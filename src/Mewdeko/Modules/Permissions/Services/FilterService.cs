@@ -245,7 +245,6 @@ public class FilterService : IEarlyBehavior, INService
                 await using var uow = db.GetDbContext();
                 uow.AutoBanWords.Remove(i);
                 await uow.SaveChangesAsync();
-                Blacklist.Remove(i);
                 return false;
             }
             var match = regex.Match(msg.Content.ToLower()).Value;
@@ -312,15 +311,12 @@ public class FilterService : IEarlyBehavior, INService
                 {
                     Log.Error($"Invalid regex, removing.: {word}");
                     await using var uow = db.GetDbContext();
-                    var config = await uow.ForGuildId(guild.Id, set => set.Include(gc => gc.FilteredWords));
-
-                    var removed = config.FilteredWords.FirstOrDefault(fw => fw.Word.Trim().ToLowerInvariant() == word);
-                    if (removed is null)
-                        return false;
-                    uow.Remove(removed);
-                    await uow.SaveChangesAsync().ConfigureAwait(false);
-                    var toremove = ServerFilteredWords.GetOrAdd(guild.Id, new ConcurrentHashSet<string>());
-                    toremove.TryRemove(word);
+                    var found = uow.FilteredWords.FirstOrDefault(x => x.Word == word);
+                    ServerFilteredWords.TryGetValue(guild.Id, out var words);
+                    words?.TryRemove(word);
+                    if (found is null) return false;
+                    uow.FilteredWords.Remove(found);
+                    await uow.SaveChangesAsync();
                     return false;
                 }
                 if (!regex.IsMatch(usrMsg.Content.ToLower())) continue;
