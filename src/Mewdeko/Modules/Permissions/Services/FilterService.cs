@@ -303,7 +303,26 @@ public class FilterService : IEarlyBehavior, INService
         {
             foreach (var word in filteredChannelWords)
             {
-                var regex = new Regex(word, RegexOptions.Compiled, TimeSpan.FromMilliseconds(250));
+                Regex regex;
+                try
+                {
+                    regex = new Regex(word, RegexOptions.Compiled, TimeSpan.FromMilliseconds(250));
+                }
+                catch
+                {
+                    Log.Error($"Invalid regex, removing.: {word}");
+                    await using var uow = db.GetDbContext();
+                    var config = await uow.ForGuildId(guild.Id, set => set.Include(gc => gc.FilteredWords));
+
+                    var removed = config.FilteredWords.FirstOrDefault(fw => fw.Word.Trim().ToLowerInvariant() == word);
+                    if (removed is null)
+                        return false;
+                    uow.Remove(removed);
+                    await uow.SaveChangesAsync().ConfigureAwait(false);
+                    var toremove = ServerFilteredWords.GetOrAdd(guild.Id, new ConcurrentHashSet<string>());
+                    toremove.TryRemove(word);
+                    return false;
+                }
                 if (!regex.IsMatch(usrMsg.Content.ToLower())) continue;
                 try
                 {
