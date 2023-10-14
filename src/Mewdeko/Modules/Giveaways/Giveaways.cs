@@ -17,11 +17,140 @@ public class Giveaways : MewdekoModuleBase<GiveawayService>
 
     public Giveaways(DbService db, IServiceProvider servs, InteractiveService interactiveService,
         GuildSettingsService guildSettings)
+    : MewdekoModuleBase<GiveawayService>
+{
+    [Cmd, Aliases, UserPerm(GuildPermission.ManageMessages)]
+    public async Task GdmMessage([Remainder] string message = null)
     {
-        interactivity = interactiveService;
-        this.guildSettings = guildSettings;
-        this.db = db;
-        this.servs = servs;
+        var gc = await guildSettings.GetGuildConfig(Context.Guild.Id);
+        if (message is null)
+        {
+            if (await PromptUserConfirmAsync(
+                    "Would you like to preview the message? Pressing no will remove the current message.",
+                    Context.User.Id))
+            {
+                var rep = new ReplacementBuilder()
+                    .WithChannel(Context.Channel)
+                    .WithClient(Context.Client as DiscordSocketClient)
+                    .WithServer(Context.Client as DiscordSocketClient, Context.Guild as SocketGuild)
+                    .WithUser(Context.User);
+
+                rep.WithOverride("%messagelink%",
+                    () => $"https://discord.com/channels/{Context.Guild.Id}/{Context.Channel.Id}/{Context.Message.Id}");
+                rep.WithOverride("%giveawayitem%", () => "test Item");
+                rep.WithOverride("%giveawaywinners%", () => "10");
+
+                var replacer = rep.Build();
+
+                if (SmartEmbed.TryParse(replacer.Replace(gc.GiveawayEndMessage), Context.Guild.Id, out var embeds,
+                        out var plaintext, out var components))
+                {
+                    await ctx.Channel
+                        .SendMessageAsync(plaintext, embeds: embeds ?? null, components: components?.Build())
+                        .ConfigureAwait(false);
+                }
+
+                else
+                    await ctx.Channel.SendConfirmAsync(replacer.Replace(gc.GiveawayEndMessage)).ConfigureAwait(false);
+            }
+            else
+            {
+                gc.GiveawayEndMessage = null;
+                await guildSettings.UpdateGuildConfig(Context.Guild.Id, gc);
+                await ctx.Channel.SendConfirmAsync("Giveaway host message removed!").ConfigureAwait(false);
+            }
+        }
+        else
+        {
+            gc.GiveawayEndMessage = message;
+            await guildSettings.UpdateGuildConfig(Context.Guild.Id, gc);
+            await ctx.Channel.SendConfirmAsync($"Giveaway host message set to {message}!").ConfigureAwait(false);
+        }
+    }
+
+
+    [Cmd, Aliases, UserPerm(GuildPermission.ManageMessages)]
+    public async Task GBanner(string banner)
+    {
+        var gc = await guildSettings.GetGuildConfig(Context.Guild.Id);
+        if (!Uri.IsWellFormedUriString(banner, UriKind.Absolute))
+        {
+            await ctx.Channel.SendErrorAsync("That's not a valid URL!").ConfigureAwait(false);
+            return;
+        }
+
+        gc.GiveawayBanner = banner;
+        await guildSettings.UpdateGuildConfig(Context.Guild.Id, gc);
+        await ctx.Channel.SendConfirmAsync(
+                $"Giveaway banner set! Just keep in mind this doesn't update until the next giveaway.")
+            .ConfigureAwait(false);
+    }
+
+    [Cmd, Aliases, UserPerm(GuildPermission.ManageMessages)]
+    public async Task GWinEmbedColor(string color)
+    {
+        var colorVal = StringExtensions.GetHexFromColorName(color);
+        if (color.StartsWith("#"))
+        {
+            if (SKColor.TryParse(color, out _))
+                colorVal = color;
+        }
+
+        if (colorVal is not null)
+        {
+            var gc = await guildSettings.GetGuildConfig(Context.Guild.Id);
+            gc.GiveawayEmbedColor = colorVal;
+            await guildSettings.UpdateGuildConfig(Context.Guild.Id, gc);
+            await ctx.Channel.SendConfirmAsync(
+                    $"Giveaway win embed color set! Just keep in mind this doesn't update until the next giveaway.")
+                .ConfigureAwait(false);
+        }
+        else
+        {
+            await ctx.Channel
+                .SendErrorAsync(
+                    "That's not a valid color! Please use proper hex (starts with #) or use html color names!")
+                .ConfigureAwait(false);
+        }
+    }
+
+    [Cmd, Aliases, UserPerm(GuildPermission.ManageMessages)]
+    public async Task GEmbedColor(string color)
+    {
+        var colorVal = StringExtensions.GetHexFromColorName(color);
+        if (color.StartsWith("#"))
+        {
+            if (SKColor.TryParse(color, out _))
+                colorVal = color;
+        }
+
+        if (colorVal is not null)
+        {
+            var gc = await guildSettings.GetGuildConfig(Context.Guild.Id);
+            gc.GiveawayEmbedColor = colorVal;
+            await guildSettings.UpdateGuildConfig(Context.Guild.Id, gc);
+            await ctx.Channel.SendConfirmAsync(
+                    $"Giveaway embed color set! Just keep in mind this doesn't update until the next giveaway.")
+                .ConfigureAwait(false);
+        }
+        else
+        {
+            await ctx.Channel
+                .SendErrorAsync(
+                    "That's not a valid color! Please use proper hex (starts with #) or use html color names!")
+                .ConfigureAwait(false);
+        }
+    }
+
+    [Cmd, Aliases, UserPerm(GuildPermission.ManageMessages)]
+    public async Task GDm()
+    {
+        var gc = await guildSettings.GetGuildConfig(Context.Guild.Id);
+        gc.DmOnGiveawayWin = gc.DmOnGiveawayWin == 0 ? 1 : 0;
+        await guildSettings.UpdateGuildConfig(Context.Guild.Id, gc);
+        await ctx.Channel.SendConfirmAsync(
+                $"Giveaway DMs set to {gc.DmOnGiveawayWin == 1}! Just keep in mind this doesn't update until the next giveaway.")
+            .ConfigureAwait(false);
     }
 
     [Cmd, Aliases, UserPerm(GuildPermission.ManageMessages)]

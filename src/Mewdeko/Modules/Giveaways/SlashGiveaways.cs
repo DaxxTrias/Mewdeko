@@ -9,15 +9,85 @@ namespace Mewdeko.Modules.Giveaways;
 [Group("giveaways", "Create or manage giveaways!")]
 public class SlashGiveaways : MewdekoSlashModuleBase<GiveawayService>
 {
-    private readonly DbService db;
-    private readonly InteractiveService interactivity;
-    private readonly GuildSettingsService guildSettings;
-
-    public SlashGiveaways(DbService db, InteractiveService interactiveService, GuildSettingsService guildSettings)
+    [SlashCommand("banner", "Allows you to set a banner for giveaways!"), SlashUserPerm(GuildPermission.ManageMessages)]
+    public async Task GBanner(string banner)
     {
-        interactivity = interactiveService;
-        this.guildSettings = guildSettings;
-        this.db = db;
+        var gc = await guildSettings.GetGuildConfig(Context.Guild.Id);
+        if (!Uri.IsWellFormedUriString(banner, UriKind.Absolute) && banner != "none")
+        {
+            await ctx.Interaction.SendErrorAsync("That's not a valid URL!").ConfigureAwait(false);
+            return;
+        }
+
+        gc.GiveawayBanner = banner == "none" ? "" : banner;
+        await guildSettings.UpdateGuildConfig(Context.Guild.Id, gc);
+        if (banner == "none")
+            await ctx.Interaction.SendConfirmAsync("Giveaway banner removed!").ConfigureAwait(false);
+        else
+            await ctx.Interaction.SendConfirmAsync("Giveaway banner set!").ConfigureAwait(false);
+    }
+
+    [SlashCommand("winembedcolor", "Allows you to set the win embed color!"),
+     SlashUserPerm(GuildPermission.ManageMessages)]
+    public async Task GWinEmbedColor(string color)
+    {
+        var colorVal = StringExtensions.GetHexFromColorName(color);
+        if (color.StartsWith("#"))
+        {
+            if (SKColor.TryParse(color, out _))
+                colorVal = color;
+        }
+
+        if (colorVal is not null)
+        {
+            var gc = await guildSettings.GetGuildConfig(Context.Guild.Id);
+            gc.GiveawayEmbedColor = colorVal;
+            await guildSettings.UpdateGuildConfig(Context.Guild.Id, gc);
+            await ctx.Interaction.SendConfirmAsync(
+                    $"Giveaway win embed color set! Just keep in mind this doesn't update until the next giveaway.")
+                .ConfigureAwait(false);
+        }
+        else
+        {
+            await ctx.Interaction.SendErrorAsync("That's not a valid color! Please use hex.").ConfigureAwait(false);
+        }
+    }
+
+    [SlashCommand("embedcolor", "Allows you to set the regular embed color!"),
+     SlashUserPerm(GuildPermission.ManageMessages)]
+    public async Task GEmbedColor(string color)
+    {
+        var colorVal = StringExtensions.GetHexFromColorName(color);
+        if (color.StartsWith("#"))
+        {
+            if (SKColor.TryParse(color, out _))
+                colorVal = color;
+        }
+
+        if (colorVal is not null)
+        {
+            var gc = await guildSettings.GetGuildConfig(Context.Guild.Id);
+            gc.GiveawayEmbedColor = colorVal;
+            await guildSettings.UpdateGuildConfig(Context.Guild.Id, gc);
+            await ctx.Interaction.SendConfirmAsync(
+                    $"Giveaway embed color set! Just keep in mind this doesn't update until the next giveaway.")
+                .ConfigureAwait(false);
+        }
+        else
+        {
+            await ctx.Interaction.SendErrorAsync("That's not a valid color! Please use hex.").ConfigureAwait(false);
+        }
+    }
+
+    [SlashCommand("dm", "Toggles whether winners get dmed!"), SlashUserPerm(GuildPermission.ManageMessages)]
+    public async Task GDm()
+    {
+        var gc = await guildSettings.GetGuildConfig(Context.Guild.Id);
+        gc.DmOnGiveawayWin = gc.DmOnGiveawayWin == 0 ? 1 : 0;
+        await guildSettings.UpdateGuildConfig(Context.Guild.Id, gc);
+        await ctx.Interaction.SendConfirmAsync(
+                $"Giveaway DMs set to {gc.DmOnGiveawayWin == 1}! Just keep in mind this doesn't update until the next giveaway.")
+            .ConfigureAwait(false);
     }
 
     [SlashCommand("emote", "Set the giveaway emote!"), SlashUserPerm(GuildPermission.ManageMessages), CheckPermissions]

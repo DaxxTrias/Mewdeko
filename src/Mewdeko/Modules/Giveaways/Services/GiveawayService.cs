@@ -163,7 +163,34 @@ public class GiveawayService : INService, IReadyExecutor
             }
         }
 
-        var msg = await chan.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
+        if (!string.IsNullOrEmpty(gconfig.GiveawayEmbedColor))
+        {
+            var colorStr = gconfig.GiveawayEmbedColor;
+
+            if (colorStr.StartsWith("#"))
+                eb.WithColor(new Color(Convert.ToUInt32(colorStr.Replace("#", ""), 16)));
+            else if (colorStr.StartsWith("0x") && colorStr.Length == 8)
+                eb.WithColor(new Color(Convert.ToUInt32(colorStr.Replace("0x", ""), 16)));
+            else if (colorStr.Length == 6 && IsHex(colorStr))
+                eb.WithColor(new Color(Convert.ToUInt32(colorStr, 16)));
+            else if (uint.TryParse(colorStr, out var colorNumber))
+                eb.WithColor(new Color(colorNumber));
+        }
+
+        if (!string.IsNullOrEmpty(gconfig.GiveawayBanner))
+        {
+            if (Uri.IsWellFormedUriString(gconfig.GiveawayBanner, UriKind.Absolute))
+                eb.WithImageUrl(gconfig.GiveawayBanner);
+        }
+
+        if (!string.IsNullOrEmpty(banner))
+        {
+            if (Uri.IsWellFormedUriString(banner, UriKind.Absolute))
+                eb.WithImageUrl(banner);
+        }
+
+        var msg = await chan.SendMessageAsync(role is not null ? role.Mention : "", embed: eb.Build())
+            .ConfigureAwait(false);
         await msg.AddReactionAsync(emote).ConfigureAwait(false);
         var time = DateTime.UtcNow + ts;
         var rem = new Database.Models.Giveaways
@@ -192,11 +219,20 @@ public class GiveawayService : INService, IReadyExecutor
             await interaction.SendConfirmFollowupAsync($"Giveaway started in {chan.Mention}").ConfigureAwait(false);
         else
             await currentChannel.SendConfirmAsync($"Giveaway started in {chan.Mention}").ConfigureAwait(false);
+            return;
+
+        bool IsHex(string value)
+        {
+            return value.All(c => c is >= '0' and <= '9' or >= 'A' and <= 'F' or >= 'a' and <= 'f');
+        }
     }
 
-    public async Task GiveawayTimerAction(Database.Models.Giveaways r)
+    public async Task GiveawayTimerAction(Database.Models.Giveaways r, IGuild? inputguild = null,
+        ITextChannel? inputchannel = null)
     {
-        if (client.GetGuild(r.ServerId) is not { } guild)
+        var dclient = client as IDiscordClient;
+        var guild = inputguild ?? await dclient.GetGuildAsync(r.ServerId);
+        if (guild is null)
             return;
         if (client.GetGuild(r.ServerId).GetTextChannel(r.ChannelId) is not { } channel)
             return;
