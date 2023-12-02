@@ -10,17 +10,26 @@ public class MewdekoUserMessage : IUserMessage
 
     public Task AddReactionAsync(IEmote emote, RequestOptions options = null) => throw new NotImplementedException();
 
-    public Task RemoveReactionAsync(IEmote emote, IUser user, RequestOptions options = null) => throw new NotImplementedException();
+    public Task RemoveReactionAsync(IEmote emote, IUser user, RequestOptions options = null) =>
+        throw new NotImplementedException();
 
-    public Task RemoveReactionAsync(IEmote emote, ulong userId, RequestOptions options = null) => throw new NotImplementedException();
+    public Task RemoveReactionAsync(IEmote emote, ulong userId, RequestOptions options = null) =>
+        throw new NotImplementedException();
 
     public Task RemoveAllReactionsAsync(RequestOptions options = null) => throw new NotImplementedException();
 
-    public Task RemoveAllReactionsForEmoteAsync(IEmote emote, RequestOptions options = null) => throw new NotImplementedException();
+    public Task RemoveAllReactionsForEmoteAsync(IEmote emote, RequestOptions options = null) =>
+        throw new NotImplementedException();
 
-    public IAsyncEnumerable<IReadOnlyCollection<IUser>> GetReactionUsersAsync(IEmote emoji, int limit, RequestOptions options = null) => throw new NotImplementedException();
+    public IAsyncEnumerable<IReadOnlyCollection<IUser>> GetReactionUsersAsync(IEmote emoji, int limit,
+        RequestOptions options = null,
+        ReactionType type = ReactionType.Normal)
+    {
+        throw new NotImplementedException();
+    }
 
-    public IAsyncEnumerable<IReadOnlyCollection<IUser>> GetReactionUsersAsync(IEmote emoji, int limit, RequestOptions options = null, ReactionType type = ReactionType.Normal) => throw new NotImplementedException();
+    public IAsyncEnumerable<IReadOnlyCollection<IUser>> GetReactionUsersAsync(IEmote emoji, int limit,
+        RequestOptions options = null) => throw new NotImplementedException();
 
     public MessageType Type => MessageType.Default;
     public MessageSource Source => MessageSource.User;
@@ -33,8 +42,8 @@ public class MewdekoUserMessage : IUserMessage
     public DateTimeOffset? EditedTimestamp => DateTimeOffset.Now;
     public IMessageChannel Channel { get; set; }
     public IUser Author { get; set; }
-    public IReadOnlyCollection<IAttachment> Attachments { get; set; }
-    public IReadOnlyCollection<IEmbed> Embeds { get; set; }
+    public IReadOnlyCollection<IAttachment> Attachments { get; set; } = new List<IAttachment>();
+    public IReadOnlyCollection<IEmbed> Embeds { get; set; } = new List<IEmbed>();
     public IReadOnlyCollection<ITag> Tags { get; set; }
     public IReadOnlyCollection<ulong> MentionedChannelIds { get; set; }
     public IReadOnlyCollection<ulong> MentionedRoleIds { get; set; }
@@ -48,7 +57,9 @@ public class MewdekoUserMessage : IUserMessage
     public IReadOnlyCollection<IStickerItem> Stickers { get; set; }
     public MessageFlags? Flags { get; set; }
     public IMessageInteraction Interaction { get; set; }
-    public Task ModifyAsync(Action<MessageProperties> func, RequestOptions options = null) => throw new NotImplementedException();
+
+    public Task ModifyAsync(Action<MessageProperties> func, RequestOptions options = null) =>
+        throw new NotImplementedException();
 
     public Task PinAsync(RequestOptions options = null) => throw new NotImplementedException();
 
@@ -64,19 +75,11 @@ public class MewdekoUserMessage : IUserMessage
         TagHandling emojiHandling = TagHandling.Name) =>
         throw new NotImplementedException();
 
+    public MessageResolvedData ResolvedData { get; }
+
     public IUserMessage ReferencedMessage { get; set; }
 
     public IThreadChannel Thread => throw new NotImplementedException();
 
     public MessageRoleSubscriptionData RoleSubscriptionData => throw new NotImplementedException();
-
-    public MessageResolvedData ResolvedData => throw new NotImplementedException();
-
-    public IMessageInteractionMetadata InteractionMetadata
-    {
-        get
-        {
-            throw new NotImplementedException();
-        }
-    }
 }
