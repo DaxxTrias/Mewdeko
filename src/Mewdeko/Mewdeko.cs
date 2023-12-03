@@ -97,7 +97,6 @@ public class Mewdeko
         AllGuildConfigs =
             new ConcurrentHashSet<GuildConfig>(
                 uow.GuildConfigs.GetAllGuildConfigs(Client.Guilds.Select(x => x.Id).ToList()));
-        var guildSettingsService = new GuildSettingsService(db, null, this);
         await uow.EnsureUserCreated(bot.Id, bot.Username, bot.Discriminator, bot.AvatarId);
         gs2.Stop();
         Log.Information("Guild Configs cached in {ElapsedTotalSeconds}s", gs2.Elapsed.TotalSeconds);
@@ -116,7 +115,6 @@ public class Mewdeko
             .AddSingleton(Cache)
             .AddSingleton(new MartineApi())
             .AddSingleton(Cache.Redis)
-            .AddSingleton(guildSettingsService)
             .AddTransient<ISeria, JsonSeria>()
             .AddTransient<IPubSub, RedisPubSub>()
             .AddTransient<IConfigSeria, YamlSeria>()
@@ -143,7 +141,8 @@ public class Mewdeko
                 DisconnectOnStop = false
             })
             .AddScoped<ISearchImagesService, SearchImagesService>()
-            .AddSingleton<ToneTagService>();
+            .AddSingleton<ToneTagService>()
+            .AddSingleton<GuildSettingsService>();
         if (Credentials.UseGlobalCurrency)
         {
             s.AddTransient<ICurrencyService, GlobalCurrencyService>();
