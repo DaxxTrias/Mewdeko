@@ -61,7 +61,7 @@ public class Mewdeko
             TotalShards = Credentials.TotalShards,
             ShardId = shardId,
             AlwaysDownloadUsers = true,
-            GatewayIntents = GatewayIntents.All,
+            GatewayIntents = GatewayIntents.All ^ GatewayIntents.GuildPresences, // temporarytest
             FormatUsersInBidirectionalUnicode = false,
             LogGatewayIntentWarnings = false,
             DefaultRetryMode = RetryMode.RetryRatelimit
