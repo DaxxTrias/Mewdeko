@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Net.Http;
+using System.Reflection;
 using System.Threading;
 using Discord.Commands;
 using Humanizer.Bytes;
@@ -67,6 +68,16 @@ public class StatsService : IStatsService, IReadyExecutor
                 var versions = _versionChecker.Invoke(new List<string> { "OpenAI_API.dll" });
                 return $"OpenAI_API {versions["OpenAI_API.dll"] ?? "Version not found"}";
             }
+        }
+        public static string GetTargetFramework()
+        {
+            // Get the TargetFrameworkAttribute from the executing assembly
+            var attribute = Assembly.GetExecutingAssembly()
+                .GetCustomAttributes(typeof(System.Runtime.Versioning.TargetFrameworkAttribute), false)
+                .FirstOrDefault() as System.Runtime.Versioning.TargetFrameworkAttribute;
+
+            // If the attribute is not null, return its FrameworkName property
+            return attribute?.FrameworkName ?? "Unknown framework";
         }
     }
 

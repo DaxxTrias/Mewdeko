@@ -206,6 +206,7 @@ public class SlashUtility : MewdekoSlashModuleBase<UtilityService>
         var commandStats = uow.CommandStats.Count(x => x.DateAdded.Value >= time);
         var user = await client.Rest.GetUserAsync(280835732728184843).ConfigureAwait(false);
         var libraryInfo = new LibraryInfo(DllVersionChecker.GetDllVersions);
+        var targetFramework = LibraryInfo.GetTargetFramework();
 
         await ctx.Interaction.RespondAsync(embed:
                 new EmbedBuilder().WithOkColor()
@@ -213,7 +214,7 @@ public class SlashUtility : MewdekoSlashModuleBase<UtilityService>
                     //.AddField(GetText("author"), $"{user.Mention} | {user.Username}#{user.Discriminator}")
                     .AddField(GetText("commands_ran"), $"{commandStats}/5s")
                     //.AddField("Library", stats.Library)
-                    .AddField(GetText("library"), $"{libraryInfo.Library} \n {libraryInfo.OpenAILib}")
+                    .AddField(GetText("library"), $"{targetFramework} \n {libraryInfo.Library} \n {libraryInfo.OpenAILib}")
                     .AddField(GetText("owner_ids"), string.Join("\n", creds.OwnerIds.Select(x => $"<@{x}>")))
                     .AddField(GetText("shard"), $"#{client.ShardId} / {creds.TotalShards}")
                     .AddField(GetText("memory"), $"{stats.Heap} MB")
