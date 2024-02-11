@@ -1,4 +1,4 @@
-﻿using System.Net;
+using System.Net;
 using Mewdeko.Modules.Searches.Services;
 using Mewdeko.Modules.Utility.Common;
 using Newtonsoft.Json;
@@ -16,7 +16,7 @@ public class RedisCache : IDataCache
 
     private readonly object timelyLock = new();
     private readonly object voteLock = new();
-    private int shardId;
+    private readonly int shardId;
 
     public RedisCache(IBotCredentials creds, int shardId)
     {

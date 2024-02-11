@@ -1,4 +1,4 @@
-﻿using Mewdeko.Database.Common;
+using Mewdeko.Database.Common;
 
 // ReSharper disable InconsistentNaming
 
@@ -18,6 +18,10 @@ public class GuildConfig : DbEntity
 
     public string AutoAssignRoleId { get; set; } = "0";
     public bool StatsOptOut { get; set; } = false;
+    public string CurrencyName { get; set; } = "Coins";
+
+    public string CurrencyEmoji { get; set; } = "💰";
+    //public int DailyReward { get; set; } = 200;
 
     // public string StatusEmbedDefault { get; set; }
     // Starboard
