@@ -1,4 +1,4 @@
-﻿using Mewdeko.Database.Models;
+using Mewdeko.Database.Models;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
@@ -24,7 +24,9 @@ public class MewdekoContext : DbContext
     public MewdekoContext(DbContextOptions<MewdekoContext> options) : base(options)
     {
     }
-
+    public DbSet<GlobalUserBalance> GlobalUserBalances { get; set; }
+    public DbSet<GuildUserBalance> GuildUserBalances { get; set; }
+    public DbSet<TransactionHistory> TransactionHistories { get; set; }
     public DbSet<JoinLeaveLogs> JoinLeaveLogs { get; set; }
     public DbSet<GuildConfig> GuildConfigs { get; set; }
 

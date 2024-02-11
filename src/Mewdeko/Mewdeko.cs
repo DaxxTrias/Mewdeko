@@ -9,11 +9,14 @@ using Fergun.Interactive;
 using Lavalink4NET;
 using Lavalink4NET.DiscordNet;
 using MartineApiNet;
+using Mewdeko.Common.Collections;
 using Mewdeko.Common.Configs;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Common.PubSub;
 using Mewdeko.Common.TypeReaders;
 using Mewdeko.Common.TypeReaders.Interactions;
+using Mewdeko.Modules.Currency.Services;
+using Mewdeko.Modules.Currency.Services.Impl;
 using Mewdeko.Modules.Gambling.Services;
 using Mewdeko.Modules.Gambling.Services.Impl;
 using Mewdeko.Modules.Music.Services;
@@ -134,6 +137,17 @@ public class Mewdeko
             .AddScoped<ISearchImagesService, SearchImagesService>()
             .AddSingleton<ToneTagService>();
 
+        if (Credentials.UseGlobalCurrency)
+        {
+            //s.AddTransient<ICurrencyService, GlobalCurrencyService>();
+        }
+        else
+        {
+            //s.AddTransient<ICurrencyService, GuildCurrencyService>();
+        }
+
+        Log.Information("Passed Singletons");
+
         s.AddHttpClient();
         s.AddHttpClient("memelist").ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
         {
@@ -150,6 +164,8 @@ public class Mewdeko
                 .AddSingleton<IReadyExecutor>(x => x.GetRequiredService<RemoteGrpcCoordinator>());
         }
 
+        Log.Information("Passed Coord");
+
         s.Scan(scan => scan.FromAssemblyOf<IReadyExecutor>()
             .AddClasses(classes => classes.AssignableToAny(
                 // services
@@ -162,6 +178,8 @@ public class Mewdeko
             .AsSelfWithInterfaces()
             .WithSingletonLifetime()
         );
+
+        Log.Information("Passed Interface Scanner");
 
         s.LoadFrom(Assembly.GetAssembly(typeof(CommandHandler)));
         //initialize Services
