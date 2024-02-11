@@ -68,14 +68,14 @@ public class GlobalCurrencyService : ICurrencyService
             .Where(x => x.UserId == userId && x.GuildId == 0)?
             .ToListAsync();
     }
-    public async Task<string> GetCurrencyEmote(ulong? guildId = null)
-    {
-        await using var uow = dbService.GetDbContext();
+    //public async Task<string> GetCurrencyEmote(ulong? guildId = null)
+    //{
+    //    await using var uow = dbService.GetDbContext();
 
-        return await uow.OwnerOnly
-            .Select(x => x.CurrencyEmote)
-            .FirstOrDefaultAsync();
-    }
+    //    return await uow.OwnerOnly
+    //        .Select(x => x.CurrencyEmote)
+    //        .FirstOrDefaultAsync();
+    //}
 
     public async Task<IEnumerable<LbCurrency>> GetAllUserBalancesAsync(ulong? _)
     {
@@ -88,20 +88,20 @@ public class GlobalCurrencyService : ICurrencyService
                 Balance = x.Balance
             }).ToList();
     }
-    public async Task SetReward(int amount, int seconds, ulong? _)
-    {
-        await using var uow = dbService.GetDbContext();
-        var config = await uow.OwnerOnly.FirstOrDefaultAsync();
-        config.RewardAmount = amount;
-        config.RewardTimeoutSeconds = seconds;
-        uow.OwnerOnly.Update(config);
-        await uow.SaveChangesAsync();
-    }
+    //public async Task SetReward(int amount, int seconds, ulong? _)
+    //{
+    //    await using var uow = dbService.GetDbContext();
+    //    var config = await uow.OwnerOnly.FirstOrDefaultAsync();
+    //    config.RewardAmount = amount;
+    //    config.RewardTimeoutSeconds = seconds;
+    //    uow.OwnerOnly.Update(config);
+    //    await uow.SaveChangesAsync();
+    //}
 
-    public async Task<(int, int)> GetReward(ulong? _)
-    {
-        await using var uow = dbService.GetDbContext();
-        var config = await uow.OwnerOnly.FirstOrDefaultAsync();
-        return (config.RewardAmount, config.RewardTimeoutSeconds);
-    }
+    //public async Task<(int, int)> GetReward(ulong? _)
+    //{
+    //    await using var uow = dbService.GetDbContext();
+    //    var config = await uow.OwnerOnly.FirstOrDefaultAsync();
+    //    return (config.RewardAmount, config.RewardTimeoutSeconds);
+    //}
 }

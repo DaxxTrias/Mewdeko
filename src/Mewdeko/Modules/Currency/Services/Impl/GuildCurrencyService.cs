@@ -82,17 +82,17 @@ public class GuildCurrencyService : ICurrencyService
             .Where(x => x.UserId == userId && x.GuildId == guildId.Value)?
             .ToListAsync();
     }
-    public async Task<string> GetCurrencyEmote(ulong? guildId)
-    {
-        if (!guildId.HasValue)
-            throw new ArgumentException("Guild ID must be provided.");
-        await using var uow = dbService.GetDbContext();
+    //public async Task<string> GetCurrencyEmote(ulong? guildId)
+    //{
+    //    if (!guildId.HasValue)
+    //        throw new ArgumentException("Guild ID must be provided.");
+    //    await using var uow = dbService.GetDbContext();
 
-        return await uow.GuildConfigs
-            .Where(x => x.GuildId == guildId.Value)
-            .Select(x => x.CurrencyEmoji)
-            .FirstOrDefaultAsync();
-    }
+    //    return await uow.GuildConfigs
+    //        .Where(x => x.GuildId == guildId.Value)
+    //        .Select(x => x.CurrencyEmoji)
+    //        .FirstOrDefaultAsync();
+    //}
 
     public async Task<IEnumerable<LbCurrency>> GetAllUserBalancesAsync(ulong? guildId)
     {
@@ -110,21 +110,21 @@ public class GuildCurrencyService : ICurrencyService
 
         return balances;
     }
-    public async Task SetReward(int amount, int seconds, ulong? guildId)
-    {
-        if (!guildId.HasValue)
-            throw new ArgumentException("Guild ID must be provided.");
-        var settings = await guildSettingsService.GetGuildConfig(guildId.Value);
-        settings.RewardAmount = amount;
-        settings.RewardTimeoutSeconds = seconds;
-        //await guildSettingsService.UpdateGuildConfig(guildId.Value, settings);
-    }
+    //public async Task SetReward(int amount, int seconds, ulong? guildId)
+    //{
+    //    if (!guildId.HasValue)
+    //        throw new ArgumentException("Guild ID must be provided.");
+    //    var settings = await guildSettingsService.GetGuildConfig(guildId.Value);
+    //    settings.RewardAmount = amount;
+    //    settings.RewardTimeoutSeconds = seconds;
+    //    //await guildSettingsService.UpdateGuildConfig(guildId.Value, settings);
+    //}
 
-    public async Task<(int, int)> GetReward(ulong? guildId)
-    {
-        if (!guildId.HasValue)
-            throw new ArgumentException("Guild ID must be provided.");
-        var settings = await guildSettingsService.GetGuildConfig(guildId.Value);
-        return (settings.RewardAmount, settings.RewardTimeoutSeconds);
-    }
+    //public async Task<(int, int)> GetReward(ulong? guildId)
+    //{
+    //    if (!guildId.HasValue)
+    //        throw new ArgumentException("Guild ID must be provided.");
+    //    var settings = await guildSettingsService.GetGuildConfig(guildId.Value);
+    //    return (settings.RewardAmount, settings.RewardTimeoutSeconds);
+    //}
 }

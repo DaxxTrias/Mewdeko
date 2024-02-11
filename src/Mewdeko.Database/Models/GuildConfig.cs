@@ -18,11 +18,11 @@ public class GuildConfig : DbEntity
 
     public string AutoAssignRoleId { get; set; } = "0";
     public bool StatsOptOut { get; set; } = false;
-    public string CurrencyName { get; set; } = "Coins";
+    //public string CurrencyName { get; set; } = "Coins";
 
-    public string CurrencyEmoji { get; set; } = "💰";
-    public int RewardAmount { get; set; } = 200;
-    public int RewardTimeoutSeconds { get; set; } = 86400;
+    //public string CurrencyEmoji { get; set; } = "💰";
+    //public int RewardAmount { get; set; } = 200;
+    //public int RewardTimeoutSeconds { get; set; } = 86400;
 
     // public string StatusEmbedDefault { get; set; }
     // Starboard
