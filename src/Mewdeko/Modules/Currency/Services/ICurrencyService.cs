@@ -11,7 +11,7 @@ public interface ICurrencyService
     //Task AddTransactionAsync(ulong userId, int amount, string description, ulong? guildId = null);
     //Task<IEnumerable<TransactionHistory>> GetTransactionsAsync(ulong userId, ulong? guildId = null);
 
-    //this is 8.0/psqldeko code
+    //todo: incomplete psqldeko code
     Task AddTransactionAsync(ulong userId, long amount, string description, ulong? guildId = null);
     Task<IEnumerable<TransactionHistory>?> GetTransactionsAsync(ulong userId, ulong? guildId = null);
     //Task<string> GetCurrencyEmote(ulong? guildId);

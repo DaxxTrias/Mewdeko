@@ -68,6 +68,7 @@ public class GlobalCurrencyService : ICurrencyService
             .Where(x => x.UserId == userId && x.GuildId == 0)?
             .ToListAsync();
     }
+    //todo: incomplete psqldeko code
     //public async Task<string> GetCurrencyEmote(ulong? guildId = null)
     //{
     //    await using var uow = dbService.GetDbContext();
@@ -88,6 +89,7 @@ public class GlobalCurrencyService : ICurrencyService
                 Balance = x.Balance
             }).ToList();
     }
+    //todo: incomplete psqldeko code
     //public async Task SetReward(int amount, int seconds, ulong? _)
     //{
     //    await using var uow = dbService.GetDbContext();

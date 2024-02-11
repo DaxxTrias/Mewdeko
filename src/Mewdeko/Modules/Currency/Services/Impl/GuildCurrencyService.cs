@@ -110,6 +110,8 @@ public class GuildCurrencyService : ICurrencyService
 
         return balances;
     }
+
+    //todo: incomplete psqldeko code
     //public async Task SetReward(int amount, int seconds, ulong? guildId)
     //{
     //    if (!guildId.HasValue)
