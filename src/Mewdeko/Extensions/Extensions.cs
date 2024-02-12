@@ -21,17 +21,35 @@ using SixLabors.ImageSharp.Formats;
 using SixLabors.ImageSharp.Formats.Png;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
+using SkiaSharp;
 using Color = SixLabors.ImageSharp.Color;
 using ModuleInfo = Discord.Commands.ModuleInfo;
 using TypeReader = Discord.Commands.TypeReader;
 
 namespace Mewdeko.Extensions;
 
-public static class Extensions
+public static partial class Extensions
 {
-    public static readonly Regex UrlRegex = new(@"^(https?|ftp)://(?<path>[^\s/$.?#].[^\s]*)$", RegexOptions.Compiled);
+    public static readonly Regex UrlRegex = MyRegex();
 
     public static TOut[] Map<TIn, TOut>(this TIn[] arr, Func<TIn, TOut> f) => Array.ConvertAll(arr, x => f(x));
+
+    // public static bool ParseBoth(this bool _, string value)
+    // {
+    //     switch (value)
+    //     {
+    //         case null:
+    //             throw new ArgumentNullException(nameof(value));
+    //         case "0":
+    //         case "1":
+    //             return value == "1";
+    //     }
+    //
+    //     if (bool.TryParse(value, out var result))
+    //         return result;
+    //
+    //     throw new FormatException($"The value '{value}' is not a valid boolean representation.");
+    // }
 
     public static Task<IUserMessage> EmbedAsync(this IMessageChannel channel, CrEmbed crEmbed,
         bool sanitizeAll = false)
@@ -44,48 +62,55 @@ public static class Extensions
     }
 
     public static async Task SendConfirmAsync(this IDiscordInteraction interaction, string? message)
-        => await interaction.RespondAsync(embed: new EmbedBuilder().WithOkColor().WithDescription(message).Build()).ConfigureAwait(false);
+        => await interaction.RespondAsync(embed: new EmbedBuilder().WithOkColor().WithDescription(message).Build())
+            .ConfigureAwait(false);
 
     public static async Task SendEphemeralConfirmAsync(this IDiscordInteraction interaction, string message)
-        => await interaction.RespondAsync(embed: new EmbedBuilder().WithOkColor().WithDescription(message).Build(), ephemeral: true).ConfigureAwait(false);
+        => await interaction
+            .RespondAsync(embed: new EmbedBuilder().WithOkColor().WithDescription(message).Build(), ephemeral: true)
+            .ConfigureAwait(false);
 
     public static async Task SendErrorAsync(this IDiscordInteraction interaction, string? message)
-        => await interaction.RespondAsync(embed: new EmbedBuilder().WithErrorColor().WithDescription(message).Build(), components: null);
+        => await interaction.RespondAsync(embed: new EmbedBuilder().WithErrorColor().WithDescription(message).Build(),
+            components: new ComponentBuilder()
+                //.WithButton(label: "Support Server", style: ButtonStyle.Link, url: "https://discord.gg/mewdeko")
+                .Build()).ConfigureAwait(false);
 
     public static async Task SendEphemeralErrorAsync(this IDiscordInteraction interaction, string? message)
-        => await interaction.RespondAsync(embed: new EmbedBuilder().WithErrorColor().WithDescription(message).Build(), ephemeral: true, components: null);
-    /*
-    public static async Task SendErrorAsync(this IDiscordInteraction interaction, string? message)
-    => await interaction.RespondAsync(embed: new EmbedBuilder().WithErrorColor().WithDescription(message).Build(), components: new ComponentBuilder()
-        .WithButton(label: "Support Server", style: ButtonStyle.Link, url: "https://discord.gg/TBD8").Build()).ConfigureAwait(false);
+        => await interaction.RespondAsync(embed: new EmbedBuilder().WithErrorColor().WithDescription(message).Build(),
+            ephemeral: true, components: new ComponentBuilder()
+                //.WithButton(label: "Support Server", style: ButtonStyle.Link, url: "https://discord.gg/mewdeko")
+                .Build()).ConfigureAwait(false);
 
-    public static async Task SendEphemeralErrorAsync(this IDiscordInteraction interaction, string? message)
-        => await interaction.RespondAsync(embed: new EmbedBuilder().WithErrorColor().WithDescription(message).Build(), ephemeral: true, components: new ComponentBuilder()
-            .WithButton(label: "Support Server", style: ButtonStyle.Link, url: "https://discord.gg/TBD5").Build()).ConfigureAwait(false);
-    */
-    public static async Task<IUserMessage> SendConfirmFollowupAsync(this IDiscordInteraction interaction, string message)
-        => await interaction.FollowupAsync(embed: new EmbedBuilder().WithOkColor().WithDescription(message).Build()).ConfigureAwait(false);
+    public static async Task<IUserMessage> SendConfirmFollowupAsync(this IDiscordInteraction interaction,
+        string message)
+        => await interaction.FollowupAsync(embed: new EmbedBuilder().WithOkColor().WithDescription(message).Build())
+            .ConfigureAwait(false);
 
-    public static async Task<IUserMessage> SendConfirmFollowupAsync(this IDiscordInteraction interaction, string message, ComponentBuilder builder)
-        => await interaction.FollowupAsync(embed: new EmbedBuilder().WithOkColor().WithDescription(message).Build(), components: builder.Build()).ConfigureAwait(false);
+    public static async Task<IUserMessage> SendConfirmFollowupAsync(this IDiscordInteraction interaction,
+        string message, ComponentBuilder builder)
+        => await interaction.FollowupAsync(embed: new EmbedBuilder().WithOkColor().WithDescription(message).Build(),
+            components: builder.Build()).ConfigureAwait(false);
 
-    public static async Task<IUserMessage> SendEphemeralFollowupConfirmAsync(this IDiscordInteraction interaction, string message)
-        => await interaction.FollowupAsync(embed: new EmbedBuilder().WithOkColor().WithDescription(message).Build(), ephemeral: true).ConfigureAwait(false);
+    public static async Task<IUserMessage> SendEphemeralFollowupConfirmAsync(this IDiscordInteraction interaction,
+        string message)
+        => await interaction
+            .FollowupAsync(embed: new EmbedBuilder().WithOkColor().WithDescription(message).Build(), ephemeral: true)
+            .ConfigureAwait(false);
 
     public static async Task<IUserMessage> SendErrorFollowupAsync(this IDiscordInteraction interaction, string message)
-    => await interaction.FollowupAsync(embed: new EmbedBuilder().WithErrorColor().WithDescription(message).Build(), components: null);
+        => await interaction.FollowupAsync(embed: new EmbedBuilder().WithErrorColor().WithDescription(message).Build(),
+            components: new ComponentBuilder()
+                //.WithButton(label: "Support Server", style: ButtonStyle.Link, url: "https://discord.gg/mewdeko")
+                .Build()).ConfigureAwait(false);
 
-    public static async Task<IUserMessage> SendEphemeralFollowupErrorAsync(this IDiscordInteraction interaction, string message)
-        => await interaction.FollowupAsync(embed: new EmbedBuilder().WithErrorColor().WithDescription(message).Build(), ephemeral: true, components: null);
-    /*
-    public static async Task<IUserMessage> SendErrorFollowupAsync(this IDiscordInteraction interaction, string message)
-        => await interaction.FollowupAsync(embed: new EmbedBuilder().WithErrorColor().WithDescription(message).Build(), components: new ComponentBuilder()
-            .WithButton(label: "Support Server", style: ButtonStyle.Link, url: "https://discord.gg/TBD6").Build()).ConfigureAwait(false);
+    public static async Task<IUserMessage> SendEphemeralFollowupErrorAsync(this IDiscordInteraction interaction,
+        string message)
+        => await interaction.FollowupAsync(embed: new EmbedBuilder().WithErrorColor().WithDescription(message).Build(),
+            ephemeral: true, components: new ComponentBuilder()
+                //.WithButton(label: "Support Server", style: ButtonStyle.Link, url: "https://discord.gg/mewdeko")
+                .Build()).ConfigureAwait(false);
 
-    public static async Task<IUserMessage> SendEphemeralFollowupErrorAsync(this IDiscordInteraction interaction, string message)
-        => await interaction.FollowupAsync(embed: new EmbedBuilder().WithErrorColor().WithDescription(message).Build(), ephemeral: true, components: new ComponentBuilder()
-            .WithButton(label: "Support Server", style: ButtonStyle.Link, url: "https://discord.gg/TBD7").Build()).ConfigureAwait(false);
-    */
     public static bool IsValidAttachment(this IReadOnlyCollection<IAttachment> attachments)
     {
         var first = attachments.FirstOrDefault();
@@ -101,9 +126,7 @@ public static class Extensions
     /// <returns>Formatted duration string</returns>
     public static string ToPrettyStringHm(this TimeSpan span)
     {
-        if (span < TimeSpan.FromMinutes(2))
-            return $"{span:mm}m {span:ss}s";
-        return $"{(int)span.TotalHours:D2}h {span:mm}m";
+        return span < TimeSpan.FromMinutes(2) ? $"{span:mm}m {span:ss}s" : $"{(int)span.TotalHours:D2}h {span:mm}m";
     }
 
     public static bool TryGetConfig(this List<GuildConfig> configList, ulong id, out GuildConfig config)
@@ -160,6 +183,7 @@ public static class Extensions
         return value is not null;
     }
 
+    //todo: this was removed in v8 psqldeko. leaving here for now since didnt port to psql yet
     // https://github.com/SixLabors/Samples/blob/master/ImageSharp/AvatarWithRoundedCorner/Program.cs
     public static void ApplyRoundedCorners(this IImageProcessingContext ctx, float cornerRadius)
     {
@@ -177,6 +201,7 @@ public static class Extensions
         foreach (var c in corners) ctx = ctx.Fill(Color.Red, c);
     }
 
+    //todo: this was removed in v8 psqldeko. leaving here for now since didnt port to psql yet
     private static IPathCollection BuildCorners(int imageWidth, int imageHeight, float cornerRadius)
     {
         // first create a square
@@ -237,7 +262,8 @@ public static class Extensions
         Array.ConvertAll(strings.GetCommandStrings(cmd.MethodName(), guildId).Args,
             arg => GetFullUsage(cmd.Name, arg, prefix));
 
-    public static string[] RealRemarksArr(this SlashCommandInfo cmd, IBotStrings strings, ulong? guildId, string? prefix) =>
+    public static string[] RealRemarksArr(this SlashCommandInfo cmd, IBotStrings strings, ulong? guildId,
+        string? prefix) =>
         Array.ConvertAll(strings.GetCommandStrings(cmd.Name, guildId).Args,
             arg => GetFullUsage(cmd.Name, arg, prefix));
 
@@ -267,7 +293,7 @@ public static class Extensions
 
     public static HttpClient AddFakeHeaders(this HttpClient http)
     {
-        AddFakeHeaders(http.DefaultRequestHeaders);
+        http.DefaultRequestHeaders.AddFakeHeaders();
         return http;
     }
 
@@ -327,7 +353,16 @@ public static class Extensions
         (await role.Guild.GetUsersAsync(CacheMode.CacheOnly).ConfigureAwait(false)).Where(u =>
             u.RoleIds.Contains(role.Id));
 
+    public static MemoryStream ToStream(this SKImage img, SKEncodedImageFormat format = SKEncodedImageFormat.Png)
+    {
+        var data = img.Encode(format, 100);
+        var stream = new MemoryStream();
+        data.SaveTo(stream);
+        stream.Position = 0;
+        return stream;
+    }
 
+    //todo: this was removed in v8 psqldeko. leaving here for now since didnt port to psql yet
     public static MemoryStream ToStream(this Image<Rgba32> img, IImageFormat? format = null)
     {
         var imageStream = new MemoryStream();
@@ -354,9 +389,10 @@ public static class Extensions
         return ms;
     }
 
-    public static IEnumerable<IRole> GetRoles(this IGuildUser user) => user.RoleIds.Select(r => user.Guild.GetRole(r)).Where(r => r != null);
+    public static IEnumerable<IRole> GetRoles(this IGuildUser user) =>
+        user.RoleIds.Select(r => user.Guild.GetRole(r)).Where(r => r != null);
 
-    public static bool IsImage(this HttpResponseMessage msg) => IsImage(msg, out _);
+    public static bool IsImage(this HttpResponseMessage msg) => msg.IsImage(out _);
 
     public static bool IsImage(this HttpResponseMessage msg, out string? mimeType)
     {
@@ -371,7 +407,12 @@ public static class Extensions
 
         return msg.Content.Headers.ContentLength / 1.Mb();
     }
+    public static SKImage ToSkImage(this byte[] imageData)
+    {
+        return SKImage.FromEncodedData(imageData);
+    }
 
+    //todo: this was also removed in v8 psqldeko. leaving here for now since didnt port to psql yet
     public static IEnumerable<Type> LoadFrom(this IServiceCollection collection, Assembly assembly)
     {
         // list of all the types which are added with this method
@@ -480,8 +521,9 @@ public static class Extensions
                 return mCmd.Data.Name;
             default:
             {
-                if (interaction is not SocketSlashCommand sCmd) throw new ArgumentException("interaction is not a valid type");
-                return (sCmd.Data.Name
+                    if (interaction is not SocketSlashCommand sCmd)
+                        throw new ArgumentException("interaction is not a valid type");
+                    return (sCmd.Data.Name
                         + " "
                         + ((sCmd.Data.Options?.FirstOrDefault()?.Type is ApplicationCommandOptionType.SubCommand
                                or ApplicationCommandOptionType.SubCommandGroup
@@ -497,4 +539,6 @@ public static class Extensions
             }
         }
     }
+    [GeneratedRegex("^(https?|ftp)://(?<path>[^\\s/$.?#].[^\\s]*)$", RegexOptions.Compiled)]
+    private static partial Regex MyRegex();
 }
