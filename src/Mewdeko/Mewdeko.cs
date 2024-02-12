@@ -27,6 +27,7 @@ using Mewdeko.Services.Settings;
 using Microsoft.Extensions.DependencyInjection;
 using NekosBestApiNet;
 using Newtonsoft.Json;
+using NsfwSpyNS;
 using Serilog;
 using StackExchange.Redis;
 using RunMode = Discord.Commands.RunMode;
@@ -46,6 +47,10 @@ public class Mewdeko
         Credentials = new BotCredentials();
         Cache = new RedisCache(Credentials, shardId);
         db = new DbService(Credentials.TotalShards, Credentials.Token);
+
+        //todo: another part of the skipped psqldeko 1st commit
+        //db = new DbService(Credentials.TotalShards, Credentials.Token, Credentials.UsePsql,
+        //    Credentials.PsqlConnectionString);
 
 
         if (shardId == 0)
@@ -74,6 +79,7 @@ public class Mewdeko
     public BotCredentials Credentials { get; }
     public DiscordSocketClient Client { get; }
     private CommandService CommandService { get; }
+    public ConcurrentHashSet<GuildConfig> AllGuildConfigs;
 
     public static Color OkColor { get; set; }
     public static Color ErrorColor { get; set; }
@@ -92,10 +98,16 @@ public class Mewdeko
         var gs2 = Stopwatch.StartNew();
         var bot = Client.CurrentUser;
         await using var uow = db.GetDbContext();
+
+        //todo: another part of the skipped psqldeko 1st commit
+        //AllGuildConfigs =
+        //    new ConcurrentHashSet<GuildConfig>(
+        //        uow.GuildConfigs.GetAllGuildConfigs(Client.Guilds.Select(x => x.Id).ToList()));
+
         var guildSettingsService = new GuildSettingsService(db, null, Cache);
         uow.EnsureUserCreated(bot.Id, bot.Username, bot.Discriminator, bot.AvatarId);
         gs2.Stop();
-        Log.Information($"Guild Configs cached in {gs2.Elapsed.TotalSeconds:F2}s.");
+        Log.Information("Guild Configs cached in {ElapsedTotalSeconds}s", gs2.Elapsed.TotalSeconds);
 
         var s = new ServiceCollection()
             .AddSingleton<IBotCredentials>(Credentials)
@@ -153,7 +165,8 @@ public class Mewdeko
         {
             AllowAutoRedirect = false
         });
-        if (Credentials.TotalShards <= 1 && Environment.GetEnvironmentVariable($"{Client.CurrentUser.Id}_IS_COORDINATED") != "1")
+        if (Credentials.TotalShards <= 1 &&
+            Environment.GetEnvironmentVariable($"{Client.CurrentUser.Id}_IS_COORDINATED") != "1")
         {
             s.AddSingleton<ICoordinator, SingleProcessCoordinator>();
         }
@@ -181,12 +194,22 @@ public class Mewdeko
 
         Log.Information("Passed Interface Scanner");
 
+        //todo: this line was deleted in the 0d1a038 commit of psqldeko
         s.LoadFrom(Assembly.GetAssembly(typeof(CommandHandler)));
+
         //initialize Services
         Services = s.BuildServiceProvider();
         var commandHandler = Services.GetService<CommandHandler>();
         commandHandler.AddServices(s);
         _ = Task.Run(() => LoadTypeReaders(typeof(Mewdeko).Assembly));
+
+        //todo: another part of the skipped psqldeko 1st commit
+        //var cache = Services.GetService<IDataCache>();
+        //var sub = cache.Redis.GetSubscriber();
+        //await sub.SubscribeAsync($"{Credentials.RedisKey()}_configsupdate", async (_, _) =>
+        //{
+        //    await GuildConfigsUpdated();
+        //});
 
         sw.Stop();
         Log.Information($"All services loaded in {sw.Elapsed.TotalSeconds:F2}s");
@@ -234,7 +257,7 @@ public class Mewdeko
         interactionService.AddTypeConverter<StatusRolesTable>(new StatusRolesTypeConverter());
 
         sw.Stop();
-        Log.Information($"TypeReaders loaded in {sw.Elapsed.TotalSeconds:F2}s");
+        Log.Information("TypeReaders loaded in {ElapsedTotalSeconds}s", sw.Elapsed.TotalSeconds);
         return toReturn;
     }
 
@@ -272,7 +295,7 @@ public class Mewdeko
         Client.Ready -= SetClientReady;
         Client.JoinedGuild += Client_JoinedGuild;
         Client.LeftGuild += Client_LeftGuild;
-        Log.Information("Shard {0} logged in.", Client.ShardId);
+        Log.Information("Shard {0} logged in", Client.ShardId);
 
 #if !DEBUG
         Client.Log -= Client_Log;
@@ -319,7 +342,9 @@ public class Mewdeko
             }
 
             await JoinedGuild.Invoke(gc).ConfigureAwait(false);
-            var chan = await Client.Rest.GetChannelAsync(Credentials.GuildJoinsChannelId).ConfigureAwait(false) as RestTextChannel;
+            var chan =
+                await Client.Rest.GetChannelAsync(Credentials.GuildJoinsChannelId).ConfigureAwait(false) as
+                    RestTextChannel;
             var eb = new EmbedBuilder();
             eb.WithTitle($"Joined {Format.Bold(arg.Name)} {arg.Id}");
             eb.AddField("Members", arg.MemberCount);
@@ -369,7 +394,8 @@ public class Mewdeko
             }
             catch
             {
-                Log.Information("Unable to connect to lavalink. If you want music please launch tha lavalink binary separately.");
+                Log.Information(
+                    "Unable to connect to lavalink. If you want music please launch tha lavalink binary separately");
             }
         });
 #if !DEBUG
@@ -399,7 +425,8 @@ public class Mewdeko
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Failed running OnReadyAsync method on {Type} type: {Message}", toExec.GetType().Name, ex.Message);
+                Log.Error(ex, "Failed running OnReadyAsync method on {Type} type: {Message}", toExec.GetType().Name,
+                    ex.Message);
             }
         });
 
@@ -472,6 +499,16 @@ public class Mewdeko
             Activity = type
         };
         var sub = Services.GetService<IDataCache>().Redis.GetSubscriber();
-        await sub.PublishAsync($"{Client.CurrentUser.Id}_status.game_set", JsonConvert.SerializeObject(obj)).ConfigureAwait(false);
+        await sub.PublishAsync($"{Client.CurrentUser.Id}_status.game_set", JsonConvert.SerializeObject(obj))
+            .ConfigureAwait(false);
     }
+
+    //todo: another part of the psqldeko commit 0d1a038 that was skipped due to not porting the very first commit
+    //public async Task GuildConfigsUpdated()
+    //{
+    //    await using var uow = db.GetDbContext();
+    //    AllGuildConfigs =
+    //        new ConcurrentHashSet<GuildConfig>(
+    //            uow.GuildConfigs.GetAllGuildConfigs(Client.Guilds.Select(x => x.Id).ToList()));
+    //}
 }
