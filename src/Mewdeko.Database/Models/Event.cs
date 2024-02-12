@@ -1,4 +1,4 @@
-﻿namespace Mewdeko.Database.Models;
+namespace Mewdeko.Database.Models;
 
 public class CurrencyEvent
 {
@@ -43,6 +43,4 @@ public class CurrencyEvent
     public string ExtraString { get; set; }
 }
 
-public class AwardedUser
-{
-}
+public class AwardedUser;

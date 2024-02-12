@@ -1,5 +1,6 @@
-﻿namespace Mewdeko.Database.Models;
+namespace Mewdeko.Database.Models;
 
+// ReSharper disable once InconsistentNaming
 public class GcChannelId : DbEntity
 {
     public GuildConfig GuildConfig { get; set; }

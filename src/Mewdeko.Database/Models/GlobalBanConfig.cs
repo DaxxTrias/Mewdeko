@@ -1,16 +1,16 @@
-﻿namespace Mewdeko.Database.Models;
+namespace Mewdeko.Database.Models;
 
 public class GlobalBanConfig : DbEntity
 {
     public ulong GuildId { get; set; }
     public GbType BanTypes { get; set; }
     public ulong GlobalBanLogChannel { get; set; }
-    public GBActionType Action { get; set; }
+    public GbActionType Action { get; set; }
     public bool UseRecommendedAction { get; set; }
     public int Duration { get; set; }
 }
 
-public enum GBActionType
+public enum GbActionType
 {
     Kick,
     Ban,
