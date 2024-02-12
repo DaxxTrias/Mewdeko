@@ -1,4 +1,4 @@
-﻿using Discord.Commands;
+using Discord.Commands;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
 using Mewdeko.Common.Attributes.TextCommands;
@@ -10,11 +10,8 @@ namespace Mewdeko.Modules.Administration;
 public partial class Administration
 {
     [Group]
-    public class DiscordPermOverrideCommands : MewdekoSubmodule<DiscordPermOverrideService>
+    public class DiscordPermOverrideCommands(InteractiveService serv) : MewdekoSubmodule<DiscordPermOverrideService>
     {
-        private readonly InteractiveService interactivity;
-
-        public DiscordPermOverrideCommands(InteractiveService serv) => interactivity = serv;
 
         [Cmd, Aliases, RequireContext(ContextType.Guild),
          UserPerm(GuildPermission.Administrator)]
@@ -64,7 +61,7 @@ public partial class Administration
                 .WithDefaultEmotes()
                 .WithActionOnCancellation(ActionOnStop.DeleteMessage)
                 .Build();
-            await interactivity.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
+            await serv.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
 
             async Task<PageBuilder> PageFactory(int page)
             {
