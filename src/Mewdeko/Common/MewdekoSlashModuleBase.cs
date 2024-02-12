@@ -30,7 +30,8 @@ public abstract class MewdekoSlashCommandModule : InteractionModuleBase
     public async Task ReplyErrorLocalizedAsync(string? textKey, params object?[] args)
     {
         var text = GetText(textKey, args);
-        await ctx.Interaction.SendErrorAsync($"{Format.Bold(ctx.User.ToString())} {text}").ConfigureAwait(false);
+        await ctx.Interaction.SendEphemeralErrorAsync($"{Format.Bold(ctx.User.ToString())} {text}")
+            .ConfigureAwait(false);
     }
 
     public async Task EphemeralReplyErrorLocalizedAsync(string? textKey, params object?[] args)
@@ -66,16 +67,20 @@ public abstract class MewdekoSlashCommandModule : InteractionModuleBase
         return ctx.Interaction.SendEphemeralConfirmAsync($"{Format.Bold(ctx.User.ToString())} {text}");
     }
 
-    public async Task<bool> PromptUserConfirmAsync(string text, ulong uid, bool ephemeral = false, bool delete = true) =>
-        await PromptUserConfirmAsync(new EmbedBuilder().WithOkColor().WithDescription(text), uid, ephemeral, delete).ConfigureAwait(false);
+    public async Task<bool>
+        PromptUserConfirmAsync(string text, ulong uid, bool ephemeral = false, bool delete = true) =>
+        await PromptUserConfirmAsync(new EmbedBuilder().WithOkColor().WithDescription(text), uid, ephemeral, delete)
+            .ConfigureAwait(false);
 
-    public async Task<bool> PromptUserConfirmAsync(EmbedBuilder embed, ulong userid, bool ephemeral = false, bool delete = true)
+    public async Task<bool> PromptUserConfirmAsync(EmbedBuilder embed, ulong userid, bool ephemeral = false,
+        bool delete = true)
     {
         embed.WithOkColor();
         var buttons = new ComponentBuilder().WithButton("Yes", "yes", ButtonStyle.Success)
             .WithButton("No", "no", ButtonStyle.Danger);
         if (!ctx.Interaction.HasResponded) await ctx.Interaction.DeferAsync(ephemeral).ConfigureAwait(false);
-        var msg = await ctx.Interaction.FollowupAsync(embed: embed.Build(), components: buttons.Build(), ephemeral: ephemeral)
+        var msg = await ctx.Interaction
+            .FollowupAsync(embed: embed.Build(), components: buttons.Build(), ephemeral: ephemeral)
             .ConfigureAwait(false);
         try
         {
@@ -98,7 +103,9 @@ public abstract class MewdekoSlashCommandModule : InteractionModuleBase
         var targetMaxRole = target.GetRoles().Max(r => r.Position);
         var modMaxRole = ((IGuildUser)ctx.User).GetRoles().Max(r => r.Position);
 
-        var hierarchyCheck = ctx.User.Id == ownerId ? botMaxRole > targetMaxRole : botMaxRole >= targetMaxRole && modMaxRole > targetMaxRole;
+        var hierarchyCheck = ctx.User.Id == ownerId
+            ? botMaxRole > targetMaxRole
+            : botMaxRole >= targetMaxRole && modMaxRole > targetMaxRole;
 
         if (!hierarchyCheck && displayError)
             await ReplyErrorLocalizedAsync("hierarchy").ConfigureAwait(false);
@@ -107,7 +114,8 @@ public abstract class MewdekoSlashCommandModule : InteractionModuleBase
     }
 
 
-    public async Task<string>? GetButtonInputAsync(ulong channelId, ulong msgId, ulong userId, bool alreadyDeferred = false)
+    public async Task<string>? GetButtonInputAsync(ulong channelId, ulong msgId, ulong userId,
+        bool alreadyDeferred = false)
     {
         var userInputTask = new TaskCompletionSource<string>();
         var dsc = (DiscordSocketClient)ctx.Client;
@@ -203,10 +211,6 @@ public abstract class MewdekoSlashModuleBase<TService> : MewdekoSlashCommandModu
     public TService Service { get; set; }
 }
 
-public abstract class MewdekoSlashSubmodule : MewdekoSlashCommandModule
-{
-}
+public abstract class MewdekoSlashSubmodule : MewdekoSlashCommandModule;
 
-public abstract class MewdekoSlashSubmodule<TService> : MewdekoSlashModuleBase<TService>
-{
-}
+public abstract class MewdekoSlashSubmodule<TService> : MewdekoSlashModuleBase<TService>;
