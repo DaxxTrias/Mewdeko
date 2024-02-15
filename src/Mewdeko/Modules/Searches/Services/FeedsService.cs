@@ -243,7 +243,11 @@ public class FeedsService : INService
                 catch (Exception ex) // General Exception for other errors
                 {
                     Log.Warning($"Error occurred in feed reader for RSS URL: {rssUrl}. Exception: {ex.Message}. StackTrace: {ex.StackTrace}");
-
+//#if DEBUG
+                    Log.Information($"{ex.Data}");
+                    Log.Information($"{ex.Message}");
+                    Log.Information($"{ex.StackTrace}");
+//#endif
                     if (ex.InnerException != null)
                     {
                         Log.Warning($"Inner Exception: {ex.InnerException.Message}. StackTrace: {ex.InnerException.StackTrace}");
