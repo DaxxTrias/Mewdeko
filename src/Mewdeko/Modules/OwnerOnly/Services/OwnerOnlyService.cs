@@ -298,6 +298,20 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
                 return;
             }
 
+            if (scannedWords.Contains("scan"))
+            {
+                try
+                {
+                    // https://github.com/OkGoDoIt/OpenAI-API-dotnet/commit/b824ac5b50027af48aa8ea02bf1bc40fac36f390#diff-ba720258629043138df0c8ebea494853e88e2517638a615c4a9c4fdc84a2a168
+                    await usrMsg.Channel.SendMessageAsync("Not Yet Implemented.");
+                    return;
+                }
+                catch
+                {
+                    throw;
+                }
+            }
+
             if (!conversations.TryGetValue(args.Author.Id, out var conversation))
             {
                 conversation = StartNewConversation(args.Author, api);
