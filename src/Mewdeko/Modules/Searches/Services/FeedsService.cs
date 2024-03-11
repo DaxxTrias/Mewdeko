@@ -90,7 +90,8 @@ public class FeedsService : INService
                                 if (feedItem.SpecificItem is AtomFeedItem atomFeedItem)
                                 {
                                     var previewElement = atomFeedItem.Element.Elements()
-                                        .FirstOrDefault(x => x.Name.LocalName == "preview") ?? atomFeedItem.Element.Elements()
+                                        .FirstOrDefault(x => x.Name.LocalName == "preview") ?? atomFeedItem.Element
+                                        .Elements()
                                         .FirstOrDefault(x => x.Name.LocalName == "thumbnail");
 
                                     var urlAttribute = previewElement?.Attribute("url");
@@ -115,7 +116,9 @@ public class FeedsService : INService
                                 return feed.ImageUrl;
                             })
                             .WithOverride("%categories%", () => string.Join(", ", feedItem.Categories))
-                            .WithOverride("%timestamp%", () => TimestampTag.FromDateTime(feedItem.PublishingDate.Value, TimestampTagStyles.LongDateTime).ToString())
+                            .WithOverride("%timestamp%",
+                                () => TimestampTag.FromDateTime(feedItem.PublishingDate.Value,
+                                    TimestampTagStyles.LongDateTime).ToString())
                             .WithOverride("%url%", () => feedItem.Link ?? feedItem.SpecificItem.Link)
                             .WithOverride("%feedurl%", () => rssUrl)
                             .Build();
@@ -198,7 +201,8 @@ public class FeedsService : INService
                             var channel = client.GetGuild(feed1.GuildConfig.GuildId).GetTextChannel(feed1.ChannelId);
                             if (channel is null)
                                 continue;
-                            var (builder, content, componentBuilder) = await GetFeedEmbed(repbuilder.Replace(feed1.Message), channel.Guild.Id);
+                            var (builder, content, componentBuilder) =
+                                await GetFeedEmbed(repbuilder.Replace(feed1.Message), channel.Guild.Id);
 
                             /*
                             if (feed1.Message is "-" or null)
@@ -215,7 +219,8 @@ public class FeedsService : INService
                             if (feed1.Message is "-" or null)
                                 allSendTasks.Add(channel.EmbedAsync(embed));
                             else
-                                allSendTasks.Add(channel.SendMessageAsync(content ?? "", embeds: builder ?? null, components: componentBuilder?.Build()));
+                                allSendTasks.Add(channel.SendMessageAsync(content ?? "", embeds: builder ?? null,
+                                    components: componentBuilder?.Build()));
                             
                         }
                     }
@@ -275,8 +280,10 @@ public class FeedsService : INService
 
         var (feedItem, _) = feed.Items
             .Select(item => (Item: item,
-                LastUpdate: item.PublishingDate?.ToUniversalTime() ?? (item.SpecificItem as AtomFeedItem)?.UpdatedDate?.ToUniversalTime()))
-            .Where(data => data.LastUpdate is not null).Select(data => (data.Item, LastUpdate: (DateTime)data.LastUpdate)).LastOrDefault();
+                LastUpdate: item.PublishingDate?.ToUniversalTime() ??
+                            (item.SpecificItem as AtomFeedItem)?.UpdatedDate?.ToUniversalTime()))
+            .Where(data => data.LastUpdate is not null)
+            .Select(data => (data.Item, LastUpdate: (DateTime)data.LastUpdate)).LastOrDefault();
 
         var repbuilder = new ReplacementBuilder()
             .WithOverride("%title%", () => feedItem.Title ?? "Unkown")
@@ -286,8 +293,9 @@ public class FeedsService : INService
             {
                 if (feedItem.SpecificItem is AtomFeedItem atomFeedItem)
                 {
-                    var previewElement = atomFeedItem.Element.Elements().FirstOrDefault(x => x.Name.LocalName == "preview") ??
-                                         atomFeedItem.Element.Elements().FirstOrDefault(x => x.Name.LocalName == "thumbnail");
+                    var previewElement =
+                        atomFeedItem.Element.Elements().FirstOrDefault(x => x.Name.LocalName == "preview") ??
+                        atomFeedItem.Element.Elements().FirstOrDefault(x => x.Name.LocalName == "thumbnail");
                     var urlAttribute = previewElement?.Attribute("url");
                     if (urlAttribute != null
                         && !string.IsNullOrWhiteSpace(urlAttribute.Value)
@@ -295,16 +303,19 @@ public class FeedsService : INService
                         return urlAttribute.Value;
                 }
 
-                if (feedItem.SpecificItem is not MediaRssFeedItem mediaRssFeedItem || !(mediaRssFeedItem.Enclosure?.MediaType?.StartsWith("image/") ?? false))
+                if (feedItem.SpecificItem is not MediaRssFeedItem mediaRssFeedItem ||
+                    !(mediaRssFeedItem.Enclosure?.MediaType?.StartsWith("image/") ?? false))
                     return feed.ImageUrl;
                 var imgUrl = mediaRssFeedItem.Enclosure.Url;
-                if (!string.IsNullOrWhiteSpace(imgUrl) && Uri.IsWellFormedUriString(imgUrl, UriKind.Absolute)) return imgUrl;
+                if (!string.IsNullOrWhiteSpace(imgUrl) && Uri.IsWellFormedUriString(imgUrl, UriKind.Absolute))
+                    return imgUrl;
 
                 return feed.ImageUrl;
             })
             .WithOverride("%categories%", () => string.Join(", ", feedItem.Categories))
             .WithOverride("%timestamp%",
-                () => TimestampTag.FromDateTime(feedItem.PublishingDate.Value, TimestampTagStyles.LongDateTime).ToString())
+                () => TimestampTag.FromDateTime(feedItem.PublishingDate.Value, TimestampTagStyles.LongDateTime)
+                    .ToString())
             .WithOverride("%url%", () => feedItem.Link ?? feedItem.SpecificItem.Link)
             .WithOverride("%feedurl%", () => sub.Url).Build();
         var embed = new EmbedBuilder().WithFooter(sub.Url);
@@ -390,7 +401,8 @@ public class FeedsService : INService
         */
     }
 
-    private Task<(Embed[] builder, string content, ComponentBuilder componentBuilder)> GetFeedEmbed(string message, ulong guildId)
+    private Task<(Embed[] builder, string content, ComponentBuilder componentBuilder)> GetFeedEmbed(string message,
+        ulong guildId)
         => SmartEmbed.TryParse(message, guildId, out var embed, out var content, out var components)
             ? Task.FromResult((embed, content, components))
             : Task.FromResult<(Embed[], string, ComponentBuilder)>((Array.Empty<Embed>(), message, null));
@@ -426,10 +438,7 @@ public class FeedsService : INService
         await uow.SaveChangesAsync();
         //adding all, in case bot wasn't on this guild when it started
         foreach (var feed in gc.FeedSubs)
-            subs.AddOrUpdate(feed.Url.ToLower(), new HashSet<FeedSub>
-            {
-                feed
-            }, (_, old) =>
+            subs.AddOrUpdate(feed.Url.ToLower(), [feed], (_, old) =>
             {
                 old.Add(feed);
                 return old;
@@ -448,7 +457,7 @@ public class FeedsService : INService
             .OrderBy(x => x.Id)
             .ToList();
         var toupdate = items[index];
-        subs.AddOrUpdate(toupdate.Url.ToLower(), new HashSet<FeedSub>(), (_, old) =>
+        subs.AddOrUpdate(toupdate.Url.ToLower(), [], (_, old) =>
         {
             old.Remove(toupdate);
             return old;
@@ -456,7 +465,7 @@ public class FeedsService : INService
         toupdate.Message = message;
         uow.Update(toupdate);
         await uow.SaveChangesAsync().ConfigureAwait(false);
-        subs.AddOrUpdate(toupdate.Url.ToLower(), new HashSet<FeedSub>(), (_, old) =>
+        subs.AddOrUpdate(toupdate.Url.ToLower(), [], (_, old) =>
         {
             old.Add(toupdate);
             return old;
@@ -478,7 +487,7 @@ public class FeedsService : INService
         if (items.Count <= index)
             return false;
         var toRemove = items[index];
-        subs.AddOrUpdate(toRemove.Url.ToLower(), new HashSet<FeedSub>(), (_, old) =>
+        subs.AddOrUpdate(toRemove.Url.ToLower(), [], (_, old) =>
         {
             old.Remove(toRemove);
             return old;

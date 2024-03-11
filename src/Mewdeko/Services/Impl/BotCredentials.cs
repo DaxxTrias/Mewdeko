@@ -44,7 +44,7 @@ public class BotCredentials : IBotCredentials
                         "Please enter your ID and and any other IDs seperated by a space to mark them as owners. You can get your ID by enabling developer mode in discord and right clicking your name");
                     var owners = Console.ReadLine();
                     var ownersList = string.IsNullOrWhiteSpace(owners)
-                        ? new List<ulong>()
+                        ? []
                         : owners.Split(' ').Select(ulong.Parse).ToList();
                     var model = new CredentialsModel
                     {
@@ -242,15 +242,12 @@ public class BotCredentials : IBotCredentials
     /// </summary>
     private class CredentialsModel : IBotCredentials
     {
-        public List<ulong> OwnerIds { get; set; } = new()
-        {
-            170185463200481280, 224188029324099584
-        };
+        public List<ulong> OwnerIds { get; set; } = [170185463200481280, 224188029324099584];
 
         public ulong[] OfficialMods { get; set; } =
-        {
+        [
             170185463200481280, 224188029324099584
-        };
+        ];
 
         public string Token { get; set; } = "";
 

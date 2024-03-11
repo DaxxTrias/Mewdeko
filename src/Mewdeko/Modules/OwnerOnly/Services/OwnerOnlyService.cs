@@ -327,11 +327,9 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
                     await usrMsg.SendConfirmReplyAsync("Session deleted");
                     return;
                 }
-                else
-                {
-                    await usrMsg.SendConfirmReplyAsync("No session to delete");
-                    return;
-                }
+
+                await usrMsg.SendConfirmReplyAsync("No session to delete");
+                return;
             }
 
             await using var uow = db.GetDbContext();
