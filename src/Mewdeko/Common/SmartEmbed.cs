@@ -1,58 +1,43 @@
 using Newtonsoft.Json;
 using Serilog;
 
-namespace Mewdeko.Common;
-
-public class SmartEmbed
+namespace Mewdeko.Common
 {
-    public static bool TryParse(
-        string? input,
-        ulong? guildId,
-        out Discord.Embed[]? embeds,
-        out string? plainText,
-        out ComponentBuilder? components)
+    /// <summary>
+    /// Provides methods for parsing and creating Discord embeds using embed json found at https://eb.mewdeko.tech
+    /// </summary>
+    public static class SmartEmbed
     {
-        try
+        /// <summary>
+        /// Tries to parse the input string into Discord embeds, plain text, and components.
+        /// </summary>
+        /// <param name="input">The input string containing the embed data.</param>
+        /// <param name="guildId">The ID of the guild where the embed is parsed.</param>
+        /// <param name="embeds">When this method returns, contains the parsed Discord embeds, if parsing succeeds; otherwise, null.</param>
+        /// <param name="plainText">When this method returns, contains the parsed plain text, if parsing succeeds; otherwise, null.</param>
+        /// <param name="components">When this method returns, contains the parsed components, if parsing succeeds; otherwise, null.</param>
+        /// <returns><c>true</c> if the input string is successfully parsed into Discord embeds, plain text, and components; otherwise, <c>false</c>.</returns>
+        public static bool TryParse(
+            string input,
+            ulong? guildId,
+            out Discord.Embed[]? embeds,
+            out string? plainText,
+            out ComponentBuilder? components)
         {
-            CrEmbed crembed;
-            embeds = Array.Empty<Discord.Embed>();
-            plainText = string.Empty;
-            components = null;
-            if (string.IsNullOrWhiteSpace(input) || !input.Trim().StartsWith('{')) return false;
             try
             {
-                crembed = JsonConvert.DeserializeObject<CrEmbed>(input);
-            }
-            catch (Exception e)
-            {
-                Log.Error(e, "Failed to parse embed");
-                return false;
-            }
-
-            if (!crembed.IsValid)
-            {
+                components = null;
+                plainText = null;
+                embeds = null;
                 NewEmbed newEmbed;
                 try
                 {
                     newEmbed = JsonConvert.DeserializeObject<NewEmbed>(input);
                 }
-                catch (Exception e)
+                catch
                 {
-                    Log.Error(e, "Failed to parse new format. trying dumb format");
-                    try
-                    {
-                        var dumbEmbed = JsonConvert.DeserializeObject<DumbEmbed.DumbEmbed>(input);
-                        embeds = DumbEmbed.DumbEmbed.ToEmbedArray(dumbEmbed.Embeds);
-                        plainText = dumbEmbed.Content ?? string.Empty;
-                        return true;
-                    }
-                    catch (Exception e2)
-                    {
-                        Log.Error(e2, "Failed to parse dumb format");
-                        return false;
-                    }
+                    return false;
                 }
-
 
                 if (newEmbed.Embed?.Fields is { Count: > 0 })
                 {
@@ -98,34 +83,14 @@ public class SmartEmbed
                 components = newEmbed.GetComponents(guildId);
                 return true;
             }
-
-            if (crembed is { Fields.Length: > 0 })
+            catch
             {
-                foreach (var f in crembed.Fields)
-                {
-                    f.Name = f.Name.TrimTo(256);
-                    f.Value = f.Value.TrimTo(1024);
-                }
-            }
-
-            if (crembed is { IsValid: false })
+                Log.Error("Unable to parse embed");
+                embeds = null;
+                plainText = null;
+                components = null;
                 return false;
-
-            embeds =
-            [
-                crembed.ToEmbed().Build()
-            ];
-            plainText = crembed.PlainText;
-            components = crembed.GetComponents(guildId);
-            return true;
-        }
-        catch (Exception e)
-        {
-            Log.Error("Failed to parse embed: {E}", e);
-            components = null;
-            embeds = null;
-            plainText = null;
-            return false;
+            }
         }
     }
 }

@@ -118,7 +118,9 @@ public class AfkService : INService, IReadyExecutor
         var latestAfkPerUserPerGuild =
             new ConcurrentDictionary<ulong, ConcurrentDictionary<ulong, Database.Models.Afk>>();
 
-        Parallel.ForEach(guilds, guildId =>
+        var guildIdsWithAfk = allafk.Select(afk => afk.GuildId).Distinct();
+
+        var tasks = guildIdsWithAfk.Select(guildId =>
         {
             var latestAfkPerUser = new ConcurrentDictionary<ulong, Database.Models.Afk>();
 
@@ -128,7 +130,8 @@ public class AfkService : INService, IReadyExecutor
                     (key, existingVal) => existingVal.When < afk.When ? afk : existingVal);
             }
 
-            latestAfkPerUserPerGuild[guildId] = latestAfkPerUser;
+            latestAfkPerUserPerGuild.TryAdd(guildId, latestAfkPerUser);
+            return Task.CompletedTask;
         });
 
         CacheLatestAfks(latestAfkPerUserPerGuild);
