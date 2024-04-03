@@ -22,6 +22,9 @@ using Image = Discord.Image;
 
 namespace Mewdeko.Modules.OwnerOnly.Services;
 
+/// <summary>
+/// Service for owner-only commands.
+/// </summary>
 public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
 {
     private readonly Mewdeko bot;
@@ -47,6 +50,26 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
     private ImmutableDictionary<ulong, IDMChannel> ownerChannels =
         new Dictionary<ulong, IDMChannel>().ToImmutableDictionary();
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="OwnerOnlyService"/> class.
+    /// This service handles owner-only commands and functionalities for the bot.
+    /// </summary>
+    /// <param name="client">The Discord client used for interacting with the Discord API.</param>
+    /// <param name="cmdHandler">Handles command processing and execution.</param>
+    /// <param name="db">Provides access to the database for data persistence.</param>
+    /// <param name="strings">Provides access to localized bot strings.</param>
+    /// <param name="creds">Contains the bot's credentials and configuration.</param>
+    /// <param name="cache">Provides caching functionalities.</param>
+    /// <param name="factory">Factory for creating instances of <see cref="HttpClient"/>.</param>
+    /// <param name="bss">Service for accessing bot configuration settings.</param>
+    /// <param name="phProviders">A collection of providers for placeholder values.</param>
+    /// <param name="bot">Reference to the main bot instance.</param>
+    /// <param name="guildSettings">Service for accessing guild-specific settings.</param>
+    /// <param name="handler">Event handler for subscribing to bot events.</param>
+    /// <remarks>
+    /// The constructor subscribes to message received events and sets up periodic tasks for rotating statuses
+    /// and checking for updates. It also listens for commands to leave guilds or reload images via Redis subscriptions.
+    /// </remarks>
     public OwnerOnlyService(DiscordSocketClient client, CommandHandler cmdHandler, DbService db,
         IBotStrings strings, IBotCredentials creds, IDataCache cache, IHttpClientFactory factory,
         BotConfigService bss, IEnumerable<IPlaceholderProvider> phProviders, Mewdeko bot,
@@ -607,6 +630,10 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         return embeds;
     }
 
+
+    /// <summary>
+    /// Resets the count of used GPT tokens to zero in the database. This is typically called to clear the token usage count at the start of a new billing period or when manually resetting the token count.
+    /// </summary>
     public async Task ClearUsedTokens()
     {
         await using var uow = db.GetDbContext();
@@ -618,7 +645,16 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         await uow.SaveChangesAsync();
     }
 
-    // forwards dms
+    /// <summary>
+    /// Forwards direct messages (DMs) received by the bot to the owners' DMs. This allows bot owners to monitor and respond to user messages directly.
+    /// </summary>
+    /// <param name="discordSocketClient">The Discord client through which the message was received.</param>
+    /// <param name="guild">The guild associated with the message, if any.</param>
+    /// <param name="msg">The message that was received and is to be forwarded.</param>
+    /// <remarks>
+    /// The method checks if the message was sent in a DM channel and forwards it to all owners if the setting is enabled.
+    /// Attachments are also forwarded. Errors in sending messages to any owner are logged but not thrown.
+    /// </remarks>
     public async Task LateExecute(DiscordSocketClient discordSocketClient, IGuild guild, IUserMessage msg)
     {
         var bs = bss.Data;
@@ -670,6 +706,12 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         }
     }
 
+    /// <summary>
+    /// Initializes required services and loads configurations when the bot is ready. This includes setting up automatic commands based on their configured intervals and creating direct message channels for the bot owners.
+    /// </summary>
+    /// <remarks>
+    /// This method is typically called once when the bot starts and is ready to receive and process messages. It prepares the bot for operation by loading necessary configurations and establishing connections.
+    /// </remarks>
     public async Task OnReadyAsync()
     {
         await using var uow = db.GetDbContext();
@@ -756,6 +798,12 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         }
     }
 
+    /// <summary>
+    /// Removes a playing status from the rotating statuses list based on its index.
+    /// </summary>
+    /// <param name="index">The zero-based index of the status to remove.</param>
+    /// <returns>The status that was removed, or null if the index was out of bounds.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown if the <paramref name="index"/> is less than 0.</exception>
     public async Task<string?> RemovePlayingAsync(int index)
     {
         if (index < 0)
@@ -776,6 +824,12 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         return toRemove.Status;
     }
 
+    /// <summary>
+    /// Adds a new playing status to the list of rotating statuses.
+    /// </summary>
+    /// <param name="t">The type of activity for the status (e.g., playing, streaming).</param>
+    /// <param name="status">The text of the status to display.</param>
+    /// <returns>A task that represents the asynchronous add operation.</returns>
     public async Task AddPlaying(ActivityType t, string status)
     {
         await using var uow = db.GetDbContext();
@@ -788,6 +842,10 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         await uow.SaveChangesAsync().ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Toggles the rotation of playing statuses on or off.
+    /// </summary>
+    /// <returns>True if rotation is enabled after the toggle, false otherwise.</returns>
     public bool ToggleRotatePlaying()
     {
         var enabled = false;
@@ -795,6 +853,10 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         return enabled;
     }
 
+    /// <summary>
+    /// Retrieves the current list of rotating playing statuses.
+    /// </summary>
+    /// <returns>A read-only list of <see cref="RotatingPlayingStatus"/> representing the current rotating statuses.</returns>
     public IReadOnlyList<RotatingPlayingStatus> GetRotatingStatuses()
     {
         using var uow = db.GetDbContext();
@@ -828,6 +890,13 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         }
     }
 
+    /// <summary>
+    /// Adds a new auto command to the database and schedules it if necessary.
+    /// </summary>
+    /// <param name="cmd">The auto command to be added.</param>
+    /// <remarks>
+    /// If the command's interval is 5 seconds or more, it's also scheduled to be executed periodically according to its interval.
+    /// </remarks>
     public void AddNewAutoCommand(AutoCommand cmd)
     {
         using (var uow = db.GetDbContext())
@@ -847,6 +916,12 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         }
     }
 
+    /// <summary>
+    /// Sets the default prefix for bot commands.
+    /// </summary>
+    /// <param name="prefix">The new prefix to be set.</param>
+    /// <returns>The newly set prefix.</returns>
+    /// <exception cref="ArgumentNullException">Thrown if <paramref name="prefix"/> is null or whitespace.</exception>
     public string SetDefaultPrefix(string prefix)
     {
         if (string.IsNullOrWhiteSpace(prefix))
@@ -857,6 +932,10 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         return prefix;
     }
 
+    /// <summary>
+    /// Retrieves a list of auto commands set to execute at bot startup (interval of 0).
+    /// </summary>
+    /// <returns>A list of startup auto commands.</returns>
     public IEnumerable<AutoCommand> GetStartupCommands()
     {
         using var uow = db.GetDbContext();
@@ -868,6 +947,10 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
                 .ToList();
     }
 
+    /// <summary>
+    /// Retrieves a list of auto commands with an interval of 5 seconds or more.
+    /// </summary>
+    /// <returns>A list of auto commands set to execute periodically.</returns>
     public IEnumerable<AutoCommand> GetAutoCommands()
     {
         using var uow = db.GetDbContext();
@@ -879,12 +962,21 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
                 .ToList();
     }
 
+    /// <summary>
+    /// Instructs the bot to leave a guild based on the guild's identifier or name.
+    /// </summary>
+    /// <param name="guildStr">The guild identifier or name.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
     public Task LeaveGuild(string guildStr)
     {
         var sub = cache.Redis.GetSubscriber();
         return sub.PublishAsync($"{creds.RedisKey()}_leave_guild", guildStr);
     }
 
+    /// <summary>
+    /// Attempts to restart the bot using the configured restart command.
+    /// </summary>
+    /// <returns>True if the command to restart the bot is not null or whitespace and the bot is restarted; otherwise, false.</returns>
     public bool RestartBot()
     {
         var cmd = creds.RestartCommand;
@@ -895,6 +987,12 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         return true;
     }
 
+    /// <summary>
+    /// Removes a startup command (a command with an interval of 0) at the specified index.
+    /// </summary>
+    /// <param name="index">The zero-based index of the startup command to remove.</param>
+    /// <param name="cmd">Out parameter that returns the removed auto command if the operation succeeds.</param>
+    /// <returns>True if a command was found and removed; otherwise, false.</returns>
     public bool RemoveStartupCommand(int index, out AutoCommand cmd)
     {
         using var uow = db.GetDbContext();
@@ -914,6 +1012,12 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         return false;
     }
 
+    /// <summary>
+    /// Removes an auto command based on its index in the collection of commands with an interval of 5 seconds or more.
+    /// </summary>
+    /// <param name="index">The zero-based index of the command to remove.</param>
+    /// <param name="cmd">Outputs the removed <see cref="AutoCommand"/> if the method returns true.</param>
+    /// <returns>True if a command was successfully found and removed; otherwise, false.</returns>
     public bool RemoveAutoCommand(int index, out AutoCommand cmd)
     {
         using var uow = db.GetDbContext();
@@ -936,6 +1040,11 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         return true;
     }
 
+    /// <summary>
+    /// Sets a new avatar for the bot by downloading an image from a specified URL.
+    /// </summary>
+    /// <param name="img">The URL of the image to set as the new avatar.</param>
+    /// <returns>True if the avatar was successfully updated; otherwise, false.</returns>
     public async Task<bool> SetAvatar(string img)
     {
         if (string.IsNullOrWhiteSpace(img))
@@ -951,7 +1060,6 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         if (!sr.IsImage())
             return false;
 
-        // i can't just do ReadAsStreamAsync because dicord.net's image poops itself
         var imgData = await sr.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
         var imgStream = imgData.ToStream();
         await using var _ = imgStream.ConfigureAwait(false);
@@ -960,30 +1068,41 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         return true;
     }
 
+    /// <summary>
+    /// Clears all startup commands from the database.
+    /// </summary>
     public void ClearStartupCommands()
     {
         using var uow = db.GetDbContext();
-        var toRemove =
-            uow.AutoCommands
-                .AsNoTracking()
-                .Where(x => x.Interval == 0);
+        var toRemove = uow.AutoCommands
+            .AsNoTracking()
+            .Where(x => x.Interval == 0);
 
         uow.AutoCommands.RemoveRange(toRemove);
         uow.SaveChanges();
     }
 
+    /// <summary>
+    /// Reloads images from a source, typically used for refreshing local or cached resources.
+    /// </summary>
     public void ReloadImages()
     {
         var sub = cache.Redis.GetSubscriber();
         sub.Publish($"{creds.RedisKey()}_reload_images", "");
     }
 
+    /// <summary>
+    /// Instructs the bot to shut down.
+    /// </summary>
     public void Die()
     {
         var sub = cache.Redis.GetSubscriber();
         sub.Publish($"{creds.RedisKey()}_die", "", CommandFlags.FireAndForget);
     }
 
+    /// <summary>
+    /// Restarts the bot by invoking a system command.
+    /// </summary>
     public void Restart()
     {
         Process.Start(creds.RestartCommand.Cmd, creds.RestartCommand.Args);
@@ -991,6 +1110,11 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         sub.Publish($"{creds.RedisKey()}_die", "", CommandFlags.FireAndForget);
     }
 
+    /// <summary>
+    /// Restarts a specific bot shard.
+    /// </summary>
+    /// <param name="shardId">The ID of the shard to restart.</param>
+    /// <returns>True if the shard ID is valid and the shard is restarted; otherwise, false.</returns>
     public bool RestartShard(int shardId)
     {
         if (shardId < 0 || shardId >= creds.TotalShards)
@@ -1004,6 +1128,10 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         return true;
     }
 
+    /// <summary>
+    /// Toggles the bot's message forwarding feature.
+    /// </summary>
+    /// <returns>True if message forwarding is enabled after the toggle; otherwise, false.</returns>
     public bool ForwardMessages()
     {
         var isForwarding = false;
@@ -1012,6 +1140,10 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         return isForwarding;
     }
 
+    /// <summary>
+    /// Toggles whether the bot forwards messages to all owners or just the primary owner.
+    /// </summary>
+    /// <returns>True if forwarding to all owners is enabled after the toggle; otherwise, false.</returns>
     public bool ForwardToAll()
     {
         var isToAll = false;

@@ -2,6 +2,17 @@ accept:
   - accept
   - suggestaccept
   - acceptsuggest
+autobanroleadd:
+  - autobanroleadd
+  - abra
+autobanroleremove:
+  - autobanroleremove
+  - abrr
+baninrole:
+  - baninrole
+debugembed:
+  - debugembed
+  - embeddebug
 acceptchannel:
   - acceptchannel
 gpingrole:
@@ -2195,4 +2206,4 @@ votesleaderboard:
 handhold:
   - handhold
 punch:
-  - punch
+  - punch
