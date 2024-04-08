@@ -185,7 +185,7 @@ public class BotCredentials : IBotCredentials
         }
     }
 
-    //// <summary>
+    /// <summary>
     /// Gets or sets the bot's token.
     /// </summary>
     public string Token { get; set; }
