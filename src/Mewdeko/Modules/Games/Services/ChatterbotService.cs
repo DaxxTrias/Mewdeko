@@ -1,4 +1,5 @@
 using System.Net.Http;
+using Mewdeko.Common.Configs;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Modules.Games.Common.ChatterBot;
 using Mewdeko.Modules.Permissions.Services;
@@ -17,6 +18,7 @@ public class ChatterBotService : INService
     private readonly DbService db;
     private readonly IHttpClientFactory httpFactory;
     private readonly GuildSettingsService guildSettings;
+    private readonly BotConfig config;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ChatterBotService"/> class.
@@ -31,11 +33,12 @@ public class ChatterBotService : INService
     public ChatterBotService(DiscordSocketClient client, IHttpClientFactory factory,
         IBotCredentials creds, DbService db,
         BlacklistService blacklistService,
-        GuildSettingsService guildSettings, EventHandler eventHandler)
+        GuildSettingsService guildSettings, EventHandler eventHandler, BotConfig config)
     {
         this.db = db;
         this.blacklistService = blacklistService;
         this.guildSettings = guildSettings;
+        this.config = config;
         this.client = client;
         this.creds = creds;
         httpFactory = factory;
@@ -154,7 +157,8 @@ public class ChatterBotService : INService
         if (blacklistService.BlacklistEntries.Select(x => x.ItemId).Contains(channel.Guild.Id))
         {
             await channel.SendErrorAsync(
-                "This server is blacklisted. Please join using the button below for an explanation or to appeal.");
+                "This server is blacklisted. Please join using the button below for an explanation or to appeal.",
+                config);
             return (null, null);
         }
 
@@ -196,7 +200,7 @@ public class ChatterBotService : INService
     /// <param name="message">The message to ask Cleverbot.</param>
     /// <param name="msg">The original user message.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    private static async Task<bool> TryAsk(IChatterBotSession cleverbot, ITextChannel channel, string message,
+    private async Task<bool> TryAsk(IChatterBotSession cleverbot, ITextChannel channel, string message,
         IUserMessage msg)
     {
         await channel.TriggerTypingAsync().ConfigureAwait(false);
@@ -208,7 +212,8 @@ public class ChatterBotService : INService
         catch
         {
             await channel.SendErrorAsync(
-                    "GPT is pay-as-you-go dont abuse it or you lose access")
+                    "GPT is pay-as-you-go dont abuse it or you lose access",
+                    config)
                 .ConfigureAwait(false);
             return false;
         }

@@ -162,6 +162,7 @@ public class Mewdeko
                 .AddSingleton<Localization>()
                 .AddSingleton<MusicService>()
                 .AddSingleton<BotConfigService>()
+                .AddSingleton<BotConfig>()
                 .AddConfigServices()
                 .AddBotStringsServices(Credentials.TotalShards)
                 .AddMemoryCache()
@@ -340,12 +341,14 @@ public class Mewdeko
             try
             {
                 var chan = await Client.Rest.GetChannelAsync(Credentials.GuildJoinsChannelId).ConfigureAwait(false);
-                await ((RestTextChannel)chan).SendErrorAsync($"Left server: {arg.Name} [{arg.Id}]", false,
-                [
-                    new EmbedFieldBuilder().WithName("Total Guilds")
-                        .WithValue(Services.GetRequiredService<ICoordinator>()
-                            .GetGuildCount().ToString())
-                ]).ConfigureAwait(false);
+                await ((RestTextChannel)chan).SendErrorAsync($"Left server: {arg.Name} [{arg.Id}]", new BotConfig(),
+                    fields:
+
+                    [
+                        new EmbedFieldBuilder().WithName("Total Guilds")
+                            .WithValue(Services.GetRequiredService<ICoordinator>()
+                                .GetGuildCount().ToString())
+                    ]).ConfigureAwait(false);
             }
             catch
             {

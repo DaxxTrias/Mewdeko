@@ -82,7 +82,7 @@ public partial class Administration
         {
             if (timer is < 0 or > 90000)
             {
-                await ctx.Channel.SendErrorAsync(GetText("maxdeletetime", "90000 seconds")).ConfigureAwait(false);
+                await ctx.Channel.SendErrorAsync(GetText("maxdeletetime", "90000 seconds"), Config).ConfigureAwait(false);
                 return;
             }
 

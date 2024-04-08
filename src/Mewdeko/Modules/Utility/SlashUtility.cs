@@ -204,7 +204,7 @@ public class SlashUtility(
             }
             else
                 await ctx.Interaction.SendEphemeralErrorAsync(
-                    "The message was empty after variable replacements. Please double check your input.");
+                    "The message was empty after variable replacements. Please double check your input.", Config);
         }
     }
 
@@ -327,7 +327,8 @@ public class SlashUtility(
             case null when channel == null:
                 await ctx.Interaction
                     .SendEphemeralErrorAsync(
-                        "You arent in a voice channel, and you haven't mentioned one either to use this command!")
+                        "You arent in a voice channel, and you haven't mentioned one either to use this command!",
+                        Config)
                     .ConfigureAwait(false);
                 return;
             // ReSharper disable once ConditionIsAlwaysTrueOrFalse
@@ -382,7 +383,7 @@ public class SlashUtility(
         // Because discord is ass and uses int32 instead of int64
         if (!ulong.TryParse(userIdstring, out var userId))
         {
-            await ctx.Interaction.SendEphemeralErrorAsync("Please make sure that you put an ID in.");
+            await ctx.Interaction.SendEphemeralErrorAsync("Please make sure that you put an ID in.", Config);
             return;
         }
 
@@ -390,7 +391,7 @@ public class SlashUtility(
         if (usr is null)
         {
             await ctx.Interaction.SendErrorAsync(
-                "That user could not be found. Please ensure that was the correct ID.");
+                "That user could not be found. Please ensure that was the correct ID.", Config);
         }
         else
         {
