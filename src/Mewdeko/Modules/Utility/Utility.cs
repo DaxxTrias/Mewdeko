@@ -46,8 +46,6 @@ public partial class Utility(
     DbService db)
     : MewdekoModuleBase<UtilityService>
 {
-    private static readonly SemaphoreSlim Sem = new(1, 1);
-
     /// <summary>
     /// Parses the type of permission search.
     /// </summary>
@@ -63,6 +61,8 @@ public partial class Utility(
         /// </summary>
         Or
     }
+
+    private static readonly SemaphoreSlim Sem = new(1, 1);
 
     /// <summary>
     /// Debug command to test parsing of embeds.
@@ -1687,7 +1687,7 @@ public partial class Utility(
             else
                 try
                 {
-                    await channel.SendMessageAsync(message, allowedMentions: !canMention
+                    await channel.SendMessageAsync(msg, allowedMentions: !canMention
                         ? new AllowedMentions(AllowedMentionTypes.Users)
                         : AllowedMentions.All);
                 }
