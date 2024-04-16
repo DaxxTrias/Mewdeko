@@ -431,7 +431,8 @@ public class LogCommandService : INService
         gss.UpdateGuildConfig(guild.Id, gc);
     }
 
-    private async Task Client_UserVoiceStateUpdated_TTS(SocketUser iusr, SocketVoiceState before, SocketVoiceState after)
+    private async Task Client_UserVoiceStateUpdated_TTS(SocketUser iusr,
+        SocketVoiceState before, SocketVoiceState after)
     {
         try
         {
@@ -1051,7 +1052,9 @@ public class LogCommandService : INService
         }
     }
 
-    private async Task Client_BulkDelete(IReadOnlyCollection<Cacheable<IMessage, ulong>> messages, Cacheable<IMessageChannel, ulong> channel)
+    private async Task Client_BulkDelete(IReadOnlyCollection<Cacheable<IMessage,
+        ulong>> messages,
+        Cacheable<IMessageChannel, ulong> channel)
     {
         if (channel.Value is not ITextChannel chan)
             return;

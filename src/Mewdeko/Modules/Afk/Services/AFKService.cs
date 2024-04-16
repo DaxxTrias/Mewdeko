@@ -1,3 +1,4 @@
+using System.Threading;
 using Humanizer;
 using LinqToDB.EntityFrameworkCore;
 using Mewdeko.Common.ModuleBehaviors;
@@ -38,19 +39,24 @@ public class AfkService : INService, IReadyExecutor
 
     private async Task StartTimedAfkLoop()
     {
-        while (true)
+        var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+        while (await timer.WaitForNextTickAsync())
         {
             await Task.Delay(1000).ConfigureAwait(false);
             try
             {
                 var now = DateTime.UtcNow;
-                var afks = await GetAfkBeforeAsync(now).ConfigureAwait(false);
-                if (afks.Count == 0)
+                var afks = GetAfkBeforeAsync(now);
+                if (afks.Any())
                     continue;
 
-                Log.Information($"Executing {afks.Count} timed AFKs.");
+                Log.Information($"Executing {afks.Count()} timed AFKs.");
 
-                // make groups of 5, with 1.5 second inbetween each one to ensure against ratelimits
+                await Task.WhenAll(afks.Select(TimedAfkFinished)).ConfigureAwait(false);
+                await Task.Delay(1500).ConfigureAwait(false);
+
+                /*
+                make groups of 5, with 1.5 second inbetween each one to ensure against ratelimits
                 var i = 0;
                 foreach (var group in afks
                              .GroupBy(_ => ++i / ((afks.Count / 5) + 1)))
@@ -59,6 +65,7 @@ public class AfkService : INService, IReadyExecutor
                     await Task.WhenAll(executedReminders.Select(TimedAfkFinished)).ConfigureAwait(false);
                     await Task.Delay(1500).ConfigureAwait(false);
                 }
+                */
             }
             catch (Exception ex)
             {
@@ -68,13 +75,24 @@ public class AfkService : INService, IReadyExecutor
         }
     }
 
-    private Task<List<Database.Models.Afk>> GetAfkBeforeAsync(DateTime now)
+    private IEnumerable<Database.Models.Afk> GetAfkBeforeAsync(DateTime now)
     {
         using var uow = db.GetDbContext();
-        return uow.Afk
-            .FromSqlInterpolated(
+        IEnumerable<Database.Models.Afk> afks;
+
+        if (uow.Database.IsNpgsql())
+        {
+            afks = uow.Afk.ToLinqToDB().Where(x => (int)(x.GuildId / (ulong)Math.Pow(2, 22) %
+            (ulong)creds.TotalShards) == client.ShardId && x.When < now).ToList();
+        }
+        else
+        {
+            afks = uow.Afk.FromSqlInterpolated(
                 $"select * from AFK where ((guildid >> 22) % {creds.TotalShards}) == {client.ShardId} and \"when\" < {now};")
-            .ToListAsync();
+                .ToList();
+        }
+
+        return afks;
     }
 
     private async Task TimedAfkFinished(Database.Models.Afk afk)
@@ -126,10 +144,11 @@ public class AfkService : INService, IReadyExecutor
         }
 
         Environment.SetEnvironmentVariable($"AFK_CACHED_{client.ShardId}", "1");
-        Log.Information("AFK Cached.");
+        Log.Information("AFK Cached");
     }
 
-    private async Task UserTyping(Cacheable<IUser, ulong> user, Cacheable<IMessageChannel, ulong> chan)
+    private async Task UserTyping(Cacheable<IUser, ulong> user,
+        Cacheable<IMessageChannel, ulong> chan)
     {
         if (user.Value is IGuildUser use)
         {
@@ -137,13 +156,18 @@ public class AfkService : INService, IReadyExecutor
                 if (IsAfk(use.Guild, use))
                 {
                     var t = GetAfkMessage(use.Guild.Id, user.Id).Last();
-                    if (t.DateAdded != null && t.DateAdded.Value.ToLocalTime() < DateTime.Now.AddSeconds(-await GetAfkTimeout(use.GuildId)) && t.WasTimed == 0)
+                    if (t.DateAdded != null && t.DateAdded.Value.ToLocalTime() <
+                        DateTime.Now.AddSeconds(-await GetAfkTimeout(use.GuildId)) && t.WasTimed == 0)
                     {
                         await AfkSet(use.Guild, use, "", 0).ConfigureAwait(false);
-                        var msg = await chan.Value.SendMessageAsync($"Welcome back {user.Value.Mention}! I noticed you typing so I disabled your afk.").ConfigureAwait(false);
+                        var msg = await chan.Value
+                            .SendMessageAsync(
+                            $"Welcome back {user.Value.Mention}! I noticed you typing so I disabled your afk.")
+                            .ConfigureAwait(false);
                         try
                         {
-                            await use.ModifyAsync(x => x.Nickname = use.Nickname.Replace("[AFK]", "")).ConfigureAwait(false);
+                            await use.ModifyAsync(x => x.Nickname =
+                            use.Nickname.Replace("[AFK]", "")).ConfigureAwait(false);
                         }
                         catch
                         {
