@@ -28,10 +28,9 @@ public class FeedsService : INService
     public FeedsService(DbService db, DiscordSocketClient client, Mewdeko bot)
     {
         this.db = db;
-        this.isRunning = true;
-        var allgc = bot.AllGuildConfigs;
-        subs = allgc
-            .SelectMany(x => x.FeedSubs)
+
+        subs = bot.AllGuildConfigs
+            .SelectMany(x => x.Value.FeedSubs)
             .GroupBy(x => x.Url.ToLower())
             .ToDictionary(x => x.Key, x => x.ToHashSet())
             .ToConcurrent();
