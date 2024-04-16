@@ -12,7 +12,6 @@ public partial class Administration
     [Group]
     public class DiscordPermOverrideCommands(InteractiveService serv) : MewdekoSubmodule<DiscordPermOverrideService>
     {
-
         [Cmd, Aliases, RequireContext(ContextType.Guild),
          UserPerm(GuildPermission.Administrator)]
         public async Task DiscordPermOverride(CommandOrCrInfo cmd, params GuildPermission[]? perms)
