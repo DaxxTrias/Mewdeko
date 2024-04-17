@@ -1,5 +1,6 @@
-﻿using System.Runtime.CompilerServices;
+using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
+using LinqToDB.EntityFrameworkCore;
 using Mewdeko.Common.DiscordImplementations;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Common.PubSub;
@@ -181,7 +182,9 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
                     var user = msg.Author as IGuildUser;
                     if (!user.GuildPermissions.Has(guildPermission))
                     {
-                        Log.Information("Chat Trigger {CtTrigger} Blocked for {MsgAuthor} in {Guild} due to them missing {Perms}.", ct.Trigger, msg.Author, guild, guildPermission);
+                        Log.Information("" +
+                            "Chat Trigger {CtTrigger} Blocked for {MsgAuthor} in {Guild} due to them missing {Perms}.",
+                            ct.Trigger, msg.Author, guild, guildPermission);
                         return false;
                     }
                 }
@@ -306,7 +309,8 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
                                 return;
                             var returnMsg = strings.GetText("perm_prevent", guild.Id,
                                 index + 1,
-                                Format.Bold(pc.Permissions[index].GetCommand(await guildSettings.GetPrefix(guild), guild)));
+                                Format.Bold(pc.Permissions[index]
+                                    .GetCommand(await guildSettings.GetPrefix(guild), guild)));
                             try
                             {
                                 await fakeMsg.Channel.SendErrorAsync(returnMsg).ConfigureAwait(false);
@@ -326,7 +330,8 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
                             var user = inter.User as IGuildUser;
                             if (!user.GuildPermissions.Has(guildPermission))
                             {
-                                Log.Information($"Chat Trigger {ct.Trigger} Blocked for {inter.User} in {guild} due to them missing {guildPermission}.");
+                                Log.Information(
+                                    $"Chat Trigger {ct.Trigger} Blocked for {inter.User} in {guild} due to them missing {guildPermission}.");
                                 return;
                             }
                         }
@@ -351,7 +356,13 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
                         await uow.SaveChangesAsync();
                     }
 
-                    var sentMsg = await ct.SendInteraction(inter, this.client, false, fakeMsg, ct.EphemeralResponse, uow, followup).ConfigureAwait(false);
+                    /*
+                     * todo: parseboth missing (from the ef model refactor that was skipped?)
+                    var sentMsg2 = await ct.SendInteraction(inter, this.client, false, fakeMsg,
+                        false.ParseBoth(ct.EphemeralResponse), uow, followup).ConfigureAwait(false);
+                    */
+                    var sentMsg = await ct.SendInteraction(inter, this.client, false, fakeMsg,
+                        ct.EphemeralResponse, uow, followup).ConfigureAwait(false);
 
                     foreach (var reaction in ct.GetReactions())
                     {
@@ -412,7 +423,8 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
                             try
                             {
                                 var baseRoles = user.RoleIds.Where(x => x != guildUser.Guild?.EveryoneRole.Id).ToList();
-                                var roles = baseRoles.Where(x => !ct.RemovedRoles?.Contains(x.ToString()) ?? true).ToList();
+                                var roles = baseRoles.Where(x => !ct.RemovedRoles?.Contains(x.ToString()) ?? true)
+                                    .ToList();
                                 roles.AddRange(ct.GetGrantedRoles().Where(x => !user.RoleIds.Contains(x)));
 
                                 // difference is caused by @everyone
@@ -421,7 +433,8 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
                             }
                             catch
                             {
-                                Log.Warning("Unable to modify the roles of {User} in {GuildId}", guildUser.Id, ct.GuildId);
+                                Log.Warning("Unable to modify the roles of {User} in {GuildId}", guildUser.Id,
+                                    ct.GuildId);
                             }
                         }
                     }
@@ -521,6 +534,10 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
     private async Task ReloadInternal(IReadOnlyList<ulong> allGuildIds)
     {
         await using var uow = db.GetDbContext();
+
+        //todo: return after porting ef model to psql
+        //var guildItems = await uow.ChatTriggers.ToLinqToDB().Where(x => (int)(x.GuildId) / (ulong)Math.Pow(2, 22) % (ulong)creds.TotalShards) == client.ShardId)
+        //    .AsNoTracking().ToListAsyncLinqToDB();
         var guildItems = await uow.ChatTriggers
             .AsNoTracking()
             .Where(x => allGuildIds.Contains(x.GuildId.Value))
@@ -1129,14 +1146,16 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
         return ct;
     }
 
-    public async Task<(CTModel? Trigger, bool Valid)> SetCrosspostingWebhookUrl(ulong? guildId, int id, string webhookUrl, bool bypassTest = false)
+    public async Task<(CTModel? Trigger, bool Valid)> SetCrosspostingWebhookUrl(ulong? guildId, int id,
+        string webhookUrl, bool bypassTest = false)
     {
         if (!bypassTest)
         {
             try
             {
                 using var discordWebhookClient = new DiscordWebhookClient(webhookUrl);
-                await discordWebhookClient.SendMessageAsync("Test of chat trigger crossposting webhook!").ConfigureAwait(false);
+                await discordWebhookClient.SendMessageAsync("Test of chat trigger crossposting webhook!")
+                    .ConfigureAwait(false);
             }
             catch
             {
@@ -1262,10 +1281,12 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
             eb.AddField(strings.GetText("trigger_reactions", gId), string.Concat(reactions));
         var addedRoles = ct.GetGrantedRoles();
         if (addedRoles.Count >= 1)
-            eb.AddField(strings.GetText("added_roles", gId), addedRoles.Select(x => $"<@&{x}>").Aggregate((x, y) => $"{x}, {y}"));
+            eb.AddField(strings.GetText("added_roles", gId),
+                addedRoles.Select(x => $"<@&{x}>").Aggregate((x, y) => $"{x}, {y}"));
         var removedRoles = ct.GetRemovedRoles();
         if (removedRoles.Count >= 1)
-            eb.AddField(strings.GetText("removed_roles", gId), removedRoles.Select(x => $"<@&{x}>").Aggregate((x, y) => $"{x}, {y}"));
+            eb.AddField(strings.GetText("removed_roles", gId),
+                removedRoles.Select(x => $"<@&{x}>").Aggregate((x, y) => $"{x}, {y}"));
         if (addedRoles.Count >= 1 || removedRoles.Count >= 1)
             eb.AddField(strings.GetText("role_grant_type", gId), ct.RoleGrantType);
         if (!ct.ApplicationCommandDescription.IsNullOrWhiteSpace())
@@ -1328,7 +1349,8 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
                 group = groups.First(y => y.Name == x.RealName.Split(' ').First());
             else
             {
-                groups.Add(new TriggerChildGrouping(x.RealName.Split(' ').First(), null, new List<TriggerChildGrouping>()));
+                groups.Add(new TriggerChildGrouping(x.RealName.Split(' ').First(), null,
+                    new List<TriggerChildGrouping>()));
                 group = groups.First(y => y.Name == x.RealName.Split(' ').First());
             }
 
@@ -1370,8 +1392,11 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
                         ? Array.Empty<SlashCommandOptionBuilder>()
                         : y.Children.Select(z => new SlashCommandOptionBuilder()
                             .WithName(z.Name.Split(' ')[2])
-                            .WithDescription(z.Triggers?.ApplicationCommandDescription.IsNullOrWhiteSpace() ?? true ? "description" : z.Triggers!.ApplicationCommandDescription)
-                            .WithType(ApplicationCommandOptionType.SubCommand)).ToArray())).ToArray())).Select(x => x.Build() as ApplicationCommandProperties).ToList();
+                            .WithDescription(z.Triggers?.ApplicationCommandDescription.IsNullOrWhiteSpace() ?? true
+                            ? "description"
+                            : z.Triggers!.ApplicationCommandDescription)
+                            .WithType(ApplicationCommandOptionType.SubCommand)).ToArray())).ToArray()))
+                                .Select(x => x.Build() as ApplicationCommandProperties).ToList();
 
         triggers.Where(x => x.ApplicationCommandType == CtApplicationCommandType.Message).ForEach(x =>
             props.Add(new MessageCommandBuilder().WithName(x.RealName).WithDMPermission(false).Build()));
@@ -1409,8 +1434,9 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
 #endif
         await using var uow = db.GetDbContext();
         var cts = uow.ChatTriggers.Where(x => x.GuildId == guild.Id).ToList();
-        cmd.SelectMany(applicationCommand => applicationCommand.GetCtNames().Select(name => (cmd: applicationCommand, name))).ToList().ForEach(x =>
-            cts.First(y => y.RealName == x.name).ApplicationCommandId = x.cmd.Id);
+        cmd.SelectMany(applicationCommand =>
+            applicationCommand.GetCtNames().Select(name => (cmd: applicationCommand, name))).ToList().ForEach(x =>
+                cts.First(y => y.RealName == x.name).ApplicationCommandId = x.cmd.Id);
         await uow.SaveChangesAsync().ConfigureAwait(false);
     }
 
@@ -1475,7 +1501,8 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
                                 trigger.RealName, newTrigger.RealName
                             }));
                         break;
-                    case 2 when newTriggerDepth == 3 && newTrigger.RealName.Split(' ')[..1].Join(' ') == trigger.RealName:
+                    case 2 when newTriggerDepth == 3 &&
+                            newTrigger.RealName.Split(' ')[..1].Join(' ') == trigger.RealName:
                         errors.Add(new("subcommand_match_parent", new[]
                             {
                                 trigger.Id, newTrigger.Id
