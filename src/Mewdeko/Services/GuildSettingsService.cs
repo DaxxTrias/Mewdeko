@@ -7,6 +7,7 @@ public class GuildSettingsService : INService
     private readonly DbService db;
     private readonly BotConfigService bss;
     private readonly IDataCache cache;
+    //todo: this will need to be reworked out of entitycoreframework eventually
 
     public GuildSettingsService(DbService db, BotConfigService bss, IDataCache cache)
     {

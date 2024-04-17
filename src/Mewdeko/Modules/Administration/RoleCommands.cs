@@ -80,7 +80,8 @@ public partial class Administration
                 }
                 catch (HttpException ex) when (ex.HttpCode == HttpStatusCode.BadRequest)
                 {
-                    await ReplyErrorLocalizedAsync("reaction_cant_access", Format.Code(x.emote.ToString())).ConfigureAwait(false);
+                    await ReplyErrorLocalizedAsync("reaction_cant_access", Format.Code(x.emote.ToString()))
+                        .ConfigureAwait(false);
                     return;
                 }
 

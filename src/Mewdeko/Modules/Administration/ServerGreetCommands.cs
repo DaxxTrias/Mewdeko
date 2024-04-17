@@ -373,7 +373,8 @@ public partial class Administration
             await ReplyConfirmLocalizedAsync("byemsg_new").ConfigureAwait(false);
             if (!sendByeEnabled)
                 await ReplyConfirmLocalizedAsync("byemsg_enable",
-                    $"`{await guildSettings.GetPrefix(ctx.Guild)}bye`").ConfigureAwait(false);
+                    $"`{await guildSettings.GetPrefix(ctx.Guild)}bye`")
+                    .ConfigureAwait(false);
         }
 
         [Cmd, Aliases, RequireContext(ContextType.Guild),
@@ -396,8 +397,9 @@ public partial class Administration
 
             await Service.ByeTest((ITextChannel)Context.Channel, user).ConfigureAwait(false);
             var enabled = await Service.GetByeEnabled(Context.Guild.Id);
-            if (!enabled) await ReplyConfirmLocalizedAsync("byemsg_enable",
-                $"`{await guildSettings.GetPrefix(ctx.Guild)}bye`").ConfigureAwait(false);
+            if (!enabled)
+                await ReplyConfirmLocalizedAsync("byemsg_enable", $"`{await guildSettings.GetPrefix(ctx.Guild)}bye`")
+                    .ConfigureAwait(false);
         }
 
         [Cmd, Aliases, RequireContext(ContextType.Guild),

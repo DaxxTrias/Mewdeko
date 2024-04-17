@@ -369,10 +369,8 @@ public class LogCommandService : INService
             var g = guildUser.Guild;
 
             if (!GuildLogSettings.TryGetValue(g.Id, out var logSetting)
-                || logSetting.UserUpdatedId == null && logSetting.NicknameUpdatedId
-                == null && logSetting.UsernameUpdatedId
-                == null && logSetting.AvatarUpdatedId
-                == null)
+                || logSetting.UserUpdatedId == null && logSetting.NicknameUpdatedId == null &&
+                logSetting.UsernameUpdatedId == null && logSetting.AvatarUpdatedId == null)
             {
                 return;
             }
@@ -405,8 +403,8 @@ public class LogCommandService : INService
                     .WithOkColor().Build());
 
                 var aav = guildUser.RealAvatarUrl();
-                embeds.Add(new EmbedBuilder().AddField("New Avatar",
-                    "_ _").WithImageUrl(aav.ToString()).WithOkColor().Build());
+                embeds.Add(new EmbedBuilder().AddField("New Avatar", "_ _").WithImageUrl(aav.ToString()).WithOkColor()
+                    .Build());
             }
             else
             {
@@ -1052,8 +1050,7 @@ public class LogCommandService : INService
         }
     }
 
-    private async Task Client_BulkDelete(IReadOnlyCollection<Cacheable<IMessage,
-        ulong>> messages,
+    private async Task Client_BulkDelete(IReadOnlyCollection<Cacheable<IMessage, ulong>> messages,
         Cacheable<IMessageChannel, ulong> channel)
     {
         if (channel.Value is not ITextChannel chan)

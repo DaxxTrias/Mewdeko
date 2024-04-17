@@ -71,8 +71,7 @@ public class Afk(InteractiveService serv, DiscordSocketClient client) : MewdekoM
 
         if (message.Length != 0 && message.Length > await Service.GetAfkLength(ctx.Guild.Id))
         {
-            await ReplyErrorLocalizedAsync("afk_message_too_long",
-                Service.GetAfkLength(ctx.Guild.Id))
+            await ReplyErrorLocalizedAsync("afk_message_too_long", Service.GetAfkLength(ctx.Guild.Id))
                 .ConfigureAwait(false);
             return;
         }
@@ -111,8 +110,7 @@ public class Afk(InteractiveService serv, DiscordSocketClient client) : MewdekoM
         }
 
         await ReplyConfirmLocalizedAsync("afk_messages_delete",
-            TimeSpan.FromSeconds(await
-            Service.GetAfkDel(ctx.Guild.Id)).Humanize(maxUnit: TimeUnit.Minute))
+            TimeSpan.FromSeconds(await Service.GetAfkDel(ctx.Guild.Id)).Humanize(maxUnit: TimeUnit.Minute))
             .ConfigureAwait(false);
     }
 
@@ -156,8 +154,7 @@ public class Afk(InteractiveService serv, DiscordSocketClient client) : MewdekoM
 
         await Service.AfkSet(ctx.Guild, ctx.User as IGuildUser, message, 1, DateTime.UtcNow + time.Time);
         await ConfirmLocalizedAsync("afk_timed_set",
-            TimestampTag.FromDateTimeOffset(DateTimeOffset.UtcNow + time.Time,
-            TimestampTagStyles.Relative), message);
+            TimestampTag.FromDateTimeOffset(DateTimeOffset.UtcNow + time.Time, TimestampTagStyles.Relative), message);
     }
 
     [Cmd, Aliases, UserPerm(GuildPermission.Administrator)]

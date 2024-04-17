@@ -9,8 +9,7 @@ namespace Mewdeko.Modules.Administration;
 public partial class Administration
 {
     [Group]
-    public class TimeZoneCommands(InteractiveService serv)
-        : MewdekoSubmodule<GuildTimezoneService>
+    public class TimeZoneCommands(InteractiveService serv) : MewdekoSubmodule<GuildTimezoneService>
     {
         [Cmd, Aliases, RequireContext(ContextType.Guild)]
         public async Task Timezones()
