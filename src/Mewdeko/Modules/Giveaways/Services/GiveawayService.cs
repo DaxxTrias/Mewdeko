@@ -31,7 +31,7 @@ public class GiveawayService(DiscordSocketClient client, DbService db, IBotCrede
                              .GroupBy(_ => ++i / ((giveawaysEnumerable.Count() / 5) + 1)))
                 {
                     var executedGiveaways = group.ToList();
-                    await Task.WhenAll(executedGiveaways.Select(GiveawayTimerAction)).ConfigureAwait(false);
+                    await Task.WhenAll(executedGiveaways.Select(x => GiveawayTimerAction(x))).ConfigureAwait(false);
                     await UpdateGiveaways(executedGiveaways).ConfigureAwait(false);
                     await Task.Delay(1500).ConfigureAwait(false);
                 }
@@ -531,10 +531,10 @@ public class GiveawayService(DiscordSocketClient client, DbService db, IBotCrede
                             .WithServer(client, guild as SocketGuild)
                             .WithUser(user);
 
-                        rep.WithOverride("",
-                            () => $"");
-                        rep.WithOverride("", () => r.Item);
-                        rep.WithOverride("", () => r.Winners.ToString());
+                        rep.WithOverride("%messagelink%",
+                            () => $"https://discord.com/channels/{guild.Id}/{channel.Id}/{ch.Id}");
+                        rep.WithOverride("%giveawayitem%", () => r.Item);
+                        rep.WithOverride("%giveawaywinners", () => r.Winners.ToString());
 
                         var replacer = rep.Build();
 
@@ -556,8 +556,8 @@ public class GiveawayService(DiscordSocketClient client, DbService db, IBotCrede
                             var ebdm = new EmbedBuilder()
                                 .WithOkColor()
                                 .WithDescription(
-                                $"");
-                            ebdm.AddField("", replacer.Replace(gset.GiveawayEndMessage));
+                                $"Congratulations! You won a giveaway for [{r.Item}](https://discord.com/channels/{r.ServerId}/{r.ChannelId}/{r.MessageId})!");
+                            ebdm.AddField("Message from Host", replacer.Replace(gset.GiveawayEndMessage));
                             try
                             {
                                 await user.SendMessageAsync(embed: ebdm.Build());
@@ -573,9 +573,9 @@ public class GiveawayService(DiscordSocketClient client, DbService db, IBotCrede
                         try
                         {
                             var ebdm = new EmbedBuilder()
-                                .WithOkColor().
-                                WithDescription(
-                                $"");
+                                .WithOkColor()
+                                .WithDescription(
+                                    $"Congratulations! You won a giveaway for [{r.Item}](https://discord.com/channels/{r.ServerId}/{r.ChannelId}/{r.MessageId})!");
                             await user.SendMessageAsync(embed: ebdm.Build());
                         }
                         catch
@@ -586,8 +586,8 @@ public class GiveawayService(DiscordSocketClient client, DbService db, IBotCrede
                 }
                 var winbed = ch.Embeds.FirstOrDefault().ToEmbedBuilder()
                     .WithErrorColor()
-                    .WithDescription($"")
-                    .WithFooter($"");
+                    .WithDescription($"Winner: {user.Mention}!\nHosted by: <@{r.UserId}>")
+                    .WithFooter($"Ended at {DateTime.UtcNow:dd.MM.yyyy HH:mm:ss}");
 
                 //todo: cleanup with ef model port
                 //var eb = new EmbedBuilder
@@ -598,14 +598,14 @@ public class GiveawayService(DiscordSocketClient client, DbService db, IBotCrede
                 await ch.ModifyAsync(x =>
                 {
                     x.Embed = winbed.Build();
-                    x.Content = $"";
+                    x.Content = $"{r.Emote} **Giveaway Ended!** {r.Emote}";
                 }).ConfigureAwait(false);
-                await ch.Channel.SendMessageAsync($"{user.Mention} won the giveaway for {r.Item}!",
+                await ch.Channel.SendMessageAsync($"Congratulations to {user.Mention}! {r.Emote}",
                     embed: new EmbedBuilder()
                     .WithOkColor()
                     .WithDescription(
-                        $"[Jump To Giveaway]({ch.GetJumpUrl()})")
-                    .Build(), allowedMentions: new AllowedMentions(AllowedMentionTypes.Users)).ConfigureAwait(false);
+                        $"{user.Mention} won the giveaway for [{r.Item}](https://discord.com/channels/{r.ServerId}/{r.ChannelId}/{r.MessageId})! \n\n- (Hosted by: <@{r.UserId}>)\n- Reroll: `{prefix}reroll {r.MessageId}`")
+                    .Build()).ConfigureAwait(false);
                 r.Ended = 1;
                 uow.Giveaways.Update(r);
                 await uow.SaveChangesAsync().ConfigureAwait(false);
@@ -657,27 +657,36 @@ public class GiveawayService(DiscordSocketClient client, DbService db, IBotCrede
 
                 var winners = users.ToList().OrderBy(_ => rand.Next()).Take(r.Winners);
 
+                var winbed = ch.Embeds.FirstOrDefault().ToEmbedBuilder()
+                    .WithErrorColor()
+                    .WithDescription(
+                        $"Winner: {string.Join(", ", winners.Take(5).Select(x => x.Mention))}!\nHosted by: <@{r.UserId}>")
+                    .WithFooter($"Ended at {DateTime.UtcNow:dd.MM.yyyy HH:mm:ss}");
+
+                /*
+                 * todo: cleanup with ef model port
                 var eb = new EmbedBuilder
                 {
                     Color = Mewdeko.OkColor, Description =
                         $"{string.Join("", winners.Select(x => x.Mention))} won the giveaway for {r.Item}!"
                 };
+                */
 
                 await ch.ModifyAsync(x =>
                 {
-                    x.Embed = eb.Build();
+                    x.Embed = winbed.Build();
                     x.Content = $"{r.Emote} **Giveaway has Ended** {r.Emote}";
                 }).ConfigureAwait(false);
 
                 foreach (var winners2 in winners.Chunk(50))
                 {
                     await ch.Channel.SendMessageAsync(
-                        $"{string.Join("", winners2.Select(x => x.Mention))} won the giveaway for {r.Item}!",
+                        $"Congratulations to {string.Join(", ", winners2.Select(x => x.Mention))}! {r.Emote}",
                         embed: new EmbedBuilder()
-                        .WithOkColor()
-                        .WithDescription(
-                            $"[Jump To Giveaway]({ch.GetJumpUrl()})")
-                        .Build()).ConfigureAwait(false);
+                            .WithErrorColor()
+                            .WithDescription(
+                                $"{string.Join(", ", winners2.Select(x => x.Mention))} won the giveaway for [{r.Item}](https://discord.com/channels/{r.ServerId}/{r.ChannelId}/{r.MessageId})! \n\n- (Hosted by: <@{r.UserId}>)\n- Reroll: `{prefix}reroll {r.MessageId}`")
+                            .Build()).ConfigureAwait(false);
                 }
 
                 r.Ended = 1;
