@@ -1,27 +1,138 @@
-﻿using System.Text.RegularExpressions;
+using System.Text.RegularExpressions;
 using Discord.Commands;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Common.TypeReaders.Models;
 using Mewdeko.Modules.Giveaways.Services;
+using SkiaSharp;
 
 namespace Mewdeko.Modules.Giveaways;
 
-public class Giveaways : MewdekoModuleBase<GiveawayService>
+public partial class Giveaways(DbService db, IServiceProvider servs, InteractiveService interactiveService,
+    GuildSettingsService guildSettings)
+    : MewdekoModuleBase<GiveawayService>
 {
-    private readonly IServiceProvider servs;
-    private readonly DbService db;
-    private readonly InteractiveService interactivity;
-    private readonly GuildSettingsService guildSettings;
-
-    public Giveaways(DbService db, IServiceProvider servs, InteractiveService interactiveService,
-        GuildSettingsService guildSettings)
+    [Cmd, Aliases, UserPerm(GuildPermission.ManageMessages)]
+    public async Task GdmMessage([Remainder] string message = null)
     {
-        interactivity = interactiveService;
-        this.guildSettings = guildSettings;
-        this.db = db;
-        this.servs = servs;
+        var gc = await guildSettings.GetGuildConfig(Context.Guild.Id);
+        if (message is null)
+        {
+            if (await PromptUserConfirmAsync(
+                "Would you like to preview the message? Pressing no will remove the current message.",
+                Context.User.Id))
+            {
+                var rep = new ReplacementBuilder()
+                    .WithChannel(Context.Channel)
+                    .WithClient(Context.Client as DiscordSocketClient)
+                    .WithServer(Context.Client as DiscordSocketClient, Context.Guild as SocketGuild)
+                    .WithUser(Context.User);
+
+                rep.WithOverride("%messagelink%",
+                    () => $"https://discord.com/channels/{Context.Guild.Id}/{Context.Channel.Id}/{Context.Message.Id}");
+                rep.WithOverride("%giveawayitem%", () => "test Item");
+                rep.WithOverride("%giveawaywinners%", () => "10");
+
+                var replacer = rep.Build();
+
+                if (SmartEmbed.TryParse(replacer.Replace(gc.GiveawayEndMessage), Context.Guild.Id, out var embeds,
+                    out var plaintext, out var components))
+                {
+                    await ctx.Channel
+                        .SendMessageAsync(plaintext, embeds: embeds ?? null, components: components?.Build())
+                        .ConfigureAwait(false);
+                }
+                else
+                    await ctx.Channel.SendConfirmAsync(replacer.Replace(gc.GiveawayEndMessage))
+                        .ConfigureAwait(false);
+            }
+            else
+            {
+                gc.GiveawayEndMessage = null;
+                //todo: make UpdateGuildConfig await after ef model port
+                guildSettings.UpdateGuildConfig(Context.Guild.Id, gc);
+                await ctx.Channel.SendConfirmAsync("Giveaway host message removed!")
+                    .ConfigureAwait(false);
+            }
+        }
+        else
+        {
+            gc.GiveawayEndMessage = message;
+            //todo: make UpdateGuildConfig await after ef model port
+            guildSettings.UpdateGuildConfig(Context.Guild.Id, gc);
+            await ctx.Channel.SendConfirmAsync($"Giveaway host message set to {message}!")
+                .ConfigureAwait(false);
+        }
+    }
+
+    [Cmd, Aliases, UserPerm(GuildPermission.ManageMessages)]
+    public async Task GBanner(string banner)
+    {
+        var gc = await guildSettings.GetGuildConfig(Context.Guild.Id);
+        if (!Uri.IsWellFormedUriString(banner, UriKind.Absolute))
+        {
+            await ctx.Channel.SendErrorAsync("That's not a valid URL!")
+                .ConfigureAwait(false);
+            return;
+        }
+
+        gc GiveawayBanner = banner;
+        //todo: make UpdateGuildConfig await after ef model port
+        guildSettings.UpdateGuildConfig(Context.Guild.Id, gc);
+        await ctx.Channel.SendConfirmAsync(
+            $"Giveaway banner set! Just keep in mind this doesn't update until the next giveaway.")
+            .ConfigureAwait(false);
+    }
+
+    [Cmd, Aliases, UserPerm(GuildPermission.ManageMessages)]
+    public async Task GWinEmbedColor(string color)
+    {
+        if (SKColor.TryParse(color, out var potentialColorValue))
+        {
+            var gc = await guildSettings.GetGuildConfig(Context.Guild.Id);
+            gc.GiveawayEmbedColor = color;
+            //todo: make UpdateGuildConfig await after ef model port
+            guildSettings.UpdateGuildConfig(Context.Guild.Id, gc);
+            await ctx.Channel.SendConfirmAsync(
+                $"Giveaway win embed color set! Just keep in mind this doesn't update until the next giveaway.")
+                .ConfigureAwait(false);
+        }
+        else
+        {
+            await ctx.Channel.SendErrorAsync("That's not a valid color. Please use hex.").ConfigureAwait(false);
+        }
+    }
+
+    [Cmd, Aliases, UserPerm(GuildPermission.ManageMessages)]
+    public async Task GEmbedColor(string color)
+    {
+        if (SKColor.TryParse(color, out var potentialColorValue))
+        {
+            var gc = await guildSettings.GetGuildConfig(Context.Guild.Id);
+            gc.GiveawayEmbedColor = color;
+            //todo: make UpdateGuildConfig await after ef model port
+            guildSettings.UpdateGuildConfig(Context.Guild.Id, gc);
+            await ctx.Channel.SendConfirmAsync(
+                $"Giveaway embed color set! Just keep in mind this doesn't update until the next giveaway.")
+                .ConfigureAwait(false);
+        }
+        else
+        {
+            await ctx.Channel.SendErrorAsync("That's not a valid color! Use hex.").ConfigureAwait(false);
+        }
+    }
+
+    [Cmd, Aliases, UserPerm(GuildPermission.ManageMessages)]
+    public async Task GDm()
+    {
+        var gc = await guildSettings.GetGuildConfig(Context.Guild.Id);
+        gc.DmOnGiveawayWin = gc.DmOnGiveawayWin == 0 ? 1 : 0;
+        //todo: make UpdateGuildConfig await after ef model port
+        guildSettings.UpdateGuildConfig(Context.Guild.Id, gc);
+        await ctx.Channel.SendConfirmAsync(
+            $"Giveaway DMs set to {gc.DmOnGiveawayWin == 1}! Just keep in mind this doesnt update until the next giveaway.")
+            .ConfigureAwait(false);
     }
 
     [Cmd, Aliases, UserPerm(GuildPermission.ManageMessages)]
@@ -312,7 +423,7 @@ public class Giveaways : MewdekoModuleBase<GiveawayService>
             .WithActionOnCancellation(ActionOnStop.DeleteMessage)
             .Build();
 
-        await interactivity.SendPaginatorAsync(paginator, Context.Channel,
+        await interactiveService.SendPaginatorAsync(paginator, Context.Channel,
             TimeSpan.FromMinutes(60)).ConfigureAwait(false);
 
         async Task<PageBuilder> PageFactory(int page)
@@ -340,13 +451,16 @@ public class Giveaways : MewdekoModuleBase<GiveawayService>
             .GiveawaysForGuild(ctx.Guild.Id).ToList().Find(x => x.MessageId == messageid);
         if (gway is null)
         {
-            await ctx.Channel.SendErrorAsync("No Giveaway with that message ID exists! Please try again!").ConfigureAwait(false);
+            await ctx.Channel.SendErrorAsync("No Giveaway with that message ID exists! Please try again!")
+                .ConfigureAwait(false);
         }
 
         if (gway.Ended == 1)
         {
             await ctx.Channel.SendErrorAsync(
-                $"This giveaway has already ended! Plase use `{await guildSettings.GetPrefix(ctx.Guild)}greroll {messageid}` to reroll!").ConfigureAwait(false);
+                $"This giveaway has already ended! Plase use `{
+                    await guildSettings.GetPrefix(ctx.Guild)}greroll {messageid}` to reroll!")
+                .ConfigureAwait(false);
         }
         else
         {
@@ -354,4 +468,7 @@ public class Giveaways : MewdekoModuleBase<GiveawayService>
             await ctx.Channel.SendConfirmAsync("Giveaway ended!").ConfigureAwait(false);
         }
     }
+
+    [GeneratedRegex("(?<=<@&)?[0-9]{17,19}(?=>)?")]
+    private static partial Regex MyRegex();
 }
