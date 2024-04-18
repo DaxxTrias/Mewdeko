@@ -1,4 +1,4 @@
-﻿using Discord.Commands;
+using Discord.Commands;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Modules.Games.Common.Trivia;
 using Mewdeko.Modules.Games.Services;
@@ -8,24 +8,11 @@ namespace Mewdeko.Modules.Games;
 public partial class Games
 {
     [Group]
-    public class TriviaCommands : MewdekoSubmodule<GamesService>
+    public class TriviaCommands(DiscordSocketClient client, IDataCache cache,
+        GamesConfigService gamesConfig,
+        GuildSettingsService guildSettings)
+        : MewdekoSubmodule<GamesService>
     {
-        private readonly IDataCache cache;
-        private readonly DiscordSocketClient client;
-        private readonly ICurrencyService cs;
-        private readonly GamesConfigService gamesConfig;
-        private readonly GuildSettingsService guildSettings;
-
-        public TriviaCommands(DiscordSocketClient client, IDataCache cache, ICurrencyService cs,
-            GamesConfigService gamesConfig,
-            GuildSettingsService guildSettings)
-        {
-            this.cache = cache;
-            this.cs = cs;
-            this.gamesConfig = gamesConfig;
-            this.guildSettings = guildSettings;
-            this.client = client;
-        }
 
         [Cmd, Aliases, RequireContext(ContextType.Guild), Priority(0),
          MewdekoOptions(typeof(TriviaOptions))]
@@ -38,8 +25,9 @@ public partial class Games
             var (opts, _) = OptionsParser.ParseFrom(new TriviaOptions(), args);
 
             var config = gamesConfig.Data;
-            if (config.Trivia.MinimumWinReq > 0 && config.Trivia.MinimumWinReq > opts.WinRequirement) return;
-            var trivia = new TriviaGame(Strings, client, config, cache, cs, channel.Guild, channel, opts,
+            if (config.Trivia.MinimumWinReq > 0 && config.Trivia.MinimumWinReq > opts.WinRequirement)
+                return;
+            var trivia = new TriviaGame(Strings, client, cache, channel.Guild, channel, opts,
                 $"{await guildSettings.GetPrefix(ctx.Guild)}tq");
             if (Service.RunningTrivias.TryAdd(channel.Guild.Id, trivia))
             {

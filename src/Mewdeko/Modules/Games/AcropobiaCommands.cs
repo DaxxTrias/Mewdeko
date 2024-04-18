@@ -1,4 +1,4 @@
-﻿using System.Collections.Immutable;
+using System.Collections.Immutable;
 using Discord.Commands;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Modules.Games.Common.Acrophobia;
@@ -9,12 +9,8 @@ namespace Mewdeko.Modules.Games;
 public partial class Games
 {
     [Group]
-    public class AcropobiaCommands : MewdekoSubmodule<GamesService>
+    public class AcropobiaCommands(DiscordSocketClient client) : MewdekoSubmodule<GamesService>
     {
-        private readonly DiscordSocketClient client;
-
-        public AcropobiaCommands(DiscordSocketClient client) => this.client = client;
-
         [Cmd, Aliases, RequireContext(ContextType.Guild),
          MewdekoOptions(typeof(AcrophobiaGame.Options))]
         public async Task Acrophobia(params string[] args)

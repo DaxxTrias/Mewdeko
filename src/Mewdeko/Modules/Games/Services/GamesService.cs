@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using Mewdeko.Modules.Games.Common;
 using Mewdeko.Modules.Games.Common.Acrophobia;
 using Mewdeko.Modules.Games.Common.Hangman;

@@ -68,7 +68,8 @@ public class ChatterBotService : INService
 
             if (string.IsNullOrEmpty(message.Item1) || message.Item2.Equals(default))
                 return;
-            var cleverbotExecuted = await TryAsk(message.Item2, (ITextChannel)usrMsg.Channel, message.Item1, usrMsg).ConfigureAwait(false);
+            var cleverbotExecuted = await TryAsk(message.Item2, (ITextChannel)usrMsg.Channel, message.Item1, usrMsg)
+                .ConfigureAwait(false);
 
             //todo: Despite cleverbot being disabled, this will still execute if GPT is also enabled
             if (cleverbotExecuted)
@@ -105,13 +106,15 @@ public class ChatterBotService : INService
 
         if (blacklistService.BlacklistEntries.Select(x => x.ItemId).Contains(channel.Guild.Id))
         {
-            await channel.SendErrorAsync("This server is blacklisted. Please join using the button below for an explanation or to appeal.");
+            await channel.SendErrorAsync(
+                "This server is blacklisted. Please join using the button below for an explanation or to appeal.");
             return (null, null);
         }
 
         if (blacklistService.BlacklistEntries.Select(x => x.ItemId).Contains(msg.Author.Id))
         {
-            (msg as IUserMessage).ReplyError("You are blacklisted from Mewdeko, join using the button below to get more info or appeal.");
+            (msg as IUserMessage).ReplyError(
+                "You are blacklisted from Mewdeko, join using the button below to get more info or appeal.");
             return (null, null);
         }
 
@@ -139,7 +142,9 @@ public class ChatterBotService : INService
     }
 
     /*
-    private static async Task<bool> TryAsk(IChatterBotSession cleverbot, ITextChannel channel, string message, IUserMessage msg)
+     * todo: this was disabled earlier. same reason? probably ef model port
+    private static async Task<bool> TryAsk(IChatterBotSession cleverbot, ITextChannel channel, string message,
+        IUserMessage msg)
     {
         await channel.TriggerTypingAsync().ConfigureAwait(false);
         string response;
@@ -161,7 +166,8 @@ public class ChatterBotService : INService
     }
     */
 
-    private static async Task<bool> TryAsk(IChatterBotSession cleverbot, ITextChannel channel, string message, IUserMessage msg)
+    private static async Task<bool> TryAsk(IChatterBotSession cleverbot, ITextChannel channel, string message,
+        IUserMessage msg)
     {
         if (cleverbot == null || channel == null)
         {
@@ -183,11 +189,13 @@ public class ChatterBotService : INService
         catch
         {
             //todo: this is a lazy workaround to avoid the spam. not a proper fix. 
-            //await channel.SendErrorAsync("GPT is pay-as-you-go. Don't abuse it or you'll lose access.").ConfigureAwait(false);
+            //await channel.SendErrorAsync("GPT is pay-as-you-go. Don't abuse it or you'll lose access.")
+            //    .ConfigureAwait(false);
             return false;
         }
 
-        await msg.ReplyAsync(embed: new EmbedBuilder().WithOkColor().WithDescription(response.SanitizeMentions(true)).Build()).ConfigureAwait(false);
+        await msg.ReplyAsync(embed: new EmbedBuilder().WithOkColor().WithDescription(response.SanitizeMentions(true))
+            .Build()).ConfigureAwait(false);
 
         return true;
     }
