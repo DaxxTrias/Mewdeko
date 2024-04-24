@@ -5,12 +5,11 @@ using JsonSerializer = System.Text.Json.JsonSerializer;
 
 namespace Mewdeko.Modules.Moderation.Services;
 
-public class RoleMetadataService : INService, IReadyExecutor
+public class RoleMetadataService(DbService dbService, DiscordSocketClient client, IBotCredentials botCredentials)
+    : INService, IReadyExecutor
 {
-    private DbService _dbService;
-    private DiscordSocketClient _client;
-    private IBotCredentials _botCredentials;
-    private List<RoleConnectionMetadataProperties> _props = new()
+    private IBotCredentials botCredentials = botCredentials;
+    private readonly List<RoleConnectionMetadataProperties> props = new()
     {
         new(RoleConnectionMetadataType.IntegerGreaterOrEqual, "total_cmds", "Total Commands",
             "The total commands a user has run since we started keeping track"),
@@ -19,8 +18,7 @@ public class RoleMetadataService : INService, IReadyExecutor
         new(RoleConnectionMetadataType.IntegerGreaterOrEqual, "total_currency", "Total Currency",
             "The user's current total currency.")
     };
-    public RoleMetadataService(DbService dbService, DiscordSocketClient client, IBotCredentials botCredentials)
-        => (_dbService, _client, _botCredentials) = (dbService, client, botCredentials);
+
     public async Task OnReadyAsync()
     {
         // keys
@@ -28,11 +26,11 @@ public class RoleMetadataService : INService, IReadyExecutor
         // earliest/latest => date
         // has/hasnt => bool
 
-        await _client.Rest.ModifyRoleConnectionMetadataRecordsAsync(_props);
+        await client.Rest.ModifyRoleConnectionMetadataRecordsAsync(props);
 
-        await using var uow = _dbService.GetDbContext();
+        await using var uow = dbService.GetDbContext();
         var cachedValues = new Dictionary<ulong, int>();
-        var client = new HttpClient();
+        var htclient = new HttpClient();
         while (true)
         {
             var authedUsers = uow.AuthCodes
@@ -47,7 +45,8 @@ public class RoleMetadataService : INService, IReadyExecutor
         }
     }
 
-    public static async Task<string> RefreshUserToken(int tokenId, ulong clientId, string clientSecret, HttpClient client, MewdekoContext uow)
+    public static async Task<string> RefreshUserToken(int tokenId, ulong clientId, string clientSecret,
+        HttpClient client, MewdekoContext uow)
     {
         var val = await uow.AuthCodes.GetById(tokenId);
         var resp = await client.PostAsync("https://discord.com/api/v10/oauth2/token",
@@ -68,7 +67,8 @@ public class RoleMetadataService : INService, IReadyExecutor
         return data.access_token;
     }
 
-    public static async Task UpdateRoleConnectionData(ulong userId, int tokenId, MewdekoContext uow, ulong clientId, string clientSecret, HttpClient client)
+    public static async Task UpdateRoleConnectionData(ulong userId, int tokenId, MewdekoContext uow, ulong clientId,
+        string clientSecret, HttpClient client)
     {
         var tokenData = await uow.AuthCodes.GetById(tokenId);
         var cmds = uow.CommandStats.Where(x => x.UserId == userId).ToList();

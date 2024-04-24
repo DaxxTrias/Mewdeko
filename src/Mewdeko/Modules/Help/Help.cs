@@ -45,7 +45,8 @@ public class Help : MewdekoModuleBase<HelpService>
     {
         try
         {
-            var msg = await ctx.Channel.SendConfirmAsync($"{config.Data.LoadingEmote} Exporting commands to json, please wait a moment...");
+            var msg = await ctx.Channel.SendConfirmAsync(
+                $"{config.Data.LoadingEmote} Exporting commands to json, please wait a moment...");
             var prefix = await guildSettings.GetPrefix(ctx.Guild);
             var modules = cmds.Modules;
             var newList = new ConcurrentDictionary<string, List<Command>>();
@@ -61,10 +62,18 @@ public class Help : MewdekoModuleBase<HelpService>
                         CommandName = j.Aliases.Any() ? j.Aliases[0] : j.Name,
                         Description = j.RealSummary(strings, ctx.Guild.Id, prefix),
                         Example = j.RealRemarksArr(strings, ctx.Guild.Id, prefix).ToList() ?? new List<string>(),
-                        GuildUserPermissions = userPerm?.UserPermissionAttribute.GuildPermission != null ? userPerm.UserPermissionAttribute.GuildPermission.ToString() : "",
-                        ChannelUserPermissions = userPerm?.UserPermissionAttribute.ChannelPermission != null ? userPerm.UserPermissionAttribute.ChannelPermission.ToString() : "",
-                        GuildBotPermissions = botPerm?.GuildPermission != null ? botPerm.GuildPermission.ToString() : "",
-                        ChannelBotPermissions = botPerm?.ChannelPermission != null ? botPerm.ChannelPermission.ToString() : "",
+                        GuildUserPermissions =
+                            userPerm?.UserPermissionAttribute.GuildPermission != null
+                                ? userPerm.UserPermissionAttribute.GuildPermission.ToString()
+                                : "",
+                        ChannelUserPermissions
+                            = userPerm?.UserPermissionAttribute.ChannelPermission != null
+                                ? userPerm.UserPermissionAttribute.ChannelPermission.ToString()
+                                : "",
+                        GuildBotPermissions =
+                            botPerm?.GuildPermission != null ? botPerm.GuildPermission.ToString() : "",
+                        ChannelBotPermissions =
+                            botPerm?.ChannelPermission != null ? botPerm.ChannelPermission.ToString() : "",
                         IsDragon = isDragon is not null
                     }).ToList();
                 newList.AddOrUpdate(modulename, commands, (_, old) =>
@@ -94,7 +103,8 @@ public class Help : MewdekoModuleBase<HelpService>
     [Cmd, Aliases]
     public async Task SearchCommand(string commandname)
     {
-        var commandInfos = this.cmds.Commands.Distinct().Where(c => c.Name.Contains(commandname, StringComparison.InvariantCulture));
+        var commandInfos = this.cmds.Commands.Distinct()
+            .Where(c => c.Name.Contains(commandname, StringComparison.InvariantCulture));
         if (!commandInfos.Any())
         {
             await ctx.Channel.SendErrorAsync(
@@ -124,7 +134,9 @@ public class Help : MewdekoModuleBase<HelpService>
         var embed = await Service.GetHelpEmbed(false, ctx.Guild ?? null, ctx.Channel, ctx.User);
         try
         {
-            await ctx.Channel.SendMessageAsync(embed: embed.Build(), components: Service.GetHelpComponents(ctx.Guild, ctx.User).Build()).ConfigureAwait(false);
+            await ctx.Channel
+                .SendMessageAsync(embed: embed.Build(),
+                    components: Service.GetHelpComponents(ctx.Guild, ctx.User).Build()).ConfigureAwait(false);
         }
         catch (Exception e)
         {
@@ -196,8 +208,10 @@ public class Help : MewdekoModuleBase<HelpService>
         async Task<PageBuilder> PageFactory(int page)
         {
             await Task.CompletedTask.ConfigureAwait(false);
-            var transformed = groups.Select(x => x.ElementAt(page).Where(commandInfo => !commandInfo.Attributes.Any(attribute => attribute is HelpDisabled)).Select(commandInfo =>
-                    $"{(succ.Contains(commandInfo) ? commandInfo.Preconditions.Any(preconditionAttribute => preconditionAttribute is RequireDragonAttribute) ? "🐉" : "✅" : "❌")}{prefix + commandInfo.Aliases[0]}{(commandInfo.Aliases.Skip(1).FirstOrDefault() is not null ? $"/{prefix}{commandInfo.Aliases[1]}" : "")}"))
+            var transformed = groups.Select(x => x.ElementAt(page)
+                .Where(commandInfo => !commandInfo.Attributes.Any(attribute => attribute is HelpDisabled)).Select(
+                    commandInfo =>
+                        $"{(succ.Contains(commandInfo) ? commandInfo.Preconditions.Any(preconditionAttribute => preconditionAttribute is RequireDragonAttribute) ? "🐉" : "✅" : "❌")}{prefix + commandInfo.Aliases[0]}{(commandInfo.Aliases.Skip(1).FirstOrDefault() is not null ? $"/{prefix}{commandInfo.Aliases[1]}" : "")}"))
                 .FirstOrDefault();
             var last = groups.Select(x => x.Count()).FirstOrDefault();
             for (i = 0; i < last; i++)
@@ -249,10 +263,12 @@ public class Help : MewdekoModuleBase<HelpService>
     }
 
     [Cmd, Aliases]
-    public async Task Guide() => await ctx.Channel.SendConfirmAsync("You can find the website at https://mewdeko.tech").ConfigureAwait(false);
+    public async Task Guide() => await ctx.Channel.SendConfirmAsync("You can find the website at https://mewdeko.tech")
+        .ConfigureAwait(false);
 
     [Cmd, Aliases]
-    public async Task Source() => await ctx.Channel.SendConfirmAsync("https://github.com/Sylveon76/Mewdeko").ConfigureAwait(false);
+    public async Task Source() => await ctx.Channel.SendConfirmAsync("https://github.com/Sylveon76/Mewdeko")
+        .ConfigureAwait(false);
 }
 
 public class CommandTextEqualityComparer : IEqualityComparer<CommandInfo>
@@ -262,16 +278,10 @@ public class CommandTextEqualityComparer : IEqualityComparer<CommandInfo>
     public int GetHashCode(CommandInfo obj) => obj.Aliases[0].GetHashCode(StringComparison.InvariantCulture);
 }
 
-public class Module
+public class Module(List<Command> commands, string name)
 {
-    public Module(List<Command> commands, string name)
-    {
-        Commands = commands;
-        Name = name;
-    }
-
-    public List<Command> Commands { get; }
-    public string Name { get; }
+    public List<Command> Commands { get; } = commands;
+    public string Name { get; } = name;
 }
 
 public class Command
