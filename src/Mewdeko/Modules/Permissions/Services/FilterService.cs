@@ -178,6 +178,7 @@ public class FilterService : IEarlyBehavior, INService
             var gc = await uow.ForGuildId(guild.Id, set => set);
             gc.invwarn = yesno;
             await uow.SaveChangesAsync().ConfigureAwait(false);
+            //todo: make this await after ef model port || gss rework
             gss.UpdateGuildConfig(guild.Id, gc);
         }
     }

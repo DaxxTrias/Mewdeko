@@ -1,4 +1,4 @@
-﻿using Discord.Commands;
+using Discord.Commands;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
 using Mewdeko.Common.Attributes.TextCommands;
@@ -11,16 +11,9 @@ namespace Mewdeko.Modules.Permissions;
 public partial class Permissions
 {
     [Group]
-    public class FilterCommands : MewdekoSubmodule<FilterService>
+    public class FilterCommands(DbService db, InteractiveService serv)
+        : MewdekoSubmodule<FilterService>
     {
-        private readonly DbService db;
-        private readonly InteractiveService interactivity;
-
-        public FilterCommands(DbService db, InteractiveService serv)
-        {
-            interactivity = serv;
-            this.db = db;
-        }
 
         [Cmd, Aliases, UserPerm(GuildPermission.Administrator), RequireContext(ContextType.Guild)]
         public async Task AutoBanWord([Remainder] string word)
@@ -28,12 +21,14 @@ public partial class Permissions
             if (Service.Blacklist.Count(x => x.Word == word && x.GuildId == ctx.Guild.Id) == 1)
             {
                 Service.UnBlacklist(word, ctx.Guild.Id);
-                await ctx.Channel.SendConfirmAsync($"Removed {Format.Code(word)} from the auto bans word list!").ConfigureAwait(false);
+                await ctx.Channel.SendConfirmAsync($"Removed {Format.Code(word)} from the auto bans word list!")
+                    .ConfigureAwait(false);
             }
             else
             {
                 Service.WordBlacklist(word, ctx.Guild.Id);
-                await ctx.Channel.SendConfirmAsync($"Added {Format.Code(word)} to the auto ban words list!").ConfigureAwait(false);
+                await ctx.Channel.SendConfirmAsync($"Added {Format.Code(word)} to the auto ban words list!")
+                    .ConfigureAwait(false);
             }
         }
 
@@ -56,7 +51,8 @@ public partial class Permissions
                     .WithActionOnCancellation(ActionOnStop.DeleteMessage)
                     .Build();
 
-                await interactivity.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
+                await serv.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60))
+                    .ConfigureAwait(false);
 
                 async Task<PageBuilder> PageFactory(int page)
                 {

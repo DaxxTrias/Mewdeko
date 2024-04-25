@@ -1,4 +1,4 @@
-﻿using Discord.Commands;
+using Discord.Commands;
 using Humanizer;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Common.Collections;
@@ -7,24 +7,15 @@ using Mewdeko.Common.TypeReaders.Models;
 using Mewdeko.Modules.Permissions.Services;
 using Microsoft.EntityFrameworkCore;
 
-namespace Mewdeko.Modules.Permissions;
+namespace Permissions;
 
 public partial class Permissions
 {
     [Group]
-    public class CmdCdsCommands : MewdekoSubmodule
+    public class CmdCdsCommands(CmdCdService service, DbService db) : MewdekoSubmodule
     {
-        private readonly DbService db;
-        private readonly CmdCdService service;
-
-        public CmdCdsCommands(CmdCdService service, DbService db)
-        {
-            this.service = service;
-            this.db = db;
-        }
-
         private ConcurrentDictionary<ulong, ConcurrentHashSet<CommandCooldown>> CommandCooldowns
-            => service.CommandCooldowns;
+                => service.CommandCooldowns;
 
         private ConcurrentDictionary<ulong, ConcurrentHashSet<ActiveCooldown>> ActiveCooldowns
             => service.ActiveCooldowns;
@@ -55,7 +46,8 @@ public partial class Permissions
                 {
                     var cc = new CommandCooldown
                     {
-                        CommandName = name, Seconds = Convert.ToInt32(time.Time.TotalSeconds)
+                        CommandName = name,
+                        Seconds = Convert.ToInt32(time.Time.TotalSeconds)
                     };
                     config.CommandCooldowns.Add(cc);
                     localSet.Add(cc);

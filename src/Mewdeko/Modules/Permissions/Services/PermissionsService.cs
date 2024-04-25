@@ -13,18 +13,17 @@ public class PermissionService : ILateBlocker, INService
     public readonly IBotStrings Strings;
     private readonly GuildSettingsService guildSettings;
 
-    public PermissionService(
-        DiscordSocketClient client,
-        DbService db,
+    public PermissionService(DbService db,
         IBotStrings strings,
-        GuildSettingsService guildSettings)
+        GuildSettingsService guildSettings,
+        Mewdeko bot)
     {
         this.db = db;
         Strings = strings;
         this.guildSettings = guildSettings;
-
+        var allgc = bot.AllGuildConfigs;
         using var uow = this.db.GetDbContext();
-        foreach (var x in uow.GuildConfigs.Permissionsv2ForAll(client.Guilds.ToArray().Select(x => x.Id).ToList()))
+        foreach (var x in allgc)
         {
             Cache.TryAdd(x.GuildId,
                 new PermissionCache
@@ -147,12 +146,14 @@ public class PermissionService : ILateBlocker, INService
         var resetCommand = commandName == "resetperms";
 
         var pc = await GetCacheFor(guild.Id);
-        if (resetCommand || pc.Permissions.CheckSlashPermissions(command.Module.SlashGroupName, commandName, ctx.User, ctx.Channel, out var index))
+        if (resetCommand || pc.Permissions.CheckSlashPermissions(command.Module.SlashGroupName, commandName, ctx.User,
+                ctx.Channel, out var index))
             return false;
         try
         {
             await ctx.Interaction.SendEphemeralErrorAsync(Strings.GetText("perm_prevent", guild.Id, index + 1,
-                    Format.Bold(pc.Permissions[index].GetCommand(await guildSettings.GetPrefix(guild), (SocketGuild)guild))))
+                    Format.Bold(pc.Permissions[index]
+                        .GetCommand(await guildSettings.GetPrefix(guild), (SocketGuild)guild))))
                 .ConfigureAwait(false);
         }
         catch

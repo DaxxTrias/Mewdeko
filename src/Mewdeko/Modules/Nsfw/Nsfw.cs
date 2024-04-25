@@ -16,49 +16,35 @@ using Serilog;
 
 namespace Mewdeko.Modules.Nsfw;
 
-public class Nsfw : MewdekoModuleBase<ISearchImagesService>
+public class Nsfw(InteractiveService interactivity, MartineApi martinApi,
+    GuildSettingsService guildSettings, HttpClient client,
+    BotConfigService config, IBotCredentials credentials1)
+    : MewdekoModuleBase<ISearchImagesService>
 {
     private static readonly ConcurrentHashSet<ulong> HentaiBombBlacklist = new();
     private static readonly ConcurrentHashSet<ulong> PornBombBlacklist = new();
-    private readonly MewdekoRandom rng;
-    private readonly InteractiveService interactivity;
-    private readonly MartineApi martineApi;
-    private readonly GuildSettingsService guildSettings;
-    private readonly HttpClient client;
-    private readonly BotConfigService config;
-    private readonly IBotCredentials credentials;
-
-    public Nsfw(
-        InteractiveService interactivity, MartineApi martineApi,
-        GuildSettingsService guildSettings, HttpClient client,
-        BotConfigService config, IBotCredentials credentials)
-    {
-        this.martineApi = martineApi;
-        this.guildSettings = guildSettings;
-        this.client = client;
-        this.config = config;
-        this.credentials = credentials;
-        this.interactivity = interactivity;
-        rng = new MewdekoRandom();
-    }
-
+    private readonly MewdekoRandom rng = new();
 
     [Cmd, Aliases, RequireContext(ContextType.Guild), RequireNsfw, Ratelimit(10)]
     public async Task RedditNsfw(string subreddit)
     {
-        var msg = await ctx.Channel.SendConfirmAsync($"{config.Data.LoadingEmote} Trying to get a post from `{subreddit}`...");
+        var msg = await ctx.Channel.SendConfirmAsync(
+            $"{config.Data.LoadingEmote} Trying to get a post from `{subreddit}`...");
         try
         {
             RedditPost image;
             try
             {
-                image = await martineApi.RedditApi.GetRandomFromSubreddit(subreddit, Toptype.year).ConfigureAwait(false);
+                image = await martinApi.RedditApi.GetRandomFromSubreddit(subreddit, Toptype.year)
+                    .ConfigureAwait(false);
             }
             catch (ApiException ex)
             {
                 await msg.DeleteAsync();
-                Log.Error($"Seems that NSFW Subreddit fetching has failed. Here's the error:\nCode: {ex.StatusCode}\nContent: {(ex.HasContent ? ex.Content : "No Content.")}");
-                await ctx.Channel.SendErrorAsync("Unable to fetch nsfw subreddit. Please check console.");
+                Log.Error(
+                    $"Seems that NSFW Subreddit fetching has failed. Here's the error:\nCode: {ex.StatusCode}\nContent: {(ex.HasContent ? ex.Content : "No Content.")}");
+                await ctx.Channel.SendErrorAsync(
+                    "Unable to fetch nsfw subreddit. Please check console.");
                 return;
             }
 
