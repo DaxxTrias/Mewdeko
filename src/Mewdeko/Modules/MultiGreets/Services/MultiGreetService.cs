@@ -1,4 +1,4 @@
-﻿using Discord.Net;
+using Discord.Net;
 using Serilog;
 
 namespace Mewdeko.Modules.MultiGreets.Services;
@@ -45,7 +45,8 @@ public class MultiGreetService : INService
 
     public async Task HandleRandomGreet(MultiGreet greet, IGuildUser user)
     {
-        var replacer = new ReplacementBuilder().WithUser(user).WithClient(client).WithServer(client, user.Guild as SocketGuild).Build();
+        var replacer = new ReplacementBuilder().WithUser(user).WithClient(client)
+            .WithServer(client, user.Guild as SocketGuild).Build();
         if (greet.WebhookUrl is not null)
         {
             if (user.IsBot && !greet.GreetBots)
@@ -54,18 +55,23 @@ public class MultiGreetService : INService
             var content = replacer.Replace(greet.Message);
             try
             {
-                if (SmartEmbed.TryParse(content, user.Guild.Id, out var embedData, out var plainText, out var components2))
+                if (SmartEmbed.TryParse(content, user.Guild.Id, out var embedData, out var plainText,
+                    out var components2))
                 {
-                    var msg = await webhook.SendMessageAsync(plainText, embeds: embedData, components: components2.Build()).ConfigureAwait(false);
+                    var msg = await webhook
+                        .SendMessageAsync(plainText, embeds: embedData, components: components2.Build())
+                        .ConfigureAwait(false);
                     if (greet.DeleteTime > 0)
-                        (await (await user.Guild.GetTextChannelAsync(greet.ChannelId)).GetMessageAsync(msg).ConfigureAwait(false)).DeleteAfter(
+                        (await (await user.Guild.GetTextChannelAsync(greet.ChannelId)).GetMessageAsync(msg)
+                            .ConfigureAwait(false)).DeleteAfter(
                             int.Parse(greet.DeleteTime.ToString()));
                 }
                 else
                 {
                     var msg = await webhook.SendMessageAsync(content).ConfigureAwait(false);
                     if (greet.DeleteTime > 0)
-                        (await (await user.Guild.GetTextChannelAsync(greet.ChannelId)).GetMessageAsync(msg).ConfigureAwait(false)).DeleteAfter(
+                        (await (await user.Guild.GetTextChannelAsync(greet.ChannelId)).GetMessageAsync(msg)
+                            .ConfigureAwait(false)).DeleteAfter(
                             int.Parse(greet.DeleteTime.ToString()));
                 }
             }
@@ -92,11 +98,13 @@ public class MultiGreetService : INService
 
             try
             {
-                if (SmartEmbed.TryParse(content, user.Guild.Id, out var embedData, out var plainText, out var components2))
+                if (SmartEmbed.TryParse(content, user.Guild.Id, out var embedData, out var plainText,
+                    out var components2))
                 {
                     if (embedData is not null && plainText is not "")
                     {
-                        var msg = await channel.SendMessageAsync(plainText, embeds: embedData, components: components2?.Build(), options: new RequestOptions
+                        var msg = await channel.SendMessageAsync(plainText, embeds: embedData,
+                            components: components2?.Build(), options: new RequestOptions
                         {
                             RetryMode = RetryMode.RetryRatelimit
                         }).ConfigureAwait(false);
@@ -127,7 +135,8 @@ public class MultiGreetService : INService
 
     private async Task HandleChannelGreets(IEnumerable<MultiGreet> multiGreets, IGuildUser user)
     {
-        var replacer = new ReplacementBuilder().WithUser(user).WithClient(client).WithServer(client, user.Guild as SocketGuild).Build();
+        var replacer = new ReplacementBuilder().WithUser(user).WithClient(client)
+            .WithServer(client, user.Guild as SocketGuild).Build();
         foreach (var i in multiGreets.Where(x => x.WebhookUrl == null))
         {
             if (i.Disabled)
@@ -145,7 +154,8 @@ public class MultiGreetService : INService
             var content = replacer.Replace(i.Message);
             if (SmartEmbed.TryParse(content, user.Guild.Id, out var embedData, out var plainText, out var components2))
             {
-                var msg = await channel.SendMessageAsync(plainText, embeds: embedData, components: components2?.Build()).ConfigureAwait(false);
+                var msg = await channel.SendMessageAsync(plainText, embeds: embedData, components: components2?.Build())
+                    .ConfigureAwait(false);
                 if (i.DeleteTime > 0)
                     msg.DeleteAfter(i.DeleteTime);
             }
@@ -160,7 +170,8 @@ public class MultiGreetService : INService
 
     private async Task HandleWebhookGreets(IEnumerable<MultiGreet> multiGreets, IGuildUser user)
     {
-        var replacer = new ReplacementBuilder().WithUser(user).WithClient(client).WithServer(client, user.Guild as SocketGuild).Build();
+        var replacer = new ReplacementBuilder().WithUser(user).WithClient(client)
+            .WithServer(client, user.Guild as SocketGuild).Build();
         foreach (var i in multiGreets)
         {
             if (i.Disabled)
@@ -179,9 +190,11 @@ public class MultiGreetService : INService
 
             if (SmartEmbed.TryParse(content, user.Guild.Id, out var embedData, out var plainText, out var components2))
             {
-                var msg = await webhook.SendMessageAsync(plainText, embeds: embedData, components: components2?.Build()).ConfigureAwait(false);
+                var msg = await webhook.SendMessageAsync(plainText, embeds: embedData, components: components2?.Build())
+                    .ConfigureAwait(false);
                 if (i.DeleteTime > 0)
-                    (await (await user.Guild.GetTextChannelAsync(i.ChannelId)).GetMessageAsync(msg).ConfigureAwait(false)).DeleteAfter(int.Parse(i.DeleteTime.ToString()));
+                    (await (await user.Guild.GetTextChannelAsync(i.ChannelId)).GetMessageAsync(msg)
+                        .ConfigureAwait(false)).DeleteAfter(int.Parse(i.DeleteTime.ToString()));
             }
             else
             {
@@ -198,10 +211,12 @@ public class MultiGreetService : INService
         var gc = await uow.ForGuildId(guild.Id, set => set);
         gc.MultiGreetType = type;
         await uow.SaveChangesAsync().ConfigureAwait(false);
+        //todo: make this an await when we rework gss / ef model port
         guildSettingsService.UpdateGuildConfig(guild.Id, gc);
     }
 
-    public async Task<int> GetMultiGreetType(ulong id) => (await guildSettingsService.GetGuildConfig(id)).MultiGreetType;
+    public async Task<int> GetMultiGreetType(ulong id) =>
+        (await guildSettingsService.GetGuildConfig(id)).MultiGreetType;
 
     public bool AddMultiGreet(ulong guildId, ulong channelId)
     {

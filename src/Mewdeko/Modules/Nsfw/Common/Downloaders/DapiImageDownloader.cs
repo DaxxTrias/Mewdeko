@@ -1,16 +1,13 @@
-﻿using System.Net.Http;
+using System.Net.Http;
 using System.Net.Http.Json;
 using System.Threading;
 
 namespace Mewdeko.Modules.Nsfw.Common.Downloaders
 {
-    public abstract class DapiImageDownloader : ImageDownloader<DapiImageObject>
+    public abstract class DapiImageDownloader
+        (Booru booru, IHttpClientFactory http, string baseUrl) : ImageDownloader<DapiImageObject>(booru, http)
     {
-        protected readonly string BaseUrl;
-
-        public DapiImageDownloader(Booru booru, IHttpClientFactory http, string baseUrl)
-            : base(booru, http)
-            => BaseUrl = baseUrl;
+        protected readonly string BaseUrl = baseUrl;
 
         protected abstract Task<bool> IsTagValid(string tag, CancellationToken cancel = default);
 
@@ -38,7 +35,9 @@ namespace Mewdeko.Modules.Nsfw.Common.Downloaders
             var uri = $"{BaseUrl}/posts.json?limit=200&tags={tagString}&page={page}";
             using var http = _http.CreateClient();
             var imageObjects = await http.GetFromJsonAsync<DapiImageObject[]>(uri, _serializerOptions, cancel);
-            return imageObjects is null ? new List<DapiImageObject>() : imageObjects.Where(x => x.FileUrl is not null).ToList();
+            return imageObjects is null
+                ? new List<DapiImageObject>()
+                : imageObjects.Where(x => x.FileUrl is not null).ToList();
         }
     }
 }
