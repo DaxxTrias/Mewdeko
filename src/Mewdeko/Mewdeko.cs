@@ -52,7 +52,7 @@ public class Mewdeko
         Credentials = new BotCredentials();
         Cache = new RedisCache(Credentials, shardId);
         db = new DbService(Credentials.TotalShards, Credentials.Token, Credentials.UsePsql,
-            Credentials.PsqlConnectionString);
+            Credentials.PsqlConnectionString, Credentials.MigrateToPsql);
 
 
         if (shardId == 0)
