@@ -54,7 +54,7 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
     }
 
     [SlashCommand("verbose", "Enables or Disables command errors"),
-        Discord.Interactions.RequireContext(ContextType.Guild), PermRoleCheck]
+     Discord.Interactions.RequireContext(ContextType.Guild), PermRoleCheck]
     public async Task Verbose(PermissionSlash? action = null)
     {
         var uow = db.GetDbContext();
@@ -73,7 +73,7 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
     }
 
     [SlashCommand("permrole", "Sets a role to change command permissions without admin"),
-        Discord.Interactions.RequireContext(ContextType.Guild),
+     Discord.Interactions.RequireContext(ContextType.Guild),
      SlashUserPerm(GuildPermission.Administrator), Priority(0)]
     public async Task PermRole(IRole? role = null)
     {
@@ -102,7 +102,7 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
     }
 
     [SlashCommand("listperms", "List currently set permissions"),
-        Discord.Interactions.RequireContext(ContextType.Guild), PermRoleCheck]
+     Discord.Interactions.RequireContext(ContextType.Guild), PermRoleCheck]
     public async Task ListPerms()
     {
         IList<Permissionv2> perms;
@@ -138,11 +138,11 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
     }
 
     [SlashCommand("removeperm", "Remove a permission based on its number"),
-        Discord.Interactions.RequireContext(ContextType.Guild), PermRoleCheck]
+     Discord.Interactions.RequireContext(ContextType.Guild), PermRoleCheck]
     public async Task RemovePerm(
         [Discord.Interactions.Summary("permission", "the permission to modify"),
-            Autocomplete(typeof(PermissionAutoCompleter))]
-            string perm)
+         Autocomplete(typeof(PermissionAutoCompleter))]
+        string perm)
     {
         var index = int.Parse(perm);
         if (index == 0)
@@ -167,8 +167,8 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
             }
 
             await ReplyConfirmLocalizedAsync("removed",
-                index + 1,
-                Format.Code(p.GetCommand(await guildSettings.GetPrefix(ctx.Guild), (SocketGuild)ctx.Guild)))
+                    index + 1,
+                    Format.Code(p.GetCommand(await guildSettings.GetPrefix(ctx.Guild), (SocketGuild)ctx.Guild)))
                 .ConfigureAwait(false);
         }
         catch (IndexOutOfRangeException)
@@ -178,11 +178,12 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
     }
 
     [SlashCommand("servercommand", "Enable or disable a command in the server"),
-        Discord.Interactions.RequireContext(ContextType.Guild), PermRoleCheck]
+     Discord.Interactions.RequireContext(ContextType.Guild), PermRoleCheck]
     public async Task ServerCmd(
         [Discord.Interactions.Summary("command", "the command to set permissions on"),
-            Autocomplete(typeof(GenericCommandAutocompleter))] string command,
-            PermissionSlash action)
+         Autocomplete(typeof(GenericCommandAutocompleter))]
+        string command,
+        PermissionSlash action)
     {
         await Service.AddPermissions(ctx.Guild.Id, new Permissionv2
         {
@@ -209,12 +210,12 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
     }
 
     [SlashCommand("servermodule", "Enable or disable a Module in the server"),
-        Discord.Interactions.RequireContext(ContextType.Guild), PermRoleCheck]
+     Discord.Interactions.RequireContext(ContextType.Guild), PermRoleCheck]
     public async Task SrvrMdl(
         [Discord.Interactions.Summary("module", "the module to set permissions on"),
-            Autocomplete(typeof(ModuleAutoCompleter))]
-            string module,
-            PermissionSlash action)
+         Autocomplete(typeof(ModuleAutoCompleter))]
+        string module,
+        PermissionSlash action)
     {
         await Service.AddPermissions(ctx.Guild.Id, new Permissionv2
         {
@@ -240,12 +241,12 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
     }
 
     [SlashCommand("usercommand", "Enable or disable a command for a user"),
-        Discord.Interactions.RequireContext(ContextType.Guild), PermRoleCheck]
+     Discord.Interactions.RequireContext(ContextType.Guild), PermRoleCheck]
     public async Task UsrCmd(
         [Discord.Interactions.Summary("command", "the command to set permissions on"),
-            Autocomplete(typeof(GenericCommandAutocompleter))]
-            string command,
-            PermissionSlash action, IGuildUser user)
+         Autocomplete(typeof(GenericCommandAutocompleter))]
+        string command,
+        PermissionSlash action, IGuildUser user)
     {
         await Service.AddPermissions(ctx.Guild.Id, new Permissionv2
         {
@@ -274,12 +275,12 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
     }
 
     [SlashCommand("usermodule", "Enable or disable a module for a user"),
-        Discord.Interactions.RequireContext(ContextType.Guild), PermRoleCheck]
+     Discord.Interactions.RequireContext(ContextType.Guild), PermRoleCheck]
     public async Task UsrMdl(
         [Discord.Interactions.Summary("module", "the module to set permissions on"),
-            Autocomplete(typeof(ModuleAutoCompleter))]
-            string module,
-            PermissionSlash action, IGuildUser user)
+         Autocomplete(typeof(ModuleAutoCompleter))]
+        string module,
+        PermissionSlash action, IGuildUser user)
     {
         await Service.AddPermissions(ctx.Guild.Id, new Permissionv2
         {
@@ -307,12 +308,12 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
     }
 
     [SlashCommand("rolecommand", "Enable or disable a command for a role"),
-        Discord.Interactions.RequireContext(ContextType.Guild), PermRoleCheck]
+     Discord.Interactions.RequireContext(ContextType.Guild), PermRoleCheck]
     public async Task RoleCmd(
         [Discord.Interactions.Summary("command", "the command to set permissions on"),
-            Autocomplete(typeof(GenericCommandAutocompleter))]
-            string command,
-            PermissionSlash action, IRole role)
+         Autocomplete(typeof(GenericCommandAutocompleter))]
+        string command,
+        PermissionSlash action, IRole role)
     {
         if (role == role.Guild.EveryoneRole)
             return;
@@ -344,12 +345,12 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
     }
 
     [SlashCommand("rolemodule", "Enable or disable a module for a role"),
-        Discord.Interactions.RequireContext(ContextType.Guild), PermRoleCheck]
+     Discord.Interactions.RequireContext(ContextType.Guild), PermRoleCheck]
     public async Task RoleMdl(
         [Discord.Interactions.Summary("module", "the module to set permissions on"),
-            Autocomplete(typeof(ModuleAutoCompleter))]
-            string module,
-            PermissionSlash action, IRole role)
+         Autocomplete(typeof(ModuleAutoCompleter))]
+        string module,
+        PermissionSlash action, IRole role)
     {
         if (role == role.Guild.EveryoneRole)
             return;
@@ -380,12 +381,12 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
     }
 
     [SlashCommand("channelcommand", "Enable or disable a command for a channel"),
-        Discord.Interactions.RequireContext(ContextType.Guild), PermRoleCheck]
+     Discord.Interactions.RequireContext(ContextType.Guild), PermRoleCheck]
     public async Task ChnlCmd(
         [Discord.Interactions.Summary("command", "the command to set permissions on"),
-            Autocomplete(typeof(GenericCommandAutocompleter))]
-            string command,
-            PermissionSlash action, ITextChannel chnl)
+         Autocomplete(typeof(GenericCommandAutocompleter))]
+        string command,
+        PermissionSlash action, ITextChannel chnl)
     {
         await Service.AddPermissions(ctx.Guild.Id, new Permissionv2
         {
@@ -414,12 +415,12 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
     }
 
     [SlashCommand("channelmodule", "Enable or disable a module for a channel"),
-        Discord.Interactions.RequireContext(ContextType.Guild), PermRoleCheck]
+     Discord.Interactions.RequireContext(ContextType.Guild), PermRoleCheck]
     public async Task ChnlMdl(
         [Discord.Interactions.Summary("module", "the module to set permissions on"),
-            Autocomplete(typeof(ModuleAutoCompleter))]
-            string module,
-            PermissionSlash action, ITextChannel chnl)
+         Autocomplete(typeof(ModuleAutoCompleter))]
+        string module,
+        PermissionSlash action, ITextChannel chnl)
     {
         await Service.AddPermissions(ctx.Guild.Id, new Permissionv2
         {
@@ -447,7 +448,7 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
     }
 
     [SlashCommand("allchannelmodules", "Enable or disable all modules in a channel"),
-        Discord.Interactions.RequireContext(ContextType.Guild), PermRoleCheck]
+     Discord.Interactions.RequireContext(ContextType.Guild), PermRoleCheck]
     public async Task AllChnlMdls(PermissionSlash action, ITextChannel chnl)
     {
         await Service.AddPermissions(ctx.Guild.Id, new Permissionv2
@@ -472,12 +473,12 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
     }
 
     [SlashCommand("categorycommand", "Enable or disable commands for a category"),
-        Discord.Interactions.RequireContext(ContextType.Guild), PermRoleCheck]
+     Discord.Interactions.RequireContext(ContextType.Guild), PermRoleCheck]
     public async Task CatCmd(
         [Discord.Interactions.Summary("command", "the command to set permissions on"),
-            Autocomplete(typeof(GenericCommandAutocompleter))]
-            string command,
-            PermissionSlash action, ICategoryChannel chnl)
+         Autocomplete(typeof(GenericCommandAutocompleter))]
+        string command,
+        PermissionSlash action, ICategoryChannel chnl)
     {
         await Service.AddPermissions(ctx.Guild.Id, new Permissionv2
         {
@@ -506,12 +507,12 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
     }
 
     [SlashCommand("categorymodule", "Enable or disable a module for a category"),
-        Discord.Interactions.RequireContext(ContextType.Guild), PermRoleCheck]
+     Discord.Interactions.RequireContext(ContextType.Guild), PermRoleCheck]
     public async Task CatMdl(
         [Discord.Interactions.Summary("module", "the module to set permissions on"),
-            Autocomplete(typeof(ModuleAutoCompleter))]
-            string module,
-            PermissionSlash action, ICategoryChannel chnl)
+         Autocomplete(typeof(ModuleAutoCompleter))]
+        string module,
+        PermissionSlash action, ICategoryChannel chnl)
     {
         await Service.AddPermissions(ctx.Guild.Id, new Permissionv2
         {
@@ -539,7 +540,7 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
     }
 
     [SlashCommand("allcategorymodules", "Enable or disable all modules in a category"),
-        Discord.Interactions.RequireContext(ContextType.Guild), PermRoleCheck]
+     Discord.Interactions.RequireContext(ContextType.Guild), PermRoleCheck]
     public async Task AllCatMdls(PermissionSlash action, ICategoryChannel chnl)
     {
         await Service.AddPermissions(ctx.Guild.Id, new Permissionv2
@@ -564,7 +565,7 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
     }
 
     [SlashCommand("allrolemodules", "Enable or disable all modules for a role"),
-        Discord.Interactions.RequireContext(ContextType.Guild), PermRoleCheck]
+     Discord.Interactions.RequireContext(ContextType.Guild), PermRoleCheck]
     public async Task AllRoleMdls(PermissionSlash action, IRole role)
     {
         if (role == role.Guild.EveryoneRole)
@@ -592,7 +593,7 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
     }
 
     [SlashCommand("allusermodules", "Enable or disable all modules for a user"),
-        Discord.Interactions.RequireContext(ContextType.Guild), PermRoleCheck]
+     Discord.Interactions.RequireContext(ContextType.Guild), PermRoleCheck]
     public async Task AllUsrMdls(PermissionSlash action, IUser user)
     {
         await Service.AddPermissions(ctx.Guild.Id, new Permissionv2
@@ -617,7 +618,7 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
     }
 
     [SlashCommand("allservermodules", "Enable or disable all modules in the server"),
-        Discord.Interactions.RequireContext(ContextType.Guild), PermRoleCheck]
+     Discord.Interactions.RequireContext(ContextType.Guild), PermRoleCheck]
     public async Task AllSrvrMdls(PermissionSlash action)
     {
         var newPerm = new Permissionv2
@@ -674,11 +675,11 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
 
         // check effecting for redundant permissions
         var redundant = effecting.Where(x => effecting.Any(y =>
-            y.Id                    != x.Id                 &&
-            y.PrimaryTarget         == x.PrimaryTarget      &&
-            y.PrimaryTargetId       == x.PrimaryTargetId    &&
-            y.SecondaryTarget       == x.SecondaryTarget    &&
-            y.SecondaryTargetName   == x.SecondaryTargetName)).ToList();
+            y.Id != x.Id &&
+            y.PrimaryTarget == x.PrimaryTarget &&
+            y.PrimaryTargetId == x.PrimaryTargetId &&
+            y.SecondaryTarget == x.SecondaryTarget &&
+            y.SecondaryTargetName == x.SecondaryTargetName)).ToList();
         if (redundant.Count >= 1)
         {
             redundant = redundant
@@ -705,10 +706,12 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
 
         if (effecting.Any(x => x.PrimaryTarget == PrimaryPermissionType.Server && x.State == false))
             cb.WithButton(GetText("perm_quick_options_disable_disabled"), $"command_toggle_disable.{commandName}",
-                ButtonStyle.Success, "<:perms_check:1085356998247317514>".ToIEmote());
+                ButtonStyle.Success,
+                "<:perms_check:1085356998247317514>".ToIEmote());
         else
             cb.WithButton(GetText("perm_quick_options_disable_enabled"), $"command_toggle_disable.{commandName}",
-                ButtonStyle.Danger, "<:perms_disabled:1085358511900327956>".ToIEmote());
+                ButtonStyle.Danger,
+                "<:perms_disabled:1085358511900327956>".ToIEmote());
 
         if (effecting.Any() || dpoUsed)
             cb.WithButton(GetText("local_perms_reset"), $"local_perms_reset.{commandName}", ButtonStyle.Danger,
@@ -749,11 +752,11 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
         var redundant = perms
             .Where(x => x.SecondaryTargetName == commandName)
             .Where(x => perms.Where(x => x.SecondaryTargetName == commandName).Any(y =>
-                y.Id                    != x.Id                 &&
-                y.PrimaryTarget         == x.PrimaryTarget      &&
-                y.PrimaryTargetId       == x.PrimaryTargetId    &&
-                y.SecondaryTarget       == x.SecondaryTarget    &&
-                y.SecondaryTargetName   == x.SecondaryTargetName))
+                y.Id != x.Id &&
+                y.PrimaryTarget == x.PrimaryTarget &&
+                y.PrimaryTargetId == x.PrimaryTargetId &&
+                y.SecondaryTarget == x.SecondaryTarget &&
+                y.SecondaryTargetName == x.SecondaryTargetName))
             .DistinctBy(x => (x.PrimaryTarget, x.PrimaryTargetId, x.SecondaryTarget, x.SecondaryTargetName))
             .ToList();
 
@@ -803,8 +806,8 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
     [ComponentInteraction("credperms_m.*.*.*.*", true)]
     [Discord.Interactions.RequireUserPermission(GuildPermission.Administrator)]
     [Discord.Interactions.RequireContext(ContextType.Guild)]
-    public async Task ResolvePermMenu(string primaryTargetType, string primaryTargetIdRaw,
-        string secondaryTargetType, string secondaryTargetId)
+    public async Task ResolvePermMenu(string primaryTargetType, string primaryTargetIdRaw, string secondaryTargetType,
+        string secondaryTargetId)
     {
         var primaryTarget = (PrimaryPermissionType)Convert.ToInt32(primaryTargetType);
         var primaryTargetId = Convert.ToUInt64(primaryTargetIdRaw);
@@ -912,6 +915,7 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
             await UpdateMessageWithPermenu(commandName);
             return;
         }
+
         await Service.RemovePerm(ctx.Guild.Id, sc.Index);
         await UpdateMessageWithPermenu(commandName);
     }
@@ -971,19 +975,19 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
 
         if (!truePerms.Any())
             truePerms = basePerms;
-        for (var i = 0; i < 25 && ((selects.Count-1)*25) < perms.Length && selects.Count <= 5; i++)
+        for (var i = 0; i < 25 && ((selects.Count - 1) * 25) < perms.Length && selects.Count <= 5; i++)
         {
             selects.Add(new SelectMenuBuilder()
                 .WithCustomId($"update_cmd_dpo.{commandName}${i}")
                 .WithMinValues(0)
                 .WithPlaceholder(GetText("cmd_perm_spawner_dpo_page", selects.Count + 1)));
             var current = selects.Last();
-            for (var j = 0; j < 25 &&((selects.Count-1)*25)+j < perms.Length; j++)
+            for (var j = 0; j < 25 && ((selects.Count - 1) * 25) + j < perms.Length; j++)
             {
-                var cdat = perms[((selects.Count-1)*25)+j];
+                var cdat = perms[((selects.Count - 1) * 25) + j];
                 current.AddOption(cdat.ToString(), ((ulong)cdat).ToString(), cdat.ToString(),
                     isDefault: truePerms.Any(x => x == cdat));
-                current.MaxValues = j+1;
+                current.MaxValues = j + 1;
             }
         }
 
@@ -1064,7 +1068,7 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
         // chunk into groups of 25, take first three
         var splitGroups = perms
             .Select((x, i) => (x, i))
-            .GroupBy(x => x.i/25)
+            .GroupBy(x => x.i / 25)
             .Select(x =>
                 x.Select(y => y.x))
             .Take(3)
@@ -1131,10 +1135,10 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
         // chunk into groups of 25, take first three
         var splitGroups = perms
             .Select((x, i) => (x, i))
-            .GroupBy(x => x.i/25)
+            .GroupBy(x => x.i / 25)
             .Select(x =>
                 x.Select(y => y.x)
-                .ToList())
+                    .ToList())
             .ToList();
 
         perms = splitGroups[index];
@@ -1248,7 +1252,7 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
         // chunk into groups of 25, take first three
         var splitGroups = perms
             .Select((x, i) => (x, i))
-            .GroupBy(x => x.i/25)
+            .GroupBy(x => x.i / 25)
             .Select(x =>
                 x.Select(y => y.x))
             .Take(3)
@@ -1283,7 +1287,8 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
                     GetText($"perms_quick_options_role_remove_{(allow ? "allow" : "deny")}", x.x.PrimaryTargetId),
                     "<:role:808826577785716756>".ToIEmote(), true));
             var sb = new SelectMenuBuilder($"perm_quick_options_role_remove.{commandName}.{overwright}.{allow}${i}",
-                options.ToList(), GetText("perms_quick_options_role_remove"), options.Count(), 0);
+                options.ToList(), GetText("perms_quick_options_role_remove"),
+                options.Count(), 0);
             cb.WithSelectMenu(sb);
         }
 
@@ -1313,10 +1318,10 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
         // chunk into groups of 25, take first three
         var splitGroups = perms
             .Select((x, i) => (x, i))
-            .GroupBy(x => x.i/25)
+            .GroupBy(x => x.i / 25)
             .Select(x =>
                 x.Select(y => y.x)
-                .ToList())
+                    .ToList())
             .ToList();
 
         perms = splitGroups[index];
@@ -1415,7 +1420,7 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
         // chunk into groups of 25, take first three
         var splitGroups = perms
             .Select((x, i) => (x, i))
-            .GroupBy(x => x.i/25)
+            .GroupBy(x => x.i / 25)
             .Select(x =>
                 x.Select(y => y.x))
             .Take(3)
@@ -1451,7 +1456,8 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
                     GetText($"perms_quick_options_channel_remove_{(allow ? "allow" : "deny")}", x.x.PrimaryTargetId),
                     GetChannelEmote(x.channel), true));
             var sb = new SelectMenuBuilder($"perm_quick_options_channel_remove.{commandName}.{overwright}.{allow}${i}",
-                options.ToList(), GetText("perms_quick_options_channel_remove"), options.Count(), 0);
+                options.ToList(),
+                GetText("perms_quick_options_channel_remove"), options.Count(), 0);
             cb.WithSelectMenu(sb);
         }
 
@@ -1483,10 +1489,10 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
         // chunk into groups of 25, take first three
         var splitGroups = perms
             .Select((x, i) => (x, i))
-            .GroupBy(x => x.i/25)
+            .GroupBy(x => x.i / 25)
             .Select(x =>
                 x.Select(y => y.x)
-                .ToList())
+                    .ToList())
             .ToList();
 
         perms = splitGroups[index];
@@ -1590,7 +1596,7 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
         // chunk into groups of 25, take first three
         var splitGroups = perms
             .Select((x, i) => (x, i))
-            .GroupBy(x => x.i/25)
+            .GroupBy(x => x.i / 25)
             .Select(x =>
                 x.Select(y => y.x))
             .Take(3)
@@ -1643,7 +1649,6 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
     }
 
 
-
     [ComponentInteraction("perm_quick_options_category_remove.*.*.*$*", true)]
     public async Task RemoveCategoryOveride(string commandName, bool overwright, bool allow, int index, string[] values)
     {
@@ -1662,10 +1667,10 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
         // chunk into groups of 25, take first three
         var splitGroups = perms
             .Select((x, i) => (x, i))
-            .GroupBy(x => x.i/25)
+            .GroupBy(x => x.i / 25)
             .Select(x =>
                 x.Select(y => y.x)
-                .ToList())
+                    .ToList())
             .ToList();
 
         perms = splitGroups[index];
@@ -1724,7 +1729,7 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
             ? permCache.Permissions.Source.ToList()
             : Permissionv2.GetDefaultPermlist;
 
-        for (i = 0; i<needAdd.Count(); i++)
+        for (i = 0; i < needAdd.Count(); i++)
             await Service.UnsafeMovePerm(ctx.Guild.Id, perms.Last().Index, 1);
         await CommandPermsCat(commandName, overwright, allow, "");
     }
@@ -1742,6 +1747,7 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
     }
 
     public IRole? TryGetRole(ulong id) => Context.Guild.Roles.FirstOrDefault(x => x.Id == id);
+
     public async Task<IChannel?> TryGetChannel(ulong id)
     {
         try
@@ -1753,21 +1759,18 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
             return null;
         }
     }
+
     public IEmote GetChannelEmote(IChannel channel)
     {
-        if (channel is ICategoryChannel)
-            return GetText("not_an_easter_egg").ToIEmote();
-        if (channel is IForumChannel)
-            return "<:ForumChannelIcon:1086869270312517632>".ToIEmote();
-        if (channel is INewsChannel)
-            return "<:ChannelAnnouncements:779042577114202122>".ToIEmote();
-        if (channel is IThreadChannel)
-            return "<:threadchannel:824240882697633812>".ToIEmote();
-        if (channel is IStageChannel)
-            return "<:stagechannel:824240882793447444>".ToIEmote();
-        if (channel is IVoiceChannel)
-            return "<:ChannelVC:779036156607332394>".ToIEmote();
-
-        return "<:ChannelText:779036156175188001>".ToIEmote();
+        return channel switch
+        {
+            ICategoryChannel => GetText("not_an_easter_egg").ToIEmote(),
+            IForumChannel => "<:ForumChannelIcon:1086869270312517632>".ToIEmote(),
+            INewsChannel => "<:ChannelAnnouncements:779042577114202122>".ToIEmote(),
+            IThreadChannel => "<:threadchannel:824240882697633812>".ToIEmote(),
+            IStageChannel => "<:stagechannel:824240882793447444>".ToIEmote(),
+            IVoiceChannel => "<:ChannelVC:779036156607332394>".ToIEmote(),
+            _ => "<:ChannelText:779036156175188001>".ToIEmote()
+        };
     }
 }

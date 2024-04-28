@@ -15,8 +15,7 @@ public class PermissionService : ILateBlocker, INService
 
     public PermissionService(DbService db,
         IBotStrings strings,
-        GuildSettingsService guildSettings,
-        Mewdeko bot)
+        GuildSettingsService guildSettings, Mewdeko bot)
     {
         this.db = db;
         Strings = strings;
@@ -226,7 +225,8 @@ public class PermissionService : ILateBlocker, INService
             PrimaryPermissionType.Role => $"<@&{id}>",
             PrimaryPermissionType.Server => $"This Server",
             PrimaryPermissionType.Category => $"<#{id}>",
-            _ => "An unexpected type input error occurred in `PermissionsService.cs#MentionPerm(PrimaryPermissionType, ulong)`. Please contact a developer at https://discord.gg/TBD12 with a screenshot of this message for more information."
+            _ =>
+                "An unexpected type input error occurred in `PermissionsService.cs#MentionPerm(PrimaryPermissionType, ulong)`. Please contact a developer at https://discord.gg/mewdeko with a screenshot of this message for more information."
         };
 
     public async Task RemovePerm(ulong guildId, int index)
