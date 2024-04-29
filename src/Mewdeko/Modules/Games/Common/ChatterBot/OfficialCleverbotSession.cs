@@ -57,17 +57,15 @@ public class CleverbotIoSession : IChatterBotSession
         using var msg = new FormUrlEncodedContent(new[] // can be nullref
         {
             new KeyValuePair<string, string>("user", user), new KeyValuePair<string, string>("key", key),
-            new KeyValuePair<string, string>("nick", await nick),
-            new KeyValuePair<string, string>("text", input)
+            new KeyValuePair<string, string>("nick", await nick), new KeyValuePair<string, string>("text", input)
         });
         using var data = await http.PostAsync(askEndpoint, msg).ConfigureAwait(false);
         var str = await data.Content.ReadAsStringAsync().ConfigureAwait(false);
-
         var obj = JsonConvert.DeserializeObject<CleverbotIoAskResponse>(str);
-        if (obj?.Status != "success")
-            throw new OperationCanceledException(obj?.Status);
+        if (obj.Status != "success")
+            throw new OperationCanceledException(obj.Status);
 
-        return obj?.Response;
+        return obj.Response;
     }
 
     private async Task<string> GetNick()
@@ -80,9 +78,9 @@ public class CleverbotIoSession : IChatterBotSession
         using var data = await http.PostAsync(createEndpoint, msg).ConfigureAwait(false);
         var str = await data.Content.ReadAsStringAsync().ConfigureAwait(false);
         var obj = JsonConvert.DeserializeObject<CleverbotIoCreateResponse>(str);
-        if (obj?.Status != "success") // obj can be null under certain circumstances
-            throw new OperationCanceledException(obj?.Status);
+        if (obj.Status != "success") // obj can be null under certain circumstances
+            throw new OperationCanceledException(obj.Status);
 
-        return obj?.Nick;
+        return obj.Nick;
     }
 }

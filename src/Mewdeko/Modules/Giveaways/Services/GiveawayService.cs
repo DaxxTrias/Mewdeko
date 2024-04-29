@@ -7,7 +7,7 @@ using Swan;
 namespace Mewdeko.Modules.Giveaways.Services;
 
 public class GiveawayService(DiscordSocketClient client, DbService db, IBotCredentials creds,
-    GuildSettingsService guildSettings)
+        GuildSettingsService guildSettings)
     : INService, IReadyExecutor
 {
     public async Task OnReadyAsync()
@@ -23,7 +23,7 @@ public class GiveawayService(DiscordSocketClient client, DbService db, IBotCrede
                 if (!giveawaysEnumerable.Any())
                     continue;
 
-                Log.Information("Executing {Count} giveaways.", giveawaysEnumerable.Count());
+                Log.Information("Executing {Count} giveaways", giveawaysEnumerable.Count());
 
                 // make groups of 5, with 1.5 second inbetween each one to ensure against ratelimits
                 var i = 0;
@@ -94,6 +94,7 @@ public class GiveawayService(DiscordSocketClient client, DbService db, IBotCrede
                 .Where(x => (int)(x.ServerId / (ulong)Math.Pow(2, 22) % (ulong)creds.TotalShards) == client.ShardId &&
                             x.Ended != 1 && x.When < now).ToList();
         }
+
         else
         {
             giveaways = uow.Giveaways
@@ -116,19 +117,18 @@ public class GiveawayService(DiscordSocketClient client, DbService db, IBotCrede
         ulong serverId, ITextChannel currentChannel, IGuild guild, string? reqroles = null,
         string? blacklistusers = null,
         string? blacklistroles = null, IDiscordInteraction? interaction = null, string banner = null,
-        IRole pingRole = null)
+        IRole pingROle = null)
     {
-        var gconfig = await guildSettings.GetGuildConfig(serverId)
-            .ConfigureAwait(false);
+        var gconfig = await guildSettings.GetGuildConfig(serverId).ConfigureAwait(false);
         IRole role = null;
         if (gconfig.GiveawayPingRole != 0)
         {
             role = guild.GetRole(gconfig.GiveawayPingRole);
         }
 
-        if (pingRole is not null)
+        if (pingROle is not null)
         {
-            role = pingRole;
+            role = pingROle;
         }
 
         var hostuser = await guild.GetUserAsync(host).ConfigureAwait(false);
@@ -140,7 +140,7 @@ public class GiveawayService(DiscordSocketClient client, DbService db, IBotCrede
             Description =
                 $"React with {emote} to enter!\nHosted by {hostuser.Mention}\nEnd Time: <t:{DateTime.UtcNow.Add(ts).ToUnixEpochDate()}:R> (<t:{DateTime.UtcNow.Add(ts).ToUnixEpochDate()}>)\n",
             Footer = new EmbedFooterBuilder()
-                .WithText($"{winners} Winners | Mewdeko Giveaways")
+                .WithText($"{winners} Winners | {guild} Giveaways | Ends on {DateTime.UtcNow.Add(ts):dd.MM.yyyy}")
         };
         if (!string.IsNullOrEmpty(reqroles))
         {
@@ -148,7 +148,8 @@ public class GiveawayService(DiscordSocketClient client, DbService db, IBotCrede
             var reqrolesparsed = new List<IRole>();
             foreach (var i in splitreqs)
             {
-                if (!ulong.TryParse(i, out var parsed)) continue;
+                if (!ulong.TryParse(i, out var parsed))
+                    continue;
                 try
                 {
                     reqrolesparsed.Add(guild.GetRole(parsed));
@@ -169,8 +170,8 @@ public class GiveawayService(DiscordSocketClient client, DbService db, IBotCrede
         if (!string.IsNullOrEmpty(gconfig.GiveawayEmbedColor))
         {
             if (gconfig.GiveawayEmbedColor.StartsWith("#"))
-                eb.WithColor(new Color(Convert.ToUInt32(gconfig.GiveawayEmbedcolor.Replace("#", ""), 16)));
-            else if (gconfig.GiveawayEmbedColor.StartsWith("0x") && gconfig.GiveawayEmbedColor.Length == 00)
+                eb.WithColor(new Color(Convert.ToUInt32(gconfig.GiveawayEmbedColor.Replace("#", ""), 16)));
+            else if (gconfig.GiveawayWinEmbedColor.StartsWith("0x") && gconfig.GiveawayEmbedColor.Length == 8)
                 eb.WithColor(new Color(Convert.ToUInt32(gconfig.GiveawayEmbedColor.Replace("0x", ""), 16)));
             else if (uint.TryParse(gconfig.GiveawayEmbedColor, out var colorNumber))
                 eb.WithColor(new Color(colorNumber));
@@ -188,7 +189,7 @@ public class GiveawayService(DiscordSocketClient client, DbService db, IBotCrede
                 eb.WithImageUrl(banner);
         }
 
-        var msg = await chan.SendMessageAsync(embed: eb.Build())
+        var msg = await chan.SendMessageAsync(role is not null ? role.Mention : "", embed: eb.Build())
             .ConfigureAwait(false);
         await msg.AddReactionAsync(emote).ConfigureAwait(false);
         var time = DateTime.UtcNow + ts;
@@ -220,176 +221,6 @@ public class GiveawayService(DiscordSocketClient client, DbService db, IBotCrede
             await currentChannel.SendConfirmAsync($"Giveaway started in {chan.Mention}").ConfigureAwait(false);
     }
 
-    public async Task GiveawayReroll(Database.Models.Giveaways r)
-    {
-        if (client.GetGuild(r.ServerId) is not { } guild)
-            return;
-        if (client.GetGuild(r.ServerId).GetTextChannel(r.ChannelId) is not { } channel)
-            return;
-        IUserMessage ch;
-        try
-        {
-            if (await channel.GetMessageAsync(r.MessageId).ConfigureAwait(false) is not
-                IUserMessage ch1)
-            {
-                return;
-            }
-
-            ch = ch1;
-        }
-        catch
-        {
-            return;
-        }
-
-        await using var uow = db.GetDbContext();
-        var emote = r.Emote.ToIEmote();
-        if (emote.Name == null)
-        {
-            await ch.Channel.SendErrorAsync($"[This Giveaway]({ch.GetJumpUrl()}) failed because the emote used for it is invalid!").ConfigureAwait(false);
-            return;
-        }
-
-        var reacts = await ch.GetReactionUsersAsync(emote, 999999).FlattenAsync().ConfigureAwait(false);
-        if (!reacts.Any())
-        {
-            var emoteTest = await GetGiveawayEmote(guild.Id);
-            var emoteTest2 = emoteTest.ToIEmote();
-            if (emoteTest2.Name == null)
-            {
-                await ch.Channel.SendErrorAsync($"[This Giveaway]({ch.GetJumpUrl()}) failed because the emote used for it is invalid!").ConfigureAwait(false);
-                return;
-            }
-
-            reacts = await ch.GetReactionUsersAsync(emoteTest.ToIEmote(), 999999).FlattenAsync().ConfigureAwait(false);
-        }
-        if (reacts.Count(x => !x.IsBot) - 1 < r.Winners)
-        {
-            var eb = new EmbedBuilder
-            {
-                Color = Mewdeko.ErrorColor, Description = "There were not enough participants!"
-            };
-            await ch.ModifyAsync(x => x.Embed = eb.Build()).ConfigureAwait(false);
-            r.Ended = 1;
-            uow.Giveaways.Update(r);
-            await uow.SaveChangesAsync().ConfigureAwait(false);
-        }
-        else
-        {
-            if (r.Winners == 1)
-            {
-                var users = reacts.Where(x => !x.IsBot).Select(x => guild.GetUser(x.Id)).Where(x => x is not null).ToList();
-                if (r.RestrictTo is not null)
-                {
-                    var parsedreqs = new List<ulong>();
-                    foreach (var i in r.RestrictTo.Split(" "))
-                    {
-                        if (ulong.TryParse(i, out var parsed))
-                        {
-                            parsedreqs.Add(parsed);
-                        }
-                    }
-
-                    try
-                    {
-                        if (parsedreqs.Count > 0)
-                        {
-                            users = users.Where(x => x.Roles.Any() && x.Roles.Select(i => i.Id).Intersect(parsedreqs).Count() == parsedreqs.Count)
-                                .ToList();
-                        }
-                    }
-                    catch (Exception e)
-                    {
-                        Log.Error(e.ToString());
-                        return;
-                    }
-                }
-
-                if (users.Count == 0)
-                {
-                    var eb1 = new EmbedBuilder().WithErrorColor()
-                        .WithDescription(
-                            "Looks like nobody that actually met the role requirements joined..")
-                        .Build();
-                    await ch.ModifyAsync(x => x.Embed = eb1).ConfigureAwait(false);
-                    return;
-                }
-
-                var rand = new Random();
-                var index = rand.Next(users.Count);
-                var user = users.ToList()[index];
-                var eb = new EmbedBuilder
-                {
-                    Color = Mewdeko.OkColor, Description = $"{user.Mention} won the giveaway for {r.Item}!"
-                };
-                await ch.ModifyAsync(x => x.Embed = eb.Build()).ConfigureAwait(false);
-                await ch.Channel.SendMessageAsync($"{user.Mention} won the giveaway for {r.Item}!",
-                    embed: new EmbedBuilder().WithOkColor().WithDescription($"[Jump To Giveaway]({ch.GetJumpUrl()})")
-                        .Build(), allowedMentions: new AllowedMentions(AllowedMentionTypes.Users)).ConfigureAwait(false);
-                r.Ended = 1;
-                uow.Giveaways.Update(r);
-                await uow.SaveChangesAsync().ConfigureAwait(false);
-            }
-            else
-            {
-                var rand = new Random();
-                var users = reacts.Where(x => !x.IsBot).Select(x => guild.GetUser(x.Id)).Where(x => x is not null).ToList();
-                if (r.RestrictTo is not null)
-                {
-                    var parsedreqs = new List<ulong>();
-                    var split = r.RestrictTo.Split(" ");
-                    foreach (var i in split)
-                    {
-                        if (ulong.TryParse(i, out var parsed))
-                        {
-                            parsedreqs.Add(parsed);
-                        }
-                    }
-
-                    try
-                    {
-                        if (parsedreqs.Count > 0)
-                        {
-                            users = users.Where(x => x.Roles.Select(i => i.Id).Intersect(parsedreqs).Count() == parsedreqs.Count)
-                                .ToList();
-                        }
-                    }
-                    catch
-                    {
-                        return;
-                    }
-                }
-
-                if (users.Count == 0)
-                {
-                    var eb1 = new EmbedBuilder().WithErrorColor()
-                        .WithDescription(
-                            "Looks like nobody that actually met the role requirements joined..")
-                        .Build();
-                    await ch.ModifyAsync(x => x.Embed = eb1).ConfigureAwait(false);
-                }
-
-                var winners = users.ToList().OrderBy(_ => rand.Next()).Take(r.Winners);
-                var eb = new EmbedBuilder
-                {
-                    Color = Mewdeko.OkColor, Description = $"{string.Join("", winners.Select(x => x.Mention))} won the giveaway for {r.Item}!"
-                };
-                await ch.ModifyAsync(x => x.Embed = eb.Build()).ConfigureAwait(false);
-                foreach (var winners2 in winners.Chunk(50))
-                {
-                    await ch.Channel.SendMessageAsync(
-                        $"{string.Join("", winners2.Select(x => x.Mention))} won the giveaway for {r.Item}!",
-                        embed: new EmbedBuilder().WithOkColor().WithDescription($"[Jump To Giveaway]({ch.GetJumpUrl()})")
-                            .Build()).ConfigureAwait(false);
-                }
-
-                r.Ended = 1;
-                uow.Giveaways.Update(r);
-                await uow.SaveChangesAsync().ConfigureAwait(false);
-            }
-        }
-    }
-
     public async Task GiveawayTimerAction(Database.Models.Giveaways r, IGuild? inputguild = null,
         ITextChannel? inputchannel = null)
     {
@@ -410,7 +241,7 @@ public class GiveawayService(DiscordSocketClient client, DbService db, IBotCrede
         IUserMessage ch;
         try
         {
-            if (await channel.GetMessageAsync(r.MessageId).ConfigureAwait(false) is not
+            if (await channel.GetMessageAsync(r.MessageId) is not
                 IUserMessage ch1)
             {
                 return;
@@ -430,8 +261,7 @@ public class GiveawayService(DiscordSocketClient client, DbService db, IBotCrede
         if (emote.Name == null)
         {
             await ch.Channel
-                .SendErrorAsync(
-                    $"[This Giveaway]({ch.GetJumpUrl()}) failed because the emote used for it is invalid!")
+                .SendErrorAsync($"[This Giveaway]({ch.GetJumpUrl()}) failed because the emote used for it is invalid!")
                 .ConfigureAwait(false);
             return;
         }
@@ -457,7 +287,8 @@ public class GiveawayService(DiscordSocketClient client, DbService db, IBotCrede
         {
             var eb = new EmbedBuilder
             {
-                Color = Mewdeko.ErrorColor, Description = "There were not enough participants!"
+                Color = Mewdeko.ErrorColor,
+                Description = "There were not enough participants!"
             };
             await ch.ModifyAsync(x =>
             {
@@ -490,8 +321,8 @@ public class GiveawayService(DiscordSocketClient client, DbService db, IBotCrede
                         if (parsedreqs.Count > 0)
                         {
                             users = users.Where(x =>
-                                x.GetRoles().Any() &&
-                                x.GetRoles().Select(i => i.Id).Intersect(parsedreqs).Count() == parsedreqs.Count)
+                                    x.GetRoles().Any() &&
+                                    x.GetRoles().Select(i => i.Id).Intersect(parsedreqs).Count() == parsedreqs.Count)
                                 .ToList();
                         }
                     }
@@ -533,12 +364,12 @@ public class GiveawayService(DiscordSocketClient client, DbService db, IBotCrede
                         rep.WithOverride("%messagelink%",
                             () => $"https://discord.com/channels/{guild.Id}/{channel.Id}/{ch.Id}");
                         rep.WithOverride("%giveawayitem%", () => r.Item);
-                        rep.WithOverride("%giveawaywinners", () => r.Winners.ToString());
+                        rep.WithOverride("%giveawaywinners%", () => r.Winners.ToString());
 
                         var replacer = rep.Build();
 
                         if (SmartEmbed.TryParse(replacer.Replace(gset.GiveawayEndMessage), guild.Id, out var embeds,
-                               out var plaintext, out var components))
+                                out var plaintext, out var components))
                         {
                             try
                             {
@@ -547,7 +378,7 @@ public class GiveawayService(DiscordSocketClient client, DbService db, IBotCrede
                             }
                             catch
                             {
-                                // ignore
+                                // ignored
                             }
                         }
                         else
@@ -555,7 +386,7 @@ public class GiveawayService(DiscordSocketClient client, DbService db, IBotCrede
                             var ebdm = new EmbedBuilder()
                                 .WithOkColor()
                                 .WithDescription(
-                                $"Congratulations! You won a giveaway for [{r.Item}](https://discord.com/channels/{r.ServerId}/{r.ChannelId}/{r.MessageId})!");
+                                    $"Congratulations! You won a giveaway for [{r.Item}](https://discord.com/channels/{r.ServerId}/{r.ChannelId}/{r.MessageId})!");
                             ebdm.AddField("Message from Host", replacer.Replace(gset.GiveawayEndMessage));
                             try
                             {
@@ -579,10 +410,11 @@ public class GiveawayService(DiscordSocketClient client, DbService db, IBotCrede
                         }
                         catch
                         {
-                            // ignore
+                            // ignored
                         }
                     }
                 }
+
                 var winbed = ch.Embeds.FirstOrDefault().ToEmbedBuilder()
                     .WithErrorColor()
                     .WithDescription($"Winner: {user.Mention}!\nHosted by: <@{r.UserId}>")
@@ -601,10 +433,10 @@ public class GiveawayService(DiscordSocketClient client, DbService db, IBotCrede
                 }).ConfigureAwait(false);
                 await ch.Channel.SendMessageAsync($"Congratulations to {user.Mention}! {r.Emote}",
                     embed: new EmbedBuilder()
-                    .WithOkColor()
-                    .WithDescription(
-                        $"{user.Mention} won the giveaway for [{r.Item}](https://discord.com/channels/{r.ServerId}/{r.ChannelId}/{r.MessageId})! \n\n- (Hosted by: <@{r.UserId}>)\n- Reroll: `{prefix}reroll {r.MessageId}`")
-                    .Build()).ConfigureAwait(false);
+                        .WithErrorColor()
+                        .WithDescription(
+                            $"{user.Mention} won the giveaway for [{r.Item}](https://discord.com/channels/{r.ServerId}/{r.ChannelId}/{r.MessageId})! \n\n- (Hosted by: <@{r.UserId}>)\n- Reroll: `{prefix}reroll {r.MessageId}`")
+                        .Build()).ConfigureAwait(false);
                 r.Ended = 1;
                 uow.Giveaways.Update(r);
                 await uow.SaveChangesAsync().ConfigureAwait(false);
@@ -612,8 +444,8 @@ public class GiveawayService(DiscordSocketClient client, DbService db, IBotCrede
             else
             {
                 var rand = new Random();
-                var users = reacts.Where(x => !x.IsBot)
-                    .Select(x => guild.GetUserAsync(x.Id)).Where(x => x is not null).ToList();
+                var users = (await Task.WhenAll(reacts.Where(x => !x.IsBot)
+                    .Select(async x => await guild.GetUserAsync(x.Id)).Where(x => x is not null))).ToHashSet();
                 if (r.RestrictTo is not null)
                 {
                     var parsedreqs = new List<ulong>();
@@ -631,8 +463,8 @@ public class GiveawayService(DiscordSocketClient client, DbService db, IBotCrede
                         if (parsedreqs.Count > 0)
                         {
                             users = users.Where(x =>
-                            x.GetRoles().Select(i => i.Id).Intersect(parsedreqs).Count() == parsedreqs.Count)
-                                .ToList();
+                                    x.GetRoles().Select(i => i.Id).Intersect(parsedreqs).Count() == parsedreqs.Count)
+                                .ToHashSet();
                         }
                     }
                     catch
@@ -641,7 +473,7 @@ public class GiveawayService(DiscordSocketClient client, DbService db, IBotCrede
                     }
                 }
 
-                if (users.Any())
+                if (!users.Any())
                 {
                     var eb1 = new EmbedBuilder().WithErrorColor()
                         .WithDescription(
@@ -674,7 +506,7 @@ public class GiveawayService(DiscordSocketClient client, DbService db, IBotCrede
                 await ch.ModifyAsync(x =>
                 {
                     x.Embed = winbed.Build();
-                    x.Content = $"{r.Emote} **Giveaway has Ended** {r.Emote}";
+                    x.Content = $"{r.Emote} **Giveaway Ended!** {r.Emote}";
                 }).ConfigureAwait(false);
 
                 foreach (var winners2 in winners.Chunk(50))
