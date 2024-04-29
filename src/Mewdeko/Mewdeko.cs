@@ -17,8 +17,6 @@ using Mewdeko.Common.TypeReaders;
 using Mewdeko.Common.TypeReaders.Interactions;
 using Mewdeko.Modules.Currency.Services;
 using Mewdeko.Modules.Currency.Services.Impl;
-using Mewdeko.Modules.Gambling.Services;
-using Mewdeko.Modules.Gambling.Services.Impl;
 using Mewdeko.Modules.Music.Services;
 using Mewdeko.Modules.Nsfw;
 using Mewdeko.Modules.Searches.Services;
@@ -46,15 +44,13 @@ public class Mewdeko
 
         Credentials = new BotCredentials();
         Cache = new RedisCache(Credentials, shardId);
-        db = new DbService(Credentials.TotalShards, Credentials.Token);
-
-        //todo: another part of the skipped psqldeko 1st commit
-        //db = new DbService(Credentials.TotalShards, Credentials.Token, Credentials.UsePsql,
-        //    Credentials.PsqlConnectionString);
+        db = new DbService(Credentials.TotalShards, Credentials.Token, Credentials.UsePsql,
+            Credentials.PsqlConnectionString);
 
 
         if (shardId == 0)
             db.Setup();
+
 
         Client = new DiscordSocketClient(new DiscordSocketConfig
         {
@@ -71,8 +67,7 @@ public class Mewdeko
         });
         CommandService = new CommandService(new CommandServiceConfig
         {
-            CaseSensitiveCommands = false,
-            DefaultRunMode = RunMode.Async
+            CaseSensitiveCommands = false, DefaultRunMode = RunMode.Async
         });
     }
 
@@ -92,24 +87,23 @@ public class Mewdeko
     public event Func<GuildConfig, Task> JoinedGuild = delegate { return Task.CompletedTask; };
 
 
-    private async void AddServices()
+    private async Task AddServices()
     {
         var sw = Stopwatch.StartNew();
         var gs2 = Stopwatch.StartNew();
         var bot = Client.CurrentUser;
         await using var uow = db.GetDbContext();
-
-        //todo: another part of the skipped psqldeko 1st commit
-        //AllGuildConfigs =
-        //    new ConcurrentHashSet<GuildConfig>(
-        //        uow.GuildConfigs.GetAllGuildConfigs(Client.Guilds.Select(x => x.Id).ToList()));
-
-        var guildSettingsService = new GuildSettingsService(db, null, Cache);
-        uow.EnsureUserCreated(bot.Id, bot.Username, bot.Discriminator, bot.AvatarId);
+        AllGuildConfigs =
+            new ConcurrentHashSet<GuildConfig>(
+                uow.GuildConfigs.GetAllGuildConfigs(Client.Guilds.Select(x => x.Id).ToList()));
+        var guildSettingsService = new GuildSettingsService(db, null, this);
+        await uow.EnsureUserCreated(bot.Id, bot.Username, bot.Discriminator, bot.AvatarId);
         gs2.Stop();
         Log.Information("Guild Configs cached in {ElapsedTotalSeconds}s", gs2.Elapsed.TotalSeconds);
 
         var s = new ServiceCollection()
+            .AddScoped<INsfwSpy, NsfwSpy>()
+            .AddSingleton<FontProvider>()
             .AddSingleton<IBotCredentials>(Credentials)
             .AddSingleton(db)
             .AddSingleton(Client)
@@ -145,18 +139,17 @@ public class Mewdeko
                 RestUri = "http://127.0.0.1:2333",
                 DisconnectOnStop = false
             })
-            .AddTransient<IShopService, ShopService>()
             .AddScoped<ISearchImagesService, SearchImagesService>()
             .AddSingleton<ToneTagService>();
-
         if (Credentials.UseGlobalCurrency)
         {
-            //s.AddTransient<ICurrencyService, GlobalCurrencyService>();
+            s.AddTransient<ICurrencyService, GlobalCurrencyService>();
         }
         else
         {
-            //s.AddTransient<ICurrencyService, GuildCurrencyService>();
+            s.AddTransient<ICurrencyService, GuildCurrencyService>();
         }
+
 
         Log.Information("Passed Singletons");
 
@@ -193,23 +186,17 @@ public class Mewdeko
         );
 
         Log.Information("Passed Interface Scanner");
-
-        //todo: this line was deleted in the 0d1a038 commit of psqldeko
-        s.LoadFrom(Assembly.GetAssembly(typeof(CommandHandler)));
-
         //initialize Services
         Services = s.BuildServiceProvider();
         var commandHandler = Services.GetService<CommandHandler>();
         commandHandler.AddServices(s);
         _ = Task.Run(() => LoadTypeReaders(typeof(Mewdeko).Assembly));
-
-        //todo: another part of the skipped psqldeko 1st commit
-        //var cache = Services.GetService<IDataCache>();
-        //var sub = cache.Redis.GetSubscriber();
-        //await sub.SubscribeAsync($"{Credentials.RedisKey()}_configsupdate", async (_, _) =>
-        //{
-        //    await GuildConfigsUpdated();
-        //});
+        var cache = Services.GetService<IDataCache>();
+        var sub = cache.Redis.GetSubscriber();
+        await sub.SubscribeAsync($"{Credentials.RedisKey()}_configsupdate", async (_, _) =>
+        {
+            await GuildConfigsUpdated();
+        });
 
         sw.Stop();
         Log.Information($"All services loaded in {sw.Elapsed.TotalSeconds:F2}s");
@@ -369,7 +356,7 @@ public class Mewdeko
         Log.Information("Shard {ShardId} loading services...", Client.ShardId);
         try
         {
-            AddServices();
+            await AddServices();
         }
         catch (Exception ex)
         {
@@ -459,8 +446,7 @@ public class Mewdeko
             {
                 var obj = new
                 {
-                    Name = default(string),
-                    Activity = ActivityType.Playing
+                    Name = default(string), Activity = ActivityType.Playing
                 };
                 obj = JsonConvert.DeserializeAnonymousType(game, obj);
                 await Client.SetGameAsync(obj.Name, type: obj.Activity).ConfigureAwait(false);
@@ -478,8 +464,7 @@ public class Mewdeko
             {
                 var obj = new
                 {
-                    Name = "",
-                    Url = ""
+                    Name = "", Url = ""
                 };
                 obj = JsonConvert.DeserializeAnonymousType(streamData, obj);
                 await Client.SetGameAsync(obj?.Name, obj!.Url, ActivityType.Streaming).ConfigureAwait(false);
@@ -495,20 +480,18 @@ public class Mewdeko
     {
         var obj = new
         {
-            Name = game,
-            Activity = type
+            Name = game, Activity = type
         };
         var sub = Services.GetService<IDataCache>().Redis.GetSubscriber();
         await sub.PublishAsync($"{Client.CurrentUser.Id}_status.game_set", JsonConvert.SerializeObject(obj))
             .ConfigureAwait(false);
     }
 
-    //todo: another part of the psqldeko commit 0d1a038 that was skipped due to not porting the very first commit
-    //public async Task GuildConfigsUpdated()
-    //{
-    //    await using var uow = db.GetDbContext();
-    //    AllGuildConfigs =
-    //        new ConcurrentHashSet<GuildConfig>(
-    //            uow.GuildConfigs.GetAllGuildConfigs(Client.Guilds.Select(x => x.Id).ToList()));
-    //}
+    public async Task GuildConfigsUpdated()
+    {
+        await using var uow = db.GetDbContext();
+        AllGuildConfigs =
+            new ConcurrentHashSet<GuildConfig>(
+                uow.GuildConfigs.GetAllGuildConfigs(Client.Guilds.Select(x => x.Id).ToList()));
+    }
 }
