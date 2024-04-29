@@ -1,4 +1,4 @@
-namespace Mewdeko.Database.Models;
+﻿namespace Mewdeko.Database.Models;
 
 public class GlobalBanConfig : DbEntity
 {
@@ -6,7 +6,7 @@ public class GlobalBanConfig : DbEntity
     public GbType BanTypes { get; set; }
     public ulong GlobalBanLogChannel { get; set; }
     public GbActionType Action { get; set; }
-    public bool UseRecommendedAction { get; set; }
+    public long UseRecommendedAction { get; set; }
     public int Duration { get; set; }
 }
 

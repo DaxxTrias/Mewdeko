@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations.Schema;
+﻿using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Mewdeko.Database.Models;
 
@@ -6,6 +6,7 @@ public class ReactionRoleMessage : DbEntity, IIndexed
 {
     [ForeignKey("GuildConfigId")]
     public int GuildConfigId { get; set; }
+
     public GuildConfig GuildConfig { get; set; }
 
     public ulong ChannelId { get; set; }

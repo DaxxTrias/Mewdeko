@@ -1,5 +1,5 @@
-using Microsoft.EntityFrameworkCore.Migrations;
-//using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
+﻿using Microsoft.EntityFrameworkCore.Migrations;
+using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 namespace Mewdeko.Database.Migrations.PostgreSql
 {
@@ -21,55 +21,55 @@ namespace Mewdeko.Database.Migrations.PostgreSql
                 defaultValue: "💰");
 
             // GlobalUserBalance Table
-            //migrationBuilder.CreateTable(
-            //    name: "GlobalUserBalance",
-            //    columns: table => new
-            //    {
-            //        Id = table.Column<int>(nullable: false)
-            //            .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityAlwaysColumn),
-            //        DateAdded = table.Column<DateTime>(nullable: true, defaultValue: DateTime.UtcNow),
-            //        UserId = table.Column<ulong>(nullable: false),
-            //        Balance = table.Column<long>(nullable: false)
-            //    },
-            //    constraints: table =>
-            //    {
-            //        table.PrimaryKey("PK_GlobalUserBalance", x => x.Id);
-            //    });
+            migrationBuilder.CreateTable(
+                name: "GlobalUserBalance",
+                columns: table => new
+                {
+                    Id = table.Column<int>(nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityAlwaysColumn),
+                    DateAdded = table.Column<DateTime>(nullable: true, defaultValue: DateTime.UtcNow),
+                    UserId = table.Column<ulong>(nullable: false),
+                    Balance = table.Column<long>(nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_GlobalUserBalance", x => x.Id);
+                });
 
             // GuildUserBalance Table
-            //migrationBuilder.CreateTable(
-            //    name: "GuildUserBalance",
-            //    columns: table => new
-            //    {
-            //        Id = table.Column<int>(nullable: false)
-            //            .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityAlwaysColumn),
-            //        DateAdded = table.Column<DateTime>(nullable: true, defaultValue: DateTime.UtcNow),
-            //        GuildId = table.Column<ulong>(nullable: false),
-            //        UserId = table.Column<ulong>(nullable: false),
-            //        Balance = table.Column<long>(nullable: false)
-            //    },
-            //    constraints: table =>
-            //    {
-            //        table.PrimaryKey("PK_GuildUserBalance", x => x.Id);
-            //    });
+            migrationBuilder.CreateTable(
+                name: "GuildUserBalance",
+                columns: table => new
+                {
+                    Id = table.Column<int>(nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityAlwaysColumn),
+                    DateAdded = table.Column<DateTime>(nullable: true, defaultValue: DateTime.UtcNow),
+                    GuildId = table.Column<ulong>(nullable: false),
+                    UserId = table.Column<ulong>(nullable: false),
+                    Balance = table.Column<long>(nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_GuildUserBalance", x => x.Id);
+                });
 
             // TransactionHistory Table
-            //migrationBuilder.CreateTable(
-            //    name: "TransactionHistory",
-            //    columns: table => new
-            //    {
-            //        Id = table.Column<int>(nullable: false)
-            //            .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityAlwaysColumn),
-            //        DateAdded = table.Column<DateTime>(nullable: true, defaultValue: DateTime.UtcNow),
-            //        GuildId = table.Column<ulong>(nullable: false),
-            //        UserId = table.Column<ulong>(nullable: true),
-            //        Amount = table.Column<long>(nullable: false),
-            //        Description = table.Column<string>(nullable: true)
-            //    },
-            //    constraints: table =>
-            //    {
-            //        table.PrimaryKey("PK_TransactionHistory", x => x.Id);
-            //    });
+            migrationBuilder.CreateTable(
+                name: "TransactionHistory",
+                columns: table => new
+                {
+                    Id = table.Column<int>(nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityAlwaysColumn),
+                    DateAdded = table.Column<DateTime>(nullable: true, defaultValue: DateTime.UtcNow),
+                    GuildId = table.Column<ulong>(nullable: false),
+                    UserId = table.Column<ulong>(nullable: true),
+                    Amount = table.Column<long>(nullable: false),
+                    Description = table.Column<string>(nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_TransactionHistory", x => x.Id);
+                });
         }
 
         protected override void Down(MigrationBuilder migrationBuilder)

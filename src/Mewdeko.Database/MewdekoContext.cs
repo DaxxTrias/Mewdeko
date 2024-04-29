@@ -1,4 +1,4 @@
-using Mewdeko.Database.Models;
+﻿using Mewdeko.Database.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace Mewdeko.Database;
@@ -104,8 +104,7 @@ public class MewdekoContext : DbContext
         modelBuilder.Entity<FeedSub>()
             .HasAlternateKey(x => new
             {
-                x.GuildConfigId,
-                x.Url
+                x.GuildConfigId, x.Url
             });
         modelBuilder.Entity<PlantedCurrency>()
             .HasIndex(x => x.MessageId)
@@ -134,8 +133,7 @@ public class MewdekoContext : DbContext
         selfassignableRolesEntity
             .HasIndex(s => new
             {
-                s.GuildId,
-                s.RoleId
+                s.GuildId, s.RoleId
             })
             .IsUnique();
 
@@ -213,8 +211,7 @@ public class MewdekoContext : DbContext
         xps
             .HasIndex(x => new
             {
-                x.UserId,
-                x.GuildId
+                x.UserId, x.GuildId
             })
             .IsUnique();
 
@@ -254,8 +251,7 @@ public class MewdekoContext : DbContext
         modelBuilder.Entity<XpRoleReward>()
             .HasIndex(x => new
             {
-                x.XpSettingsId,
-                x.Level
+                x.XpSettingsId, x.Level
             })
             .IsUnique();
 
@@ -270,8 +266,7 @@ public class MewdekoContext : DbContext
 
         ci.HasAlternateKey(x => new
         {
-            x.Name,
-            x.Discrim
+            x.Name, x.Discrim
         });
 
         #endregion
@@ -281,8 +276,7 @@ public class MewdekoContext : DbContext
         modelBuilder.Entity<ClubApplicants>()
             .HasKey(t => new
             {
-                t.ClubId,
-                t.UserId
+                t.ClubId, t.UserId
             });
 
         modelBuilder.Entity<ClubApplicants>()
@@ -296,8 +290,7 @@ public class MewdekoContext : DbContext
         modelBuilder.Entity<ClubBans>()
             .HasKey(t => new
             {
-                t.ClubId,
-                t.UserId
+                t.ClubId, t.UserId
             });
 
         modelBuilder.Entity<ClubBans>()
@@ -330,8 +323,7 @@ public class MewdekoContext : DbContext
         modelBuilder.Entity<GroupName>()
             .HasIndex(x => new
             {
-                x.GuildConfigId,
-                x.Number
+                x.GuildConfigId, x.Number
             })
             .IsUnique();
 
@@ -355,8 +347,7 @@ public class MewdekoContext : DbContext
         modelBuilder.Entity<DiscordPermOverride>()
             .HasIndex(x => new
             {
-                x.GuildId,
-                x.Command
+                x.GuildId, x.Command
             })
             .IsUnique();
 

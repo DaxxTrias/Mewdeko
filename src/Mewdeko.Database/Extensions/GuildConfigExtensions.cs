@@ -1,4 +1,4 @@
-using LinqToDB.EntityFrameworkCore;
+﻿using LinqToDB.EntityFrameworkCore;
 using Mewdeko.Database.Common;
 using Mewdeko.Database.Models;
 using Microsoft.EntityFrameworkCore;
@@ -46,16 +46,12 @@ public static class GuildConfigExtensions
         {
             await ctx.GuildConfigs.AddAsync(config = new GuildConfig
             {
-                GuildId = guildId,
-                Permissions = Permissionv2.GetDefaultPermlist,
-                WarningsInitialized = 1,
-                WarnPunishments = DefaultWarnPunishments
+                GuildId = guildId, Permissions = Permissionv2.GetDefaultPermlist, WarningsInitialized = 1, WarnPunishments = DefaultWarnPunishments
             });
             await ctx.SaveChangesAsync();
         }
 
-        if (false.ParseBoth(config.WarningsInitialized.ToString()))
-            return config;
+        if (false.ParseBoth(config.WarningsInitialized.ToString())) return config;
         config.WarningsInitialized = 1;
         config.WarnPunishments = DefaultWarnPunishments;
 
@@ -81,8 +77,7 @@ public static class GuildConfigExtensions
             .SelectMany(x => x.GenerateCurrencyChannelIds)
             .Select(x => new GeneratingChannel
             {
-                ChannelId = x.ChannelId,
-                GuildId = x.GuildConfig.GuildId
+                ChannelId = x.ChannelId, GuildId = x.GuildConfig.GuildId
             })
             .ToArray();
 
@@ -99,8 +94,7 @@ public static class GuildConfigExtensions
         {
             await ctx.GuildConfigs.AddAsync(config = new GuildConfig
             {
-                GuildId = guildId,
-                Permissions = Permissionv2.GetDefaultPermlist
+                GuildId = guildId, Permissions = Permissionv2.GetDefaultPermlist
             });
             await ctx.SaveChangesAsync();
         }
@@ -147,16 +141,12 @@ public static class GuildConfigExtensions
         {
             await ctx.AddAsync(config = new GuildConfig
             {
-                GuildId = guildId,
-                Permissions = Permissionv2.GetDefaultPermlist,
-                WarningsInitialized = 1,
-                WarnPunishments = DefaultWarnPunishments
+                GuildId = guildId, Permissions = Permissionv2.GetDefaultPermlist, WarningsInitialized = 1, WarnPunishments = DefaultWarnPunishments
             });
             await ctx.SaveChangesAsync();
         }
 
-        if (false.ParseBoth(config.WarningsInitialized.ToString()))
-            return config;
+        if (false.ParseBoth(config.WarningsInitialized.ToString())) return config;
         config.WarningsInitialized = 1;
         config.WarnPunishments = DefaultWarnPunishments;
 
