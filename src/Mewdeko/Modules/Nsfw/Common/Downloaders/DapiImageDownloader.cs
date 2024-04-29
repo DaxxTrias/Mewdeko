@@ -33,8 +33,8 @@ namespace Mewdeko.Modules.Nsfw.Common.Downloaders
             var tagString = ImageDownloaderHelper.GetTagString(tags, isExplicit);
 
             var uri = $"{BaseUrl}/posts.json?limit=200&tags={tagString}&page={page}";
-            using var http = _http.CreateClient();
-            var imageObjects = await http.GetFromJsonAsync<DapiImageObject[]>(uri, _serializerOptions, cancel);
+            using var http = Http.CreateClient();
+            var imageObjects = await http.GetFromJsonAsync<DapiImageObject[]>(uri, SerializerOptions, cancel);
             return imageObjects is null
                 ? new List<DapiImageObject>()
                 : imageObjects.Where(x => x.FileUrl is not null).ToList();

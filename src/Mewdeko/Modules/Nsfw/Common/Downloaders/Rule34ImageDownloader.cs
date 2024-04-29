@@ -4,9 +4,8 @@ using System.Threading;
 
 namespace Mewdeko.Modules.Nsfw.Common.Downloaders;
 
-public class Rule34ImageDownloader(IHttpClientFactory http : ImageDownloader<Rule34Object>(Booru.Rule34, http)
+public class Rule34ImageDownloader(IHttpClientFactory http) : ImageDownloader<Rule34Object>(Booru.Rule34, http)
 {
-
     public override async Task<List<Rule34Object>> DownloadImagesAsync(
         string[] tags,
         int page,
@@ -24,7 +23,7 @@ public class Rule34ImageDownloader(IHttpClientFactory http : ImageDownloader<Rul
         using var http = Http.CreateClient();
         http.DefaultRequestHeaders
             .TryAddWithoutValidation("cookie",
-            "cf_clearance=Gg3bVffg9fOL_.9fIdKmu5PJS86eTI.yTrhbR8z2tPc-1652310659-0-250");
+                "cf_clearance=Gg3bVffg9fOL_.9fIdKmu5PJS86eTI.yTrhbR8z2tPc-1652310659-0-250");
 
         http.DefaultRequestHeaders
             .TryAddWithoutValidation("user-agent",

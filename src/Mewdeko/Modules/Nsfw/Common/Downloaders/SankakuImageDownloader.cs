@@ -4,7 +4,8 @@ using System.Threading;
 
 namespace Mewdeko.Modules.Nsfw.Common.Downloaders;
 
-public sealed class SankakuImageDownloader(IHttpClientFactory http) : ImageDownloader<SankakuImageObject>(Booru.Sankaku, http)
+public sealed class SankakuImageDownloader(IHttpClientFactory http) : ImageDownloader<SankakuImageObject>(Booru.Sankaku,
+    http)
 {
     private readonly string baseUrl = "https://capi-v2.sankakucomplex.com";
 

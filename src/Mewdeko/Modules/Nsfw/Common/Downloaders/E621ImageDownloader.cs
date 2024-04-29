@@ -1,14 +1,11 @@
 using System.Net.Http;
 using System.Net.Http.Json;
 using System.Threading;
-using Swan.Formatters;
 
 namespace Mewdeko.Modules.Nsfw.Common.Downloaders;
 
-public class E621ImageDownloader(IHttpClientFactory http)
-    : ImageDownloader<E621Object>(Booru.E621, http)
+public class E621ImageDownloader(IHttpClientFactory http) : ImageDownloader<E621Object>(Booru.E621, http)
 {
-
     public override async Task<List<E621Object>> DownloadImagesAsync(
         string[] tags,
         int page,

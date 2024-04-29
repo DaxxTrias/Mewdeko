@@ -4,10 +4,9 @@ using System.Threading;
 
 namespace Mewdeko.Modules.Nsfw.Common.Downloaders;
 
-public class DerpibooruImageDownloader(IHttpClientFactory http)
-    : ImageDownloader<DerpiImageObject>(Booru.Derpibooru, http)
+public class DerpibooruImageDownloader(IHttpClientFactory http) : ImageDownloader<DerpiImageObject>(Booru.Derpibooru,
+    http)
 {
-
     public override async Task<List<DerpiImageObject>> DownloadImagesAsync(
         string[] tags,
         int page,
@@ -23,7 +22,7 @@ public class DerpibooruImageDownloader(IHttpClientFactory http)
         using var res = await http.SendAsync(req, cancel);
         res.EnsureSuccessStatusCode();
 
-        var container = await res.Content.ReadFromJsonAsync<DerpiContainer>(_serializerOptions, cancel);
+        var container = await res.Content.ReadFromJsonAsync<DerpiContainer>(SerializerOptions, cancel);
         return container?.Images is null
             ? new List<DerpiImageObject>()
             : container.Images.Where(x => !string.IsNullOrWhiteSpace(x.ViewUrl)).ToList();

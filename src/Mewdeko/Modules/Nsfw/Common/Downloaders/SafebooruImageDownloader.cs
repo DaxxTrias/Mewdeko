@@ -4,9 +4,9 @@ using System.Threading;
 
 namespace Mewdeko.Modules.Nsfw.Common.Downloaders;
 
-public class SafebooruImageDownloader(IHttpClientFactory http) : ImageDownloader<SafebooruElement>(Booru.Safebooru, http)
+public class SafebooruImageDownloader(IHttpClientFactory http) : ImageDownloader<SafebooruElement>(Booru.Safebooru,
+    http)
 {
-
     public override async Task<List<SafebooruElement>> DownloadImagesAsync(
         string[] tags,
         int page,

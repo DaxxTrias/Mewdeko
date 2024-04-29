@@ -4,9 +4,9 @@ using System.Threading;
 
 namespace Mewdeko.Modules.Nsfw.Common.Downloaders;
 
-public class RealbooruImageDownloader(IHttpClientFactory http) : ImageDownloader<RealBooruElement>(Booru.Realbooru, http)
+public class RealbooruImageDownloader(IHttpClientFactory http) : ImageDownloader<RealBooruElement>(Booru.Realbooru,
+    http)
 {
-
     public override async Task<List<RealBooruElement>> DownloadImagesAsync(
         string[] tags,
         int page,

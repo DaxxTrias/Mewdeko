@@ -4,8 +4,8 @@ using System.Threading;
 
 namespace Mewdeko.Modules.Nsfw.Common.Downloaders;
 
-public sealed class DanbooruImageDownloader(IHttpClientFactory http)
-    : DapiImageDownloader(Booru.Danbooru, http, "http://danboru.dormal.us")
+public sealed class DanbooruImageDownloader(IHttpClientFactory http) : DapiImageDownloader(Booru.Danbooru, http,
+    "http://danbooru.donmai.us")
 {
     // using them as concurrent hashsets, value doesn't matter
     private static readonly ConcurrentDictionary<string, bool> ExistentTags = new();
@@ -22,7 +22,7 @@ public sealed class DanbooruImageDownloader(IHttpClientFactory http)
         using var http = Http.CreateClient();
         var tags = await http.GetFromJsonAsync<DapiTag[]>(
             BaseUrl + "/tags.json" + $"?search[name_or_alias_matches]={tag}",
-            _serializerOptions,
+            SerializerOptions,
             cancel);
         if (tags is { Length: > 0 })
             return ExistentTags[tag] = true;

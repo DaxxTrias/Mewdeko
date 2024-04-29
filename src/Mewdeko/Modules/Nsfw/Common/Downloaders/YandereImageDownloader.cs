@@ -4,9 +4,10 @@ using System.Threading;
 
 namespace Mewdeko.Modules.Nsfw.Common.Downloaders;
 
-public sealed class YandereImageDownloader(IHttpClientFactory http) : ImageDownloader<DapiImageObject>(Booru.Yandere, http)
+public sealed class YandereImageDownloader(IHttpClientFactory http) : ImageDownloader<DapiImageObject>(Booru.Yandere,
+    http)
 {
-    private const string _baseUrl = "https://yande.re";
+    private const string BaseUrl = "https://yande.re";
 
     public override async Task<List<DapiImageObject>> DownloadImagesAsync(
         string[] tags,
@@ -16,7 +17,7 @@ public sealed class YandereImageDownloader(IHttpClientFactory http) : ImageDownl
     {
         var tagString = ImageDownloaderHelper.GetTagString(tags, isExplicit);
 
-        var uri = $"{_baseUrl}/post.json?limit=200&tags={tagString}&page={page}";
+        var uri = $"{BaseUrl}/post.json?limit=200&tags={tagString}&page={page}";
 
         using var http = Http.CreateClient();
         var imageObjects = await http.GetFromJsonAsync<DapiImageObject[]>(uri, SerializerOptions, cancel);

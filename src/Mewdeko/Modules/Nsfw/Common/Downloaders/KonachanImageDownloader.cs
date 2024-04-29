@@ -4,7 +4,8 @@ using System.Threading;
 
 namespace Mewdeko.Modules.Nsfw.Common.Downloaders;
 
-public sealed class KonachanImageDownloader(IHttpClientFactory http) : ImageDownloader<DapiImageObject>(Booru.Konachan, http)
+public sealed class KonachanImageDownloader(IHttpClientFactory http) : ImageDownloader<DapiImageObject>(Booru.Konachan,
+    http)
 {
     private const string BaseUrl = "https://konachan.com";
 
