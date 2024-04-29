@@ -28,36 +28,16 @@ using Color = SixLabors.ImageSharp.Color;
 
 namespace Mewdeko.Modules.Searches;
 
-public partial class Searches : MewdekoModuleBase<SearchesService>
+public partial class Searches(IBotCredentials creds, IGoogleApiService google, IHttpClientFactory factory,
+    IMemoryCache cache,
+    GuildTimezoneService tzSvc,
+    InteractiveService interactivity,
+    MartineApi martineApi,
+    ToneTagService toneTagService,
+    BotConfigService config)
+    : MewdekoModuleBase<SearchesService>
 {
-    private static readonly ConcurrentDictionary<string, string> CachedShortenedLinks = new();
-    private readonly IMemoryCache cache;
-    private readonly IBotCredentials creds;
-    private readonly IGoogleApiService google;
-    private readonly IHttpClientFactory httpFactory;
-    private readonly GuildTimezoneService tzSvc;
-    private readonly InteractiveService interactivity;
-    private readonly MartineApi martineApi;
-    private readonly ToneTagService toneTagService;
-    private readonly BotConfigService config;
-
-    public Searches(IBotCredentials creds, IGoogleApiService google, IHttpClientFactory factory, IMemoryCache cache,
-        GuildTimezoneService tzSvc,
-        InteractiveService serv,
-        MartineApi martineApi, ToneTagService toneTagService,
-        BotConfigService config)
-    {
-        interactivity = serv;
-        this.martineApi = martineApi;
-        this.creds = creds;
-        this.google = google;
-        httpFactory = factory;
-        this.cache = cache;
-        this.tzSvc = tzSvc;
-        this.toneTagService = toneTagService;
-        this.config = config;
-    }
-
+    private static readonly ConcurrentDictionary<string, string> CacheShortenedLink = new();
     [Cmd, Aliases]
     public async Task Meme()
     {
@@ -434,11 +414,11 @@ public partial class Searches : MewdekoModuleBase<SearchesService>
             return;
 
         query = query.Trim();
-        if (!CachedShortenedLinks.TryGetValue(query, out var shortLink))
+        if (!cache.TryGetValue(query, out var shortLink))
         {
             try
             {
-                using var http = httpFactory.CreateClient();
+                using var http = factory.CreateClient();
                 using var req = new HttpRequestMessage(HttpMethod.Post, "https://goolnk.com/api/v1/shorten");
                 req.Content = new MultipartFormDataContent
                 {
@@ -452,7 +432,7 @@ public partial class Searches : MewdekoModuleBase<SearchesService>
                 var data = JsonConvert.DeserializeObject<ShortenData>(content);
 
                 if (!string.IsNullOrWhiteSpace(data?.ResultUrl))
-                    CachedShortenedLinks.TryAdd(query, data.ResultUrl);
+                    CacheShortenedLink.TryAdd(query, data.ResultUrl);
                 else
                     return;
 
@@ -580,7 +560,7 @@ public partial class Searches : MewdekoModuleBase<SearchesService>
             return;
 
         await ctx.Channel.TriggerTypingAsync().ConfigureAwait(false);
-        using var http = httpFactory.CreateClient();
+        using var http = factory.CreateClient();
         var res = await http
             .GetStringAsync($"https://api.urbandictionary.com/v0/define?term={Uri.EscapeDataString(query)}")
             .ConfigureAwait(false);
@@ -629,7 +609,7 @@ public partial class Searches : MewdekoModuleBase<SearchesService>
         if (!await ValidateQuery(ctx.Channel, word).ConfigureAwait(false))
             return;
 
-        using var http = httpFactory.CreateClient();
+        using var http = factory.CreateClient();
         try
         {
             var res = await cache.GetOrCreateAsync($"define_{word}", e =>
@@ -702,7 +682,7 @@ public partial class Searches : MewdekoModuleBase<SearchesService>
     [Cmd, Aliases]
     public async Task Catfact()
     {
-        using var http = httpFactory.CreateClient();
+        using var http = factory.CreateClient();
         var response = await http.GetStringAsync("https://catfact.ninja/fact").ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(response))
             return;
@@ -748,7 +728,7 @@ public partial class Searches : MewdekoModuleBase<SearchesService>
         if (!await ValidateQuery(ctx.Channel, query).ConfigureAwait(false))
             return;
 
-        using var http = httpFactory.CreateClient();
+        using var http = factory.CreateClient();
         var result = await http
             .GetStringAsync(
                 $"https://en.wikipedia.org//w/api.php?action=query&format=json&prop=info&redirects=1&formatversion=2&inprop=url&titles={Uri.EscapeDataString(query)}")
@@ -793,7 +773,7 @@ public partial class Searches : MewdekoModuleBase<SearchesService>
         }
 
         await ctx.Channel.TriggerTypingAsync().ConfigureAwait(false);
-        using var http = httpFactory.CreateClient();
+        using var http = factory.CreateClient();
         http.DefaultRequestHeaders.Clear();
         try
         {
@@ -827,7 +807,7 @@ public partial class Searches : MewdekoModuleBase<SearchesService>
         var obj = new BibleVerses();
         try
         {
-            using var http = httpFactory.CreateClient();
+            using var http = factory.CreateClient();
             var res = await http
                 .GetStringAsync($"https://bible-api.com/{book} {chapterAndVerse}").ConfigureAwait(false);
 
