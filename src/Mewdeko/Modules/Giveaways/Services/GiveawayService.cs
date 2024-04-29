@@ -87,7 +87,7 @@ public class GiveawayService(DiscordSocketClient client, DbService db, IBotCrede
         using var uow = db.GetDbContext();
         IEnumerable<Database.Models.Giveaways> giveaways;
 
-        if (uow.Database.IsMpgsql())
+        if (uow.Database.IsNpgsql())
         {
             giveaways = uow.Giveaways
                 .ToLinqToDB()
@@ -98,8 +98,7 @@ public class GiveawayService(DiscordSocketClient client, DbService db, IBotCrede
         {
             giveaways = uow.Giveaways
                 .FromSqlInterpolated(
-                $"select * from Giveaways where {{ServerId >> 22) % {creds.TotalShards}} = " +
-                $"{client.ShardId} and ended = 0 and \"when\" < {now};")
+                    $"select * from Giveaways where ((ServerId >> 22) % {creds.TotalShards}) = {client.ShardId} and ended = 0 and \"when\" < {now};")
                 .ToList();
         }
 

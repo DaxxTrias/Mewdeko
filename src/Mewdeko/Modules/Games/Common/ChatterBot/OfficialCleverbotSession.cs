@@ -4,7 +4,7 @@ using Serilog;
 
 namespace Mewdeko.Modules.Games.Common.ChatterBot;
 
-public class OfficialCleverbotSession(string apiKey, IHttpClientFactory factory : IChatterBotSession
+public class OfficialCleverbotSession(string apiKey, IHttpClientFactory factory) : IChatterBotSession
 {
     private string cs;
 

@@ -1070,7 +1070,6 @@ public class OwnerOnly(DiscordSocketClient client,
             await msg.ModifyAsync(x => x.Embed = embed.Build()).ConfigureAwait(false);
         }
     }
-}
 
 public sealed class EvaluationEnvironment(CommandContext ctx)
 {

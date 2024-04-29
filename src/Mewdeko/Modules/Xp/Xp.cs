@@ -1,4 +1,4 @@
-﻿using Discord.Commands;
+using Discord.Commands;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
 using Mewdeko.Common.Attributes.TextCommands;
@@ -290,20 +290,22 @@ public partial class Xp(DownloadTracker tracker, XpConfigService xpconfig, Inter
     {
         try
         {
-        user ??= ctx.User as IGuildUser;
-        await ctx.Channel.TriggerTypingAsync().ConfigureAwait(false);
-        var (img, fmt) = await Service.GenerateXpImageAsync(user).ConfigureAwait(false);
-        await using (img.ConfigureAwait(false))
-        {
-            await ctx.Channel.SendFileAsync(img,
-                    $"{ctx.Guild.Id}_{user.Id}_xp.{fmt.FileExtensions.FirstOrDefault()}")
-                .ConfigureAwait(false);
-            await img.DisposeAsync().ConfigureAwait(false);
+            user ??= ctx.User as IGuildUser;
+            await ctx.Channel.TriggerTypingAsync().ConfigureAwait(false);
+            var (img, fmt) = await Service.GenerateXpImageAsync(user).ConfigureAwait(false);
+            await using (img.ConfigureAwait(false))
+            {
+                await ctx.Channel.SendFileAsync(img,
+                        $"{ctx.Guild.Id}_{user.Id}_xp.{fmt.FileExtensions.FirstOrDefault()}")
+                    .ConfigureAwait(false);
+                await img.DisposeAsync().ConfigureAwait(false);
+            }
         }
         catch (Exception e)
         {
             Console.WriteLine(e);
             throw;
+        }
     }
 
     [Cmd, Aliases, RequireContext(ContextType.Guild)]
@@ -582,27 +584,27 @@ public partial class Xp(DownloadTracker tracker, XpConfigService xpconfig, Inter
             .ConfigureAwait(false);
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild), OwnerOnly]
-    public async Task XpCurrencyReward(int level, int amount = 0)
-    {
-        if (level < 1 || amount < 0)
-            return;
-
-        Service.SetCurrencyReward(ctx.Guild.Id, level, amount);
-        var config = gss.Data;
-
-        if (amount == 0)
-        {
-            await ReplyConfirmLocalizedAsync("cur_reward_cleared", level, config.Currency.Sign)
-                .ConfigureAwait(false);
-        }
-        else
-        {
-            await ReplyConfirmLocalizedAsync("cur_reward_added",
-                    level, Format.Bold(amount + config.Currency.Sign))
-                .ConfigureAwait(false);
-        }
-    }
+    // [Cmd, Aliases, RequireContext(ContextType.Guild), OwnerOnly]
+    // public async Task XpCurrencyReward(int level, int amount = 0)
+    // {
+    //     if (level < 1 || amount < 0)
+    //         return;
+    //
+    //     Service.SetCurrencyReward(ctx.Guild.Id, level, amount);
+    //     var config = gss.Data;
+    //
+    //     if (amount == 0)
+    //     {
+    //         await ReplyConfirmLocalizedAsync("cur_reward_cleared", level, config.Currency.Sign)
+    //             .ConfigureAwait(false);
+    //     }
+    //     else
+    //     {
+    //         await ReplyConfirmLocalizedAsync("cur_reward_added",
+    //                 level, Format.Bold(amount + config.Currency.Sign))
+    //             .ConfigureAwait(false);
+    //     }
+    // }
 
     [Cmd, Aliases, RequireContext(ContextType.Guild),
      UserPerm(GuildPermission.Administrator)]
