@@ -31,7 +31,8 @@ public class EmoteStealer : MewdekoSlashCommandModule
             "If the message below loads infinitely, discord has limited the servers emoji upload limit. And no, this cant be circumvented with other bots (to my knowledge).");
         var eb = new EmbedBuilder
         {
-            Description = $"{config.Data.LoadingEmote} Adding Emotes...", Color = Mewdeko.OkColor
+            Description = $"{config.Data.LoadingEmote} Adding Emotes...",
+            Color = Mewdeko.OkColor
         };
         var tags = message.Tags.Where(x => x.Type == TagType.Emoji).Select(x => (Emote)x.Value).Distinct();
         if (!tags.Any())
@@ -39,10 +40,10 @@ public class EmoteStealer : MewdekoSlashCommandModule
             await ctx.Interaction.SendEphemeralFollowupErrorAsync("No emotes in this message!").ConfigureAwait(false);
             return;
         }
+
         var errored = new List<string>();
         var emotes = new List<string>();
         var msg = await ctx.Interaction.FollowupAsync(embed: eb.Build()).ConfigureAwait(false);
-
         foreach (var i in tags)
         {
             var emoteName = i.Name; // Default to the emote name
@@ -108,8 +109,10 @@ public class EmoteStealer : MewdekoSlashCommandModule
         {
             Color = Mewdeko.OkColor
         };
-        if (emotes.Count > 0) b.WithDescription($"**Added Emotes**\n{string.Join("\n", emotes)}");
-        if (errored.Count > 0) b.AddField("Errored Emotes", string.Join("\n\n", errored));
+        if (emotes.Count > 0)
+            b.WithDescription($"**Added Emotes**\n{string.Join("\n", emotes)}");
+        if (errored.Count > 0)
+            b.AddField("Errored Emotes", string.Join("\n\n", errored));
         await msg.ModifyAsync(x => x.Embed = b.Build()).ConfigureAwait(false);
     }
 
@@ -124,7 +127,8 @@ public class EmoteStealer : MewdekoSlashCommandModule
             "If the message below loads infinitely, discord has limited the servers stickers upload limit. And no, this cant be circumvented with other bots (to my knowledge).");
         var eb = new EmbedBuilder
         {
-            Description = $"{config.Data.LoadingEmote} Adding stickers...", Color = Mewdeko.OkColor
+            Description = $"{config.Data.LoadingEmote} Adding stickers...",
+            Color = Mewdeko.OkColor
         };
         var tags = message.Stickers.Select(x => x as SocketUnknownSticker).Distinct();
         if (!tags.Any())
@@ -135,7 +139,7 @@ public class EmoteStealer : MewdekoSlashCommandModule
 
         var errored = new List<string>();
         var emotes = new List<string>();
-        var msg = await ctx.Interaction.FollowupAsync(embed: eb.Build(), ephemeral: true).ConfigureAwait(false);
+        await ctx.Interaction.FollowupAsync(embed: eb.Build(), ephemeral: true).ConfigureAwait(false);
         foreach (var i in tags)
         {
             using var http = httpFactory.CreateClient();
@@ -166,8 +170,10 @@ public class EmoteStealer : MewdekoSlashCommandModule
         {
             Color = Mewdeko.OkColor
         };
-        if (emotes.Count > 0) b.WithDescription($"**Added Stickers**\n{string.Join("\n", emotes)}");
-        if (errored.Count > 0) b.AddField("Errored Stickers", string.Join("\n\n", errored));
+        if (emotes.Count > 0)
+            b.WithDescription($"**Added Stickers**\n{string.Join("\n", emotes)}");
+        if (errored.Count > 0)
+            b.AddField("Errored Stickers", string.Join("\n\n", errored));
         await ctx.Interaction.ModifyOriginalResponseAsync(x => x.Embed = b.Build()).ConfigureAwait(false);
     }
 }
