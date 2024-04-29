@@ -11,10 +11,8 @@ namespace Mewdeko.Modules.Permissions;
 public partial class Permissions
 {
     [Group]
-    public class FilterCommands(DbService db, InteractiveService serv)
-        : MewdekoSubmodule<FilterService>
+    public class FilterCommands(DbService db, InteractiveService serv) : MewdekoSubmodule<FilterService>
     {
-
         [Cmd, Aliases, UserPerm(GuildPermission.Administrator), RequireContext(ContextType.Guild)]
         public async Task AutoBanWord([Remainder] string word)
         {
@@ -351,7 +349,7 @@ public partial class Permissions
                 .WithActionOnCancellation(ActionOnStop.DeleteMessage)
                 .Build();
 
-            await interactivity.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
+            await serv.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
 
             async Task<PageBuilder> PageFactory(int page)
             {

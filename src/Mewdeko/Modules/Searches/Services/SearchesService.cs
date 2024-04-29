@@ -136,12 +136,12 @@ public class SearchesService : INService, IUnloadableService
         if (File.Exists("data/wowjokes.json"))
             WowJokes = JsonConvert.DeserializeObject<List<WoWJoke>>(File.ReadAllText("data/wowjokes.json"));
         else
-            Log.Warning("data/wowjokes.json is missing. WOW Jokes are not loaded.");
+            Log.Warning("data/wowjokes.json is missing. WOW Jokes are not loaded");
 
         if (File.Exists("data/magicitems.json"))
             MagicItems = JsonConvert.DeserializeObject<List<MagicItem>>(File.ReadAllText("data/magicitems.json"));
         else
-            Log.Warning("data/magicitems.json is missing. Magic items are not loaded.");
+            Log.Warning("data/magicitems.json is missing. Magic items are not loaded");
 
         if (File.Exists("data/yomama.txt"))
         {
@@ -237,6 +237,7 @@ public class SearchesService : INService, IUnloadableService
         return bg.ToStream().ToArray();
     }
 
+
     public Task<WeatherData?> GetWeatherDataAsync(string query)
     {
         query = query.Trim().ToLowerInvariant();
@@ -253,7 +254,8 @@ public class SearchesService : INService, IUnloadableService
         try
         {
             var data = await http.GetStringAsync(
-                $"https://api.openweathermap.org/data/2.5/weather?q={query}&appid=42cd627dd60debf25a5739e50a217d74&units=metric").ConfigureAwait(false);
+                    $"https://api.openweathermap.org/data/2.5/weather?q={query}&appid=42cd627dd60debf25a5739e50a217d74&units=metric")
+                .ConfigureAwait(false);
 
             return string.IsNullOrEmpty(data) ? null : JsonConvert.DeserializeObject<WeatherData>(data);
         }
@@ -264,7 +266,8 @@ public class SearchesService : INService, IUnloadableService
         }
     }
 
-    public Task<((string Address, DateTime Time, string TimeZoneName), TimeErrors?)> GetTimeDataAsync(string arg) => GetTimeDataFactory(arg);
+    public Task<((string Address, DateTime Time, string TimeZoneName), TimeErrors?)> GetTimeDataAsync(string arg) =>
+        GetTimeDataFactory(arg);
 
     //return _cache.GetOrAddCachedDataAsync($"Mewdeko_time_{arg}",
     //    GetTimeDataFactory,
@@ -275,7 +278,8 @@ public class SearchesService : INService, IUnloadableService
     {
         query = query.Trim();
 
-        if (string.IsNullOrEmpty(query)) return (default, TimeErrors.InvalidInput);
+        if (string.IsNullOrEmpty(query))
+            return (default, TimeErrors.InvalidInput);
 
         if (string.IsNullOrWhiteSpace(creds.LocationIqApiKey)
             || string.IsNullOrWhiteSpace(creds.TimezoneDbApiKey))
@@ -345,14 +349,18 @@ public class SearchesService : INService, IUnloadableService
     {
         using var translator = new AggregateTranslator();
         var translation = await translator.TranslateAsync(str, to, from).ConfigureAwait(false);
-        return translation.Translation == str ? (await translator.TransliterateAsync(str, to, from).ConfigureAwait(false)).Transliteration : translation.Translation;
+        return translation.Translation == str
+            ? (await translator.TransliterateAsync(str, to, from).ConfigureAwait(false)).Transliteration
+            : translation.Translation;
     }
 
     public static async Task<string> Translate(string langs, string? text = null)
     {
         using var translator = new AggregateTranslator();
         var translation = await translator.TranslateAsync(text, langs).ConfigureAwait(false);
-        return translation.Translation == text ? (await translator.TransliterateAsync(text, langs).ConfigureAwait(false)).Transliteration : translation.Translation;
+        return translation.Translation == text
+            ? (await translator.TransliterateAsync(text, langs).ConfigureAwait(false)).Transliteration
+            : translation.Translation;
     }
 
     public Task<ImageCacherObject?> DapiSearch(string? tag, DapiSearchType type, ulong? guild,
@@ -424,7 +432,8 @@ public class SearchesService : INService, IUnloadableService
 
     public void ClearCache()
     {
-        foreach (var c in imageCacher) c.Value.Clear();
+        foreach (var c in imageCacher)
+            c.Value.Clear();
     }
 
     public bool NsfwCheck(string reddit) => nsfwreddits.Contains(reddit, StringComparer.OrdinalIgnoreCase);
@@ -460,7 +469,8 @@ public class SearchesService : INService, IUnloadableService
         var res = await http.GetStringAsync("https://official-joke-api.appspot.com/random_joke").ConfigureAwait(false);
         var resObj = JsonConvert.DeserializeAnonymousType(res, new
         {
-            setup = "", punchline = ""
+            setup = "",
+            punchline = ""
         });
         return (resObj.setup, resObj.punchline);
     }
@@ -587,7 +597,9 @@ public class SearchesService : INService, IUnloadableService
     private async Task<OmdbMovie?> GetMovieDataFactory(string name)
     {
         using var http = httpFactory.CreateClient();
-        var res = await http.GetStringAsync($"https://omdbapi.nadeko.bot/?t={name.Trim().Replace(' ', '+')}&y=&plot=full&r=json").ConfigureAwait(false);
+        var res = await http
+            .GetStringAsync($"https://omdbapi.nadeko.bot/?t={name.Trim().Replace(' ', '+')}&y=&plot=full&r=json")
+            .ConfigureAwait(false);
         var movie = JsonConvert.DeserializeObject<OmdbMovie>(res);
         if (movie?.Title == null)
             return null;
@@ -740,7 +752,8 @@ public class SearchesService : INService, IUnloadableService
 
         using var http = httpFactory.CreateClient();
         http.DefaultRequestHeaders.Clear();
-        http.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.77 Safari/537.36");
+        http.DefaultRequestHeaders.Add("User-Agent",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.77 Safari/537.36");
 
         using var formData = new MultipartFormDataContent
         {

@@ -81,7 +81,8 @@ public partial class Searches
             var memeUrl = $"https://api.memegen.link/{meme}";
             if (!string.IsNullOrWhiteSpace(memeText))
             {
-                memeUrl = memeText.Split(';').Select(Replace).Aggregate(memeUrl, (current, newText) => current + $"/{newText}");
+                memeUrl = memeText.Split(';').Select(Replace)
+                    .Aggregate(memeUrl, (current, newText) => current + $"/{newText}");
             }
 
             memeUrl += ".png";

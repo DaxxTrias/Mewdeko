@@ -50,7 +50,8 @@ public class SearchImageCacher : INService
     /// <param name="type">Provider type</param>
     /// <param name="cancel">Cancellation token</param>
     /// <returns>Whether any image is found.</returns>
-    private async Task<bool> UpdateImagesInternalAsync(string[] tags, bool forceExplicit, Booru type, CancellationToken cancel)
+    private async Task<bool> UpdateImagesInternalAsync(string[] tags, bool forceExplicit, Booru type,
+        CancellationToken cancel)
     {
         var images = await DownloadImagesAsync(tags, forceExplicit, type, cancel).ConfigureAwait(false);
         if (!images.Any())
@@ -95,7 +96,8 @@ public class SearchImageCacher : INService
                 // retreived images
                 foreach (var tag in img.Tags.Concat(tags).Distinct())
                 {
-                    if (!typeUsedTags.Contains(tag)) continue;
+                    if (!typeUsedTags.Contains(tag))
+                        continue;
                     var set = cache.GetOrCreate(Key(type, tag), e =>
                     {
                         e.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(30);
@@ -232,7 +234,8 @@ public class SearchImageCacher : INService
 
     private readonly ConcurrentDictionary<(Booru, string), int> maxPages = new();
 
-    public async Task<List<ImageData?>> DownloadImagesAsync(string[] tags, bool isExplicit, Booru type, CancellationToken cancel)
+    public async Task<List<ImageData?>> DownloadImagesAsync(string[] tags, bool isExplicit, Booru type,
+        CancellationToken cancel)
     {
         var tagStr = string.Join(' ', tags.OrderByDescending(x => x));
 
@@ -245,7 +248,7 @@ public class SearchImageCacher : INService
                 if (maxPage == 0)
                 {
 #if DEBUG
-                    Log.Information("Tag {0} yields no result on {1}, skipping.", tagStr, type);
+                    Log.Information("Tag {0} yields no result on {1}, skipping", tagStr, type);
 #endif
                     return new List<ImageData>();
                 }
@@ -259,9 +262,10 @@ public class SearchImageCacher : INService
 
             var result = await DownloadImagesAsync(tags, isExplicit, type, page, cancel).ConfigureAwait(false);
 
-            if (result is not (null or { Count: 0 })) return result;
+            if (result is not (null or { Count: 0 }))
+                return result;
 #if DEBUG
-            Log.Information("Tag {0}, page {1} has no result on {2}.", string.Join(", ", tags), page, type.ToString());
+            Log.Information("Tag {0}, page {1} has no result on {2}", string.Join(", ", tags), page, type.ToString());
 #endif
         }
 
@@ -285,7 +289,8 @@ public class SearchImageCacher : INService
         };
 
 
-    private async Task<List<ImageData>> DownloadImagesAsync(string[] tags, bool isExplicit, Booru type, int page, CancellationToken cancel)
+    private async Task<List<ImageData>> DownloadImagesAsync(string[] tags, bool isExplicit, Booru type, int page,
+        CancellationToken cancel)
     {
         try
         {
@@ -297,7 +302,8 @@ public class SearchImageCacher : INService
             var downloader = GetImageDownloader(type);
 
             var images = await downloader.DownloadImageDataAsync(tags, page, isExplicit, cancel).ConfigureAwait(false);
-            if (images.Count != 0) return images;
+            if (images.Count != 0)
+                return images;
             var tagStr = string.Join(' ', tags.OrderByDescending(x => x));
             maxPages[(type, tagStr)] = page;
 

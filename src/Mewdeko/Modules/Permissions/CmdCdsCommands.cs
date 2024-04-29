@@ -7,7 +7,7 @@ using Mewdeko.Common.TypeReaders.Models;
 using Mewdeko.Modules.Permissions.Services;
 using Microsoft.EntityFrameworkCore;
 
-namespace Permissions;
+namespace Mewdeko.Modules.Permissions;
 
 public partial class Permissions
 {

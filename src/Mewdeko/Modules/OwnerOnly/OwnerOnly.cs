@@ -21,11 +21,7 @@ using Serilog;
 namespace Mewdeko.Modules.OwnerOnly;
 
 [OwnerOnly]
-public class OwnerOnly : MewdekoModuleBase<OwnerOnlyService>
-{
-
-    [OwnerOnly]
-    public class ownerOnly(DiscordSocketClient client,
+public class OwnerOnly(DiscordSocketClient client,
         Mewdeko bot,
         IBotStrings strings,
         InteractiveService serv,
@@ -54,7 +50,6 @@ public class OwnerOnly : MewdekoModuleBase<OwnerOnlyService>
             {
                 await Service.ClearUsedTokens();
                 await ctx.Channel.SendErrorAsync("Cleared.");
-
             }
         }
 

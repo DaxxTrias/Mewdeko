@@ -10,10 +10,9 @@ namespace Mewdeko.Modules.Searches;
 public partial class Searches
 {
     [Group]
-    public class StreamNotificationCommands(DbService db, InteractiveService serv)
-        : MewdekoSubmodule<StreamNotificationService>
+    public class StreamNotificationCommands
+        (DbService db, InteractiveService serv) : MewdekoSubmodule<StreamNotificationService>
     {
-
         [Cmd, Aliases, RequireContext(ContextType.Guild), UserPerm(GuildPermission.ManageMessages)]
         public async Task StreamAdd(string link)
         {

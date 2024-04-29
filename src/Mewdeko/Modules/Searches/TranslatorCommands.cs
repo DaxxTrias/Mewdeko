@@ -83,7 +83,7 @@ public partial class Searches
         }
 
         [Cmd, Aliases, RequireContext(ContextType.Guild)]
-        public async Task Translangs()
-            => await ctx.Channel.SendTableAsync(google.Languages, str => $"{str,-15}").ConfigureAwait(false);
+        public async Task Translangs() =>
+            await ctx.Channel.SendTableAsync(google.Languages, str => $"{str,-15}").ConfigureAwait(false);
     }
 }

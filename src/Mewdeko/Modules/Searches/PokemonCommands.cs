@@ -102,7 +102,8 @@ public partial class Searches
                 {
                     pb.AddField("Game Indices",
                         string.Join("\n",
-                            poke.GameIndicies.Skip(10 * 1).Take(10).Select(x => $"{char.ToUpper(x.Version.Name[0]) + x.Version.Name[1..]}")));
+                            poke.GameIndicies.Skip(10 * 1).Take(10).Select(x =>
+                                $"{char.ToUpper(x.Version.Name[0]) + x.Version.Name[1..]}")));
                 }
 
                 if (poke.Moves.Any())

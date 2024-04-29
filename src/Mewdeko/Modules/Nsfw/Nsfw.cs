@@ -16,14 +16,15 @@ using Serilog;
 
 namespace Mewdeko.Modules.Nsfw;
 
-public class Nsfw(InteractiveService interactivity, MartineApi martinApi,
+public class Nsfw(InteractiveService interactivity, MartineApi martineApi,
     GuildSettingsService guildSettings, HttpClient client,
-    BotConfigService config, IBotCredentials credentials1)
+        BotConfigService config, IBotCredentials credentials)
     : MewdekoModuleBase<ISearchImagesService>
 {
     private static readonly ConcurrentHashSet<ulong> HentaiBombBlacklist = new();
     private static readonly ConcurrentHashSet<ulong> PornBombBlacklist = new();
     private readonly MewdekoRandom rng = new();
+
 
     [Cmd, Aliases, RequireContext(ContextType.Guild), RequireNsfw, Ratelimit(10)]
     public async Task RedditNsfw(string subreddit)
@@ -35,16 +36,17 @@ public class Nsfw(InteractiveService interactivity, MartineApi martinApi,
             RedditPost image;
             try
             {
-                image = await martinApi.RedditApi.GetRandomFromSubreddit(subreddit, Toptype.year)
+                image = await martineApi.RedditApi.GetRandomFromSubreddit(subreddit, Toptype.year)
                     .ConfigureAwait(false);
             }
             catch (ApiException ex)
             {
                 await msg.DeleteAsync();
                 Log.Error(
-                    $"Seems that NSFW Subreddit fetching has failed. Here's the error:\nCode: {ex.StatusCode}\nContent: {(ex.HasContent ? ex.Content : "No Content.")}");
+                    "Seems that NSFW Subreddit fetching has failed. Here\'s the error:\\nCode:{ExStatusCode}\\nContent: {ExContent}",
+                    ex.StatusCode, (ex.HasContent ? ex.Content : "No Content."));
                 await ctx.Channel.SendErrorAsync(
-                    "Unable to fetch nsfw subreddit. Please check console.");
+                    "Unable to fetch nsfw subreddit. Please check console or report the issue at https://discord.gg/mewdeko.");
                 return;
             }
 
@@ -59,7 +61,8 @@ public class Nsfw(InteractiveService interactivity, MartineApi martinApi,
                 if (image.Data.ImageUrl.Contains("redgifs"))
                     image.Data.ImageUrl = await GetRedGifMp4(image.Data.ImageUrl);
                 image.Data.ImageUrl = image.Data.ImageUrl.Replace("gifv", "mp4");
-                using var sr = await client.GetAsync(image.Data.ImageUrl, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
+                using var sr = await client.GetAsync(image.Data.ImageUrl, HttpCompletionOption.ResponseHeadersRead)
+                    .ConfigureAwait(false);
                 var imgData = await sr.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
                 var imgStream = imgData.ToStream();
                 await using var _ = imgStream.ConfigureAwait(false);
@@ -117,7 +120,9 @@ public class Nsfw(InteractiveService interactivity, MartineApi martinApi,
         if (tags.Contains("lolicon") || tags.Contains("loli") || tags.Contains("shotacon") || tags.Contains("shota"))
 
         {
-            await ctx.Channel.SendErrorAsync("This manga contains loli/shota content and is not allowed by discord TOS!").ConfigureAwait(false);
+            await ctx.Channel
+                .SendErrorAsync("This manga contains loli/shota content and is not allowed by discord TOS!")
+                .ConfigureAwait(false);
             return;
         }
 
@@ -130,7 +135,8 @@ public class Nsfw(InteractiveService interactivity, MartineApi martinApi,
             .WithActionOnCancellation(ActionOnStop.DeleteMessage)
             .Build();
 
-        await interactivity.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
+        await interactivity.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60))
+            .ConfigureAwait(false);
 
         async Task<PageBuilder> PageFactory(int page)
         {
@@ -155,10 +161,12 @@ public class Nsfw(InteractiveService interactivity, MartineApi martinApi,
             }
         };
         var nHentaiClient = new NHentaiClient(credentials.UserAgent, cookies);
-        var result = await nHentaiClient.GetSearchPageListAsync($"{search} {exclude} -lolicon -loli -shota -shotacon", page).ConfigureAwait(false);
+        var result = await nHentaiClient
+            .GetSearchPageListAsync($"{search} {exclude} -lolicon -loli -shota -shotacon", page).ConfigureAwait(false);
         if (result.Result.Count == 0)
         {
-            await ctx.Channel.SendErrorAsync("The search returned no results. Try again with a different query!").ConfigureAwait(false);
+            await ctx.Channel.SendErrorAsync("The search returned no results. Try again with a different query!")
+                .ConfigureAwait(false);
             return;
         }
 
@@ -171,12 +179,14 @@ public class Nsfw(InteractiveService interactivity, MartineApi martinApi,
             .WithActionOnCancellation(ActionOnStop.DeleteMessage)
             .Build();
 
-        await interactivity.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
+        await interactivity.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60))
+            .ConfigureAwait(false);
 
         async Task<PageBuilder> PageFactory(int page1)
         {
             await Task.CompletedTask.ConfigureAwait(false);
-            var list = result.Result.Skip(page1).FirstOrDefault().Tags.Select(i => $"[{i.Name}](https://nhentai.net{i.Url})").ToList();
+            var list = result.Result.Skip(page1).FirstOrDefault().Tags
+                .Select(i => $"[{i.Name}](https://nhentai.net{i.Url})").ToList();
             return new PageBuilder().WithOkColor()
                 .WithTitle(result.Result.Skip(page1).FirstOrDefault().Title.English)
                 .WithDescription(string.Join("|", list.Take(20)))
@@ -204,16 +214,20 @@ public class Nsfw(InteractiveService interactivity, MartineApi martinApi,
     public async Task Bondage() => await RedditNsfw("bondage").ConfigureAwait(false);
 
     [Cmd, Aliases, RequireContext(ContextType.Guild), RequireNsfw]
-    public async Task NHentaiSearch([Remainder] string search) => await InternalNHentaiSearch(search).ConfigureAwait(false);
+    public async Task NHentaiSearch([Remainder] string search) =>
+        await InternalNHentaiSearch(search).ConfigureAwait(false);
 
     [Cmd, Aliases, RequireContext(ContextType.Guild), RequireNsfw]
-    public async Task NHentaiSearch(string search, [Remainder] string blacklist) => await InternalNHentaiSearch(search, 1, blacklist).ConfigureAwait(false);
+    public async Task NHentaiSearch(string search, [Remainder] string blacklist) =>
+        await InternalNHentaiSearch(search, 1, blacklist).ConfigureAwait(false);
 
     [Cmd, Aliases, RequireContext(ContextType.Guild), RequireNsfw]
-    public async Task NHentaiSearch(string search, int page) => await InternalNHentaiSearch(search, page).ConfigureAwait(false);
+    public async Task NHentaiSearch(string search, int page) =>
+        await InternalNHentaiSearch(search, page).ConfigureAwait(false);
 
     [Cmd, Aliases, RequireContext(ContextType.Guild), RequireNsfw]
-    public async Task NHentaiSearch(string search, int page, string type) => await InternalNHentaiSearch(search, page, type).ConfigureAwait(false);
+    public async Task NHentaiSearch(string search, int page, string type) =>
+        await InternalNHentaiSearch(search, page, type).ConfigureAwait(false);
 
     [Cmd, Aliases, RequireContext(ContextType.Guild), RequireNsfw]
     public async Task NHentaiSearch(string search, int page, string type, [Remainder] string blacklist) =>
@@ -282,7 +296,8 @@ public class Nsfw(InteractiveService interactivity, MartineApi martinApi,
 
         if (interval == 0)
         {
-            if (!Service.AutoHentaiTimers.TryRemove(ctx.Channel.Id, out t)) return;
+            if (!Service.AutoHentaiTimers.TryRemove(ctx.Channel.Id, out t))
+                return;
 
             t.Change(Timeout.Infinite, Timeout.Infinite); //proper way to disable the timer
             await ReplyConfirmLocalizedAsync("stopped").ConfigureAwait(false);
@@ -571,7 +586,8 @@ public class Nsfw(InteractiveService interactivity, MartineApi martinApi,
         }
         else
         {
-            using var sr = await client.GetAsync(data.Url, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
+            using var sr = await client.GetAsync(data.Url, HttpCompletionOption.ResponseHeadersRead)
+                .ConfigureAwait(false);
             var imgData = await sr.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
             var imgStream = imgData.ToStream();
             await using var _ = imgStream.ConfigureAwait(false);
