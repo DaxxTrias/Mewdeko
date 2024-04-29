@@ -1,4 +1,4 @@
-﻿using LinqToDB.EntityFrameworkCore;
+using LinqToDB.EntityFrameworkCore;
 using Mewdeko.Database.Common;
 using Mewdeko.Database.Models;
 using Microsoft.EntityFrameworkCore;
@@ -12,6 +12,13 @@ public static class GuildConfigExtensions
         public ulong GuildId { get; set; }
         public ulong ChannelId { get; set; }
     }
+
+
+    public static IEnumerable<GuildConfig> GetAllGuildConfigs(
+        this DbSet<GuildConfig> configs,
+        List<ulong> availableGuilds)
+        => configs.IncludeEverything().AsNoTracking().Where(x => availableGuilds.Contains(x.GuildId)).ToList();
+
 
     public static IndexedCollection<ReactionRoleMessage> GetReactionRoles(this MewdekoContext ctx, ulong guildId)
         => ctx.GuildConfigs
@@ -27,7 +34,6 @@ public static class GuildConfigExtensions
         {
             config = await ctx
                 .GuildConfigs
-                .IncludeEverything()
                 .FirstOrDefaultAsyncEF(c => c.GuildId == guildId);
         }
         else
@@ -40,23 +46,29 @@ public static class GuildConfigExtensions
         {
             await ctx.GuildConfigs.AddAsync(config = new GuildConfig
             {
-                GuildId = guildId, Permissions = Permissionv2.GetDefaultPermlist, WarningsInitialized = true, WarnPunishments = DefaultWarnPunishments
+                GuildId = guildId,
+                Permissions = Permissionv2.GetDefaultPermlist,
+                WarningsInitialized = 1,
+                WarnPunishments = DefaultWarnPunishments
             });
             await ctx.SaveChangesAsync();
         }
 
-        if (config.WarningsInitialized) return config;
-        config.WarningsInitialized = true;
+        if (false.ParseBoth(config.WarningsInitialized.ToString()))
+            return config;
+        config.WarningsInitialized = 1;
         config.WarnPunishments = DefaultWarnPunishments;
 
         return config;
     }
 
-    public static IEnumerable<GuildConfig> Permissionsv2ForAll(this DbSet<GuildConfig> configs, List<ulong> include)
+    public static IEnumerable<GuildConfig> Permissionsv2ForAll(this DbSet<GuildConfig> configs, int totalShards, int shardId)
     {
-        var query = configs.AsQueryable()
-            .Where(x => include.Contains(x.GuildId))
-            .Include(gc => gc.Permissions);
+        var query = configs
+            .Include(gc => gc.Permissions)
+            .ToLinqToDB()
+            .AsQueryable()
+            .Where(x => (int)(x.GuildId / (ulong)Math.Pow(2, 22) % (ulong)totalShards) == shardId);
 
         return query.ToList();
     }
@@ -69,7 +81,8 @@ public static class GuildConfigExtensions
             .SelectMany(x => x.GenerateCurrencyChannelIds)
             .Select(x => new GeneratingChannel
             {
-                ChannelId = x.ChannelId, GuildId = x.GuildConfig.GuildId
+                ChannelId = x.ChannelId,
+                GuildId = x.GuildConfig.GuildId
             })
             .ToArray();
 
@@ -86,7 +99,8 @@ public static class GuildConfigExtensions
         {
             await ctx.GuildConfigs.AddAsync(config = new GuildConfig
             {
-                GuildId = guildId, Permissions = Permissionv2.GetDefaultPermlist
+                GuildId = guildId,
+                Permissions = Permissionv2.GetDefaultPermlist
             });
             await ctx.SaveChangesAsync();
         }
@@ -124,22 +138,26 @@ public static class GuildConfigExtensions
     public static async Task<GuildConfig> LogSettingsFor(this MewdekoContext ctx, ulong guildId)
     {
         var config = await ctx.GuildConfigs
-            .AsQueryable()
             .Include(gc => gc.LogSetting)
             .ThenInclude(gc => gc.IgnoredChannels)
-            .FirstOrDefaultAsyncEF(x => x.GuildId == guildId);
+            .ToLinqToDB()
+            .FirstOrDefaultAsyncLinqToDB(x => x.GuildId == guildId);
 
         if (config == null)
         {
             await ctx.AddAsync(config = new GuildConfig
             {
-                GuildId = guildId, Permissions = Permissionv2.GetDefaultPermlist, WarningsInitialized = true, WarnPunishments = DefaultWarnPunishments
+                GuildId = guildId,
+                Permissions = Permissionv2.GetDefaultPermlist,
+                WarningsInitialized = 1,
+                WarnPunishments = DefaultWarnPunishments
             });
             await ctx.SaveChangesAsync();
         }
 
-        if (config.WarningsInitialized) return config;
-        config.WarningsInitialized = true;
+        if (false.ParseBoth(config.WarningsInitialized.ToString()))
+            return config;
+        config.WarningsInitialized = 1;
         config.WarnPunishments = DefaultWarnPunishments;
 
         return config;
@@ -163,9 +181,13 @@ public static class GuildConfigExtensions
             .Where(x => x.GuildId == guildid)
             .Select(x => x.CleverbotChannel).Single();
 
-    private static IQueryable<GuildConfig> IncludeEverything(this DbSet<GuildConfig> config) =>
+    public static IQueryable<GuildConfig> IncludeEverything(this DbSet<GuildConfig> config) =>
         config
             .AsQueryable()
+            .Include(gc => gc.LogSetting)
+            .ThenInclude(gc => gc.IgnoredChannels)
+            .Include(gc => gc.Permissions)
+            .Include(gc => gc.GenerateCurrencyChannelIds)
             .Include(gc => gc.CommandCooldowns)
             .Include(gc => gc.GuildRepeaters)
             .Include(gc => gc.FollowedStreams)
@@ -175,5 +197,11 @@ public static class GuildConfigExtensions
             .ThenInclude(x => x.ExclusionList)
             .Include(gc => gc.DelMsgOnCmdChannels)
             .Include(gc => gc.ReactionRoleMessages)
-            .ThenInclude(x => x.ReactionRoles);
+            .ThenInclude(x => x.ReactionRoles)
+            .Include(x => x.XpSettings)
+            .ThenInclude(x => x.RoleRewards)
+            .Include(x => x.XpSettings)
+            .ThenInclude(x => x.CurrencyRewards)
+            .Include(x => x.XpSettings)
+            .ThenInclude(x => x.ExclusionList);
 }
