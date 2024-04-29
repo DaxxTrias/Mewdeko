@@ -11,17 +11,8 @@ namespace Mewdeko.Modules.Utility;
 public partial class Utility
 {
     [Group]
-    public class RepeatCommands : MewdekoSubmodule<MessageRepeaterService>
+    public class RepeatCommands(DiscordSocketClient client, DbService db) : MewdekoSubmodule<MessageRepeaterService>
     {
-        private readonly DiscordSocketClient client;
-        private readonly DbService db;
-
-        public RepeatCommands(DiscordSocketClient client, DbService db)
-        {
-            this.client = client;
-            this.db = db;
-        }
-
         [Cmd, Aliases, RequireContext(ContextType.Guild), UserPerm(GuildPermission.ManageMessages)]
         public async Task RepeatInvoke(int index)
         {
@@ -157,6 +148,8 @@ public partial class Utility
          UserPerm(GuildPermission.ManageMessages), Priority(2)]
         public async Task Repeat(GuildDateTime? dt, StoopidTime? interval, [Remainder] string? message)
         {
+            try
+            {
             if (!Service.RepeaterReady)
                 return;
 
@@ -223,6 +216,12 @@ public partial class Utility
                 .WithTitle(GetText("repeater_created"))
                 .WithDescription(description)).ConfigureAwait(false);
         }
+            catch (Exception e)
+            {
+                Console.WriteLine(e);
+                throw;
+            }
+        }
 
         [Cmd, Aliases, RequireContext(ContextType.Guild), UserPerm(GuildPermission.ManageMessages)]
         public async Task RepeatList()
@@ -241,7 +240,8 @@ public partial class Utility
                 .WithTitle(GetText("list_of_repeaters"))
                 .WithOkColor();
 
-            if (replist.Count == 0) embed.WithDescription(GetText("no_active_repeaters"));
+            if (replist.Count == 0)
+                embed.WithDescription(GetText("no_active_repeaters"));
 
             for (var i = 0; i < replist.Count; i++)
             {
@@ -321,7 +321,8 @@ public partial class Utility
             await using var _ = uow.ConfigureAwait(false);
             var guildConfig = await uow.ForGuildId(ctx.Guild.Id, set => set.Include(gc => gc.GuildRepeaters));
             var item = guildConfig.GuildRepeaters.Find(r => r.Id == repeater.Id);
-            if (item != null) item.ChannelId = textChannel.Id;
+            if (item != null)
+                item.ChannelId = textChannel.Id;
             await uow.SaveChangesAsync().ConfigureAwait(false);
 
             await ReplyConfirmLocalizedAsync("repeater_channel_update", textChannel.Mention).ConfigureAwait(false);

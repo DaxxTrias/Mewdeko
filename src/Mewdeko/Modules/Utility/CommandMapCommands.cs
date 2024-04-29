@@ -10,17 +10,8 @@ namespace Mewdeko.Modules.Utility;
 public partial class Utility
 {
     [Group]
-    public class CommandMapCommands : MewdekoSubmodule<CommandMapService>
+    public class CommandMapCommands(DbService db, InteractiveService serv) : MewdekoSubmodule<CommandMapService>
     {
-        private readonly DbService db;
-        private readonly InteractiveService interactivity;
-
-        public CommandMapCommands(DbService db, InteractiveService serv)
-        {
-            interactivity = serv;
-            this.db = db;
-        }
-
         [Cmd, Aliases, RequireContext(ContextType.Guild),
          UserPerm(GuildPermission.Administrator)]
         public async Task AliasesClear()
@@ -64,10 +55,12 @@ public partial class Utility
             {
                 using (var uow = db.GetDbContext())
                 {
-                    var config = uow.ForGuildId(ctx.Guild.Id, set => set.Include(x => x.CommandAliases)).GetAwaiter().GetResult();
+                    var config = uow.ForGuildId(ctx.Guild.Id, set => set.Include(x => x.CommandAliases)).GetAwaiter()
+                        .GetResult();
                     config.CommandAliases.Add(new CommandAlias
                     {
-                        Mapping = mapping, Trigger = trigger
+                        Mapping = mapping,
+                        Trigger = trigger
                     });
                     uow.SaveChanges();
                 }
@@ -82,10 +75,12 @@ public partial class Utility
             {
                 using (var uow = db.GetDbContext())
                 {
-                    var config = uow.ForGuildId(ctx.Guild.Id, set => set.Include(x => x.CommandAliases)).GetAwaiter().GetResult();
+                    var config = uow.ForGuildId(ctx.Guild.Id, set => set.Include(x => x.CommandAliases)).GetAwaiter()
+                        .GetResult();
                     var toAdd = new CommandAlias
                     {
-                        Mapping = mapping, Trigger = trigger
+                        Mapping = mapping,
+                        Trigger = trigger
                     };
                     var toRemove = config.CommandAliases.Where(x => x.Trigger == trigger);
                     if (toRemove.Any())
@@ -122,7 +117,7 @@ public partial class Utility
                 .WithActionOnCancellation(ActionOnStop.DeleteMessage)
                 .Build();
 
-            await interactivity.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
+            await serv.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
 
             async Task<PageBuilder> PageFactory(int page)
             {

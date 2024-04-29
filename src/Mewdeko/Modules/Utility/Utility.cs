@@ -21,38 +21,15 @@ using StringExtensions = Mewdeko.Extensions.StringExtensions;
 
 namespace Mewdeko.Modules.Utility;
 
-public partial class Utility : MewdekoModuleBase<UtilityService>
-{
-    private static readonly SemaphoreSlim Sem = new(1, 1);
-    private readonly DiscordSocketClient client;
-    private readonly IBotCredentials creds;
-    private readonly IStatsService stats;
-    private readonly DownloadTracker tracker;
-    private readonly InteractiveService interactivity;
-    private readonly ICoordinator coordinator;
-    private readonly GuildSettingsService guildSettings;
-    private readonly HttpClient httpClient;
-    private readonly BotConfigService config;
-    private readonly DbService db;
-
-    public Utility(
-        DiscordSocketClient client,
-        IStatsService stats, IBotCredentials creds, DownloadTracker tracker, InteractiveService serv, ICoordinator coordinator,
+public partial class Utility(DiscordSocketClient client,
+        IStatsService stats, IBotCredentials creds, DownloadTracker tracker, InteractiveService serv,
+        ICoordinator coordinator,
         GuildSettingsService guildSettings,
         HttpClient httpClient,
         BotConfigService config, DbService db)
+    : MewdekoModuleBase<UtilityService>
     {
-        this.coordinator = coordinator;
-        this.guildSettings = guildSettings;
-        this.httpClient = httpClient;
-        this.config = config;
-        this.db = db;
-        interactivity = serv;
-        this.client = client;
-        this.stats = stats;
-        this.creds = creds;
-        this.tracker = tracker;
-    }
+    private static readonly SemaphoreSlim Sem = new(1, 1);
 
     public enum PermissionType
     {
@@ -94,13 +71,15 @@ public partial class Utility : MewdekoModuleBase<UtilityService>
 
         var paginator = new LazyPaginatorBuilder()
             .WithUsers(ctx.User)
-            .WithMaxPageIndex(searchType == PermissionType.Or ? (rolesWithMatchedPerms.Count - 1) / 6 : (rolesWithPerms.Count - 1) / 6)
+            .WithMaxPageIndex(searchType == PermissionType.Or
+                ? (rolesWithMatchedPerms.Count - 1) / 6
+                : (rolesWithPerms.Count - 1) / 6)
             .WithPageFactory(PageFactory)
             .WithFooter(PaginatorFooter.PageNumber)
             .WithDefaultEmotes()
             .Build();
 
-        await interactivity.SendPaginatorAsync(paginator, ctx.Channel, TimeSpan.FromMinutes(5));
+        await serv.SendPaginatorAsync(paginator, ctx.Channel, TimeSpan.FromMinutes(5));
 
         async Task<PageBuilder> PageFactory(int pagenum)
         {
@@ -112,7 +91,8 @@ public partial class Utility : MewdekoModuleBase<UtilityService>
             {
                 foreach (var role in rolesWithPerms.Skip(pagenum * 6).Take(6))
                 {
-                    embed.AddField(role.Name, $"`Id`: {role.Id}\n`Mention`: {role.Mention}\n`Users`: {(await role.GetMembersAsync()).Count()}");
+                    embed.AddField(role.Name,
+                        $"`Id`: {role.Id}\n`Mention`: {role.Mention}\n`Users`: {(await role.GetMembersAsync()).Count()}");
                 }
             }
             else // PermissionType.Or
@@ -138,7 +118,8 @@ public partial class Utility : MewdekoModuleBase<UtilityService>
         channel ??= ctx.Channel as ITextChannel;
         var settings = new JsonSerializerSettings
         {
-            ContractResolver = new LowercaseContractResolver(), NullValueHandling = NullValueHandling.Ignore
+            ContractResolver = new LowercaseContractResolver(),
+            NullValueHandling = NullValueHandling.Ignore
         };
 
         var message = await channel.GetMessageAsync(id);
@@ -163,7 +144,8 @@ public partial class Utility : MewdekoModuleBase<UtilityService>
         var curTime = DateTime.UtcNow.Subtract(time.Time);
         if (!Directory.Exists(creds.ChatSavePath))
         {
-            await ctx.Channel.SendErrorAsync("Chat save directory does not exist. Please create it.").ConfigureAwait(false);
+            await ctx.Channel.SendErrorAsync("Chat save directory does not exist. Please create it.")
+                .ConfigureAwait(false);
             return;
         }
 
@@ -180,7 +162,9 @@ public partial class Utility : MewdekoModuleBase<UtilityService>
 
         if (time.Time.Days > 3)
         {
-            await ctx.Channel.SendErrorAsync("Max time to grab messages is 3 days. This will be increased in the near future.").ConfigureAwait(false);
+            await ctx.Channel
+                .SendErrorAsync("Max time to grab messages is 3 days. This will be increased in the near future.")
+                .ConfigureAwait(false);
             return;
         }
 
@@ -197,7 +181,8 @@ public partial class Utility : MewdekoModuleBase<UtilityService>
         using (ctx.Channel.EnterTypingState())
         {
             process.Start();
-            await ctx.Channel.SendConfirmAsync($"{config.Data.LoadingEmote} Saving chat log, this may take some time...");
+            await ctx.Channel.SendConfirmAsync(
+                $"{config.Data.LoadingEmote} Saving chat log, this may take some time...");
         }
 
         await process.WaitForExitAsync().ConfigureAwait(false);
@@ -206,7 +191,9 @@ public partial class Utility : MewdekoModuleBase<UtilityService>
                     $"Your chat log is here: https://cdn.mewdeko.tech/chatlogs/{ctx.Guild.Id}/{secureString}/{ctx.Guild.Name.Replace(" ", "-")}-{(channel?.Name ?? ctx.Channel.Name).Replace(" ", "-")}-{curTime:yyyy-MM-ddTHH-mm-ssZ}.html")
                 .ConfigureAwait(false);
         else
-            await ctx.Channel.SendConfirmAsync($"Your chat log is here: {creds.ChatSavePath}/{ctx.Guild.Id}/{secureString}").ConfigureAwait(false);
+            await ctx.Channel
+                .SendConfirmAsync($"Your chat log is here: {creds.ChatSavePath}/{ctx.Guild.Id}/{secureString}")
+                .ConfigureAwait(false);
     }
 
     [Cmd, Aliases]
@@ -234,7 +221,7 @@ public partial class Utility : MewdekoModuleBase<UtilityService>
             .WithActionOnCancellation(ActionOnStop.DeleteMessage)
             .Build();
 
-        await interactivity.SendPaginatorAsync(paginator, Context.Channel,
+        await serv.SendPaginatorAsync(paginator, Context.Channel,
             TimeSpan.FromMinutes(60)).ConfigureAwait(false);
 
         async Task<PageBuilder> PageFactory(int page)
@@ -298,7 +285,8 @@ public partial class Utility : MewdekoModuleBase<UtilityService>
             if (e == 0)
             {
                 await Service.SetReactChan(ctx.Guild, chan.Id).ConfigureAwait(false);
-                await ctx.Channel.SendConfirmAsync($"Your React Channel has been set to {chan.Mention}!").ConfigureAwait(false);
+                await ctx.Channel.SendConfirmAsync($"Your React Channel has been set to {chan.Mention}!")
+                    .ConfigureAwait(false);
             }
             else
             {
@@ -311,7 +299,8 @@ public partial class Utility : MewdekoModuleBase<UtilityService>
                 {
                     await Service.SetReactChan(ctx.Guild, chan.Id).ConfigureAwait(false);
                     await ctx.Channel.SendConfirmAsync(
-                        $"Your React Channel has been switched from {chan2.Mention} to {chan.Mention}!").ConfigureAwait(false);
+                            $"Your React Channel has been switched from {chan2.Mention} to {chan.Mention}!")
+                        .ConfigureAwait(false);
                 }
             }
         }
@@ -333,25 +322,29 @@ public partial class Utility : MewdekoModuleBase<UtilityService>
         //todo: snipe doesnt capture images if they were the deleted message
         if (!await Service.GetSnipeSet(ctx.Guild.Id))
         {
-            await ReplyErrorLocalizedAsync("snipe_not_enabled", await guildSettings.GetPrefix(ctx.Guild)).ConfigureAwait(false);
+            await ReplyErrorLocalizedAsync("snipe_not_enabled", await guildSettings.GetPrefix(ctx.Guild))
+                .ConfigureAwait(false);
             return;
         }
 
         await Service.GetSnipes(ctx.Guild.Id).ConfigureAwait(false);
-        var msg = (await Service.GetSnipes(ctx.Guild.Id).ConfigureAwait(false)).LastOrDefault(x => x.ChannelId == ctx.Channel.Id && !x.Edited);
+        var msg = (await Service.GetSnipes(ctx.Guild.Id).ConfigureAwait(false)).LastOrDefault(x =>
+            x.ChannelId == ctx.Channel.Id && !x.Edited);
         if (msg is null)
         {
             await ctx.Channel.SendErrorAsync("There is nothing to snipe here!").ConfigureAwait(false);
             return;
         }
 
-        var user = await ctx.Channel.GetUserAsync(msg.UserId).ConfigureAwait(false) ?? await client.Rest.GetUserAsync(msg.UserId).ConfigureAwait(false);
+        var user = await ctx.Channel.GetUserAsync(msg.UserId).ConfigureAwait(false) ??
+                   await client.Rest.GetUserAsync(msg.UserId).ConfigureAwait(false);
 
         var em = new EmbedBuilder
         {
             Author = new EmbedAuthorBuilder
             {
-                IconUrl = user.GetAvatarUrl(), Name = $"{user} said:"
+                IconUrl = user.GetAvatarUrl(),
+                Name = $"{user} said:"
             },
             Description = msg.Message,
             Footer = new EmbedFooterBuilder
@@ -381,11 +374,13 @@ public partial class Utility : MewdekoModuleBase<UtilityService>
     {
         if (!await Service.GetSnipeSet(ctx.Guild.Id))
         {
-            await ReplyErrorLocalizedAsync("snipe_not_enabled", await guildSettings.GetPrefix(ctx.Guild)).ConfigureAwait(false);
+            await ReplyErrorLocalizedAsync("snipe_not_enabled", await guildSettings.GetPrefix(ctx.Guild))
+                .ConfigureAwait(false);
             return;
         }
 
-        var msgs = (await Service.GetSnipes(ctx.Guild.Id).ConfigureAwait(false)).Where(x => x.ChannelId == ctx.Channel.Id && !x.Edited);
+        var msgs = (await Service.GetSnipes(ctx.Guild.Id).ConfigureAwait(false)).Where(x =>
+            x.ChannelId == ctx.Channel.Id && !x.Edited);
         {
             var snipeStores = msgs as SnipeStore[] ?? msgs.ToArray();
             if (snipeStores.Length == 0)
@@ -404,7 +399,7 @@ public partial class Utility : MewdekoModuleBase<UtilityService>
                 .WithActionOnCancellation(ActionOnStop.DeleteMessage)
                 .Build();
 
-            await interactivity.SendPaginatorAsync(paginator, Context.Channel,
+            await serv.SendPaginatorAsync(paginator, Context.Channel,
                 TimeSpan.FromMinutes(60)).ConfigureAwait(false);
 
             async Task<PageBuilder> PageFactory(int page)
@@ -435,11 +430,13 @@ public partial class Utility : MewdekoModuleBase<UtilityService>
     {
         if (!await Service.GetSnipeSet(ctx.Guild.Id))
         {
-            await ReplyErrorLocalizedAsync("snipe_not_enabled", await guildSettings.GetPrefix(ctx.Guild)).ConfigureAwait(false);
+            await ReplyErrorLocalizedAsync("snipe_not_enabled", await guildSettings.GetPrefix(ctx.Guild))
+                .ConfigureAwait(false);
             return;
         }
 
-        var msgs = (await Service.GetSnipes(ctx.Guild.Id).ConfigureAwait(false)).Where(x => x.ChannelId == ctx.Channel.Id && x.UserId == user.Id && !x.Edited);
+        var msgs = (await Service.GetSnipes(ctx.Guild.Id).ConfigureAwait(false)).Where(x =>
+            x.ChannelId == ctx.Channel.Id && x.UserId == user.Id && !x.Edited);
         {
             var snipeStores = msgs as SnipeStore[] ?? msgs.ToArray();
             if (snipeStores.Length == 0)
@@ -458,7 +455,7 @@ public partial class Utility : MewdekoModuleBase<UtilityService>
                 .WithActionOnCancellation(ActionOnStop.DeleteMessage)
                 .Build();
 
-            await interactivity.SendPaginatorAsync(paginator, Context.Channel,
+            await serv.SendPaginatorAsync(paginator, Context.Channel,
                 TimeSpan.FromMinutes(60)).ConfigureAwait(false);
 
             async Task<PageBuilder> PageFactory(int page)
@@ -489,11 +486,13 @@ public partial class Utility : MewdekoModuleBase<UtilityService>
     {
         if (!await Service.GetSnipeSet(ctx.Guild.Id))
         {
-            await ReplyErrorLocalizedAsync("snipe_not_enabled", await guildSettings.GetPrefix(ctx.Guild)).ConfigureAwait(false);
+            await ReplyErrorLocalizedAsync("snipe_not_enabled", await guildSettings.GetPrefix(ctx.Guild))
+                .ConfigureAwait(false);
             return;
         }
 
-        var msgs = (await Service.GetSnipes(ctx.Guild.Id).ConfigureAwait(false)).Where(x => x.ChannelId == ctx.Channel.Id && x.ChannelId == channel.Id && !x.Edited);
+        var msgs = (await Service.GetSnipes(ctx.Guild.Id).ConfigureAwait(false)).Where(x =>
+            x.ChannelId == ctx.Channel.Id && x.ChannelId == channel.Id && !x.Edited);
         {
             var snipeStores = msgs as SnipeStore[] ?? msgs.ToArray();
             if (snipeStores.Length == 0)
@@ -512,7 +511,7 @@ public partial class Utility : MewdekoModuleBase<UtilityService>
                 .WithActionOnCancellation(ActionOnStop.DeleteMessage)
                 .Build();
 
-            await interactivity.SendPaginatorAsync(paginator, Context.Channel,
+            await serv.SendPaginatorAsync(paginator, Context.Channel,
                 TimeSpan.FromMinutes(60)).ConfigureAwait(false);
 
             async Task<PageBuilder> PageFactory(int page)
@@ -543,7 +542,8 @@ public partial class Utility : MewdekoModuleBase<UtilityService>
     {
         if (!await Service.GetSnipeSet(ctx.Guild.Id))
         {
-            await ReplyErrorLocalizedAsync("snipe_not_enabled", await guildSettings.GetPrefix(ctx.Guild)).ConfigureAwait(false);
+            await ReplyErrorLocalizedAsync("snipe_not_enabled", await guildSettings.GetPrefix(ctx.Guild))
+                .ConfigureAwait(false);
             return;
         }
 
@@ -567,7 +567,7 @@ public partial class Utility : MewdekoModuleBase<UtilityService>
                 .WithActionOnCancellation(ActionOnStop.DeleteMessage)
                 .Build();
 
-            await interactivity.SendPaginatorAsync(paginator, Context.Channel,
+            await serv.SendPaginatorAsync(paginator, Context.Channel,
                 TimeSpan.FromMinutes(60)).ConfigureAwait(false);
 
             async Task<PageBuilder> PageFactory(int page)
@@ -598,11 +598,13 @@ public partial class Utility : MewdekoModuleBase<UtilityService>
     {
         if (!await Service.GetSnipeSet(ctx.Guild.Id))
         {
-            await ReplyErrorLocalizedAsync("snipe_not_enabled", await guildSettings.GetPrefix(ctx.Guild)).ConfigureAwait(false);
+            await ReplyErrorLocalizedAsync("snipe_not_enabled", await guildSettings.GetPrefix(ctx.Guild))
+                .ConfigureAwait(false);
             return;
         }
 
-        var msgs = (await Service.GetSnipes(ctx.Guild.Id).ConfigureAwait(false)).Where(x => x.ChannelId == ctx.Channel.Id && x.Edited);
+        var msgs = (await Service.GetSnipes(ctx.Guild.Id).ConfigureAwait(false)).Where(x =>
+            x.ChannelId == ctx.Channel.Id && x.Edited);
         {
             var snipeStores = msgs as SnipeStore[] ?? msgs.ToArray();
             if (snipeStores.Length == 0)
@@ -621,7 +623,7 @@ public partial class Utility : MewdekoModuleBase<UtilityService>
                 .WithActionOnCancellation(ActionOnStop.DeleteMessage)
                 .Build();
 
-            await interactivity.SendPaginatorAsync(paginator, Context.Channel,
+            await serv.SendPaginatorAsync(paginator, Context.Channel,
                 TimeSpan.FromMinutes(60)).ConfigureAwait(false);
 
             async Task<PageBuilder> PageFactory(int page)
@@ -652,11 +654,13 @@ public partial class Utility : MewdekoModuleBase<UtilityService>
     {
         if (!await Service.GetSnipeSet(ctx.Guild.Id))
         {
-            await ReplyErrorLocalizedAsync("snipe_not_enabled", await guildSettings.GetPrefix(ctx.Guild)).ConfigureAwait(false);
+            await ReplyErrorLocalizedAsync("snipe_not_enabled", await guildSettings.GetPrefix(ctx.Guild))
+                .ConfigureAwait(false);
             return;
         }
 
-        var msgs = (await Service.GetSnipes(ctx.Guild.Id).ConfigureAwait(false)).Where(x => x.ChannelId == ctx.Channel.Id && x.UserId == user.Id && x.Edited);
+        var msgs = (await Service.GetSnipes(ctx.Guild.Id).ConfigureAwait(false)).Where(x =>
+            x.ChannelId == ctx.Channel.Id && x.UserId == user.Id && x.Edited);
         {
             var snipeStores = msgs as SnipeStore[] ?? msgs.ToArray();
             if (snipeStores.Length == 0)
@@ -675,7 +679,7 @@ public partial class Utility : MewdekoModuleBase<UtilityService>
                 .WithActionOnCancellation(ActionOnStop.DeleteMessage)
                 .Build();
 
-            await interactivity.SendPaginatorAsync(paginator, Context.Channel,
+            await serv.SendPaginatorAsync(paginator, Context.Channel,
                 TimeSpan.FromMinutes(60)).ConfigureAwait(false);
 
             async Task<PageBuilder> PageFactory(int page)
@@ -706,11 +710,13 @@ public partial class Utility : MewdekoModuleBase<UtilityService>
     {
         if (!await Service.GetSnipeSet(ctx.Guild.Id))
         {
-            await ReplyErrorLocalizedAsync("snipe_not_enabled", await guildSettings.GetPrefix(ctx.Guild)).ConfigureAwait(false);
+            await ReplyErrorLocalizedAsync("snipe_not_enabled", await guildSettings.GetPrefix(ctx.Guild))
+                .ConfigureAwait(false);
             return;
         }
 
-        var msgs = (await Service.GetSnipes(ctx.Guild.Id).ConfigureAwait(false)).Where(x => x.ChannelId == ctx.Channel.Id && x.ChannelId == channel.Id && x.Edited);
+        var msgs = (await Service.GetSnipes(ctx.Guild.Id).ConfigureAwait(false)).Where(x =>
+            x.ChannelId == ctx.Channel.Id && x.ChannelId == channel.Id && x.Edited);
         {
             var snipeStores = msgs as SnipeStore[] ?? msgs.ToArray();
             if (snipeStores.Length == 0)
@@ -729,7 +735,7 @@ public partial class Utility : MewdekoModuleBase<UtilityService>
                 .WithActionOnCancellation(ActionOnStop.DeleteMessage)
                 .Build();
 
-            await interactivity.SendPaginatorAsync(paginator, Context.Channel,
+            await serv.SendPaginatorAsync(paginator, Context.Channel,
                 TimeSpan.FromMinutes(60)).ConfigureAwait(false);
 
             async Task<PageBuilder> PageFactory(int page)
@@ -760,7 +766,8 @@ public partial class Utility : MewdekoModuleBase<UtilityService>
     {
         if (!await Service.GetSnipeSet(ctx.Guild.Id))
         {
-            await ReplyErrorLocalizedAsync("snipe_not_enabled", await guildSettings.GetPrefix(ctx.Guild)).ConfigureAwait(false);
+            await ReplyErrorLocalizedAsync("snipe_not_enabled", await guildSettings.GetPrefix(ctx.Guild))
+                .ConfigureAwait(false);
             return;
         }
 
@@ -784,7 +791,7 @@ public partial class Utility : MewdekoModuleBase<UtilityService>
                 .WithActionOnCancellation(ActionOnStop.DeleteMessage)
                 .Build();
 
-            await interactivity.SendPaginatorAsync(paginator, Context.Channel,
+            await serv.SendPaginatorAsync(paginator, Context.Channel,
                 TimeSpan.FromMinutes(60)).ConfigureAwait(false);
 
             async Task<PageBuilder> PageFactory(int page)
@@ -816,7 +823,8 @@ public partial class Utility : MewdekoModuleBase<UtilityService>
     {
         if (!await Service.GetSnipeSet(ctx.Guild.Id))
         {
-            await ReplyErrorLocalizedAsync("snipe_not_enabled", await guildSettings.GetPrefix(ctx.Guild)).ConfigureAwait(false);
+            await ReplyErrorLocalizedAsync("snipe_not_enabled", await guildSettings.GetPrefix(ctx.Guild))
+                .ConfigureAwait(false);
             return;
         }
 
@@ -828,12 +836,14 @@ public partial class Utility : MewdekoModuleBase<UtilityService>
             return;
         }
 
-        var user = await ctx.Channel.GetUserAsync(msg.UserId).ConfigureAwait(false) ?? await client.Rest.GetUserAsync(msg.UserId).ConfigureAwait(false);
+        var user = await ctx.Channel.GetUserAsync(msg.UserId).ConfigureAwait(false) ??
+                   await client.Rest.GetUserAsync(msg.UserId).ConfigureAwait(false);
         var em = new EmbedBuilder
         {
             Author = new EmbedAuthorBuilder
             {
-                IconUrl = user.GetAvatarUrl(), Name = $"{user} said:"
+                IconUrl = user.GetAvatarUrl(),
+                Name = $"{user} said:"
             },
             Description = msg.Message,
             Footer = new EmbedFooterBuilder
@@ -883,7 +893,8 @@ public partial class Utility : MewdekoModuleBase<UtilityService>
     {
         if (!await Service.GetSnipeSet(ctx.Guild.Id))
         {
-            await ReplyErrorLocalizedAsync("snipe_not_enabled", await guildSettings.GetPrefix(ctx.Guild)).ConfigureAwait(false);
+            await ReplyErrorLocalizedAsync("snipe_not_enabled", await guildSettings.GetPrefix(ctx.Guild))
+                .ConfigureAwait(false);
             return;
         }
 
@@ -895,13 +906,15 @@ public partial class Utility : MewdekoModuleBase<UtilityService>
             return;
         }
 
-        var user = await ctx.Channel.GetUserAsync(msg.UserId).ConfigureAwait(false) ?? await client.Rest.GetUserAsync(msg.UserId).ConfigureAwait(false);
+        var user = await ctx.Channel.GetUserAsync(msg.UserId).ConfigureAwait(false) ??
+                   await client.Rest.GetUserAsync(msg.UserId).ConfigureAwait(false);
 
         var em = new EmbedBuilder
         {
             Author = new EmbedAuthorBuilder
             {
-                IconUrl = user.GetAvatarUrl(), Name = $"{user} said:"
+                IconUrl = user.GetAvatarUrl(),
+                Name = $"{user} said:"
             },
             Description = msg.Message,
             Footer = new EmbedFooterBuilder
@@ -932,7 +945,8 @@ public partial class Utility : MewdekoModuleBase<UtilityService>
     {
         if (!await Service.GetSnipeSet(ctx.Guild.Id))
         {
-            await ReplyErrorLocalizedAsync("snipe_not_enabled", await guildSettings.GetPrefix(ctx.Guild)).ConfigureAwait(false);
+            await ReplyErrorLocalizedAsync("snipe_not_enabled", await guildSettings.GetPrefix(ctx.Guild))
+                .ConfigureAwait(false);
             return;
         }
 
@@ -941,17 +955,20 @@ public partial class Utility : MewdekoModuleBase<UtilityService>
         {
             if (msg == null)
             {
-                await ctx.Channel.SendErrorAsync("There's nothing to snipe for that channel and user!").ConfigureAwait(false);
+                await ctx.Channel.SendErrorAsync("There's nothing to snipe for that channel and user!")
+                    .ConfigureAwait(false);
                 return;
             }
 
-            var user = await ctx.Channel.GetUserAsync(msg.UserId).ConfigureAwait(false) ?? await client.Rest.GetUserAsync(msg.UserId).ConfigureAwait(false);
+            var user = await ctx.Channel.GetUserAsync(msg.UserId).ConfigureAwait(false) ??
+                       await client.Rest.GetUserAsync(msg.UserId).ConfigureAwait(false);
 
             var em = new EmbedBuilder
             {
                 Author = new EmbedAuthorBuilder
                 {
-                    IconUrl = user.GetAvatarUrl(), Name = $"{user} said:"
+                    IconUrl = user.GetAvatarUrl(),
+                    Name = $"{user} said:"
                 },
                 Description = msg.Message,
                 Footer = new EmbedFooterBuilder
@@ -999,7 +1016,8 @@ public partial class Utility : MewdekoModuleBase<UtilityService>
     {
         if (!await Service.GetSnipeSet(ctx.Guild.Id))
         {
-            await ReplyErrorLocalizedAsync("snipe_not_enabled", await guildSettings.GetPrefix(ctx.Guild)).ConfigureAwait(false);
+            await ReplyErrorLocalizedAsync("snipe_not_enabled", await guildSettings.GetPrefix(ctx.Guild))
+                .ConfigureAwait(false);
             return;
         }
 
@@ -1013,13 +1031,15 @@ public partial class Utility : MewdekoModuleBase<UtilityService>
             return;
         }
 
-        var user = await ctx.Channel.GetUserAsync(msg.UserId).ConfigureAwait(false) ?? await client.Rest.GetUserAsync(msg.UserId).ConfigureAwait(false);
+        var user = await ctx.Channel.GetUserAsync(msg.UserId).ConfigureAwait(false) ??
+                   await client.Rest.GetUserAsync(msg.UserId).ConfigureAwait(false);
 
         var em = new EmbedBuilder
         {
             Author = new EmbedAuthorBuilder
             {
-                IconUrl = user.GetAvatarUrl(), Name = $"{user} originally said:"
+                IconUrl = user.GetAvatarUrl(),
+                Name = $"{user} originally said:"
             },
             Description = msg.Message,
             Footer = new EmbedFooterBuilder
@@ -1050,7 +1070,8 @@ public partial class Utility : MewdekoModuleBase<UtilityService>
     {
         if (!await Service.GetSnipeSet(ctx.Guild.Id))
         {
-            await ReplyErrorLocalizedAsync("snipe_not_enabled", await guildSettings.GetPrefix(ctx.Guild)).ConfigureAwait(false);
+            await ReplyErrorLocalizedAsync("snipe_not_enabled", await guildSettings.GetPrefix(ctx.Guild))
+                .ConfigureAwait(false);
             return;
         }
 
@@ -1064,13 +1085,15 @@ public partial class Utility : MewdekoModuleBase<UtilityService>
                 return;
             }
 
-            var user = await ctx.Channel.GetUserAsync(msg.UserId).ConfigureAwait(false) ?? await client.Rest.GetUserAsync(msg.UserId).ConfigureAwait(false);
+            var user = await ctx.Channel.GetUserAsync(msg.UserId).ConfigureAwait(false) ??
+                       await client.Rest.GetUserAsync(msg.UserId).ConfigureAwait(false);
 
             var em = new EmbedBuilder
             {
                 Author = new EmbedAuthorBuilder
                 {
-                    IconUrl = user.GetAvatarUrl(), Name = $"{user} originally said:"
+                    IconUrl = user.GetAvatarUrl(),
+                    Name = $"{user} originally said:"
                 },
                 Description = msg.Message,
                 Footer = new EmbedFooterBuilder
@@ -1102,7 +1125,8 @@ public partial class Utility : MewdekoModuleBase<UtilityService>
     {
         if (!await Service.GetSnipeSet(ctx.Guild.Id))
         {
-            await ReplyErrorLocalizedAsync("snipe_not_enabled", await guildSettings.GetPrefix(ctx.Guild)).ConfigureAwait(false);
+            await ReplyErrorLocalizedAsync("snipe_not_enabled", await guildSettings.GetPrefix(ctx.Guild))
+                .ConfigureAwait(false);
             return;
         }
 
@@ -1116,13 +1140,15 @@ public partial class Utility : MewdekoModuleBase<UtilityService>
                 return;
             }
 
-            var user = await ctx.Channel.GetUserAsync(msg.UserId).ConfigureAwait(false) ?? await client.Rest.GetUserAsync(msg.UserId).ConfigureAwait(false);
+            var user = await ctx.Channel.GetUserAsync(msg.UserId).ConfigureAwait(false) ??
+                       await client.Rest.GetUserAsync(msg.UserId).ConfigureAwait(false);
 
             var em = new EmbedBuilder
             {
                 Author = new EmbedAuthorBuilder
                 {
-                    IconUrl = user.GetAvatarUrl(), Name = $"{user} originally said:"
+                    IconUrl = user.GetAvatarUrl(),
+                    Name = $"{user} originally said:"
                 },
                 Description = msg.Message,
                 Footer = new EmbedFooterBuilder
@@ -1155,7 +1181,8 @@ public partial class Utility : MewdekoModuleBase<UtilityService>
     {
         if (!await Service.GetSnipeSet(ctx.Guild.Id))
         {
-            await ReplyErrorLocalizedAsync("snipe_not_enabled", await guildSettings.GetPrefix(ctx.Guild)).ConfigureAwait(false);
+            await ReplyErrorLocalizedAsync("snipe_not_enabled", await guildSettings.GetPrefix(ctx.Guild))
+                .ConfigureAwait(false);
             return;
         }
 
@@ -1169,13 +1196,15 @@ public partial class Utility : MewdekoModuleBase<UtilityService>
                 return;
             }
 
-            var user = await ctx.Channel.GetUserAsync(msg.UserId).ConfigureAwait(false) ?? await client.Rest.GetUserAsync(msg.UserId).ConfigureAwait(false);
+            var user = await ctx.Channel.GetUserAsync(msg.UserId).ConfigureAwait(false) ??
+                       await client.Rest.GetUserAsync(msg.UserId).ConfigureAwait(false);
 
             var em = new EmbedBuilder
             {
                 Author = new EmbedAuthorBuilder
                 {
-                    IconUrl = user.GetAvatarUrl(), Name = $"{user} originally said:"
+                    IconUrl = user.GetAvatarUrl(),
+                    Name = $"{user} originally said:"
                 },
                 Description = msg.Message,
                 Footer = new EmbedFooterBuilder
@@ -1212,7 +1241,7 @@ public partial class Utility : MewdekoModuleBase<UtilityService>
 
         if (ctx.Guild is not SocketGuild socketGuild)
         {
-            Log.Warning("Can't cast guild to socket guild.");
+            Log.Warning("Can't cast guild to socket guild");
             return;
         }
 
@@ -1239,7 +1268,7 @@ public partial class Utility : MewdekoModuleBase<UtilityService>
                 .WithActionOnCancellation(ActionOnStop.DeleteMessage)
                 .Build();
 
-            await interactivity.SendPaginatorAsync(paginator, Context.Channel,
+            await serv.SendPaginatorAsync(paginator, Context.Channel,
                 TimeSpan.FromMinutes(60)).ConfigureAwait(false);
 
             async Task<PageBuilder> PageFactory(int page)
@@ -1281,7 +1310,7 @@ public partial class Utility : MewdekoModuleBase<UtilityService>
             .WithActionOnCancellation(ActionOnStop.DeleteMessage)
             .Build();
 
-        await interactivity.SendPaginatorAsync(paginator, Context.Channel,
+        await serv.SendPaginatorAsync(paginator, Context.Channel,
             TimeSpan.FromMinutes(60)).ConfigureAwait(false);
 
         async Task<PageBuilder> PageFactory(int page)
@@ -1317,7 +1346,7 @@ public partial class Utility : MewdekoModuleBase<UtilityService>
             .WithActionOnCancellation(ActionOnStop.DeleteMessage)
             .Build();
 
-        await interactivity.SendPaginatorAsync(paginator, Context.Channel,
+        await serv.SendPaginatorAsync(paginator, Context.Channel,
             TimeSpan.FromMinutes(60)).ConfigureAwait(false);
 
         async Task<PageBuilder> PageFactory(int page)
@@ -1381,14 +1410,15 @@ public partial class Utility : MewdekoModuleBase<UtilityService>
                     .WithDefaultEmotes()
                     .WithActionOnCancellation(ActionOnStop.DeleteMessage)
                     .Build();
-                await interactivity.SendPaginatorAsync(paginator, ctx.Channel, TimeSpan.FromMinutes(60));
+                await serv.SendPaginatorAsync(paginator, ctx.Channel, TimeSpan.FromMinutes(60));
 
                 async Task<PageBuilder> PageFactory(int page)
                 {
                     await Task.CompletedTask;
                     return new PageBuilder().WithOkColor().WithTitle($"Roles List for {target}")
                         .WithDescription(string.Join("\n",
-                            roles.Skip(page * 10).Take(10).Select(x => $"{x.Mention} | {x.Id} | {x.GetMembersAsync().GetAwaiter().GetResult().Count()} Members")));
+                            roles.Skip(page * 10).Take(10).Select(x =>
+                                $"{x.Mention} | {x.Id} | {x.GetMembersAsync().GetAwaiter().GetResult().Count()} Members")));
                 }
             }
         }
@@ -1413,7 +1443,7 @@ public partial class Utility : MewdekoModuleBase<UtilityService>
                     .WithDefaultEmotes()
                     .WithActionOnCancellation(ActionOnStop.DeleteMessage)
                     .Build();
-                await interactivity.SendPaginatorAsync(paginator, ctx.Channel, TimeSpan.FromMinutes(60));
+                await serv.SendPaginatorAsync(paginator, ctx.Channel, TimeSpan.FromMinutes(60));
 
                 async Task<PageBuilder> PageFactory(int page)
                 {
@@ -1421,7 +1451,8 @@ public partial class Utility : MewdekoModuleBase<UtilityService>
                     return new PageBuilder().WithOkColor().WithTitle("Guild Roles List")
                         .WithDescription(string.Join("\n",
                             roles.Skip(page * 10).Take(10).Select(x => x as SocketRole)
-                                .Select(x => $"{x.Mention} | {x.Id} | {x.GetMembersAsync().GetAwaiter().GetResult().Count()}")));
+                                .Select(x =>
+                                    $"{x.Mention} | {x.Id} | {x.GetMembersAsync().GetAwaiter().GetResult().Count()}")));
                 }
             }
         }
@@ -1463,8 +1494,11 @@ public partial class Utility : MewdekoModuleBase<UtilityService>
             {
                 try
                 {
-                    await channel.SendFilesAsync(attachments: attachments, plainText, embeds: embedData, components: components?.Build(),
-                            allowedMentions: !canMention ? new AllowedMentions(AllowedMentionTypes.Users) : AllowedMentions.All)
+                    await channel.SendFilesAsync(attachments: attachments, plainText, embeds: embedData,
+                            components: components?.Build(),
+                            allowedMentions: !canMention
+                                ? new AllowedMentions(AllowedMentionTypes.Users)
+                                : AllowedMentions.All)
                         .ConfigureAwait(false);
                     foreach (var i in streams)
                         await i.DisposeAsync();
@@ -1477,10 +1511,11 @@ public partial class Utility : MewdekoModuleBase<UtilityService>
             }
             else
                 try
-
                 {
                     await channel.SendMessageAsync(plainText, embeds: embedData, components: components?.Build(),
-                            allowedMentions: !canMention ? new AllowedMentions(AllowedMentionTypes.Users) : AllowedMentions.All)
+                            allowedMentions: !canMention
+                                ? new AllowedMentions(AllowedMentionTypes.Users)
+                                : AllowedMentions.All)
                         .ConfigureAwait(false);
                 }
                 catch (Exception ex)
@@ -1495,7 +1530,10 @@ public partial class Utility : MewdekoModuleBase<UtilityService>
             {
                 try
                 {
-                    await channel.SendFilesAsync(attachments, msg, allowedMentions: !canMention ? new AllowedMentions(AllowedMentionTypes.Users) : AllowedMentions.All)
+                    await channel.SendFilesAsync(attachments, msg,
+                            allowedMentions: !canMention
+                                ? new AllowedMentions(AllowedMentionTypes.Users)
+                                : AllowedMentions.All)
                         .ConfigureAwait(false);
                     foreach (var i in streams)
                         await i.DisposeAsync();
@@ -1518,15 +1556,19 @@ public partial class Utility : MewdekoModuleBase<UtilityService>
         }
     }
 
-    private async Task<(List<FileAttachment> attachments, string? message, List<MemoryStream> streams)> HandleAttachmentsAsync(bool isTextInAttachments, string? message)
+    private async Task<(List<FileAttachment> attachments, string? message, List<MemoryStream> streams)>
+        HandleAttachmentsAsync(bool isTextInAttachments, string? message)
     {
         var attachments = new List<FileAttachment>();
         var streams = new List<MemoryStream>();
-        if (!ctx.Message.Attachments.Any()) return (attachments, message, streams);
+        if (!ctx.Message.Attachments.Any())
+            return (attachments, message, streams);
 
         var userAttachments = new List<IAttachment>(ctx.Message.Attachments);
 
-        if (isTextInAttachments && await PromptUserConfirmAsync("Do you want to use the text file in your attachments as the message?", ctx.User.Id))
+        if (isTextInAttachments &&
+            await PromptUserConfirmAsync("Do you want to use the text file in your attachments as the message?",
+                ctx.User.Id))
         {
             var txtAttachment = userAttachments.First(x => x.Filename.EndsWith("txt"));
             message = await httpClient.GetStringAsync(txtAttachment.Url);
@@ -1535,7 +1577,8 @@ public partial class Utility : MewdekoModuleBase<UtilityService>
 
         foreach (var i in userAttachments)
         {
-            using var sr = await httpClient.GetAsync(i.Url, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
+            using var sr = await httpClient.GetAsync(i.Url, HttpCompletionOption.ResponseHeadersRead)
+                .ConfigureAwait(false);
             var imgData = await sr.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
             var imgStream = new MemoryStream(imgData);
             attachments.Add(new FileAttachment(imgStream, i.Filename));
@@ -1544,6 +1587,7 @@ public partial class Utility : MewdekoModuleBase<UtilityService>
 
         return (attachments, message, streams);
     }
+
 
     [Cmd, Aliases, RequireContext(ContextType.Guild), UserPerm(GuildPermission.ManageMessages), Priority(0)]
     public async Task Say([Remainder] string? message = null) => await Say((ITextChannel)ctx.Channel, message);
@@ -1556,7 +1600,8 @@ public partial class Utility : MewdekoModuleBase<UtilityService>
         var commandStats = uow.CommandStats.Count(x => x.DateAdded.Value >= time);
         var users = new[]
         {
-            await client.Rest.GetUserAsync(170185463200481280).ConfigureAwait(false), await client.Rest.GetUserAsync(224188029324099584).ConfigureAwait(false),
+            await client.Rest.GetUserAsync(280835732728184843).ConfigureAwait(false),
+            await client.Rest.GetUserAsync(786375627892064257).ConfigureAwait(false),
         };
         var libraryInfo = new LibraryInfo(DllVersionChecker.GetDllVersions);
         var targetFramework = LibraryInfo.GetTargetFramework();
@@ -1653,6 +1698,7 @@ public partial class Utility : MewdekoModuleBase<UtilityService>
         await Sem.WaitAsync(5000).ConfigureAwait(false);
         try
         {
+            await using var uow = db.GetDbContext();
             var sw = Stopwatch.StartNew();
             var msg = await ctx.Channel.SendMessageAsync("🏓").ConfigureAwait(false);
             sw.Stop();
@@ -1709,7 +1755,7 @@ public partial class Utility : MewdekoModuleBase<UtilityService>
             .WithActionOnCancellation(ActionOnStop.DeleteMessage)
             .Build();
 
-        await interactivity.SendPaginatorAsync(paginator, ctx.Channel, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
+        await serv.SendPaginatorAsync(paginator, ctx.Channel, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
     }
 
     [Cmd, Aliases]

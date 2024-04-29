@@ -15,16 +15,14 @@ public class GreetSettingsService : INService, IReadyExecutor
     private readonly GreetGrouper<IGuildUser> greets = new();
 
     public GreetSettingsService(DiscordSocketClient client, GuildSettingsService gss, DbService db,
-        BotConfigService bss, EventHandler eventHandler)
+        BotConfigService bss, EventHandler eventHandler, Mewdeko bot)
     {
         this.db = db;
         this.client = client;
         this.gss = gss;
         this.bss = bss;
-        using var uow = db.GetDbContext();
-        var gc = uow.GuildConfigs.Where(x => this.client.Guilds.Select(socketGuild => socketGuild.Id).Contains(x.GuildId));
         GuildConfigsCache = new ConcurrentDictionary<ulong, GreetSettings>(
-            gc
+            bot.AllGuildConfigs
                 .ToDictionary(g => g.GuildId, GreetSettings.Create));
 
         eventHandler.UserJoined += UserJoined;
@@ -84,16 +82,19 @@ public class GreetSettingsService : INService, IReadyExecutor
         var rep = new ReplacementBuilder()
             .WithDefault(user, chan, user.Guild, client)
             .Build();
-        if (SmartEmbed.TryParse(rep.Replace(conf.BoostMessage), user.Guild?.Id, out var embed, out var plainText, out var components))
+        if (SmartEmbed.TryParse(rep.Replace(conf.BoostMessage), user.Guild?.Id, out var embed, out var plainText,
+                out var components))
         {
             try
             {
-                var toDelete = await chan.SendMessageAsync(plainText, embeds: embed, components: components?.Build()).ConfigureAwait(false);
-                if (conf.BoostMessageDeleteAfter > 0) toDelete.DeleteAfter(conf.BoostMessageDeleteAfter);
+                var toDelete = await chan.SendMessageAsync(plainText, embeds: embed, components: components?.Build())
+                    .ConfigureAwait(false);
+                if (conf.BoostMessageDeleteAfter > 0)
+                    toDelete.DeleteAfter(conf.BoostMessageDeleteAfter);
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Error sending boost message.");
+                Log.Error(ex, "Error sending boost message");
             }
         }
         else
@@ -103,11 +104,12 @@ public class GreetSettingsService : INService, IReadyExecutor
             {
                 var toDelete = await chan.SendMessageAsync(msg).ConfigureAwait(false);
 
-                if (conf.BoostMessageDeleteAfter > 0) toDelete.DeleteAfter(conf.BoostMessageDeleteAfter);
+                if (conf.BoostMessageDeleteAfter > 0)
+                    toDelete.DeleteAfter(conf.BoostMessageDeleteAfter);
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Error sending boost message.");
+                Log.Error(ex, "Error sending boost message");
             }
         }
     }
@@ -119,7 +121,8 @@ public class GreetSettingsService : INService, IReadyExecutor
             // if user is a new booster
             // or boosted again the same server
             if ((optOldUser.Value is not { PremiumSince: null } || newUser is not { PremiumSince: not null })
-                && (optOldUser.Value?.PremiumSince is not { } oldDate || newUser.PremiumSince is not { } newDate || newDate <= oldDate))
+                && (optOldUser.Value?.PremiumSince is not { } oldDate || newUser.PremiumSince is not { } newDate ||
+                    newDate <= oldDate))
             {
                 return;
             }
@@ -157,10 +160,12 @@ public class GreetSettingsService : INService, IReadyExecutor
             var user = usr as SocketGuildUser;
             var conf = await GetOrAddSettingsForGuild(guild.Id);
 
-            if (!conf.SendChannelByeMessage) return;
+            if (!conf.SendChannelByeMessage)
+                return;
 
             if ((await guild.GetTextChannelsAsync()).SingleOrDefault(c =>
-                    c.Id == conf.ByeMessageChannelId) is not { } channel) //maybe warn the server owner that the channel is missing
+                    c.Id == conf.ByeMessageChannelId) is not
+                    { } channel) //maybe warn the server owner that the channel is missing
             {
                 return;
             }
@@ -281,19 +286,24 @@ public class GreetSettingsService : INService, IReadyExecutor
             .Build();
         var lh = await GetLeaveHook(channel.GuildId);
 
-        if (SmartEmbed.TryParse(rep.Replace(conf.ChannelByeMessageText), channel.GuildId, out var embed, out var plainText, out var components))
+        if (SmartEmbed.TryParse(rep.Replace(conf.ChannelByeMessageText), channel.GuildId, out var embed,
+                out var plainText, out var components))
         {
             try
             {
                 if (string.IsNullOrEmpty(lh) || lh == 0.ToString())
                 {
-                    var toDelete = await channel.SendMessageAsync(plainText, embeds: embed, components: components?.Build()).ConfigureAwait(false);
-                    if (conf.AutoDeleteByeMessagesTimer > 0) toDelete.DeleteAfter(conf.AutoDeleteByeMessagesTimer);
+                    var toDelete = await channel
+                        .SendMessageAsync(plainText, embeds: embed, components: components?.Build())
+                        .ConfigureAwait(false);
+                    if (conf.AutoDeleteByeMessagesTimer > 0)
+                        toDelete.DeleteAfter(conf.AutoDeleteByeMessagesTimer);
                 }
                 else
                 {
                     var webhook = new DiscordWebhookClient(await GetLeaveHook(channel.GuildId));
-                    var toDelete = await webhook.SendMessageAsync(plainText, embeds: embed, components: components?.Build())
+                    var toDelete = await webhook
+                        .SendMessageAsync(plainText, embeds: embed, components: components?.Build())
                         .ConfigureAwait(false);
                     if (conf.AutoDeleteByeMessagesTimer > 0)
                     {
@@ -317,7 +327,8 @@ public class GreetSettingsService : INService, IReadyExecutor
                 if (string.IsNullOrEmpty(lh) || lh == 0.ToString())
                 {
                     var toDelete = await channel.SendMessageAsync(msg.SanitizeMentions()).ConfigureAwait(false);
-                    if (conf.AutoDeleteByeMessagesTimer > 0) toDelete.DeleteAfter(conf.AutoDeleteByeMessagesTimer);
+                    if (conf.AutoDeleteByeMessagesTimer > 0)
+                        toDelete.DeleteAfter(conf.AutoDeleteByeMessagesTimer);
                 }
                 else
                 {
@@ -337,7 +348,8 @@ public class GreetSettingsService : INService, IReadyExecutor
         }
     }
 
-    private Task GreetUsers(GreetSettings conf, ITextChannel channel, IGuildUser user) => GreetUsers(conf, channel, new[]
+    private Task GreetUsers(GreetSettings conf, ITextChannel channel, IGuildUser user) => GreetUsers(conf, channel,
+        new[]
     {
         user
     });
@@ -354,7 +366,8 @@ public class GreetSettingsService : INService, IReadyExecutor
             .WithManyUsers(users)
             .Build();
         var gh = await GetGreetHook(channel.GuildId);
-        if (SmartEmbed.TryParse(rep.Replace(conf.ChannelGreetMessageText), channel.GuildId, out var embed, out var plainText, out var components))
+        if (SmartEmbed.TryParse(rep.Replace(conf.ChannelGreetMessageText), channel.GuildId, out var embed,
+                out var plainText, out var components))
         {
             try
             {
@@ -427,11 +440,13 @@ public class GreetSettingsService : INService, IReadyExecutor
             .WithDefault(user, channel, (SocketGuild)user.Guild, client)
             .Build();
 
-        if (SmartEmbed.TryParse(rep.Replace(conf.DmGreetMessageText), user.GuildId, out var embed, out var plainText, out var components))
+        if (SmartEmbed.TryParse(rep.Replace(conf.DmGreetMessageText), user.GuildId, out var embed, out var plainText,
+                out var components))
         {
             try
             {
-                await channel.SendMessageAsync(plainText, embeds: embed, components: components?.Build()).ConfigureAwait(false);
+                await channel.SendMessageAsync(plainText, embeds: embed, components: components?.Build())
+                    .ConfigureAwait(false);
             }
             catch
             {
@@ -441,7 +456,8 @@ public class GreetSettingsService : INService, IReadyExecutor
         else
         {
             var msg = rep.Replace(conf.DmGreetMessageText);
-            if (string.IsNullOrWhiteSpace(msg)) return true;
+            if (string.IsNullOrWhiteSpace(msg))
+                return true;
             try
             {
                 await channel.SendConfirmAsync(msg).ConfigureAwait(false);
@@ -465,7 +481,8 @@ public class GreetSettingsService : INService, IReadyExecutor
 
                 if (conf.SendChannelGreetMessage)
                 {
-                    var channel = await user.Guild.GetTextChannelAsync(conf.GreetMessageChannelId).ConfigureAwait(false);
+                    var channel = await user.Guild.GetTextChannelAsync(conf.GreetMessageChannelId)
+                        .ConfigureAwait(false);
                     if (channel != null)
                     {
                         if (GroupGreets)
@@ -503,7 +520,8 @@ public class GreetSettingsService : INService, IReadyExecutor
                 {
                     var channel = await user.CreateDMChannelAsync().ConfigureAwait(false);
 
-                    if (channel != null) await GreetDmUser(conf, user).ConfigureAwait(false);
+                    if (channel != null)
+                        await GreetDmUser(conf, user).ConfigureAwait(false);
                 }
             }
             catch
@@ -540,7 +558,8 @@ public class GreetSettingsService : INService, IReadyExecutor
 
     public async Task<bool> SetSettings(ulong guildId, GreetSettings settings)
     {
-        if (settings.AutoDeleteByeMessagesTimer is > 600 or < 0 || settings.AutoDeleteGreetMessagesTimer is > 600 or < 0)
+        if (settings.AutoDeleteByeMessagesTimer is > 600 or < 0 ||
+            settings.AutoDeleteGreetMessagesTimer is > 600 or < 0)
             return false;
 
         await using var uow = db.GetDbContext();
@@ -584,6 +603,7 @@ public class GreetSettingsService : INService, IReadyExecutor
         return enabled;
     }
 
+
     public async Task<bool> SetGreetMessage(ulong guildId, string? message)
     {
         message = message?.SanitizeMentions();
@@ -617,6 +637,7 @@ public class GreetSettingsService : INService, IReadyExecutor
 
         return enabled;
     }
+
 
     public async Task<bool> SetGreetDmMessage(ulong guildId, string? message)
     {
@@ -652,6 +673,7 @@ public class GreetSettingsService : INService, IReadyExecutor
 
         return enabled;
     }
+
 
     public async Task<bool> SetByeMessage(ulong guildId, string? message)
     {

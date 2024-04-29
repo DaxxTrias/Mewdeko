@@ -39,12 +39,14 @@ public class StatusRolesService : INService, IReadyExecutor
             {
                 return;
             }
+
             if (status.State is null && beforeStatus?.State is null || status.State == beforeStatus?.State)
             {
                 return;
             }
 
-            if (!await cache.SetUserStatusCache(args.Id, status.State?.ToBase64() is null ? "none" : status.State.ToBase64()))
+            if (!await cache.SetUserStatusCache(args.Id,
+                    status.State?.ToBase64() is null ? "none" : status.State.ToBase64()))
             {
                 return;
             }
@@ -82,7 +84,9 @@ public class StatusRolesService : INService, IReadyExecutor
                                     }
                                     catch
                                     {
-                                        Log.Error($"Unable to remove added role {role} for {user} in {user.Guild} due to permission issues.");
+                                        Log.Error(
+                                            "Unable to remove added role {Role} for {User} in {UserGuild} due to permission issues",
+                                            role, user, user.Guild);
                                     }
                                 }
                             }
@@ -92,7 +96,8 @@ public class StatusRolesService : INService, IReadyExecutor
                         {
                             if (toRemove.Any())
                             {
-                                foreach (var role in toRemove.Where(socketRole => !user.Roles.Select(x => x.Id).Contains(socketRole)))
+                                foreach (var role in toRemove.Where(socketRole =>
+                                             !user.Roles.Select(x => x.Id).Contains(socketRole)))
                                 {
                                     try
                                     {
@@ -100,7 +105,8 @@ public class StatusRolesService : INService, IReadyExecutor
                                     }
                                     catch
                                     {
-                                        Log.Error($"Unable to add removed role {role} for {user} in {user.Guild} due to permission issues.");
+                                        Log.Error(
+                                            $"Unable to add removed role {role} for {user} in {user.Guild} due to permission issues.");
                                     }
                                 }
                             }
@@ -155,9 +161,11 @@ public class StatusRolesService : INService, IReadyExecutor
 
                 var rep = new ReplacementBuilder().WithDefault(user, channel, user.Guild, client).Build();
 
-                if (SmartEmbed.TryParse(rep.Replace(i.StatusEmbed), user.Guild.Id, out var embeds, out var plainText, out var components))
+                if (SmartEmbed.TryParse(rep.Replace(i.StatusEmbed), user.Guild.Id, out var embeds, out var plainText,
+                        out var components))
                 {
-                    await channel.SendMessageAsync(plainText ?? null, embeds: embeds ?? Array.Empty<Embed>(), components: components?.Build());
+                    await channel.SendMessageAsync(plainText ?? null, embeds: embeds ?? Array.Empty<Embed>(),
+                        components: components?.Build());
                 }
                 else
                 {
@@ -168,7 +176,8 @@ public class StatusRolesService : INService, IReadyExecutor
         catch (Exception e)
         {
             var status = args3.Activities?.FirstOrDefault() as CustomStatusGame;
-            Log.Error("Error in StatusRolesService. After Status: {status} args: {args2} args2: {args3}\n{Exception}", status.State, args2, args3, e);
+            Log.Error("Error in StatusRolesService. After Status: {Status} args: {Args2} args2: {Args3}\n{Exception}",
+                status.State, args2, args3, e);
         }
     }
 
@@ -177,7 +186,8 @@ public class StatusRolesService : INService, IReadyExecutor
         await using var uow = db.GetDbContext();
         var toAdd = new StatusRolesTable
         {
-            Status = status, GuildId = guildId
+            Status = status,
+            GuildId = guildId
         };
         if (uow.StatusRoles.Where(x => x.GuildId == guildId).Any(x => x.Status == status))
             return false;

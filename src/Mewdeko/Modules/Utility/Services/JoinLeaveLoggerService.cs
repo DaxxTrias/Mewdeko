@@ -15,7 +15,8 @@ public class JoinLeaveLoggerService : INService
     private readonly Timer flushTimer;
     private readonly IBotCredentials credentials;
 
-    public JoinLeaveLoggerService(EventHandler eventHandler, IDataCache cache, DbService db, IBotCredentials credentials)
+    public JoinLeaveLoggerService(EventHandler eventHandler, IDataCache cache, DbService db,
+        IBotCredentials credentials)
     {
         dbContext = db;
         this.credentials = credentials;
@@ -376,7 +377,7 @@ public class JoinLeaveLoggerService : INService
 
     private async Task FlushDataToSqliteAsync()
     {
-        Log.Information("Flushing join/leave logs to SQLite...");
+        Log.Information("Flushing join/leave logs to DB....");
         await using var uow = dbContext.GetDbContext();
         var redisDatabase = cache.Redis.GetDatabase();
         var guildIds = uow.JoinLeaveLogs.Select(e => e.GuildId).Distinct().ToList();
@@ -396,7 +397,7 @@ public class JoinLeaveLoggerService : INService
         }
 
         await uow.SaveChangesAsync();
-        Log.Information("Flushing join/leave logs to SQLite completed.");
+        Log.Information("Flushing join/leave logs to DB completed");
     }
 
     public async Task SetJoinColor(uint color, ulong guildId)

@@ -14,13 +14,13 @@ public class StreamRoleService : INService, IUnloadableService
     private readonly DbService db;
     private readonly ConcurrentDictionary<ulong, StreamRoleSettings> guildSettings;
 
-    public StreamRoleService(DiscordSocketClient client, DbService db, EventHandler eventHandler)
+    public StreamRoleService(DiscordSocketClient client, DbService db, EventHandler eventHandler, Mewdeko bot)
     {
         this.db = db;
         this.eventHandler = eventHandler;
-        using var uow = db.GetDbContext();
-        var gc = uow.GuildConfigs.Include(x => x.StreamRole).Where(x => client.Guilds.Select(socketGuild => socketGuild.Id).Contains(x.GuildId));
-        guildSettings = gc
+        var allgc = bot.AllGuildConfigs;
+
+        guildSettings = allgc
             .ToDictionary(x => x.GuildId, x => x.StreamRole)
             .Where(x => x.Value is { Enabled: true })
             .ToConcurrent();
@@ -73,7 +73,8 @@ public class StreamRoleService : INService, IUnloadableService
             {
                 var userObj = new StreamRoleWhitelistedUser
                 {
-                    UserId = userId, Username = userName
+                    UserId = userId,
+                    Username = userName
                 };
 
                 if (action == AddRemove.Rem)
@@ -94,7 +95,8 @@ public class StreamRoleService : INService, IUnloadableService
             {
                 var userObj = new StreamRoleBlacklistedUser
                 {
-                    UserId = userId, Username = userName
+                    UserId = userId,
+                    Username = userName
                 };
 
                 if (action == AddRemove.Rem)
@@ -115,7 +117,8 @@ public class StreamRoleService : INService, IUnloadableService
             UpdateCache(guild.Id, streamRoleSettings);
         }
 
-        if (success) await RescanUsers(guild).ConfigureAwait(false);
+        if (success)
+            await RescanUsers(guild).ConfigureAwait(false);
         return success;
     }
 
@@ -219,7 +222,8 @@ public class StreamRoleService : INService, IUnloadableService
         var g = (StreamingGame)user.Activities
             .FirstOrDefault(a => a is StreamingGame &&
                                  (string.IsNullOrWhiteSpace(setting.Keyword)
-                                  || a.Name.Contains(setting.Keyword, StringComparison.InvariantCultureIgnoreCase) || setting.Whitelist.Any(x => x.UserId == user.Id)));
+                                  || a.Name.Contains(setting.Keyword, StringComparison.InvariantCultureIgnoreCase) ||
+                                  setting.Whitelist.Any(x => x.UserId == user.Id)));
 
         if (g is not null
             && setting.Enabled
@@ -232,7 +236,7 @@ public class StreamRoleService : INService, IUnloadableService
                 if (addRole == null)
                 {
                     await StopStreamRole(user.Guild).ConfigureAwait(false);
-                    Log.Warning("Stream role in server {0} no longer exists. Stopping.", setting.AddRoleId);
+                    Log.Warning("Stream role in server {0} no longer exists. Stopping", setting.AddRoleId);
                     return;
                 }
 
@@ -299,5 +303,6 @@ public class StreamRoleService : INService, IUnloadableService
         }
     }
 
-    private void UpdateCache(ulong guildId, StreamRoleSettings setting) => guildSettings.AddOrUpdate(guildId, _ => setting, (_, _) => setting);
+    private void UpdateCache(ulong guildId, StreamRoleSettings setting) =>
+        guildSettings.AddOrUpdate(guildId, _ => setting, (_, _) => setting);
 }

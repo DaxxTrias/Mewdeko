@@ -25,7 +25,7 @@ public class StatsService : IStatsService, IReadyExecutor
 
     public StatsService(
         DiscordSocketClient client, IBotCredentials creds, ICoordinator coord, CommandService cmdServ,
-        HttpClient http, IDataCache cache, EventHandler handler)
+        HttpClient http, IDataCache cache)
     {
         Client = client;
         Creds = creds;
@@ -174,14 +174,18 @@ public class StatsService : IStatsService, IReadyExecutor
             {
                 Log.Information("Updating top guilds");
                 var guilds = await Client.Rest.GetGuildsAsync(true);
-                var servers = guilds.OrderByDescending(x => x.ApproximateMemberCount.Value).Where(x => !x.Name.ToLower().Contains("botlist")).Take(11).Select(x =>
+                var servers = guilds.OrderByDescending(x => x.ApproximateMemberCount.Value)
+                    .Where(x => !x.Name.ToLower().Contains("botlist")).Take(11).Select(x =>
                     new MewdekoPartialGuild
                     {
-                        IconUrl = x.IconId.StartsWith("a_") ? x.IconUrl.Replace(".jpg", ".gif") : x.IconUrl, MemberCount = x.ApproximateMemberCount.Value, Name = x.Name
+                            IconUrl = x.IconId.StartsWith("a_") ? x.IconUrl.Replace(".jpg", ".gif") : x.IconUrl,
+                            MemberCount = x.ApproximateMemberCount.Value,
+                            Name = x.Name
                     });
 
                 var serialied = Json.Serialize(servers);
-                await cache.Redis.GetDatabase().StringSetAsync($"{Client.CurrentUser.Id}_topguilds", serialied).ConfigureAwait(false);
+                await cache.Redis.GetDatabase().StringSetAsync($"{Client.CurrentUser.Id}_topguilds", serialied)
+                    .ConfigureAwait(false);
                 Log.Information("Updated top guilds");
             }
             catch (Exception e)

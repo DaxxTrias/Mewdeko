@@ -9,17 +9,8 @@ namespace Mewdeko.Modules.Utility;
 public partial class Utility
 {
     [Group]
-    public class InfoCommands : MewdekoSubmodule<UtilityService>
+    public class InfoCommands(DiscordSocketClient client, MuteService muteService) : MewdekoSubmodule<UtilityService>
     {
-        private readonly DiscordSocketClient client;
-        private readonly MuteService muteService;
-
-        public InfoCommands(DiscordSocketClient client, MuteService muteService)
-        {
-            this.client = client;
-            this.muteService = muteService;
-        }
-
         [Cmd, Aliases, RequireContext(ContextType.Guild)]
         public async Task RInfo(IRole role)
         {
@@ -47,7 +38,8 @@ public partial class Utility
             {
                 case null when channel == null:
                     await ctx.Channel.SendErrorAsync(
-                        "You arent in a voice channel, and you haven't mentioned either to use this command!").ConfigureAwait(false);
+                            "You arent in a voice channel, and you haven't mentioned either to use this command!")
+                        .ConfigureAwait(false);
                     return;
                 // ReSharper disable once ConditionIsAlwaysTrueOrFalse
                 case null when channel is not null:
@@ -93,7 +85,8 @@ public partial class Utility
             var usr = await client.Rest.GetUserAsync(id).ConfigureAwait(false);
             if (usr is null)
             {
-                await ctx.Channel.SendErrorAsync("That user could not be found. Please ensure that was the correct ID.");
+                await ctx.Channel.SendErrorAsync(
+                    "That user could not be found. Please ensure that was the correct ID.");
             }
             else
             {
@@ -154,8 +147,8 @@ public partial class Utility
                             .TrimTo(1024)));
             }
 
-            await ctx.Channel.SendMessageAsync(embed: embed.Build(), components:
-                component.Build()).ConfigureAwait(false);
+            await ctx.Channel.SendMessageAsync(embed: embed.Build(), components: component.Build())
+                .ConfigureAwait(false);
         }
 
         [Cmd, Aliases, RequireContext(ContextType.Guild)]
@@ -217,7 +210,8 @@ public partial class Utility
                 }
             }
 
-            var msg = await ctx.Channel.SendMessageAsync(embed: embed.Build(), components: component.Build()).ConfigureAwait(false);
+            var msg = await ctx.Channel.SendMessageAsync(embed: embed.Build(), components: component.Build())
+                .ConfigureAwait(false);
             var input = await GetButtonInputAsync(ctx.Channel.Id, msg.Id, ctx.User.Id).ConfigureAwait(false);
             if (input == "moreuinfo")
             {
@@ -229,7 +223,8 @@ public partial class Utility
 
                 embed.AddField("Deafened", user.IsDeafened);
                 embed.AddField("Is VC Muted", user.IsMuted);
-                embed.AddField("Is Server Muted", user.GetRoles().Contains(await muteService.GetMuteRole(ctx.Guild).ConfigureAwait(false)));
+                embed.AddField("Is Server Muted",
+                    user.GetRoles().Contains(await muteService.GetMuteRole(ctx.Guild).ConfigureAwait(false)));
                 await msg.ModifyAsync(x =>
                 {
                     x.Embed = embed.Build();
@@ -261,8 +256,10 @@ public partial class Utility
                 .WithOkColor()
                 .AddField(efb => efb.WithName("Username").WithValue(usr.ToString()).WithIsInline(true))
                 .AddField(efb =>
-                    efb.WithName($"{(av.GuildAvatarId is null ? "" : "Guild")} Avatar Url").WithValue($"[Link]({avatarUrl})").WithIsInline(true))
-                .WithImageUrl(avatarUrl).Build(), components: av.GuildAvatarId is null ? null : components.Build()).ConfigureAwait(false);
+                        efb.WithName($"{(av.GuildAvatarId is null ? "" : "Guild")} Avatar Url")
+                            .WithValue($"[Link]({avatarUrl})").WithIsInline(true))
+                    .WithImageUrl(avatarUrl).Build(), components: av.GuildAvatarId is null ? null : components.Build())
+                .ConfigureAwait(false);
         }
     }
 
@@ -270,7 +267,7 @@ public partial class Utility
     public async Task Banner([Remainder] IGuildUser? usr = null)
     {
         usr ??= (IGuildUser)ctx.User;
-        //var components = new ComponentBuilder().WithButton("Non-Guild Banner", $"bannertype:real,{usr.Id}");
+        var components = new ComponentBuilder().WithButton("Non-Guild Banner", $"bannertype:real,{usr.Id}");
         var guildUser = await client.Rest.GetGuildUserAsync(ctx.Guild.Id, usr.Id);
         var user = await client.Rest.GetUserAsync(usr.Id);
         if (user.GetBannerUrl(size: 2048) == null && guildUser.GetBannerUrl() == null)
@@ -285,8 +282,9 @@ public partial class Utility
             .WithOkColor()
             .AddField(efb => efb.WithName("Username").WithValue(usr.ToString()).WithIsInline(true))
             .AddField(efb =>
-                efb.WithName($"{(guildUser.BannerId is null ? "" : "Guild")} Banner Url").WithValue($"[Link]({avatarUrl})").WithIsInline(true))
-            //.WithImageUrl(avatarUrl).Build(), components: guildUser.BannerId is null ? null : components.Build()).ConfigureAwait(false);
-            .WithImageUrl(avatarUrl).Build(), components: guildUser.BannerId is null ? null : null).ConfigureAwait(false);
+                    efb.WithName($"{(guildUser.BannerId is null ? "" : "Guild")} Banner Url")
+                        .WithValue($"[Link]({avatarUrl})").WithIsInline(true))
+                .WithImageUrl(avatarUrl).Build(), components: guildUser.BannerId is null ? null : components.Build())
+            .ConfigureAwait(false);
     }
 }

@@ -212,6 +212,7 @@ public partial class ServerManagement
         var msg = await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
         foreach (var i in tags)
         {
+            using var http = factory.CreateClient();
             var emoteName = i.Name; // Default to the emote name
 
             // Define a pattern to find the emote in the message
