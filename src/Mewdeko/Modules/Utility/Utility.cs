@@ -38,6 +38,7 @@ public partial class Utility(
     IStatsService stats,
     IBotCredentials creds,
     DownloadTracker tracker,
+    CommandService cmdServ,
     InteractiveService serv,
     ICoordinator coordinator,
     GuildSettingsService guildSettings,
@@ -1775,8 +1776,8 @@ public partial class Utility(
                     .WithAuthor($"{client.CurrentUser.Username} v{StatsService.BotVersion}", client.CurrentUser.GetAvatarUrl(), config.Data.SupportServer)
                     //.AddField(GetText("authors"), $"[{users[0]}](https://github.com/SylveonDeko)\n[{users[1]}](https://github.com/CottageDwellingCat)")
                     .AddField(GetText("commands_ran"), $"{commandStats}/5s")
-                    //.AddField("Library", stats.Library)
-                    .AddField(GetText("library"), $"{targetFramework} \n {libraryInfo.Library} \n {libraryInfo.OpenAILib}")
+                    .AddField(GetText("command_count"), cmdServ.Commands.DistinctBy(x => x.Name).Count())
+                    .AddField("Library", stats.Library)
                     .AddField(GetText("owner_ids"), string.Join("\n", creds.OwnerIds.Select(x => $"<@{x}>")))
                     .AddField(GetText("shard"), $"#{client.ShardId} / {creds.TotalShards}")
                     .AddField(GetText("memory"), $"{stats.Heap} MB")
