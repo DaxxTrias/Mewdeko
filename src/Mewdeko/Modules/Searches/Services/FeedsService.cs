@@ -11,7 +11,7 @@ namespace Mewdeko.Modules.Searches.Services;
 public class FeedsService : INService
 {
     private readonly DiscordShardedClient client;
-    private readonly DbService db;
+    private readonly MewdekoContext dbContext;
     private bool isRunning;
 
     private readonly ConcurrentDictionary<string, DateTime> lastPosts =
@@ -25,9 +25,9 @@ public class FeedsService : INService
     /// <param name="db">The database service.</param>
     /// <param name="client">The Discord client.</param>
     /// <param name="bot">The bot instance.</param>
-    public FeedsService(DbService db, DiscordShardedClient client, Mewdeko bot)
+    public FeedsService(MewdekoContext dbContext, DiscordShardedClient client, Mewdeko bot)
     {
-        this.db = db;
+        this.dbContext = dbContext;
         subs = new ConcurrentDictionary<string, HashSet<FeedSub>>();
 
         this.client = client;
@@ -38,8 +38,8 @@ public class FeedsService : INService
 
     private async Task<GuildConfig> GetGuildConfigFromId(int guildConfigId)
     {
-        using var uow = db.GetDbContext();
-        return await uow.GuildConfigs.AsQueryable().AsNoTracking().FirstOrDefaultAsync(x => x.Id == guildConfigId);
+
+        return await dbContext.GuildConfigs.AsQueryable().AsNoTracking().FirstOrDefaultAsync(x => x.Id == guildConfigId);
     }
 
     /// <summary>
@@ -448,8 +448,8 @@ public class FeedsService : INService
     /// <returns>A list of feed subscriptions.</returns>
     public List<FeedSub?> GetFeeds(ulong guildId)
     {
-        using var uow = db.GetDbContext();
-        return uow.ForGuildId(guildId,
+
+        return dbContext.ForGuildId(guildId,
                 set => set.Include(x => x.FeedSubs)).GetAwaiter().GetResult()
             .FeedSubs
             .OrderBy(x => x.Id)
@@ -472,8 +472,8 @@ public class FeedsService : INService
             ChannelId = channelId, Url = rssFeed.Trim()
         };
 
-        await using var uow = db.GetDbContext();
-        var gc = await uow.ForGuildId(guildId,
+
+        var gc = await dbContext.ForGuildId(guildId,
             set => set.Include(x => x.FeedSubs));
 
         if (gc.FeedSubs.Any(x => x.Url.ToLower() == fs.Url.ToLower()))
@@ -481,7 +481,7 @@ public class FeedsService : INService
         if (gc.FeedSubs.Count >= 20) return false;
 
         gc.FeedSubs.Add(fs);
-        await uow.SaveChangesAsync();
+        await dbContext.SaveChangesAsync();
         //adding all, in case bot wasn't on this guild when it started
         foreach (var feed in gc.FeedSubs)
             subs.AddOrUpdate(feed.Url.ToLower(), [feed], (_, old) =>
@@ -504,8 +504,8 @@ public class FeedsService : INService
     {
         if (index < 0)
             return false;
-        await using var uow = db.GetDbContext();
-        var items = uow.ForGuildId(guildId, set => set.Include(x => x.FeedSubs)).GetAwaiter().GetResult()
+
+        var items = dbContext.ForGuildId(guildId, set => set.Include(x => x.FeedSubs)).GetAwaiter().GetResult()
             .FeedSubs
             .OrderBy(x => x.Id)
             .ToList();
@@ -516,8 +516,8 @@ public class FeedsService : INService
             return old;
         });
         toupdate.Message = message;
-        uow.Update(toupdate);
-        await uow.SaveChangesAsync().ConfigureAwait(false);
+        dbContext.Update(toupdate);
+        await dbContext.SaveChangesAsync().ConfigureAwait(false);
         subs.AddOrUpdate(toupdate.Url.ToLower(), [], (_, old) =>
         {
             old.Add(toupdate);
@@ -537,8 +537,8 @@ public class FeedsService : INService
         if (index < 0)
             return false;
 
-        using var uow = db.GetDbContext();
-        var items = uow.ForGuildId(guildId, set => set.Include(x => x.FeedSubs)).GetAwaiter().GetResult()
+
+        var items = dbContext.ForGuildId(guildId, set => set.Include(x => x.FeedSubs)).GetAwaiter().GetResult()
             .FeedSubs
             .OrderBy(x => x.Id)
             .ToList();
@@ -551,8 +551,8 @@ public class FeedsService : INService
             old.Remove(toRemove);
             return old;
         });
-        uow.Remove(toRemove);
-        uow.SaveChanges();
+        dbContext.Remove(toRemove);
+        dbContext.SaveChanges();
 
         return true;
     }
