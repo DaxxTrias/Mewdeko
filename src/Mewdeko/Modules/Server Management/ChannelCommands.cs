@@ -156,8 +156,7 @@ public partial class ServerManagement
                 Description =
                     "Are you sure you want to nuke this channel? This will delete the entire channel and remake it."
             };
-            if (!await PromptUserConfirmAsync(embed, ctx.User.Id).ConfigureAwait(false))
-                return;
+            if (!await PromptUserConfirmAsync(embed, ctx.User.Id).ConfigureAwait(false)) return;
             ITextChannel chan;
             if (chan3 is null)
                 chan = ctx.Channel as ITextChannel;
@@ -179,8 +178,7 @@ public partial class ServerManagement
                 var chan2 = await ctx.Guild.CreateTextChannelAsync(chan.Name, x =>
                 {
                     x.Position = chan.Position;
-                    if (chan.Topic is not null)
-                        x.Topic = chan.Topic;
+                    if (chan.Topic is not null) x.Topic = chan.Topic;
                     x.PermissionOverwrites = new Optional<IEnumerable<Overwrite>>(chan.PermissionOverwrites);
                     x.IsNsfw = chan.IsNsfw;
                     x.CategoryId = chan.CategoryId;

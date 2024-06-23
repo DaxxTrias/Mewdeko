@@ -41,12 +41,12 @@ public class Vote(InteractiveService interactivity) : MewdekoModuleBase<VoteServ
                     var rep = new ReplacementBuilder()
                         .WithDefault(ctx.User, null, ctx.Guild as SocketGuild, ctx.Client as DiscordSocketClient)
                         .WithOverride("%votestotalcount%", () => votes.Count.ToString())
-                            .WithOverride("%votesmonthcount%",
-                                () => votes.Count(x => x.DateAdded.Value.Month == DateTime.UtcNow.Month).ToString())
-                            .Build();
+                        .WithOverride("%votesmonthcount%",
+                            () => votes.Count(x => x.DateAdded.Value.Month == DateTime.UtcNow.Month).ToString())
+                        .Build();
 
-                        if (SmartEmbed.TryParse(rep.Replace(voteMessage), ctx.Guild.Id, out var embeds, out var plainText,
-                                out var components))
+                    if (SmartEmbed.TryParse(rep.Replace(voteMessage), ctx.Guild.Id, out var embeds, out var plainText,
+                            out var components))
                     {
                         await ctx.Channel.SendMessageAsync(plainText, embeds: embeds, components: components.Build());
                     }
@@ -192,8 +192,7 @@ public class Vote(InteractiveService interactivity) : MewdekoModuleBase<VoteServ
         if (monthly)
             votes = (await Service.GetVotes(ctx.Guild.Id)).Where(x => x.DateAdded.Value.Month == DateTime.UtcNow.Month)
                 .ToList();
-        else
-            votes = await Service.GetVotes(ctx.Guild.Id);
+        else votes = await Service.GetVotes(ctx.Guild.Id);
         if (votes is null || !votes.Any())
         {
             await ctx.Channel.SendErrorAsync(monthly
@@ -206,8 +205,7 @@ public class Vote(InteractiveService interactivity) : MewdekoModuleBase<VoteServ
         foreach (var i in votes)
         {
             var user = (await ctx.Guild.GetUsersAsync()).FirstOrDefault(x => x.Id == i.UserId);
-            if (user is null)
-                continue;
+            if (user is null) continue;
             var item = voteList.FirstOrDefault(x => x.User == user);
             if (item is not null)
             {
@@ -219,8 +217,7 @@ public class Vote(InteractiveService interactivity) : MewdekoModuleBase<VoteServ
             {
                 voteList.Add(new CustomVoteThingy
                 {
-                    User = user,
-                    VoteCount = 1
+                    User = user, VoteCount = 1
                 });
             }
         }

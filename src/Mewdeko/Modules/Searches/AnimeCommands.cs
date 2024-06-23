@@ -222,8 +222,7 @@ public partial class Searches
         public async Task FindAnime(string? e = null)
         {
             var t = string.Empty;
-            if (e != null)
-                t = e;
+            if (e != null) t = e;
             if (e is null)
             {
                 try
@@ -267,23 +266,20 @@ public partial class Searches
             var image = await c2.GetMediaById(ert.Anilist).ConfigureAwait(false);
             var eb = new EmbedBuilder
             {
-                ImageUrl = image?.CoverImageLarge,
-                Color = Mewdeko.OkColor
+                ImageUrl = image?.CoverImageLarge, Color = Mewdeko.OkColor
             };
             var te = image?.SeasonInt.ToString()?[2..] is ""
                 ? image.SeasonInt.ToString()?[1..]
                 : image?.SeasonInt.ToString()?[2..];
             var entitle = image?.EnglishTitle;
-            if (image?.EnglishTitle == null)
-                entitle = "None";
+            if (image?.EnglishTitle == null) entitle = "None";
             eb.AddField("English Title", entitle);
             eb.AddField("Japanese Title", image?.NativeTitle);
             eb.AddField("Romanji Title", image?.RomajiTitle);
             eb.AddField("Air Start Date", image?.AiringStartDate);
             eb.AddField("Air End Date", image?.AiringEndDate);
             eb.AddField("Season Number", te);
-            if (ert.Episode is not 0)
-                eb.AddField("Episode", ert.Episode);
+            if (ert.Episode is not 0) eb.AddField("Episode", ert.Episode);
             eb.AddField("AniList Link", image?.SiteUrl);
             eb.AddField("MAL Link", $"https://myanimelist.net/anime/{image?.IdMal}");
             eb.AddField("Score", image?.MeanScore);
@@ -297,12 +293,9 @@ public partial class Searches
             var anilist = new Client();
             var te = await anilist.GetCharacterBySearch(chara).ConfigureAwait(false);
             var desc = string.Empty;
-            if (te.DescriptionMd is null)
-                desc = "None";
-            if (te.DescriptionMd != null)
-                desc = te.DescriptionMd;
-            if (te.DescriptionMd is { Length: > 1024 })
-                desc = te.DescriptionMd.TrimTo(1024);
+            if (te.DescriptionMd is null) desc = "None";
+            if (te.DescriptionMd != null) desc = te.DescriptionMd;
+            if (te.DescriptionMd is { Length: > 1024 }) desc = te.DescriptionMd.TrimTo(1024);
             var altnames = string.IsNullOrEmpty(te.AlternativeNames.FirstOrDefault())
                 ? "None"
                 : string.Join(",", te.AlternativeNames);

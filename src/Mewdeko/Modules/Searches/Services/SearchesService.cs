@@ -13,12 +13,7 @@ using Microsoft.EntityFrameworkCore;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Serilog;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Drawing.Processing;
-using SixLabors.ImageSharp.PixelFormats;
-using SixLabors.ImageSharp.Processing;
-using Color = SixLabors.ImageSharp.Color;
-using Image = SixLabors.ImageSharp.Image;
+using SkiaSharp;
 
 namespace Mewdeko.Modules.Searches.Services;
 
@@ -45,7 +40,6 @@ public class SearchesService : INService, IUnloadableService
     private readonly IDataCache cache;
     private readonly IBotCredentials creds;
     private readonly DbService db;
-    private readonly FontProvider fonts;
     private readonly IGoogleApiService google;
     private readonly IHttpClientFactory httpFactory;
 
@@ -60,20 +54,18 @@ public class SearchesService : INService, IUnloadableService
 
     public SearchesService(DiscordSocketClient client, IGoogleApiService google,
         DbService db, IDataCache cache, IHttpClientFactory factory,
-        FontProvider fonts, IBotCredentials creds)
+        FontProvider fonts, IBotCredentials creds, Mewdeko bot)
     {
         httpFactory = factory;
         this.google = google;
         this.db = db;
         imgs = cache.LocalImages;
         this.cache = cache;
-        this.fonts = fonts;
         this.creds = creds;
         rng = new MewdekoRandom();
-        using var uow = db.GetDbContext();
-        var gc = uow.GuildConfigs.Include(x => x.NsfwBlacklistedTags).Where(x => client.Guilds.Select(socketGuild => socketGuild.Id).Contains(x.GuildId));
+        var allgc = bot.AllGuildConfigs;
         blacklistedTags = new ConcurrentDictionary<ulong, HashSet<string>>(
-            gc.ToDictionary(
+            allgc.ToDictionary(
                 x => x.GuildId,
                 x => new HashSet<string>(x.NsfwBlacklistedTags.Select(y => y.Tag))));
 
@@ -198,43 +190,87 @@ public class SearchesService : INService, IUnloadableService
         return data.ToStream();
     }
 
-    private static void DrawAvatar(Image bg, Image avatarImage) => bg.Mutate(x => x.Grayscale().DrawImage(avatarImage, new Point(83, 139), new GraphicsOptions()));
-
     public async Task<byte[]> GetRipPictureFactory((string text, Uri avatarUrl) arg)
     {
         var (text, avatarUrl) = arg;
-        using var bg = Image.Load<Rgba32>(imgs.Rip.ToArray());
-        var (succ, data) = (false, (byte[])null); //await _cache.TryGetImageDataAsync(avatarUrl);
+
+        var bg = SKBitmap.Decode(imgs.Rip.ToArray());
+        var (succ, data) = await cache.TryGetImageDataAsync(avatarUrl);
         if (!succ)
         {
             using var http = httpFactory.CreateClient();
             data = await http.GetByteArrayAsync(avatarUrl).ConfigureAwait(false);
-            using (var avatarImg = Image.Load<Rgba32>(data))
+
+            using (var avatarImg = SKBitmap.Decode(data))
             {
-                avatarImg.Mutate(x => x
-                    .Resize(85, 85)
-                    .ApplyRoundedCorners(42));
-                data = avatarImg.ToStream().ToArray();
-                DrawAvatar(bg, avatarImg);
+                var resizedAvatarImg = avatarImg.Resize(new SKImageInfo(85, 85), SKFilterQuality.High);
+                var roundedAvatarImg = ApplyRoundedCorners(resizedAvatarImg, 42);
+
+                data = SKImage.FromBitmap(roundedAvatarImg).Encode().ToArray();
+                DrawAvatar(bg, roundedAvatarImg);
             }
 
             await cache.SetImageDataAsync(avatarUrl, data).ConfigureAwait(false);
         }
         else
         {
-            using var avatarImg = Image.Load<Rgba32>(data);
+            using var avatarImg = SKBitmap.Decode(data);
             DrawAvatar(bg, avatarImg);
         }
 
-        bg.Mutate(x => x.DrawText(text, fonts.RipFont, Color.Black, new PointF(25, 225)));
+        var textPaint = new SKPaint
+        {
+            Typeface = SKTypeface.FromFamilyName("Arial", SKFontStyleWeight.Bold, SKFontStyleWidth.Normal,
+                SKFontStyleSlant.Upright),
+            TextSize = 14,
+            IsAntialias = true,
+            Color = SKColors.Black
+        };
+
+        using var canvas = new SKCanvas(bg);
+        canvas.DrawText(text, new SKPoint(25, 225), textPaint);
 
         //flowa
-        using (var flowers = Image.Load(imgs.RipOverlay.ToArray()))
-        {
-            bg.Mutate(x => x.DrawImage(flowers, new Point(0, 0), new GraphicsOptions()));
-        }
+        using var flowers = SKBitmap.Decode(imgs.RipOverlay.ToArray());
+        DrawImage(bg, flowers, new SKPoint(0, 0));
 
-        return bg.ToStream().ToArray();
+        return SKImage.FromBitmap(bg).Encode().ToArray();
+    }
+
+// Helper method to draw rounded corners
+    private static SKBitmap ApplyRoundedCorners(SKBitmap input, float radius)
+    {
+        var output = new SKBitmap(input.Width, input.Height, input.AlphaType == SKAlphaType.Opaque);
+
+        using var paint = new SKPaint
+        {
+            IsAntialias = true
+        };
+        using var clipPath = new SKPath();
+
+        var rect = new SKRect(0, 0, input.Width, input.Height);
+        clipPath.AddRoundRect(rect, radius, radius);
+
+        using var canvas = new SKCanvas(output);
+        canvas.ClipPath(clipPath);
+        canvas.DrawBitmap(input, 0, 0, paint);
+
+        return output;
+    }
+
+
+// Helper method to draw an image on a canvas
+    private static void DrawAvatar(SKBitmap bg, SKBitmap avatar)
+    {
+        using var canvas = new SKCanvas(bg);
+        canvas.DrawBitmap(avatar, new SKPoint(0, 0));
+    }
+
+// Helper method to draw an image on a canvas
+    private static void DrawImage(SKBitmap bg, SKBitmap image, SKPoint location)
+    {
+        using var canvas = new SKCanvas(bg);
+        canvas.DrawBitmap(image, location);
     }
 
 
@@ -278,8 +314,7 @@ public class SearchesService : INService, IUnloadableService
     {
         query = query.Trim();
 
-        if (string.IsNullOrEmpty(query))
-            return (default, TimeErrors.InvalidInput);
+        if (string.IsNullOrEmpty(query)) return (default, TimeErrors.InvalidInput);
 
         if (string.IsNullOrWhiteSpace(creds.LocationIqApiKey)
             || string.IsNullOrWhiteSpace(creds.TimezoneDbApiKey))
@@ -432,8 +467,7 @@ public class SearchesService : INService, IUnloadableService
 
     public void ClearCache()
     {
-        foreach (var c in imageCacher)
-            c.Value.Clear();
+        foreach (var c in imageCacher) c.Value.Clear();
     }
 
     public bool NsfwCheck(string reddit) => nsfwreddits.Contains(reddit, StringComparer.OrdinalIgnoreCase);
@@ -469,8 +503,7 @@ public class SearchesService : INService, IUnloadableService
         var res = await http.GetStringAsync("https://official-joke-api.appspot.com/random_joke").ConfigureAwait(false);
         var resObj = JsonConvert.DeserializeAnonymousType(res, new
         {
-            setup = "",
-            punchline = ""
+            setup = "", punchline = ""
         });
         return (resObj.setup, resObj.punchline);
     }
@@ -755,12 +788,8 @@ public class SearchesService : INService, IUnloadableService
         http.DefaultRequestHeaders.Add("User-Agent",
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.77 Safari/537.36");
 
-        using var formData = new MultipartFormDataContent
-        {
-            {
-                new StringContent(query), "q"
-            }
-        };
+        using var formData = new MultipartFormDataContent();
+        formData.Add(new StringContent(query), "q");
         using var response = await http.PostAsync(fullQueryLink, formData).ConfigureAwait(false);
         var content = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
 

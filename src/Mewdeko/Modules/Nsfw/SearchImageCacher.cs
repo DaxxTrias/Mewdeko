@@ -96,8 +96,7 @@ public class SearchImageCacher : INService
                 // retreived images
                 foreach (var tag in img.Tags.Concat(tags).Distinct())
                 {
-                    if (!typeUsedTags.Contains(tag))
-                        continue;
+                    if (!typeUsedTags.Contains(tag)) continue;
                     var set = cache.GetOrCreate(Key(type, tag), e =>
                     {
                         e.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(30);
@@ -262,8 +261,7 @@ public class SearchImageCacher : INService
 
             var result = await DownloadImagesAsync(tags, isExplicit, type, page, cancel).ConfigureAwait(false);
 
-            if (result is not (null or { Count: 0 }))
-                return result;
+            if (result is not (null or { Count: 0 })) return result;
 #if DEBUG
             Log.Information("Tag {0}, page {1} has no result on {2}", string.Join(", ", tags), page, type.ToString());
 #endif
@@ -302,8 +300,7 @@ public class SearchImageCacher : INService
             var downloader = GetImageDownloader(type);
 
             var images = await downloader.DownloadImageDataAsync(tags, page, isExplicit, cancel).ConfigureAwait(false);
-            if (images.Count != 0)
-                return images;
+            if (images.Count != 0) return images;
             var tagStr = string.Join(' ', tags.OrderByDescending(x => x));
             maxPages[(type, tagStr)] = page;
 

@@ -23,8 +23,8 @@ public partial class Moderation
             var components = new ComponentBuilder()
                 .WithButton("Enter Code", "auth_code.enter", ButtonStyle.Success)
                 .WithButton("Get Code", null, ButtonStyle.Link, url: url)
-                .WithButton("Help", null, ButtonStyle.Link, url: "https://discord.gg/TBD15");
-            await Context.Channel.SendMessageAsync("Please authorize bot to manage your role connections. " +
+                .WithButton("Help", null, ButtonStyle.Link, url: "https://discord.gg/mewdeko");
+            await Context.Channel.SendMessageAsync("Please authorize Mewdeko to manage your role connections. " +
                                                    "If you already have a code, click `Enter Code`, if you don't click `Get Code`.",
                 components: components.Build());
         }

@@ -35,9 +35,7 @@ public class JoinLeaveLoggerService : INService
         var db = cache.Redis.GetDatabase();
         var joinEvent = new JoinLeaveLogs
         {
-            GuildId = args.Guild.Id,
-            UserId = args.Id,
-            IsJoin = true
+            GuildId = args.Guild.Id, UserId = args.Id, IsJoin = true
         };
 
         var serializedEvent = JsonSerializer.Serialize(joinEvent);
@@ -49,9 +47,7 @@ public class JoinLeaveLoggerService : INService
         var db = cache.Redis.GetDatabase();
         var leaveEvent = new JoinLeaveLogs
         {
-            GuildId = args.Id,
-            UserId = arsg2.Id,
-            IsJoin = false
+            GuildId = args.Id, UserId = arsg2.Id, IsJoin = false
         };
 
         var serializedEvent = JsonSerializer.Serialize(leaveEvent);
@@ -96,8 +92,7 @@ public class JoinLeaveLoggerService : INService
             .GroupBy(log => log.DateAdded.Value.Date)
             .Select(group => new
             {
-                Date = group.Key,
-                Count = group.Count()
+                Date = group.Key, Count = group.Count()
             })
             .OrderBy(x => x.Date)
             .ToList();
@@ -110,8 +105,7 @@ public class JoinLeaveLoggerService : INService
         var past10DaysData = dateRange
             .GroupJoin(groupLogs, d => d, log => log.Date, (date, logs) => new
             {
-                Date = date,
-                Count = logs.Sum(log => log.Count)
+                Date = date, Count = logs.Sum(log => log.Count)
             })
             .ToList();
 
@@ -128,15 +122,12 @@ public class JoinLeaveLoggerService : INService
 
         var gridPaint = new SKPaint
         {
-            Color = new SKColor(55, 71, 79),
-            Style = SKPaintStyle.Stroke
+            Color = new SKColor(55, 71, 79), Style = SKPaintStyle.Stroke
         };
 
         var paint = new SKPaint
         {
-            Color = new SKColor(config.JoinGraphColor),
-            StrokeWidth = 3,
-            IsAntialias = true
+            Color = new SKColor(config.JoinGraphColor), StrokeWidth = 3, IsAntialias = true
         };
 
         var maxCount = past10DaysData.Max(log => (float)log.Count);
@@ -228,8 +219,7 @@ public class JoinLeaveLoggerService : INService
             .GroupBy(log => log.DateAdded.Value.Date)
             .Select(group => new
             {
-                Date = group.Key,
-                Count = group.Count()
+                Date = group.Key, Count = group.Count()
             })
             .OrderBy(x => x.Date)
             .ToList();
@@ -242,8 +232,7 @@ public class JoinLeaveLoggerService : INService
         var past10DaysData = dateRange
             .GroupJoin(groupLogs, d => d, log => log.Date, (date, logs) => new
             {
-                Date = date,
-                Count = logs.Sum(log => log.Count)
+                Date = date, Count = logs.Sum(log => log.Count)
             })
             .ToList();
 
@@ -260,15 +249,12 @@ public class JoinLeaveLoggerService : INService
 
         var gridPaint = new SKPaint
         {
-            Color = new SKColor(55, 71, 79),
-            Style = SKPaintStyle.Stroke
+            Color = new SKColor(55, 71, 79), Style = SKPaintStyle.Stroke
         };
 
         var paint = new SKPaint
         {
-            Color = new SKColor(config.LeaveGraphColor),
-            StrokeWidth = 3,
-            IsAntialias = true
+            Color = new SKColor(config.LeaveGraphColor), StrokeWidth = 3, IsAntialias = true
         };
 
         var maxCount = past10DaysData.Max(log => (float)log.Count);

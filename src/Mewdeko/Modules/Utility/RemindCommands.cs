@@ -86,7 +86,7 @@ public partial class Utility
                     var diff = when - DateTime.UtcNow;
                     embed.AddField(
                         $"#{++i + (page * 10)} {rem.When:HH:mm yyyy-MM-dd} UTC (in {(int)diff.TotalHours}h {diff.Minutes}m)",
-                        $@"`Target:` {(rem.IsPrivate ? "DM" : "Channel")}
+                        $@"`Target:` {(rem.IsPrivate == 1 ? "DM" : "Channel")}
 `TargetId:` {rem.ChannelId}
 `Message:` {rem.Message?.TrimTo(50)}");
                 }
@@ -137,14 +137,13 @@ public partial class Utility
             if (ctx.Guild != null)
             {
                 var perms = ((IGuildUser)ctx.User).GetPermissions((IGuildChannel)ctx.Channel);
-                if (!perms.MentionEveryone)
-                    message = message.SanitizeAllMentions();
+                if (!perms.MentionEveryone) message = message.SanitizeAllMentions();
             }
 
             var rem = new Reminder
             {
                 ChannelId = targetId,
-                IsPrivate = isPrivate,
+                IsPrivate = isPrivate ? 1 : 0,
                 When = time,
                 Message = message,
                 UserId = ctx.User.Id,

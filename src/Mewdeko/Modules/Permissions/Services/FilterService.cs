@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Text.RegularExpressions;
 using Discord.Net;
 using Mewdeko.Common.Collections;
@@ -18,16 +18,16 @@ public class FilterService : IEarlyBehavior, INService
     private readonly DbService db;
     private readonly IPubSub pubSub;
 
-    private readonly TypedKey<HashSet<AutoBanEntry>> blPubKey = new("autobanword.reload");
+    private readonly TypedKey<AutoBanEntry[]> blPubKey = new("autobanword.reload");
     private readonly DiscordSocketClient client;
-    public HashSet<AutoBanEntry> Blacklist;
+    public IReadOnlyList<AutoBanEntry> Blacklist;
     public readonly AdministrationService Ass;
     public readonly UserPunishService Upun;
     private readonly GuildSettingsService gss;
 
     public FilterService(DiscordSocketClient client, DbService db, IPubSub pubSub,
         UserPunishService upun2, IBotStrings strng, AdministrationService ass,
-        GuildSettingsService gss, EventHandler eventHandler)
+        GuildSettingsService gss, EventHandler eventHandler, Mewdeko bot)
     {
         this.db = db;
         this.client = client;
@@ -38,41 +38,30 @@ public class FilterService : IEarlyBehavior, INService
         this.pubSub.Sub(blPubKey, OnReload);
         Ass = ass;
         this.gss = gss;
-        using (var uow = db.GetDbContext())
-        {
-            var ids = client.GetGuildIds();
-            var configs = uow.GuildConfigs
-                .AsQueryable()
-                .Include(x => x.FilteredWords)
-                .Include(x => x.FilterLinksChannelIds)
-                .Include(x => x.FilterWordsChannelIds)
-                .Include(x => x.FilterInvitesChannelIds)
-                .Where(gc => ids.Contains(gc.GuildId))
-                .ToList();
+        var allgc = bot.AllGuildConfigs;
 
-            InviteFilteringServers =
-                new ConcurrentHashSet<ulong>(configs.Where(gc => gc.FilterInvites).Select(gc => gc.GuildId));
-            InviteFilteringChannels =
-                new ConcurrentHashSet<ulong>(configs.SelectMany(gc =>
-                    gc.FilterInvitesChannelIds.Select(fci => fci.ChannelId)));
+        InviteFilteringServers =
+            new ConcurrentHashSet<ulong>(allgc.Where(gc => gc.FilterInvites != 0).Select(gc => gc.GuildId));
+        InviteFilteringChannels =
+            new ConcurrentHashSet<ulong>(allgc.SelectMany(gc =>
+                gc.FilterInvitesChannelIds.Select(fci => fci.ChannelId)));
 
-            LinkFilteringServers =
-                new ConcurrentHashSet<ulong>(configs.Where(gc => gc.FilterLinks).Select(gc => gc.GuildId));
-            LinkFilteringChannels =
-                new ConcurrentHashSet<ulong>(configs.SelectMany(gc =>
-                    gc.FilterLinksChannelIds.Select(fci => fci.ChannelId)));
+        LinkFilteringServers =
+            new ConcurrentHashSet<ulong>(allgc.Where(gc => gc.FilterLinks != 0).Select(gc => gc.GuildId));
+        LinkFilteringChannels =
+            new ConcurrentHashSet<ulong>(allgc.SelectMany(gc =>
+                gc.FilterLinksChannelIds.Select(fci => fci.ChannelId)));
 
-            var dict = configs.ToDictionary(gc => gc.GuildId,
-                gc => new ConcurrentHashSet<string>(gc.FilteredWords.Select(fw => fw.Word)));
+        var dict = allgc.ToDictionary(gc => gc.GuildId,
+            gc => new ConcurrentHashSet<string>(gc.FilteredWords.Select(fw => fw.Word)));
 
-            ServerFilteredWords = new ConcurrentDictionary<ulong, ConcurrentHashSet<string>>(dict);
+        ServerFilteredWords = new ConcurrentDictionary<ulong, ConcurrentHashSet<string>>(dict);
 
-            var serverFiltering = configs.Where(gc => gc.FilterWords);
-            WordFilteringServers = new ConcurrentHashSet<ulong>(serverFiltering.Select(gc => gc.GuildId));
-            WordFilteringChannels =
-                new ConcurrentHashSet<ulong>(configs.SelectMany(gc =>
-                    gc.FilterWordsChannelIds.Select(fwci => fwci.ChannelId)));
-        }
+        var serverFiltering = allgc.Where(gc => gc.FilterWords != 0);
+        WordFilteringServers = new ConcurrentHashSet<ulong>(serverFiltering.Select(gc => gc.GuildId));
+        WordFilteringChannels =
+            new ConcurrentHashSet<ulong>(allgc.SelectMany(gc =>
+                gc.FilterWordsChannelIds.Select(fwci => fwci.ChannelId)));
 
         eventHandler.MessageUpdated += (_, newMsg, channel) =>
         {
@@ -108,7 +97,7 @@ public class FilterService : IEarlyBehavior, INService
                                                || await FilterLinks(guild, msg).ConfigureAwait(false)
                                                || await FilterBannedWords(guild, msg).ConfigureAwait(false));
 
-    private ValueTask OnReload(HashSet<AutoBanEntry> blacklist)
+    private ValueTask OnReload(AutoBanEntry[] blacklist)
     {
         Blacklist = blacklist;
         return default;
@@ -117,10 +106,9 @@ public class FilterService : IEarlyBehavior, INService
     public void Reload(bool publish = true)
     {
         using var uow = db.GetDbContext();
-        var toPublish = uow.AutoBanWords.AsNoTracking().ToHashSet();
+        var toPublish = uow.AutoBanWords.AsNoTracking().ToArray();
         Blacklist = toPublish;
-        if (publish)
-            pubSub.Pub(blPubKey, toPublish);
+        if (publish) pubSub.Pub(blPubKey, toPublish);
     }
 
     public void WordBlacklist(string id, ulong id2)
@@ -128,8 +116,7 @@ public class FilterService : IEarlyBehavior, INService
         using var uow = db.GetDbContext();
         var item = new AutoBanEntry
         {
-            Word = id,
-            GuildId = id2
+            Word = id, GuildId = id2
         };
         uow.AutoBanWords.Add(item);
         uow.SaveChanges();
@@ -180,8 +167,7 @@ public class FilterService : IEarlyBehavior, INService
             var gc = await uow.ForGuildId(guild.Id, set => set);
             gc.invwarn = yesno;
             await uow.SaveChangesAsync().ConfigureAwait(false);
-            //todo: make this await after ef model port || gss rework
-            gss.UpdateGuildConfig(guild.Id, gc);
+            await gss.UpdateGuildConfig(guild.Id, gc);
         }
     }
 
@@ -206,7 +192,7 @@ public class FilterService : IEarlyBehavior, INService
             var gc = await uow.ForGuildId(guild.Id, set => set);
             gc.fwarn = yesno;
             await uow.SaveChangesAsync().ConfigureAwait(false);
-            gss.UpdateGuildConfig(guild.Id, gc);
+            await gss.UpdateGuildConfig(guild.Id, gc);
         }
     }
 
@@ -220,10 +206,9 @@ public class FilterService : IEarlyBehavior, INService
         WordFilteringServers.TryRemove(guildId);
         ServerFilteredWords.TryRemove(guildId, out _);
 
-        foreach (var c in gc.FilterWordsChannelIds)
-            WordFilteringChannels.TryRemove(c.ChannelId);
+        foreach (var c in gc.FilterWordsChannelIds) WordFilteringChannels.TryRemove(c.ChannelId);
 
-        gc.FilterWords = false;
+        gc.FilterWords = 0;
         gc.FilteredWords.Clear();
         gc.FilterWordsChannelIds.Clear();
 
@@ -247,25 +232,11 @@ public class FilterService : IEarlyBehavior, INService
         if (msg is null)
             return false;
         var bannedwords = Blacklist.Where(x => x.GuildId == guild.Id);
-        foreach (var i in bannedwords)
+        foreach (var i in bannedwords.Select(x => x.Word))
         {
-            Regex regex;
-            try
-            {
-                regex = new Regex(i.Word, RegexOptions.Compiled, TimeSpan.FromMilliseconds(250));
-            }
-            catch
-            {
-                Log.Error($"Invalid regex, removing.: {i.Word}");
-                await using var uow = db.GetDbContext();
-                uow.AutoBanWords.Remove(i);
-                await uow.SaveChangesAsync();
-                Blacklist.Remove(i);
-                return false;
-            }
+            var regex = new Regex(i, RegexOptions.Compiled, TimeSpan.FromMilliseconds(250));
             var match = regex.Match(msg.Content.ToLower()).Value;
-            if (!regex.IsMatch(msg.Content.ToLower()))
-                continue;
+            if (!regex.IsMatch(msg.Content.ToLower())) continue;
             try
             {
                 await msg.DeleteAsync().ConfigureAwait(false);
@@ -319,26 +290,7 @@ public class FilterService : IEarlyBehavior, INService
         {
             foreach (var word in filteredChannelWords)
             {
-                Regex regex;
-                try
-                {
-                    regex = new Regex(word, RegexOptions.Compiled, TimeSpan.FromMilliseconds(250));
-                }
-                catch
-                {
-                    Log.Error($"Invalid regex, removing.: {word}");
-                    await using var uow = db.GetDbContext();
-                    var config = await uow.ForGuildId(guild.Id, set => set.Include(gc => gc.FilteredWords));
-
-                    var removed = config.FilteredWords.FirstOrDefault(fw => fw.Word.Trim().ToLowerInvariant() == word);
-                    if (removed is null)
-                        return false;
-                    uow.Remove(removed);
-                    await uow.SaveChangesAsync().ConfigureAwait(false);
-                    var toremove = ServerFilteredWords.GetOrAdd(guild.Id, new ConcurrentHashSet<string>());
-                    toremove.TryRemove(word);
-                    return false;
-                }
+                var regex = new Regex(word, RegexOptions.Compiled, TimeSpan.FromMilliseconds(250));
                 if (!regex.IsMatch(usrMsg.Content.ToLower())) continue;
                 try
                 {
@@ -366,8 +318,7 @@ public class FilterService : IEarlyBehavior, INService
         foreach (var word in filteredServerWords)
         {
             var regex = new Regex(word, RegexOptions.Compiled, TimeSpan.FromMilliseconds(250));
-            if (!regex.IsMatch(usrMsg.Content.ToLower()))
-                continue;
+            if (!regex.IsMatch(usrMsg.Content.ToLower())) continue;
             try
             {
                 await usrMsg.DeleteAsync().ConfigureAwait(false);
@@ -407,8 +358,7 @@ public class FilterService : IEarlyBehavior, INService
             try
             {
                 await usrMsg.DeleteAsync().ConfigureAwait(false);
-                if (await GetInvWarn(guild.Id) == 0)
-                    return true;
+                if (await GetInvWarn(guild.Id) == 0) return true;
                 await Upun.Warn(guild, usrMsg.Author.Id, client.CurrentUser, "Warned for Posting Invite")
                     .ConfigureAwait(false);
                 var user = await usrMsg.Author.CreateDMChannelAsync().ConfigureAwait(false);

@@ -1,4 +1,4 @@
-using Discord.Commands;
+﻿using Discord.Commands;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
 using Mewdeko.Common.Attributes.TextCommands;
@@ -178,7 +178,7 @@ public class Highlights(InteractiveService interactivity, IServiceProvider svcs,
                     }
 
                     if (await Service.ToggleIgnoredUser(ctx.Guild.Id, ctx.User.Id, host.Id.ToString())
-                        .ConfigureAwait(false))
+                            .ConfigureAwait(false))
                     {
                         await ctx.Channel.SendConfirmAsync($"Added {host.Mention} to ignored users!")
                             .ConfigureAwait(false);
@@ -194,7 +194,7 @@ public class Highlights(InteractiveService interactivity, IServiceProvider svcs,
                 var channel = (ITextChannel)result.BestMatch;
 
                 if (await Service.ToggleIgnoredChannel(ctx.Guild.Id, ctx.User.Id, channel.Id.ToString())
-                    .ConfigureAwait(false))
+                        .ConfigureAwait(false))
                 {
                     await ctx.Channel.SendConfirmAsync($"Added {channel.Mention} to ignored channels!")
                         .ConfigureAwait(false);

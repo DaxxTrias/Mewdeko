@@ -15,31 +15,13 @@ using Swan;
 
 namespace Mewdeko.Modules.Help;
 
-public class Help : MewdekoModuleBase<HelpService>
-{
-    private readonly CommandService cmds;
-    private readonly BotConfigService config;
-    private readonly GuildSettingsService guildSettings;
-    private readonly InteractiveService interactive;
-    private readonly GlobalPermissionService perms;
-    private readonly IServiceProvider services;
-    private readonly IBotStrings strings;
-
-    public Help(GlobalPermissionService perms, CommandService cmds,
+public class Help(GlobalPermissionService perms, CommandService cmds,
         IServiceProvider services, IBotStrings strings,
         InteractiveService serv,
         GuildSettingsService guildSettings,
         BotConfigService config)
-    {
-        interactive = serv;
-        this.guildSettings = guildSettings;
-        this.config = config;
-        this.cmds = cmds;
-        this.perms = perms;
-        this.services = services;
-        this.strings = strings;
-    }
-
+    : MewdekoModuleBase<HelpService>
+{
     [Cmd, Aliases, Ratelimit(60)]
     public async Task ExportCommandsJson()
     {
@@ -56,7 +38,8 @@ public class Help : MewdekoModuleBase<HelpService>
                 var commands = (from j in i.Commands.OrderByDescending(x => x.Name)
                     let userPerm = j.Preconditions.FirstOrDefault(ca => ca is UserPermAttribute) as UserPermAttribute
                     let botPerm = j.Preconditions.FirstOrDefault(ca => ca is BotPermAttribute) as BotPermAttribute
-                    let isDragon = j.Preconditions.FirstOrDefault(ca => ca is RequireDragonAttribute) as RequireDragonAttribute
+                    let isDragon =
+                        j.Preconditions.FirstOrDefault(ca => ca is RequireDragonAttribute) as RequireDragonAttribute
                     select new Command
                     {
                         CommandName = j.Aliases.Any() ? j.Aliases[0] : j.Name,
@@ -66,8 +49,8 @@ public class Help : MewdekoModuleBase<HelpService>
                             userPerm?.UserPermissionAttribute.GuildPermission != null
                                 ? userPerm.UserPermissionAttribute.GuildPermission.ToString()
                                 : "",
-                        ChannelUserPermissions
-                            = userPerm?.UserPermissionAttribute.ChannelPermission != null
+                        ChannelUserPermissions =
+                            userPerm?.UserPermissionAttribute.ChannelPermission != null
                                 ? userPerm.UserPermissionAttribute.ChannelPermission.ToString()
                                 : "",
                         GuildBotPermissions =
@@ -87,7 +70,8 @@ public class Help : MewdekoModuleBase<HelpService>
             {
                 ContractResolver = new OrderedResolver()
             };
-            var jsonVersion = JsonConvert.SerializeObject(newList.Select(x => new Module(x.Value, x.Key)), Formatting.Indented, settings);
+            var jsonVersion = JsonConvert.SerializeObject(newList.Select(x => new Module(x.Value, x.Key)),
+                Formatting.Indented, settings);
             await using var stream = new MemoryStream(Encoding.Default.GetBytes(jsonVersion));
             await ctx.Channel.SendFileAsync(stream, $"Commands-{DateTime.UtcNow:u}.json");
             await msg.DeleteAsync();
@@ -103,7 +87,7 @@ public class Help : MewdekoModuleBase<HelpService>
     [Cmd, Aliases]
     public async Task SearchCommand(string commandname)
     {
-        var commandInfos = this.cmds.Commands.Distinct()
+        var commandInfos = cmds.Commands.Distinct()
             .Where(c => c.Name.Contains(commandname, StringComparison.InvariantCulture));
         if (!commandInfos.Any())
         {
@@ -117,7 +101,8 @@ public class Help : MewdekoModuleBase<HelpService>
             foreach (var i in commandInfos)
             {
                 cmdnames += $"\n{i.Name}";
-                cmdremarks += $"\n{i.RealSummary(strings, ctx.Guild.Id, await guildSettings.GetPrefix(ctx.Guild)).Truncate(50)}";
+                cmdremarks +=
+                    $"\n{i.RealSummary(strings, ctx.Guild.Id, await guildSettings.GetPrefix(ctx.Guild)).Truncate(50)}";
             }
 
             var eb = new EmbedBuilder()
@@ -164,7 +149,7 @@ public class Help : MewdekoModuleBase<HelpService>
         // Find commands for that module
         // don't show commands which are blocked
         // order by name
-        var commandInfos = this.cmds.Commands.Where(c =>
+        var commandInfos = cmds.Commands.Where(c =>
                 c.Module.GetTopLevelModule().Name.ToUpperInvariant()
                     .StartsWith(module, StringComparison.InvariantCulture))
             .Where(c => !perms.BlockedCommands.Contains(c.Aliases[0].ToLowerInvariant()))
@@ -202,16 +187,16 @@ public class Help : MewdekoModuleBase<HelpService>
             .WithActionOnCancellation(ActionOnStop.DeleteMessage)
             .Build();
 
-        await interactive.SendPaginatorAsync(paginator, Context.Channel,
+        await serv.SendPaginatorAsync(paginator, Context.Channel,
             TimeSpan.FromMinutes(60)).ConfigureAwait(false);
 
         async Task<PageBuilder> PageFactory(int page)
         {
             await Task.CompletedTask.ConfigureAwait(false);
             var transformed = groups.Select(x => x.ElementAt(page)
-                .Where(commandInfo => !commandInfo.Attributes.Any(attribute => attribute is HelpDisabled)).Select(
-                    commandInfo =>
-                        $"{(succ.Contains(commandInfo) ? commandInfo.Preconditions.Any(preconditionAttribute => preconditionAttribute is RequireDragonAttribute) ? "🐉" : "✅" : "❌")}{prefix + commandInfo.Aliases[0]}{(commandInfo.Aliases.Skip(1).FirstOrDefault() is not null ? $"/{prefix}{commandInfo.Aliases[1]}" : "")}"))
+                    .Where(commandInfo => !commandInfo.Attributes.Any(attribute => attribute is HelpDisabled)).Select(
+                        commandInfo =>
+                            $"{(succ.Contains(commandInfo) ? commandInfo.Preconditions.Any(preconditionAttribute => preconditionAttribute is RequireDragonAttribute) ? "🐉" : "✅" : "❌")}{prefix + commandInfo.Aliases[0]}{(commandInfo.Aliases.Skip(1).FirstOrDefault() is not null ? $"/{prefix}{commandInfo.Aliases[1]}" : "")}"))
                 .FirstOrDefault();
             var last = groups.Select(x => x.Count()).FirstOrDefault();
             for (i = 0; i < last; i++)
@@ -228,7 +213,7 @@ public class Help : MewdekoModuleBase<HelpService>
                 .AddField(groups.Select(x => x.ElementAt(page).Key).FirstOrDefault(),
                     $"```css\n{string.Join("\n", transformed)}\n```")
                 .WithDescription(
-                    $"✅: You can use this command.\n❌: You cannot use this command.\n{config.Data.LoadingEmote}: \nDo `{prefix}h commandname` to see info on that command")
+                    $"✅: You can use this command.\n❌: You cannot use this command.\n{config.Data.LoadingEmote}: If you need any help don't hesitate to join [The Support Server](https://discord.gg/mewdeko)\nDo `{prefix}h commandname` to see info on that command")
                 .WithOkColor();
         }
     }
@@ -267,8 +252,8 @@ public class Help : MewdekoModuleBase<HelpService>
         .ConfigureAwait(false);
 
     [Cmd, Aliases]
-    public async Task Source() => await ctx.Channel.SendConfirmAsync("https://github.com/Sylveon76/Mewdeko")
-        .ConfigureAwait(false);
+    public async Task Source() =>
+        await ctx.Channel.SendConfirmAsync("https://github.com/Sylveon76/Mewdeko").ConfigureAwait(false);
 }
 
 public class CommandTextEqualityComparer : IEqualityComparer<CommandInfo>

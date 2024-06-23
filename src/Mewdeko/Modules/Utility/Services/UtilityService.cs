@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 using Mewdeko.Modules.Utility.Common;
 using VirusTotalNet;
 using VirusTotalNet.Results;
@@ -43,7 +43,7 @@ public class UtilityService : INService
         var gc = await uow.ForGuildId(guild.Id, set => set);
         gc.ReactChannel = yesnt;
         await uow.SaveChangesAsync().ConfigureAwait(false);
-        guildSettings.UpdateGuildConfig(guild.Id, gc);
+        await guildSettings.UpdateGuildConfig(guild.Id, gc);
     }
 
     public async Task PreviewLinks(IGuild guild, string yesnt)
@@ -65,28 +65,29 @@ public class UtilityService : INService
             var gc = await uow.ForGuildId(guild.Id, set => set);
             gc.PreviewLinks = yesno;
             await uow.SaveChangesAsync().ConfigureAwait(false);
-            guildSettings.UpdateGuildConfig(guild.Id, gc);
+            await guildSettings.UpdateGuildConfig(guild.Id, gc);
         }
     }
 
-    public async Task<bool> GetSnipeSet(ulong id) => (await guildSettings.GetGuildConfig(id)).snipeset;
+    public async Task<bool> GetSnipeSet(ulong id) =>
+        false.ParseBoth((await guildSettings.GetGuildConfig(id)).snipeset.ToString());
 
     public async Task SnipeSet(IGuild guild, bool enabled)
     {
         await using var uow = db.GetDbContext();
         var gc = await uow.ForGuildId(guild.Id, set => set);
-        gc.snipeset = enabled;
+        gc.snipeset = enabled ? 1L : 0L; // Converting bool to long
         await uow.SaveChangesAsync().ConfigureAwait(false);
-        guildSettings.UpdateGuildConfig(guild.Id, gc);
+        await guildSettings.UpdateGuildConfig(guild.Id, gc);
     }
 
     public async Task SnipeSetBool(IGuild guild, bool enabled)
     {
         await using var uow = db.GetDbContext();
         var gc = await uow.ForGuildId(guild.Id, set => set);
-        gc.snipeset = enabled;
+        gc.snipeset = enabled ? 1L : 0L; // Converting bool to long
         await uow.SaveChangesAsync().ConfigureAwait(false);
-        guildSettings.UpdateGuildConfig(guild.Id, gc);
+        await guildSettings.UpdateGuildConfig(guild.Id, gc);
     }
 
 
@@ -140,13 +141,10 @@ public class UtilityService : INService
         if (!ch.HasValue || ch.Value is not IGuildChannel channel)
             return;
 
-        if (!await GetSnipeSet(channel.Guild.Id))
-            return;
+        if (!await GetSnipeSet(channel.Guild.Id)) return;
 
-        if ((optMsg.HasValue ? optMsg.Value : null) is not IUserMessage msg)
-            return;
-        if (msg.Author is null /*for some reason*/)
-            return;
+        if ((optMsg.HasValue ? optMsg.Value : null) is not IUserMessage msg) return;
+        if (msg.Author is null /*for some reason*/) return;
         var snipemsg = new SnipeStore
         {
             GuildId = channel.Guild.Id,
@@ -174,15 +172,12 @@ public class UtilityService : INService
 
     private async Task MsgStore2(Cacheable<IMessage, ulong> optMsg, SocketMessage imsg2, ISocketMessageChannel ch)
     {
-        if (ch is not IGuildChannel channel)
-            return;
+        if (ch is not IGuildChannel channel) return;
 
 
-        if (!await GetSnipeSet(channel.Guild.Id))
-            return;
+        if (!await GetSnipeSet(channel.Guild.Id)) return;
 
-        if ((optMsg.HasValue ? optMsg.Value : null) is not IUserMessage msg)
-            return;
+        if ((optMsg.HasValue ? optMsg.Value : null) is not IUserMessage msg) return;
         var snipemsg = new SnipeStore
         {
             GuildId = channel.GuildId,
@@ -210,10 +205,8 @@ public class UtilityService : INService
 
     public async Task MsgReciev2(IMessage msg)
     {
-        if (msg.Author.IsBot)
-            return;
-        if (msg.Channel is SocketDMChannel)
-            return;
+        if (msg.Author.IsBot) return;
+        if (msg.Channel is SocketDMChannel) return;
         var guild = ((SocketGuildChannel)msg.Channel).Guild.Id;
         var id = await GetReactChans(guild);
         if (msg.Channel.Id == id)
@@ -237,8 +230,7 @@ public class UtilityService : INService
     {
         if (msg.Channel is SocketTextChannel t)
         {
-            if (msg.Author.IsBot)
-                return;
+            if (msg.Author.IsBot) return;
             var gid = t.Guild;
             if (await GetPLinks(gid.Id) == 1)
             {
@@ -249,17 +241,14 @@ public class UtilityService : INService
                 {
                     var e = new Uri(m.Value);
                     var en = e.Host.Split(".");
-                    if (!en.Contains("discord"))
-                        continue;
+                    if (!en.Contains("discord")) continue;
                     var eb = string.Join("", e.Segments).Split("/");
-                    if (!eb.Contains("channels"))
-                        continue;
+                    if (!eb.Contains("channels")) continue;
                     SocketGuild guild;
                     if (gid.Id != Convert.ToUInt64(eb[2]))
                     {
                         guild = client.GetGuild(Convert.ToUInt64(eb[2]));
-                        if (guild is null)
-                            return;
+                        if (guild is null) return;
                     }
                     else
                     {
@@ -269,23 +258,19 @@ public class UtilityService : INService
                     if (guild != t.Guild)
                         return;
                     var em = await ((IGuild)guild).GetTextChannelAsync(Convert.ToUInt64(eb[3])).ConfigureAwait(false);
-                    if (em == null)
-                        return;
+                    if (em == null) return;
                     var msg2 = await em.GetMessageAsync(Convert.ToUInt64(eb[4])).ConfigureAwait(false);
-                    if (msg2 is null)
-                        return;
+                    if (msg2 is null) return;
                     var en2 = new EmbedBuilder
                     {
                         Color = Mewdeko.OkColor,
                         Author = new EmbedAuthorBuilder
                         {
-                            Name = msg2.Author.Username,
-                            IconUrl = msg2.Author.GetAvatarUrl(size: 2048)
+                            Name = msg2.Author.Username, IconUrl = msg2.Author.GetAvatarUrl(size: 2048)
                         },
                         Footer = new EmbedFooterBuilder
                         {
-                            IconUrl = ((IGuild)guild).IconUrl,
-                            Text = $"{((IGuild)guild).Name}: {em.Name}"
+                            IconUrl = ((IGuild)guild).IconUrl, Text = $"{((IGuild)guild).Name}: {em.Name}"
                         }
                     };
                     if (msg2.Embeds.Count > 0)
@@ -299,11 +284,9 @@ public class UtilityService : INService
                         }
                     }
 
-                    if (msg2.Content.Length > 0)
-                        en2.Description = msg2.Content;
+                    if (msg2.Content.Length > 0) en2.Description = msg2.Content;
 
-                    if (msg2.Attachments.Count > 0)
-                        en2.ImageUrl = msg2.Attachments.FirstOrDefault().Url;
+                    if (msg2.Attachments.Count > 0) en2.ImageUrl = msg2.Attachments.FirstOrDefault().Url;
 
                     await msg.Channel.SendMessageAsync(embed: en2.WithTimestamp(msg2.Timestamp).Build())
                         .ConfigureAwait(false);

@@ -1,4 +1,4 @@
-using Discord.Commands;
+﻿using Discord.Commands;
 using Discord.Rest;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;

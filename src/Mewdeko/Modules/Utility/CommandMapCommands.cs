@@ -1,4 +1,4 @@
-using Discord.Commands;
+﻿using Discord.Commands;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
 using Mewdeko.Common.Attributes.TextCommands;
@@ -59,8 +59,7 @@ public partial class Utility
                         .GetResult();
                     config.CommandAliases.Add(new CommandAlias
                     {
-                        Mapping = mapping,
-                        Trigger = trigger
+                        Mapping = mapping, Trigger = trigger
                     });
                     uow.SaveChanges();
                 }
@@ -79,8 +78,7 @@ public partial class Utility
                         .GetResult();
                     var toAdd = new CommandAlias
                     {
-                        Mapping = mapping,
-                        Trigger = trigger
+                        Mapping = mapping, Trigger = trigger
                     };
                     var toRemove = config.CommandAliases.Where(x => x.Trigger == trigger);
                     if (toRemove.Any())

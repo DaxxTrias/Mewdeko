@@ -78,10 +78,10 @@ public partial class RemindService : INService
         else
         {
             reminders = await uow.Reminders
-            .FromSqlInterpolated(
+                .FromSqlInterpolated(
                     $"select * from reminders where ((ServerId >> 22) % {creds.TotalShards}) = {client.ShardId} and \"when\" < {now};")
-            .ToListAsync();
-    }
+                .ToListAsync();
+        }
 
         return reminders;
     }
@@ -92,8 +92,7 @@ public partial class RemindService : INService
         var m = regex.Match(input);
 
         obj = default;
-        if (m.Length == 0)
-            return false;
+        if (m.Length == 0) return false;
 
         var values = new Dictionary<string, int>();
 
@@ -107,8 +106,7 @@ public partial class RemindService : INService
 
         foreach (var groupName in regex.GetGroupNames())
         {
-            if (groupName is "0" or "what")
-                continue;
+            if (groupName is "0" or "what") continue;
             if (string.IsNullOrWhiteSpace(m.Groups[groupName].Value))
             {
                 values[groupName] = 0;
@@ -140,8 +138,7 @@ public partial class RemindService : INService
 
         obj = new RemindObject
         {
-            Time = ts,
-            What = what
+            Time = ts, What = what
         };
 
         return true;
@@ -152,7 +149,7 @@ public partial class RemindService : INService
         try
         {
             IMessageChannel ch;
-            if (r.IsPrivate)
+            if (r.IsPrivate == 1)
             {
                 var user = client.GetUser(r.ChannelId);
                 if (user == null)

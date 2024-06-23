@@ -1,4 +1,4 @@
-using System.Net.Http;
+﻿using System.Net.Http;
 using Discord.Commands;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Modules.Searches.Common;
@@ -129,8 +129,7 @@ public partial class Searches
 
             using var http = factory.CreateClient();
             var m = 0;
-            if (!string.IsNullOrWhiteSpace(mode))
-                m = ResolveGameMode(mode);
+            if (!string.IsNullOrWhiteSpace(mode)) m = ResolveGameMode(mode);
 
             var reqString =
                 $"https://osu.ppy.sh/api/get_user_best?k={creds.OsuApiKey}&u={Uri.EscapeDataString(user)}&type=string&limit=5&m={m}";
@@ -154,8 +153,7 @@ public partial class Searches
                 var desc = $@"[/b/{item.BeatmapId}](https://osu.ppy.sh/b/{item.BeatmapId})
 {$"{pp}pp",-7} | {$"{acc}%",-7}
 ";
-                if (mods != "+")
-                    desc += Format.Bold(mods);
+                if (mods != "+") desc += Format.Bold(mods);
 
                 return (title, desc);
             });
@@ -165,8 +163,7 @@ public partial class Searches
                 .WithTitle($"Top 5 plays for {user}");
 
             var mapData = await Task.WhenAll(mapTasks).ConfigureAwait(false);
-            foreach (var (title, desc) in mapData.Where(x => x != default))
-                eb.AddField(title, desc);
+            foreach (var (title, desc) in mapData.Where(x => x != default)) eb.AddField(title, desc);
 
             await channel.EmbedAsync(eb).ConfigureAwait(false);
         }

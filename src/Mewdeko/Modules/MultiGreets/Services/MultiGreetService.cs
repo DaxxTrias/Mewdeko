@@ -1,4 +1,4 @@
-using Discord.Net;
+﻿using Discord.Net;
 using Serilog;
 
 namespace Mewdeko.Modules.MultiGreets.Services;
@@ -49,14 +49,14 @@ public class MultiGreetService : INService
             .WithServer(client, user.Guild as SocketGuild).Build();
         if (greet.WebhookUrl is not null)
         {
-            if (user.IsBot && !greet.GreetBots)
+            if (user.IsBot && greet.GreetBots == 0)
                 return;
             var webhook = new DiscordWebhookClient(greet.WebhookUrl);
             var content = replacer.Replace(greet.Message);
             try
             {
                 if (SmartEmbed.TryParse(content, user.Guild.Id, out var embedData, out var plainText,
-                    out var components2))
+                        out var components2))
                 {
                     var msg = await webhook
                         .SendMessageAsync(plainText, embeds: embedData, components: components2.Build())
@@ -86,7 +86,7 @@ public class MultiGreetService : INService
         }
         else
         {
-            if (user.IsBot && !greet.GreetBots)
+            if (user.IsBot && greet.GreetBots == 0)
                 return;
             var channel = await user.Guild.GetTextChannelAsync(greet.ChannelId);
             var content = replacer.Replace(greet.Message);
@@ -99,15 +99,15 @@ public class MultiGreetService : INService
             try
             {
                 if (SmartEmbed.TryParse(content, user.Guild.Id, out var embedData, out var plainText,
-                    out var components2))
+                        out var components2))
                 {
                     if (embedData is not null && plainText is not "")
                     {
                         var msg = await channel.SendMessageAsync(plainText, embeds: embedData,
                             components: components2?.Build(), options: new RequestOptions
-                        {
-                            RetryMode = RetryMode.RetryRatelimit
-                        }).ConfigureAwait(false);
+                            {
+                                RetryMode = RetryMode.RetryRatelimit
+                            }).ConfigureAwait(false);
                         if (greet.DeleteTime > 0)
                             msg.DeleteAfter(greet.DeleteTime);
                     }
@@ -139,9 +139,9 @@ public class MultiGreetService : INService
             .WithServer(client, user.Guild as SocketGuild).Build();
         foreach (var i in multiGreets.Where(x => x.WebhookUrl == null))
         {
-            if (i.Disabled)
+            if (i.Disabled == 1)
                 continue;
-            if (user.IsBot && !i.GreetBots)
+            if (user.IsBot && i.GreetBots == 0)
                 continue;
             if (i.WebhookUrl is not null) continue;
             var channel = await user.Guild.GetTextChannelAsync(i.ChannelId);
@@ -174,9 +174,9 @@ public class MultiGreetService : INService
             .WithServer(client, user.Guild as SocketGuild).Build();
         foreach (var i in multiGreets)
         {
-            if (i.Disabled)
+            if (i.Disabled == 1)
                 continue;
-            if (user.IsBot && !i.GreetBots)
+            if (user.IsBot && i.GreetBots == 0)
                 continue;
             if (i.WebhookUrl is null) continue;
             var webhook = new DiscordWebhookClient(i.WebhookUrl);
@@ -200,7 +200,8 @@ public class MultiGreetService : INService
             {
                 var msg = await webhook.SendMessageAsync(content).ConfigureAwait(false);
                 if (i.DeleteTime > 0)
-                    (await (await user.Guild.GetTextChannelAsync(i.ChannelId)).GetMessageAsync(msg).ConfigureAwait(false)).DeleteAfter(int.Parse(i.DeleteTime.ToString()));
+                    (await (await user.Guild.GetTextChannelAsync(i.ChannelId)).GetMessageAsync(msg)
+                        .ConfigureAwait(false)).DeleteAfter(int.Parse(i.DeleteTime.ToString()));
             }
         }
     }
@@ -211,8 +212,7 @@ public class MultiGreetService : INService
         var gc = await uow.ForGuildId(guild.Id, set => set);
         gc.MultiGreetType = type;
         await uow.SaveChangesAsync().ConfigureAwait(false);
-        //todo: make this an await when we rework gss / ef model port
-        guildSettingsService.UpdateGuildConfig(guild.Id, gc);
+        await guildSettingsService.UpdateGuildConfig(guild.Id, gc);
     }
 
     public async Task<int> GetMultiGreetType(ulong id) =>
@@ -253,7 +253,7 @@ public class MultiGreetService : INService
     public async Task ChangeMgGb(MultiGreet greet, bool enabled)
     {
         await using var uow = db.GetDbContext();
-        greet.GreetBots = enabled;
+        greet.GreetBots = enabled ? 1 : 0;
         uow.MultiGreets.Update(greet);
         await uow.SaveChangesAsync().ConfigureAwait(false);
     }
@@ -285,7 +285,7 @@ public class MultiGreetService : INService
     public async Task MultiGreetDisable(MultiGreet greet, bool disabled)
     {
         var uow = db.GetDbContext();
-        greet.Disabled = disabled;
+        greet.Disabled = disabled ? 1 : 0;
         uow.MultiGreets.Update(greet);
         await uow.SaveChangesAsync().ConfigureAwait(false);
     }

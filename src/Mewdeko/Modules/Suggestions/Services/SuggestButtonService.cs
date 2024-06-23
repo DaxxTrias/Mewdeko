@@ -11,8 +11,7 @@ public class SuggestButtonService : MewdekoSlashSubmodule<SuggestionsService>
         await DeferAsync(true).ConfigureAwait(false);
         var componentInteraction = ctx.Interaction as IComponentInteraction;
         var componentData = ComponentBuilder.FromMessage(componentInteraction.Message);
-        if (!int.TryParse(number, out var emoteNum))
-            return;
+        if (!int.TryParse(number, out var emoteNum)) return;
         var changed = false;
         var pickedEmote = await Service.GetPickedEmote(componentInteraction.Message.Id, ctx.User.Id);
         if (pickedEmote == emoteNum)

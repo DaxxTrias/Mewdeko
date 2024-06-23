@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 using Mewdeko.Common.ModuleBehaviors;
 using Serilog;
 
@@ -61,14 +61,14 @@ public class HighlightsService : INService, IReadyExecutor
             {
                 _ = Task.Run(async () =>
                     await cache.CacheHighlights(i.Id, allHighlights.Where(x => x.GuildId == i.Id).ToList())
-                    .ConfigureAwait(false));
+                        .ConfigureAwait(false));
             }
 
             if (hlSettings is not null)
             {
                 _ = Task.Run(async () =>
-                    await cache.CacheHighlightSettings(i.Id, allHighlightSettings.Where(x => x.GuildId == i.Id).ToList())
-                    .ConfigureAwait(false));
+                    await cache.CacheHighlightSettings(i.Id,
+                        allHighlightSettings.Where(x => x.GuildId == i.Id).ToList()).ConfigureAwait(false));
             }
         }
 
@@ -119,7 +119,7 @@ public class HighlightsService : INService, IReadyExecutor
                     .FirstOrDefault(x => x.UserId == i.UserId && x.GuildId == channel.GuildId);
                 if (settings is not null)
                 {
-                    if (!settings.HighlightsOn)
+                    if (settings.HighlightsOn == 0)
                         continue;
                     if (settings.IgnoredChannels.Split(" ").Contains(channel.Id.ToString()))
                         continue;
@@ -146,13 +146,12 @@ public class HighlightsService : INService, IReadyExecutor
                 continue;
             }
 
-            var eb = new
-                EmbedBuilder().WithOkColor().WithTitle(i.Word.TrimTo(100)).WithDescription(string.Join("\n",
-                    messages.OrderBy(x => x.Timestamp)
-                        .Select(x =>
-                             $"<t:{x.Timestamp.ToUnixTimeSeconds()}:T>: {Format.Bold(x.Author.ToString())}: {(x == message ? "***" : "")}" +
-                             $"[{x.Content?.TrimTo(100)}]({message.GetJumpLink()}){(x == message ? "***" : "")}" +
-                             $" {(x.Embeds?.Count >= 1 || x.Attachments?.Count >= 1 ? " [has embed]" : "")}")));
+            var eb = new EmbedBuilder().WithOkColor().WithTitle(i.Word.TrimTo(100)).WithDescription(string.Join("\n",
+                messages.OrderBy(x => x.Timestamp)
+                    .Select(x =>
+                        $"<t:{x.Timestamp.ToUnixTimeSeconds()}:T>: {Format.Bold(x.Author.ToString())}: {(x == message ? "***" : "")}" +
+                        $"[{x.Content?.TrimTo(100)}]({message.GetJumpLink()}){(x == message ? "***" : "")}" +
+                        $" {(x.Embeds?.Count >= 1 || x.Attachments?.Count >= 1 ? " [has embed]" : "")}")));
 
             var cb = new ComponentBuilder()
                 .WithButton("Jump to message", style: ButtonStyle.Link,
@@ -198,7 +197,7 @@ public class HighlightsService : INService, IReadyExecutor
             {
                 GuildId = guildId,
                 UserId = userId,
-                HighlightsOn = enabled,
+                HighlightsOn = enabled ? 1 : 0,
                 IgnoredChannels = "0",
                 IgnoredUsers = "0"
             };
@@ -209,7 +208,7 @@ public class HighlightsService : INService, IReadyExecutor
             await cache.AddHighlightSettingToCache(guildId, current1).ConfigureAwait(false);
         }
 
-        toupdate.HighlightsOn = enabled;
+        toupdate.HighlightsOn = enabled ? 1 : 0;
         uow.HighlightSettings.Update(toupdate);
         await uow.SaveChangesAsync().ConfigureAwait(false);
         var current = cache.GetHighlightSettingsForGuild(guildId) ?? new List<HighlightSettings?>();
@@ -228,7 +227,7 @@ public class HighlightsService : INService, IReadyExecutor
             {
                 GuildId = guildId,
                 UserId = userId,
-                HighlightsOn = true,
+                HighlightsOn = 1,
                 IgnoredChannels = "0",
                 IgnoredUsers = "0"
             };
@@ -274,7 +273,7 @@ public class HighlightsService : INService, IReadyExecutor
             {
                 GuildId = guildId,
                 UserId = userId,
-                HighlightsOn = true,
+                HighlightsOn = 1,
                 IgnoredChannels = "0",
                 IgnoredUsers = "0"
             };

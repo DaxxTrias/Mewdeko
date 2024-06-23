@@ -1,4 +1,4 @@
-using Discord.Interactions;
+﻿using Discord.Interactions;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
 using Humanizer;
@@ -16,7 +16,7 @@ public partial class Utility
             GuildSettingsService guildSettings,
             BotConfigService config)
         : MewdekoSlashModuleBase<UtilityService>
-        {
+    {
         [SlashCommand("deleted", "Snipes deleted messages for the current or mentioned channel"),
          RequireContext(ContextType.Guild), CheckPermissions]
         public async Task Snipe(IMessageChannel? channel = null, IUser? user = null)
@@ -50,8 +50,7 @@ public partial class Utility
             {
                 Author = new EmbedAuthorBuilder
                 {
-                    IconUrl = user.GetAvatarUrl(),
-                    Name = $"{user} said:"
+                    IconUrl = user.GetAvatarUrl(), Name = $"{user} said:"
                 },
                 Description = msg.Message,
                 Footer = new EmbedFooterBuilder
@@ -110,8 +109,7 @@ public partial class Utility
             {
                 Author = new EmbedAuthorBuilder
                 {
-                    IconUrl = user.GetAvatarUrl(),
-                    Name = $"{user} said:"
+                    IconUrl = user.GetAvatarUrl(), Name = $"{user} said:"
                 },
                 Description = msg.Message,
                 Footer = new EmbedFooterBuilder

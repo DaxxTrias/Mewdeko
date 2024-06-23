@@ -4,8 +4,7 @@ using Mewdeko.Common.Modals;
 using Mewdeko.Modules.Permissions.Services;
 using Mewdeko.Modules.UserProfile.Services;
 using Microsoft.EntityFrameworkCore;
-using SixLabors.ImageSharp.PixelFormats;
-using Color = SixLabors.ImageSharp.Color;
+using SkiaSharp;
 
 namespace Mewdeko.Modules.UserProfile;
 
@@ -84,16 +83,15 @@ public class SlashUserProfile : MewdekoSlashModuleBase<UserProfileService>
     [SlashCommand("setcolor", "Set's the color in your user profile"), CheckPermissions]
     public async Task SetProfileColor([Summary("color", "Accepts hex and regular color names.")] string input)
     {
-        if (!Color.TryParse(input, out var inputColor))
+        if (!SKColor.TryParse(input, out var inputColor))
         {
             await ctx.Interaction.SendErrorAsync("You have input an invalid color.");
             return;
         }
 
-        var color = Rgba32.ParseHex(inputColor.ToHex());
-        var discordColor = new Discord.Color(color.R, color.G, color.B);
+        var discordColor = new Color(inputColor.Red, inputColor.Green, inputColor.Blue);
         await Service.SetProfileColor(ctx.User, discordColor);
-        await ctx.Interaction.SendConfirmAsync($"Your Profile Color has been set to:\n`{color}`");
+        await ctx.Interaction.SendConfirmAsync($"Your Profile Color has been set to:\n`{inputColor}`");
     }
 
     [SlashCommand("setbirthday", "Set's the color in your user profile"), CheckPermissions]
@@ -168,8 +166,7 @@ public class SlashUserProfile : MewdekoSlashModuleBase<UserProfileService>
     {
         await using var uow = db.GetDbContext();
         var user = await uow.GetOrCreateUser(ctx.User).ConfigureAwait(false);
-        if (await PronounsDisabled(user).ConfigureAwait(false))
-            return;
+        if (await PronounsDisabled(user).ConfigureAwait(false)) return;
         user.Pronouns = "";
         await uow.SaveChangesAsync().ConfigureAwait(false);
         await ConfirmLocalizedAsync("pronouns_cleared_self").ConfigureAwait(false);
@@ -180,8 +177,7 @@ public class SlashUserProfile : MewdekoSlashModuleBase<UserProfileService>
     {
         await using var uow = db.GetDbContext();
         var user = await uow.GetOrCreateUser(ctx.User).ConfigureAwait(false);
-        if (await PronounsDisabled(user).ConfigureAwait(false))
-            return;
+        if (await PronounsDisabled(user).ConfigureAwait(false)) return;
         user.Pronouns = modal.Pronouns;
         await uow.SaveChangesAsync().ConfigureAwait(false);
         await ConfirmLocalizedAsync("pronouns_internal_update", user.Pronouns).ConfigureAwait(false);
@@ -193,13 +189,11 @@ public class SlashUserProfile : MewdekoSlashModuleBase<UserProfileService>
         await using var uow = db.GetDbContext();
         var reporter = await uow.GetOrCreateUser(ctx.User).ConfigureAwait(false);
 
-        if (await PronounsDisabled(reporter).ConfigureAwait(false))
-            return;
+        if (await PronounsDisabled(reporter).ConfigureAwait(false)) return;
 
         var id = ulong.Parse(sId);
         var user = await uow.DiscordUser.FirstOrDefaultAsync(x => x.UserId == id).ConfigureAwait(false);
-        if (string.IsNullOrWhiteSpace(user?.Pronouns))
-            return;
+        if (string.IsNullOrWhiteSpace(user?.Pronouns)) return;
 
         var channel = await ctx.Client.GetChannelAsync(bot.Credentials.PronounAbuseReportChannelId)
             .ConfigureAwait(false);
@@ -270,7 +264,7 @@ public class SlashUserProfile : MewdekoSlashModuleBase<UserProfileService>
         await using var uow = db.GetDbContext();
         var user = await uow.DiscordUser.AsQueryable().FirstAsync(x => x.UserId == userId).ConfigureAwait(false);
         user.Pronouns = "";
-        user.PronounsDisabled = bool.TryParse(sPronounsDisable, out var disable) && disable;
+        user.PronounsDisabled = bool.TryParse(sPronounsDisable, out var disable) && disable ? 1 : 0;
         user.PronounsClearedReason = modal.FcbReason;
         await uow.SaveChangesAsync().ConfigureAwait(false);
         if (bool.TryParse(sBlacklist, out var blacklist) && blacklist)
@@ -280,7 +274,7 @@ public class SlashUserProfile : MewdekoSlashModuleBase<UserProfileService>
 
     private async Task<bool> PronounsDisabled(DiscordUser user)
     {
-        if (!user.PronounsDisabled) return false;
+        if (user.PronounsDisabled == 0) return false;
         await ReplyErrorLocalizedAsync("pronouns_disabled_user", user.PronounsClearedReason).ConfigureAwait(false);
         return true;
     }
@@ -291,8 +285,7 @@ public class SlashUserProfile : MewdekoSlashModuleBase<UserProfileService>
     {
         await using var uow = db.GetDbContext();
         var dbUser = await uow.GetOrCreateUser(user).ConfigureAwait(false);
-        if (await PronounsDisabled(dbUser).ConfigureAwait(false))
-            return;
+        if (await PronounsDisabled(dbUser).ConfigureAwait(false)) return;
         var pronouns = await Service.GetPronounsOrUnspecifiedAsync(user.Id).ConfigureAwait(false);
         var cb = new ComponentBuilder();
         if (!pronouns.PronounDb)
@@ -310,8 +303,7 @@ public class SlashUserProfile : MewdekoSlashModuleBase<UserProfileService>
     {
         await using var uow = db.GetDbContext();
         var user = await uow.GetOrCreateUser(ctx.User).ConfigureAwait(false);
-        if (await PronounsDisabled(user).ConfigureAwait(false))
-            return;
+        if (await PronounsDisabled(user).ConfigureAwait(false)) return;
         if (string.IsNullOrWhiteSpace(pronouns))
         {
             var cb = new ComponentBuilder().WithButton(GetText("pronouns_overwrite_button"), "pronouns_overwrite");

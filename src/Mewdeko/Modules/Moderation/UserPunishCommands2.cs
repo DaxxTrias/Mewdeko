@@ -47,7 +47,7 @@ public partial class Moderation
             await Service.SetMWarnlogChannelId(ctx.Guild, channel).ConfigureAwait(false);
             var newWarnChannel = await ctx.Guild.GetTextChannelAsync(mWarnlogChannel).ConfigureAwait(false);
             await ctx.Channel.SendConfirmAsync(
-                $"Your mini warnlog channel has been changed from {oldWarnChannel.Mention} to {newWarnChannel.Mention}")
+                    $"Your mini warnlog channel has been changed from {oldWarnChannel.Mention} to {newWarnChannel.Mention}")
                 .ConfigureAwait(false);
         }
 
@@ -105,7 +105,7 @@ public partial class Moderation
                 var uow = db.GetDbContext();
                 var warnings = uow.Warnings2
                     .ForId(ctx.Guild.Id, user.Id)
-                    .Count(w => !w.Forgiven && w.UserId == user.Id);
+                    .Count(w => w.Forgiven == 0 && w.UserId == user.Id);
                 var condition = punishment != null;
                 var punishtime = condition ? TimeSpan.FromMinutes(punishment.Time).Humanize() : " ";
                 var punishaction = condition ? punishment.Punishment.ToString() : "None";
@@ -200,7 +200,7 @@ public partial class Moderation
                     i++;
                     var name = GetText("warned_on_by", $"<t:{w.DateAdded.Value.ToUnixEpochDate()}:D>",
                         $"<t:{w.DateAdded.Value.ToUnixEpochDate()}:T>", w.Moderator);
-                    if (w.Forgiven)
+                    if (w.Forgiven == 1)
                         name = $"{Format.Strikethrough(name)} {GetText("warn_cleared_by", w.ForgivenBy)}";
 
                     embed.AddField(x => x
@@ -239,7 +239,7 @@ public partial class Moderation
                         .Select(x =>
                         {
                             var all = x.Count();
-                            var forgiven = x.Count(y => y.Forgiven);
+                            var forgiven = x.Count(y => y.Forgiven == 1);
                             var total = all - forgiven;
                             var usr = ((SocketGuild)ctx.Guild).GetUser(x.Key);
                             return $"{usr?.ToString() ?? x.Key.ToString()} | {total} ({all} - {forgiven})";

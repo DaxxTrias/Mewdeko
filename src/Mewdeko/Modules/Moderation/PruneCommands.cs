@@ -1,4 +1,4 @@
-using Discord.Commands;
+﻿using Discord.Commands;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Common.TypeReaders.Models;
 using Mewdeko.Modules.Moderation.Services;
@@ -88,7 +88,7 @@ public partial class Moderation
                     if (time.Time > TwoWeeks)
                         return;
                     await Service.PurgeWhere((ITextChannel)ctx.Channel, count,
-                        x => DateTimeOffset.Now.Subtract(x.Timestamp).TotalSeconds <= time.Time.TotalSeconds)
+                            x => DateTimeOffset.Now.Subtract(x.Timestamp).TotalSeconds <= time.Time.TotalSeconds)
                         .ConfigureAwait(false);
                     break;
                 case "-a":
@@ -98,7 +98,7 @@ public partial class Moderation
                     if (time.Time > TwoWeeks)
                         return;
                     await Service.PurgeWhere((ITextChannel)ctx.Channel, count,
-                        x => DateTimeOffset.Now.Subtract(x.Timestamp).TotalSeconds >= time.Time.TotalSeconds)
+                            x => DateTimeOffset.Now.Subtract(x.Timestamp).TotalSeconds >= time.Time.TotalSeconds)
                         .ConfigureAwait(false);
                     break;
                 case "-he":

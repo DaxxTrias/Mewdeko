@@ -1,4 +1,4 @@
-using System.Net.Http;
+﻿using System.Net.Http;
 using System.Threading;
 using Discord.Commands;
 using Fergun.Interactive;
@@ -17,7 +17,7 @@ using Serilog;
 namespace Mewdeko.Modules.Nsfw;
 
 public class Nsfw(InteractiveService interactivity, MartineApi martineApi,
-    GuildSettingsService guildSettings, HttpClient client,
+        GuildSettingsService guildSettings, HttpClient client,
         BotConfigService config, IBotCredentials credentials)
     : MewdekoModuleBase<ISearchImagesService>
 {
@@ -296,8 +296,7 @@ public class Nsfw(InteractiveService interactivity, MartineApi martineApi,
 
         if (interval == 0)
         {
-            if (!Service.AutoHentaiTimers.TryRemove(ctx.Channel.Id, out t))
-                return;
+            if (!Service.AutoHentaiTimers.TryRemove(ctx.Channel.Id, out t)) return;
 
             t.Change(Timeout.Infinite, Timeout.Infinite); //proper way to disable the timer
             await ReplyConfirmLocalizedAsync("stopped").ConfigureAwait(false);

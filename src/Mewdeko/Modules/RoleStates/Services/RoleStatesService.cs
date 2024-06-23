@@ -17,15 +17,13 @@ public class RoleStatesService : INService
 
     private async Task OnUserBanned(SocketUser args, SocketGuild arsg2)
     {
-        if (args is not SocketGuildUser usr)
-            return;
+        if (args is not SocketGuildUser usr) return;
         await using var db = this.dbService.GetDbContext();
         var roleStateSettings = await db.RoleStateSettings.FirstOrDefaultAsync(x => x.GuildId == arsg2.Id);
-        if (roleStateSettings is null || !roleStateSettings.Enabled || !roleStateSettings.ClearOnBan) return;
+        if (roleStateSettings is null || roleStateSettings.Enabled == 0 || roleStateSettings.ClearOnBan == 0) return;
 
         var roleState = await db.UserRoleStates.FirstOrDefaultAsync(x => x.GuildId == arsg2.Id && x.UserId == usr.Id);
-        if (roleState is null)
-            return;
+        if (roleState is null) return;
         db.Remove(roleState);
         await db.SaveChangesAsync();
     }
@@ -35,21 +33,19 @@ public class RoleStatesService : INService
         await using var db = dbService.GetDbContext();
 
         var roleStateSettings = await db.RoleStateSettings.FirstOrDefaultAsync(x => x.GuildId == usr.Guild.Id);
-        if (roleStateSettings is null || !roleStateSettings.Enabled) return;
+        if (roleStateSettings is null || roleStateSettings.Enabled == 0) return;
 
-        if (roleStateSettings.IgnoreBots && usr.IsBot) return;
+        if (roleStateSettings.IgnoreBots == 1 && usr.IsBot) return;
 
         var deniedUsers = string.IsNullOrWhiteSpace(roleStateSettings.DeniedUsers)
             ? new List<ulong>()
             : roleStateSettings.DeniedUsers.Split(',').Select(ulong.Parse).ToList();
 
-        if (deniedUsers.Contains(usr.Id))
-            return;
+        if (deniedUsers.Contains(usr.Id)) return;
 
         var roleState =
             await db.UserRoleStates.FirstOrDefaultAsync(x => x.GuildId == usr.Guild.Id && x.UserId == usr.Id);
-        if (roleState is null || string.IsNullOrWhiteSpace(roleState.SavedRoles))
-            return;
+        if (roleState is null || string.IsNullOrWhiteSpace(roleState.SavedRoles)) return;
 
         var savedRoleIds = roleState.SavedRoles.Split(',').Select(ulong.Parse).ToList();
 
@@ -72,9 +68,9 @@ public class RoleStatesService : INService
     {
         await using var db = this.dbService.GetDbContext();
         var roleStateSettings = await db.RoleStateSettings.FirstOrDefaultAsync(x => x.GuildId == args.Id);
-        if (roleStateSettings is null || !roleStateSettings.Enabled) return;
+        if (roleStateSettings is null || roleStateSettings.Enabled == 0) return;
 
-        if (roleStateSettings.IgnoreBots && args2.IsBot) return;
+        if (roleStateSettings.IgnoreBots == 1 && args2.IsBot) return;
 
         var deniedRoles = string.IsNullOrWhiteSpace(roleStateSettings.DeniedRoles)
             ? new List<ulong>()
@@ -84,11 +80,9 @@ public class RoleStatesService : INService
             ? new List<ulong>()
             : roleStateSettings.DeniedUsers.Split(',').Select(ulong.Parse).ToList();
 
-        if (deniedUsers.Contains(args2.Id))
-            return;
+        if (deniedUsers.Contains(args2.Id)) return;
 
-        if (args2 is not SocketGuildUser usr)
-            return;
+        if (args2 is not SocketGuildUser usr) return;
 
         var rolesToSave = usr.Roles.Where(x => !x.IsManaged && !x.IsEveryone).Select(x => x.Id);
         if (deniedRoles.Any())
@@ -96,8 +90,7 @@ public class RoleStatesService : INService
             rolesToSave = rolesToSave.Except(deniedRoles);
         }
 
-        if (!rolesToSave.Any())
-            return;
+        if (!rolesToSave.Any()) return;
 
         var roleState = await db.UserRoleStates.FirstOrDefaultAsync(x => x.GuildId == args.Id && x.UserId == usr.Id);
         if (roleState is null)
@@ -129,17 +122,17 @@ public class RoleStatesService : INService
         {
             var toAdd = new RoleStateSettings
             {
-                GuildId = guildId, Enabled = true,
+                GuildId = guildId, Enabled = 1,
             };
             await db.RoleStateSettings.AddAsync(toAdd);
             await db.SaveChangesAsync();
             return true;
         }
 
-        roleStateSettings.Enabled = !roleStateSettings.Enabled;
+        roleStateSettings.Enabled = roleStateSettings.Enabled == 1 ? 0 : 1;
         db.RoleStateSettings.Update(roleStateSettings);
         await db.SaveChangesAsync();
-        return !roleStateSettings.Enabled;
+        return !false.ParseBoth(roleStateSettings.Enabled);
     }
 
     public async Task<RoleStateSettings?> GetRoleStateSettings(ulong guildId)
@@ -171,13 +164,13 @@ public class RoleStatesService : INService
     {
         await using var db = dbService.GetDbContext();
 
-        var newIgnoreBotsValue = !roleStateSettings.IgnoreBots;
+        var newIgnoreBotsValue = roleStateSettings.IgnoreBots == 1 ? 0 : 1;
         roleStateSettings.IgnoreBots = newIgnoreBotsValue;
 
         db.RoleStateSettings.Update(roleStateSettings);
         await db.SaveChangesAsync();
 
-        return newIgnoreBotsValue;
+        return false.ParseBoth(newIgnoreBotsValue);
     }
 
 
@@ -186,12 +179,12 @@ public class RoleStatesService : INService
         await using var db = dbService.GetDbContext();
 
         var previousClearOnBanValue = roleStateSettings.ClearOnBan;
-        roleStateSettings.ClearOnBan = !previousClearOnBanValue;
+        roleStateSettings.ClearOnBan = previousClearOnBanValue == 1 ? 0 : 1;
 
         db.RoleStateSettings.Update(roleStateSettings);
         await db.SaveChangesAsync();
 
-        return roleStateSettings.ClearOnBan;
+        return false.ParseBoth(roleStateSettings.ClearOnBan);
     }
 
 
@@ -266,8 +259,7 @@ public class RoleStatesService : INService
         await using var db = dbService.GetDbContext();
         var userRoleState =
             await db.UserRoleStates.FirstOrDefaultAsync(x => x.GuildId == guildId && x.UserId == userId);
-        if (userRoleState is null)
-            return false;
+        if (userRoleState is null) return false;
         db.UserRoleStates.Remove(userRoleState);
         await db.SaveChangesAsync();
         return true;
@@ -280,15 +272,13 @@ public class RoleStatesService : INService
         var sourceUserRoleState =
             await db.UserRoleStates.FirstOrDefaultAsync(x => x.GuildId == guildId && x.UserId == sourceUserId);
 
-        if (sourceUserRoleState is null || string.IsNullOrWhiteSpace(sourceUserRoleState.SavedRoles))
-            return false;
+        if (sourceUserRoleState is null || string.IsNullOrWhiteSpace(sourceUserRoleState.SavedRoles)) return false;
 
 
         var sourceUserSavedRoleIds = sourceUserRoleState.SavedRoles.Split(',').Select(ulong.Parse).ToList();
         var rolesToAssign = targetUser.Guild.Roles.Where(role => sourceUserSavedRoleIds.Contains(role.Id)).ToList();
 
-        if (!rolesToAssign.Any())
-            return false;
+        if (!rolesToAssign.Any()) return false;
         try
         {
             await targetUser.AddRolesAsync(rolesToAssign);
@@ -310,10 +300,7 @@ public class RoleStatesService : INService
         {
             userRoleState = new UserRoleStates
             {
-                GuildId = guildId,
-                UserId = user.Id,
-                UserName = user.ToString(),
-                SavedRoles = string.Join(",", roles)
+                GuildId = guildId, UserId = user.Id, UserName = user.ToString(), SavedRoles = string.Join(",", roles)
             };
             await db.UserRoleStates.AddAsync(userRoleState);
             await db.SaveChangesAsync();

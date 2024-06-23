@@ -1,5 +1,4 @@
-﻿using System.Data.Entity;
-using System.Net;
+﻿using System.Net;
 using Discord.Net;
 using Mewdeko.Common.TypeReaders;
 using Mewdeko.Modules.Utility.Common;
@@ -22,7 +21,7 @@ public class StreamRoleService : INService, IUnloadableService
 
         guildSettings = allgc
             .ToDictionary(x => x.GuildId, x => x.StreamRole)
-            .Where(x => x.Value is { Enabled: true })
+            .Where(x => x.Value is { Enabled: 1 })
             .ToConcurrent();
 
         eventHandler.GuildMemberUpdated += Client_GuildMemberUpdated;
@@ -73,8 +72,7 @@ public class StreamRoleService : INService, IUnloadableService
             {
                 var userObj = new StreamRoleWhitelistedUser
                 {
-                    UserId = userId,
-                    Username = userName
+                    UserId = userId, Username = userName
                 };
 
                 if (action == AddRemove.Rem)
@@ -95,8 +93,7 @@ public class StreamRoleService : INService, IUnloadableService
             {
                 var userObj = new StreamRoleBlacklistedUser
                 {
-                    UserId = userId,
-                    Username = userName
+                    UserId = userId, Username = userName
                 };
 
                 if (action == AddRemove.Rem)
@@ -117,8 +114,7 @@ public class StreamRoleService : INService, IUnloadableService
             UpdateCache(guild.Id, streamRoleSettings);
         }
 
-        if (success)
-            await RescanUsers(guild).ConfigureAwait(false);
+        if (success) await RescanUsers(guild).ConfigureAwait(false);
         return success;
     }
 
@@ -184,7 +180,7 @@ public class StreamRoleService : INService, IUnloadableService
         {
             var streamRoleSettings = await uow.GetStreamRoleSettings(fromRole.Guild.Id);
 
-            streamRoleSettings.Enabled = true;
+            streamRoleSettings.Enabled = 1;
             streamRoleSettings.AddRoleId = addRole.Id;
             streamRoleSettings.FromRoleId = fromRole.Id;
 
@@ -207,7 +203,7 @@ public class StreamRoleService : INService, IUnloadableService
         await using (uow.ConfigureAwait(false))
         {
             var streamRoleSettings = await uow.GetStreamRoleSettings(guild.Id);
-            streamRoleSettings.Enabled = false;
+            streamRoleSettings.Enabled = 0;
             streamRoleSettings.AddRoleId = 0;
             streamRoleSettings.FromRoleId = 0;
             await uow.SaveChangesAsync().ConfigureAwait(false);
@@ -226,7 +222,7 @@ public class StreamRoleService : INService, IUnloadableService
                                   setting.Whitelist.Any(x => x.UserId == user.Id)));
 
         if (g is not null
-            && setting.Enabled
+            && setting.Enabled == 1
             && setting.Blacklist.All(x => x.UserId != user.Id)
             && user.RoleIds.Contains(setting.FromRoleId))
         {
@@ -291,7 +287,7 @@ public class StreamRoleService : INService, IUnloadableService
         if (addRole == null)
             return;
 
-        if (setting.Enabled)
+        if (setting.Enabled == 1)
         {
             var users = await guild.GetUsersAsync(CacheMode.CacheOnly).ConfigureAwait(false);
             foreach (var usr in users.Where(x =>

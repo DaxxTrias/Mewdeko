@@ -177,20 +177,17 @@ public partial class ServerManagement
 
             var embed = new EmbedBuilder
             {
-                Title = "Are you sure you want to delete these roles?",
-                Description = $"{string.Join("\n", secondlist)}"
+                Title = "Are you sure you want to delete these roles?", Description = $"{string.Join("\n", secondlist)}"
             };
             if (await PromptUserConfirmAsync(embed, ctx.User.Id).ConfigureAwait(false))
             {
                 var msg = await ctx.Channel
                     .SendConfirmAsync($"{config.Data.LoadingEmote} Deleting {roles.Length} roles...")
                     .ConfigureAwait(false);
-                foreach (var i in roles)
-                    await i.DeleteAsync().ConfigureAwait(false);
+                foreach (var i in roles) await i.DeleteAsync().ConfigureAwait(false);
                 var newemb = new EmbedBuilder
                 {
-                    Description = $"Succesfully deleted {roles.Length} roles!",
-                    Color = Mewdeko.OkColor
+                    Description = $"Succesfully deleted {roles.Length} roles!", Color = Mewdeko.OkColor
                 };
                 await msg.ModifyAsync(x => x.Embed = newemb.Build()).ConfigureAwait(false);
             }
@@ -212,8 +209,7 @@ public partial class ServerManagement
 
             var eb = new EmbedBuilder
             {
-                Color = Mewdeko.OkColor,
-                Description = "Are you sure you want to stop this job?"
+                Color = Mewdeko.OkColor, Description = "Are you sure you want to stop this job?"
             };
             eb.AddField(list.JobType,
                 $"Started by {list.StartedBy.Mention}\nProgress: {list.AddedTo}/{list.TotalUsers}");
@@ -240,8 +236,7 @@ public partial class ServerManagement
                     return;
                 }
 
-                if (((IGuildUser)ctx.User).GetRoles().Max(x => x.Position) > i.Position)
-                    continue;
+                if (((IGuildUser)ctx.User).GetRoles().Max(x => x.Position) > i.Position) continue;
                 await ctx.Channel.SendErrorAsync($"I cannot manage the role {i.Mention}!").ConfigureAwait(false);
                 return;
             }
@@ -319,8 +314,7 @@ public partial class ServerManagement
                     return;
                 }
 
-                if (((IGuildUser)ctx.User).GetRoles().Max(x => x.Position) > i.Position)
-                    continue;
+                if (((IGuildUser)ctx.User).GetRoles().Max(x => x.Position) > i.Position) continue;
                 await ctx.Channel.SendErrorAsync($"I cannot manage the role {i.Mention}!").ConfigureAwait(false);
                 return;
             }
@@ -344,8 +338,7 @@ public partial class ServerManagement
 
             var eb = new EmbedBuilder
             {
-                Title = $"{list.Count} Mass Role Operations Running",
-                Color = Mewdeko.OkColor
+                Title = $"{list.Count} Mass Role Operations Running", Color = Mewdeko.OkColor
             };
             foreach (var i in list)
             {
@@ -633,16 +626,12 @@ public partial class ServerManagement
                 if (role.Members.Any())
                     role.Members.ForEach(x => pair.Add(new ExportedRoles
                     {
-                        RoleId = i.Id,
-                        UserId = x.Id,
-                        RoleName = i.Name
+                        RoleId = i.Id, UserId = x.Id, RoleName = i.Name
                     }));
                 else
                     pair.Add(new ExportedRoles
                     {
-                        RoleId = i.Id,
-                        UserId = 0,
-                        RoleName = i.Name
+                        RoleId = i.Id, UserId = 0, RoleName = i.Name
                     });
             }
 

@@ -41,9 +41,6 @@ public partial class Administration
         Inherit
     }
 
-    private readonly GuildSettingsService guildSettingsService;
-    private readonly DownloadTracker downloadTracker;
-
     [Cmd, Aliases, UserPerm(GuildPermission.Administrator)]
     public async Task GuildStatsOptOut()
     {
@@ -107,7 +104,6 @@ public partial class Administration
 
         await ctx.Channel.SendConfirmAsync(GetText("nameban_message_delete"));
         var deleteString = await NextMessageAsync(ctx.Channel.Id, ctx.User.Id);
-        var deleteCount = 0;
         if (deleteString == null)
         {
             await ctx.Channel.SendErrorAsync($"{configService.Data.ErrorEmote} {GetText("nameban_cancelled")}");
@@ -120,7 +116,7 @@ public partial class Administration
             return;
         }
 
-        deleteCount = int.Parse(deleteString);
+        var deleteCount = int.Parse(deleteString);
         var components = new ComponentBuilder()
             .WithButton(GetText("preview"), "previewbans")
             .WithButton(GetText("execute"), "executeorder66", ButtonStyle.Success)
@@ -224,7 +220,7 @@ public partial class Administration
                 {
                     await Task.CompletedTask.ConfigureAwait(false);
                     return new PageBuilder()
-                    .WithTitle(GetText("banunder_preview", users.Count(),
+                        .WithTitle(GetText("banunder_preview", users.Count(),
                             time.Time.Humanize(maxUnit: TimeUnit.Year)))
                         .WithDescription(string.Join("\n", users.Skip(page * 20).Take(20)));
                 }
@@ -350,8 +346,7 @@ public partial class Administration
 
                 var eb = new EmbedBuilder
                 {
-                    Description = $"Are you sure you want to prune {toprune} Members?",
-                    Color = Mewdeko.OkColor
+                    Description = $"Are you sure you want to prune {toprune} Members?", Color = Mewdeko.OkColor
                 };
                 if (!await PromptUserConfirmAsync(eb, ctx.User.Id).ConfigureAwait(false))
                 {
@@ -363,8 +358,7 @@ public partial class Administration
                     await ctx.Guild.PruneUsersAsync(time.Time.Days).ConfigureAwait(false);
                     var ebi = new EmbedBuilder
                     {
-                        Description = GetText("pruned_members", toprune),
-                        Color = Mewdeko.OkColor
+                        Description = GetText("pruned_members", toprune), Color = Mewdeko.OkColor
                     };
                     await msg.ModifyAsync(x => x.Embed = ebi.Build()).ConfigureAwait(false);
                 }
@@ -385,8 +379,7 @@ public partial class Administration
 
                 var eb = new EmbedBuilder
                 {
-                    Description = GetText("prune_confirm", toprune),
-                    Color = Mewdeko.OkColor
+                    Description = GetText("prune_confirm", toprune), Color = Mewdeko.OkColor
                 };
                 if (!await PromptUserConfirmAsync(eb, ctx.User.Id).ConfigureAwait(false))
                 {
@@ -402,8 +395,7 @@ public partial class Administration
                         });
                     var ebi = new EmbedBuilder
                     {
-                        Description = GetText("pruned_members", toprune),
-                        Color = Mewdeko.OkColor
+                        Description = GetText("pruned_members", toprune), Color = Mewdeko.OkColor
                     };
                     await msg.ModifyAsync(x => x.Embed = ebi.Build()).ConfigureAwait(false);
                 }
@@ -521,7 +513,7 @@ public partial class Administration
             {
                 var ch = guild.GetChannel(x.ChannelId)?.ToString()
                          ?? x.ChannelId.ToString();
-                var prefix = x.State ? "✅ " : "❌ ";
+                var prefix = x.State == 1 ? "✅ " : "❌ ";
                 return prefix + ch;
             }));
 

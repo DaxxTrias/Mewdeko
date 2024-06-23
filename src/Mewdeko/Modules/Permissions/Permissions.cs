@@ -1,4 +1,4 @@
-using Discord.Commands;
+﻿using Discord.Commands;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
 using Mewdeko.Common.Attributes.TextCommands;
@@ -32,8 +32,8 @@ public partial class Permissions(DbService db, InteractiveService inter, GuildSe
         await using (uow.ConfigureAwait(false))
         {
             var config = await uow.GcWithPermissionsv2For(ctx.Guild.Id);
-            action ??= new PermissionAction(!config.VerbosePermissions);
-            config.VerbosePermissions = action.Value;
+            action ??= new PermissionAction(config.VerbosePermissions == 0L);
+            config.VerbosePermissions = action.Value ? 1L : 0L;
             await uow.SaveChangesAsync().ConfigureAwait(false);
             Service.UpdateCache(config);
         }
@@ -149,8 +149,8 @@ public partial class Permissions(DbService db, InteractiveService inter, GuildSe
             }
 
             await ReplyConfirmLocalizedAsync("removed",
-                index + 1,
-                Format.Code(p.GetCommand(await guildSettings.GetPrefix(ctx.Guild), (SocketGuild)ctx.Guild)))
+                    index + 1,
+                    Format.Code(p.GetCommand(await guildSettings.GetPrefix(ctx.Guild), (SocketGuild)ctx.Guild)))
                 .ConfigureAwait(false);
         }
         catch (IndexOutOfRangeException)
@@ -223,8 +223,8 @@ public partial class Permissions(DbService db, InteractiveService inter, GuildSe
             PrimaryTargetId = 0,
             SecondaryTarget = SecondaryPermissionType.Command,
             SecondaryTargetName = command.Name.ToLowerInvariant(),
-            State = action.Value,
-            IsCustomCommand = command.IsCustom
+            State = action.Value ? 1 : 0,
+            IsCustomCommand = command.IsCustom ? 1 : 0,
         }).ConfigureAwait(false);
 
         if (action.Value)
@@ -250,7 +250,7 @@ public partial class Permissions(DbService db, InteractiveService inter, GuildSe
             PrimaryTargetId = 0,
             SecondaryTarget = SecondaryPermissionType.Module,
             SecondaryTargetName = module.Name.ToLowerInvariant(),
-            State = action.Value
+            State = action.Value ? 1 : 0,
         }).ConfigureAwait(false);
 
         if (action.Value)
@@ -276,8 +276,8 @@ public partial class Permissions(DbService db, InteractiveService inter, GuildSe
             PrimaryTargetId = user.Id,
             SecondaryTarget = SecondaryPermissionType.Command,
             SecondaryTargetName = command.Name.ToLowerInvariant(),
-            State = action.Value,
-            IsCustomCommand = command.IsCustom
+            State = action.Value ? 1 : 0,
+            IsCustomCommand = command.IsCustom ? 1 : 0
         }).ConfigureAwait(false);
 
         if (action.Value)
@@ -305,7 +305,7 @@ public partial class Permissions(DbService db, InteractiveService inter, GuildSe
             PrimaryTargetId = user.Id,
             SecondaryTarget = SecondaryPermissionType.Module,
             SecondaryTargetName = module.Name.ToLowerInvariant(),
-            State = action.Value
+            State = action.Value ? 1 : 0
         }).ConfigureAwait(false);
 
         if (action.Value)
@@ -336,8 +336,8 @@ public partial class Permissions(DbService db, InteractiveService inter, GuildSe
             PrimaryTargetId = role.Id,
             SecondaryTarget = SecondaryPermissionType.Command,
             SecondaryTargetName = command.Name.ToLowerInvariant(),
-            State = action.Value,
-            IsCustomCommand = command.IsCustom
+            State = action.Value ? 1 : 0,
+            IsCustomCommand = command.IsCustom ? 1 : 0
         }).ConfigureAwait(false);
 
         if (action.Value)
@@ -368,7 +368,7 @@ public partial class Permissions(DbService db, InteractiveService inter, GuildSe
             PrimaryTargetId = role.Id,
             SecondaryTarget = SecondaryPermissionType.Module,
             SecondaryTargetName = module.Name.ToLowerInvariant(),
-            State = action.Value
+            State = action.Value ? 1 : 0
         }).ConfigureAwait(false);
 
         if (action.Value)
@@ -396,8 +396,8 @@ public partial class Permissions(DbService db, InteractiveService inter, GuildSe
             PrimaryTargetId = chnl.Id,
             SecondaryTarget = SecondaryPermissionType.Command,
             SecondaryTargetName = command.Name.ToLowerInvariant(),
-            State = action.Value,
-            IsCustomCommand = command.IsCustom
+            State = action.Value ? 1 : 0,
+            IsCustomCommand = command.IsCustom ? 1 : 0
         }).ConfigureAwait(false);
 
         if (action.Value)
@@ -425,7 +425,7 @@ public partial class Permissions(DbService db, InteractiveService inter, GuildSe
             PrimaryTargetId = chnl.Id,
             SecondaryTarget = SecondaryPermissionType.Module,
             SecondaryTargetName = module.Name.ToLowerInvariant(),
-            State = action.Value
+            State = action.Value ? 1 : 0
         }).ConfigureAwait(false);
 
         if (action.Value)
@@ -453,7 +453,7 @@ public partial class Permissions(DbService db, InteractiveService inter, GuildSe
             PrimaryTargetId = chnl.Id,
             SecondaryTarget = SecondaryPermissionType.AllModules,
             SecondaryTargetName = "*",
-            State = action.Value
+            State = action.Value ? 1 : 0
         }).ConfigureAwait(false);
 
         if (action.Value)
@@ -477,8 +477,8 @@ public partial class Permissions(DbService db, InteractiveService inter, GuildSe
             PrimaryTargetId = chnl.Id,
             SecondaryTarget = SecondaryPermissionType.Command,
             SecondaryTargetName = command.Name.ToLowerInvariant(),
-            State = action.Value,
-            IsCustomCommand = command.IsCustom
+            State = action.Value ? 1 : 0,
+            IsCustomCommand = command.IsCustom ? 1 : 0
         }).ConfigureAwait(false);
 
         if (action.Value)
@@ -506,7 +506,7 @@ public partial class Permissions(DbService db, InteractiveService inter, GuildSe
             PrimaryTargetId = chnl.Id,
             SecondaryTarget = SecondaryPermissionType.Module,
             SecondaryTargetName = module.Name.ToLowerInvariant(),
-            State = action.Value
+            State = action.Value ? 1 : 0
         }).ConfigureAwait(false);
 
         if (action.Value)
@@ -534,7 +534,7 @@ public partial class Permissions(DbService db, InteractiveService inter, GuildSe
             PrimaryTargetId = chnl.Id,
             SecondaryTarget = SecondaryPermissionType.AllModules,
             SecondaryTargetName = "*",
-            State = action.Value
+            State = action.Value ? 1 : 0
         }).ConfigureAwait(false);
 
         if (action.Value)
@@ -561,7 +561,7 @@ public partial class Permissions(DbService db, InteractiveService inter, GuildSe
             PrimaryTargetId = role.Id,
             SecondaryTarget = SecondaryPermissionType.AllModules,
             SecondaryTargetName = "*",
-            State = action.Value
+            State = action.Value ? 1 : 0
         }).ConfigureAwait(false);
 
         if (action.Value)
@@ -585,7 +585,7 @@ public partial class Permissions(DbService db, InteractiveService inter, GuildSe
             PrimaryTargetId = user.Id,
             SecondaryTarget = SecondaryPermissionType.AllModules,
             SecondaryTargetName = "*",
-            State = action.Value
+            State = action.Value ? 1 : 0
         }).ConfigureAwait(false);
 
         if (action.Value)
@@ -609,7 +609,7 @@ public partial class Permissions(DbService db, InteractiveService inter, GuildSe
             PrimaryTargetId = 0,
             SecondaryTarget = SecondaryPermissionType.AllModules,
             SecondaryTargetName = "*",
-            State = action.Value
+            State = action.Value ? 1 : 0
         };
 
         var allowUser = new Permissionv2
@@ -618,7 +618,7 @@ public partial class Permissions(DbService db, InteractiveService inter, GuildSe
             PrimaryTargetId = ctx.User.Id,
             SecondaryTarget = SecondaryPermissionType.AllModules,
             SecondaryTargetName = "*",
-            State = true
+            State = 1
         };
 
         await Service.AddPermissions(ctx.Guild.Id,

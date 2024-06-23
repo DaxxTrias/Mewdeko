@@ -11,7 +11,7 @@ namespace Mewdeko.Modules.Moderation;
 
 public class SlashRoleMetadataCommands : MewdekoSlashSubmodule
 {
-    private static HttpClient httpClient = new();
+    private static readonly HttpClient HttpClient = new();
     public IBotCredentials Credentials { get; set; }
     public BotConfigService ConfigService { get; set; }
     public DbService DbService { get; set; }
@@ -45,7 +45,7 @@ public class SlashRoleMetadataCommands : MewdekoSlashSubmodule
                 "redirect_uri", ConfigService.Data.RedirectUrl
             }
         });
-        var req = await httpClient.PostAsync(url, content);
+        var req = await HttpClient.PostAsync(url, content);
         var response = JsonSerializer.Deserialize<AuthResponce>(await req.Content.ReadAsStringAsync());
 
         if (response.access_token.IsNullOrWhiteSpace())
@@ -80,7 +80,7 @@ public class SlashRoleMetadataCommands : MewdekoSlashSubmodule
 
         await Task.Delay(1000);
         await RoleMetadataService.UpdateRoleConnectionData(Context.User.Id, mod.Id, uow, Context.Client.CurrentUser.Id,
-            Credentials.ClientSecret, _httpClient);
+            Credentials.ClientSecret, HttpClient);
 
         var eb = new EmbedBuilder()
             .WithTitle("Code Saved")

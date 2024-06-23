@@ -253,9 +253,9 @@ public partial class Utility
                     : $"{DiscordConfig.CDNUrl}guilds/{ctx.Guild.Id}/users/{usr.Id}/avatars/{av.GuildAvatarId}.png?size=2048";
 
             await ctx.Channel.SendMessageAsync(embed: new EmbedBuilder()
-                .WithOkColor()
-                .AddField(efb => efb.WithName("Username").WithValue(usr.ToString()).WithIsInline(true))
-                .AddField(efb =>
+                    .WithOkColor()
+                    .AddField(efb => efb.WithName("Username").WithValue(usr.ToString()).WithIsInline(true))
+                    .AddField(efb =>
                         efb.WithName($"{(av.GuildAvatarId is null ? "" : "Guild")} Avatar Url")
                             .WithValue($"[Link]({avatarUrl})").WithIsInline(true))
                     .WithImageUrl(avatarUrl).Build(), components: av.GuildAvatarId is null ? null : components.Build())
@@ -279,9 +279,9 @@ public partial class Utility
         var avatarUrl = guildUser.GetBannerUrl() ?? user.GetBannerUrl(size: 2048);
 
         await ctx.Channel.SendMessageAsync(embed: new EmbedBuilder()
-            .WithOkColor()
-            .AddField(efb => efb.WithName("Username").WithValue(usr.ToString()).WithIsInline(true))
-            .AddField(efb =>
+                .WithOkColor()
+                .AddField(efb => efb.WithName("Username").WithValue(usr.ToString()).WithIsInline(true))
+                .AddField(efb =>
                     efb.WithName($"{(guildUser.BannerId is null ? "" : "Guild")} Banner Url")
                         .WithValue($"[Link]({avatarUrl})").WithIsInline(true))
                 .WithImageUrl(avatarUrl).Build(), components: guildUser.BannerId is null ? null : components.Build())

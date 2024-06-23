@@ -101,10 +101,14 @@ public partial class Utility
         public async Task RepeatRedundant(int index)
         {
             if (!Service.RepeaterReady)
+            {
                 return;
+            }
 
             if (!Service.Repeaters.TryGetValue(ctx.Guild.Id, out var guildRepeaters))
+            {
                 return;
+            }
 
             var repeaterList = guildRepeaters.ToList();
 
@@ -115,21 +119,28 @@ public partial class Utility
             }
 
             var repeater = repeaterList[index].Value.Repeater;
-            var newValue = repeater.NoRedundant = !repeater.NoRedundant;
-            var uow = db.GetDbContext();
-            await using (uow.ConfigureAwait(false))
-            {
-                var guildConfig = await uow.ForGuildId(ctx.Guild.Id, set => set.Include(gc => gc.GuildRepeaters));
+            var newValue = repeater.NoRedundant == 0 ? 1 : 0;
+            repeater.NoRedundant = newValue;
 
-                var item = guildConfig.GuildRepeaters.Find(r => r.Id == repeater.Id);
-                if (item != null) item.NoRedundant = newValue;
+            await using var uow = db.GetDbContext();
+
+            var guildConfig = await uow.ForGuildId(ctx.Guild.Id, set => set.Include(gc => gc.GuildRepeaters));
+
+            var item = guildConfig.GuildRepeaters.Find(r => r.Id == repeater.Id);
+            if (item != null)
+            {
+                item.NoRedundant = newValue;
                 await uow.SaveChangesAsync().ConfigureAwait(false);
             }
 
-            if (newValue)
+            if (newValue == 1)
+            {
                 await ReplyConfirmLocalizedAsync("repeater_redundant_no", index + 1).ConfigureAwait(false);
+            }
             else
+            {
                 await ReplyConfirmLocalizedAsync("repeater_redundant_yes", index + 1).ConfigureAwait(false);
+            }
         }
 
         [Cmd, Aliases, RequireContext(ContextType.Guild),
@@ -150,72 +161,72 @@ public partial class Utility
         {
             try
             {
-            if (!Service.RepeaterReady)
-                return;
+                if (!Service.RepeaterReady)
+                    return;
 
-            var startTimeOfDay = dt?.InputTimeUtc.TimeOfDay;
-            // if interval not null, that means user specified it (don't change it)
+                var startTimeOfDay = dt?.InputTimeUtc.TimeOfDay;
+                // if interval not null, that means user specified it (don't change it)
 
-            // if interval is null set the default to:
-            // if time of day is specified: 1 day
-            // else 5 minutes
-            var realInterval = interval?.Time ?? (startTimeOfDay is null
-                ? TimeSpan.FromMinutes(5)
-                : TimeSpan.FromDays(1));
+                // if interval is null set the default to:
+                // if time of day is specified: 1 day
+                // else 5 minutes
+                var realInterval = interval?.Time ?? (startTimeOfDay is null
+                    ? TimeSpan.FromMinutes(5)
+                    : TimeSpan.FromDays(1));
 
-            if (string.IsNullOrWhiteSpace(message)
-                || (interval != null &&
-                    (interval.Time > TimeSpan.FromMinutes(25000) || interval.Time < TimeSpan.FromSeconds(10))))
-            {
-                return;
-            }
-
-            var toAdd = new Repeater
-            {
-                ChannelId = ctx.Channel.Id,
-                GuildId = ctx.Guild.Id,
-                Interval = realInterval,
-                Message = ((IGuildUser)ctx.User).GuildPermissions.MentionEveryone
-                    ? message
-                    : message.SanitizeMentions(true),
-                NoRedundant = false,
-                StartTimeOfDay = startTimeOfDay
-            };
-
-            var uow = db.GetDbContext();
-            await using (uow.ConfigureAwait(false))
-            {
-                var gc = await uow.ForGuildId(ctx.Guild.Id, set => set.Include(x => x.GuildRepeaters));
-                gc.GuildRepeaters.Add(toAdd);
-                try
+                if (string.IsNullOrWhiteSpace(message)
+                    || (interval != null &&
+                        (interval.Time > TimeSpan.FromMinutes(25000) || interval.Time < TimeSpan.FromSeconds(10))))
                 {
-                    await uow.SaveChangesAsync().ConfigureAwait(false);
+                    return;
                 }
-                catch (Exception e)
+
+                var toAdd = new Repeater
                 {
-                    Console.WriteLine(e);
-                    throw;
+                    ChannelId = ctx.Channel.Id,
+                    GuildId = ctx.Guild.Id,
+                    Interval = realInterval.ToString(),
+                    Message = ((IGuildUser)ctx.User).GuildPermissions.MentionEveryone
+                        ? message
+                        : message.SanitizeMentions(true),
+                    NoRedundant = 0,
+                    StartTimeOfDay = startTimeOfDay?.ToString()
+                };
+
+                var uow = db.GetDbContext();
+                await using (uow.ConfigureAwait(false))
+                {
+                    var gc = await uow.ForGuildId(ctx.Guild.Id, set => set.Include(x => x.GuildRepeaters));
+                    gc.GuildRepeaters.Add(toAdd);
+                    try
+                    {
+                        await uow.SaveChangesAsync().ConfigureAwait(false);
+                    }
+                    catch (Exception e)
+                    {
+                        Console.WriteLine(e);
+                        throw;
+                    }
                 }
+
+                var runner = new RepeatRunner(client, (SocketGuild)ctx.Guild, toAdd, Service);
+
+                Service.Repeaters.AddOrUpdate(ctx.Guild.Id,
+                    new ConcurrentDictionary<int, RepeatRunner>(new[]
+                    {
+                        new KeyValuePair<int, RepeatRunner>(toAdd.Id, runner)
+                    }), (_, old) =>
+                    {
+                        old.TryAdd(runner.Repeater.Id, runner);
+                        return old;
+                    });
+
+                var description = GetRepeaterInfoString(runner);
+                await ctx.Channel.EmbedAsync(new EmbedBuilder()
+                    .WithOkColor()
+                    .WithTitle(GetText("repeater_created"))
+                    .WithDescription(description)).ConfigureAwait(false);
             }
-
-            var runner = new RepeatRunner(client, (SocketGuild)ctx.Guild, toAdd, Service);
-
-            Service.Repeaters.AddOrUpdate(ctx.Guild.Id,
-                new ConcurrentDictionary<int, RepeatRunner>(new[]
-                {
-                    new KeyValuePair<int, RepeatRunner>(toAdd.Id, runner)
-                }), (_, old) =>
-                {
-                    old.TryAdd(runner.Repeater.Id, runner);
-                    return old;
-                });
-
-            var description = GetRepeaterInfoString(runner);
-            await ctx.Channel.EmbedAsync(new EmbedBuilder()
-                .WithOkColor()
-                .WithTitle(GetText("repeater_created"))
-                .WithDescription(description)).ConfigureAwait(false);
-        }
             catch (Exception e)
             {
                 Console.WriteLine(e);
@@ -240,8 +251,7 @@ public partial class Utility
                 .WithTitle(GetText("list_of_repeaters"))
                 .WithOkColor();
 
-            if (replist.Count == 0)
-                embed.WithDescription(GetText("no_active_repeaters"));
+            if (replist.Count == 0) embed.WithDescription(GetText("no_active_repeaters"));
 
             for (var i = 0; i < replist.Count; i++)
             {
@@ -321,8 +331,7 @@ public partial class Utility
             await using var _ = uow.ConfigureAwait(false);
             var guildConfig = await uow.ForGuildId(ctx.Guild.Id, set => set.Include(gc => gc.GuildRepeaters));
             var item = guildConfig.GuildRepeaters.Find(r => r.Id == repeater.Id);
-            if (item != null)
-                item.ChannelId = textChannel.Id;
+            if (item != null) item.ChannelId = textChannel.Id;
             await uow.SaveChangesAsync().ConfigureAwait(false);
 
             await ReplyConfirmLocalizedAsync("repeater_channel_update", textChannel.Mention).ConfigureAwait(false);
@@ -330,13 +339,13 @@ public partial class Utility
 
         private string GetRepeaterInfoString(RepeatRunner runner)
         {
-            var intervalString = Format.Bold(runner.Repeater.Interval.ToPrettyStringHm());
+            var intervalString = Format.Bold(TimeSpan.Parse(runner.Repeater.Interval).ToPrettyStringHm());
             var executesIn = runner.NextDateTime - DateTime.UtcNow;
             var executesInString = Format.Bold(executesIn.ToPrettyStringHm());
             var message = Format.Sanitize(runner.Repeater.Message.TrimTo(50));
 
             var description = "";
-            if (runner.Repeater.NoRedundant)
+            if (runner.Repeater.NoRedundant == 1)
                 description = $"{Format.Underline(Format.Bold(GetText("no_redundant:")))}\n\n";
 
             description +=

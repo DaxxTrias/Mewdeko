@@ -162,8 +162,7 @@ public class RoleStates(BotConfigService bss, InteractiveService interactivity) 
 
         foreach (var role in roles)
         {
-            if (deniedRoles.Contains(role.Id))
-                continue;
+            if (deniedRoles.Contains(role.Id)) continue;
             deniedRoles.Add(role.Id);
             addedCount++;
         }
@@ -195,8 +194,7 @@ public class RoleStates(BotConfigService bss, InteractiveService interactivity) 
 
         foreach (var role in roles)
         {
-            if (!deniedRoles.Contains(role.Id))
-                continue;
+            if (!deniedRoles.Contains(role.Id)) continue;
             deniedRoles.Remove(role.Id);
             removedCount++;
         }
@@ -228,8 +226,7 @@ public class RoleStates(BotConfigService bss, InteractiveService interactivity) 
 
         foreach (var user in users)
         {
-            if (deniedUsers.Contains(user.Id))
-                continue;
+            if (deniedUsers.Contains(user.Id)) continue;
             deniedUsers.Add(user.Id);
             addedCount++;
         }
@@ -261,8 +258,7 @@ public class RoleStates(BotConfigService bss, InteractiveService interactivity) 
 
         foreach (var user in users)
         {
-            if (!deniedUsers.Contains(user.Id))
-                continue;
+            if (!deniedUsers.Contains(user.Id)) continue;
             deniedUsers.Remove(user.Id);
             removedCount++;
         }

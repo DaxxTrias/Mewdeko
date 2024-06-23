@@ -1,4 +1,4 @@
-using Discord.Commands;
+﻿using Discord.Commands;
 using Discord.Interactions;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Modules.Permissions.Common;
@@ -27,7 +27,7 @@ public class PermissionService : ILateBlocker, INService
             Cache.TryAdd(x.GuildId,
                 new PermissionCache
                 {
-                    Verbose = x.VerbosePermissions,
+                    Verbose = false.ParseBoth(x.VerbosePermissions.ToString()),
                     PermRole = x.PermissionRole,
                     Permissions = new PermissionsCollection<Permissionv2>(x.Permissions)
                 });
@@ -199,12 +199,12 @@ public class PermissionService : ILateBlocker, INService
         {
             Permissions = new PermissionsCollection<Permissionv2>(config.Permissions),
             PermRole = config.PermissionRole,
-            Verbose = config.VerbosePermissions
+            Verbose = false.ParseBoth(config.VerbosePermissions.ToString())
         }, (_, old) =>
         {
             old.Permissions = new PermissionsCollection<Permissionv2>(config.Permissions);
             old.PermRole = config.PermissionRole;
-            old.Verbose = config.VerbosePermissions;
+            old.Verbose = false.ParseBoth(config.VerbosePermissions.ToString());
             return old;
         });
 
@@ -251,7 +251,7 @@ public class PermissionService : ILateBlocker, INService
         var permsCol = new PermissionsCollection<Permissionv2>(config.Permissions);
 
         var p = permsCol[index];
-        p.State = state;
+        p.State = state ? 1 : 0;
         uow.Update(p);
         await uow.SaveChangesAsync().ConfigureAwait(false);
         UpdateCache(config);

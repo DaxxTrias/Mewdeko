@@ -33,8 +33,8 @@ public class HelpSlashCommand(GlobalPermissionService permissionService,
             .ConfigureAwait(false);
     }
 
-    [ComponentInteraction("helpselect", true)]
-    public async Task HelpSlash(string[] selected)
+    [ComponentInteraction("helpselect:*", true)]
+    public async Task HelpSlash(string unused, string[] selected)
     {
         var currentmsg = new MewdekoUserMessage
         {
@@ -70,7 +70,7 @@ public class HelpSlashCommand(GlobalPermissionService permissionService,
         var commandInfos = cmds.Commands.Where(c =>
                 c.Module.GetTopLevelModule().Name.ToUpperInvariant()
                     .StartsWith(module, StringComparison.InvariantCulture) &&
-                        !permissionService.BlockedCommands.Contains(c.Aliases[0].ToLowerInvariant()))
+                !permissionService.BlockedCommands.Contains(c.Aliases[0].ToLowerInvariant()))
             .OrderBy(c => c.Aliases[0])
             .Distinct(new CommandTextEqualityComparer());
         // check preconditions for all commands, but only if it's not 'all'
@@ -114,9 +114,9 @@ public class HelpSlashCommand(GlobalPermissionService permissionService,
         {
             await Task.CompletedTask.ConfigureAwait(false);
             var transformed = groups.Select(x => x.ElementAt(page)
-                .Where(commandInfo => !commandInfo.Attributes.Any(attribute => attribute is HelpDisabled)).Select(
-                    commandInfo =>
-                        $"{(succ.Contains(commandInfo) ? "✅" : "❌")}{prefix + commandInfo.Aliases[0]}{(commandInfo.Aliases.Skip(1).FirstOrDefault() is not null ? $"/{prefix}{commandInfo.Aliases[1]}" : "")}"))
+                    .Where(commandInfo => !commandInfo.Attributes.Any(attribute => attribute is HelpDisabled)).Select(
+                        commandInfo =>
+                            $"{(succ.Contains(commandInfo) ? "✅" : "❌")}{prefix + commandInfo.Aliases[0]}{(commandInfo.Aliases.Skip(1).FirstOrDefault() is not null ? $"/{prefix}{commandInfo.Aliases[1]}" : "")}"))
                 .FirstOrDefault();
             var last = groups.Select(x => x.Count()).FirstOrDefault();
             for (i = 0; i < last; i++)
@@ -133,7 +133,7 @@ public class HelpSlashCommand(GlobalPermissionService permissionService,
                 .AddField(groups.Select(x => x.ElementAt(page).Key).FirstOrDefault(),
                     $"```css\n{string.Join("\n", transformed)}\n```")
                 .WithDescription(
-                    $"✅: You can use this command.\n❌: You cannot use this command.\n{config.Data.LoadingEmote}: \nDo `{prefix}h commandname` to see info on that command")
+                    $"✅: You can use this command.\n❌: You cannot use this command.\n{config.Data.LoadingEmote}: If you need any help don't hesitate to join [The Support Server](https://discord.gg/mewdeko)\nDo `{prefix}h commandname` to see info on that command")
                 .WithOkColor();
         }
     }
@@ -142,10 +142,10 @@ public class HelpSlashCommand(GlobalPermissionService permissionService,
     public async Task Invite()
     {
         var eb = new EmbedBuilder()
-            .AddField("",
-                "")
-            .AddField("", "")
-            .AddField("", config.Data.SupportServer)
+            .AddField("Invite Link",
+                "[Anime](https://discord.com/oauth2/authorize?client_id=752236274261426212&scope=bot&permissions=66186303)\n[Non Anime](https://discord.com/oauth2/authorize?client_id=733370438175948891&scope=bot&permissions=66186303)")
+            .AddField("Website/Docs", "https://mewdeko.tech")
+            .AddField("Support Server", config.Data.SupportServer)
             .WithOkColor();
         await ctx.Interaction.RespondAsync(embed: eb.Build()).ConfigureAwait(false);
     }
@@ -154,7 +154,7 @@ public class HelpSlashCommand(GlobalPermissionService permissionService,
     public async Task SearchCommand
     (
         [Discord.Interactions.Summary("command", "the command to get information about"),
-            Autocomplete(typeof(GenericCommandAutocompleter))]
+         Autocomplete(typeof(GenericCommandAutocompleter))]
         string command
     )
     {
