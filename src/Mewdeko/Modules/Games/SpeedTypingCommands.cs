@@ -1,4 +1,4 @@
-using Discord.Commands;
+﻿using Discord.Commands;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Modules.Games.Common;
 using Mewdeko.Modules.Games.Services;
@@ -11,7 +11,6 @@ public partial class Games
     public class SpeedTypingCommands(DiscordSocketClient client, GamesService games, GuildSettingsService guildSettings)
         : MewdekoSubmodule<GamesService>
     {
-
         [Cmd, Aliases, RequireContext(ContextType.Guild),
          MewdekoOptions(typeof(TypingGame.Options))]
         public async Task TypeStart(params string[] args)

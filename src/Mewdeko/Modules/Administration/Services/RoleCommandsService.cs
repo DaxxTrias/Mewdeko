@@ -1,4 +1,4 @@
-using Mewdeko.Database.Common;
+﻿using Mewdeko.Database.Common;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 
@@ -9,12 +9,11 @@ public class RoleCommandsService : INService
     private readonly DbService db;
     private readonly ConcurrentDictionary<ulong, IndexedCollection<ReactionRoleMessage>> models;
 
-    public RoleCommandsService(DiscordSocketClient client, DbService db, EventHandler eventHandler)
+    public RoleCommandsService(DbService db, EventHandler eventHandler, Mewdeko bot)
     {
         this.db = db;
-        using var uow = db.GetDbContext();
-        var gc = uow.GuildConfigs.Include(x => x.ReactionRoleMessages).ThenInclude(x => x.ReactionRoles).Where(x => client.Guilds.Select(socketGuild => socketGuild.Id).Contains(x.GuildId));
-        models = gc.ToDictionary(x => x.GuildId,
+        var allgc = bot.AllGuildConfigs;
+        models = allgc.ToDictionary(x => x.GuildId,
                 x => x.ReactionRoleMessages)
             .ToConcurrent();
         eventHandler.ReactionAdded += _client_ReactionAdded;

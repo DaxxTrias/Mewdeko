@@ -1,4 +1,4 @@
-using Discord.Commands;
+﻿using Discord.Commands;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Modules.Games.Common.Nunchi;
 using Mewdeko.Modules.Games.Services;
@@ -10,7 +10,6 @@ public partial class Games
     [Group]
     public class NunchiCommands(DiscordSocketClient client) : MewdekoSubmodule<GamesService>
     {
-
         [Cmd, Aliases, RequireContext(ContextType.Guild)]
         public async Task Nunchi()
         {

@@ -1,4 +1,4 @@
-using System.Net.Http;
+﻿using System.Net.Http;
 using Discord.Commands;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
@@ -126,9 +126,9 @@ public class ChatTriggers
                 string.Join("\n", chatTriggers.OrderBy(cr => cr.Trigger).Skip(page * 20).Take(20).Select(cr =>
                 {
                     var str = $"`#{cr.Id}` {cr.Trigger}";
-                    if (cr.AutoDeleteTrigger)
+                    if (cr.AutoDeleteTrigger == 1)
                         str = $"🗑{str}";
-                    if (cr.DmResponse)
+                    if (cr.DmResponse == 1)
                         str = $"📪{str}";
                     var reactions = cr.GetReactions();
                     if (reactions.Length > 0)
@@ -541,7 +541,7 @@ public class ChatTriggers
         var errors = Service.GetAcctErrors(ctx.Guild?.Id);
         var eb = new EmbedBuilder();
         var cb = new ComponentBuilder().WithButton("Support Server", style: ButtonStyle.Link,
-            url: "https://discord.gg/",
+            url: "https://discord.gg/Mewdeko",
             emote: Emote.Parse("<:IconInvite:778931752835088426>"));
         if (errors?.Any() ?? false)
         {

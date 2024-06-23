@@ -1,4 +1,4 @@
-using Discord.Commands;
+﻿using Discord.Commands;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Modules.Games.Common.Trivia;
 using Mewdeko.Modules.Games.Services;
@@ -9,11 +9,10 @@ public partial class Games
 {
     [Group]
     public class TriviaCommands(DiscordSocketClient client, IDataCache cache,
-        GamesConfigService gamesConfig,
-        GuildSettingsService guildSettings)
+            GamesConfigService gamesConfig,
+            GuildSettingsService guildSettings)
         : MewdekoSubmodule<GamesService>
     {
-
         [Cmd, Aliases, RequireContext(ContextType.Guild), Priority(0),
          MewdekoOptions(typeof(TriviaOptions))]
         public Task Trivia(params string[] args) => InternalTrivia(args);
@@ -25,8 +24,7 @@ public partial class Games
             var (opts, _) = OptionsParser.ParseFrom(new TriviaOptions(), args);
 
             var config = gamesConfig.Data;
-            if (config.Trivia.MinimumWinReq > 0 && config.Trivia.MinimumWinReq > opts.WinRequirement)
-                return;
+            if (config.Trivia.MinimumWinReq > 0 && config.Trivia.MinimumWinReq > opts.WinRequirement) return;
             var trivia = new TriviaGame(Strings, client, cache, channel.Guild, channel, opts,
                 $"{await guildSettings.GetPrefix(ctx.Guild)}tq");
             if (Service.RunningTrivias.TryAdd(channel.Guild.Id, trivia))

@@ -54,7 +54,7 @@ public class CleverbotIoSession : IChatterBotSession
     public async Task<string> Think(string input)
     {
         using var http = httpFactory.CreateClient();
-        using var msg = new FormUrlEncodedContent(new[] // can be nullref
+        using var msg = new FormUrlEncodedContent(new[]
         {
             new KeyValuePair<string, string>("user", user), new KeyValuePair<string, string>("key", key),
             new KeyValuePair<string, string>("nick", await nick), new KeyValuePair<string, string>("text", input)
@@ -78,7 +78,7 @@ public class CleverbotIoSession : IChatterBotSession
         using var data = await http.PostAsync(createEndpoint, msg).ConfigureAwait(false);
         var str = await data.Content.ReadAsStringAsync().ConfigureAwait(false);
         var obj = JsonConvert.DeserializeObject<CleverbotIoCreateResponse>(str);
-        if (obj.Status != "success") // obj can be null under certain circumstances
+        if (obj.Status != "success")
             throw new OperationCanceledException(obj.Status);
 
         return obj.Nick;

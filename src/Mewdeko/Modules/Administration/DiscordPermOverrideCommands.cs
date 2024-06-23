@@ -1,4 +1,4 @@
-using Discord.Commands;
+﻿using Discord.Commands;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
 using Mewdeko.Common.Attributes.TextCommands;
@@ -50,12 +50,12 @@ public partial class Administration
          UserPerm(GuildPermission.Administrator)]
         public async Task DiscordPermOverrideList()
         {
-            var overrides = await Service.GetAllOverrides(Context.Guild.Id).ConfigureAwait(false);
+            var overrides = Service.GetAllOverrides(Context.Guild.Id);
             var paginator = new LazyPaginatorBuilder()
                 .AddUser(ctx.User)
                 .WithPageFactory(PageFactory)
                 .WithFooter(PaginatorFooter.PageNumber | PaginatorFooter.Users)
-                .WithMaxPageIndex(overrides.Count / 9)
+                .WithMaxPageIndex(overrides.Count() / 9)
                 .WithDefaultCanceledPage()
                 .WithDefaultEmotes()
                 .WithActionOnCancellation(ActionOnStop.DeleteMessage)

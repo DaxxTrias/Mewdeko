@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using Discord.Commands;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
@@ -10,8 +10,8 @@ namespace Mewdeko.Modules.Administration;
 public partial class Administration
 {
     [Group]
-    public class SelfAssignedRolesCommands(InteractiveService serv, GuildSettingsService guildSettings) :
-        MewdekoSubmodule<SelfAssignedRolesService>
+    public class SelfAssignedRolesCommands(InteractiveService serv, GuildSettingsService guildSettings)
+        : MewdekoSubmodule<SelfAssignedRolesService>
     {
         [Cmd, Aliases, RequireContext(ContextType.Guild),
          UserPerm(GuildPermission.ManageMessages), BotPerm(GuildPermission.ManageMessages)]

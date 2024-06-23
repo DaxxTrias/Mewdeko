@@ -1,4 +1,4 @@
-using Discord.Commands;
+﻿using Discord.Commands;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
 using Humanizer;
@@ -110,7 +110,7 @@ public class Afk(InteractiveService serv, DiscordSocketClient client) : MewdekoM
         }
 
         await ReplyConfirmLocalizedAsync("afk_messages_delete",
-            TimeSpan.FromSeconds(await Service.GetAfkDel(ctx.Guild.Id)).Humanize(maxUnit: TimeUnit.Minute))
+                TimeSpan.FromSeconds(await Service.GetAfkDel(ctx.Guild.Id)).Humanize(maxUnit: TimeUnit.Minute))
             .ConfigureAwait(false);
     }
 
@@ -148,7 +148,8 @@ public class Afk(InteractiveService serv, DiscordSocketClient client) : MewdekoM
 
         if (message.Length != 0 && message.Length > await Service.GetAfkLength(ctx.Guild.Id))
         {
-            await ReplyErrorLocalizedAsync("afk_message_too_long", Service.GetAfkLength(ctx.Guild.Id)).ConfigureAwait(false);
+            await ReplyErrorLocalizedAsync("afk_message_too_long", Service.GetAfkLength(ctx.Guild.Id))
+                .ConfigureAwait(false);
             return;
         }
 

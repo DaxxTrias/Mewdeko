@@ -1,4 +1,4 @@
-namespace Mewdeko.Modules.Currency.Services.Impl;
+﻿namespace Mewdeko.Modules.Currency.Services.Impl;
 
 public class LbCurrency
 {

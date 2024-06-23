@@ -1,4 +1,4 @@
-using System.Threading;
+﻿using System.Threading;
 using Discord.Commands;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Modules.Games.Common;

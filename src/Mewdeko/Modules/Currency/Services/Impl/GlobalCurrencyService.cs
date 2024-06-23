@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 
 namespace Mewdeko.Modules.Currency.Services.Impl;
 
@@ -27,8 +27,7 @@ public class GlobalCurrencyService : ICurrencyService
         {
             var globalBalance = new GlobalUserBalance
             {
-                UserId = userId,
-                Balance = amount
+                UserId = userId, Balance = amount
             };
             uow.GlobalUserBalances.Add(globalBalance);
         }
@@ -51,9 +50,7 @@ public class GlobalCurrencyService : ICurrencyService
 
         var transaction = new TransactionHistory
         {
-            UserId = userId,
-            Amount = amount,
-            Description = description
+            UserId = userId, Amount = amount, Description = description
         };
 
         uow.TransactionHistories.Add(transaction);
@@ -68,15 +65,15 @@ public class GlobalCurrencyService : ICurrencyService
             .Where(x => x.UserId == userId && x.GuildId == 0)?
             .ToListAsync();
     }
-    //todo: incomplete psqldeko code
-    //public async Task<string> GetCurrencyEmote(ulong? guildId = null)
-    //{
-    //    await using var uow = dbService.GetDbContext();
 
-    //    return await uow.OwnerOnly
-    //        .Select(x => x.CurrencyEmote)
-    //        .FirstOrDefaultAsync();
-    //}
+    public async Task<string> GetCurrencyEmote(ulong? guildId = null)
+    {
+        await using var uow = dbService.GetDbContext();
+
+        return await uow.OwnerOnly
+            .Select(x => x.CurrencyEmote)
+            .FirstOrDefaultAsync();
+    }
 
     public async Task<IEnumerable<LbCurrency>> GetAllUserBalancesAsync(ulong? _)
     {
@@ -85,25 +82,24 @@ public class GlobalCurrencyService : ICurrencyService
         return uow.GlobalUserBalances
             .Select(x => new LbCurrency
             {
-                UserId = x.UserId,
-                Balance = x.Balance
+                UserId = x.UserId, Balance = x.Balance
             }).ToList();
     }
-    //todo: incomplete psqldeko code
-    //public async Task SetReward(int amount, int seconds, ulong? _)
-    //{
-    //    await using var uow = dbService.GetDbContext();
-    //    var config = await uow.OwnerOnly.FirstOrDefaultAsync();
-    //    config.RewardAmount = amount;
-    //    config.RewardTimeoutSeconds = seconds;
-    //    uow.OwnerOnly.Update(config);
-    //    await uow.SaveChangesAsync();
-    //}
 
-    //public async Task<(int, int)> GetReward(ulong? _)
-    //{
-    //    await using var uow = dbService.GetDbContext();
-    //    var config = await uow.OwnerOnly.FirstOrDefaultAsync();
-    //    return (config.RewardAmount, config.RewardTimeoutSeconds);
-    //}
+    public async Task SetReward(int amount, int seconds, ulong? _)
+    {
+        await using var uow = dbService.GetDbContext();
+        var config = await uow.OwnerOnly.FirstOrDefaultAsync();
+        config.RewardAmount = amount;
+        config.RewardTimeoutSeconds = seconds;
+        uow.OwnerOnly.Update(config);
+        await uow.SaveChangesAsync();
+    }
+
+    public async Task<(int, int)> GetReward(ulong? _)
+    {
+        await using var uow = dbService.GetDbContext();
+        var config = await uow.OwnerOnly.FirstOrDefaultAsync();
+        return (config.RewardAmount, config.RewardTimeoutSeconds);
+    }
 }

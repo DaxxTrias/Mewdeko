@@ -1,4 +1,4 @@
-using LinqToDB.EntityFrameworkCore;
+﻿using LinqToDB.EntityFrameworkCore;
 using Mewdeko.Common.ModuleBehaviors;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
@@ -50,7 +50,7 @@ public class GiveawayService(DiscordSocketClient client, DbService db, IBotCrede
         var gc = await uow.ForGuildId(guild.Id, set => set);
         gc.GiveawayEmote = emote;
         await uow.SaveChangesAsync().ConfigureAwait(false);
-        guildSettings.UpdateGuildConfig(guild.Id, gc);
+        await guildSettings.UpdateGuildConfig(guild.Id, gc);
     }
 
     public async Task<string> GetGiveawayEmote(ulong id)
@@ -104,13 +104,6 @@ public class GiveawayService(DiscordSocketClient client, DbService db, IBotCrede
         }
 
         return giveaways;
-
-        //todo cleanup with ef model port
-        //return uow.Giveaways
-        //    .FromSqlInterpolated(
-        //        $"select * from giveaways where ((serverid >> 22) % {creds.TotalShards}) == {client.ShardId} and \"when\" < {now} and \"Ended\" == 0;")
-        //    .ToListAsync();
-
     }
 
     public async Task GiveawaysInternal(ITextChannel chan, TimeSpan ts, string item, int winners, ulong host,
@@ -148,8 +141,7 @@ public class GiveawayService(DiscordSocketClient client, DbService db, IBotCrede
             var reqrolesparsed = new List<IRole>();
             foreach (var i in splitreqs)
             {
-                if (!ulong.TryParse(i, out var parsed))
-                    continue;
+                if (!ulong.TryParse(i, out var parsed)) continue;
                 try
                 {
                     reqrolesparsed.Add(guild.GetRole(parsed));
@@ -232,12 +224,6 @@ public class GiveawayService(DiscordSocketClient client, DbService db, IBotCrede
         var channel = inputchannel ?? await guild.GetTextChannelAsync(r.ChannelId);
         if (channel is null)
             return;
-
-        //todo: cleanup with ef model port
-        //if (client.GetGuild(r.ServerId) is not { } guild)
-        //    return;
-        //if (client.GetGuild(r.ServerId).GetTextChannel(r.ChannelId) is not { } channel)
-        //    return;
         IUserMessage ch;
         try
         {
@@ -287,8 +273,7 @@ public class GiveawayService(DiscordSocketClient client, DbService db, IBotCrede
         {
             var eb = new EmbedBuilder
             {
-                Color = Mewdeko.ErrorColor,
-                Description = "There were not enough participants!"
+                Color = Mewdeko.ErrorColor, Description = "There were not enough participants!"
             };
             await ch.ModifyAsync(x =>
             {
@@ -420,12 +405,6 @@ public class GiveawayService(DiscordSocketClient client, DbService db, IBotCrede
                     .WithDescription($"Winner: {user.Mention}!\nHosted by: <@{r.UserId}>")
                     .WithFooter($"Ended at {DateTime.UtcNow:dd.MM.yyyy HH:mm:ss}");
 
-                //todo: cleanup with ef model port
-                //var eb = new EmbedBuilder
-                //{
-                //    Color = Mewdeko.OkColor, Description = $"{user.Mention} won the giveaway for {r.Item}!"
-                //};
-
                 await ch.ModifyAsync(x =>
                 {
                     x.Embed = winbed.Build();
@@ -493,15 +472,6 @@ public class GiveawayService(DiscordSocketClient client, DbService db, IBotCrede
                     .WithDescription(
                         $"Winner: {string.Join(", ", winners.Take(5).Select(x => x.Mention))}!\nHosted by: <@{r.UserId}>")
                     .WithFooter($"Ended at {DateTime.UtcNow:dd.MM.yyyy HH:mm:ss}");
-
-                /*
-                 * todo: cleanup with ef model port
-                var eb = new EmbedBuilder
-                {
-                    Color = Mewdeko.OkColor, Description =
-                        $"{string.Join("", winners.Select(x => x.Mention))} won the giveaway for {r.Item}!"
-                };
-                */
 
                 await ch.ModifyAsync(x =>
                 {

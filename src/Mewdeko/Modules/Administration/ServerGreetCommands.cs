@@ -1,4 +1,4 @@
-using System.Net.Http;
+﻿using System.Net.Http;
 using Discord.Commands;
 using Mewdeko.Common.Attributes.TextCommands;
 
@@ -372,8 +372,7 @@ public partial class Administration
 
             await ReplyConfirmLocalizedAsync("byemsg_new").ConfigureAwait(false);
             if (!sendByeEnabled)
-                await ReplyConfirmLocalizedAsync("byemsg_enable",
-                    $"`{await guildSettings.GetPrefix(ctx.Guild)}bye`")
+                await ReplyConfirmLocalizedAsync("byemsg_enable", $"`{await guildSettings.GetPrefix(ctx.Guild)}bye`")
                     .ConfigureAwait(false);
         }
 

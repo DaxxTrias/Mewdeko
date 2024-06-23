@@ -1,7 +1,6 @@
 namespace Mewdeko.Modules.Games.Services;
 
-public class ActivityService(DbService db, GuildSettingsService guildSettings)
-    : INService
+public class ActivityService(DbService db, GuildSettingsService guildSettings) : INService
 {
     public async Task<ulong> GetGameMasterRole(ulong guildId) =>
         (await guildSettings.GetGuildConfig(guildId)).GameMasterRole;
@@ -12,8 +11,6 @@ public class ActivityService(DbService db, GuildSettingsService guildSettings)
         var gc = await uow.ForGuildId(guildid, set => set);
         gc.GameMasterRole = role;
         await uow.SaveChangesAsync().ConfigureAwait(false);
-
-        //todo: make await after ef model port
-        guildSettings.UpdateGuildConfig(guildid, gc);
+        await guildSettings.UpdateGuildConfig(guildid, gc);
     }
 }
