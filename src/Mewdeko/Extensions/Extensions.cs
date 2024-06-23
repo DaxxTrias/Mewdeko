@@ -1,8 +1,7 @@
-#nullable enable
+﻿#nullable enable
 using System.IO;
 using System.Net.Http;
 using System.Net.Http.Headers;
-using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
 using Discord.Commands;
@@ -12,17 +11,7 @@ using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Common.TypeReaders;
 using Mewdeko.Modules.Administration.Services;
 using Mewdeko.Services.strings;
-using Microsoft.Extensions.DependencyInjection;
-using Serilog;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Drawing;
-using SixLabors.ImageSharp.Drawing.Processing;
-using SixLabors.ImageSharp.Formats;
-using SixLabors.ImageSharp.Formats.Png;
-using SixLabors.ImageSharp.PixelFormats;
-using SixLabors.ImageSharp.Processing;
 using SkiaSharp;
-using Color = SixLabors.ImageSharp.Color;
 using ModuleInfo = Discord.Commands.ModuleInfo;
 using TypeReader = Discord.Commands.TypeReader;
 
@@ -73,13 +62,13 @@ public static partial class Extensions
     public static async Task SendErrorAsync(this IDiscordInteraction interaction, string? message)
         => await interaction.RespondAsync(embed: new EmbedBuilder().WithErrorColor().WithDescription(message).Build(),
             components: new ComponentBuilder()
-                //.WithButton(label: "Support Server", style: ButtonStyle.Link, url: "https://discord.gg/mewdeko")
+                .WithButton(label: "Support Server", style: ButtonStyle.Link, url: "https://discord.gg/mewdeko")
                 .Build()).ConfigureAwait(false);
 
     public static async Task SendEphemeralErrorAsync(this IDiscordInteraction interaction, string? message)
         => await interaction.RespondAsync(embed: new EmbedBuilder().WithErrorColor().WithDescription(message).Build(),
             ephemeral: true, components: new ComponentBuilder()
-                //.WithButton(label: "Support Server", style: ButtonStyle.Link, url: "https://discord.gg/mewdeko")
+                .WithButton(label: "Support Server", style: ButtonStyle.Link, url: "https://discord.gg/mewdeko")
                 .Build()).ConfigureAwait(false);
 
     public static async Task<IUserMessage> SendConfirmFollowupAsync(this IDiscordInteraction interaction,
@@ -101,14 +90,14 @@ public static partial class Extensions
     public static async Task<IUserMessage> SendErrorFollowupAsync(this IDiscordInteraction interaction, string message)
         => await interaction.FollowupAsync(embed: new EmbedBuilder().WithErrorColor().WithDescription(message).Build(),
             components: new ComponentBuilder()
-                //.WithButton(label: "Support Server", style: ButtonStyle.Link, url: "https://discord.gg/mewdeko")
+                .WithButton(label: "Support Server", style: ButtonStyle.Link, url: "https://discord.gg/mewdeko")
                 .Build()).ConfigureAwait(false);
 
     public static async Task<IUserMessage> SendEphemeralFollowupErrorAsync(this IDiscordInteraction interaction,
         string message)
         => await interaction.FollowupAsync(embed: new EmbedBuilder().WithErrorColor().WithDescription(message).Build(),
             ephemeral: true, components: new ComponentBuilder()
-                //.WithButton(label: "Support Server", style: ButtonStyle.Link, url: "https://discord.gg/mewdeko")
+                .WithButton(label: "Support Server", style: ButtonStyle.Link, url: "https://discord.gg/mewdeko")
                 .Build()).ConfigureAwait(false);
 
     public static bool IsValidAttachment(this IReadOnlyCollection<IAttachment> attachments)
@@ -183,46 +172,6 @@ public static partial class Extensions
         return value is not null;
     }
 
-    //todo: this was removed in v8 psqldeko. leaving here for now since didnt port to psql yet
-    // https://github.com/SixLabors/Samples/blob/master/ImageSharp/AvatarWithRoundedCorner/Program.cs
-    public static void ApplyRoundedCorners(this IImageProcessingContext ctx, float cornerRadius)
-    {
-        var (width, height) = ctx.GetCurrentSize();
-        var corners = BuildCorners(width, height, cornerRadius);
-
-        ctx.SetGraphicsOptions(new GraphicsOptions
-        {
-            Antialias = true,
-            AlphaCompositionMode =
-                PixelAlphaCompositionMode
-                    .DestOut // enforces that any part of this shape that has color is punched out of the background
-        });
-
-        foreach (var c in corners) ctx = ctx.Fill(Color.Red, c);
-    }
-
-    //todo: this was removed in v8 psqldeko. leaving here for now since didnt port to psql yet
-    private static IPathCollection BuildCorners(int imageWidth, int imageHeight, float cornerRadius)
-    {
-        // first create a square
-        var rect = new RectangularPolygon(-0.5f, -0.5f, cornerRadius, cornerRadius);
-
-        // then cut out of the square a circle so we are left with a corner
-        var cornerTopLeft = rect.Clip(new EllipsePolygon(cornerRadius - 0.5f, cornerRadius - 0.5f, cornerRadius));
-
-        // corner is now a corner shape positions top left
-        //lets make 3 more positioned correctly, we can do that by translating the original around the center of the image
-
-        var rightPos = imageWidth - cornerTopLeft.Bounds.Width + 1;
-        var bottomPos = imageHeight - cornerTopLeft.Bounds.Height + 1;
-
-        // move it across the width of the image - the width of the shape
-        var cornerTopRight = cornerTopLeft.RotateDegree(90).Translate(rightPos, 0);
-        var cornerBottomLeft = cornerTopLeft.RotateDegree(-90).Translate(0, bottomPos);
-        var cornerBottomRight = cornerTopLeft.RotateDegree(180).Translate(rightPos, bottomPos);
-
-        return new PathCollection(cornerTopLeft, cornerBottomLeft, cornerTopRight, cornerBottomRight);
-    }
 
     /// <summary>
     ///     First 10 characters of teh bot token.
@@ -353,6 +302,7 @@ public static partial class Extensions
         (await role.Guild.GetUsersAsync(CacheMode.CacheOnly).ConfigureAwait(false)).Where(u =>
             u.RoleIds.Contains(role.Id));
 
+
     public static MemoryStream ToStream(this SKImage img, SKEncodedImageFormat format = SKEncodedImageFormat.Png)
     {
         var data = img.Encode(format, 100);
@@ -362,25 +312,6 @@ public static partial class Extensions
         return stream;
     }
 
-    //todo: this was removed in v8 psqldeko. leaving here for now since didnt port to psql yet
-    public static MemoryStream ToStream(this Image<Rgba32> img, IImageFormat? format = null)
-    {
-        var imageStream = new MemoryStream();
-        if (format?.Name == "GIF")
-        {
-            img.SaveAsGif(imageStream);
-        }
-        else
-        {
-            img.SaveAsPng(imageStream, new PngEncoder
-            {
-                ColorType = PngColorType.RgbWithAlpha, CompressionLevel = PngCompressionLevel.BestCompression
-            });
-        }
-
-        imageStream.Position = 0;
-        return imageStream;
-    }
 
     public static Stream ToStream(this IEnumerable<byte> bytes, bool canWrite = false)
     {
@@ -407,77 +338,12 @@ public static partial class Extensions
 
         return msg.Content.Headers.ContentLength / 1.Mb();
     }
+
     public static SKImage ToSkImage(this byte[] imageData)
     {
         return SKImage.FromEncodedData(imageData);
     }
 
-    //todo: this was also removed in v8 psqldeko. leaving here for now since didnt port to psql yet
-    public static IEnumerable<Type> LoadFrom(this IServiceCollection collection, Assembly assembly)
-    {
-        // list of all the types which are added with this method
-        var addedTypes = new List<Type>();
-
-        Type[] allTypes;
-        try
-        {
-            // first, get all types in te assembly
-            allTypes = assembly.GetTypes();
-        }
-        catch (ReflectionTypeLoadException ex)
-        {
-            Log.Error(ex, "Error loading assembly types");
-            return Enumerable.Empty<Type>();
-        }
-
-        // all types which have INService implementation are services
-        // which are supposed to be loaded with this method
-        // ignore all interfaces and abstract classes
-        var services = new Queue<Type>(allTypes
-            .Where(x => x.GetInterfaces().Contains(typeof(INService))
-                        && !x.GetTypeInfo().IsInterface && !x.GetTypeInfo().IsAbstract
-#if GLOBAL_Mewdeko
-                        && x.GetTypeInfo().GetCustomAttribute<NoPublicBotAttribute>() == null
-#endif
-            )
-            .ToArray());
-
-        // we will just return those types when we're done instantiating them
-        addedTypes.AddRange(services);
-
-        // get all interfaces which inherit from INService
-        // as we need to also add a service for each one of interfaces
-        // so that DI works for them too
-        var interfaces = new HashSet<Type>(allTypes
-            .Where(x => x.GetInterfaces().Contains(typeof(INService))
-                        && x.GetTypeInfo().IsInterface));
-
-        // keep instantiating until we've instantiated them all
-        while (services.Count > 0)
-        {
-            var serviceType = services.Dequeue(); //get a type i need to add
-
-            if (collection.FirstOrDefault(x => x.ServiceType == serviceType) !=
-                null) // if that type is already added, skip
-            {
-                continue;
-            }
-
-            //also add the same type
-            var interfaceType = interfaces.FirstOrDefault(x => serviceType.GetInterfaces().Contains(x));
-            if (interfaceType != null)
-            {
-                addedTypes.Add(interfaceType);
-                collection.AddSingleton(interfaceType, serviceType);
-            }
-            else
-            {
-                collection.AddSingleton(serviceType, serviceType);
-            }
-        }
-
-        return addedTypes;
-    }
 
     // public static SlashCommandOptionBuilder AddOptions(this SlashCommandOptionBuilder builder, IEnumerable<SlashCommandOptionBuilder> options)
     // {
@@ -521,9 +387,9 @@ public static partial class Extensions
                 return mCmd.Data.Name;
             default:
             {
-                    if (interaction is not SocketSlashCommand sCmd)
-                        throw new ArgumentException("interaction is not a valid type");
-                    return (sCmd.Data.Name
+                if (interaction is not SocketSlashCommand sCmd)
+                    throw new ArgumentException("interaction is not a valid type");
+                return (sCmd.Data.Name
                         + " "
                         + ((sCmd.Data.Options?.FirstOrDefault()?.Type is ApplicationCommandOptionType.SubCommand
                                or ApplicationCommandOptionType.SubCommandGroup
@@ -539,6 +405,7 @@ public static partial class Extensions
             }
         }
     }
+
     [GeneratedRegex("^(https?|ftp)://(?<path>[^\\s/$.?#].[^\\s]*)$", RegexOptions.Compiled)]
     private static partial Regex MyRegex();
 }
