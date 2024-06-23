@@ -43,8 +43,7 @@ public class GuildSettingsService : INService
     {
         var configs = bot.AllGuildConfigs;
         var toReturn = configs.FirstOrDefault(x => x.GuildId == guildId);
-        if (toReturn is not null)
-            return toReturn;
+        if (toReturn is not null) return toReturn;
         {
             await using var uow = db.GetDbContext();
             var toLoad = uow.GuildConfigs.IncludeEverything().FirstOrDefault(x => x.GuildId == guildId);

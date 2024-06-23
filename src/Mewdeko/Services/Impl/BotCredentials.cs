@@ -1,4 +1,4 @@
-using System.Collections.Immutable;
+﻿using System.Collections.Immutable;
 using System.IO;
 using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json;
@@ -48,8 +48,7 @@ public class BotCredentials : IBotCredentials
                         : owners.Split(' ').Select(ulong.Parse).ToList();
                     var model = new CredentialsModel
                     {
-                        Token = token,
-                        OwnerIds = ownersList
+                        Token = token, OwnerIds = ownersList
                     };
                     File.WriteAllText(credsFileName, JsonConvert.SerializeObject(model, Formatting.Indented));
                     break;
@@ -58,8 +57,7 @@ public class BotCredentials : IBotCredentials
                 case "3":
                     Environment.Exit(0);
                     break;
-                default:
-                    throw new ArgumentOutOfRangeException();
+                default: throw new ArgumentOutOfRangeException();
             }
         }
 
@@ -94,6 +92,8 @@ public class BotCredentials : IBotCredentials
             OfficialMods = data.GetSection("OfficialMods").GetChildren().Select(c => ulong.Parse(c.Value))
                 .ToImmutableArray();
             GoogleApiKey = data[nameof(GoogleApiKey)];
+            UsePsql = false.ParseBoth(data[nameof(UsePsql)] ?? "false");
+            PsqlConnectionString = data[nameof(PsqlConnectionString)];
             CsrfToken = data[nameof(CsrfToken)];
             UserAgent = data[nameof(UserAgent)];
             CfClearance = data[nameof(CfClearance)];

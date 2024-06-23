@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Threading;
 using Discord.Commands;
@@ -93,17 +93,17 @@ public class CommandHandler : INService
             if (ctx.Guild is not null)
             {
                 var gconf = await gss.GetGuildConfig(ctx.Guild.Id);
-                if (!gconf.StatsOptOut)
+                if (!false.ParseBoth(gconf.StatsOptOut.ToString()))
                 {
                     await using var uow = db.GetDbContext();
                     var user = await uow.GetOrCreateUser(ctx.User);
-                    if (!user.StatsOptOut)
+                    if (!false.ParseBoth(user.StatsOptOut))
                     {
                         var comStats = new CommandStats
                         {
                             ChannelId = ctx.Channel.Id,
                             GuildId = ctx.Guild.Id,
-                            IsSlash = true,
+                            IsSlash = 1,
                             NameOrId = info.Name,
                             UserId = ctx.User.Id,
                             Module = info.Module.Name
@@ -225,17 +225,17 @@ public class CommandHandler : INService
             if (ctx.Guild is not null)
             {
                 var gconf = await gss.GetGuildConfig(ctx.Guild.Id);
-                if (!gconf.StatsOptOut)
+                if (!false.ParseBoth(gconf.StatsOptOut.ToString()))
                 {
                     await using var uow = db.GetDbContext();
                     var user = await uow.GetOrCreateUser(ctx.User);
-                    if (!user.StatsOptOut)
+                    if (!false.ParseBoth(user.StatsOptOut))
                     {
                         var comStats = new CommandStats
                         {
                             ChannelId = ctx.Channel.Id,
                             GuildId = ctx.Guild.Id,
-                            IsSlash = true,
+                            IsSlash = 1,
                             NameOrId = slashInfo.Name,
                             UserId = ctx.User.Id,
                             Module = slashInfo.Module.Name
@@ -356,7 +356,7 @@ public class CommandHandler : INService
         await Task.Delay(2500);
         var blacklistService = services.GetService<BlacklistService>();
         var cb = new ComponentBuilder().WithButton("Support Server", null, ButtonStyle.Link,
-            url: "https://discord.gg/TBD4").Build();
+            url: "https://discord.gg/mewdeko").Build();
         foreach (var bl in blacklistService.BlacklistEntries)
         {
             if ((interaction.Channel as IGuildChannel)?.Guild != null && bl.Type == BlacklistType.Server &&
@@ -589,14 +589,7 @@ public class CommandHandler : INService
         {
             while (CommandParseQueue[channelId].TryDequeue(out var msg))
             {
-                try
-                {
-                    await TryRunCommand((msg.Channel as IGuildChannel)?.Guild, msg.Channel, msg).ConfigureAwait(false);
-                }
-                catch (Exception e)
-                {
-                    Log.Error($"Error occured in the handler: {e}");
-                }
+                await TryRunCommand((msg.Channel as IGuildChannel)?.Guild, msg.Channel, msg).ConfigureAwait(false);
             }
 
             CommandParseQueue[channelId] = new ConcurrentQueue<IUserMessage>();
@@ -655,7 +648,7 @@ public class CommandHandler : INService
         var startsWithPrefix = messageContent.StartsWith(prefix, StringComparison.InvariantCulture);
         var startsWithBotMention =
             messageContent.StartsWith($"<@{client.CurrentUser.Id}> ", StringComparison.InvariantCulture) ||
-                                   messageContent.StartsWith($"<@!{client.CurrentUser.Id}> ", StringComparison.InvariantCulture);
+            messageContent.StartsWith($"<@!{client.CurrentUser.Id}> ", StringComparison.InvariantCulture);
 
         if (!startsWithPrefix && !startsWithBotMention)
         {
@@ -684,11 +677,11 @@ public class CommandHandler : INService
         if (guild is not null)
         {
             var gconf = await gss.GetGuildConfig(guild.Id);
-            if (!gconf.StatsOptOut && info is not null)
+            if (!false.ParseBoth(gconf.StatsOptOut.ToString()) && info is not null)
             {
                 await using var uow = db.GetDbContext();
                 var user = await uow.GetOrCreateUser(usrMsg.Author);
-                if (!user.StatsOptOut)
+                if (!false.ParseBoth(user.StatsOptOut))
                 {
                     var comStats = new CommandStats
                     {
