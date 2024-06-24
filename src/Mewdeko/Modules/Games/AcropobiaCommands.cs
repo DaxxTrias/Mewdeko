@@ -9,8 +9,12 @@ namespace Mewdeko.Modules.Games;
 public partial class Games
 {
     [Group]
-    public class AcropobiaCommands(DiscordSocketClient client) : MewdekoSubmodule<GamesService>
+    public class AcropobiaCommands : MewdekoSubmodule<GamesService>
     {
+        private readonly DiscordSocketClient client;
+
+        public AcropobiaCommands(DiscordSocketClient client) => this.client = client;
+
         [Cmd, Aliases, RequireContext(ContextType.Guild),
          MewdekoOptions(typeof(AcrophobiaGame.Options))]
         public async Task Acrophobia(params string[] args)

@@ -10,15 +10,24 @@ namespace Mewdeko.Modules.Searches;
 public partial class Searches
 {
     [Group]
-    public class OsuCommands(IBotCredentials creds, IHttpClientFactory factory) : MewdekoSubmodule
+    public class OsuCommands : MewdekoSubmodule
     {
+        private readonly IBotCredentials creds;
+        private readonly IHttpClientFactory httpFactory;
+
+        public OsuCommands(IBotCredentials creds, IHttpClientFactory factory)
+        {
+            this.creds = creds;
+            httpFactory = factory;
+        }
+
         [Cmd, Aliases]
         public async Task Osu(string user, [Remainder] string? mode = null)
         {
             if (string.IsNullOrWhiteSpace(user))
                 return;
 
-            using var http = factory.CreateClient();
+            using var http = httpFactory.CreateClient();
             var modeNumber = string.IsNullOrWhiteSpace(mode)
                 ? 0
                 : ResolveGameMode(mode);
@@ -73,7 +82,7 @@ public partial class Searches
         [Cmd, Aliases]
         public async Task Gatari(string user, [Remainder] string? mode = null)
         {
-            using var http = factory.CreateClient();
+            using var http = httpFactory.CreateClient();
             var modeNumber = string.IsNullOrWhiteSpace(mode)
                 ? 0
                 : ResolveGameMode(mode);
@@ -127,7 +136,7 @@ public partial class Searches
                 return;
             }
 
-            using var http = factory.CreateClient();
+            using var http = httpFactory.CreateClient();
             var m = 0;
             if (!string.IsNullOrWhiteSpace(mode)) m = ResolveGameMode(mode);
 

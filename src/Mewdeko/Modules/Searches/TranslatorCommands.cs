@@ -7,12 +7,21 @@ namespace Mewdeko.Modules.Searches;
 public partial class Searches
 {
     [Group]
-    public class TranslateCommands(SearchesService searches, IGoogleApiService google) : MewdekoSubmodule
+    public class TranslateCommands : MewdekoSubmodule
     {
         public enum AutoDeleteAutoTranslate
         {
             Del,
             Nodel
+        }
+
+        private readonly IGoogleApiService google;
+        private readonly SearchesService searches;
+
+        public TranslateCommands(SearchesService searches, IGoogleApiService google)
+        {
+            this.searches = searches;
+            this.google = google;
         }
 
         [Cmd, Aliases]
@@ -83,7 +92,6 @@ public partial class Searches
         }
 
         [Cmd, Aliases, RequireContext(ContextType.Guild)]
-        public async Task Translangs() =>
-            await ctx.Channel.SendTableAsync(google.Languages, str => $"{str,-15}").ConfigureAwait(false);
+        public async Task Translangs() => await ctx.Channel.SendTableAsync(google.Languages, str => $"{str,-15}").ConfigureAwait(false);
     }
 }
