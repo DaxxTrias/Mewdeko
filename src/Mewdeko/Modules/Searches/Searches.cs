@@ -25,21 +25,42 @@ using SkiaSharp;
 
 namespace Mewdeko.Modules.Searches;
 
-public partial class Searches(IBotCredentials creds, IGoogleApiService google, IHttpClientFactory factory,
-        IMemoryCache cache,
+public partial class Searches : MewdekoModuleBase<SearchesService>
+{
+    private static readonly ConcurrentDictionary<string, string> CachedShortenedLinks = new();
+    private readonly IMemoryCache cache;
+    private readonly IBotCredentials creds;
+    private readonly IGoogleApiService google;
+    private readonly IHttpClientFactory httpFactory;
+    private readonly GuildTimezoneService tzSvc;
+    private readonly InteractiveService interactivity;
+    private readonly MartineApi martineApi;
+    private readonly ToneTagService toneTagService;
+    private readonly BotConfigService config;
+    private readonly INsfwSpy nsfwSpy;
+
+    public Searches(IBotCredentials creds, IGoogleApiService google, IHttpClientFactory factory, IMemoryCache cache,
         GuildTimezoneService tzSvc,
         InteractiveService serv,
         MartineApi martineApi, ToneTagService toneTagService,
         BotConfigService config, INsfwSpy nsfwSpy)
-    : MewdekoModuleBase<SearchesService>
-{
-    private static readonly ConcurrentDictionary<string, string> CachedShortenedLinks = new();
+    {
+        interactivity = serv;
+        this.martineApi = martineApi;
+        this.creds = creds;
+        this.google = google;
+        httpFactory = factory;
+        this.cache = cache;
+        this.tzSvc = tzSvc;
+        this.toneTagService = toneTagService;
+        this.config = config;
+        this.nsfwSpy = nsfwSpy;
+    }
 
     [Cmd, Aliases]
     public async Task Meme()
     {
-        var msg = await ctx.Channel.SendConfirmAsync($"{config.Data.LoadingEmote} Fetching random meme...")
-            .ConfigureAwait(false);
+        var msg = await ctx.Channel.SendConfirmAsync($"{config.Data.LoadingEmote} Fetching random meme...").ConfigureAwait(false);
         var image = await martineApi.RedditApi.GetRandomMeme(Toptype.year).ConfigureAwait(false);
 
         var button = new ComponentBuilder().WithButton("Another!", $"meme:{ctx.User.Id}");
@@ -89,10 +110,8 @@ public partial class Searches(IBotCredentials creds, IGoogleApiService google, I
         catch (ApiException ex)
         {
             await msg.DeleteAsync().ConfigureAwait(false);
-            await ctx.Channel.SendErrorAsync("Seems like that subreddit wasn't found, please try something else!")
-                .ConfigureAwait(false);
-            Log.Error(
-                $"Seems that Meme fetching has failed. Here's the error:\nCode: {ex.StatusCode}\nContent: {(ex.HasContent ? ex.Content : "No Content.")}");
+            await ctx.Channel.SendErrorAsync("Seems like that subreddit wasn't found, please try something else!").ConfigureAwait(false);
+            Log.Error($"Seems that Meme fetching has failed. Here's the error:\nCode: {ex.StatusCode}\nContent: {(ex.HasContent ? ex.Content : "No Content.")}");
             return;
         }
 
@@ -260,7 +279,7 @@ public partial class Searches(IBotCredentials creds, IGoogleApiService google, I
             .WithActionOnCancellation(ActionOnStop.DeleteMessage)
             .Build();
 
-        await serv.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
+        await interactivity.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
 
         async Task<PageBuilder> PageFactory(int page)
         {
@@ -271,7 +290,7 @@ public partial class Searches(IBotCredentials creds, IGoogleApiService google, I
                 .WithTitle(result[page].Snippet.Title)
                 .WithUrl($"https://www.youtube.com/watch?v={result[page].Id.VideoId}")
                 .WithImageUrl(result[page].Snippet.Thumbnails.High.Url)
-                .WithColor(new Color(255, 0, 0));
+                .WithColor(new Discord.Color(255, 0, 0));
         }
     }
 
@@ -374,8 +393,7 @@ public partial class Searches(IBotCredentials creds, IGoogleApiService google, I
                     .WithMaxPageIndex(images.Count)
                     .WithDefaultEmotes()
                     .WithActionOnCancellation(ActionOnStop.DeleteMessage).Build();
-                await serv.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60))
-                    .ConfigureAwait(false);
+                await interactivity.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
 
                 async Task<PageBuilder> PageFactory(int page)
                 {
@@ -421,7 +439,7 @@ public partial class Searches(IBotCredentials creds, IGoogleApiService google, I
                 .WithDefaultEmotes()
                 .WithActionOnCancellation(ActionOnStop.DeleteMessage)
                 .Build();
-            await serv.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
+            await interactivity.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
 
             async Task<PageBuilder> PageFactory(int page)
             {
@@ -458,7 +476,7 @@ public partial class Searches(IBotCredentials creds, IGoogleApiService google, I
         {
             try
             {
-                using var http = factory.CreateClient();
+                using var http = httpFactory.CreateClient();
                 using var req = new HttpRequestMessage(HttpMethod.Post, "https://goolnk.com/api/v1/shorten");
                 req.Content = new MultipartFormDataContent
                 {
@@ -511,8 +529,7 @@ public partial class Searches(IBotCredentials creds, IGoogleApiService google, I
             if (data is null)
             {
                 await ctx.Channel.SendErrorAsync(
-                        "Neither google nor duckduckgo returned a result! Please search something else!")
-                    .ConfigureAwait(false);
+                    "Neither google nor duckduckgo returned a result! Please search something else!").ConfigureAwait(false);
                 return;
             }
         }
@@ -601,7 +618,7 @@ public partial class Searches(IBotCredentials creds, IGoogleApiService google, I
             return;
 
         await ctx.Channel.TriggerTypingAsync().ConfigureAwait(false);
-        using var http = factory.CreateClient();
+        using var http = httpFactory.CreateClient();
         var res = await http
             .GetStringAsync($"https://api.urbandictionary.com/v0/define?term={Uri.EscapeDataString(query)}")
             .ConfigureAwait(false);
@@ -619,8 +636,7 @@ public partial class Searches(IBotCredentials creds, IGoogleApiService google, I
                     .WithActionOnCancellation(ActionOnStop.DeleteMessage)
                     .Build();
 
-                await serv.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60))
-                    .ConfigureAwait(false);
+                await interactivity.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
 
                 async Task<PageBuilder> PageFactory(int page)
                 {
@@ -651,7 +667,7 @@ public partial class Searches(IBotCredentials creds, IGoogleApiService google, I
         if (!await ValidateQuery(ctx.Channel, word).ConfigureAwait(false))
             return;
 
-        using var http = factory.CreateClient();
+        using var http = httpFactory.CreateClient();
         try
         {
             var res = await cache.GetOrCreateAsync($"define_{word}", e =>
@@ -695,7 +711,7 @@ public partial class Searches(IBotCredentials creds, IGoogleApiService google, I
                 .WithActionOnCancellation(ActionOnStop.DeleteMessage)
                 .Build();
 
-            await serv.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
+            await interactivity.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
 
             async Task<PageBuilder> PageFactory(int page)
             {
@@ -724,7 +740,7 @@ public partial class Searches(IBotCredentials creds, IGoogleApiService google, I
     [Cmd, Aliases]
     public async Task Catfact()
     {
-        using var http = factory.CreateClient();
+        using var http = httpFactory.CreateClient();
         var response = await http.GetStringAsync("https://catfact.ninja/fact").ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(response))
             return;
@@ -788,8 +804,7 @@ public partial class Searches(IBotCredentials creds, IGoogleApiService google, I
 
 
     [Cmd, Aliases]
-    public Task Safebooru([Remainder] string? tag = null) =>
-        InternalDapiCommand(ctx.Message, tag, DapiSearchType.Safebooru);
+    public Task Safebooru([Remainder] string? tag = null) => InternalDapiCommand(ctx.Message, tag, DapiSearchType.Safebooru);
 
 
     [Cmd, Aliases]
@@ -800,7 +815,7 @@ public partial class Searches(IBotCredentials creds, IGoogleApiService google, I
         if (!await ValidateQuery(ctx.Channel, query).ConfigureAwait(false))
             return;
 
-        using var http = factory.CreateClient();
+        using var http = httpFactory.CreateClient();
         var result = await http
             .GetStringAsync(
                 $"https://en.wikipedia.org//w/api.php?action=query&format=json&prop=info&redirects=1&formatversion=2&inprop=url&titles={Uri.EscapeDataString(query)}")
@@ -855,7 +870,7 @@ public partial class Searches(IBotCredentials creds, IGoogleApiService google, I
         }
 
         await ctx.Channel.TriggerTypingAsync().ConfigureAwait(false);
-        using var http = factory.CreateClient();
+        using var http = httpFactory.CreateClient();
         http.DefaultRequestHeaders.Clear();
         try
         {
@@ -889,7 +904,7 @@ public partial class Searches(IBotCredentials creds, IGoogleApiService google, I
         var obj = new BibleVerses();
         try
         {
-            using var http = factory.CreateClient();
+            using var http = httpFactory.CreateClient();
             var res = await http
                 .GetStringAsync($"https://bible-api.com/{book} {chapterAndVerse}").ConfigureAwait(false);
 

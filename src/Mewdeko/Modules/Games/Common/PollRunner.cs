@@ -8,13 +8,13 @@ public class PollRunner
 
     private readonly SemaphoreSlim locker = new(1, 1);
 
-    public PollRunner(DbService db, Discord.Poll poll)
+    public PollRunner(DbService db, Poll poll)
     {
         this.db = db;
         Poll = poll;
     }
 
-    public Discord.Poll Poll { get; }
+    public Poll Poll { get; }
 
     public async Task<(bool allowed, PollType type)> TryVote(int num, IUser user)
     {
