@@ -1,4 +1,4 @@
-﻿namespace Mewdeko.Database.Models;
+namespace Mewdeko.Database.Models;
 
 public class OwnerOnly : DbEntity
 {
