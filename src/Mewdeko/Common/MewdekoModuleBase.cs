@@ -184,6 +184,7 @@ public abstract class MewdekoModule : ModuleBase
             }).ConfigureAwait(false);
         }
     }
+
     public async Task<SocketMessage>? NextFullMessageAsync(ulong channelId, ulong userId)
     {
         var userInputTask = new TaskCompletionSource<SocketMessage>();
@@ -208,8 +209,7 @@ public abstract class MewdekoModule : ModuleBase
         {
             await Task.Run(async () =>
             {
-                if (arg.Author.Id != userId || arg.Channel.Id != channelId)
-                    return;
+                if (arg.Author.Id != userId || arg.Channel.Id != channelId) return;
                 userInputTask.TrySetResult(arg);
                 try
                 {

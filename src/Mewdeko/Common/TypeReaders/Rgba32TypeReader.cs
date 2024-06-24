@@ -1,4 +1,4 @@
-using Discord.Commands;
+﻿using Discord.Commands;
 using SkiaSharp;
 
 namespace Mewdeko.Common.TypeReaders

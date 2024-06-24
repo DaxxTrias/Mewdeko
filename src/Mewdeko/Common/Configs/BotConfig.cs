@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using Mewdeko.Common.Yml;
 using SkiaSharp;
 using YamlDotNet.Core;

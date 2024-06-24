@@ -1,4 +1,4 @@
-using Mewdeko.Common.JsonConverters;
+﻿using Mewdeko.Common.JsonConverters;
 using Newtonsoft.Json;
 
 namespace Mewdeko.Common;
@@ -149,8 +149,7 @@ public class NewEmbed
 
         var activeRowId = 0;
         var rowLength = 0;
-        if (Components is null)
-            return null;
+        if (Components is null) return null;
         foreach (var comp in Components)
         {
             if (activeRowId == 5)

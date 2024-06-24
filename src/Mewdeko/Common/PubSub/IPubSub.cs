@@ -1,4 +1,4 @@
-namespace Mewdeko.Common.PubSub;
+﻿namespace Mewdeko.Common.PubSub;
 
 public interface IPubSub
 {

@@ -1,4 +1,4 @@
-using Discord.Commands;
+﻿using Discord.Commands;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Mewdeko.Common.Attributes.TextCommands;

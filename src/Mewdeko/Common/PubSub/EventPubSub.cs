@@ -1,4 +1,4 @@
-using Serilog;
+﻿using Serilog;
 
 namespace Mewdeko.Common.PubSub;
 
@@ -57,8 +57,7 @@ public class EventPubSub : IPubSub
             sameActions.RemoveAll(a => (Func<TData, ValueTask>)a.Target == action); // Remove the specific subscription
 
             // Clean up if there are no more subscriptions for this action
-            if (sameActions.Count != 0)
-                return Task.CompletedTask;
+            if (sameActions.Count != 0) return Task.CompletedTask;
             dictionary.TryRemove(action, out _);
 
             // Clean up if there are no more actions for this key

@@ -4,8 +4,8 @@ namespace Mewdeko.Common.TypeReaders.Interactions;
 
 public class StatusRolesTypeConverter : TypeConverter<StatusRolesTable>
 {
-
     public override ApplicationCommandOptionType GetDiscordType() => ApplicationCommandOptionType.String;
+
 
     public override async Task<TypeConverterResult> ReadAsync(IInteractionContext context,
         IApplicationCommandInteractionDataOption input, IServiceProvider services)

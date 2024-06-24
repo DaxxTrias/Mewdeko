@@ -1,6 +1,5 @@
 using System.Globalization;
 using Discord.Interactions;
-using LinqToDB.Tools;
 using Mewdeko.Services.strings;
 
 namespace Mewdeko.Common;
@@ -30,35 +29,26 @@ public abstract class MewdekoSlashCommandModule : InteractionModuleBase
     public async Task ReplyErrorLocalizedAsync(string? textKey, params object?[] args)
     {
         var text = GetText(textKey, args);
-        await ctx.Interaction.SendEphemeralErrorAsync($"{Format.Bold(ctx.User.ToString())} {text}")
-            .ConfigureAwait(false);
+        await ctx.Interaction.SendErrorAsync($"{Format.Bold(ctx.User.ToString())} {text}").ConfigureAwait(false);
     }
 
     public async Task EphemeralReplyErrorLocalizedAsync(string? textKey, params object?[] args)
     {
         var text = GetText(textKey, args);
-        if (ctx.Interaction.HasResponded)
-            await ctx.Interaction.SendEphemeralFollowupErrorAsync($"{Format.Bold(ctx.User.ToString())} {text}").ConfigureAwait(false);
-        else
-            await ctx.Interaction.SendEphemeralErrorAsync($"{Format.Bold(ctx.User.ToString())} {text}").ConfigureAwait(false);
+        await ctx.Interaction.SendEphemeralErrorAsync($"{Format.Bold(ctx.User.ToString())} {text}")
+            .ConfigureAwait(false);
     }
 
     public async Task ConfirmLocalizedAsync(string? textKey, params object?[] args)
     {
         var text = GetText(textKey, args);
-        if (ctx.Interaction.HasResponded)
-            await ctx.Interaction.SendConfirmFollowupAsync(text).ConfigureAwait(false);
-        else
-            await ctx.Interaction.SendConfirmAsync(text).ConfigureAwait(false);
+        await ctx.Interaction.SendConfirmAsync(text).ConfigureAwait(false);
     }
 
-    public async Task ReplyConfirmLocalizedAsync(string? textKey, params object?[] args)
+    public Task ReplyConfirmLocalizedAsync(string? textKey, params object?[] args)
     {
         var text = GetText(textKey, args);
-        if (ctx.Interaction.HasResponded)
-            await ctx.Interaction.SendConfirmFollowupAsync($"{Format.Bold(ctx.User.ToString())} {text}");
-        else
-            await ctx.Interaction.SendConfirmAsync($"{Format.Bold(ctx.User.ToString())} {text}");
+        return ctx.Interaction.SendConfirmAsync($"{Format.Bold(ctx.User.ToString())} {text}");
     }
 
     public Task EphemeralReplyConfirmLocalizedAsync(string? textKey, params object?[] args)

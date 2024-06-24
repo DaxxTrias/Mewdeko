@@ -1,4 +1,4 @@
-namespace Mewdeko.Common.Attributes.TextCommands;
+﻿namespace Mewdeko.Common.Attributes.TextCommands;
 
 [AttributeUsage(AttributeTargets.Method)]
 public sealed class MewdekoOptionsAttribute(Type t) : Attribute
