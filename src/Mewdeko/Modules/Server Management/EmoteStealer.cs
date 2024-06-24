@@ -1,5 +1,7 @@
-﻿using System.Net.Http;
+using System.Net.Http;
+using System.Text.RegularExpressions;
 using Discord.Interactions;
+using Discord.Net;
 using Mewdeko.Common.Attributes.InteractionCommands;
 using Mewdeko.Services.Settings;
 using Serilog;
