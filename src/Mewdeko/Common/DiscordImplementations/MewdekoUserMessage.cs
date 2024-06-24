@@ -20,6 +20,8 @@ public class MewdekoUserMessage : IUserMessage
 
     public IAsyncEnumerable<IReadOnlyCollection<IUser>> GetReactionUsersAsync(IEmote emoji, int limit, RequestOptions options = null) => throw new NotImplementedException();
 
+    public IAsyncEnumerable<IReadOnlyCollection<IUser>> GetReactionUsersAsync(IEmote emoji, int limit, RequestOptions options = null, ReactionType type = ReactionType.Normal) => throw new NotImplementedException();
+
     public MessageType Type => MessageType.Default;
     public MessageSource Source => MessageSource.User;
     public bool IsTTS => false;
@@ -31,8 +33,8 @@ public class MewdekoUserMessage : IUserMessage
     public DateTimeOffset? EditedTimestamp => DateTimeOffset.Now;
     public IMessageChannel Channel { get; set; }
     public IUser Author { get; set; }
-    public IReadOnlyCollection<IAttachment> Attachments { get; set; } = new List<IAttachment>();
-    public IReadOnlyCollection<IEmbed> Embeds { get; set; } = new List<IEmbed>();
+    public IReadOnlyCollection<IAttachment> Attachments { get; set; }
+    public IReadOnlyCollection<IEmbed> Embeds { get; set; }
     public IReadOnlyCollection<ITag> Tags { get; set; }
     public IReadOnlyCollection<ulong> MentionedChannelIds { get; set; }
     public IReadOnlyCollection<ulong> MentionedRoleIds { get; set; }
@@ -67,4 +69,14 @@ public class MewdekoUserMessage : IUserMessage
     public IThreadChannel Thread => throw new NotImplementedException();
 
     public MessageRoleSubscriptionData RoleSubscriptionData => throw new NotImplementedException();
+
+    public MessageResolvedData ResolvedData => throw new NotImplementedException();
+
+    public IMessageInteractionMetadata InteractionMetadata
+    {
+        get
+        {
+            throw new NotImplementedException();
+        }
+    }
 }
