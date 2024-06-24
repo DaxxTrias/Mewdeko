@@ -4,7 +4,7 @@
 //using Mewdeko.Api.Reimplementations.PubSub;
 //using Mewdeko.Database;
 
-//var builder = WebApplication.CreateBuilder(args);
+var builder = WebApplication.CreateBuilder(args);
 //var creds = new BotCredentials();
 //var db = new DbService(1, creds.Token);
 //var cache = new RedisCache(creds);
@@ -23,7 +23,7 @@
 //builder.Services.AddEndpointsApiExplorer();
 //builder.Services.AddSwaggerGen();
 
-//var app = builder.Build();
+var app = builder.Build();
 
 //// Configure the HTTP request pipeline.
 //if (app.Environment.IsDevelopment())
@@ -38,4 +38,4 @@
 
 //app.MapControllers();
 
-//app.Run();
+app.Run();
