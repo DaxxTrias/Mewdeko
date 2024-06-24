@@ -1,8 +1,6 @@
-using CodeHollow.FeedReader;
+﻿using CodeHollow.FeedReader;
 using CodeHollow.FeedReader.Feeds;
-using CodeHollow.FeedReader.Parser;
 using Microsoft.EntityFrameworkCore;
-using Serilog;
 using Embed = Discord.Embed;
 
 namespace Mewdeko.Modules.Searches.Services;
@@ -13,28 +11,22 @@ public class FeedsService : INService
     private readonly DbService db;
     private bool isRunning;
 
-    private readonly ConcurrentDictionary<string, DateTime> lastPosts = new();
+    private readonly ConcurrentDictionary<string, DateTime> lastPosts =
+        new();
 
     private readonly ConcurrentDictionary<string, HashSet<FeedSub>> subs;
 
-    public FeedsService(Mewdeko bot, DbService db, DiscordSocketClient client)
+    public FeedsService(DbService db, DiscordSocketClient client, Mewdeko bot)
     {
         this.db = db;
         this.isRunning = true;
+        var allgc = bot.AllGuildConfigs;
+        subs = allgc
+            .SelectMany(x => x.FeedSubs)
+            .GroupBy(x => x.Url.ToLower())
+            .ToDictionary(x => x.Key, x => x.ToHashSet())
+            .ToConcurrent();
 
-        using (var uow = db.GetDbContext())
-        {
-            var guildConfigIds = uow.GuildConfigs.Where(x => bot.Client.Guilds.Select(socketGuild => socketGuild.Id).Contains(x.GuildId)).Select(x => x.Id);
-            subs = uow.GuildConfigs
-                .AsQueryable()
-                .Where(x => guildConfigIds.Contains(x.Id))
-                .Include(x => x.FeedSubs)
-                .ToList()
-                .SelectMany(x => x.FeedSubs)
-                .GroupBy(x => x.Url.ToLower())
-                .ToDictionary(x => x.Key, x => x.ToHashSet())
-                .ToConcurrent();
-        }
 
         this.client = client;
 
@@ -112,7 +104,7 @@ public class FeedsService : INService
 
                                 if (feedItem.SpecificItem is not MediaRssFeedItem mediaRssFeedItem
                                     || !(mediaRssFeedItem.Enclosure?.MediaType?.StartsWith("image/") ?? false))
-                                        return feed.ImageUrl;
+                                    return feed.ImageUrl;
                                 var imgUrl = mediaRssFeedItem.Enclosure.Url;
                                 if (!string.IsNullOrWhiteSpace(imgUrl) &&
                                     Uri.IsWellFormedUriString(imgUrl, UriKind.Absolute))
@@ -138,9 +130,9 @@ public class FeedsService : INService
                         if (!string.IsNullOrWhiteSpace(link) && Uri.IsWellFormedUriString(link, UriKind.Absolute))
                             embed.WithUrl(link);
 
-                        var title = string.IsNullOrWhiteSpace(feedTitle)
-                            ? (string.IsNullOrWhiteSpace(feedItem.Title) ? "-" : feedItem.Title)
-                            : feedTitle;
+                        var title = string.IsNullOrWhiteSpace(feedItem.Title)
+                            ? "-"
+                            : feedItem.Title;
 
                         var gotImage = false;
 
@@ -305,10 +297,8 @@ public class FeedsService : INService
 
                 if (feedItem.SpecificItem is not MediaRssFeedItem mediaRssFeedItem || !(mediaRssFeedItem.Enclosure?.MediaType?.StartsWith("image/") ?? false))
                     return feed.ImageUrl;
-
                 var imgUrl = mediaRssFeedItem.Enclosure.Url;
-                if (!string.IsNullOrWhiteSpace(imgUrl) && Uri.IsWellFormedUriString(imgUrl, UriKind.Absolute))
-                    return imgUrl;
+                if (!string.IsNullOrWhiteSpace(imgUrl) && Uri.IsWellFormedUriString(imgUrl, UriKind.Absolute)) return imgUrl;
 
                 return feed.ImageUrl;
             })

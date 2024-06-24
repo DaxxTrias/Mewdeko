@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using Discord.Interactions;
 using Humanizer;
 using Mewdeko.Common.Attributes.InteractionCommands;
@@ -113,7 +113,7 @@ public class SlashUtility : MewdekoSlashModuleBase<UtilityService>
         {
             case "real":
                 var avatarUrl = user.GetAvatarUrl(size: 2048);
-                //var componentbuilder = new ComponentBuilder().WithButton("Guild Banner", $"bannertype:guild,{userId}");
+                var componentbuilder = new ComponentBuilder().WithButton("Guild Banner", $"bannertype:guild,{userId}");
                 var eb = new EmbedBuilder()
                     .WithOkColor()
                     .AddField(efb => efb.WithName("Username").WithValue(user.ToString()).WithIsInline(true))
@@ -123,12 +123,12 @@ public class SlashUtility : MewdekoSlashModuleBase<UtilityService>
                 await componentInteraction.UpdateAsync(x =>
                 {
                     x.Embed = eb.Build();
-                    //x.Components = componentbuilder.Build();
+                    x.Components = componentbuilder.Build();
                 });
                 break;
             case "guild":
                 var avatarUrlGuild = guildUser.GetBannerUrl(size: 2048);
-                //var componentbuilderGuild = new ComponentBuilder().WithButton("Real Banner", $"bannertype:real,{userId}");
+                var componentbuilderGuild = new ComponentBuilder().WithButton("Real Banner", $"bannertype:real,{userId}");
                 var ebGuild = new EmbedBuilder()
                     .WithOkColor()
                     .AddField(efb => efb.WithName("Username").WithValue(user.ToString()).WithIsInline(true))
@@ -138,11 +138,12 @@ public class SlashUtility : MewdekoSlashModuleBase<UtilityService>
                 await componentInteraction.UpdateAsync(x =>
                 {
                     x.Embed = ebGuild.Build();
-                    //x.Components = componentbuilderGuild.Build();
+                    x.Components = componentbuilderGuild.Build();
                 });
                 break;
         }
     }
+
 
     [SlashCommand("getjson", "Gets the json from a message to use with our embed builder!"), RequireContext(ContextType.Guild), SlashUserPerm(GuildPermission.ManageMessages)]
     public async Task GetJson(ulong messageId, ITextChannel channel = null)
@@ -532,6 +533,7 @@ public class SlashUtility : MewdekoSlashModuleBase<UtilityService>
         var tag = TimestampTag.FromDateTimeOffset(utc, format);
         await ctx.Interaction.SendEphemeralConfirmAsync($"{tag} (`{tag}`)");
     }
+
     [ComponentInteraction("moresinfo", true)]
     public async Task MoreSInfo()
     {

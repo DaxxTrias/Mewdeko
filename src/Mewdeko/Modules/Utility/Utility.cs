@@ -15,8 +15,6 @@ using Mewdeko.Services.Impl;
 using Mewdeko.Services.Settings;
 using Newtonsoft.Json;
 using Serilog;
-using StackExchange.Redis;
-using static Mewdeko.Services.Impl.StatsService;
 using StringExtensions = Mewdeko.Extensions.StringExtensions;
 
 namespace Mewdeko.Modules.Utility;
@@ -28,7 +26,7 @@ public partial class Utility(DiscordSocketClient client,
         HttpClient httpClient,
         BotConfigService config, DbService db)
     : MewdekoModuleBase<UtilityService>
-    {
+{
     private static readonly SemaphoreSlim Sem = new(1, 1);
 
     public enum PermissionType
@@ -46,16 +44,16 @@ public partial class Utility(DiscordSocketClient client,
         if (searchType == PermissionType.And)
         {
             rolesWithPerms = (from role in ctx.Guild.Roles
-                              let hasAllPerms = perms.All(perm => role.Permissions.Has(perm))
-                              where hasAllPerms
-                              select role).ToList();
+                let hasAllPerms = perms.All(perm => role.Permissions.Has(perm))
+                where hasAllPerms
+                select role).ToList();
         }
         else // PermissionType.Or
         {
             rolesWithPerms = (from role in ctx.Guild.Roles
-                              let matchedPerms = perms.Where(perm => role.Permissions.Has(perm)).ToList()
-                              where matchedPerms.Any()
-                              select role).ToList();
+                let matchedPerms = perms.Where(perm => role.Permissions.Has(perm)).ToList()
+                where matchedPerms.Any()
+                select role).ToList();
 
             foreach (var role in rolesWithPerms)
             {
@@ -118,8 +116,7 @@ public partial class Utility(DiscordSocketClient client,
         channel ??= ctx.Channel as ITextChannel;
         var settings = new JsonSerializerSettings
         {
-            ContractResolver = new LowercaseContractResolver(),
-            NullValueHandling = NullValueHandling.Ignore
+            ContractResolver = new LowercaseContractResolver(), NullValueHandling = NullValueHandling.Ignore
         };
 
         var message = await channel.GetMessageAsync(id);
@@ -343,8 +340,7 @@ public partial class Utility(DiscordSocketClient client,
         {
             Author = new EmbedAuthorBuilder
             {
-                IconUrl = user.GetAvatarUrl(),
-                Name = $"{user} said:"
+                IconUrl = user.GetAvatarUrl(), Name = $"{user} said:"
             },
             Description = msg.Message,
             Footer = new EmbedFooterBuilder
@@ -842,8 +838,7 @@ public partial class Utility(DiscordSocketClient client,
         {
             Author = new EmbedAuthorBuilder
             {
-                IconUrl = user.GetAvatarUrl(),
-                Name = $"{user} said:"
+                IconUrl = user.GetAvatarUrl(), Name = $"{user} said:"
             },
             Description = msg.Message,
             Footer = new EmbedFooterBuilder
@@ -913,8 +908,7 @@ public partial class Utility(DiscordSocketClient client,
         {
             Author = new EmbedAuthorBuilder
             {
-                IconUrl = user.GetAvatarUrl(),
-                Name = $"{user} said:"
+                IconUrl = user.GetAvatarUrl(), Name = $"{user} said:"
             },
             Description = msg.Message,
             Footer = new EmbedFooterBuilder
@@ -967,8 +961,7 @@ public partial class Utility(DiscordSocketClient client,
             {
                 Author = new EmbedAuthorBuilder
                 {
-                    IconUrl = user.GetAvatarUrl(),
-                    Name = $"{user} said:"
+                    IconUrl = user.GetAvatarUrl(), Name = $"{user} said:"
                 },
                 Description = msg.Message,
                 Footer = new EmbedFooterBuilder
@@ -1038,8 +1031,7 @@ public partial class Utility(DiscordSocketClient client,
         {
             Author = new EmbedAuthorBuilder
             {
-                IconUrl = user.GetAvatarUrl(),
-                Name = $"{user} originally said:"
+                IconUrl = user.GetAvatarUrl(), Name = $"{user} originally said:"
             },
             Description = msg.Message,
             Footer = new EmbedFooterBuilder
@@ -1092,8 +1084,7 @@ public partial class Utility(DiscordSocketClient client,
             {
                 Author = new EmbedAuthorBuilder
                 {
-                    IconUrl = user.GetAvatarUrl(),
-                    Name = $"{user} originally said:"
+                    IconUrl = user.GetAvatarUrl(), Name = $"{user} originally said:"
                 },
                 Description = msg.Message,
                 Footer = new EmbedFooterBuilder
@@ -1147,8 +1138,7 @@ public partial class Utility(DiscordSocketClient client,
             {
                 Author = new EmbedAuthorBuilder
                 {
-                    IconUrl = user.GetAvatarUrl(),
-                    Name = $"{user} originally said:"
+                    IconUrl = user.GetAvatarUrl(), Name = $"{user} originally said:"
                 },
                 Description = msg.Message,
                 Footer = new EmbedFooterBuilder
@@ -1203,8 +1193,7 @@ public partial class Utility(DiscordSocketClient client,
             {
                 Author = new EmbedAuthorBuilder
                 {
-                    IconUrl = user.GetAvatarUrl(),
-                    Name = $"{user} originally said:"
+                    IconUrl = user.GetAvatarUrl(), Name = $"{user} originally said:"
                 },
                 Description = msg.Message,
                 Footer = new EmbedFooterBuilder
@@ -1287,7 +1276,7 @@ public partial class Utility(DiscordSocketClient client,
     public async Task Vote() =>
         await ctx.Channel.EmbedAsync(new EmbedBuilder().WithOkColor()
                 .WithDescription(
-                    ""))
+                    "Vote here for Mewdeko!\n[Vote Link](https://top.gg/bot/752236274261426212)\nMake sure to join the support server! \n[Link](https://mewdeko.tech/support)"))
             .ConfigureAwait(false);
 
     [Cmd, Aliases, RequireContext(ContextType.Guild)]
@@ -1561,8 +1550,7 @@ public partial class Utility(DiscordSocketClient client,
     {
         var attachments = new List<FileAttachment>();
         var streams = new List<MemoryStream>();
-        if (!ctx.Message.Attachments.Any())
-            return (attachments, message, streams);
+        if (!ctx.Message.Attachments.Any()) return (attachments, message, streams);
 
         var userAttachments = new List<IAttachment>(ctx.Message.Attachments);
 

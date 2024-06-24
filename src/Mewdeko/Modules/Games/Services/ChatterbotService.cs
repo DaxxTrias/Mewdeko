@@ -1,4 +1,4 @@
-using System.Net.Http;
+﻿using System.Net.Http;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Modules.Games.Common.ChatterBot;
 using Mewdeko.Modules.Permissions.Services;
@@ -41,7 +41,7 @@ public class ChatterBotService : INService
         var gc = await uow.ForGuildId(guild.Id, set => set);
         gc.CleverbotChannel = id;
         await uow.SaveChangesAsync().ConfigureAwait(false);
-        guildSettings.UpdateGuildConfig(guild.Id, gc);
+        await guildSettings.UpdateGuildConfig(guild.Id, gc);
     }
 
     public async Task<ulong> GetCleverbotChannel(ulong id) => (await guildSettings.GetGuildConfig(id)).CleverbotChannel;
