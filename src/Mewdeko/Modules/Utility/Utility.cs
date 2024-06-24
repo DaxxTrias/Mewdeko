@@ -15,6 +15,7 @@ using Mewdeko.Services.Impl;
 using Mewdeko.Services.Settings;
 using Newtonsoft.Json;
 using Serilog;
+using static Mewdeko.Services.Impl.StatsService;
 using StringExtensions = Mewdeko.Extensions.StringExtensions;
 
 namespace Mewdeko.Modules.Utility;
