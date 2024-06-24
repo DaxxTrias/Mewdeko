@@ -37,7 +37,7 @@ public class PollService : INService
         return (true, poll.Poll.PollType);
     }
 
-    public static Poll? CreatePoll(ulong guildId, ulong channelId, string input, PollType type)
+    public static Database.Models.Poll? CreatePoll(ulong guildId, ulong channelId, string input, PollType type)
     {
         if (string.IsNullOrWhiteSpace(input) || !input.Contains(';'))
             return null;
@@ -45,13 +45,13 @@ public class PollService : INService
         if (data.Length < 3)
             return null;
 
-        var col = new IndexedCollection<PollAnswer>(data.Skip(1)
-            .Select(x => new PollAnswer
+        var col = new IndexedCollection<Database.Models.PollAnswer>(data.Skip(1)
+            .Select(x => new Database.Models.PollAnswer
             {
                 Text = x
             }));
 
-        return new Poll
+        return new Database.Models.Poll
         {
             Answers = col,
             Question = data[0],
@@ -62,7 +62,7 @@ public class PollService : INService
         };
     }
 
-    public bool StartPoll(Poll p)
+    public bool StartPoll(Database.Models.Poll p)
     {
         var pr = new PollRunner(db, p);
         if (!ActivePolls.TryAdd(p.GuildId, pr)) return false;
@@ -72,7 +72,7 @@ public class PollService : INService
         return true;
     }
 
-    public async Task<Poll?> StopPoll(ulong guildId)
+    public async Task<Database.Models.Poll?> StopPoll(ulong guildId)
     {
         if (!ActivePolls.TryRemove(guildId, out var pr)) return null;
         await using (var uow = db.GetDbContext())

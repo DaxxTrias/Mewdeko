@@ -1,7 +1,8 @@
-﻿using System.Text;
+using System.Text;
 using Discord.Commands;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Modules.Games.Services;
+using Mewdeko.Database.Models;
 
 namespace Mewdeko.Modules.Games;
 
@@ -93,7 +94,7 @@ public partial class Games
          RequireContext(ContextType.Guild)]
         public async Task Pollend()
         {
-            Poll p;
+            Database.Models.Poll p;
             if ((p = await Service.StopPoll(ctx.Guild.Id)) == null)
                 return;
 
@@ -102,7 +103,7 @@ public partial class Games
                 .ConfigureAwait(false);
         }
 
-        public EmbedBuilder GetStats(Poll poll, string? title)
+        public EmbedBuilder GetStats(Database.Models.Poll poll, string? title)
         {
             var results = poll.Votes.GroupBy(kvp => kvp.VoteIndex)
                 .ToDictionary(x => x.Key, x => x.Sum(_ => 1));
