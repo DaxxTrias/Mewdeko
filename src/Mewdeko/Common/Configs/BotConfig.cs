@@ -1,6 +1,6 @@
 using System.Globalization;
 using Mewdeko.Common.Yml;
-using SixLabors.ImageSharp.PixelFormats;
+using SkiaSharp;
 using YamlDotNet.Core;
 using YamlDotNet.Serialization;
 
@@ -145,6 +145,7 @@ See RotatingStatuses submodule in Administration.")]
     [Comment("Used to set the support server invite on public Mewdeko")]
     public string SupportServer { get; set; }
 
+
     public string Prefixed(string text) => Prefix + text;
 }
 
@@ -164,19 +165,19 @@ public class ColorConfig
 {
     public ColorConfig()
     {
-        Ok = Rgba32.ParseHex("00e584");
-        Error = Rgba32.ParseHex("ee281f");
-        Pending = Rgba32.ParseHex("faa61a");
+        Ok = SKColor.Parse("00e584");
+        Error = SKColor.Parse("ee281f");
+        Pending = SKColor.Parse("faa61a");
     }
 
     [Comment(@"Color used for embed responses when command successfully executes")]
-    public Rgba32 Ok { get; set; }
+    public SKColor Ok { get; set; }
 
     [Comment(@"Color used for embed responses when command has an error")]
-    public Rgba32 Error { get; set; }
+    public SKColor Error { get; set; }
 
     [Comment(@"Color used for embed responses while command is doing work or is in progress")]
-    public Rgba32 Pending { get; set; }
+    public SKColor Pending { get; set; }
 }
 
 public enum ConsoleOutputType
