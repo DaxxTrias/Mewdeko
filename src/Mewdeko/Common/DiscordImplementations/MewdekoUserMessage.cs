@@ -87,4 +87,6 @@ public class MewdekoUserMessage : IUserMessage
         => throw new NotImplementedException();
 
     public Discord.Poll? Poll { get; }
+    public PurchaseNotification PurchaseNotification { get; }
+    public MessageCallData? CallData { get; }
 }
