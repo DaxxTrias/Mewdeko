@@ -98,7 +98,8 @@ public class XpService : INService, IUnloadableService
 
         // Scan guilds on startup.
         this.client.GuildAvailable += Client_OnGuildAvailable;
-        foreach (var guild in this.client.Guilds) Client_OnGuildAvailable(guild);
+        foreach (var guild in this.client.Guilds)
+            Client_OnGuildAvailable(guild);
 #endif
         _ = Task.Run(UpdateLoop);
     }
@@ -130,10 +131,12 @@ public class XpService : INService, IUnloadableService
                 var curRewards = new Dictionary<ulong, List<XpCurrencyReward>>();
 
                 var toAddTo = new List<UserCacheItem>();
-                while (addMessageXp.TryDequeue(out var usr)) toAddTo.Add(usr);
+                while (addMessageXp.TryDequeue(out var usr))
+                    toAddTo.Add(usr);
 
                 var group = toAddTo.GroupBy(x => (GuildId: x.Guild.Id, x.User));
-                if (toAddTo.Count == 0) continue;
+                if (toAddTo.Count == 0)
+                    continue;
 
                 var uow = db.GetDbContext();
                 await using (uow.ConfigureAwait(false))
@@ -156,7 +159,8 @@ public class XpService : INService, IUnloadableService
                         var oldGuildLevelData = new LevelStats(usr.Xp + usr.AwardedXp);
                         usr.Xp += xp;
                         du.TotalXp += xp;
-                        if (du.Club != null) du.Club.Xp += xp;
+                        if (du.Club != null)
+                            du.Club.Xp += xp;
                         var newGuildLevelData = new LevelStats(usr.Xp + usr.AwardedXp);
 
                         if (oldGlobalLevelData.Level < newGlobalLevelData.Level)
@@ -170,7 +174,8 @@ public class XpService : INService, IUnloadableService
                             }
                         }
 
-                        if (oldGuildLevelData.Level >= newGuildLevelData.Level) continue;
+                        if (oldGuildLevelData.Level >= newGuildLevelData.Level)
+                            continue;
                         {
                             usr.LastLevelUp = DateTime.UtcNow;
                             //send level up notification
@@ -197,9 +202,11 @@ public class XpService : INService, IUnloadableService
                             for (var i = oldGuildLevelData.Level + 1; i <= newGuildLevelData.Level; i++)
                             {
                                 var rrew = rrews.Find(x => x.Level == i);
-                                if (rrew == null) continue;
+                                if (rrew == null)
+                                    continue;
                                 var role = first.User.Guild.GetRole(rrew.RoleId);
-                                if (role is not null) _ = first.User.AddRoleAsync(role);
+                                if (role is not null)
+                                    _ = first.User.AddRoleAsync(role);
                             }
                         }
                     }
@@ -270,7 +277,8 @@ public class XpService : INService, IUnloadableService
             else
                 settings.CurrencyRewards.Add(new XpCurrencyReward
                 {
-                    Level = level, Amount = amount
+                    Level = level,
+                    Amount = amount
                 });
         }
 
@@ -312,7 +320,8 @@ public class XpService : INService, IUnloadableService
             else
                 settings.RoleRewards.Add(new XpRoleReward
                 {
-                    Level = level, RoleId = roleId.Value
+                    Level = level,
+                    RoleId = roleId.Value
                 });
         }
 
@@ -370,7 +379,8 @@ public class XpService : INService, IUnloadableService
     {
         Task.Run(() =>
         {
-            foreach (var channel in guild.VoiceChannels) ScanChannelForVoiceXp(channel);
+            foreach (var channel in guild.VoiceChannels)
+                ScanChannelForVoiceXp(channel);
         });
 
         return Task.CompletedTask;
@@ -390,7 +400,8 @@ public class XpService : INService, IUnloadableService
                 return;
             if (!bot.Ready.Task.IsCompleted)
                 return;
-            if (before.VoiceChannel != null) ScanChannelForVoiceXp(before.VoiceChannel);
+            if (before.VoiceChannel != null)
+                ScanChannelForVoiceXp(before.VoiceChannel);
 
             if (after.VoiceChannel != null && after.VoiceChannel != before.VoiceChannel)
             {
@@ -481,7 +492,8 @@ public class XpService : INService, IUnloadableService
         memoryCache.Remove(key);
 
         // Allow for if this function gets called multiple times when a user leaves a channel.
-        if (value is null) return;
+        if (value is null)
+            return;
 
         if (value is not long startUnixTime)
             return;
@@ -496,15 +508,19 @@ public class XpService : INService, IUnloadableService
         if (actualXp > 0)
             addMessageXp.Enqueue(new UserCacheItem
             {
-                Guild = channel.Guild, User = user, XpAmount = actualXp
+                Guild = channel.Guild,
+                User = user,
+                XpAmount = actualXp
             });
     }
 
     private bool ShouldTrackXp(SocketGuildUser user, ulong channelId)
     {
-        if (excludedChannels.TryGetValue(user.Guild.Id, out var chans) && chans.Contains(channelId)) return false;
+        if (excludedChannels.TryGetValue(user.Guild.Id, out var chans) && chans.Contains(channelId))
+            return false;
 
-        if (excludedServers.Contains(user.Guild.Id)) return false;
+        if (excludedServers.Contains(user.Guild.Id))
+            return false;
 
         return !excludedRoles.TryGetValue(user.Guild.Id, out var roles) || !user.Roles.Any(x => roles.Contains(x.Id));
     }
@@ -527,7 +543,10 @@ public class XpService : INService, IUnloadableService
             var e = GetTxtXpRate(user.Guild.Id) == 0 ? xpConfig.Data.XpPerMessage : GetTxtXpRate(user.Guild.Id);
             addMessageXp.Enqueue(new UserCacheItem
             {
-                Guild = user.Guild, Channel = arg.Channel, User = user, XpAmount = e
+                Guild = user.Guild,
+                Channel = arg.Channel,
+                User = user,
+                XpAmount = e
             });
         });
         return Task.CompletedTask;
@@ -535,11 +554,15 @@ public class XpService : INService, IUnloadableService
 
     public void AddXpDirectly(IGuildUser user, IMessageChannel channel, int amount)
     {
-        if (amount <= 0) throw new ArgumentOutOfRangeException(nameof(amount));
+        if (amount <= 0)
+            throw new ArgumentOutOfRangeException(nameof(amount));
 
         addMessageXp.Enqueue(new UserCacheItem
         {
-            Guild = user.Guild, Channel = channel, User = user, XpAmount = amount
+            Guild = user.Guild,
+            Channel = channel,
+            User = user,
+            XpAmount = amount
         });
     }
 
@@ -671,12 +694,14 @@ public class XpService : INService, IUnloadableService
         var xpSetting = await uow.XpSettingsFor(guildId);
         var excludeObj = new ExcludedItem
         {
-            ItemId = rId, ItemType = ExcludedItemType.Role
+            ItemId = rId,
+            ItemType = ExcludedItemType.Role
         };
 
         if (roles.Add(rId))
         {
-            if (xpSetting.ExclusionList.Add(excludeObj)) await uow.SaveChangesAsync().ConfigureAwait(false);
+            if (xpSetting.ExclusionList.Add(excludeObj))
+                await uow.SaveChangesAsync().ConfigureAwait(false);
 
             return true;
         }
@@ -684,7 +709,8 @@ public class XpService : INService, IUnloadableService
         roles.TryRemove(rId);
 
         var toDelete = xpSetting.ExclusionList.FirstOrDefault(x => x.Equals(excludeObj));
-        if (toDelete == null) return false;
+        if (toDelete == null)
+            return false;
         uow.Remove(toDelete);
         await uow.SaveChangesAsync().ConfigureAwait(false);
 
@@ -698,19 +724,22 @@ public class XpService : INService, IUnloadableService
         var xpSetting = await uow.XpSettingsFor(guildId);
         var excludeObj = new ExcludedItem
         {
-            ItemId = chId, ItemType = ExcludedItemType.Channel
+            ItemId = chId,
+            ItemType = ExcludedItemType.Channel
         };
 
         if (channels.Add(chId))
         {
-            if (xpSetting.ExclusionList.Add(excludeObj)) await uow.SaveChangesAsync().ConfigureAwait(false);
+            if (xpSetting.ExclusionList.Add(excludeObj))
+                await uow.SaveChangesAsync().ConfigureAwait(false);
 
             return true;
         }
 
         channels.TryRemove(chId);
 
-        if (xpSetting.ExclusionList.Remove(excludeObj)) await uow.SaveChangesAsync().ConfigureAwait(false);
+        if (xpSetting.ExclusionList.Remove(excludeObj))
+            await uow.SaveChangesAsync().ConfigureAwait(false);
 
         return false;
     }
@@ -732,7 +761,8 @@ public class XpService : INService, IUnloadableService
 
         var textPaint = new SKPaint
         {
-            IsAntialias = true, Style = SKPaintStyle.Fill,
+            IsAntialias = true,
+            Style = SKPaintStyle.Fill,
         };
 
         // Draw the username
@@ -925,7 +955,8 @@ public class XpService : INService, IUnloadableService
             .Include(x => x.TemplateGuild)
             .FirstOrDefault(x => x.GuildId == guildId);
 
-        if (template != null) return template;
+        if (template != null)
+            return template;
         var toAdd = new Template
         {
             GuildId = guildId,

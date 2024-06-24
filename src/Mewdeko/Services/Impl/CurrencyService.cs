@@ -69,11 +69,11 @@ public class CurrencyService /* : ICurrencyService*/
     //    InternalRemoveAsync(user.Id, user.Username, user.Discriminator, user.AvatarId, reason, amount,
     //        gamble);
 
-    private static CurrencyTransaction GetCurrencyTransaction(ulong userId, string? reason, long amount) =>
-        new()
-        {
-            Amount = amount, UserId = userId, Reason = reason ?? "-"
-        };
+    //private static CurrencyTransaction GetCurrencyTransaction(ulong userId, string? reason, long amount) =>
+    //    new()
+    //    {
+    //        Amount = amount, UserId = userId, Reason = reason ?? "-"
+    //    };
 
     //private bool InternalChange(ulong userId, string userName, string discrim, string avatar,
     //    string reason, long amount, bool gamble, MewdekoContext uow)
