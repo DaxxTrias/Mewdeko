@@ -1,4 +1,4 @@
-﻿using CodeHollow.FeedReader;
+using CodeHollow.FeedReader;
 using CodeHollow.FeedReader.Feeds;
 using Microsoft.EntityFrameworkCore;
 using Embed = Discord.Embed;
