@@ -6,27 +6,18 @@ using Fergun.Interactive.Pagination;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Modules.Administration.Services;
 using Serilog;
-using SixLabors.ImageSharp.PixelFormats;
-using Color = SixLabors.ImageSharp.Color;
+using SkiaSharp;
 
 namespace Mewdeko.Modules.Administration;
 
 public partial class Administration
 {
-    public class RoleCommands : MewdekoSubmodule<RoleCommandsService>
+    public class RoleCommands
+        (IServiceProvider services, InteractiveService intserv) : MewdekoSubmodule<RoleCommandsService>
     {
         public enum Exclude
         {
             Excl
-        }
-
-        private readonly IServiceProvider services;
-        private readonly InteractiveService interactivity;
-
-        public RoleCommands(IServiceProvider services, InteractiveService intserv)
-        {
-            this.services = services;
-            interactivity = intserv;
         }
 
         public async Task? InternalReactionRoles(bool exclusive, ulong? messageId, params string[] input)
@@ -50,7 +41,7 @@ public partial class Administration
                     var roleResult = await roleReader.ReadAsync(ctx, inputRoleStr, services).ConfigureAwait(false);
                     if (!roleResult.IsSuccess)
                     {
-                        Log.Warning("Role {0} not found.", inputRoleStr);
+                        Log.Warning("Role {0} not found", inputRoleStr);
                         return null;
                     }
 
@@ -88,7 +79,8 @@ public partial class Administration
                 }
                 catch (HttpException ex) when (ex.HttpCode == HttpStatusCode.BadRequest)
                 {
-                    await ReplyErrorLocalizedAsync("reaction_cant_access", Format.Code(x.emote.ToString())).ConfigureAwait(false);
+                    await ReplyErrorLocalizedAsync("reaction_cant_access", Format.Code(x.emote.ToString()))
+                        .ConfigureAwait(false);
                     return;
                 }
 
@@ -97,7 +89,7 @@ public partial class Administration
 
             if (target != null && await Service.Add(ctx.Guild.Id, new ReactionRoleMessage
                 {
-                    Exclusive = exclusive,
+                    Exclusive = exclusive ? 1 : 0,
                     MessageId = target.Id,
                     ChannelId = target.Channel.Id,
                     ReactionRoles = all.Select(x => new ReactionRole
@@ -115,15 +107,18 @@ public partial class Administration
         }
 
         [Cmd, Aliases, RequireContext(ContextType.Guild), BotPerm(GuildPermission.ManageRoles), Priority(0)]
-        public Task ReactionRoles(ulong messageId, params string[] input) => InternalReactionRoles(false, messageId, input);
+        public Task ReactionRoles(ulong messageId, params string[] input) =>
+            InternalReactionRoles(false, messageId, input);
 
         [Cmd, Aliases, RequireContext(ContextType.Guild), UserPerm(GuildPermission.ManageRoles),
          BotPerm(GuildPermission.ManageRoles), Priority(1)]
-        public Task ReactionRoles(ulong messageId, Exclude _, params string[] input) => InternalReactionRoles(true, messageId, input);
+        public Task ReactionRoles(ulong messageId, Exclude _, params string[] input) =>
+            InternalReactionRoles(true, messageId, input);
 
         [Cmd, Aliases, RequireContext(ContextType.Guild), UserPerm(GuildPermission.ManageRoles),
          BotPerm(GuildPermission.ManageRoles), Priority(1)]
-        public Task ReactionRoles(Exclude _, ulong messageId, params string[] input) => InternalReactionRoles(true, messageId, input);
+        public Task ReactionRoles(Exclude _, ulong messageId, params string[] input) =>
+            InternalReactionRoles(true, messageId, input);
 
         [Cmd, Aliases, RequireContext(ContextType.Guild),
          UserPerm(GuildPermission.ManageRoles), BotPerm(GuildPermission.ManageRoles), Priority(0)]
@@ -153,7 +148,8 @@ public partial class Administration
                     .WithActionOnCancellation(ActionOnStop.DeleteMessage)
                     .Build();
 
-                await interactivity.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
+                await intserv.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60))
+                    .ConfigureAwait(false);
 
                 async Task<PageBuilder> PageFactory(int page)
                 {
@@ -165,13 +161,15 @@ public partial class Administration
                         msg = await ch.GetMessageAsync(rr.MessageId).ConfigureAwait(false) as IUserMessage;
                     var eb = new PageBuilder().WithOkColor();
                     return
-                        eb.AddField("ID", rr.Index + 1).AddField($"Roles ({rr.ReactionRoles.Count})",
+                        eb.AddField("ID", rr.Index + 1).AddField(GetText("rero_roles_count", rr.ReactionRoles.Count),
                                 string.Join(",",
                                     rr.ReactionRoles.Select(x => $"{x.EmoteName} {g.GetRole(x.RoleId).Mention}")))
-                            .AddField("Users can select more than one role", !rr.Exclusive)
-                            .AddField("Was Deleted?", msg == null ? "Yes" : "No")
-                            .AddField("Message Link",
-                                msg == null ? "None, Message was Deleted." : $"[Link]({msg.GetJumpUrl()})");
+                            .AddField(GetText("users_can_select_morethan_one"), rr.Exclusive == 1)
+                            .AddField(GetText("wasdeleted"), msg == null ? GetText("yes") : GetText("no"))
+                            .AddField(GetText("messagelink"),
+                                msg == null
+                                    ? GetText("messagewasdeleted")
+                                    : $"[{GetText("HYATT")}]({msg.GetJumpUrl()})");
                 }
             }
         }
@@ -320,7 +318,8 @@ public partial class Administration
                 .ToList();
 
             if (user.Id == ctx.Guild.OwnerId || (ctx.User.Id != ctx.Guild.OwnerId &&
-                                                 guser.GetRoles().Max(x => x.Position) <= userRoles.Max(x => x.Position)))
+                                                 guser.GetRoles().Max(x => x.Position) <=
+                                                 userRoles.Max(x => x.Position)))
             {
                 return;
             }
@@ -381,17 +380,16 @@ public partial class Administration
 
         [Cmd, Aliases, RequireContext(ContextType.Guild), Priority(1)]
         public async Task RoleColor([Remainder] IRole role) =>
-            await ctx.Channel.SendConfirmAsync("Role Color", role.Color.RawValue.ToString("x6"))
+            await ctx.Channel.SendConfirmAsync(GetText("rolecolor"), role.Color.RawValue.ToString("x6"))
                 .ConfigureAwait(false);
 
         [Cmd, Aliases, RequireContext(ContextType.Guild),
          UserPerm(GuildPermission.ManageRoles), BotPerm(GuildPermission.ManageRoles), Priority(0)]
-        public async Task RoleColor(IRole role, Color color)
+        public async Task RoleColor(IRole role, SKColor color)
         {
             try
             {
-                var rgba32 = color.ToPixel<Rgba32>();
-                await role.ModifyAsync(r => r.Color = new Discord.Color(rgba32.R, rgba32.G, rgba32.B))
+                await role.ModifyAsync(r => r.Color = new Color(color.Red, color.Green, color.Blue))
                     .ConfigureAwait(false);
                 await ReplyConfirmLocalizedAsync("rc", Format.Bold(role.Name)).ConfigureAwait(false);
             }

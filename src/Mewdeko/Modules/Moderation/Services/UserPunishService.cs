@@ -16,7 +16,7 @@ public class UserPunishService : INService
     private readonly MuteService mute;
     private readonly DiscordSocketClient client;
     private readonly GuildSettingsService guildSettings;
-    private Dictionary<ulong, MassNick> massNicks = new ();
+    private Dictionary<ulong, MassNick> massNicks = new();
 
     public UserPunishService(MuteService mute, DbService db, BlacklistService blacklistService,
         DiscordSocketClient client,
@@ -41,10 +41,7 @@ public class UserPunishService : INService
 
         var massNick = new MassNick
         {
-            StartedBy = user,
-            Total = total,
-            OperationType = operationType,
-            StartedAt = DateTime.UtcNow
+            StartedBy = user, Total = total, OperationType = operationType, StartedAt = DateTime.UtcNow
         };
         massNicks.Add(guildId, massNick);
         returnMassNick = massNick;
@@ -85,7 +82,7 @@ public class UserPunishService : INService
         var gc = await uow.ForGuildId(guild.Id, set => set);
         gc.WarnlogChannelId = channel.Id;
         await uow.SaveChangesAsync().ConfigureAwait(false);
-        guildSettings.UpdateGuildConfig(guild.Id, gc);
+        await guildSettings.UpdateGuildConfig(guild.Id, gc);
     }
 
     public async Task<WarningPunishment>? Warn(IGuild guild, ulong userId, IUser mod, string reason)
@@ -101,7 +98,7 @@ public class UserPunishService : INService
         {
             UserId = userId,
             GuildId = guildId,
-            Forgiven = false,
+            Forgiven = 0,
             Reason = reason,
             Moderator = modName
         };
@@ -116,7 +113,7 @@ public class UserPunishService : INService
 
             warnings += uow.Warnings
                 .ForId(guildId, userId)
-                .Count(w => !w.Forgiven && w.UserId == userId);
+                .Count(w => w.Forgiven == 0 && w.UserId == userId);
 
             uow.Warnings.Add(warn);
 
@@ -131,7 +128,8 @@ public class UserPunishService : INService
             if (user == null)
                 return null;
 
-            await ApplyPunishment(guild, user, mod, p.Punishment, p.Time, p.RoleId, "Warned too many times.").ConfigureAwait(false);
+            await ApplyPunishment(guild, user, mod, p.Punishment, p.Time, p.RoleId, "Warned too many times.")
+                .ConfigureAwait(false);
             return p;
         }
 
@@ -262,16 +260,39 @@ public class UserPunishService : INService
     public async Task CheckAllWarnExpiresAsync()
     {
         await using var uow = db.GetDbContext();
-        var cleared = await uow.Database.ExecuteSqlRawAsync(@"UPDATE Warnings
-SET Forgiven = 1,
-    ForgivenBy = 'Expiry'
-WHERE GuildId in (SELECT GuildId FROM GuildConfigs WHERE WarnExpireHours > 0 AND WarnExpireAction = 0)
-	AND Forgiven = 0
-	AND DateAdded < datetime('now', (SELECT '-' || WarnExpireHours || ' hours' FROM GuildConfigs as gc WHERE gc.GuildId = Warnings.GuildId));").ConfigureAwait(false);
+        int cleared;
+        int deleted;
 
-        var deleted = await uow.Database.ExecuteSqlRawAsync(@"DELETE FROM Warnings
-WHERE GuildId in (SELECT GuildId FROM GuildConfigs WHERE WarnExpireHours > 0 AND WarnExpireAction = 1)
-	AND DateAdded < datetime('now', (SELECT '-' || WarnExpireHours || ' hours' FROM GuildConfigs as gc WHERE gc.GuildId = Warnings.GuildId));").ConfigureAwait(false);
+        if (uow.Database.IsNpgsql())
+        {
+            cleared = await uow.Database.ExecuteSqlRawAsync(@"UPDATE ""Warnings""
+SET ""Forgiven"" = 1,
+    ""ForgivenBy"" = 'Expiry'
+WHERE ""GuildId"" in (SELECT ""GuildId"" FROM ""GuildConfigs"" WHERE ""WarnExpireHours"" > 0 AND ""WarnExpireAction"" = 0)
+	AND ""Forgiven"" = 0
+	AND ""DateAdded"" < NOW() - INTERVAL '1 hour' * (SELECT ""WarnExpireHours"" FROM ""GuildConfigs"" as gc WHERE gc.""GuildId"" = ""Warnings"".""GuildId"");")
+                .ConfigureAwait(false);
+
+            deleted = await uow.Database.ExecuteSqlRawAsync(@"DELETE FROM ""Warnings""
+WHERE ""GuildId"" in (SELECT ""GuildId"" FROM ""GuildConfigs"" WHERE ""WarnExpireHours"" > 0 AND ""WarnExpireAction"" = 1)
+	AND ""DateAdded"" < NOW() - INTERVAL '1 hour' * (SELECT ""WarnExpireHours"" FROM ""GuildConfigs"" as gc WHERE gc.""GuildId"" = ""Warnings"".""GuildId"");")
+                .ConfigureAwait(false);
+        }
+        else
+        {
+            cleared = await uow.Database.ExecuteSqlRawAsync(@"UPDATE ""Warnings""
+SET ""Forgiven"" = 1,
+    ""ForgivenBy"" = 'Expiry'
+WHERE ""GuildId"" in (SELECT ""GuildId"" FROM ""GuildConfigs"" WHERE ""WarnExpireHours"" > 0 AND ""WarnExpireAction"" = 0)
+	AND ""Forgiven"" = 0
+	AND ""DateAdded"" < datetime('now', (SELECT '-' || ""WarnExpireHours"" || ' hours' FROM ""GuildConfigs"" as gc WHERE gc.""GuildId"" = ""Warnings"".""GuildId""));")
+                .ConfigureAwait(false);
+
+            deleted = await uow.Database.ExecuteSqlRawAsync(@"DELETE FROM ""Warnings""
+WHERE ""GuildId"" in (SELECT ""GuildId"" FROM ""GuildConfigs"" WHERE ""WarnExpireHours"" > 0 AND ""WarnExpireAction"" = 1)
+	AND ""DateAdded"" < datetime('now', (SELECT '-' || ""WarnExpireHours"" || ' hours' FROM ""GuildConfigs"" as gc WHERE gc.""GuildId"" = ""Warnings"".""GuildId""));")
+                .ConfigureAwait(false);
+        }
 
         if (cleared > 0 || deleted > 0)
             Log.Information($"Cleared {cleared} warnings and deleted {deleted} warnings due to expiry.");
@@ -285,44 +306,78 @@ WHERE GuildId in (SELECT GuildId FROM GuildConfigs WHERE WarnExpireHours > 0 AND
         if (config.WarnExpireHours == 0)
             return;
 
-        var hours = $"{-config.WarnExpireHours} hours";
-        switch (config.WarnExpireAction)
+        var interval = -config.WarnExpireHours;
+
+        // Check for PostgreSQL provider
+        if (uow.Database.IsNpgsql())
         {
-            case WarnExpireAction.Clear:
-                await uow.Database.ExecuteSqlInterpolatedAsync($@"UPDATE warnings
-SET Forgiven = 1,
-    ForgivenBy = 'Expiry'
-WHERE GuildId={guildId}
-    AND Forgiven = 0
-    AND DateAdded < datetime('now', {hours})").ConfigureAwait(false);
-                break;
-            case WarnExpireAction.Delete:
-                await uow.Database.ExecuteSqlInterpolatedAsync($@"DELETE FROM warnings
-WHERE GuildId={guildId}
-    AND DateAdded < datetime('now', {hours})").ConfigureAwait(false);
-                break;
+            switch (config.WarnExpireAction)
+            {
+                case WarnExpireAction.Clear:
+                    await uow.Database.ExecuteSqlInterpolatedAsync($@"UPDATE ""Warnings""
+            SET ""Forgiven"" = 1,
+                ""ForgivenBy"" = 'Expiry'
+            WHERE ""GuildId""={guildId}
+                AND ""Forgiven"" = 0
+                AND ""DateAdded"" < NOW() - MAKE_INTERVAL(hours := {interval})").ConfigureAwait(false);
+                    break;
+                case WarnExpireAction.Delete:
+                    await uow.Database.ExecuteSqlInterpolatedAsync($@"DELETE FROM ""Warnings""
+            WHERE ""GuildId""={guildId}
+                AND ""DateAdded"" < NOW() - MAKE_INTERVAL(hours := {interval})").ConfigureAwait(false);
+                    break;
+            }
+        }
+        else
+        {
+            var hours = $"{-config.WarnExpireHours} hours";
+            switch (config.WarnExpireAction)
+            {
+                case WarnExpireAction.Clear:
+                    await uow.Database.ExecuteSqlInterpolatedAsync($@"UPDATE warnings
+            SET Forgiven = 1,
+                ForgivenBy = 'Expiry'
+            WHERE GuildId={guildId}
+                AND Forgiven = 0
+                AND DateAdded < datetime('now', {hours})").ConfigureAwait(false);
+                    break;
+                case WarnExpireAction.Delete:
+                    await uow.Database.ExecuteSqlInterpolatedAsync($@"DELETE FROM warnings
+            WHERE GuildId={guildId}
+                AND DateAdded < datetime('now', {hours})").ConfigureAwait(false);
+                    break;
+            }
         }
 
         await uow.SaveChangesAsync().ConfigureAwait(false);
     }
 
+
     public async Task WarnExpireAsync(ulong guildId, int days, bool delete)
     {
-        var uow = db.GetDbContext();
-        await using (uow.ConfigureAwait(false))
+        try
         {
-            var config = await uow.ForGuildId(guildId, inc => inc);
+            var uow = db.GetDbContext();
+            await using (uow.ConfigureAwait(false))
+            {
+                var config = await uow.ForGuildId(guildId, inc => inc);
 
-            config.WarnExpireHours = days * 24;
-            config.WarnExpireAction = delete ? WarnExpireAction.Delete : WarnExpireAction.Clear;
-            await uow.SaveChangesAsync().ConfigureAwait(false);
+                config.WarnExpireHours = days * 24;
+                config.WarnExpireAction = delete ? WarnExpireAction.Delete : WarnExpireAction.Clear;
+                await uow.SaveChangesAsync().ConfigureAwait(false);
 
-            // no need to check for warn expires
-            if (config.WarnExpireHours == 0)
-                return;
+                // no need to check for warn expires
+                if (config.WarnExpireHours == 0)
+                    return;
+            }
+
+            await CheckWarnExpiresAsync(guildId).ConfigureAwait(false);
         }
-
-        await CheckWarnExpiresAsync(guildId).ConfigureAwait(false);
+        catch (Exception e)
+        {
+            Console.WriteLine(e);
+            throw;
+        }
     }
 
     public async Task<IGrouping<ulong, Warning>[]> WarnlogAll(ulong gid)
@@ -350,7 +405,8 @@ WHERE GuildId={guildId}
         return toReturn;
     }
 
-    public async Task<bool> WarnPunish(ulong guildId, int number, PunishmentAction punish, StoopidTime? time, IRole? role = null)
+    public async Task<bool> WarnPunish(ulong guildId, int number, PunishmentAction punish, StoopidTime? time,
+        IRole? role = null)
     {
         // these 3 don't make sense with time
         if (punish is PunishmentAction.Softban or PunishmentAction.Kick or PunishmentAction.RemoveRoles && time != null)
@@ -366,7 +422,10 @@ WHERE GuildId={guildId}
 
         ps.Add(new WarningPunishment
         {
-            Count = number, Punishment = punish, Time = (int?)time?.Time.TotalMinutes ?? 0, RoleId = punish == PunishmentAction.AddRole ? role.Id : default(ulong?)
+            Count = number,
+            Punishment = punish,
+            Time = (int?)time?.Time.TotalMinutes ?? 0,
+            RoleId = punish == PunishmentAction.AddRole ? role.Id : default(ulong?)
         });
         await uow.SaveChangesAsync().ConfigureAwait(false);
 
@@ -482,7 +541,8 @@ WHERE GuildId={guildId}
         uow.SaveChanges();
     }
 
-    public Task<(Embed[]?, string?, ComponentBuilder?)> GetBanUserDmEmbed(ICommandContext context, IGuildUser target, string? defaultMessage,
+    public Task<(Embed[]?, string?, ComponentBuilder?)> GetBanUserDmEmbed(ICommandContext context, IGuildUser target,
+        string? defaultMessage,
         string? banReason, TimeSpan? duration) =>
         GetBanUserDmEmbed(
             (DiscordSocketClient)context.Client,
@@ -493,7 +553,8 @@ WHERE GuildId={guildId}
             banReason,
             duration);
 
-    public Task<(Embed[]?, string?, ComponentBuilder?)> GetBanUserDmEmbed(IInteractionContext context, IGuildUser target, string? defaultMessage,
+    public Task<(Embed[]?, string?, ComponentBuilder?)> GetBanUserDmEmbed(IInteractionContext context,
+        IGuildUser target, string? defaultMessage,
         string? banReason, TimeSpan? duration) =>
         GetBanUserDmEmbed(
             (DiscordSocketClient)context.Client,
@@ -504,7 +565,8 @@ WHERE GuildId={guildId}
             banReason,
             duration);
 
-    public Task<(Embed[], string?, ComponentBuilder?)> GetBanUserDmEmbed(DiscordSocketClient discordSocketClient, SocketGuild guild,
+    public Task<(Embed[], string?, ComponentBuilder?)> GetBanUserDmEmbed(DiscordSocketClient discordSocketClient,
+        SocketGuild guild,
         IGuildUser moderator, IGuildUser target, string? defaultMessage, string? banReason, TimeSpan? duration)
     {
         var template = GetBanTemplate(guild.Id);

@@ -9,22 +9,12 @@ using Mewdeko.Modules.Permissions.Services;
 
 namespace Mewdeko.Modules.Permissions;
 
-public partial class Permissions : MewdekoModuleBase<PermissionService>
+public partial class Permissions(DbService db, InteractiveService inter, GuildSettingsService guildSettings)
+    : MewdekoModuleBase<PermissionService>
 {
     public enum Reset
     {
         Reset
-    }
-
-    private readonly DbService db;
-    private readonly InteractiveService interactivity;
-    private readonly GuildSettingsService guildSettings;
-
-    public Permissions(DbService db, InteractiveService inter, GuildSettingsService guildSettings)
-    {
-        interactivity = inter;
-        this.guildSettings = guildSettings;
-        this.db = db;
     }
 
     [Cmd, Aliases, RequireContext(ContextType.Guild),
@@ -42,8 +32,8 @@ public partial class Permissions : MewdekoModuleBase<PermissionService>
         await using (uow.ConfigureAwait(false))
         {
             var config = await uow.GcWithPermissionsv2For(ctx.Guild.Id);
-            action ??= new PermissionAction(!config.VerbosePermissions);
-            config.VerbosePermissions = action.Value;
+            action ??= new PermissionAction(config.VerbosePermissions == 0L);
+            config.VerbosePermissions = action.Value ? 1L : 0L;
             await uow.SaveChangesAsync().ConfigureAwait(false);
             Service.UpdateCache(config);
         }
@@ -109,7 +99,9 @@ public partial class Permissions : MewdekoModuleBase<PermissionService>
     [Cmd, Aliases, RequireContext(ContextType.Guild)]
     public async Task ListPerms()
     {
-        IList<Permissionv2> perms = Service.Cache.TryGetValue(ctx.Guild.Id, out var permCache) ? permCache.Permissions.Source.ToList() : Permissionv2.GetDefaultPermlist;
+        IList<Permissionv2> perms = Service.Cache.TryGetValue(ctx.Guild.Id, out var permCache)
+            ? permCache.Permissions.Source.ToList()
+            : Permissionv2.GetDefaultPermlist;
         var paginator = new LazyPaginatorBuilder()
             .AddUser(ctx.User)
             .WithPageFactory(PageFactory)
@@ -118,7 +110,7 @@ public partial class Permissions : MewdekoModuleBase<PermissionService>
             .WithDefaultEmotes()
             .WithActionOnCancellation(ActionOnStop.DeleteMessage)
             .Build();
-        await interactivity.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
+        await inter.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
 
         async Task<PageBuilder> PageFactory(int page)
         {
@@ -126,7 +118,8 @@ public partial class Permissions : MewdekoModuleBase<PermissionService>
             return new PageBuilder().WithDescription(string.Join("\n",
                 perms.Skip(page * 10).Take(10).Select(p =>
                 {
-                    var str = $"`{p.Index + 1}.` {Format.Bold(p.GetCommand(guildSettings.GetPrefix(ctx.Guild).GetAwaiter().GetResult(), (SocketGuild)ctx.Guild))}";
+                    var str =
+                        $"`{p.Index + 1}.` {Format.Bold(p.GetCommand(guildSettings.GetPrefix(ctx.Guild).GetAwaiter().GetResult(), (SocketGuild)ctx.Guild))}";
                     if (p.Index == 0)
                         str += $" [{GetText("uneditable")}]";
                     return str;
@@ -156,8 +149,9 @@ public partial class Permissions : MewdekoModuleBase<PermissionService>
             }
 
             await ReplyConfirmLocalizedAsync("removed",
-                index + 1,
-                Format.Code(p.GetCommand(await guildSettings.GetPrefix(ctx.Guild), (SocketGuild)ctx.Guild))).ConfigureAwait(false);
+                    index + 1,
+                    Format.Code(p.GetCommand(await guildSettings.GetPrefix(ctx.Guild), (SocketGuild)ctx.Guild)))
+                .ConfigureAwait(false);
         }
         catch (IndexOutOfRangeException)
         {
@@ -205,7 +199,8 @@ public partial class Permissions : MewdekoModuleBase<PermissionService>
                 }
 
                 await ReplyConfirmLocalizedAsync("moved_permission",
-                        Format.Code(fromPerm.GetCommand(await guildSettings.GetPrefix(ctx.Guild), (SocketGuild)ctx.Guild)),
+                        Format.Code(fromPerm.GetCommand(await guildSettings.GetPrefix(ctx.Guild),
+                            (SocketGuild)ctx.Guild)),
                         ++from,
                         ++to)
                     .ConfigureAwait(false);
@@ -228,8 +223,8 @@ public partial class Permissions : MewdekoModuleBase<PermissionService>
             PrimaryTargetId = 0,
             SecondaryTarget = SecondaryPermissionType.Command,
             SecondaryTargetName = command.Name.ToLowerInvariant(),
-            State = action.Value,
-            IsCustomCommand = command.IsCustom
+            State = action.Value ? 1 : 0,
+            IsCustomCommand = command.IsCustom ? 1 : 0,
         }).ConfigureAwait(false);
 
         if (action.Value)
@@ -255,7 +250,7 @@ public partial class Permissions : MewdekoModuleBase<PermissionService>
             PrimaryTargetId = 0,
             SecondaryTarget = SecondaryPermissionType.Module,
             SecondaryTargetName = module.Name.ToLowerInvariant(),
-            State = action.Value
+            State = action.Value ? 1 : 0,
         }).ConfigureAwait(false);
 
         if (action.Value)
@@ -281,8 +276,8 @@ public partial class Permissions : MewdekoModuleBase<PermissionService>
             PrimaryTargetId = user.Id,
             SecondaryTarget = SecondaryPermissionType.Command,
             SecondaryTargetName = command.Name.ToLowerInvariant(),
-            State = action.Value,
-            IsCustomCommand = command.IsCustom
+            State = action.Value ? 1 : 0,
+            IsCustomCommand = command.IsCustom ? 1 : 0
         }).ConfigureAwait(false);
 
         if (action.Value)
@@ -310,7 +305,7 @@ public partial class Permissions : MewdekoModuleBase<PermissionService>
             PrimaryTargetId = user.Id,
             SecondaryTarget = SecondaryPermissionType.Module,
             SecondaryTargetName = module.Name.ToLowerInvariant(),
-            State = action.Value
+            State = action.Value ? 1 : 0
         }).ConfigureAwait(false);
 
         if (action.Value)
@@ -341,8 +336,8 @@ public partial class Permissions : MewdekoModuleBase<PermissionService>
             PrimaryTargetId = role.Id,
             SecondaryTarget = SecondaryPermissionType.Command,
             SecondaryTargetName = command.Name.ToLowerInvariant(),
-            State = action.Value,
-            IsCustomCommand = command.IsCustom
+            State = action.Value ? 1 : 0,
+            IsCustomCommand = command.IsCustom ? 1 : 0
         }).ConfigureAwait(false);
 
         if (action.Value)
@@ -373,7 +368,7 @@ public partial class Permissions : MewdekoModuleBase<PermissionService>
             PrimaryTargetId = role.Id,
             SecondaryTarget = SecondaryPermissionType.Module,
             SecondaryTargetName = module.Name.ToLowerInvariant(),
-            State = action.Value
+            State = action.Value ? 1 : 0
         }).ConfigureAwait(false);
 
         if (action.Value)
@@ -401,8 +396,8 @@ public partial class Permissions : MewdekoModuleBase<PermissionService>
             PrimaryTargetId = chnl.Id,
             SecondaryTarget = SecondaryPermissionType.Command,
             SecondaryTargetName = command.Name.ToLowerInvariant(),
-            State = action.Value,
-            IsCustomCommand = command.IsCustom
+            State = action.Value ? 1 : 0,
+            IsCustomCommand = command.IsCustom ? 1 : 0
         }).ConfigureAwait(false);
 
         if (action.Value)
@@ -430,7 +425,7 @@ public partial class Permissions : MewdekoModuleBase<PermissionService>
             PrimaryTargetId = chnl.Id,
             SecondaryTarget = SecondaryPermissionType.Module,
             SecondaryTargetName = module.Name.ToLowerInvariant(),
-            State = action.Value
+            State = action.Value ? 1 : 0
         }).ConfigureAwait(false);
 
         if (action.Value)
@@ -458,7 +453,7 @@ public partial class Permissions : MewdekoModuleBase<PermissionService>
             PrimaryTargetId = chnl.Id,
             SecondaryTarget = SecondaryPermissionType.AllModules,
             SecondaryTargetName = "*",
-            State = action.Value
+            State = action.Value ? 1 : 0
         }).ConfigureAwait(false);
 
         if (action.Value)
@@ -482,8 +477,8 @@ public partial class Permissions : MewdekoModuleBase<PermissionService>
             PrimaryTargetId = chnl.Id,
             SecondaryTarget = SecondaryPermissionType.Command,
             SecondaryTargetName = command.Name.ToLowerInvariant(),
-            State = action.Value,
-            IsCustomCommand = command.IsCustom
+            State = action.Value ? 1 : 0,
+            IsCustomCommand = command.IsCustom ? 1 : 0
         }).ConfigureAwait(false);
 
         if (action.Value)
@@ -511,7 +506,7 @@ public partial class Permissions : MewdekoModuleBase<PermissionService>
             PrimaryTargetId = chnl.Id,
             SecondaryTarget = SecondaryPermissionType.Module,
             SecondaryTargetName = module.Name.ToLowerInvariant(),
-            State = action.Value
+            State = action.Value ? 1 : 0
         }).ConfigureAwait(false);
 
         if (action.Value)
@@ -539,7 +534,7 @@ public partial class Permissions : MewdekoModuleBase<PermissionService>
             PrimaryTargetId = chnl.Id,
             SecondaryTarget = SecondaryPermissionType.AllModules,
             SecondaryTargetName = "*",
-            State = action.Value
+            State = action.Value ? 1 : 0
         }).ConfigureAwait(false);
 
         if (action.Value)
@@ -566,7 +561,7 @@ public partial class Permissions : MewdekoModuleBase<PermissionService>
             PrimaryTargetId = role.Id,
             SecondaryTarget = SecondaryPermissionType.AllModules,
             SecondaryTargetName = "*",
-            State = action.Value
+            State = action.Value ? 1 : 0
         }).ConfigureAwait(false);
 
         if (action.Value)
@@ -590,7 +585,7 @@ public partial class Permissions : MewdekoModuleBase<PermissionService>
             PrimaryTargetId = user.Id,
             SecondaryTarget = SecondaryPermissionType.AllModules,
             SecondaryTargetName = "*",
-            State = action.Value
+            State = action.Value ? 1 : 0
         }).ConfigureAwait(false);
 
         if (action.Value)
@@ -614,7 +609,7 @@ public partial class Permissions : MewdekoModuleBase<PermissionService>
             PrimaryTargetId = 0,
             SecondaryTarget = SecondaryPermissionType.AllModules,
             SecondaryTargetName = "*",
-            State = action.Value
+            State = action.Value ? 1 : 0
         };
 
         var allowUser = new Permissionv2
@@ -623,7 +618,7 @@ public partial class Permissions : MewdekoModuleBase<PermissionService>
             PrimaryTargetId = ctx.User.Id,
             SecondaryTarget = SecondaryPermissionType.AllModules,
             SecondaryTargetName = "*",
-            State = true
+            State = 1
         };
 
         await Service.AddPermissions(ctx.Guild.Id,

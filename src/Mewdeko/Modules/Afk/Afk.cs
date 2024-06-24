@@ -9,17 +9,8 @@ using Mewdeko.Modules.Afk.Services;
 
 namespace Mewdeko.Modules.Afk;
 
-public class Afk : MewdekoModuleBase<AfkService>
+public class Afk(InteractiveService serv, DiscordSocketClient client) : MewdekoModuleBase<AfkService>
 {
-    private readonly InteractiveService interactivity;
-    private readonly DiscordSocketClient client;
-
-    public Afk(InteractiveService serv, DiscordSocketClient client)
-    {
-        interactivity = serv;
-        this.client = client;
-    }
-
     public enum AfkTypeEnum
     {
         SelfDisable = 1,
@@ -80,7 +71,8 @@ public class Afk : MewdekoModuleBase<AfkService>
 
         if (message.Length != 0 && message.Length > await Service.GetAfkLength(ctx.Guild.Id))
         {
-            await ReplyErrorLocalizedAsync("afk_message_too_long", Service.GetAfkLength(ctx.Guild.Id)).ConfigureAwait(false);
+            await ReplyErrorLocalizedAsync("afk_message_too_long", Service.GetAfkLength(ctx.Guild.Id))
+                .ConfigureAwait(false);
             return;
         }
 
@@ -117,7 +109,8 @@ public class Afk : MewdekoModuleBase<AfkService>
             return;
         }
 
-        await ReplyConfirmLocalizedAsync("afk_messages_delete", TimeSpan.FromSeconds(await Service.GetAfkDel(ctx.Guild.Id)).Humanize(maxUnit: TimeUnit.Minute))
+        await ReplyConfirmLocalizedAsync("afk_messages_delete",
+                TimeSpan.FromSeconds(await Service.GetAfkDel(ctx.Guild.Id)).Humanize(maxUnit: TimeUnit.Minute))
             .ConfigureAwait(false);
     }
 
@@ -155,12 +148,14 @@ public class Afk : MewdekoModuleBase<AfkService>
 
         if (message.Length != 0 && message.Length > await Service.GetAfkLength(ctx.Guild.Id))
         {
-            await ReplyErrorLocalizedAsync("afk_message_too_long", Service.GetAfkLength(ctx.Guild.Id)).ConfigureAwait(false);
+            await ReplyErrorLocalizedAsync("afk_message_too_long", Service.GetAfkLength(ctx.Guild.Id))
+                .ConfigureAwait(false);
             return;
         }
 
         await Service.AfkSet(ctx.Guild, ctx.User as IGuildUser, message, 1, DateTime.UtcNow + time.Time);
-        await ConfirmLocalizedAsync("afk_timed_set", TimestampTag.FromDateTimeOffset(DateTimeOffset.UtcNow + time.Time, TimestampTagStyles.Relative), message);
+        await ConfirmLocalizedAsync("afk_timed_set",
+            TimestampTag.FromDateTimeOffset(DateTimeOffset.UtcNow + time.Time, TimestampTagStyles.Relative), message);
     }
 
     [Cmd, Aliases, UserPerm(GuildPermission.Administrator)]
@@ -202,13 +197,13 @@ public class Afk : MewdekoModuleBase<AfkService>
             .WithActionOnCancellation(ActionOnStop.DeleteMessage)
             .Build();
 
-        await interactivity.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
+        await serv.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
 
         async Task<PageBuilder> PageFactory(int page)
         {
             await Task.CompletedTask.ConfigureAwait(false);
             return new PageBuilder().WithOkColor()
-                .WithTitle($"{Format.Bold("Active AFKs")} - {afks.ToArray().Length}")
+                .WithTitle($"{Format.Bold(GetText("active_afks"))} - {afks.ToArray().Length}")
                 .WithDescription(string.Join("\n", afks.ToArray().Skip(page * 20).Take(20)));
         }
     }
@@ -260,14 +255,14 @@ public class Afk : MewdekoModuleBase<AfkService>
             .WithActionOnCancellation(ActionOnStop.DeleteMessage)
             .Build();
 
-        await interactivity.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
+        await serv.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
 
         async Task<PageBuilder> PageFactory(int page)
         {
             await Task.CompletedTask.ConfigureAwait(false);
             return new PageBuilder().WithOkColor()
                 .WithTitle(
-                    $"{Format.Bold("Disabled Afk Channels")} - {mentions.ToArray().Length}")
+                    $"{Format.Bold(GetText("disabled_afk_channels"))} - {mentions.ToArray().Length}")
                 .WithDescription(string.Join("\n", mentions.ToArray().Skip(page * 20).Take(20)));
         }
     }

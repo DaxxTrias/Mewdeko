@@ -1,38 +1,23 @@
 ﻿using Mewdeko.Database.Models;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Design;
 
 namespace Mewdeko.Database;
 
-public class MewdekoContextFactory : IDesignTimeDbContextFactory<MewdekoContext>
-{
-    public MewdekoContext CreateDbContext(string[] args)
-    {
-        var optionsBuilder = new DbContextOptionsBuilder<MewdekoContext>();
-        var builder = new SqliteConnectionStringBuilder("Data Source = data/Mewdeko.db");
-        builder.DataSource = Path.Combine(AppContext.BaseDirectory, builder.DataSource);
-        optionsBuilder.UseSqlite(builder.ToString());
-        var ctx = new MewdekoContext(optionsBuilder.Options);
-        ctx.Database.SetCommandTimeout(60);
-        return ctx;
-    }
-}
-
 public class MewdekoContext : DbContext
 {
-    public MewdekoContext(DbContextOptions<MewdekoContext> options) : base(options)
-    {
-    }
-
+    public DbSet<GlobalUserBalance> GlobalUserBalances { get; set; }
+    public DbSet<GuildUserBalance> GuildUserBalances { get; set; }
+    public DbSet<TransactionHistory> TransactionHistories { get; set; }
     public DbSet<JoinLeaveLogs> JoinLeaveLogs { get; set; }
     public DbSet<GuildConfig> GuildConfigs { get; set; }
 
     public DbSet<SuggestionsModel> Suggestions { get; set; }
+    public DbSet<FilteredWord> FilteredWords { get; set; }
     public DbSet<OwnerOnly> OwnerOnly { get; set; }
 
     // public DbSet<GlobalBanConfig> GlobalBanConfigs { get; set; }
     public DbSet<Warning2> Warnings2 { get; set; }
+    public DbSet<Template> Templates { get; set; }
     public DbSet<ServerRecoveryStore> ServerRecoveryStore { get; set; }
     public DbSet<Afk> Afk { get; set; }
     public DbSet<MultiGreet> MultiGreets { get; set; }
@@ -51,7 +36,6 @@ public class MewdekoContext : DbContext
     public DbSet<HighlightSettings> HighlightSettings { get; set; }
     public DbSet<MusicPlaylist> MusicPlaylists { get; set; }
     public DbSet<ChatTriggers> ChatTriggers { get; set; }
-    public DbSet<CurrencyTransaction> CurrencyTransactions { get; set; }
     public DbSet<MusicPlayerSettings> MusicPlayerSettings { get; set; }
     public DbSet<WaifuUpdate> WaifuUpdates { get; set; }
     public DbSet<WaifuInfo> WaifuInfo { get; set; }
@@ -76,7 +60,6 @@ public class MewdekoContext : DbContext
     public DbSet<AutoCommand> AutoCommands { get; set; }
     public DbSet<AutoBanEntry> AutoBanWords { get; set; }
     public DbSet<StatusRolesTable> StatusRoles { get; set; }
-    public DbSet<RewardedUser> RewardedUsers { get; set; }
     public DbSet<Stake> Stakes { get; set; }
     public DbSet<GlobalBans> GlobalBans { get; set; }
     public DbSet<PlantedCurrency> PlantedCurrency { get; set; }
@@ -210,7 +193,6 @@ public class MewdekoContext : DbContext
             .HasDefaultValue(new DateTime(2017, 9, 21, 20, 53, 13, 305, DateTimeKind.Local));
 
         du.HasIndex(x => x.TotalXp);
-        du.HasIndex(x => x.CurrencyAmount);
         du.HasIndex(x => x.UserId);
 
         #endregion
@@ -221,14 +203,6 @@ public class MewdekoContext : DbContext
         warn.HasIndex(x => x.GuildId);
         warn.HasIndex(x => x.UserId);
         warn.HasIndex(x => x.DateAdded);
-
-        #endregion
-
-        #region PatreonRewards
-
-        var pr = modelBuilder.Entity<RewardedUser>();
-        pr.HasIndex(x => x.PatreonUserId)
-            .IsUnique();
 
         #endregion
 
@@ -335,14 +309,6 @@ public class MewdekoContext : DbContext
         modelBuilder.Entity<Poll>()
             .HasIndex(x => x.GuildId)
             .IsUnique();
-
-        #endregion
-
-        #region CurrencyTransactions
-
-        modelBuilder.Entity<CurrencyTransaction>()
-            .HasIndex(x => x.UserId)
-            .IsUnique(false);
 
         #endregion
 

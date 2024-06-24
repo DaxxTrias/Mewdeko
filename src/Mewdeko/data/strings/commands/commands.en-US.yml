@@ -8,6 +8,31 @@ addstatusrole:
   args:
     - "status"
   desc: Adds a status to be configured with the rest of the statusrole commands
+gpingrole:
+  args:
+    - "roleid"
+    - "@role"
+  desc: "Sets the role to ping when a giveaway starts"
+gdmmessage:
+  args:
+    - "message"
+  desc: "Sets the message to DM to a giveaway winner. Supports custom embed code! https://eb.mewdeko.tech"
+gdm:
+  args:
+    - ""
+  desc: "Toggles whether the bot should DM a giveaway winner"
+gembedcolor:
+  args:
+    - "#5E9D3B"
+  desc: "Sets the color of the giveaway embed."
+gwinembedcolor:
+  args:
+    - "#5E9D3B"
+  desc: "Sets the color of the giveaway winner embed."
+gbanner:
+  args:
+    - "url"
+  desc: "Sets the banner of the giveaway embed."
 importrolelist:
   args:
     - ""
@@ -30,6 +55,10 @@ exportrolelist:
   args:
     - ""
   desc: "Exports a list of roles to a file that can be imported with the importrolelist command"
+manualblacklistcheck:
+  args:
+    - ""
+  desc: "Manually checks all blacklists"
 lyrics:
   args:
     - "song name"
@@ -542,7 +571,7 @@ autoassignrole:
     - ''
     - RoleName
   desc: >-
-    Toggles the role which will be assigned to every user who joins the server.
+    Toggles the role which will be assigned to every bot who joins the server.
     You can run this command multiple times to add multiple roles (up to 10).
     Specifying the role that is already added will remove that role from the
     list. Provide no parameters to list current roles.

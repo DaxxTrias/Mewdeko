@@ -1,4 +1,4 @@
-﻿using System.Text.RegularExpressions;
+using System.Text.RegularExpressions;
 using Discord.Commands;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
@@ -280,7 +280,8 @@ public class Giveaways : MewdekoModuleBase<GiveawayService>
             parsed = Regex.Matches(next, @"(?<=<@&)?[0-9]{17,19}(?=>)?")
                 .Select(m => ulong.Parse(m.Value))
                 .Select(Context.Guild.GetRole).Where(x => x is not null).ToList();
-            if (parsed.Count > 0) break;
+            if (parsed.Count > 0)
+                break;
             await msg.ModifyAsync(x => x.Embed = eb
                 .WithDescription("Looks like those roles were incorrect! Please try again!")
                 .Build()).ConfigureAwait(false);

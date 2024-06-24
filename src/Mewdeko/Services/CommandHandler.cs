@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Threading;
 using Discord.Commands;
@@ -41,6 +41,8 @@ public class CommandHandler : INService
     private IEnumerable<ILateExecutor> lateExecutors;
     public readonly InteractionService InteractionService;
     private readonly GuildSettingsService gss;
+    private readonly IBotCredentials creds;
+    private readonly IDataCache cache;
 
     public NonBlocking.ConcurrentDictionary<ulong, ConcurrentQueue<IUserMessage>> CommandParseQueue { get; } = new();
     public NonBlocking.ConcurrentDictionary<ulong, bool> CommandParseLock { get; } = new();
@@ -48,10 +50,12 @@ public class CommandHandler : INService
     public CommandHandler(DiscordSocketClient client, DbService db, CommandService commandService,
         BotConfigService bss, Mewdeko bot, IServiceProvider services, IBotStrings strngs,
         InteractionService interactionService,
-        GuildSettingsService gss, EventHandler eventHandler)
+        GuildSettingsService gss, EventHandler eventHandler, IBotCredentials creds, IDataCache cache)
     {
         InteractionService = interactionService;
         this.gss = gss;
+        this.creds = creds;
+        this.cache = cache;
         strings = strngs;
         this.client = client;
         this.commandService = commandService;
@@ -75,7 +79,10 @@ public class CommandHandler : INService
 
     public event Func<IUserMessage, CommandInfo, Task> CommandExecuted = delegate { return Task.CompletedTask; };
 
-    public event Func<CommandInfo, ITextChannel, string, IUser?, Task> CommandErrored = delegate { return Task.CompletedTask; };
+    public event Func<CommandInfo, ITextChannel, string, IUser?, Task> CommandErrored = delegate
+    {
+        return Task.CompletedTask;
+    };
 
     public event Func<IUserMessage, Task> OnMessageNoTrigger = delegate { return Task.CompletedTask; };
 
@@ -86,17 +93,17 @@ public class CommandHandler : INService
             if (ctx.Guild is not null)
             {
                 var gconf = await gss.GetGuildConfig(ctx.Guild.Id);
-                if (!gconf.StatsOptOut)
+                if (!false.ParseBoth(gconf.StatsOptOut.ToString()))
                 {
                     await using var uow = db.GetDbContext();
                     var user = await uow.GetOrCreateUser(ctx.User);
-                    if (!user.StatsOptOut)
+                    if (!false.ParseBoth(user.StatsOptOut))
                     {
                         var comStats = new CommandStats
                         {
                             ChannelId = ctx.Channel.Id,
                             GuildId = ctx.Guild.Id,
-                            IsSlash = true,
+                            IsSlash = 1,
                             NameOrId = info.Name,
                             UserId = ctx.User.Id,
                             Module = info.Module.Name
@@ -109,8 +116,12 @@ public class CommandHandler : INService
 
             if (!result.IsSuccess)
             {
-                await ctx.Interaction.SendEphemeralErrorAsync($"Command failed for the following reason:\n{result.ErrorReason}").ConfigureAwait(false);
-                Log.Warning("Slash Command Errored\n\t" + "User: {0}\n\t" + "Server: {1}\n\t" + "Channel: {2}\n\t" + "Message: {3}\n\t" + "Error: {4}",
+                await ctx.Interaction
+                    .SendEphemeralErrorAsync($"Command failed for the following reason:\n{result.ErrorReason}")
+                    .ConfigureAwait(false);
+                Log.Warning(
+                    "Slash Command Errored\n\t" + "User: {0}\n\t" + "Server: {1}\n\t" + "Channel: {2}\n\t" +
+                    "Message: {3}\n\t" + "Error: {4}",
                     $"{ctx.User} [{ctx.User.Id}]", // {0}
                     ctx.Guild == null ? "PRIVATE" : $"{ctx.Guild.Name} [{ctx.Guild.Id}]", // {1}
                     ctx.Channel == null ? "PRIVATE" : $"{ctx.Channel.Name} [{ctx.Channel.Id}]", // {2}
@@ -158,7 +169,9 @@ public class CommandHandler : INService
             }
 
             var chan = ctx.Channel as ITextChannel;
-            Log.Information("Slash Command Executed" + "\n\t" + "User: {0}\n\t" + "Server: {1}\n\t" + "Channel: {2}\n\t" + "Module: {3}\n\t" + "Command: {4}",
+            Log.Information(
+                "Slash Command Executed" + "\n\t" + "User: {0}\n\t" + "Server: {1}\n\t" + "Channel: {2}\n\t" +
+                "Module: {3}\n\t" + "Command: {4}",
                 $"{ctx.User} [{ctx.User.Id}]", // {0}
                 chan == null ? "PRIVATE" : $"{chan.Guild.Name} [{chan.Guild.Id}]", // {1}
                 chan == null ? "PRIVATE" : $"{chan.Name} [{chan.Id}]", // {2}
@@ -212,17 +225,17 @@ public class CommandHandler : INService
             if (ctx.Guild is not null)
             {
                 var gconf = await gss.GetGuildConfig(ctx.Guild.Id);
-                if (!gconf.StatsOptOut)
+                if (!false.ParseBoth(gconf.StatsOptOut.ToString()))
                 {
                     await using var uow = db.GetDbContext();
                     var user = await uow.GetOrCreateUser(ctx.User);
-                    if (!user.StatsOptOut)
+                    if (!false.ParseBoth(user.StatsOptOut))
                     {
                         var comStats = new CommandStats
                         {
                             ChannelId = ctx.Channel.Id,
                             GuildId = ctx.Guild.Id,
-                            IsSlash = true,
+                            IsSlash = 1,
                             NameOrId = slashInfo.Name,
                             UserId = ctx.User.Id,
                             Module = slashInfo.Module.Name
@@ -235,8 +248,12 @@ public class CommandHandler : INService
 
             if (!result.IsSuccess)
             {
-                await ctx.Interaction.SendEphemeralErrorAsync($"Command failed for the following reason:\n{result.ErrorReason}").ConfigureAwait(false);
-                Log.Warning("Slash Command Errored\n\t" + "User: {0}\n\t" + "Server: {1}\n\t" + "Channel: {2}\n\t" + "Message: {3}\n\t" + "Error: {4}",
+                await ctx.Interaction
+                    .SendEphemeralErrorAsync($"Command failed for the following reason:\n{result.ErrorReason}")
+                    .ConfigureAwait(false);
+                Log.Warning(
+                    "Slash Command Errored\n\t" + "User: {0}\n\t" + "Server: {1}\n\t" + "Channel: {2}\n\t" +
+                    "Message: {3}\n\t" + "Error: {4}",
                     $"{ctx.User} [{ctx.User.Id}]", // {0}
                     ctx.Guild == null ? "PRIVATE" : $"{ctx.Guild.Name} [{ctx.Guild.Id}]", // {1}
                     ctx.Channel == null ? "PRIVATE" : $"{ctx.Channel.Name} [{ctx.Channel.Id}]", // {2}
@@ -285,7 +302,9 @@ public class CommandHandler : INService
             }
 
             var chan = ctx.Channel as ITextChannel;
-            Log.Information("Slash Command Executed" + "\n\t" + "User: {0}\n\t" + "Server: {1}\n\t" + "Channel: {2}\n\t" + "Module: {3}\n\t" + "Command: {4}",
+            Log.Information(
+                "Slash Command Executed" + "\n\t" + "User: {0}\n\t" + "Server: {1}\n\t" + "Channel: {2}\n\t" +
+                "Module: {3}\n\t" + "Command: {4}",
                 $"{ctx.User} [{ctx.User.Id}]", // {0}
                 chan == null ? "PRIVATE" : $"{chan.Guild.Name} [{chan.Guild.Id}]", // {1}
                 chan == null ? "PRIVATE" : $"{chan.Name} [{chan.Id}]", // {2}
@@ -337,19 +356,22 @@ public class CommandHandler : INService
         await Task.Delay(2500);
         var blacklistService = services.GetService<BlacklistService>();
         var cb = new ComponentBuilder().WithButton("Support Server", null, ButtonStyle.Link,
-            url: "https://discord.gg/TBD4").Build();
+            url: "https://discord.gg/mewdeko").Build();
         foreach (var bl in blacklistService.BlacklistEntries)
         {
-            if ((interaction.Channel as IGuildChannel)?.Guild != null && bl.Type == BlacklistType.Server && bl.ItemId == (interaction.Channel as IGuildChannel)?.Guild?.Id)
+            if ((interaction.Channel as IGuildChannel)?.Guild != null && bl.Type == BlacklistType.Server &&
+                bl.ItemId == (interaction.Channel as IGuildChannel)?.Guild?.Id)
             {
-                await interaction.RespondAsync($"*This guild is blacklisted for **{bl.Reason}**! You can visit the support server below to try and resolve this.*",
+                await interaction.RespondAsync(
+                    $"*This guild is blacklisted from Mewdeko for **{bl.Reason}**! You can visit the support server below to try and resolve this.*",
                     components: cb).ConfigureAwait(false);
                 return;
             }
 
             if (bl.Type == BlacklistType.User && bl.ItemId == interaction.User.Id)
             {
-                await interaction.RespondAsync($"*You are blacklisted for **{bl.Reason}**! You can visit the support server below to try and resolve this.*",
+                await interaction.RespondAsync(
+                    $"*You are blacklisted from Mewdeko for **{bl.Reason}**! You can visit the support server below to try and resolve this.*",
                     ephemeral: true, components: cb).ConfigureAwait(false);
                 return;
             }
@@ -373,18 +395,11 @@ public class CommandHandler : INService
 
         var ctx = new SocketInteractionContext(client, interaction);
         var result = await InteractionService.ExecuteCommandAsync(ctx, services).ConfigureAwait(false);
+#if DEBUG
         Log.Information($"Button was executed:{result.IsSuccess}\nReason:{result.ErrorReason}");
+#endif
     }
 
-    public string SetDefaultPrefix(string prefix)
-    {
-        if (string.IsNullOrWhiteSpace(prefix))
-            throw new ArgumentNullException(nameof(prefix));
-
-        bss.ModifyConfig(bs => bs.Prefix = prefix);
-
-        return prefix;
-    }
 
     public void AddServices(IServiceCollection services)
     {
@@ -417,7 +432,7 @@ public class CommandHandler : INService
             var guild = client.GetGuild(guildId.Value);
             if (guild?.GetChannel(channelId) is not SocketTextChannel channel)
             {
-                Log.Warning("Channel for external execution not found.");
+                Log.Warning("Channel for external execution not found");
                 return;
             }
 
@@ -455,7 +470,8 @@ public class CommandHandler : INService
                 var eb = new EmbedBuilder()
                     .WithOkColor()
                     .WithTitle("Text Command Executed")
-                    .AddField("Executed Time", string.Join("/", execPoints.Select(x => (x * OneThousandth).ToString("F3"))))
+                    .AddField("Executed Time",
+                        string.Join("/", execPoints.Select(x => (x * OneThousandth).ToString("F3"))))
                     .AddField("User", $"{usrMsg.Author.Mention} {usrMsg.Author} {usrMsg.Author.Id}")
                     .AddField("Guild", channel == null ? "PRIVATE" : $"{channel.Guild.Name} `{channel.Guild.Id}`")
                     .AddField("Channel", channel == null ? "PRIVATE" : $"{channel.Name} `{channel.Id}`")
@@ -475,7 +491,8 @@ public class CommandHandler : INService
                 var eb = new EmbedBuilder()
                     .WithOkColor()
                     .WithTitle("Text Command Executed")
-                    .AddField("Executed Time", string.Join("/", execPoints.Select(x => (x * OneThousandth).ToString("F3"))))
+                    .AddField("Executed Time",
+                        string.Join("/", execPoints.Select(x => (x * OneThousandth).ToString("F3"))))
                     .AddField("User", $"{usrMsg.Author.Mention} {usrMsg.Author} {usrMsg.Author.Id}")
                     .AddField("Channel", channel == null ? "PRIVATE" : $"{channel.Name} `{channel.Id}`")
                     .AddField("Message", usrMsg.Content.TrimTo(1000));
@@ -486,12 +503,15 @@ public class CommandHandler : INService
         return Task.CompletedTask;
     }
 
-    private Task LogErroredExecution(string errorMessage, IMessage usrMsg, IGuildChannel? channel, params int[] execPoints)
+    private Task LogErroredExecution(string errorMessage, IMessage usrMsg, IGuildChannel? channel,
+        params int[] execPoints)
     {
         _ = Task.Run(async () =>
         {
             var errorafter = string.Join("/", execPoints.Select(x => (x * OneThousandth).ToString("F3")));
-            Log.Warning($"Command Errored after {errorafter}\n\t" + "User: {0}\n\t" + "Server: {1}\n\t" + "Channel: {2}\n\t" + "Message: {3}\n\t" + "Error: {4}",
+            Log.Warning(
+                $"Command Errored after {errorafter}\n\t" + "User: {0}\n\t" + "Server: {1}\n\t" + "Channel: {2}\n\t" +
+                "Message: {3}\n\t" + "Error: {4}",
                 $"{usrMsg.Author} [{usrMsg.Author.Id}]", // {0}
                 channel == null ? "PRIVATE" : $"{channel.Guild.Name} [{channel.Guild.Id}]", // {1}
                 channel == null ? "PRIVATE" : $"{channel.Name} [{channel.Id}]", // {2}
@@ -500,11 +520,13 @@ public class CommandHandler : INService
             var toFetch = await client.Rest.GetChannelAsync(bss.Data.CommandLogChannel).ConfigureAwait(false);
             if (toFetch is RestTextChannel restChannel)
             {
-                var eb = new EmbedBuilder().WithOkColor().WithTitle("Text Command Errored").AddField("Error Reason", errorMessage)
+                var eb = new EmbedBuilder().WithOkColor().WithTitle("Text Command Errored")
+                    .AddField("Error Reason", errorMessage)
                     .AddField("Errored Time", execPoints.Select(x => (x * OneThousandth).ToString("F3")))
                     .AddField("User", $"{usrMsg.Author} {usrMsg.Author.Id}")
                     .AddField("Guild", channel == null ? "PRIVATE" : $"{channel.Guild.Name} `{channel.Guild.Id}`")
-                    .AddField("Channel", channel == null ? "PRIVATE" : $"{channel.Name} `{channel.Id}`").AddField("Message", usrMsg.Content.TrimTo(1000));
+                    .AddField("Channel", channel == null ? "PRIVATE" : $"{channel.Name} `{channel.Id}`")
+                    .AddField("Message", usrMsg.Content.TrimTo(1000));
 
                 await restChannel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
             }
@@ -548,7 +570,8 @@ public class CommandHandler : INService
 
     public async Task<bool> ExecuteCommandsInChannelAsync(ulong channelId)
     {
-        if (CommandParseLock.GetValueOrDefault(channelId, false) || CommandParseQueue.GetValueOrDefault(channelId)?.IsEmpty != false)
+        if (CommandParseLock.GetValueOrDefault(channelId, false) ||
+            CommandParseQueue.GetValueOrDefault(channelId)?.IsEmpty != false)
             return false;
 
         CommandParseLock[channelId] = true;
@@ -556,7 +579,14 @@ public class CommandHandler : INService
         {
             while (CommandParseQueue[channelId].TryDequeue(out var msg))
             {
-                await TryRunCommand((msg.Channel as IGuildChannel)?.Guild, msg.Channel, msg).ConfigureAwait(false);
+                try
+                {
+                    await TryRunCommand((msg.Channel as IGuildChannel)?.Guild, msg.Channel, msg).ConfigureAwait(false);
+                }
+                catch (Exception e)
+                {
+                    Log.Error("Error occured in the handler:", e);
+                }
             }
 
             CommandParseQueue[channelId] = new ConcurrentQueue<IUserMessage>();
@@ -584,10 +614,12 @@ public class CommandHandler : INService
             switch (beh.BehaviorType)
             {
                 case ModuleBehaviorType.Blocker:
-                    Log.Information("Blocked User: [{0}] Message: [{1}] Service: [{2}]", $"{usrMsg.Author} | {usrMsg.Author.Id}", usrMsg.Content, beh.GetType().Name);
+                    Log.Information("Blocked User: [{0}] Message: [{1}] Service: [{2}]",
+                        $"{usrMsg.Author} | {usrMsg.Author.Id}", usrMsg.Content, beh.GetType().Name);
                     break;
                 case ModuleBehaviorType.Executor:
-                    Log.Information("User [{0}] executed [{1}] in [{2}] User ID: {3}", usrMsg.Author, usrMsg.Content, beh.GetType().Name, usrMsg.Author.Id);
+                    Log.Information("User [{0}] executed [{1}] in [{2}] User ID: {3}", usrMsg.Author, usrMsg.Content,
+                        beh.GetType().Name, usrMsg.Author.Id);
                     break;
             }
 
@@ -611,8 +643,9 @@ public class CommandHandler : INService
         var prefix = await gss.GetPrefix(guild?.Id);
 
         var startsWithPrefix = messageContent.StartsWith(prefix, StringComparison.InvariantCulture);
-        var startsWithBotMention = messageContent.StartsWith($"<@{client.CurrentUser.Id}> ", StringComparison.InvariantCulture) ||
-                                   messageContent.StartsWith($"<@!{client.CurrentUser.Id}> ", StringComparison.InvariantCulture);
+        var startsWithBotMention =
+            messageContent.StartsWith($"<@{client.CurrentUser.Id}> ", StringComparison.InvariantCulture) ||
+            messageContent.StartsWith($"<@!{client.CurrentUser.Id}> ", StringComparison.InvariantCulture);
 
         if (!startsWithPrefix && !startsWithBotMention)
         {
@@ -622,7 +655,9 @@ public class CommandHandler : INService
 
         if (startsWithBotMention)
         {
-            prefix = messageContent.IndexOf('!') == -1 ? $"<@{client.CurrentUser.Id}> " : $"<@!{client.CurrentUser.Id}> ";
+            prefix = messageContent.IndexOf('!') == -1
+                ? $"<@{client.CurrentUser.Id}> "
+                : $"<@!{client.CurrentUser.Id}> ";
         }
 
         if (messageContent.Equals(prefix.Trim(), StringComparison.InvariantCulture))
@@ -639,11 +674,11 @@ public class CommandHandler : INService
         if (guild is not null)
         {
             var gconf = await gss.GetGuildConfig(guild.Id);
-            if (!gconf.StatsOptOut && info is not null)
+            if (!false.ParseBoth(gconf.StatsOptOut.ToString()) && info is not null)
             {
                 await using var uow = db.GetDbContext();
                 var user = await uow.GetOrCreateUser(usrMsg.Author);
-                if (!user.StatsOptOut)
+                if (!false.ParseBoth(user.StatsOptOut))
                 {
                     var comStats = new CommandStats
                     {
@@ -671,7 +706,7 @@ public class CommandHandler : INService
             await LogErroredExecution(error, usrMsg, channel as ITextChannel, exec2, execTime);
             if (guild != null)
             {
-                var perms = new PermissionService(client, db, strings, gss);
+                var perms = new PermissionService(db, strings, gss, bot);
                 var pc = await perms.GetCacheFor(guild.Id);
                 if (pc != null && pc.Permissions.CheckPermissions(usrMsg, info.Name, info.Module.Name, out _))
                     await CommandErrored(info, channel as ITextChannel, error, usrMsg.Author).ConfigureAwait(false);
@@ -685,6 +720,7 @@ public class CommandHandler : INService
             await exec.LateExecute(client, guild, usrMsg).ConfigureAwait(false);
         }
     }
+
 
     private async Task<(bool Success, string Error, CommandInfo Info)> ExecuteCommandAsync(CommandContext context,
         string input, int argPos,
@@ -787,7 +823,6 @@ public class CommandHandler : INService
         // GlobalCommandsCooldown constant (milliseconds)
         if (!UsersOnShortCooldown.Add(context.Message.Author.Id))
             return (false, null, cmd);
-        //return SearchResult.FromError(CommandError.Exception, "You are on a global cooldown.");
 
         var commandName = cmd.Aliases[0];
         foreach (var exec in LateBlockers)

@@ -96,12 +96,12 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
                 if (server.OwnerId != this.client.CurrentUser.Id)
                 {
                     await server.LeaveAsync().ConfigureAwait(false);
-                    Log.Information("Left server {ServerName} [{ServerId}]", server.Name, server.Id);
+                    Log.Information($"Left server {server.Name} [{server.Id}]");
                 }
                 else
                 {
                     await server.DeleteAsync().ConfigureAwait(false);
-                    Log.Information("Deleted server {ServerName} [{ServerId}]", server.Name, server.Id);
+                    Log.Information($"Deleted server {server.Name} [{server.Id}]");
                 }
             }
             catch
@@ -203,7 +203,6 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
                 {
                     throw;
                 }
-
                 var authorName = args.Author.ToString();
                 var prompt = args.Content.Substring("frog image ".Length).Trim();
                 if (string.IsNullOrEmpty(prompt))
@@ -297,6 +296,21 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
                     await usrMsg.SendErrorReplyAsync($"Failed to generate image due to an unexpected error. Please try again later. Error code: **{ex.HResult}**");
                 }
                 return;
+            }
+
+            if (scannedWords.Contains("scan"))
+            {
+                try
+                {
+                    //todo: dep support has been enabled, finish this when ef model port done
+                    // https://github.com/OkGoDoIt/OpenAI-API-dotnet/commit/b824ac5b50027af48aa8ea02bf1bc40fac36f390#diff-ba720258629043138df0c8ebea494853e88e2517638a615c4a9c4fdc84a2a168
+                    await usrMsg.Channel.SendMessageAsync("Not Yet Implemented.");
+                    return;
+                }
+                catch
+                {
+                    throw;
+                }
             }
 
             if (!conversations.TryGetValue(args.Author.Id, out var conversation))

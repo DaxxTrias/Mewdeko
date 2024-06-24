@@ -1,4 +1,4 @@
-using Discord.Commands;
+﻿using Discord.Commands;
 using Humanizer;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Common.TypeReaders.Models;
@@ -251,7 +251,7 @@ public partial class Administration
 
         private string? GetAntiAltString(AntiAltStats alt) =>
             GetText("anti_alt_status",
-                Format.Bold(alt.MinAge.ToString(@"dd\d\ hh\h\ mm\m\ ")),
+                Format.Bold(TimeSpan.Parse(alt.MinAge).ToString(@"dd\d\ hh\h\ mm\m\ ")),
                 Format.Bold(alt.Action.ToString()),
                 Format.Bold(alt.Counter.ToString()));
 

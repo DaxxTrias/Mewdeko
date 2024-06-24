@@ -1,5 +1,6 @@
 ﻿using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
+using LinqToDB.EntityFrameworkCore;
 using Mewdeko.Common.DiscordImplementations;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Common.PubSub;
@@ -80,6 +81,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
     private readonly IBotStrings strings;
     private readonly GuildSettingsService guildSettings;
     private readonly BotConfigService configService;
+    private readonly IBotCredentials creds;
 
     // it is perfectly fine to have global chattriggers as an array
     // 1. custom reactions are almost never added (compared to how many times they are being looped through)
@@ -101,7 +103,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
         IPubSub pubSub,
         DiscordPermOverrideService discordPermOverride,
         GuildSettingsService guildSettings,
-        BotConfigService configService)
+        BotConfigService configService, IBotCredentials creds)
     {
         this.db = db;
         this.client = client;
@@ -113,6 +115,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
         this.discordPermOverride = discordPermOverride;
         this.guildSettings = guildSettings;
         this.configService = configService;
+        this.creds = creds;
         rng = new MewdekoRandom();
 
         pubSub.Sub(crsReloadedKey, OnCrsShouldReload);
@@ -127,7 +130,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
 
     private async ValueTask OnCrAdded(CTModel arg)
     {
-        await AddAsync(arg.GuildId, arg.Trigger, arg.Response, arg.IsRegex);
+        await AddAsync(arg.GuildId, arg.Trigger, arg.Response, arg.IsRegex == 1);
     }
 
     public int Priority => -1;
@@ -181,7 +184,9 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
                     var user = msg.Author as IGuildUser;
                     if (!user.GuildPermissions.Has(guildPermission))
                     {
-                        Log.Information("Chat Trigger {CtTrigger} Blocked for {MsgAuthor} in {Guild} due to them missing {Perms}.", ct.Trigger, msg.Author, guild, guildPermission);
+                        Log.Information(
+                            "Chat Trigger {CtTrigger} Blocked for {MsgAuthor} in {Guild} due to them missing {Perms}",
+                            ct.Trigger, msg.Author, guild, guildPermission);
                         return false;
                     }
                 }
@@ -190,12 +195,12 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
             var guildConfig = await guildSettings.GetGuildConfig(guild.Id);
             var uow = db.GetDbContext();
             var dbUser = await uow.GetOrCreateUser(msg.Author);
-            if (!guildConfig.StatsOptOut && !dbUser.StatsOptOut)
+            if (!false.ParseBoth(guildConfig.StatsOptOut.ToString()) && dbUser.StatsOptOut == 0)
             {
                 var toAdd = new CommandStats
                 {
                     ChannelId = msg.Channel.Id,
-                    Trigger = true,
+                    Trigger = 1,
                     NameOrId = $"{ct.Id}",
                     GuildId = guild.Id,
                     UserId = msg.Author.Id
@@ -210,7 +215,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
             {
                 try
                 {
-                    if (!ct.ReactToTrigger && !ct.NoRespond)
+                    if (ct.ReactToTrigger == 0 && ct.NoRespond == 0)
                         await sentMsg.AddReactionAsync(reaction.ToIEmote()).ConfigureAwait(false);
                     else
                         await msg.AddReactionAsync(reaction.ToIEmote()).ConfigureAwait(false);
@@ -227,7 +232,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
 
             try
             {
-                if (ct.AutoDeleteTrigger)
+                if (ct.AutoDeleteTrigger == 1)
                     await msg.DeleteAsync().ConfigureAwait(false);
             }
             catch
@@ -306,7 +311,8 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
                                 return;
                             var returnMsg = strings.GetText("perm_prevent", guild.Id,
                                 index + 1,
-                                Format.Bold(pc.Permissions[index].GetCommand(await guildSettings.GetPrefix(guild), guild)));
+                                Format.Bold(pc.Permissions[index]
+                                    .GetCommand(await guildSettings.GetPrefix(guild), guild)));
                             try
                             {
                                 await fakeMsg.Channel.SendErrorAsync(returnMsg).ConfigureAwait(false);
@@ -326,7 +332,8 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
                             var user = inter.User as IGuildUser;
                             if (!user.GuildPermissions.Has(guildPermission))
                             {
-                                Log.Information($"Chat Trigger {ct.Trigger} Blocked for {inter.User} in {guild} due to them missing {guildPermission}.");
+                                Log.Information(
+                                    $"Chat Trigger {ct.Trigger} Blocked for {inter.User} in {guild} due to them missing {guildPermission}.");
                                 return;
                             }
                         }
@@ -337,12 +344,12 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
                     var guildConfig = await guildSettings.GetGuildConfig(channel.GuildId);
                     await using var uow = db.GetDbContext();
                     var dbUser = await uow.GetOrCreateUser(fakeMsg.Author);
-                    if (!guildConfig.StatsOptOut && !dbUser.StatsOptOut)
+                    if (!false.ParseBoth(guildConfig.StatsOptOut) && dbUser.StatsOptOut == 0)
                     {
                         var toAdd = new CommandStats
                         {
                             ChannelId = channel.Id,
-                            Trigger = true,
+                            Trigger = 1,
                             NameOrId = $"{ct.Id}",
                             GuildId = channel.GuildId,
                             UserId = inter.User.Id
@@ -351,13 +358,14 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
                         await uow.SaveChangesAsync();
                     }
 
-                    var sentMsg = await ct.SendInteraction(inter, this.client, false, fakeMsg, ct.EphemeralResponse, uow, followup).ConfigureAwait(false);
+                    var sentMsg = await ct.SendInteraction(inter, this.client, false, fakeMsg,
+                        false.ParseBoth(ct.EphemeralResponse), uow, followup).ConfigureAwait(false);
 
                     foreach (var reaction in ct.GetReactions())
                     {
                         try
                         {
-                            if (!ct.ReactToTrigger && !ct.NoRespond)
+                            if (ct.ReactToTrigger == 0 && ct.NoRespond == 0)
                                 await sentMsg.AddReactionAsync(reaction.ToIEmote()).ConfigureAwait(false);
                             else
                                 await sentMsg.AddReactionAsync(reaction.ToIEmote()).ConfigureAwait(false);
@@ -412,7 +420,8 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
                             try
                             {
                                 var baseRoles = user.RoleIds.Where(x => x != guildUser.Guild?.EveryoneRole.Id).ToList();
-                                var roles = baseRoles.Where(x => !ct.RemovedRoles?.Contains(x.ToString()) ?? true).ToList();
+                                var roles = baseRoles.Where(x => !ct.RemovedRoles?.Contains(x.ToString()) ?? true)
+                                    .ToList();
                                 roles.AddRange(ct.GetGrantedRoles().Where(x => !user.RoleIds.Contains(x)));
 
                                 // difference is caused by @everyone
@@ -421,7 +430,8 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
                             }
                             catch
                             {
-                                Log.Warning("Unable to modify the roles of {User} in {GuildId}", guildUser.Id, ct.GuildId);
+                                Log.Warning("Unable to modify the roles of {User} in {GuildId}", guildUser.Id,
+                                    ct.GuildId);
                             }
                         }
                     }
@@ -479,21 +489,21 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
                         Response = ct.Res,
                         Reactions = ct.React?.JoinWith("@@@"),
                         Trigger = trigger,
-                        AllowTarget = ct.At,
-                        ContainsAnywhere = ct.Ca,
-                        DmResponse = ct.Dm,
-                        AutoDeleteTrigger = ct.Ad,
-                        NoRespond = ct.Nr,
-                        IsRegex = ct.Rgx,
+                        AllowTarget = ct.At ? 1 : 0,
+                        ContainsAnywhere = ct.Ca ? 1 : 0,
+                        DmResponse = ct.Dm ? 1 : 0,
+                        AutoDeleteTrigger = ct.Ad ? 1 : 0,
+                        NoRespond = ct.Nr ? 1 : 0,
+                        IsRegex = ct.Rgx ? 1 : 0,
                         GrantedRoles = string.Join("@@@", ct.ARole.Select(x => x.ToString())),
                         RemovedRoles = string.Join("@@@", ct.RRole.Select(x => x.ToString())),
-                        ReactToTrigger = ct.Rtt,
+                        ReactToTrigger = ct.Rtt ? 1 : 0,
                         RoleGrantType = ct.Rgt,
                         ValidTriggerTypes = ct.VTypes,
                         ApplicationCommandName = ct.AcName,
                         ApplicationCommandDescription = ct.AcDesc,
                         ApplicationCommandType = ct.Act,
-                        EphemeralResponse = ct.Eph
+                        EphemeralResponse = ct.Eph ? 1 : 0
                     }));
             }
 
@@ -522,9 +532,9 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
     {
         await using var uow = db.GetDbContext();
         var guildItems = await uow.ChatTriggers
-            .AsNoTracking()
-            .Where(x => allGuildIds.Contains(x.GuildId.Value))
-            .ToListAsync().ConfigureAwait(false);
+            .ToLinqToDB().Where(x =>
+                (int)(x.GuildId / (ulong)Math.Pow(2, 22) % (ulong)creds.TotalShards) == client.ShardId)
+            .AsNoTracking().ToListAsyncLinqToDB();
 
         newGuildReactions = guildItems
             .GroupBy(k => k.GuildId!.Value)
@@ -615,7 +625,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
             }
 
             // regex triggers are only checked on regex content
-            if (ct.IsRegex)
+            if (ct.IsRegex == 1)
             {
                 if (Regex.IsMatch(new string(content), trigger, RegexOptions.None, TimeSpan.FromMilliseconds(1)))
                     result.Add(ct);
@@ -633,7 +643,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
             {
                 // if input is greater than the trigger, it can only work if:
                 // it has CA enabled
-                if (ct.ContainsAnywhere)
+                if (ct.ContainsAnywhere == 1)
                 {
                     // if ca is enabled, we have to check if it is a word within the content
                     var wp = Extensions.Extensions.GetWordPosition(content, trigger);
@@ -650,8 +660,8 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
 
                 // if CA is disabled, and CR has AllowTarget, then the
                 // content has to start with the trigger followed by a space
-                if (ct.AllowTarget && content.StartsWith(trigger, StringComparison.OrdinalIgnoreCase)
-                                   && content[trigger.Length] == ' ')
+                if (ct.AllowTarget == 1 && content.StartsWith(trigger, StringComparison.OrdinalIgnoreCase)
+                                        && content[trigger.Length] == ' ')
                 {
                     result.Add(ct);
                 }
@@ -818,32 +828,33 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
         await UpdateInternalAsync(guildId, ct).ConfigureAwait(false);
     }
 
-    public async Task<(bool Sucess, bool NewValue)> ToggleCrOptionAsync(CTModel? ct, CtField? field)
+    public async Task<(bool Success, bool NewValue)> ToggleCrOptionAsync(CTModel? ct, CtField? field)
     {
-        var newVal = false;
-        var uow = db.GetDbContext();
-        await using (uow.ConfigureAwait(false))
+        long newVal = 0;
+        await using var uow = db.GetDbContext();
+
+        if (ct is null)
+            return (false, false);
+
+        newVal = field switch
         {
-            if (ct is null)
-                return (false, false);
-            newVal = field switch
-            {
-                CtField.AutoDelete => ct.AutoDeleteTrigger = !ct.AutoDeleteTrigger,
-                CtField.ContainsAnywhere => ct.ContainsAnywhere = !ct.ContainsAnywhere,
-                CtField.DmResponse => ct.DmResponse = !ct.DmResponse,
-                CtField.AllowTarget => ct.AllowTarget = !ct.AllowTarget,
-                CtField.ReactToTrigger => ct.ReactToTrigger = !ct.ReactToTrigger,
-                CtField.NoRespond => ct.NoRespond = !ct.NoRespond,
-                _ => newVal
-            };
-            uow.ChatTriggers.Update(ct);
-            await uow.SaveChangesAsync().ConfigureAwait(false);
-        }
+            CtField.AutoDelete => ct.AutoDeleteTrigger ^= 1,
+            CtField.ContainsAnywhere => ct.ContainsAnywhere ^= 1,
+            CtField.DmResponse => ct.DmResponse ^= 1,
+            CtField.AllowTarget => ct.AllowTarget ^= 1,
+            CtField.ReactToTrigger => ct.ReactToTrigger ^= 1,
+            CtField.NoRespond => ct.NoRespond ^= 1,
+            _ => newVal
+        };
+
+        uow.ChatTriggers.Update(ct);
+        await uow.SaveChangesAsync().ConfigureAwait(false);
 
         await UpdateInternalAsync(ct.GuildId, ct).ConfigureAwait(false);
 
-        return (true, newVal);
+        return (true, false.ParseBoth(newVal));
     }
+
 
     public async Task<CTModel?> GetChatTriggers(ulong? guildId, int id)
     {
@@ -955,11 +966,11 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
         key = key.ToLowerInvariant();
         var cr = new CTModel
         {
-            GuildId = guildId, Trigger = key, Response = message, IsRegex = regex
+            GuildId = guildId, Trigger = key, Response = message, IsRegex = regex ? 1 : 0
         };
 
         if (cr.Response.Contains("%target", StringComparison.OrdinalIgnoreCase))
-            cr.AllowTarget = true;
+            cr.AllowTarget = 1;
 
         var uow = db.GetDbContext();
         await using (uow.ConfigureAwait(false))
@@ -975,30 +986,30 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
 
     public async Task<CTModel?> EditAsync(ulong? guildId, int id, string? message, bool? regex, string? trigger = null)
     {
-        await using var uow = db.GetDbContext();
+        using var uow = db.GetDbContext();
         var ct = await uow.ChatTriggers.GetById(id);
 
         if (ct == null || ct.GuildId != guildId)
             return null;
 
-        ct.IsRegex = regex ?? ct.IsRegex;
+        ct.IsRegex = regex.HasValue ? Convert.ToInt64(regex.Value) : ct.IsRegex;
 
         // disable allowtarget if message had target, but it was removed from it
         if (!message.Contains("%target%", StringComparison.OrdinalIgnoreCase)
             && ct.Response.Contains("%target%", StringComparison.OrdinalIgnoreCase))
         {
-            ct.AllowTarget = false;
+            ct.AllowTarget = 0; // false
         }
 
         ct.Response = message;
         ct.Trigger = trigger ?? ct.Trigger;
 
         // enable allow target if message is edited to contain target
-        if (ct.Response.Contains("%target", StringComparison.OrdinalIgnoreCase))
-            ct.AllowTarget = true;
+        if (ct.Response.Contains("%target%", StringComparison.OrdinalIgnoreCase))
+            ct.AllowTarget = 1; // true
 
         await uow.SaveChangesAsync().ConfigureAwait(false);
-        await UpdateInternalAsync(guildId, ct).ConfigureAwait(false);
+        await UpdateInternalAsync(guildId.Value, ct).ConfigureAwait(false);
 
         return ct;
     }
@@ -1092,7 +1103,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
         if (ct == null || ct.GuildId != guildId)
             return null;
 
-        ct.EphemeralResponse = ephemeral;
+        ct.EphemeralResponse = ephemeral ? 1 : 0;
         await uow.SaveChangesAsync().ConfigureAwait(false);
         await UpdateInternalAsync(guildId, ct).ConfigureAwait(false);
 
@@ -1129,14 +1140,16 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
         return ct;
     }
 
-    public async Task<(CTModel? Trigger, bool Valid)> SetCrosspostingWebhookUrl(ulong? guildId, int id, string webhookUrl, bool bypassTest = false)
+    public async Task<(CTModel? Trigger, bool Valid)> SetCrosspostingWebhookUrl(ulong? guildId, int id,
+        string webhookUrl, bool bypassTest = false)
     {
         if (!bypassTest)
         {
             try
             {
                 using var discordWebhookClient = new DiscordWebhookClient(webhookUrl);
-                await discordWebhookClient.SendMessageAsync("Test of chat trigger crossposting webhook!").ConfigureAwait(false);
+                await discordWebhookClient.SendMessageAsync("Test of chat trigger crossposting webhook!")
+                    .ConfigureAwait(false);
             }
             catch
             {
@@ -1262,10 +1275,12 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
             eb.AddField(strings.GetText("trigger_reactions", gId), string.Concat(reactions));
         var addedRoles = ct.GetGrantedRoles();
         if (addedRoles.Count >= 1)
-            eb.AddField(strings.GetText("added_roles", gId), addedRoles.Select(x => $"<@&{x}>").Aggregate((x, y) => $"{x}, {y}"));
+            eb.AddField(strings.GetText("added_roles", gId),
+                addedRoles.Select(x => $"<@&{x}>").Aggregate((x, y) => $"{x}, {y}"));
         var removedRoles = ct.GetRemovedRoles();
         if (removedRoles.Count >= 1)
-            eb.AddField(strings.GetText("removed_roles", gId), removedRoles.Select(x => $"<@&{x}>").Aggregate((x, y) => $"{x}, {y}"));
+            eb.AddField(strings.GetText("removed_roles", gId),
+                removedRoles.Select(x => $"<@&{x}>").Aggregate((x, y) => $"{x}, {y}"));
         if (addedRoles.Count >= 1 || removedRoles.Count >= 1)
             eb.AddField(strings.GetText("role_grant_type", gId), ct.RoleGrantType);
         if (!ct.ApplicationCommandDescription.IsNullOrWhiteSpace())
@@ -1328,7 +1343,8 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
                 group = groups.First(y => y.Name == x.RealName.Split(' ').First());
             else
             {
-                groups.Add(new TriggerChildGrouping(x.RealName.Split(' ').First(), null, new List<TriggerChildGrouping>()));
+                groups.Add(new TriggerChildGrouping(x.RealName.Split(' ').First(), null,
+                    new List<TriggerChildGrouping>()));
                 group = groups.First(y => y.Name == x.RealName.Split(' ').First());
             }
 
@@ -1349,29 +1365,32 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
         }).ForEach(x => x.Group.Children.Add(new(x.Triggers.RealName, x.Triggers, null)));
 
         props = groups.Select(x => new SlashCommandBuilder()
-            .WithName(x.Name)
-            .WithDescription(x.Triggers?.ApplicationCommandDescription.IsNullOrWhiteSpace() ?? true
-                ? "description"
-                : x.Triggers!.ApplicationCommandDescription)
-            .AddOptions(x.Triggers is not null
-                ? Array.Empty<SlashCommandOptionBuilder>()
-                : x.Children.Select(y => new SlashCommandOptionBuilder
-                    {
-                        Options = new()
-                    }
-                    .WithName(y.Name)
-                    .WithDescription(y.Triggers?.ApplicationCommandDescription.IsNullOrWhiteSpace() ?? true
-                        ? "description"
-                        : y.Triggers!.ApplicationCommandDescription)
-                    .WithType(y.Triggers is null
-                        ? ApplicationCommandOptionType.SubCommandGroup
-                        : ApplicationCommandOptionType.SubCommand)
-                    .AddOptions(y.Children is null
-                        ? Array.Empty<SlashCommandOptionBuilder>()
-                        : y.Children.Select(z => new SlashCommandOptionBuilder()
-                            .WithName(z.Name.Split(' ')[2])
-                            .WithDescription(z.Triggers?.ApplicationCommandDescription.IsNullOrWhiteSpace() ?? true ? "description" : z.Triggers!.ApplicationCommandDescription)
-                            .WithType(ApplicationCommandOptionType.SubCommand)).ToArray())).ToArray())).Select(x => x.Build() as ApplicationCommandProperties).ToList();
+                .WithName(x.Name)
+                .WithDescription(x.Triggers?.ApplicationCommandDescription.IsNullOrWhiteSpace() ?? true
+                    ? "description"
+                    : x.Triggers!.ApplicationCommandDescription)
+                .AddOptions(x.Triggers is not null
+                    ? Array.Empty<SlashCommandOptionBuilder>()
+                    : x.Children.Select(y => new SlashCommandOptionBuilder
+                        {
+                            Options = new()
+                        }
+                        .WithName(y.Name)
+                        .WithDescription(y.Triggers?.ApplicationCommandDescription.IsNullOrWhiteSpace() ?? true
+                            ? "description"
+                            : y.Triggers!.ApplicationCommandDescription)
+                        .WithType(y.Triggers is null
+                            ? ApplicationCommandOptionType.SubCommandGroup
+                            : ApplicationCommandOptionType.SubCommand)
+                        .AddOptions(y.Children is null
+                            ? Array.Empty<SlashCommandOptionBuilder>()
+                            : y.Children.Select(z => new SlashCommandOptionBuilder()
+                                .WithName(z.Name.Split(' ')[2])
+                                .WithDescription(z.Triggers?.ApplicationCommandDescription.IsNullOrWhiteSpace() ?? true
+                                    ? "description"
+                                    : z.Triggers!.ApplicationCommandDescription)
+                                .WithType(ApplicationCommandOptionType.SubCommand)).ToArray())).ToArray()))
+            .Select(x => x.Build() as ApplicationCommandProperties).ToList();
 
         triggers.Where(x => x.ApplicationCommandType == CtApplicationCommandType.Message).ForEach(x =>
             props.Add(new MessageCommandBuilder().WithName(x.RealName).WithDMPermission(false).Build()));
@@ -1409,7 +1428,8 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
 #endif
         await using var uow = db.GetDbContext();
         var cts = uow.ChatTriggers.Where(x => x.GuildId == guild.Id).ToList();
-        cmd.SelectMany(applicationCommand => applicationCommand.GetCtNames().Select(name => (cmd: applicationCommand, name))).ToList().ForEach(x =>
+        cmd.SelectMany(applicationCommand =>
+            applicationCommand.GetCtNames().Select(name => (cmd: applicationCommand, name))).ToList().ForEach(x =>
             cts.First(y => y.RealName == x.name).ApplicationCommandId = x.cmd.Id);
         await uow.SaveChangesAsync().ConfigureAwait(false);
     }
@@ -1475,7 +1495,8 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
                                 trigger.RealName, newTrigger.RealName
                             }));
                         break;
-                    case 2 when newTriggerDepth == 3 && newTrigger.RealName.Split(' ')[..1].Join(' ') == trigger.RealName:
+                    case 2 when newTriggerDepth == 3 &&
+                                newTrigger.RealName.Split(' ')[..1].Join(' ') == trigger.RealName:
                         errors.Add(new("subcommand_match_parent", new[]
                             {
                                 trigger.Id, newTrigger.Id

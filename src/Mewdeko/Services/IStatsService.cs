@@ -1,4 +1,4 @@
-namespace Mewdeko.Services;
+﻿namespace Mewdeko.Services;
 
 public interface IStatsService : INService
 {

@@ -10,12 +10,8 @@ namespace Mewdeko.Modules.Administration;
 public partial class Administration
 {
     [Group]
-    public class DiscordPermOverrideCommands : MewdekoSubmodule<DiscordPermOverrideService>
+    public class DiscordPermOverrideCommands(InteractiveService serv) : MewdekoSubmodule<DiscordPermOverrideService>
     {
-        private readonly InteractiveService interactivity;
-
-        public DiscordPermOverrideCommands(InteractiveService serv) => interactivity = serv;
-
         [Cmd, Aliases, RequireContext(ContextType.Guild),
          UserPerm(GuildPermission.Administrator)]
         public async Task DiscordPermOverride(CommandOrCrInfo cmd, params GuildPermission[]? perms)
@@ -54,17 +50,17 @@ public partial class Administration
          UserPerm(GuildPermission.Administrator)]
         public async Task DiscordPermOverrideList()
         {
-            var overrides = await Service.GetAllOverrides(Context.Guild.Id).ConfigureAwait(false);
+            var overrides = Service.GetAllOverrides(Context.Guild.Id);
             var paginator = new LazyPaginatorBuilder()
                 .AddUser(ctx.User)
                 .WithPageFactory(PageFactory)
                 .WithFooter(PaginatorFooter.PageNumber | PaginatorFooter.Users)
-                .WithMaxPageIndex(overrides.Count / 9)
+                .WithMaxPageIndex(overrides.Count() / 9)
                 .WithDefaultCanceledPage()
                 .WithDefaultEmotes()
                 .WithActionOnCancellation(ActionOnStop.DeleteMessage)
                 .Build();
-            await interactivity.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
+            await serv.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
 
             async Task<PageBuilder> PageFactory(int page)
             {

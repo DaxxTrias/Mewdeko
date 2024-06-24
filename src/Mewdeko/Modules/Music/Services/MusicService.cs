@@ -7,7 +7,7 @@ using SpotifyAPI.Web;
 
 namespace Mewdeko.Modules.Music.Services;
 
-public class    MusicService : INService
+public class MusicService : INService
 {
     public readonly ConcurrentDictionary<ulong, List<LavalinkTrack?>> Queues;
     private readonly ConcurrentDictionary<ulong, MusicPlayerSettings> settings;
@@ -137,9 +137,9 @@ public class    MusicService : INService
                             ? new ComponentBuilder()
                                 .WithButton(style: ButtonStyle.Link,
                                     url:
-                                    "",
-                                    label: "",
-                                    emote: "".ToIEmote()).Build()
+                                    "https://discord.com/oauth2/authorize?client_id=752236274261426212&permissions=8&response_type=code&redirect_uri=https%3A%2F%2Fmewdeko.tech&scope=bot%20applications.commands",
+                                    label: "Invite Me!",
+                                    emote: "<a:HaneMeow:968564817784877066>".ToIEmote()).Build()
                             : null).ConfigureAwait(false);
                     var addedcount = 0;
                     foreach (var track in items.Select(i => i.Track as FullTrack))
@@ -198,9 +198,9 @@ public class    MusicService : INService
                             ? new ComponentBuilder()
                                 .WithButton(style: ButtonStyle.Link,
                                     url:
-                                    "",
-                                    label: "",
-                                    emote: "".ToIEmote()).Build()
+                                    "https://discord.com/oauth2/authorize?client_id=752236274261426212&permissions=8&response_type=code&redirect_uri=https%3A%2F%2Fmewdeko.tech&scope=bot%20applications.commands",
+                                    label: "Invite Me!",
+                                    emote: "<a:HaneMeow:968564817784877066>".ToIEmote()).Build()
                             : null).ConfigureAwait(false);
                     var addedcount = 0;
                     foreach (var track in items)
@@ -443,7 +443,7 @@ public class    MusicService : INService
             return;
         if ((await GetSettingsInternalAsync(before.VoiceChannel.Guild.Id)).AutoDisconnect is AutoDisconnect.Either or AutoDisconnect.Voice)
         {
-            if (after.VoiceChannel.Users.Count <= 1)
+            if (before.VoiceChannel.ConnectedUsers.Count - 1 <= 1)
             {
                 await player.StopAsync(true);
                 await QueueClear(after.VoiceChannel.Guild.Id);

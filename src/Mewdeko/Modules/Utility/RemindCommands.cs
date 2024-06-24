@@ -9,21 +9,12 @@ namespace Mewdeko.Modules.Utility;
 public partial class Utility
 {
     [Group]
-    public class RemindCommands : MewdekoSubmodule<RemindService>
+    public class RemindCommands(DbService db, GuildTimezoneService tz) : MewdekoSubmodule<RemindService>
     {
         public enum MeOrHere
         {
             Me,
             Here
-        }
-
-        private readonly DbService db;
-        private readonly GuildTimezoneService tz;
-
-        public RemindCommands(DbService db, GuildTimezoneService tz)
-        {
-            this.db = db;
-            this.tz = tz;
         }
 
         [Cmd, Aliases, Priority(1)]
@@ -95,7 +86,7 @@ public partial class Utility
                     var diff = when - DateTime.UtcNow;
                     embed.AddField(
                         $"#{++i + (page * 10)} {rem.When:HH:mm yyyy-MM-dd} UTC (in {(int)diff.TotalHours}h {diff.Minutes}m)",
-                        $@"`Target:` {(rem.IsPrivate ? "DM" : "Channel")}
+                        $@"`Target:` {(rem.IsPrivate == 1 ? "DM" : "Channel")}
 `TargetId:` {rem.ChannelId}
 `Message:` {rem.Message?.TrimTo(50)}");
                 }
@@ -152,7 +143,7 @@ public partial class Utility
             var rem = new Reminder
             {
                 ChannelId = targetId,
-                IsPrivate = isPrivate,
+                IsPrivate = isPrivate ? 1 : 0,
                 When = time,
                 Message = message,
                 UserId = ctx.User.Id,

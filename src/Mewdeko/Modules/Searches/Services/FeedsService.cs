@@ -1,8 +1,6 @@
 using CodeHollow.FeedReader;
 using CodeHollow.FeedReader.Feeds;
-using CodeHollow.FeedReader.Parser;
 using Microsoft.EntityFrameworkCore;
-using Serilog;
 using Embed = Discord.Embed;
 
 namespace Mewdeko.Modules.Searches.Services;
@@ -13,28 +11,22 @@ public class FeedsService : INService
     private readonly DbService db;
     private bool isRunning;
 
-    private readonly ConcurrentDictionary<string, DateTime> lastPosts = new();
+    private readonly ConcurrentDictionary<string, DateTime> lastPosts =
+        new();
 
     private readonly ConcurrentDictionary<string, HashSet<FeedSub>> subs;
 
-    public FeedsService(Mewdeko bot, DbService db, DiscordSocketClient client)
+    public FeedsService(DbService db, DiscordSocketClient client, Mewdeko bot)
     {
         this.db = db;
         this.isRunning = true;
+        var allgc = bot.AllGuildConfigs;
+        subs = allgc
+            .SelectMany(x => x.FeedSubs)
+            .GroupBy(x => x.Url.ToLower())
+            .ToDictionary(x => x.Key, x => x.ToHashSet())
+            .ToConcurrent();
 
-        using (var uow = db.GetDbContext())
-        {
-            var guildConfigIds = uow.GuildConfigs.Where(x => bot.Client.Guilds.Select(socketGuild => socketGuild.Id).Contains(x.GuildId)).Select(x => x.Id);
-            subs = uow.GuildConfigs
-                .AsQueryable()
-                .Where(x => guildConfigIds.Contains(x.Id))
-                .Include(x => x.FeedSubs)
-                .ToList()
-                .SelectMany(x => x.FeedSubs)
-                .GroupBy(x => x.Url.ToLower())
-                .ToDictionary(x => x.Key, x => x.ToHashSet())
-                .ToConcurrent();
-        }
 
         this.client = client;
 
@@ -112,7 +104,7 @@ public class FeedsService : INService
 
                                 if (feedItem.SpecificItem is not MediaRssFeedItem mediaRssFeedItem
                                     || !(mediaRssFeedItem.Enclosure?.MediaType?.StartsWith("image/") ?? false))
-                                        return feed.ImageUrl;
+                                    return feed.ImageUrl;
                                 var imgUrl = mediaRssFeedItem.Enclosure.Url;
                                 if (!string.IsNullOrWhiteSpace(imgUrl) &&
                                     Uri.IsWellFormedUriString(imgUrl, UriKind.Absolute))
@@ -138,9 +130,9 @@ public class FeedsService : INService
                         if (!string.IsNullOrWhiteSpace(link) && Uri.IsWellFormedUriString(link, UriKind.Absolute))
                             embed.WithUrl(link);
 
-                        var title = string.IsNullOrWhiteSpace(feedTitle)
-                            ? (string.IsNullOrWhiteSpace(feedItem.Title) ? "-" : feedItem.Title)
-                            : feedTitle;
+                        var title = string.IsNullOrWhiteSpace(feedItem.Title)
+                            ? "-"
+                            : feedItem.Title;
 
                         var gotImage = false;
 
@@ -230,25 +222,29 @@ public class FeedsService : INService
                 }
                 catch (UrlNotFoundException ex)
                 {
-                    Log.Warning($"URL not found for RSS URL: {rssUrl}. Exception: {ex.Message}");
+                    //Log.Warning($"URL not found for RSS URL: {rssUrl}. Exception: {ex.Message}");
                 }
-                catch (InvalidFeedLinkException ex)
-                {
-                    Log.Warning($"Invalid feed link for RSS URL: {rssUrl}. Exception: {ex.Message}");
-                }
-                catch (FeedTypeNotSupportedException ex)
-                {
-                    Log.Warning($"Feed type not supported for RSS URL: {rssUrl}. The feed might be of a different type not supported by the library. Exception: {ex.Message}");
-                }
-                catch (Exception ex) // General Exception for other errors
-                {
-                    Log.Warning($"Error occurred in feed reader for RSS URL: {rssUrl}. Exception: {ex.Message}. StackTrace: {ex.StackTrace}");
-
-                    if (ex.InnerException != null)
-                    {
-                        Log.Warning($"Inner Exception: {ex.InnerException.Message}. StackTrace: {ex.InnerException.StackTrace}");
-                    }
-                }
+//                catch (InvalidFeedLinkException ex)
+//                {
+//                    Log.Warning($"Invalid feed link for RSS URL: {rssUrl}. Exception: {ex.Message}");
+//                }
+//                catch (FeedTypeNotSupportedException ex)
+//                {
+//                    Log.Warning($"Feed type not supported for RSS URL: {rssUrl}. The feed might be of a different type not supported by the library. Exception: {ex.Message}");
+//                }
+//                catch (Exception ex) // General Exception for other errors
+//                {
+//                    Log.Warning($"Error occurred in feed reader for RSS URL: {rssUrl}. Exception: {ex.Message}. StackTrace: {ex.StackTrace}");
+////#if DEBUG
+//                    Log.Information($"{ex.Data}");
+//                    Log.Information($"{ex.Message}");
+//                    Log.Information($"{ex.StackTrace}");
+////#endif
+//                    if (ex.InnerException != null)
+//                    {
+//                        Log.Warning($"Inner Exception: {ex.InnerException.Message}. StackTrace: {ex.InnerException.StackTrace}");
+//                    }
+//                }
             }
             await Task.WhenAll(Task.WhenAll(allSendTasks), Task.Delay(180000)).ConfigureAwait(false);
         }
@@ -301,10 +297,8 @@ public class FeedsService : INService
 
                 if (feedItem.SpecificItem is not MediaRssFeedItem mediaRssFeedItem || !(mediaRssFeedItem.Enclosure?.MediaType?.StartsWith("image/") ?? false))
                     return feed.ImageUrl;
-
                 var imgUrl = mediaRssFeedItem.Enclosure.Url;
-                if (!string.IsNullOrWhiteSpace(imgUrl) && Uri.IsWellFormedUriString(imgUrl, UriKind.Absolute))
-                    return imgUrl;
+                if (!string.IsNullOrWhiteSpace(imgUrl) && Uri.IsWellFormedUriString(imgUrl, UriKind.Absolute)) return imgUrl;
 
                 return feed.ImageUrl;
             })

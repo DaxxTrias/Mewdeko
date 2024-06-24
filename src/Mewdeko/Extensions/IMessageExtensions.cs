@@ -12,7 +12,7 @@ public static class MessageExtensions
     public static void ReplyError(this IUserMessage message, string content)
     {
         var eb = new EmbedBuilder().WithErrorColor().WithDescription(content);
-        var builder = new ComponentBuilder().WithButton("Support Server", style: ButtonStyle.Link, url: "discord.gg/");
+        var builder = new ComponentBuilder().WithButton("Support Server", style: ButtonStyle.Link, url: "discord.gg/mewdeko");
         message.ReplyAsync(embed: eb.Build(), components: builder.Build());
     }
 

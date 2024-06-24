@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using Discord.Interactions;
 using Humanizer;
 using Mewdeko.Common.Attributes.InteractionCommands;
@@ -113,7 +113,7 @@ public class SlashUtility : MewdekoSlashModuleBase<UtilityService>
         {
             case "real":
                 var avatarUrl = user.GetAvatarUrl(size: 2048);
-                //var componentbuilder = new ComponentBuilder().WithButton("Guild Banner", $"bannertype:guild,{userId}");
+                var componentbuilder = new ComponentBuilder().WithButton("Guild Banner", $"bannertype:guild,{userId}");
                 var eb = new EmbedBuilder()
                     .WithOkColor()
                     .AddField(efb => efb.WithName("Username").WithValue(user.ToString()).WithIsInline(true))
@@ -123,12 +123,12 @@ public class SlashUtility : MewdekoSlashModuleBase<UtilityService>
                 await componentInteraction.UpdateAsync(x =>
                 {
                     x.Embed = eb.Build();
-                    //x.Components = componentbuilder.Build();
+                    x.Components = componentbuilder.Build();
                 });
                 break;
             case "guild":
                 var avatarUrlGuild = guildUser.GetBannerUrl(size: 2048);
-                //var componentbuilderGuild = new ComponentBuilder().WithButton("Real Banner", $"bannertype:real,{userId}");
+                var componentbuilderGuild = new ComponentBuilder().WithButton("Real Banner", $"bannertype:real,{userId}");
                 var ebGuild = new EmbedBuilder()
                     .WithOkColor()
                     .AddField(efb => efb.WithName("Username").WithValue(user.ToString()).WithIsInline(true))
@@ -138,11 +138,12 @@ public class SlashUtility : MewdekoSlashModuleBase<UtilityService>
                 await componentInteraction.UpdateAsync(x =>
                 {
                     x.Embed = ebGuild.Build();
-                    //x.Components = componentbuilderGuild.Build();
+                    x.Components = componentbuilderGuild.Build();
                 });
                 break;
         }
     }
+
 
     [SlashCommand("getjson", "Gets the json from a message to use with our embed builder!"), RequireContext(ContextType.Guild), SlashUserPerm(GuildPermission.ManageMessages)]
     public async Task GetJson(ulong messageId, ITextChannel channel = null)
@@ -206,6 +207,7 @@ public class SlashUtility : MewdekoSlashModuleBase<UtilityService>
         var commandStats = uow.CommandStats.Count(x => x.DateAdded.Value >= time);
         var user = await client.Rest.GetUserAsync(280835732728184843).ConfigureAwait(false);
         var libraryInfo = new LibraryInfo(DllVersionChecker.GetDllVersions);
+        var targetFramework = LibraryInfo.GetTargetFramework();
 
         await ctx.Interaction.RespondAsync(embed:
                 new EmbedBuilder().WithOkColor()
@@ -213,7 +215,7 @@ public class SlashUtility : MewdekoSlashModuleBase<UtilityService>
                     //.AddField(GetText("author"), $"{user.Mention} | {user.Username}#{user.Discriminator}")
                     .AddField(GetText("commands_ran"), $"{commandStats}/5s")
                     //.AddField("Library", stats.Library)
-                    .AddField(GetText("library"), $"{libraryInfo.Library} \n {libraryInfo.OpenAILib}")
+                    .AddField(GetText("library"), $"{targetFramework} \n {libraryInfo.Library} \n {libraryInfo.OpenAILib}")
                     .AddField(GetText("owner_ids"), string.Join("\n", creds.OwnerIds.Select(x => $"<@{x}>")))
                     .AddField(GetText("shard"), $"#{client.ShardId} / {creds.TotalShards}")
                     .AddField(GetText("memory"), $"{stats.Heap} MB")
@@ -530,5 +532,52 @@ public class SlashUtility : MewdekoSlashModuleBase<UtilityService>
         var utc = TimeZoneInfo.ConvertTimeToUtc(time, timezone);
         var tag = TimestampTag.FromDateTimeOffset(utc, format);
         await ctx.Interaction.SendEphemeralConfirmAsync($"{tag} (`{tag}`)");
+    }
+
+    [ComponentInteraction("moresinfo", true)]
+    public async Task MoreSInfo()
+    {
+        var textchn = (await ctx.Guild.GetTextChannelsAsync().ConfigureAwait(false)).Count;
+        var voicechn = (await ctx.Guild.GetVoiceChannelsAsync().ConfigureAwait(false)).Count;
+        await DeferAsync();
+        var componentInteraction = ctx.Interaction as IComponentInteraction;
+        var embed = componentInteraction.Message.Embeds.FirstOrDefault().ToEmbedBuilder();
+        var vals = Enum.GetValues(typeof(GuildFeature)).Cast<GuildFeature>();
+        var setFeatures = vals.Where(x => Context.Guild.Features.Value.HasFlag(x));
+        embed
+            .AddField("Bots", (await ctx.Guild.GetUsersAsync().ConfigureAwait(false)).Count(x => x.IsBot))
+            .AddField("Users", (await ctx.Guild.GetUsersAsync().ConfigureAwait(false)).Count(x => !x.IsBot))
+            .AddField("Text Channels", textchn.ToString())
+            .AddField("Voice Channels", voicechn.ToString())
+            .AddField("Roles", ctx.Guild.Roles.Count.ToString())
+            .AddField("Server Features", Format.Code(string.Join("\n", setFeatures)));
+        await componentInteraction.Message.ModifyAsync(x =>
+        {
+            x.Embed = embed.Build();
+            x.Components = null;
+        }).ConfigureAwait(false);
+    }
+
+    [ComponentInteraction("moreuinfo:*", true)]
+    public async Task MoreUInfo(ulong userId)
+    {
+        await DeferAsync();
+        var user = await ctx.Guild.GetUserAsync(userId).ConfigureAwait(false);
+        var componentInteraction = ctx.Interaction as IComponentInteraction;
+        var embed = componentInteraction.Message.Embeds.FirstOrDefault().ToEmbedBuilder();
+        if (user.GetRoles().Any(x => x.Id != ctx.Guild.EveryoneRole.Id))
+        {
+            embed.AddField("Roles",
+                string.Join("", user.GetRoles().OrderBy(x => x.Position).Select(x => x.Mention)));
+        }
+
+        embed.AddField("Deafened", user.IsDeafened);
+        embed.AddField("Is VC Muted", user.IsMuted);
+        embed.AddField("Is Server Muted", user.GetRoles().Contains(await muteService.GetMuteRole(ctx.Guild).ConfigureAwait(false)));
+        await componentInteraction.Message.ModifyAsync(x =>
+        {
+            x.Embed = embed.Build();
+            x.Components = null;
+        }).ConfigureAwait(false);
     }
 }

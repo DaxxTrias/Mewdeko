@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Net.Http;
+using System.Reflection;
 using System.Threading;
 using Discord.Commands;
 using Humanizer.Bytes;
@@ -18,13 +19,13 @@ public class StatsService : IStatsService, IReadyExecutor
     public readonly ICoordinator Coord;
     private readonly IDataCache cache;
     private readonly HttpClient http;
-    public const string BotVersion = "7.2.6";
+    public const string BotVersion = "7.3.0";
 
     private readonly DateTime started;
 
     public StatsService(
         DiscordSocketClient client, IBotCredentials creds, ICoordinator coord, CommandService cmdServ,
-        HttpClient http, IDataCache cache, EventHandler handler)
+        HttpClient http, IDataCache cache)
     {
         Client = client;
         Creds = creds;
@@ -44,18 +45,18 @@ public class StatsService : IStatsService, IReadyExecutor
 
     public class LibraryInfo
     {
-        private GetVersionsDelegate _versionChecker;
+        private GetVersionsDelegate versionChecker;
 
         public LibraryInfo(GetVersionsDelegate versionChecker)
         {
-            _versionChecker = versionChecker;
+            this.versionChecker = versionChecker;
         }
 
         public string Library
         {
             get
             {
-                var versions = _versionChecker.Invoke(new List<string> { "Discord.Net.WebSocket.dll" });
+                var versions = versionChecker.Invoke(new List<string> { "Discord.Net.WebSocket.dll" });
                 return $"Discord.Net {versions["Discord.Net.WebSocket.dll"] ?? "Version not found"}";
             }
         }
@@ -64,9 +65,19 @@ public class StatsService : IStatsService, IReadyExecutor
         {
             get
             {
-                var versions = _versionChecker.Invoke(new List<string> { "OpenAI_API.dll" });
+                var versions = versionChecker.Invoke(new List<string> { "OpenAI_API.dll" });
                 return $"OpenAI_API {versions["OpenAI_API.dll"] ?? "Version not found"}";
             }
+        }
+        public static string GetTargetFramework()
+        {
+            // Get the TargetFrameworkAttribute from the executing assembly
+            var attribute = Assembly.GetExecutingAssembly()
+                .GetCustomAttributes(typeof(System.Runtime.Versioning.TargetFrameworkAttribute), false)
+                .FirstOrDefault() as System.Runtime.Versioning.TargetFrameworkAttribute;
+
+            // If the attribute is not null, return its FrameworkName property
+            return attribute?.FrameworkName ?? "Unknown framework";
         }
     }
 
@@ -163,14 +174,18 @@ public class StatsService : IStatsService, IReadyExecutor
             {
                 Log.Information("Updating top guilds");
                 var guilds = await Client.Rest.GetGuildsAsync(true);
-                var servers = guilds.OrderByDescending(x => x.ApproximateMemberCount.Value).Where(x => !x.Name.ToLower().Contains("botlist")).Take(11).Select(x =>
-                    new MewdekoPartialGuild
-                    {
-                        IconUrl = x.IconId.StartsWith("a_") ? x.IconUrl.Replace(".jpg", ".gif") : x.IconUrl, MemberCount = x.ApproximateMemberCount.Value, Name = x.Name
-                    });
+                var servers = guilds.OrderByDescending(x => x.ApproximateMemberCount.Value)
+                    .Where(x => !x.Name.ToLower().Contains("botlist")).Take(11).Select(x =>
+                        new MewdekoPartialGuild
+                        {
+                            IconUrl = x.IconId.StartsWith("a_") ? x.IconUrl.Replace(".jpg", ".gif") : x.IconUrl,
+                            MemberCount = x.ApproximateMemberCount.Value,
+                            Name = x.Name
+                        });
 
                 var serialied = Json.Serialize(servers);
-                await cache.Redis.GetDatabase().StringSetAsync($"{Client.CurrentUser.Id}_topguilds", serialied).ConfigureAwait(false);
+                await cache.Redis.GetDatabase().StringSetAsync($"{Client.CurrentUser.Id}_topguilds", serialied)
+                    .ConfigureAwait(false);
                 Log.Information("Updated top guilds");
             }
             catch (Exception e)

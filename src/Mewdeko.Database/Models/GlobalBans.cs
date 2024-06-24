@@ -5,8 +5,8 @@ public class GlobalBans : DbEntity
     public ulong UserId { get; set; }
     public string Proof { get; set; }
     public string Reason { get; set; }
-    public GBActionType RecommendedAction { get; set; }
-    public TimeSpan Duration { get; set; }
+    public GbActionType RecommendedAction { get; set; }
+    public string Duration { get; set; }
     public ulong AddedBy { get; set; }
     public GbType Type { get; set; }
 }

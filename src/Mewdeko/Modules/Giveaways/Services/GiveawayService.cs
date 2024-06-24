@@ -1,4 +1,5 @@
-﻿using Mewdeko.Common.ModuleBehaviors;
+using LinqToDB.EntityFrameworkCore;
+using Mewdeko.Common.ModuleBehaviors;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 using Swan;
@@ -30,16 +31,16 @@ public class GiveawayService : INService, IReadyExecutor
             try
             {
                 var now = DateTime.UtcNow;
-                var reminders = await GetGiveawaysBeforeAsync(now).ConfigureAwait(false);
-                if (reminders.Count == 0)
+                var reminders = GetGiveawaysBeforeAsync(now);
+                if (!reminders.Any())
                     continue;
 
-                Log.Information($"Executing {reminders.Count} giveaways.");
+                Log.Information($"Executing {reminders.Count()} giveaways.");
 
                 // make groups of 5, with 1.5 second inbetween each one to ensure against ratelimits
                 var i = 0;
                 foreach (var group in reminders
-                             .GroupBy(_ => ++i / ((reminders.Count / 5) + 1)))
+                             .GroupBy(_ => ++i / ((reminders.Count() / 5) + 1)))
                 {
                     var executedGiveaways = group.ToList();
                     await Task.WhenAll(executedGiveaways.Select(GiveawayTimerAction)).ConfigureAwait(false);
@@ -50,6 +51,13 @@ public class GiveawayService : INService, IReadyExecutor
             catch (Exception ex)
             {
                 Log.Warning("Error in Giveaway loop: {ExMessage}", ex.Message);
+                if (ex.Message.Contains("another user"))
+                {
+                    await using var uow = db.GetDbContext();
+                    uow.Giveaways.RemoveRange(uow.Giveaways);
+                    await uow.SaveChangesAsync();
+                }
+
                 Log.Warning(ex.ToString());
             }
         }
@@ -93,13 +101,26 @@ public class GiveawayService : INService, IReadyExecutor
         }
     }
 
-    private Task<List<Database.Models.Giveaways>> GetGiveawaysBeforeAsync(DateTime now)
+    private IEnumerable<Database.Models.Giveaways> GetGiveawaysBeforeAsync(DateTime now)
     {
         using var uow = db.GetDbContext();
-        return uow.Giveaways
-            .FromSqlInterpolated(
-                $"select * from giveaways where ((serverid >> 22) % {creds.TotalShards}) == {client.ShardId} and \"when\" < {now} and \"Ended\" == 0;")
-            .ToListAsync();
+        IEnumerable<Database.Models.Giveaways> giveaways;
+
+        if (uow.Database.IsNpgsql())
+        {
+            giveaways = uow.Giveaways
+                .ToLinqToDB()
+                .Where(x => (int)(x.ServerId / (ulong)Math.Pow(2, 22) % (ulong)creds.TotalShards) == client.ShardId && x.Ended != 1 && x.When < now).ToList();
+        }
+
+        else
+        {
+            giveaways = uow.Giveaways
+                .FromSqlInterpolated(
+                    $"select * from Giveaways where ((ServerId >> 22) % {creds.TotalShards}) = {client.ShardId} and ended = 0 and \"when\" < {now};").ToList();
+        }
+
+        return giveaways;
     }
 
     public async Task GiveawaysInternal(ITextChannel chan, TimeSpan ts, string item, int winners, ulong host,
@@ -123,7 +144,8 @@ public class GiveawayService : INService, IReadyExecutor
             var reqrolesparsed = new List<IRole>();
             foreach (var i in splitreqs)
             {
-                if (!ulong.TryParse(i, out var parsed)) continue;
+                if (!ulong.TryParse(i, out var parsed))
+                    continue;
                 try
                 {
                     reqrolesparsed.Add(guild.GetRole(parsed));
@@ -215,11 +237,13 @@ public class GiveawayService : INService, IReadyExecutor
 
             reacts = await ch.GetReactionUsersAsync(emoteTest.ToIEmote(), 999999).FlattenAsync().ConfigureAwait(false);
         }
+
         if (reacts.Count(x => !x.IsBot) - 1 < r.Winners)
         {
             var eb = new EmbedBuilder
             {
-                Color = Mewdeko.ErrorColor, Description = "There were not enough participants!"
+                Color = Mewdeko.ErrorColor,
+                Description = "There were not enough participants!"
             };
             await ch.ModifyAsync(x => x.Embed = eb.Build()).ConfigureAwait(false);
             r.Ended = 1;
@@ -272,7 +296,8 @@ public class GiveawayService : INService, IReadyExecutor
                 var user = users.ToList()[index];
                 var eb = new EmbedBuilder
                 {
-                    Color = Mewdeko.OkColor, Description = $"{user.Mention} won the giveaway for {r.Item}!"
+                    Color = Mewdeko.OkColor,
+                    Description = $"{user.Mention} won the giveaway for {r.Item}!"
                 };
                 await ch.ModifyAsync(x => x.Embed = eb.Build()).ConfigureAwait(false);
                 await ch.Channel.SendMessageAsync($"{user.Mention} won the giveaway for {r.Item}!",
@@ -324,7 +349,8 @@ public class GiveawayService : INService, IReadyExecutor
                 var winners = users.ToList().OrderBy(_ => rand.Next()).Take(r.Winners);
                 var eb = new EmbedBuilder
                 {
-                    Color = Mewdeko.OkColor, Description = $"{string.Join("", winners.Select(x => x.Mention))} won the giveaway for {r.Item}!"
+                    Color = Mewdeko.OkColor,
+                    Description = $"{string.Join("", winners.Select(x => x.Mention))} won the giveaway for {r.Item}!"
                 };
                 await ch.ModifyAsync(x => x.Embed = eb.Build()).ConfigureAwait(false);
                 foreach (var winners2 in winners.Chunk(50))
@@ -385,11 +411,13 @@ public class GiveawayService : INService, IReadyExecutor
 
             reacts = await ch.GetReactionUsersAsync(emoteTest.ToIEmote(), 999999).FlattenAsync().ConfigureAwait(false);
         }
+
         if (reacts.Count(x => !x.IsBot) - 1 < r.Winners)
         {
             var eb = new EmbedBuilder
             {
-                Color = Mewdeko.ErrorColor, Description = "There were not enough participants!"
+                Color = Mewdeko.ErrorColor,
+                Description = "There were not enough participants!"
             };
             await ch.ModifyAsync(x => x.Embed = eb.Build()).ConfigureAwait(false);
             r.Ended = 1;
@@ -442,7 +470,8 @@ public class GiveawayService : INService, IReadyExecutor
                 var user = users.ToList()[index];
                 var eb = new EmbedBuilder
                 {
-                    Color = Mewdeko.OkColor, Description = $"{user.Mention} won the giveaway for {r.Item}!"
+                    Color = Mewdeko.OkColor,
+                    Description = $"{user.Mention} won the giveaway for {r.Item}!"
                 };
                 await ch.ModifyAsync(x => x.Embed = eb.Build()).ConfigureAwait(false);
                 await ch.Channel.SendMessageAsync($"{user.Mention} won the giveaway for {r.Item}!",
@@ -494,7 +523,8 @@ public class GiveawayService : INService, IReadyExecutor
                 var winners = users.ToList().OrderBy(_ => rand.Next()).Take(r.Winners);
                 var eb = new EmbedBuilder
                 {
-                    Color = Mewdeko.OkColor, Description = $"{string.Join("", winners.Select(x => x.Mention))} won the giveaway for {r.Item}!"
+                    Color = Mewdeko.OkColor,
+                    Description = $"{string.Join("", winners.Select(x => x.Mention))} won the giveaway for {r.Item}!"
                 };
                 await ch.ModifyAsync(x => x.Embed = eb.Build()).ConfigureAwait(false);
                 foreach (var winners2 in winners.Chunk(50))

@@ -1,28 +1,16 @@
 using System.Net.Http;
-using System.Reactive.Joins;
-using System.Text.RegularExpressions;
 using Discord.Commands;
 using Discord.Net;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Modules.Server_Management.Services;
 using Mewdeko.Services.Settings;
-using Serilog;
-using TwitchLib.Api.Helix.Models.Moderation.CheckAutoModStatus;
 using Image = Discord.Image;
 
 namespace Mewdeko.Modules.Server_Management;
 
-public partial class ServerManagement : MewdekoModuleBase<ServerManagementService>
+public partial class ServerManagement
+    (IHttpClientFactory factory, BotConfigService config) : MewdekoModuleBase<ServerManagementService>
 {
-    private readonly IHttpClientFactory httpFactory;
-    private readonly BotConfigService config;
-
-    public ServerManagement(IHttpClientFactory factory, BotConfigService config)
-    {
-        httpFactory = factory;
-        this.config = config;
-    }
-
     [Cmd, Aliases, RequireContext(ContextType.Guild)]
     public async Task PermView()
     {
@@ -68,7 +56,7 @@ public partial class ServerManagement : MewdekoModuleBase<ServerManagementServic
     {
         var guild = ctx.Guild;
         var uri = new Uri(img);
-        using var http = httpFactory.CreateClient();
+        using var http = factory.CreateClient();
         using var sr = await http.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
         var imgData = await sr.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
         var imgStream = imgData.ToStream();
@@ -83,7 +71,7 @@ public partial class ServerManagement : MewdekoModuleBase<ServerManagementServic
     {
         var guild = ctx.Guild;
         var uri = new Uri(img);
-        using var http = httpFactory.CreateClient();
+        using var http = factory.CreateClient();
         using var sr = await http.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
         var imgData = await sr.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
         var imgStream = imgData.ToStream();
@@ -98,7 +86,7 @@ public partial class ServerManagement : MewdekoModuleBase<ServerManagementServic
     {
         var guild = ctx.Guild;
         var uri = new Uri(img);
-        using var http = httpFactory.CreateClient();
+        using var http = factory.CreateClient();
         using var sr = await http.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
         var imgData = await sr.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
         var imgStream = imgData.ToStream();
@@ -138,7 +126,7 @@ public partial class ServerManagement : MewdekoModuleBase<ServerManagementServic
         }
 
         var uri = new Uri(acturl);
-        using var http = httpFactory.CreateClient();
+        using var http = factory.CreateClient();
         using var sr = await http.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
         var imgData = await sr.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
         var imgStream = imgData.ToStream();
@@ -146,12 +134,14 @@ public partial class ServerManagement : MewdekoModuleBase<ServerManagementServic
         try
         {
             var emote = await ctx.Guild.CreateEmoteAsync(name, new Image(imgStream)).ConfigureAwait(false);
-            await ctx.Channel.SendConfirmAsync($"{emote} with the name {Format.Code(name)} created!").ConfigureAwait(false);
+            await ctx.Channel.SendConfirmAsync($"{emote} with the name {Format.Code(name)} created!")
+                .ConfigureAwait(false);
         }
         catch (Exception)
         {
             await ctx.Channel.SendErrorAsync(
-                "The emote could not be added because it is either: Too Big(Over 256kb), != a direct link, Or exceeds server emoji limit.").ConfigureAwait(false);
+                    "The emote could not be added because it is either: Too Big(Over 256kb), != a direct link, Or exceeds server emoji limit.")
+                .ConfigureAwait(false);
         }
     }
 
@@ -192,7 +182,8 @@ public partial class ServerManagement : MewdekoModuleBase<ServerManagementServic
             await ctx.Guild.ModifyEmoteAsync(emote1, x => x.Name = name).ConfigureAwait(false);
             var emote2 = await ctx.Guild.GetEmoteAsync(tags.Id).ConfigureAwait(false);
             await ctx.Channel.SendConfirmAsync(
-                $"{emote1} has been renamed from {Format.Code(ogname)} to {Format.Code(emote2.Name)}").ConfigureAwait(false);
+                    $"{emote1} has been renamed from {Format.Code(ogname)} to {Format.Code(emote2.Name)}")
+                .ConfigureAwait(false);
         }
         catch (HttpException)
         {
@@ -213,39 +204,9 @@ public partial class ServerManagement : MewdekoModuleBase<ServerManagementServic
         var tags = ctx.Message.Tags.Where(t => t.Type == TagType.Emoji).Select(x => (Emote)x.Value).Distinct();
         if (!tags.Any()) return;
         var msg = await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
-
         foreach (var i in tags)
         {
-            var emoteName = i.Name; // Default to the emote name
-
-            // Define a pattern to find the emote in the message
-            var patternStatic = $"<:{i.Name}:[0-9]+>";
-            var patternAnimated = $"<a:{i.Name}:[0-9]+>";
-            var matchStatic = Regex.Match(ctx.Message.Content, patternStatic);
-            var matchAnimated = Regex.Match(ctx.Message.Content, patternAnimated);
-
-            if (matchStatic.Success || matchAnimated.Success)
-            {
-                // Lets create a temp var to handle the match
-                var match = matchStatic.Success ? matchStatic : matchAnimated;
-
-                // Find the index immediately after the emote match
-                var indexAfterEmote = match.Index + match.Length;
-
-                // Get the substring from the message that comes after the emote
-                var potentialNamePart = ctx.Message.Content.Substring(indexAfterEmote).Trim();
-
-                // Split the remaining message by spaces and take the first word if any
-                var parts = potentialNamePart.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-
-                // Use the provided name only if there is exactly one emote and one potential name
-                if (parts.Length > 0 && tags.Count() == 1)
-                {
-                    emoteName = parts[0]; // Custom name provided by the user
-                }
-            }
-
-            using var http = httpFactory.CreateClient();
+            using var http = factory.CreateClient();
             using var sr = await http.GetAsync(i.Url, HttpCompletionOption.ResponseHeadersRead)
                 .ConfigureAwait(false);
             var imgData = await sr.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
@@ -254,26 +215,11 @@ public partial class ServerManagement : MewdekoModuleBase<ServerManagementServic
             {
                 try
                 {
-                    var emote = await ctx.Guild.CreateEmoteAsync(emoteName, new Image(imgStream)).ConfigureAwait(false);
+                    var emote = await ctx.Guild.CreateEmoteAsync(i.Name, new Image(imgStream)).ConfigureAwait(false);
                     emotes.Add($"{emote} {Format.Code(emote.Name)}");
                 }
-                catch (HttpException httpEx) when (httpEx.HttpCode == System.Net.HttpStatusCode.BadRequest)
+                catch (Exception)
                 {
-                    // check if the error is 30008
-                    if (httpEx.DiscordCode.HasValue && httpEx.DiscordCode.Value == (DiscordErrorCode)30008)
-                    {
-                        errored.Add($"Unable to add '{i.Name}'. Discord server reports no free emoji slots.");
-                    }
-                    else
-                    {
-                        // other HttpExceptions
-                        Log.Information($"Failed to add emotes. Message: {httpEx.Message}");
-                        errored.Add($"{i.Name}\n{i.Url}");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Log.Information($"Failed to add emotes. Message: {ex.Message}");
                     errored.Add($"{i.Name}\n{i.Url}");
                 }
             }
@@ -308,7 +254,7 @@ public partial class ServerManagement : MewdekoModuleBase<ServerManagementServic
 
         foreach (var i in tags)
         {
-            using var http = httpFactory.CreateClient();
+            using var http = factory.CreateClient();
             using var sr = await http.GetAsync(i.Url, HttpCompletionOption.ResponseHeadersRead)
                 .ConfigureAwait(false);
             var imgData = await sr.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
@@ -317,12 +263,12 @@ public partial class ServerManagement : MewdekoModuleBase<ServerManagementServic
             {
                 try
                 {
-                    var emote = await ctx.Guild.CreateEmoteAsync(i.Name, new Image(imgStream), list).ConfigureAwait(false);
+                    var emote = await ctx.Guild.CreateEmoteAsync(i.Name, new Image(imgStream), list)
+                        .ConfigureAwait(false);
                     emotes.Add($"{emote} {Format.Code(emote.Name)}");
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
-                    Log.Information($"Failed to add emotes. Message: {ex.Message}");
                     errored.Add($"{i.Name}\n{i.Url}");
                 }
             }

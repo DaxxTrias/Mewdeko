@@ -39,10 +39,10 @@ public class EmoteStealer : MewdekoSlashCommandModule
             await ctx.Interaction.SendEphemeralFollowupErrorAsync("No emotes in this message!").ConfigureAwait(false);
             return;
         }
+
         var errored = new List<string>();
         var emotes = new List<string>();
         var msg = await ctx.Interaction.FollowupAsync(embed: eb.Build()).ConfigureAwait(false);
-
         foreach (var i in tags)
         {
             var emoteName = i.Name; // Default to the emote name
@@ -135,7 +135,7 @@ public class EmoteStealer : MewdekoSlashCommandModule
 
         var errored = new List<string>();
         var emotes = new List<string>();
-        var msg = await ctx.Interaction.FollowupAsync(embed: eb.Build(), ephemeral: true).ConfigureAwait(false);
+        await ctx.Interaction.FollowupAsync(embed: eb.Build(), ephemeral: true).ConfigureAwait(false);
         foreach (var i in tags)
         {
             using var http = httpFactory.CreateClient();

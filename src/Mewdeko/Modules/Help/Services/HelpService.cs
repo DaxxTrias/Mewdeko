@@ -1,4 +1,4 @@
-using CommandLine;
+﻿using CommandLine;
 using Discord.Commands;
 using Discord.Interactions;
 using Mewdeko.Common.Attributes.TextCommands;
@@ -71,20 +71,27 @@ public class HelpService : ILateExecutor, INService
     {
         var modules = cmds.Commands.Select(x => x.Module).Where(x => !x.IsSubmodule).Distinct();
         var compBuilder = new ComponentBuilder();
-        var selMenu = new SelectMenuBuilder().WithCustomId("helpselect");
-        foreach (var i in modules.Where(x => !x.Attributes.Any(attribute => attribute is HelpDisabled)))
+        var menuCount = (modules.Count() - 1) / 25 + 1;
+
+        for (var j = 0; j < menuCount; j++)
         {
-            selMenu.Options.Add(new SelectMenuOptionBuilder()
-                .WithLabel(i.Name).WithDescription(GetText($"module_description_{i.Name.ToLower()}", guild)).WithValue(i.Name.ToLower()));
+            var selMenu = new SelectMenuBuilder().WithCustomId($"helpselect:{j}");
+            foreach (var i in modules.Skip(j * 25).Take(25).Where(x => !x.Attributes.Any(attribute => attribute is HelpDisabled)))
+            {
+                selMenu.Options.Add(new SelectMenuOptionBuilder()
+                    .WithLabel(i.Name).WithDescription(GetText($"module_description_{i.Name.ToLower()}", guild)).WithValue(i.Name.ToLower()));
+            }
+
+            compBuilder.WithSelectMenu(selMenu); // add the select menu to the component builder
         }
 
         compBuilder.WithButton(GetText("toggle_descriptions", guild), $"toggle-descriptions:{descriptions},{user.Id}");
-        //compBuilder.WithButton(GetText("invite_me", guild), style: ButtonStyle.Link,
-        //    url: "https://discord.com/oauth2/authorize?client_id=752236274261426212&scope=bot&permissions=66186303&scope=bot%20applications.commands");
-        //compBuilder.WithButton(GetText("donatetext", guild), style: ButtonStyle.Link, url: "https://ko-fi.com/mewdeko");
-        compBuilder.WithSelectMenu(selMenu);
+        compBuilder.WithButton(GetText("invite_me", guild), style: ButtonStyle.Link,
+            url: "https://discord.com/oauth2/authorize?client_id=752236274261426212&scope=bot&permissions=66186303&scope=bot%20applications.commands");
+        compBuilder.WithButton(GetText("donatetext", guild), style: ButtonStyle.Link, url: "https://ko-fi.com/mewdeko");
         return compBuilder;
     }
+
 
     public async Task<EmbedBuilder> GetHelpEmbed(bool description, IGuild? guild, IMessageChannel channel, IUser user)
     {
@@ -93,9 +100,9 @@ public class HelpService : ILateExecutor, INService
         embed.WithOkColor();
         embed.WithDescription(
             GetText("command_help_description", guild, await guildSettings.GetPrefix(guild)) +
-            $"\n{GetText("module_help_description", guild, await guildSettings.GetPrefix(guild))}"); //+
-            // "\n\n**Youtube Tutorials**\nhttps://www.youtube.com/channel/UCKJEaaZMJQq6lH33L3b_sTg\n\n**Links**\n" +
-            // $"[Documentation](https://mewdeko.tech) | [Support Server](https://discord.gg/mewdeko) | [Invite Me](https://discord.com/oauth2/authorize?client_id={bot.Client.CurrentUser.Id}&scope=bot&permissions=66186303&scope=bot%20applications.commands) | [Top.gg Listing](https://top.gg/bot/752236274261426212) | [Donate!](https://ko-fi.com/mewdeko)");
+            $"\n{GetText("module_help_description", guild, await guildSettings.GetPrefix(guild))}" +
+            "\n\n**Youtube Tutorials**\nhttps://www.youtube.com/channel/UCKJEaaZMJQq6lH33L3b_sTg\n\n**Links**\n" +
+            $"[Documentation](https://mewdeko.tech) | [Support Server](https://discord.gg/mewdeko) | [Invite Me](https://discord.com/oauth2/authorize?client_id={bot.Client.CurrentUser.Id}&scope=bot&permissions=66186303&scope=bot%20applications.commands) | [Top.gg Listing](https://top.gg/bot/752236274261426212) | [Donate!](https://ko-fi.com/mewdeko)");
         var modules = cmds.Commands.Select(x => x.Module).Where(x => !x.IsSubmodule && !x.Attributes.Any(attribute => attribute is HelpDisabled)).Distinct();
         var count = 0;
         if (description)
@@ -140,8 +147,8 @@ public class HelpService : ILateExecutor, INService
                     var eb = new EmbedBuilder();
                     eb.WithOkColor();
                     eb.WithDescription(
-                        $"Hi there! To see my command categories do `{await guildSettings.GetPrefix(chan.Guild)}cmds`\nMy current Prefix is `{await guildSettings.GetPrefix(chan.Guild)}`\nIf you need help using the bot feel free to join the [Support Server](https://discord.gg/TBD9)!**\n\n I hope you have a great day!");
-                    //eb.WithThumbnailUrl("https://cdn.discordapp.com/emojis/914307922287276052.gif");
+                        $"Hi there! To see my command categories do `{await guildSettings.GetPrefix(chan.Guild)}cmds`\nMy current Prefix is `{await guildSettings.GetPrefix(chan.Guild)}`\nIf you need help using the bot feel free to join the [Support Server](https://discord.gg/mewdeko)!\n**Please support me! While this bot is free it's not free to run! https://ko-fi.com/mewdeko**\n\n I hope you have a great day!");
+                    eb.WithThumbnailUrl("https://cdn.discordapp.com/emojis/914307922287276052.gif");
                     eb.WithFooter(new EmbedFooterBuilder().WithText(client.CurrentUser.Username).WithIconUrl(client.CurrentUser.RealAvatarUrl().ToString()));
                     await chan.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
                 }
@@ -160,14 +167,14 @@ public class HelpService : ILateExecutor, INService
         var eb = new EmbedBuilder
         {
             Description =
-                $"Hi, thanks for inviting! I hope you like the bot, and discover all its features! The default prefix is `{px}.` This can be changed with the prefix command."
+                $"Hi, thanks for inviting Mewdeko! I hope you like the bot, and discover all its features! The default prefix is `{px}.` This can be changed with the prefix command."
         };
         eb.AddField("How to look for commands",
             $"1) Use the {px}cmds command to see all the categories\n2) use {px}cmds with the category name to glance at what commands it has. ex: `{px}cmds mod`\n3) Use {px}h with a command name to view its help. ex: `{px}h purge`");
-        //eb.AddField("Have any questions, or need my invite link?", "Support Server: https://discord.gg/mewdeko \nInvite Link: https://mewdeko.tech/invite");
-        // eb.AddField("Youtube Channel", "https://youtube.com/channel/UCKJEaaZMJQq6lH33L3b_sTg");
-        //eb.WithThumbnailUrl(
-        //    "https://cdn.discordapp.com/emojis/968564817784877066.gif");
+        eb.AddField("Have any questions, or need my invite link?", "Support Server: https://discord.gg/mewdeko \nInvite Link: https://mewdeko.tech/invite");
+        eb.AddField("Youtube Channel", "https://youtube.com/channel/UCKJEaaZMJQq6lH33L3b_sTg");
+        eb.WithThumbnailUrl(
+            "https://cdn.discordapp.com/emojis/968564817784877066.gif");
         eb.WithOkColor();
         await e.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
     }

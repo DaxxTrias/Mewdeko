@@ -2,17 +2,12 @@
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Modules.UserProfile.Services;
 using Microsoft.EntityFrameworkCore;
-using SixLabors.ImageSharp.PixelFormats;
-using Color = SixLabors.ImageSharp.Color;
+using SkiaSharp;
 
 namespace Mewdeko.Modules.UserProfile;
 
-public class UserProfile : MewdekoModuleBase<UserProfileService>
+public class UserProfile(DbService db) : MewdekoModuleBase<UserProfileService>
 {
-    private readonly DbService db;
-
-    public UserProfile(DbService db) => this.db = db;
-
     [Cmd, Aliases]
     public async Task Profile(IUser user = null)
     {
@@ -48,12 +43,11 @@ public class UserProfile : MewdekoModuleBase<UserProfileService>
     }
 
     [Cmd, Aliases]
-    public async Task SetProfileColor(Color input)
+    public async Task SetProfileColor(SKColor input)
     {
-        var color = Rgba32.ParseHex(input.ToHex());
-        var discordColor = new Discord.Color(color.R, color.G, color.B);
+        var discordColor = new Color(input.Red, input.Green, input.Blue);
         await Service.SetProfileColor(ctx.User, discordColor);
-        await ctx.Channel.SendConfirmAsync($"Your Profile Color has been set to:\n`{color}`");
+        await ctx.Channel.SendConfirmAsync($"Your Profile Color has been set to:\n`{input}`");
     }
 
     [Cmd, Aliases]
@@ -68,7 +62,8 @@ public class UserProfile : MewdekoModuleBase<UserProfileService>
     {
         var optout = await Service.ToggleOptOut(ctx.User);
         if (!optout)
-            await ctx.Channel.SendConfirmAsync("Succesfully enabled command stats collection! (This does ***not*** collect message contents!)");
+            await ctx.Channel.SendConfirmAsync(
+                "Succesfully enabled command stats collection! (This does ***not*** collect message contents!)");
         else
             await ctx.Channel.SendConfirmAsync("Succesfully disable command stats collection.");
     }
@@ -76,7 +71,8 @@ public class UserProfile : MewdekoModuleBase<UserProfileService>
     [Cmd, Aliases, Ratelimit(3600)]
     public async Task DeleteUserStatsData()
     {
-        if (await PromptUserConfirmAsync("Are you sure you want to delete your command stats? This action is irreversible!", ctx.User.Id))
+        if (await PromptUserConfirmAsync(
+                "Are you sure you want to delete your command stats? This action is irreversible!", ctx.User.Id))
         {
             if (await Service.DeleteStatsData(ctx.User))
                 await ctx.Channel.SendErrorAsync("Command Stats deleted.");
@@ -89,7 +85,8 @@ public class UserProfile : MewdekoModuleBase<UserProfileService>
     public async Task SetBirthdayPrivacy(DiscordUser.BirthdayDisplayModeEnum birthdayDisplayModeEnum)
     {
         await Service.SetBirthdayDisplayMode(ctx.User, birthdayDisplayModeEnum);
-        await ctx.Channel.SendConfirmAsync($"Your birthday display mode has been set to {birthdayDisplayModeEnum.ToString()}");
+        await ctx.Channel.SendConfirmAsync(
+            $"Your birthday display mode has been set to {birthdayDisplayModeEnum.ToString()}");
     }
 
     [Cmd, Aliases]
@@ -97,12 +94,14 @@ public class UserProfile : MewdekoModuleBase<UserProfileService>
     {
         if (!url.IsImage())
         {
-            await ctx.Channel.SendErrorAsync("The image url you provided is invalid. Please make sure it ends with `.gif`, `.png` or `.jpg`");
+            await ctx.Channel.SendErrorAsync(
+                "The image url you provided is invalid. Please make sure it ends with `.gif`, `.png` or `.jpg`");
             return;
         }
 
         await Service.SetProfileImage(ctx.User, url);
-        var eb = new EmbedBuilder().WithOkColor().WithDescription("Sucesffully set the profile image to:").WithImageUrl(url);
+        var eb = new EmbedBuilder().WithOkColor().WithDescription("Sucesffully set the profile image to:")
+            .WithImageUrl(url);
         await ctx.Channel.SendMessageAsync(embed: eb.Build());
     }
 
@@ -118,7 +117,8 @@ public class UserProfile : MewdekoModuleBase<UserProfileService>
     {
         if (!await Service.SetSwitchFc(ctx.User, switchFc))
         {
-            await ctx.Channel.SendErrorAsync("The Switch Friend Code you provided is invalid. Please make sure it matches the format sw-XXXX-XXXX-XXXX.");
+            await ctx.Channel.SendErrorAsync(
+                "The Switch Friend Code you provided is invalid. Please make sure it matches the format sw-XXXX-XXXX-XXXX.");
             return;
         }
 
@@ -142,7 +142,10 @@ public class UserProfile : MewdekoModuleBase<UserProfileService>
         if (!pronouns.PronounDb)
             cb.WithButton(GetText("pronouns_report_button"), $"pronouns_report.{user.Id};", ButtonStyle.Danger);
         await ctx.Channel.SendConfirmAsync(
-            GetText(pronouns.PronounDb ? pronouns.Pronouns.Contains(' ') ? "pronouns_pndb_special" : "pronouns_pndb_get" : "pronouns_internal_get", user.ToString(),
+            GetText(
+                pronouns.PronounDb
+                    ? pronouns.Pronouns.Contains(' ') ? "pronouns_pndb_special" : "pronouns_pndb_get"
+                    : "pronouns_internal_get", user.ToString(),
                 pronouns.Pronouns), cb).ConfigureAwait(false);
     }
 
@@ -163,7 +166,8 @@ public class UserProfile : MewdekoModuleBase<UserProfileService>
             }
 
             cb.WithButton(GetText("pronouns_overwrite_clear_button"), "pronouns_overwrite_clear", ButtonStyle.Danger);
-            await ctx.Channel.SendConfirmAsync(GetText("pronouns_internal_self", user.Pronouns), cb).ConfigureAwait(false);
+            await ctx.Channel.SendConfirmAsync(GetText("pronouns_internal_self", user.Pronouns), cb)
+                .ConfigureAwait(false);
             return;
         }
 
@@ -174,7 +178,7 @@ public class UserProfile : MewdekoModuleBase<UserProfileService>
 
     private async Task<bool> PronounsDisabled(DiscordUser user)
     {
-        if (!user.PronounsDisabled) return false;
+        if (user.PronounsDisabled == 0) return false;
         await ReplyErrorLocalizedAsync("pronouns_disabled_user", user.PronounsClearedReason).ConfigureAwait(false);
         return true;
     }
@@ -186,10 +190,11 @@ public class UserProfile : MewdekoModuleBase<UserProfileService>
         var uow = db.GetDbContext();
         await using var _ = uow.ConfigureAwait(false);
         var dbUser = await uow.GetOrCreateUser(user).ConfigureAwait(false);
-        dbUser.PronounsDisabled = pronounsDisabledAbuse;
+        dbUser.PronounsDisabled = pronounsDisabledAbuse ? 1 : 0;
         dbUser.PronounsClearedReason = reason;
         await uow.SaveChangesAsync().ConfigureAwait(false);
-        await ConfirmLocalizedAsync(pronounsDisabledAbuse ? "pronouns_disabled_user" : "pronouns_cleared").ConfigureAwait(false);
+        await ConfirmLocalizedAsync(pronounsDisabledAbuse ? "pronouns_disabled_user" : "pronouns_cleared")
+            .ConfigureAwait(false);
     }
 
     [Cmd, Aliases, OwnerOnly]
@@ -198,9 +203,10 @@ public class UserProfile : MewdekoModuleBase<UserProfileService>
         var uow = db.GetDbContext();
         await using var _ = uow.ConfigureAwait(false);
         var dbUser = await uow.DiscordUser.AsQueryable().FirstAsync(x => x.UserId == user).ConfigureAwait(false);
-        dbUser.PronounsDisabled = pronounsDisabledAbuse;
+        dbUser.PronounsDisabled = pronounsDisabledAbuse ? 1 : 0;
         dbUser.PronounsClearedReason = reason;
         await uow.SaveChangesAsync().ConfigureAwait(false);
-        await ConfirmLocalizedAsync(pronounsDisabledAbuse ? "pronouns_disabled_user" : "pronouns_cleared").ConfigureAwait(false);
+        await ConfirmLocalizedAsync(pronounsDisabledAbuse ? "pronouns_disabled_user" : "pronouns_cleared")
+            .ConfigureAwait(false);
     }
 }
