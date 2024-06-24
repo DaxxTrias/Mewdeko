@@ -79,4 +79,12 @@ public class MewdekoUserMessage : IUserMessage
             throw new NotImplementedException();
         }
     }
+
+    public Task EndPollAsync(RequestOptions options = null) => throw new NotImplementedException();
+
+    public IAsyncEnumerable<IReadOnlyCollection<IUser>> GetPollAnswerVotersAsync(
+        uint answerId, int? limit = null, ulong? afterId = null, RequestOptions options = null)
+        => throw new NotImplementedException();
+
+    public Discord.Poll? Poll { get; }
 }
