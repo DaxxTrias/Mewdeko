@@ -15,11 +15,13 @@ using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Common.PubSub;
 using Mewdeko.Common.TypeReaders;
 using Mewdeko.Common.TypeReaders.Interactions;
+using Mewdeko.Database;
 using Mewdeko.Modules.Currency.Services;
 using Mewdeko.Modules.Currency.Services.Impl;
 using Mewdeko.Modules.Music.Services;
 using Mewdeko.Modules.Nsfw;
 using Mewdeko.Modules.Searches.Services;
+using Mewdeko.Services;
 using Mewdeko.Services.Impl;
 using Mewdeko.Services.Settings;
 using Microsoft.Extensions.DependencyInjection;
@@ -103,6 +105,8 @@ public class Mewdeko
 
         var s = new ServiceCollection()
             .AddScoped<INsfwSpy, NsfwSpy>()
+            .AddSingleton<ApiKeyRepository>(provider => new ApiKeyRepository("Data Source=mewdeko.db"))
+            .AddSingleton<ApiService>()
             .AddSingleton<FontProvider>()
             .AddSingleton<IBotCredentials>(Credentials)
             .AddSingleton(db)

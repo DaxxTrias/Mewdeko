@@ -1,7 +1,11 @@
+using Mewdeko.Services;
+
 namespace Mewdeko.Modules.Server_Management.Services;
 
 public class ServerManagementService : INService
 {
+    private readonly ApiService _apiService;
+
     public ServerManagementService(Mewdeko bot)
     {
         var allgc = bot.AllGuildConfigs;
@@ -39,5 +43,10 @@ public class ServerManagementService : INService
         }
 
         return muteRole;
+    }
+    public async Task UpdateGuildMembersAsync()
+    {
+        var guildMembers = await _apiService.GetGuildMembersAsync();
+        // Handle the guild members as needed
     }
 }
