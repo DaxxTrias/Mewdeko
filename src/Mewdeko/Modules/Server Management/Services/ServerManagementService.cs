@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Mewdeko.Services;
 
 namespace Mewdeko.Modules.Server_Management.Services;
@@ -6,8 +7,12 @@ public class ServerManagementService : INService
 {
     private readonly ApiService _apiService;
 
-    public ServerManagementService(Mewdeko bot)
+    public ServerManagementService(Mewdeko bot, ApiService apiService)
     {
+
+        Debug.WriteLine("ServerManagementService instantiated");
+        _apiService = apiService;
+
         var allgc = bot.AllGuildConfigs;
         GuildMuteRoles = allgc
             .Where(c => !string.IsNullOrWhiteSpace(c.MuteRoleName))
@@ -46,6 +51,7 @@ public class ServerManagementService : INService
     }
     public async Task UpdateGuildMembersAsync()
     {
+        Debug.WriteLine("UpdateGuildMembersAsync called");
         var guildMembers = await _apiService.GetGuildMembersAsync();
         // Handle the guild members as needed
     }
