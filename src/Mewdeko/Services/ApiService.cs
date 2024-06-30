@@ -8,7 +8,6 @@ using System.Text;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Mewdeko.Database;
-using Google.Apis.YouTube.v3.Data;
 
 namespace Mewdeko.Services
 {
@@ -21,7 +20,7 @@ namespace Mewdeko.Services
         {
             _httpClient = new HttpClient
             {
-                BaseAddress = new Uri("https://www.bitmex.com") // Replace with actual base URL
+                BaseAddress = new Uri("https://www.bitmex.com")
             };
             _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 

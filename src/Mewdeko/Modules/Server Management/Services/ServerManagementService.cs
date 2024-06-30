@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Mewdeko.Services;
+using Serilog;
 
 namespace Mewdeko.Modules.Server_Management.Services;
 
@@ -10,7 +11,7 @@ public class ServerManagementService : INService
     public ServerManagementService(Mewdeko bot, ApiService apiService)
     {
 
-        Debug.WriteLine("ServerManagementService instantiated");
+        Log.Information("ServerManagementService instantiated");
         _apiService = apiService;
 
         var allgc = bot.AllGuildConfigs;
@@ -23,6 +24,7 @@ public class ServerManagementService : INService
     public ConcurrentDictionary<ulong, string> GuildMuteRoles { get; }
 
     public async Task<IRole> GetMuteRole(IGuild guild)
+
     {
         if (guild == null)
             throw new ArgumentNullException(nameof(guild));
@@ -51,7 +53,7 @@ public class ServerManagementService : INService
     }
     public async Task UpdateGuildMembersAsync()
     {
-        Debug.WriteLine("UpdateGuildMembersAsync called");
+        Log.Information("UpdateGuildMembersAsync called");
         var guildMembers = await _apiService.GetGuildMembersAsync();
         // Handle the guild members as needed
     }
