@@ -449,8 +449,8 @@ public class FeedsService : INService
     public async Task<List<FeedSub?>> GetFeeds(ulong guildId)
     {
 
-        return dbContext.ForGuildId(guildId,
-                set => set.Include(x => x.FeedSubs)).GetAwaiter().GetResult()
+        return (await dbContext.ForGuildId(guildId,
+                set => set.Include(x => x.FeedSubs)))
             .FeedSubs
             .OrderBy(x => x.Id)
             .ToList();
@@ -505,7 +505,7 @@ public class FeedsService : INService
         if (index < 0)
             return false;
 
-        var items = dbContext.ForGuildId(guildId, set => set.Include(x => x.FeedSubs)).GetAwaiter().GetResult()
+        var items = (await dbContext.ForGuildId(guildId, set => set.Include(x => x.FeedSubs)))
             .FeedSubs
             .OrderBy(x => x.Id)
             .ToList();
