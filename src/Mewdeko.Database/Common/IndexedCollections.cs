@@ -6,13 +6,13 @@ namespace Mewdeko.Database.Common;
 
 public class IndexedCollection<T> : IList<T> where T : class, IIndexed
 {
-    private readonly object locker = new();
+    private readonly object _locker = new();
 
     public IndexedCollection() => Source = new List<T>();
 
     public IndexedCollection(IEnumerable<T> source)
     {
-        lock (locker)
+        lock (_locker)
         {
             Source = source.OrderBy(x => x.Index).ToList();
             UpdateIndexes();
@@ -36,7 +36,7 @@ public class IndexedCollection<T> : IList<T> where T : class, IIndexed
 
     public void Add(T item)
     {
-        lock (locker)
+        lock (_locker)
         {
             Debug.Assert(item != null, $"{nameof(item)} != null");
             item.Index = Source.Count;
@@ -46,7 +46,7 @@ public class IndexedCollection<T> : IList<T> where T : class, IIndexed
 
     public virtual void Clear()
     {
-        lock (locker)
+        lock (_locker)
         {
             Source.Clear();
         }
@@ -54,7 +54,7 @@ public class IndexedCollection<T> : IList<T> where T : class, IIndexed
 
     public bool Contains(T item)
     {
-        lock (locker)
+        lock (_locker)
         {
             return Source.Contains(item);
         }
@@ -62,7 +62,7 @@ public class IndexedCollection<T> : IList<T> where T : class, IIndexed
 
     public void CopyTo(T[] array, int arrayIndex)
     {
-        lock (locker)
+        lock (_locker)
         {
             Source.CopyTo(array, arrayIndex);
         }
@@ -71,7 +71,7 @@ public class IndexedCollection<T> : IList<T> where T : class, IIndexed
     public virtual bool Remove(T item)
     {
         bool removed;
-        lock (locker)
+        lock (_locker)
         {
             // ReSharper disable once AssignmentInConditionalExpression
             if (removed = Source.Remove(item))
@@ -87,7 +87,7 @@ public class IndexedCollection<T> : IList<T> where T : class, IIndexed
 
     public virtual void Insert(int index, T item)
     {
-        lock (locker)
+        lock (_locker)
         {
             Source.Insert(index, item);
             for (var i = index; i < Source.Count; i++) Source[i].Index = i;
@@ -96,7 +96,7 @@ public class IndexedCollection<T> : IList<T> where T : class, IIndexed
 
     public virtual void RemoveAt(int index)
     {
-        lock (locker)
+        lock (_locker)
         {
             Source.RemoveAt(index);
             for (var i = index; i < Source.Count; i++) Source[i].Index = i;
@@ -108,7 +108,7 @@ public class IndexedCollection<T> : IList<T> where T : class, IIndexed
         get => Source[index];
         set
         {
-            lock (locker)
+            lock (_locker)
             {
                 value.Index = index;
                 Source[index] = value;
@@ -118,7 +118,7 @@ public class IndexedCollection<T> : IList<T> where T : class, IIndexed
 
     public void UpdateIndexes()
     {
-        lock (locker)
+        lock (_locker)
         {
             for (var i = 0; i < Source.Count; i++)
             {

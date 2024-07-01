@@ -43,4 +43,6 @@ public class CurrencyEvent
     public string ExtraString { get; set; }
 }
 
-public class AwardedUser;
+public class AwardedUser
+{
+}

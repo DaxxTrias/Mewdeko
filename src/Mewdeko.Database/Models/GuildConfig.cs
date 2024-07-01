@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations.Schema;
+﻿using System.ComponentModel.DataAnnotations.Schema;
 using Mewdeko.Database.Common;
 
 // ReSharper disable InconsistentNaming

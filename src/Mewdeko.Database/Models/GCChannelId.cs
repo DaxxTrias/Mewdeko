@@ -2,7 +2,6 @@
 
 namespace Mewdeko.Database.Models;
 
-// ReSharper disable once InconsistentNaming
 public class GCChannelId : DbEntity
 {
     [ForeignKey("GuildConfigId")]

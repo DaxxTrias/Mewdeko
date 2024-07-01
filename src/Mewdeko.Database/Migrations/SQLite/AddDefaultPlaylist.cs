@@ -2,7 +2,7 @@
 
 namespace Mewdeko.Database.Migrations.SQLite;
 
-public class AddDefaultPlaylist : Migration
+public partial class AddDefaultPlaylist : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder) =>
         migrationBuilder.AddColumn<int>(
