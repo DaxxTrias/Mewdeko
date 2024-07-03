@@ -5,6 +5,7 @@ using Mewdeko.Common.Attributes.InteractionCommands;
 using Mewdeko.Common.Autocompleters;
 using Mewdeko.Common.JsonSettings;
 using Mewdeko.Common.Modals;
+using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.Moderation.Services;
 using Mewdeko.Modules.Utility.Services;
 using Mewdeko.Services.Impl;
@@ -24,7 +25,7 @@ public class SlashUtility(
     IBotCredentials creds,
     MuteService muteService,
     BotConfigService config,
-    MewdekoContext dbContext) : MewdekoSlashModuleBase<UtilityService>
+    DbContextProvider dbProvider) : MewdekoSlashModuleBase<UtilityService>
 {
     /// <summary>
     /// Displays the avatar of a user. This can either be their global Discord avatar or their server-specific avatar if available.
@@ -215,6 +216,7 @@ public class SlashUtility(
      SlashUserPerm(GuildPermission.SendMessages)]
     public async Task Stats()
     {
+        await using var dbContext = await dbProvider.GetContextAsync();
 
         var time = DateTime.UtcNow.Subtract(TimeSpan.FromSeconds(5));
         var commandStats = dbContext.CommandStats.Count(x => x.DateAdded.Value >= time);

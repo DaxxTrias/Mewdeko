@@ -6,6 +6,7 @@ using System.Threading;
 using LinqToDB.EntityFrameworkCore;
 using Mewdeko.Common.Configs;
 using Mewdeko.Common.ModuleBehaviors;
+using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Services.Settings;
 using Mewdeko.Services.strings;
 using Microsoft.EntityFrameworkCore;
@@ -36,7 +37,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
     private readonly DiscordShardedClient client;
     private readonly CommandHandler cmdHandler;
     private readonly IBotCredentials creds;
-    private readonly DbService db;
+    private readonly DbContextProvider dbProvider;
     private readonly IHttpClientFactory httpFactory;
     private readonly Replacer rep;
     private readonly IBotStrings strings;
@@ -71,14 +72,14 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
     /// The constructor subscribes to message received events and sets up periodic tasks for rotating statuses
     /// and checking for updates. It also listens for commands to leave guilds or reload images via Redis subscriptions.
     /// </remarks>
-    public OwnerOnlyService(DiscordShardedClient client, CommandHandler cmdHandler, DbService db,
+    public OwnerOnlyService(DiscordShardedClient client, CommandHandler cmdHandler, DbContextProvider dbProvider,
         IBotStrings strings, IBotCredentials creds, IDataCache cache, IHttpClientFactory factory,
         BotConfigService bss, IEnumerable<IPlaceholderProvider> phProviders, Mewdeko bot,
         GuildSettingsService guildSettings, EventHandler handler)
     {
         var redis = cache.Redis;
         this.cmdHandler = cmdHandler;
-        this.db = db;
+        this.dbProvider = dbProvider;
         this.strings = strings;
         this.client = client;
         this.creds = creds;
@@ -350,7 +351,9 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
                 return;
             }
 
-            await using var uow = db.GetDbContext();
+
+            await using var dbContext = await dbProvider.GetContextAsync();
+
             (Database.Models.OwnerOnly actualItem, bool added) toUpdate = dbContext.OwnerOnly.Any()
                 ? (await dbContext.OwnerOnly.FirstOrDefaultAsync(), false)
                 : (new Database.Models.OwnerOnly
@@ -507,8 +510,8 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
 
             conversation.AppendUserInput(gptprompt);
 
-            var loadingMsg = await usrMsg.SendConfirmReplyAsync($"{bss.Data.LoadingEmote} Awaiting response...");
-            await StreamResponseAndUpdateEmbedAsync(conversation, loadingMsg, uow, toUpdate, args.Author);
+            var loadingMsg = await usrMsg.Channel.SendConfirmAsync($"{bss.Data.LoadingEmote} Awaiting response...");
+            await StreamResponseAndUpdateEmbedAsync(conversation, loadingMsg, dbProvider, toUpdate, args.Author);
         }
         catch (Exception e)
         {
@@ -564,8 +567,10 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
     }
 
     private static async Task StreamResponseAndUpdateEmbedAsync(Conversation conversation, IUserMessage loadingMsg,
-        MewdekoContext uow, (Database.Models.OwnerOnly actualItem, bool added) toUpdate, SocketUser author)
+        DbContextProvider dbProvider, (Database.Models.OwnerOnly actualItem, bool added) toUpdate, SocketUser author)
     {
+        await using var dbContext = await dbProvider.GetContextAsync();
+
         var responseBuilder = new StringBuilder();
         var lastUpdate = DateTimeOffset.UtcNow;
 
@@ -631,8 +636,8 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
     /// </summary>
     public async Task ClearUsedTokens()
     {
-        await using var uow = db.GetDbContext();
-        var val = await uow.OwnerOnly.FirstOrDefaultAsync();
+        await using var dbContext = await dbProvider.GetContextAsync();
+        var val = await dbContext.OwnerOnly.FirstOrDefaultAsync();
         if (val is null)
             return;
         val.GptTokensUsed = 0;
@@ -710,7 +715,9 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
     public async Task OnReadyAsync()
     {
         Log.Information($"Starting {this.GetType()} Cache");
-        await using var uow = db.GetDbContext();
+
+        await using var dbContext = await dbProvider.GetContextAsync();
+
 
         autoCommands =
             (await dbContext.AutoCommands
@@ -765,8 +772,9 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         {
             try
             {
-                if (!bss.Data.RotateStatuses)
-                    continue;
+                await using var dbContext = await dbProvider.GetContextAsync();
+
+                if (!bss.Data.RotateStatuses) continue;
 
                 IReadOnlyList<RotatingPlayingStatus> rotatingStatuses;
                 var uow = db.GetDbContext();
@@ -804,8 +812,10 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         if (index < 0)
             throw new ArgumentOutOfRangeException(nameof(index));
 
-        await using var uow = db.GetDbContext();
-        var toRemove = await uow.RotatingStatus
+        await using var dbContext = await dbProvider.GetContextAsync();
+
+
+        var toRemove = await dbContext.RotatingStatus
             .AsQueryable()
             .AsNoTracking()
             .Skip(index)
@@ -827,7 +837,8 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
     /// <returns>A task that represents the asynchronous add operation.</returns>
     public async Task AddPlaying(ActivityType t, string status)
     {
-        await using var uow = db.GetDbContext();
+        await using var dbContext = await dbProvider.GetContextAsync();
+
         var toAdd = new RotatingPlayingStatus
         {
             Status = status,
@@ -852,10 +863,11 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
     /// Retrieves the current list of rotating playing statuses.
     /// </summary>
     /// <returns>A read-only list of <see cref="RotatingPlayingStatus"/> representing the current rotating statuses.</returns>
-    public IReadOnlyList<RotatingPlayingStatus> GetRotatingStatuses()
+    public async Task<IReadOnlyList<RotatingPlayingStatus>> GetRotatingStatuses()
     {
-        using var uow = db.GetDbContext();
-        return uow.RotatingStatus.AsNoTracking().ToList();
+        await using var dbContext = await dbProvider.GetContextAsync();
+
+        return await dbContext.RotatingStatus.AsNoTracking().ToListAsync();
     }
 
     private Timer TimerFromAutoCommand(AutoCommand x) =>
@@ -890,13 +902,12 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
     /// <remarks>
     /// If the command's interval is 5 seconds or more, it's also scheduled to be executed periodically according to its interval.
     /// </remarks>
-    public void AddNewAutoCommand(AutoCommand cmd)
+    public async Task AddNewAutoCommand(AutoCommand cmd)
     {
-        using (var uow = db.GetDbContext())
-        {
-            uow.AutoCommands.Add(cmd);
-            uow.SaveChanges();
-        }
+        await using var dbContext = await dbProvider.GetContextAsync();
+
+            dbContext.AutoCommands.Add(cmd);
+            await dbContext.SaveChangesAsync();
 
         if (cmd.Interval >= 5)
         {
@@ -929,9 +940,10 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
     /// Retrieves a list of auto commands set to execute at bot startup (interval of 0).
     /// </summary>
     /// <returns>A list of startup auto commands.</returns>
-    public IEnumerable<AutoCommand> GetStartupCommands()
+    public async Task<IEnumerable<AutoCommand>> GetStartupCommands()
     {
-        using var uow = db.GetDbContext();
+        await using var dbContext = await dbProvider.GetContextAsync();
+
         return
             uow.AutoCommands
                 .AsNoTracking()
@@ -944,9 +956,10 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
     /// Retrieves a list of auto commands with an interval of 5 seconds or more.
     /// </summary>
     /// <returns>A list of auto commands set to execute periodically.</returns>
-    public IEnumerable<AutoCommand> GetAutoCommands()
+    public async Task<IEnumerable<AutoCommand>> GetAutoCommands()
     {
-        using var uow = db.GetDbContext();
+        await using var dbContext = await dbProvider.GetContextAsync();
+
         return
             uow.AutoCommands
                 .AsNoTracking()
@@ -986,23 +999,21 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
     /// <param name="index">The zero-based index of the startup command to remove.</param>
     /// <param name="cmd">Out parameter that returns the removed auto command if the operation succeeds.</param>
     /// <returns>True if a command was found and removed; otherwise, false.</returns>
-    public bool RemoveStartupCommand(int index, out AutoCommand cmd)
+    public async Task<bool> RemoveStartupCommand(int index)
     {
-        using var uow = db.GetDbContext();
-        cmd = uow.AutoCommands
+        await using var dbContext = await dbProvider.GetContextAsync();
+
+        var cmd = await dbContext.AutoCommands
             .AsNoTracking()
             .Where(x => x.Interval == 0)
             .Skip(index)
-            .FirstOrDefault();
+            .FirstOrDefaultAsync();
 
-        if (cmd != null)
-        {
-            uow.Remove(cmd);
-            uow.SaveChanges();
-            return true;
-        }
+        if (cmd == null) return false;
+        dbContext.Remove(cmd);
+        await dbContext.SaveChangesAsync();
+        return true;
 
-        return false;
     }
 
     /// <summary>
@@ -1011,14 +1022,15 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
     /// <param name="index">The zero-based index of the command to remove.</param>
     /// <param name="cmd">Outputs the removed <see cref="AutoCommand"/> if the method returns true.</param>
     /// <returns>True if a command was successfully found and removed; otherwise, false.</returns>
-    public bool RemoveAutoCommand(int index, out AutoCommand cmd)
+    public async Task<bool> RemoveAutoCommand(int index)
     {
-        using var uow = db.GetDbContext();
-        cmd = uow.AutoCommands
+        await using var dbContext = await dbProvider.GetContextAsync();
+
+        var cmd = await dbContext.AutoCommands
             .AsNoTracking()
             .Where(x => x.Interval >= 5)
             .Skip(index)
-            .FirstOrDefault();
+            .FirstOrDefaultAsync();
 
         if (cmd == null)
             return false;
@@ -1064,15 +1076,16 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
     /// <summary>
     /// Clears all startup commands from the database.
     /// </summary>
-    public void ClearStartupCommands()
+    public async Task ClearStartupCommands()
     {
-        using var uow = db.GetDbContext();
-        var toRemove = uow.AutoCommands
+        await using var dbContext = await dbProvider.GetContextAsync();
+
+        var toRemove = dbContext.AutoCommands
             .AsNoTracking()
             .Where(x => x.Interval == 0);
 
-        uow.AutoCommands.RemoveRange(toRemove);
-        uow.SaveChanges();
+        dbContext.AutoCommands.RemoveRange(toRemove);
+        await dbContext.SaveChangesAsync();
     }
 
     /// <summary>

@@ -15,6 +15,7 @@ using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Common.PubSub;
 using Mewdeko.Common.TypeReaders;
 using Mewdeko.Common.TypeReaders.Interactions;
+using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.Currency.Services;
 using Mewdeko.Modules.Currency.Services.Impl;
 using Mewdeko.Modules.Nsfw;
@@ -136,12 +137,13 @@ public class Mewdeko
             .AddSingleton<FontProvider>()
             .AddSingleton<IBotCredentials>(Credentials)
             //Wahoo
-            .AddDbContextPool<MewdekoContext>(builder => builder
+            .AddPooledDbContextFactory<MewdekoContext>(builder => builder
                 .UseNpgsql(Credentials.PsqlConnectionString, x => x.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery))
             .EnableDetailedErrors()
             .EnableSensitiveDataLogging())
+            .AddSingleton<DbContextProvider>()
             .AddSingleton(Client)
-            .AddSingleton(new EventHandler(Client))
+            .AddScoped<EventHandler>()
             .AddSingleton(CommandService)
             .AddSingleton(this)
             .AddSingleton(Cache)
@@ -170,7 +172,7 @@ public class Mewdeko
             })
             .AddScoped<ISearchImagesService, SearchImagesService>()
             .AddSingleton<ToneTagService>()
-            .AddScoped<GuildSettingsService>();
+            .AddTransient<GuildSettingsService>();
         s.AddFusionCache().TryWithAutoSetup();
         if (Credentials.UseGlobalCurrency)
         {
@@ -345,9 +347,7 @@ public class Mewdeko
             await arg.DownloadUsersAsync().ConfigureAwait(false);
             Log.Information("Joined server: {0} [{1}]", arg.Name, arg.Id);
 
-            GuildConfig gc;
-
-                gc = await dbContext.ForGuildId(arg.Id);
+            var gc = await dbContext.ForGuildId(arg.Id);
 
             await JoinedGuild.Invoke(gc).ConfigureAwait(false);
             var chan =
@@ -378,7 +378,8 @@ public class Mewdeko
         try
         {
             await AddServices();
-            var dbContext = Services.GetRequiredService<MewdekoContext>();
+            var dbProvider = Services.GetRequiredService<DbContextProvider>();
+            await using var dbContext = await dbProvider.GetContextAsync();
             await dbContext.EnsureUserCreated(Client.CurrentUser.Id, Client.CurrentUser.Username, Client.CurrentUser.Discriminator, Client.CurrentUser.AvatarId);
         }
         catch (Exception ex)
@@ -413,7 +414,7 @@ public class Mewdeko
     private async Task ExecuteReadySubscriptions()
     {
         var readyExecutors = Services.GetServices<IReadyExecutor>();
-        foreach (var toExec in readyExecutors)
+        var tasks = readyExecutors.Select(async toExec =>
         {
             try
             {
@@ -424,7 +425,8 @@ public class Mewdeko
                 Log.Error(ex, "Failed running OnReadyAsync method on {Type} type: {Message}", toExec.GetType().Name,
                     ex.Message);
             }
-        }
+        });
+        await tasks.WhenAll();
     }
 
     private static Task Client_Log(LogMessage arg)

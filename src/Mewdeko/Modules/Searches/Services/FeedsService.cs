@@ -1,5 +1,6 @@
 using CodeHollow.FeedReader;
 using CodeHollow.FeedReader.Feeds;
+using Mewdeko.Database.DbContextStuff;
 using Microsoft.EntityFrameworkCore;
 using Embed = Discord.Embed;
 
@@ -11,7 +12,7 @@ namespace Mewdeko.Modules.Searches.Services;
 public class FeedsService : INService
 {
     private readonly DiscordShardedClient client;
-    private readonly MewdekoContext dbContext;
+    private readonly DbContextProvider dbProvider;
     private bool isRunning;
 
     private readonly ConcurrentDictionary<string, DateTime> lastPosts =
@@ -25,9 +26,9 @@ public class FeedsService : INService
     /// <param name="db">The database service.</param>
     /// <param name="client">The Discord client.</param>
     /// <param name="bot">The bot instance.</param>
-    public FeedsService(MewdekoContext dbContext, DiscordShardedClient client, Mewdeko bot)
+    public FeedsService(DbContextProvider dbProvider, DiscordShardedClient client, Mewdeko bot)
     {
-        this.dbContext = dbContext;
+        this.dbProvider = dbProvider;
         subs = new ConcurrentDictionary<string, HashSet<FeedSub>>();
 
         this.client = client;
@@ -38,6 +39,7 @@ public class FeedsService : INService
 
     private async Task<GuildConfig> GetGuildConfigFromId(int guildConfigId)
     {
+        await using var dbContext = await dbProvider.GetContextAsync();
 
         return await dbContext.GuildConfigs.AsQueryable().AsNoTracking().FirstOrDefaultAsync(x => x.Id == guildConfigId);
     }
@@ -448,6 +450,7 @@ public class FeedsService : INService
     /// <returns>A list of feed subscriptions.</returns>
     public async Task<List<FeedSub?>> GetFeeds(ulong guildId)
     {
+        await using var dbContext = await dbProvider.GetContextAsync();
 
         return (await dbContext.ForGuildId(guildId,
                 set => set.Include(x => x.FeedSubs)))
@@ -472,6 +475,8 @@ public class FeedsService : INService
             ChannelId = channelId, Url = rssFeed.Trim()
         };
 
+
+        await using var dbContext = await dbProvider.GetContextAsync();
 
         var gc = await dbContext.ForGuildId(guildId,
             set => set.Include(x => x.FeedSubs));
@@ -505,6 +510,8 @@ public class FeedsService : INService
         if (index < 0)
             return false;
 
+        await using var dbContext = await dbProvider.GetContextAsync();
+
         var items = (await dbContext.ForGuildId(guildId, set => set.Include(x => x.FeedSubs)))
             .FeedSubs
             .OrderBy(x => x.Id)
@@ -532,11 +539,12 @@ public class FeedsService : INService
     /// <param name="guildId">The ID of the guild.</param>
     /// <param name="index">The index of the feed subscription to remove.</param>
     /// <returns><c>true</c> if the feed subscription was successfully removed; otherwise, <c>false</c>.</returns>
-    public bool RemoveFeed(ulong guildId, int index)
+    public async Task<bool> RemoveFeed(ulong guildId, int index)
     {
         if (index < 0)
             return false;
 
+        await using var dbContext = await dbProvider.GetContextAsync();
 
         var items = dbContext.ForGuildId(guildId, set => set.Include(x => x.FeedSubs)).GetAwaiter().GetResult()
             .FeedSubs
