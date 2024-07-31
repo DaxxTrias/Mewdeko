@@ -161,10 +161,9 @@ public class EmoteStealer(IHttpClientFactory httpFactory, BotConfigService confi
             {
                 try
                 {
-                    var emote = await ctx.Guild.CreateStickerAsync(i.Name, new Image(imgStream), new[]
-                        {
+                    var emote = await ctx.Guild.CreateStickerAsync(i.Name, new Image(imgStream), [
                             "Mewdeko"
-                        }, i.Description)
+                        ], i.Description)
                         .ConfigureAwait(false);
                     emotes.Add($"{emote.Name} [Url]({(emote.GetStickerUrl())})");
                 }
