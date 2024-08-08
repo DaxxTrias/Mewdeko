@@ -17,7 +17,6 @@ using Mewdeko.Modules.Searches.Services;
 using Mewdeko.Services.Impl;
 using Mewdeko.Services.Settings;
 using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
@@ -167,8 +166,7 @@ public class Program
             .AddJsonOptions(options =>
             {
                 options.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
-            });
-        ;
+            });;
         services.AddEndpointsApiExplorer();
         services.AddSwaggerGen();
         if (!credentials.SkipApiKey)
@@ -191,18 +189,9 @@ public class Program
         services.AddAuthorization(options =>
         {
             if (!credentials.SkipApiKey)
-            {
-                options.DefaultPolicy = new AuthorizationPolicyBuilder()
-                    .RequireAuthenticatedUser()
-                    .AddAuthenticationSchemes("ApiKey")
-                    .Build();
-
                 options.AddPolicy("ApiKeyPolicy", policy =>
                     policy.RequireAuthenticatedUser().AddAuthenticationSchemes("ApiKey"));
-            }
-
-            options.AddPolicy("TopggPolicy", policy =>
-                policy.RequireClaim(AuthHandler.TopggClaim).AddAuthenticationSchemes(AuthHandler.SchemeName));
+            options.AddPolicy("TopggPolicy", policy => policy.RequireClaim(AuthHandler.TopggClaim).AddAuthenticationSchemes(AuthHandler.SchemeName));
         });
 
         var app = builder.Build();
