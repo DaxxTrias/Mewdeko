@@ -39,7 +39,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
     private readonly Replacer rep;
     private readonly IBotStrings strings;
     private readonly GuildSettingsService guildSettings;
-    private static readonly Dictionary<ulong, Conversation> UserConversations = new Dictionary<ulong, Conversation>();
+    private static readonly Dictionary<ulong, Conversation> UserConversations = new();
 
 #pragma warning disable CS8714
     private ConcurrentDictionary<ulong?, ConcurrentDictionary<int, Timer>> autoCommands =
@@ -325,167 +325,166 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         isDebugMode = true;
 #endif
 
-        //try
-        //{
-        if (args.Content is ".deletesession" && !isDebugMode)
+        try
         {
-            if (UserConversations.TryGetValue(args.Author.Id, out _))
+            if (args.Content is ".deletesession" && !isDebugMode)
             {
-                ClearConversation(args.Author.Id);
-                await args.Channel.SendConfirmAsync("Conversation deleted.");
-                return;
-            }
-
-            await args.Channel.SendErrorAsync("You dont have a conversation saved.", bss.Data);
-            return;
-        }
-        else if (args.Content is ",deletesesssion" && isDebugMode)
-        {
-            if (UserConversations.TryGetValue(args.Author.Id, out _))
-            {
-                await usrMsg.SendConfirmReplyAsync("Session deleted");
-                return;
-            }
-            await usrMsg.SendConfirmReplyAsync("No session to delete");
-            return;
-        }
-
-
-        await using var dbContext = await dbProvider.GetContextAsync();
-
-        (Database.Models.OwnerOnly actualItem, bool added) toUpdate = dbContext.OwnerOnly.Any()
-            ? (await dbContext.OwnerOnly.FirstOrDefaultAsync(), false)
-            : (new Database.Models.OwnerOnly
-            {
-                GptTokensUsed = 0
-            }, true);
-
-
-        if (!args.Content.StartsWith("!frog") && !isDebugMode)
-            return;
-
-        else if (!args.Content.StartsWith("-frog") && isDebugMode)
-            return;
-
-        Log.Information("ChatGPT request from {Author}: | ({AuthorId}): | {Content}", args.Author, args.Author.Id, args.Content);
-
-        // lower any capitalization in message content
-        var loweredContents = args.Content.ToLower();
-
-        // Remove the prefix from the message content being sent to gpt
-        var gptprompt = loweredContents.Substring("frog ".Length).Trim();
-
-        // Split the message content into words and take only the first two for checking.
-        var words = args.Content.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries).Take(2).ToList();
-        var scannedWords = words.Select(w => w.ToLower()).ToList();
-
-        if (scannedWords.Contains("image"))
-        {
-            try
-            {
-                await usrMsg.Channel.SendMessageAsync("Dall-E disabled.");
-                return;
-            }
-            catch
-            {
-                throw;
-            }
-            var authorName = args.Author.ToString();
-            var prompt = args.Content.Substring("frog image ".Length).Trim();
-            if (string.IsNullOrEmpty(prompt))
-            {
-                await usrMsg.Channel.SendMessageAsync("Please provide a prompt for the image.");
-                return;
-            }
-
-            IUserMessage placeholderMessage = null;
-            try
-            {
-                // Send a placeholder message directly using the bot's client
-                placeholderMessage = await usrMsg.SendConfirmReplyAsync($"{bss.Data.LoadingEmote} Generating image...");
-
-                // Generate the image
-                //var images = await api.ImageGenerations.CreateImageAsync(new ImageGenerationRequest
-                //{
-                //    Prompt = prompt,  // prompt (text string)
-                //    NumOfImages = 1, // dall-e2 can provide multiple images, e3 does not support this currently
-                //    Size = ImageSize._1792x1024, // resolution of the generated images (256x256 | 512x512 | 1024x1024 | 1792x1024) dall-e3 cannot use images below 1024x1024
-                //    Model = Model.DALLE3, // model (model for this req. defaults to dall-e2
-                //    User = authorName, // user: author of post, this can be used to help openai detect abuse and rule breaking
-                //    ResponseFormat = ImageResponseFormat.Url // the format the images can be returned as. must be url or b64_json
-                //                                             // quality: by default images are generated at standard, but on e3 you can use HD
-                //});
-
-                /*
-                // if dall-e3 ever supports more then 1 image can use this code block instead
-                // Update the placeholder message with the images
-                if (images.Data.Count > 0)
+                if (UserConversations.TryGetValue(args.Author.Id, out _))
                 {
-                    var embeds = images.Data.Select(image => new EmbedBuilder().WithImageUrl(image.Url).Build()).ToArray(); // Convert to array
+                    ClearConversation(args.Author.Id);
+                    await args.Channel.SendConfirmAsync("Conversation deleted.");
+                    return;
+                }
 
-                    await placeholderMessage.ModifyAsync(msg =>
+                await args.Channel.SendErrorAsync("You dont have a conversation saved.", bss.Data);
+                return;
+            }
+            else if (args.Content is ",deletesesssion" && isDebugMode)
+            {
+                if (UserConversations.TryGetValue(args.Author.Id, out _))
+                {
+                    await usrMsg.SendConfirmReplyAsync("Session deleted");
+                    return;
+                }
+                await usrMsg.SendConfirmReplyAsync("No session to delete");
+                return;
+            }
+
+            await using var dbContext = await dbProvider.GetContextAsync();
+
+            (Database.Models.OwnerOnly actualItem, bool added) toUpdate = dbContext.OwnerOnly.Any()
+                ? (await dbContext.OwnerOnly.FirstOrDefaultAsync(), false)
+                : (new Database.Models.OwnerOnly
+                {
+                    GptTokensUsed = 0
+                }, true);
+
+
+            if (!args.Content.StartsWith("!frog") && !isDebugMode)
+                return;
+
+            else if (!args.Content.StartsWith("-frog") && isDebugMode)
+                return;
+
+            Log.Information("ChatGPT request from {Author}: | ({AuthorId}): | {Content}", args.Author, args.Author.Id, args.Content);
+
+            // lower any capitalization in message content
+            var loweredContents = args.Content.ToLower();
+
+            // Remove the prefix from the message content being sent to gpt
+            var gptprompt = loweredContents.Substring("frog ".Length).Trim();
+
+            // Split the message content into words and take only the first two for checking.
+            var words = args.Content.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries).Take(2).ToList();
+            var scannedWords = words.Select(w => w.ToLower()).ToList();
+
+            if (scannedWords.Contains("image"))
+            {
+                try
+                {
+                    await usrMsg.Channel.SendMessageAsync("Dall-E disabled.");
+                    return;
+                }
+                catch
+                {
+                    throw;
+                }
+                var authorName = args.Author.ToString();
+                var prompt = args.Content.Substring("frog image ".Length).Trim();
+                if (string.IsNullOrEmpty(prompt))
+                {
+                    await usrMsg.Channel.SendMessageAsync("Please provide a prompt for the image.");
+                    return;
+                }
+
+                IUserMessage placeholderMessage = null;
+                try
+                {
+                    // Send a placeholder message directly using the bot's client
+                    placeholderMessage = await usrMsg.SendConfirmReplyAsync($"{bss.Data.LoadingEmote} Generating image...");
+
+                    // Generate the image
+                    //var images = await api.ImageGenerations.CreateImageAsync(new ImageGenerationRequest
+                    //{
+                    //    Prompt = prompt,  // prompt (text string)
+                    //    NumOfImages = 1, // dall-e2 can provide multiple images, e3 does not support this currently
+                    //    Size = ImageSize._1792x1024, // resolution of the generated images (256x256 | 512x512 | 1024x1024 | 1792x1024) dall-e3 cannot use images below 1024x1024
+                    //    Model = Model.DALLE3, // model (model for this req. defaults to dall-e2
+                    //    User = authorName, // user: author of post, this can be used to help openai detect abuse and rule breaking
+                    //    ResponseFormat = ImageResponseFormat.Url // the format the images can be returned as. must be url or b64_json
+                    //                                             // quality: by default images are generated at standard, but on e3 you can use HD
+                    //});
+
+                    /*
+                    // if dall-e3 ever supports more then 1 image can use this code block instead
+                    // Update the placeholder message with the images
+                    if (images.Data.Count > 0)
                     {
-                        msg.Content = ""; // Clearing the content
-                        msg.Embeds = new Optional<Embed[]>(embeds); // Wrap the array in an Optional
-                    });
+                        var embeds = images.Data.Select(image => new EmbedBuilder().WithImageUrl(image.Url).Build()).ToArray(); // Convert to array
+
+                        await placeholderMessage.ModifyAsync(msg =>
+                        {
+                            msg.Content = ""; // Clearing the content
+                            msg.Embeds = new Optional<Embed[]>(embeds); // Wrap the array in an Optional
+                        });
+                    }
+                    else
+                    {
+                        await placeholderMessage.ModifyAsync(msg => msg.Content = "No images were generated.");
+                    }
+                    */
+
+                    // Update the placeholder message with the image
+                    //if (images.Data.Count > 0)
+                    //{
+                    //    var imageUrl = images.Data[0].Url; // Assuming images.Data[0] contains the URL
+                    //    var embed = new EmbedBuilder()
+                    //        .WithImageUrl(imageUrl)
+                    //        .Build();
+                    //    await placeholderMessage.ModifyAsync(msg =>
+                    //    {
+                    //        msg.Content = ""; // Clearing the content
+                    //        msg.Embed = embed;
+                    //    });
+                    //}
+                    //else
+                    //{
+                    //    await placeholderMessage.ModifyAsync(msg => msg.Content = "No image generated.");
+                    //}
                 }
-                else
+                catch (HttpRequestException httpEx)
                 {
-                    await placeholderMessage.ModifyAsync(msg => msg.Content = "No images were generated.");
+                    var content = httpEx.Message; // This is not the response content, but the exception message.
+                    Log.Information("Exception message: {Message}", content);
+
+                    // Log the full exception details for debugging
+                    Log.Error(httpEx, "HttpRequestException occurred while processing the request.");
+
+                    // Clean up the placeholder message if it was assigned
+                    if (placeholderMessage != null)
+                    {
+                        await placeholderMessage.DeleteAsync();
+                    }
+
+                    // Notify the user of a generic error message
+                    await usrMsg.SendErrorReplyAsync("An error occurred while processing your request. Please try again later.");
                 }
-                */
-
-                // Update the placeholder message with the image
-                //if (images.Data.Count > 0)
-                //{
-                //    var imageUrl = images.Data[0].Url; // Assuming images.Data[0] contains the URL
-                //    var embed = new EmbedBuilder()
-                //        .WithImageUrl(imageUrl)
-                //        .Build();
-                //    await placeholderMessage.ModifyAsync(msg =>
-                //    {
-                //        msg.Content = ""; // Clearing the content
-                //        msg.Embed = embed;
-                //    });
-                //}
-                //else
-                //{
-                //    await placeholderMessage.ModifyAsync(msg => msg.Content = "No image generated.");
-                //}
-            }
-            catch (HttpRequestException httpEx)
-            {
-                var content = httpEx.Message; // This is not the response content, but the exception message.
-                Log.Information("Exception message: {Message}", content);
-
-                // Log the full exception details for debugging
-                Log.Error(httpEx, "HttpRequestException occurred while processing the request.");
-
-                // Clean up the placeholder message if it was assigned
-                if (placeholderMessage != null)
+                catch (Exception ex)
                 {
-                    await placeholderMessage.DeleteAsync();
+                    // Log the error
+                    Log.Error(ex, "Error generating image");
+
+                    // Clean up the placeholder message if it was assigned
+                    if (placeholderMessage != null)
+                    {
+                        await placeholderMessage.DeleteAsync();
+                    }
+                    await usrMsg.SendErrorReplyAsync($"Failed to generate image due to an unexpected error. Please try again later. Error code: **{ex.HResult}**");
                 }
-
-                // Notify the user of a generic error message
-                await usrMsg.SendErrorReplyAsync("An error occurred while processing your request. Please try again later.");
+                return;
             }
-            catch (Exception ex)
-            {
-                // Log the error
-                Log.Error(ex, "Error generating image");
 
-                // Clean up the placeholder message if it was assigned
-                if (placeholderMessage != null)
-                {
-                    await placeholderMessage.DeleteAsync();
-                }
-                await usrMsg.SendErrorReplyAsync($"Failed to generate image due to an unexpected error. Please try again later. Error code: **{ex.HResult}**");
-            }
-            return;
-        }
-
-        if (scannedWords.Contains("scan"))
+            if (scannedWords.Contains("scan"))
         {
             try
             {
@@ -500,30 +499,29 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
             }
         }
 
-        var loadingMsg = await usrMsg.Channel.SendConfirmAsync($"{bss.Data.LoadingEmote} Awaiting response...");
+            var loadingMsg = await usrMsg.Channel.SendConfirmAsync($"{bss.Data.LoadingEmote} Awaiting response...");
+            await StreamResponseAndUpdateEmbedAsync(bss.Data.ChatGptKey, bss.Data.ChatGptModel,
+                bss.Data.ChatGptInitPrompt +
+                $"The users name is {args.Author}, you are in the discord server {guildChannel.Guild} and in the channel {guildChannel} and there are {(await guildChannel.GetUsersAsync().FlattenAsync()).Count()} users that can see this channel.",
+                loadingMsg, toUpdate, args.Author, gptprompt);
 
-        await StreamResponseAndUpdateEmbedAsync(bss.Data.ChatGptKey, bss.Data.ChatGptModel,
-            bss.Data.ChatGptInitPrompt +
-            $"The users name is {args.Author}, you are in the discord server {guildChannel.Guild} and in the channel {guildChannel} and there are {(await guildChannel.GetUsersAsync().FlattenAsync()).Count()} users that can see this channel.",
-            loadingMsg, toUpdate, args.Author, gptprompt);
+            //if (!conversations.TryGetValue(args.Author.Id, out var conversation))
+            //{
+            //    conversation = StartNewConversation(args.Author, api);
+            //    conversations.TryAdd(args.Author.Id, conversation);
+            //}
 
-        //if (!conversations.TryGetValue(args.Author.Id, out var conversation))
-        //{
-        //    conversation = StartNewConversation(args.Author, api);
-        //    conversations.TryAdd(args.Author.Id, conversation);
-        //}
+            //conversation.AppendUserInput(gptprompt);
 
-        //conversation.AppendUserInput(gptprompt);
+            //var loadingMsg = await usrMsg.Channel.SendConfirmAsync($"{bss.Data.LoadingEmote} Awaiting response...");
+            //await StreamResponseAndUpdateEmbedAsync(conversation, loadingMsg, dbProvider, toUpdate, args.Author);
 
-        //var loadingMsg = await usrMsg.Channel.SendConfirmAsync($"{bss.Data.LoadingEmote} Awaiting response...");
-        //await StreamResponseAndUpdateEmbedAsync(conversation, loadingMsg, dbProvider, toUpdate, args.Author);
-
-        //}
-        //catch (Exception e)
-        //{
-        //    Log.Warning(e, "Error in ChatGPT");
-        //    await usrMsg.SendErrorReplyAsync("Something went wrong, please try again later.");
-        //}
+        }
+        catch (Exception e)
+        {
+           Log.Warning(e, "Error in ChatGPT");
+           await usrMsg.SendErrorReplyAsync("Something went wrong, please try again later.");
+        }
     }
 
     private static void ClearConversation(ulong userId)
@@ -531,30 +529,26 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         UserConversations.Remove(userId);
     }
 
-    private async Task StreamResponseAndUpdateEmbedAsync(string apiKey, string model, string systemPrompt,
+private async Task StreamResponseAndUpdateEmbedAsync(string apiKey, string model, string systemPrompt,
         IUserMessage loadingMsg,
         (Database.Models.OwnerOnly actualItem, bool added) toUpdate, SocketUser author, string userPrompt)
     {
         using var httpClient = httpFactory.CreateClient();
         httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
 
-        // Get or create conversation for this user
         if (!UserConversations.TryGetValue(author.Id, out var conversation))
         {
             conversation = new Conversation();
             conversation.Messages.Add(new Message
             {
-                Role = "system",
-                Content = systemPrompt
+                Role = "system", Content = systemPrompt
             });
             UserConversations[author.Id] = conversation;
         }
 
-        // Add user message to conversation
         conversation.Messages.Add(new Message
         {
-            Role = "user",
-            Content = userPrompt
+            Role = "user", Content = userPrompt
         });
 
         var requestBody = new
@@ -562,11 +556,14 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
             model,
             messages = conversation.Messages.Select(m => new
             {
-                role = m.Role,
-                content = m.Content
+                role = m.Role, content = m.Content
             }).ToArray(),
             stream = true,
-            user = author.Id.ToString()
+            user = author.Id.ToString(),
+            stream_options = new
+            {
+                include_usage = true
+            }
         };
 
         var content = new StringContent(System.Text.Json.JsonSerializer.Serialize(requestBody), Encoding.UTF8,
@@ -581,37 +578,34 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         var responseBuilder = new StringBuilder();
         var lastUpdate = DateTimeOffset.UtcNow;
         var totalTokens = 0;
+        var lastResponse = new ChatCompletionChunkResponse();
 
         while (!reader.EndOfStream)
         {
             var line = await reader.ReadLineAsync();
-            if (string.IsNullOrEmpty(line) || line == "data: [DONE]")
-                continue;
+            if (string.IsNullOrEmpty(line) || line == "data: [DONE]") continue;
 
-            if (!line.StartsWith("data: "))
-                continue;
+            if (!line.StartsWith("data: ")) continue;
             var json = line[6..];
             var chatResponse = JsonConvert.DeserializeObject<ChatCompletionChunkResponse>(json);
-
-            if (chatResponse?.Choices is not { Count: > 0 })
-                continue;
+            lastResponse = chatResponse;
+            if (chatResponse?.Choices is not { Count: > 0 }) continue;
             var conversationContent = chatResponse.Choices[0].Delta?.Content;
-            if (string.IsNullOrEmpty(conversationContent))
-                continue;
+            if (string.IsNullOrEmpty(conversationContent)) continue;
             responseBuilder.Append(conversationContent);
-            if (!((DateTimeOffset.UtcNow - lastUpdate).TotalSeconds >= 1))
-                continue;
+            if (!((DateTimeOffset.UtcNow - lastUpdate).TotalSeconds >= 1)) continue;
             lastUpdate = DateTimeOffset.UtcNow;
             var embeds = BuildEmbeds(responseBuilder.ToString(), author,
-                toUpdate.actualItem.GptTokensUsed + totalTokens);
+                chatResponse.Usage is not null ? toUpdate.actualItem.GptTokensUsed + chatResponse.Usage.TotalTokens : toUpdate.actualItem.GptTokensUsed);
+            if (chatResponse.Usage is not null)
+                totalTokens += chatResponse.Usage.TotalTokens;
             await loadingMsg.ModifyAsync(m => m.Embeds = embeds.ToArray());
         }
 
         // Add assistant's response to the conversation
         conversation.Messages.Add(new Message
         {
-            Role = "assistant",
-            Content = responseBuilder.ToString()
+            Role = "assistant", Content = responseBuilder.ToString()
         });
 
         // Trim conversation history if it gets too long
@@ -621,7 +615,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         }
 
         await using var dbContext = await dbProvider.GetContextAsync();
-        toUpdate.actualItem.GptTokensUsed += totalTokens;
+        toUpdate.actualItem.GptTokensUsed += lastResponse.Usage.TotalTokens;
 
         if (toUpdate.added)
             dbContext.OwnerOnly.Add(toUpdate.actualItem);
@@ -632,7 +626,6 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         var finalEmbeds = BuildEmbeds(responseBuilder.ToString(), author, toUpdate.actualItem.GptTokensUsed);
         await loadingMsg.ModifyAsync(m => m.Embeds = finalEmbeds.ToArray());
     }
-
     private static List<Embed> BuildEmbeds(string response, IUser requester, int totalTokensUsed)
     {
         var embeds = new List<Embed>();
@@ -1223,6 +1216,21 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
 
         [JsonProperty("choices", NullValueHandling = NullValueHandling.Ignore)]
         public List<Choice> Choices;
+
+        [JsonProperty("usage", NullValueHandling = NullValueHandling.Include)]
+        public Usage? Usage;
+    }
+
+    private class Usage
+    {
+        [JsonProperty("prompt_tokens", NullValueHandling = NullValueHandling.Ignore)]
+        public int PromptTokens;
+
+        [JsonProperty("completion_tokens", NullValueHandling = NullValueHandling.Ignore)]
+        public int CompletionTokens;
+
+        [JsonProperty("total_tokens", NullValueHandling = NullValueHandling.Ignore)]
+        public int TotalTokens;
     }
 
     private class Conversation
