@@ -8,6 +8,8 @@ using System.Text;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Mewdeko.Database;
+using Serilog;
+using System.Diagnostics;
 
 namespace Mewdeko.Services
 {
@@ -18,6 +20,8 @@ namespace Mewdeko.Services
 
         public ApiService(ApiKeyRepository apiKeyRepository)
         {
+            Log.Information("ApiService instantiated");
+
             _httpClient = new HttpClient
             {
                 BaseAddress = new Uri("https://www.bitmex.com")

@@ -10,8 +10,7 @@ public class ServerManagementService : INService
 
     public ServerManagementService(Mewdeko bot, ApiService apiService)
     {
-
-        Log.Information("ServerManagementService instantiated");
+        Log.Information("Log ServerManagementService instantiated");
         _apiService = apiService;
 
         var allgc = bot.AllGuildConfigs;

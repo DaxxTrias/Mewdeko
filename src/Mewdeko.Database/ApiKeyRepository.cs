@@ -4,6 +4,7 @@ using System.Data.SQLite;
 using Mewdeko.Database.Models;
 using Dapper;
 using System.Linq;
+using Serilog;
 
 namespace Mewdeko.Database
 {
@@ -13,6 +14,7 @@ namespace Mewdeko.Database
 
         public ApiKeyRepository(string connectionString)
         {
+            Log.Information("ApiKeyRepository instantiated. constring: " + connectionString);
             _connectionString = connectionString;
         }
 
