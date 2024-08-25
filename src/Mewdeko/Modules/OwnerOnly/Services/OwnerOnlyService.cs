@@ -176,7 +176,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
             if (!args.Content.StartsWith("!frog") && !isDebugMode)
                 return;
 
-            if (!args.Content.StartsWith("#frog") && isDebugMode)
+            else if (!args.Content.StartsWith("-frog") && isDebugMode)
                 return;
 
 
@@ -342,6 +342,11 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
             "gpt3" => Model.ChatGPTTurbo,
             _ => Model.ChatGPTTurbo
         };
+
+        if (bss.Data.ChatGptModel == "gpt-4o")
+        {
+            modelToUse.ModelID = "gpt-4o";
+        }
 
         var chat = api.Chat.CreateConversation(new ChatRequest
         {
