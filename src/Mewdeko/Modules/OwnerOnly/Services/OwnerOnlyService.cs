@@ -361,6 +361,10 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         {
             modelToUse.ModelID = "gpt-4o";
         }
+        //else if (bss.Data.ChatGptModel == "o1-preview")
+        //{
+        //    modelToUse.ModelID = "o1-preview";
+        //}
 
         var chat = api.Chat.CreateConversation(new ChatRequest
         {
