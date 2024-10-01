@@ -7,7 +7,7 @@ using Embed = Discord.Embed;
 namespace Mewdeko.Modules.Searches.Services;
 
 /// <summary>
-/// Service for tracking RSS feeds and sending updates to subscribed channels.
+///     Service for tracking RSS feeds and sending updates to subscribed channels.
 /// </summary>
 public class FeedsService : INService
 {
@@ -21,7 +21,7 @@ public class FeedsService : INService
     private readonly ConcurrentDictionary<string, HashSet<FeedSub>> subs;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="FeedsService"/> class.
+    ///     Initializes a new instance of the <see cref="FeedsService" /> class.
     /// </summary>
     /// <param name="db">The database service.</param>
     /// <param name="client">The Discord client.</param>
@@ -41,17 +41,18 @@ public class FeedsService : INService
     {
         await using var dbContext = await dbProvider.GetContextAsync();
 
-        return await dbContext.GuildConfigs.AsQueryable().AsNoTracking().FirstOrDefaultAsync(x => x.Id == guildConfigId);
+        return await dbContext.GuildConfigs.AsQueryable().AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == guildConfigId);
     }
 
     /// <summary>
-    /// Tracks RSS feeds for updates and sends notifications to subscribed channels.
+    ///     Tracks RSS feeds for updates and sends notifications to subscribed channels.
     /// </summary>
     /// <returns>An asynchronous task representing the operation.</returns>
     private async Task<EmbedBuilder> TrackFeeds(IEnumerable<ulong> serverIds)
     {
         // ReSharper disable once AsyncVoidLambda
-        foreach(var serverId in serverIds)
+        foreach (var serverId in serverIds)
         {
             await Task.CompletedTask;
             var feeds = await GetFeeds(serverId);
@@ -64,6 +65,7 @@ public class FeedsService : INService
                 });
             }
         }
+
         while (true)
         {
             var allSendTasks = new List<Task>(subs.Count);
@@ -287,7 +289,7 @@ public class FeedsService : INService
     }
 
     /// <summary>
-    /// Tests an RSS feed subscription by sending an update to the specified channel.
+    ///     Tests an RSS feed subscription by sending an update to the specified channel.
     /// </summary>
     /// <param name="sub">The feed subscription to test.</param>
     /// <param name="channel">The channel to send the test update to.</param>
@@ -438,13 +440,15 @@ public class FeedsService : INService
 
     private Task<(Embed[] builder, string content, ComponentBuilder componentBuilder)> GetFeedEmbed(string message,
         ulong guildId)
-        => SmartEmbed.TryParse(message, guildId, out var embed, out var content, out var components)
+    {
+        return SmartEmbed.TryParse(message, guildId, out var embed, out var content, out var components)
             ? Task.FromResult((embed, content, components))
             : Task.FromResult<(Embed[], string, ComponentBuilder)>(([], message, null));
+    }
 
 
     /// <summary>
-    /// Retrieves all feed subscriptions for a guild.
+    ///     Retrieves all feed subscriptions for a guild.
     /// </summary>
     /// <param name="guildId">The ID of the guild.</param>
     /// <returns>A list of feed subscriptions.</returns>
@@ -460,7 +464,7 @@ public class FeedsService : INService
     }
 
     /// <summary>
-    /// Adds a new RSS feed subscription to a guild.
+    ///     Adds a new RSS feed subscription to a guild.
     /// </summary>
     /// <param name="guildId">The ID of the guild.</param>
     /// <param name="channelId">The ID of the channel to receive updates.</param>
@@ -499,7 +503,7 @@ public class FeedsService : INService
     }
 
     /// <summary>
-    /// Adds or updates the message template for a feed subscription.
+    ///     Adds or updates the message template for a feed subscription.
     /// </summary>
     /// <param name="guildId">The ID of the guild.</param>
     /// <param name="index">The index of the feed subscription.</param>
@@ -534,7 +538,7 @@ public class FeedsService : INService
     }
 
     /// <summary>
-    /// Removes a feed subscription from a guild.
+    ///     Removes a feed subscription from a guild.
     /// </summary>
     /// <param name="guildId">The ID of the guild.</param>
     /// <param name="index">The index of the feed subscription to remove.</param>
