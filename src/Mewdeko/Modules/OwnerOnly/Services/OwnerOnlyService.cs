@@ -96,12 +96,12 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
                 if (server.OwnerId != this.client.CurrentUser.Id)
                 {
                     await server.LeaveAsync().ConfigureAwait(false);
-                    Log.Information($"Left server {server.Name} [{server.Id}]");
+                    Log.Information("Left server {ServerName} [{ServerId}]", server.Name, server.Id);
                 }
                 else
                 {
                     await server.DeleteAsync().ConfigureAwait(false);
-                    Log.Information($"Deleted server {server.Name} [{server.Id}]");
+                    Log.Information("Deleted server {ServerName} [{ServerId}]", server.Name, server.Id);
                 }
             }
             catch
