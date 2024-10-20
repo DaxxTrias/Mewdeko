@@ -165,12 +165,18 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
             }
 
             await using var uow = db.GetDbContext();
-            (Database.Models.OwnerOnly actualItem, bool added) toUpdate = uow.OwnerOnly.Any()
-                    ? (await uow.OwnerOnly.FirstOrDefaultAsync(), false)
-                    : (new Database.Models.OwnerOnly
-                    {
-                        GptTokensUsed = 0
-                    }, true);
+            (Database.Models.OwnerOnly actualItem, bool added) toUpdate;
+            if (uow.OwnerOnly.Any())
+            {
+                toUpdate = (await uow.OwnerOnly.FirstOrDefaultAsync(), false);
+            }
+            else
+            {
+                toUpdate = (new Database.Models.OwnerOnly
+                {
+                    GptTokensUsed = 0
+                }, true);
+            }
 
 
             if (!args.Content.StartsWith("!frog") && !isDebugMode)
