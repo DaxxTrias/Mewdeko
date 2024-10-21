@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 
@@ -102,7 +102,7 @@ public class VcRoleService : INService
         var infos = new NonBlocking.ConcurrentDictionary<ulong, IRole>();
         var missingRoles = new List<VcRoleInfo>();
         VcRoles.AddOrUpdate(gconf.GuildId, infos, delegate { return infos; });
-        foreach (var ri in gconf.VcRoleInfos) //todo: can nullref on this? why
+        foreach (var ri in gconf.VcRoleInfos)
         {
             var role = g.GetRole(ri.RoleId);
             if (role == null)

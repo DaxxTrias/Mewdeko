@@ -199,5 +199,4 @@ public class ChatterBotService : INService
 
         return true;
     }
-
 }

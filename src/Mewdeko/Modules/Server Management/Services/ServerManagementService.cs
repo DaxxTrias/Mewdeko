@@ -23,7 +23,6 @@ public class ServerManagementService : INService
     public ConcurrentDictionary<ulong, string> GuildMuteRoles { get; }
 
     public async Task<IRole> GetMuteRole(IGuild guild)
-
     {
         if (guild == null)
             throw new ArgumentNullException(nameof(guild));

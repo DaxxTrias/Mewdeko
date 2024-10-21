@@ -71,9 +71,9 @@ public class Nsfw(InteractiveService interactivity, MartineApi martineApi,
                         ? new ComponentBuilder()
                             .WithButton(style: ButtonStyle.Link,
                                 url:
-                                "",
-                                label: "",
-                                emote: "".ToIEmote()).Build()
+                                "https://discord.com/oauth2/authorize?client_id=752236274261426212&permissions=8&response_type=code&redirect_uri=https%3A%2F%2Fmewdeko.tech&scope=bot%20applications.commands",
+                                label: "Invite Me!",
+                                emote: "<a:HaneMeow:968564817784877066>".ToIEmote()).Build()
                         : null);
                 await msg.DeleteAsync();
             }
@@ -84,9 +84,9 @@ public class Nsfw(InteractiveService interactivity, MartineApi martineApi,
                         ? new ComponentBuilder()
                             .WithButton(style: ButtonStyle.Link,
                                 url:
-                                "",
-                                label: "!",
-                                emote: "".ToIEmote()).Build()
+                                "https://discord.com/oauth2/authorize?client_id=752236274261426212&permissions=8&response_type=code&redirect_uri=https%3A%2F%2Fmewdeko.tech&scope=bot%20applications.commands",
+                                label: "Invite Me!",
+                                emote: "<a:HaneMeow:968564817784877066>".ToIEmote()).Build()
                         : null).ConfigureAwait(false);
                 await msg.DeleteAsync();
             }
@@ -395,9 +395,9 @@ public class Nsfw(InteractiveService interactivity, MartineApi martineApi,
                         ? new ComponentBuilder()
                             .WithButton(style: ButtonStyle.Link,
                                 url:
-                                "",
-                                label: "",
-                                emote: "".ToIEmote()).Build()
+                                "https://discord.com/oauth2/authorize?client_id=752236274261426212&permissions=8&response_type=code&redirect_uri=https%3A%2F%2Fmewdeko.tech&scope=bot%20applications.commands",
+                                label: "Invite Me!",
+                                emote: "<a:HaneMeow:968564817784877066>".ToIEmote()).Build()
                         : null)
                 .ConfigureAwait(false);
         }
@@ -432,9 +432,9 @@ public class Nsfw(InteractiveService interactivity, MartineApi martineApi,
                         ? new ComponentBuilder()
                             .WithButton(style: ButtonStyle.Link,
                                 url:
-                                "",
-                                label: "",
-                                emote: "".ToIEmote()).Build()
+                                "https://discord.com/oauth2/authorize?client_id=752236274261426212&permissions=8&response_type=code&redirect_uri=https%3A%2F%2Fmewdeko.tech&scope=bot%20applications.commands",
+                                label: "Invite Me!",
+                                emote: "<a:HaneMeow:968564817784877066>".ToIEmote()).Build()
                         : null)
                 .ConfigureAwait(false);
         }
@@ -578,9 +578,9 @@ public class Nsfw(InteractiveService interactivity, MartineApi martineApi,
                     ? new ComponentBuilder()
                         .WithButton(style: ButtonStyle.Link,
                             url:
-                            "",
-                            label: "",
-                            emote: "".ToIEmote()).Build()
+                            "https://discord.com/oauth2/authorize?client_id=752236274261426212&permissions=8&response_type=code&redirect_uri=https%3A%2F%2Fmewdeko.tech&scope=bot%20applications.commands",
+                            label: "Invite Me!",
+                            emote: "<a:HaneMeow:968564817784877066>".ToIEmote()).Build()
                     : null).ConfigureAwait(false);
         }
         else
@@ -600,9 +600,9 @@ public class Nsfw(InteractiveService interactivity, MartineApi martineApi,
                     ? new ComponentBuilder()
                         .WithButton(style: ButtonStyle.Link,
                             url:
-                            "",
-                            label: "",
-                            emote: "".ToIEmote()).Build()
+                            "https://discord.com/oauth2/authorize?client_id=752236274261426212&permissions=8&response_type=code&redirect_uri=https%3A%2F%2Fmewdeko.tech&scope=bot%20applications.commands",
+                            label: "Invite Me!",
+                            emote: "<a:HaneMeow:968564817784877066>".ToIEmote()).Build()
                     : null).ConfigureAwait(false);
         }
     }

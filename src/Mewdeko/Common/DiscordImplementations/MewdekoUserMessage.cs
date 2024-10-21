@@ -82,4 +82,12 @@ public class MewdekoUserMessage : IUserMessage
     public IThreadChannel Thread => throw new NotImplementedException();
 
     public MessageRoleSubscriptionData RoleSubscriptionData => throw new NotImplementedException();
+
+    public IMessageInteractionMetadata InteractionMetadata
+    {
+        get
+        {
+            throw new NotImplementedException();
+        }
+    }
 }
