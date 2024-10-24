@@ -6,6 +6,7 @@ using Discord.Commands;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
 using Humanizer;
+using LinqToDB;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Common.JsonSettings;
 using Mewdeko.Common.TypeReaders.Models;
@@ -1869,88 +1870,37 @@ public partial class Utility(
     {
         await using var dbContext = await dbProvider.GetContextAsync();
 
-        var time = DateTime.UtcNow.Subtract(TimeSpan.FromSeconds(5));
-        var commandStats = dbContext.CommandStats.Count(x => x.DateAdded.Value >= time);
-        var users = new[]
+        var fiveSecondsAgo = DateTime.Now.AddSeconds(-5);
+        var commandStatsTask = dbContext.CommandStats
+            .Where(x => x.DateAdded >= fiveSecondsAgo)
+            .CountAsync();
+        var userTasks = new[]
         {
-            await client.Rest.GetUserAsync(280835732728184843).ConfigureAwait(false),
-            await client.Rest.GetUserAsync(786375627892064257).ConfigureAwait(false)
+            client.Rest.GetUserAsync(280835732728184843),
+            client.Rest.GetUserAsync(786375627892064257)
         };
+
+        var users = await Task.WhenAll(userTasks);
+        var commandStats = await commandStatsTask;
+
         var libraryInfo = new LibraryInfo(DllVersionChecker.GetDllVersions);
         var targetFramework = LibraryInfo.GetTargetFramework();
 
         await ctx.Channel.EmbedAsync(
-                new EmbedBuilder().WithOkColor()
-                    .WithAuthor($"{client.CurrentUser.Username} v{StatsService.BotVersion}", client.CurrentUser.GetAvatarUrl(), config.Data.SupportServer)
-                    //.AddField(GetText("authors"), $"[{users[0]}](https://github.com/SylveonDeko)\n[{users[1]}](https://github.com/CottageDwellingCat)")
-                    .AddField(GetText("commands_ran"), $"{commandStats}/5s")
-                    .AddField(GetText("command_count"), cmdServ.Commands.DistinctBy(x => x.Name).Count())
-                    .AddField("Library", stats.Library)
-                    .AddField(GetText("owner_ids"), string.Join("\n", creds.OwnerIds.Select(x => $"<@{x}>")))
-                    .AddField(GetText("shard"), $"#{client.GetShardFor(ctx.Guild).ShardId} / {creds.TotalShards}")
-                    .AddField(GetText("memory"), $"{stats.Heap} MB")
-                    .AddField(GetText("uptime"), stats.GetUptimeString("\n"))
-                    .AddField("Servers", $"{client.Guilds.Count} Servers"))
-            .ConfigureAwait(false);
-    }
-
-    [Cmd, Aliases]
-    public async Task Docs(string platform = "")
-    {
-        var originalPlatform = platform; // Save the original platform
-        platform = platform.ToLower(); // Use this for switch and keep the original value intact
-
-        var link = platform switch
-        {
-            "v3" or "version-3" => "https://docs.tealstreet.io/docs/about/version-3",
-            "windows" or "win" => "https://docs.tealstreet.io/docs/desktopclient/windows",
-            "linux" or "nix" => "https://docs.tealstreet.io/docs/desktopclient/linux",
-            "mac" or "macos" => "https://docs.tealstreet.io/docs/desktopclient/mac",
-            "binance" or "nance" => "https://docs.tealstreet.io/docs/connect/binance",
-            "dualapi" or "dual-api" => "https://docs.tealstreet.io/docs/connect/dual-api",
-            "encryption" or "api-encryption" => "https://docs.tealstreet.io/docs/connect/api-encryption",
-            "blofin" => "https://docs.tealstreet.io/docs/connect/blofin",
-            "bitget" or "bg" => "https://docs.tealstreet.io/docs/connect/bitget",
-            "bitmex" or "bmex" => "https://docs.tealstreet.io/docs/connect/bitmex",
-            "bybit" => "https://docs.tealstreet.io/docs/connect/bybit",
-            "brackets" or "bracketorders" or "bracket-orders" => "https://docs.tealstreet.io/docs/trade/bracket-orders",
-            "bybitv5" => "https://docs.tealstreet.io/docs/connect/bybitv5",
-            "bingx" => "https://docs.tealstreet.io/docs/connect/bingx",
-            "cli" or "console" or "commandline" => "https://docs.tealstreet.io/docs/cli",
-            "okx" or "okex" => "https://docs.tealstreet.io/docs/connect/okex",
-            "phm" or "phemex" => "https://docs.tealstreet.io/docs/connect/phemex",
-            "woo" or "woox" => "https://docs.tealstreet.io/docs/connect/woo",
-            "woofi" => "https://docs.tealstreet.io/docs/connect/woofi",
-            "terminal" or "term" => "https://docs.tealstreet.io/docs/trade/terminal",
-            "ref" or "reflink" or "referral" or "ref-link" => "https://docs.tealstreet.io/docs/ref-links",
-            "changelog" or "changes" or "patchnotes" => "https://docs.tealstreet.io/docs/changelog",
-            "multiaccstreaming" or "multiacc" => "https://docs.tealstreet.io/docs/trade/multi-acc-streaming",
-            "troubleshoot" or "troubleshooting" => "https://docs.tealstreet.io/docs/about/troubleshooting",
-            "beta" or "betafeatures" => "https://docs.tealstreet.io/docs/trade/beta-features",
-            "runbot" => "https://docs.tealstreet.io/docs/webhooks/runbot",
-            "copytrade" or "copytrading" or "copy-trade" or "copy" => "https://docs.tealstreet.io/docs/copy-trade",
-            "webhook" or "webhooks" => "https://docs.tealstreet.io/docs/webhooks/",
-            "faq" => "https://docs.tealstreet.io/docs/FAQ",
-            "twap" => "https://docs.tealstreet.io/docs/trade/beta-features#twap-orders",
-            "orders" or "placing-orders" => "https://docs.tealstreet.io/docs/trade/placing-orders",
-            "stops" or "stop-orders" or "stoploss" => "https://docs.tealstreet.io/docs/trade/placing-orders#stop-orders",
-            "trailingstop" or "trailing-stop" or "trailing" => "https://docs.tealstreet.io/docs/trade/placing-orders#trailing-stop-orders",
-            "mobile" or "phone" => "https://docs.tealstreet.io/docs/trade/mobile",
-
-            // default case
-            "" => "https://docs.tealstreet.io/",
-            _ => "https://docs.tealstreet.io/" // This is like the default case in traditional switch.
-        };
-
-        if (link == "https://docs.tealstreet.io/")
-        {
-            originalPlatform = ""; // Reset to empty if default case was hit
-        }
-
-        await ctx.Channel.EmbedAsync(
             new EmbedBuilder().WithOkColor()
-            .AddField("Tealstreet Docs: " + originalPlatform, link))
-            .ConfigureAwait(false);
+                .WithAuthor($"{client.CurrentUser.Username} v{StatsService.BotVersion}",
+                    client.CurrentUser.GetAvatarUrl(), config.Data.SupportServer)
+                // .AddField(GetText("authors"),
+                    // $"[{users[0]}](https://github.com/SylveonDeko)\n[{users[1]}](https://github.com/CottageDwellingCat)")
+                .AddField(GetText("commands_ran"), $"{commandStats}/5s")
+                .AddField(GetText("command_count"), cmdServ.Commands.DistinctBy(x => x.Name).Count())
+                // .AddField("Library", stats.Library)
+                .AddField(GetText("library"), $"{targetFramework} \n {libraryInfo.Library} \n {libraryInfo.OpenAILib}")
+                .AddField(GetText("owner_ids"), string.Join("\n", creds.OwnerIds.Select(x => $"<@{x}>")))
+                .AddField(GetText("shard"), $"#{client.GetShardFor(ctx.Guild).ShardId} / {creds.TotalShards}")
+                .AddField(GetText("memory"), $"{stats.Heap} MB")
+                .AddField(GetText("uptime"), stats.GetUptimeString("\n"))
+                .AddField("Servers", $"{client.Guilds.Count} Servers"));
     }
 
     /// <summary>
@@ -2058,5 +2008,64 @@ public partial class Utility(
     public async Task OwoIfy([Remainder] string input)
     {
         await ctx.Channel.SendMessageAsync(OwoServices.OwoIfy(input).SanitizeMentions(true)).ConfigureAwait(false);
+    }
+
+    [Cmd, Aliases]
+    public async Task Docs(string platform = "")
+    {
+        var originalPlatform = platform; // Save the original platform
+        platform = platform.ToLower(); // Use this for switch and keep the original value intact
+
+        var link = platform switch
+        {
+            "v3" or "version-3" => "https://docs.tealstreet.io/docs/about/version-3",
+            "windows" or "win" => "https://docs.tealstreet.io/docs/desktopclient/windows",
+            "linux" or "nix" => "https://docs.tealstreet.io/docs/desktopclient/linux",
+            "mac" or "macos" => "https://docs.tealstreet.io/docs/desktopclient/mac",
+            "binance" or "nance" => "https://docs.tealstreet.io/docs/connect/binance",
+            "dualapi" or "dual-api" => "https://docs.tealstreet.io/docs/connect/dual-api",
+            "encryption" or "api-encryption" => "https://docs.tealstreet.io/docs/connect/api-encryption",
+            "blofin" => "https://docs.tealstreet.io/docs/connect/blofin",
+            "bitget" or "bg" => "https://docs.tealstreet.io/docs/connect/bitget",
+            "bitmex" or "bmex" => "https://docs.tealstreet.io/docs/connect/bitmex",
+            "bybit" => "https://docs.tealstreet.io/docs/connect/bybit",
+            "brackets" or "bracketorders" or "bracket-orders" => "https://docs.tealstreet.io/docs/trade/bracket-orders",
+            "bybitv5" => "https://docs.tealstreet.io/docs/connect/bybitv5",
+            "bingx" => "https://docs.tealstreet.io/docs/connect/bingx",
+            "cli" or "console" or "commandline" => "https://docs.tealstreet.io/docs/cli",
+            "okx" or "okex" => "https://docs.tealstreet.io/docs/connect/okex",
+            "phm" or "phemex" => "https://docs.tealstreet.io/docs/connect/phemex",
+            "woo" or "woox" => "https://docs.tealstreet.io/docs/connect/woo",
+            "woofi" => "https://docs.tealstreet.io/docs/connect/woofi",
+            "terminal" or "term" => "https://docs.tealstreet.io/docs/trade/terminal",
+            "ref" or "reflink" or "referral" or "ref-link" => "https://docs.tealstreet.io/docs/ref-links",
+            "changelog" or "changes" or "patchnotes" => "https://docs.tealstreet.io/docs/changelog",
+            "multiaccstreaming" or "multiacc" => "https://docs.tealstreet.io/docs/trade/multi-acc-streaming",
+            "troubleshoot" or "troubleshooting" => "https://docs.tealstreet.io/docs/about/troubleshooting",
+            "beta" or "betafeatures" => "https://docs.tealstreet.io/docs/trade/beta-features",
+            "runbot" => "https://docs.tealstreet.io/docs/webhooks/runbot",
+            "copytrade" or "copytrading" or "copy-trade" or "copy" => "https://docs.tealstreet.io/docs/copy-trade",
+            "webhook" or "webhooks" => "https://docs.tealstreet.io/docs/webhooks/",
+            "faq" => "https://docs.tealstreet.io/docs/FAQ",
+            "twap" => "https://docs.tealstreet.io/docs/trade/beta-features#twap-orders",
+            "orders" or "placing-orders" => "https://docs.tealstreet.io/docs/trade/placing-orders",
+            "stops" or "stop-orders" or "stoploss" => "https://docs.tealstreet.io/docs/trade/placing-orders#stop-orders",
+            "trailingstop" or "trailing-stop" or "trailing" => "https://docs.tealstreet.io/docs/trade/placing-orders#trailing-stop-orders",
+            "mobile" or "phone" => "https://docs.tealstreet.io/docs/trade/mobile",
+
+            // default case
+            "" => "https://docs.tealstreet.io/",
+            _ => "https://docs.tealstreet.io/" // This is like the default case in traditional switch.
+        };
+
+        if (link == "https://docs.tealstreet.io/")
+        {
+            originalPlatform = ""; // Reset to empty if default case was hit
+        }
+
+        await ctx.Channel.EmbedAsync(
+            new EmbedBuilder().WithOkColor()
+            .AddField("Tealstreet Docs: " + originalPlatform, link))
+            .ConfigureAwait(false);
     }
 }

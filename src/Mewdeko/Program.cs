@@ -181,7 +181,7 @@ public class Program
             //.AddSingleton<ApiService>()
             .AddSingleton<FontProvider>()
             .AddSingleton<IBotCredentials>(credentials)
-            .AddDbContext<MewdekoPostgresContext>()
+            //.AddDbContext<MewdekoPostgresContext>()
             .AddPooledDbContextFactory<MewdekoContext>(dbContextOptionsBuilder => dbContextOptionsBuilder
                 .UseNpgsql(credentials.PsqlConnectionString,
                     x => x.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery))
