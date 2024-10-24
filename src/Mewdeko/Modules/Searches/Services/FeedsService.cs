@@ -304,146 +304,188 @@ public class FeedsService : INService
 
     public async Task TestRss(FeedSub sub, ITextChannel channel, bool sendBoth = false)
     {
-        var feed = await FeedReader.ReadAsync(sub.Url);
-
-        string feedTitle = null;
-
-        // Check for RSS 2.0 type
-        if (feed.Type == FeedType.Rss_2_0)
+        try
         {
-            var rss20feed = (Rss20Feed)feed.SpecificFeed;
-            feedTitle = rss20feed.Title;
+            var feed = await FeedReader.ReadAsync(sub.Url);
+
+            string feedTitle = null;
+
+            // Check for RSS 2.0 type
+            if (feed.Type == FeedType.Rss_2_0)
+            {
+                var rss20feed = (Rss20Feed)feed.SpecificFeed;
+                feedTitle = rss20feed.Title;
+
+                /*
+                feedImage = rss20feed.Image;
+                Log.Information("pubDate: " + rss20feed.PublishingDate);
+                Log.Information("Description: " + rss20feed.Description);
+                Log.Information("Title: " + rss20feed.Title);
+                Log.Information("Link: " + rss20feed.Link);
+                */
+            }
+
+            var (feedItem, _) = feed.Items
+                .Select(item => (Item: item,
+                    LastUpdate: item.PublishingDate?.ToUniversalTime() ??
+                                (item.SpecificItem as AtomFeedItem)?.UpdatedDate?.ToUniversalTime()))
+                .Where(data => data.LastUpdate is not null)
+                .Select(data => (data.Item, LastUpdate: (DateTime)data.LastUpdate))
+                .LastOrDefault();
+
+            if (feedItem == null)
+            {
+                await channel.SendMessageAsync("No items found in the feed.");
+                return;
+            }
+
+            var repbuilder = new ReplacementBuilder()
+                .WithOverride("%title%", () => feedItem.Title ?? "Unkown")
+                .WithOverride("%author%", () => feedItem.Author ?? "Unknown")
+                .WithOverride("%content%", () => feedItem.Description?.StripHtml())
+                .WithOverride("%image_url%", () =>
+                {
+                    if (feedItem.SpecificItem is AtomFeedItem atomFeedItem)
+                    {
+                        var previewElement =
+                            atomFeedItem.Element.Elements().FirstOrDefault(x => x.Name.LocalName == "preview") ??
+                            atomFeedItem.Element.Elements().FirstOrDefault(x => x.Name.LocalName == "thumbnail");
+                        var urlAttribute = previewElement?.Attribute("url");
+                        if (urlAttribute != null
+                            && !string.IsNullOrWhiteSpace(urlAttribute.Value)
+                            && Uri.IsWellFormedUriString(urlAttribute.Value, UriKind.Absolute))
+                            return urlAttribute.Value;
+                    }
+
+                    if (feedItem.SpecificItem is not MediaRssFeedItem mediaRssFeedItem ||
+                        !(mediaRssFeedItem.Enclosure?.MediaType?.StartsWith("image/") ?? false))
+                        return feed.ImageUrl;
+
+                    // rsshub test code
+                    //if (!string.IsNullOrWhiteSpace(feedItem.Description))
+                    //{
+                    //    var imageUrl = ExtractImageUrlFromContent(feedItem.Description);
+                    //    if (!string.IsNullOrWhiteSpace(imageUrl))
+                    //    {
+                    //        return imageUrl;
+                    //    }
+                    //}
+
+                    var imgUrl = mediaRssFeedItem.Enclosure.Url;
+                    if (!string.IsNullOrWhiteSpace(imgUrl) && Uri.IsWellFormedUriString(imgUrl, UriKind.Absolute))
+                        return imgUrl;
+
+                    return feed.ImageUrl;
+                })
+                .WithOverride("%categories%", () => string.Join(", ", feedItem.Categories))
+                .WithOverride("%timestamp%",
+                    () => TimestampTag.FromDateTime(feedItem.PublishingDate.Value, TimestampTagStyles.LongDateTime)
+                        .ToString())
+                .WithOverride("%url%", () => feedItem.Link ?? feedItem.SpecificItem.Link)
+                .WithOverride("%feedurl%", () => sub.Url)
+                .Build();
+
+            var embed = new EmbedBuilder().WithFooter(sub.Url);
+            var link = feedItem.SpecificItem.Link;
+            if (!string.IsNullOrWhiteSpace(link) && Uri.IsWellFormedUriString(link, UriKind.Absolute))
+                embed.WithUrl(link);
 
             /*
-            feedImage = rss20feed.Image;
-            Log.Information("pubDate: " + rss20feed.PublishingDate);
-            Log.Information("Description: " + rss20feed.Description);
-            Log.Information("Title: " + rss20feed.Title);
-            Log.Information("Link: " + rss20feed.Link);
+            var title = string.IsNullOrWhiteSpace(feedItem.Title) ? "-" : feedItem.Title;
+            */
+
+            //prior to rsshub integration. can probably delete just keeping for archive purposes temporarily.
+            //var title = string.IsNullOrWhiteSpace(feedTitle)
+            //                    ? (string.IsNullOrWhiteSpace(feedItem.Title) ? "-" : feedItem.Title)
+            //                    : feedTitle;
+
+            var title = !string.IsNullOrWhiteSpace(feedTitle)
+                ? feedTitle
+                : (!string.IsNullOrWhiteSpace(feedItem.Title) ? feedItem.Title : "-");
+
+            var gotImage = false;
+
+            // Check for RSS 1.0 compliant media
+            if (feedItem.SpecificItem is MediaRssFeedItem mrfi &&
+                (mrfi.Enclosure?.MediaType?.StartsWith("image/") ?? false))
+            {
+                var imgUrl = mrfi.Enclosure.Url;
+                if (!string.IsNullOrWhiteSpace(imgUrl) &&
+                    Uri.IsWellFormedUriString(imgUrl, UriKind.Absolute))
+                {
+                    embed.WithImageUrl(imgUrl);
+                    gotImage = true;
+                }
+            }
+
+            /*
+            // Check for RSS 2.0 compliant media
+            if (!gotImage && feed.Type == FeedType.Rss_2_0)
+            {
+                var rss20feed = (Rss20Feed)feed.SpecificFeed;
+                var imageUrl = rss20feed?.Image?.Url;
+                if (!string.IsNullOrWhiteSpace(imageUrl) &&
+                    Uri.IsWellFormedUriString(imageUrl, UriKind.Absolute))
+                {
+                    embed.WithImageUrl(imageUrl);
+                    gotImage = true;
+                }
+            }
+            */
+
+            // Check for ATOM format images
+            if (!gotImage && feedItem.SpecificItem is AtomFeedItem afi)
+            {
+                var previewElement = afi.Element.Elements()
+                    .FirstOrDefault(x => x.Name.LocalName == "preview") ?? afi.Element.Elements()
+                    .FirstOrDefault(x => x.Name.LocalName == "thumbnail");
+
+                var urlAttribute = previewElement?.Attribute("url");
+                if (urlAttribute != null && !string.IsNullOrWhiteSpace(urlAttribute.Value)
+                                         && Uri.IsWellFormedUriString(urlAttribute.Value,
+                                             UriKind.Absolute))
+                {
+                    embed.WithImageUrl(urlAttribute.Value);
+                }
+            }
+
+            embed.WithTitle(title.TrimTo(256));
+            var desc = feedItem.Description?.StripHtml();
+
+            if (!string.IsNullOrWhiteSpace(feedItem.Description))
+                embed.WithDescription(desc.TrimTo(2048));
+
+            // rsshub integration code to be used later maybe
+            //if (!string.IsNullOrWhiteSpace(desc))
+            //{
+            //    var converter = new ReverseMarkdown.Converter();
+            //    var markdown = converter.Convert(desc);
+            //    embed.WithDescription(markdown.TrimTo(2048));
+            //}
+
+            var (builder, content, componentBuilder) =
+                await GetFeedEmbed(repbuilder.Replace(sub.Message), channel.GuildId);
+
+            if (sendBoth || sub.Message is "-" or null)
+            {
+                await channel.EmbedAsync(embed);
+            }
+
+            if (sendBoth || !(sub.Message is "-" or null))
+            {
+                await channel.SendMessageAsync(content ?? "", embeds: builder ?? null, components: componentBuilder?.Build());
+            }
+
+            /*
+            if (sub.Message is "-" or null) await channel.EmbedAsync(embed);
+            else await channel.SendMessageAsync(content ?? "", embeds: builder ?? null, components: componentBuilder?.Build());
             */
         }
-
-        var (feedItem, _) = feed.Items
-            .Select(item => (Item: item,
-                LastUpdate: item.PublishingDate?.ToUniversalTime() ??
-                            (item.SpecificItem as AtomFeedItem)?.UpdatedDate?.ToUniversalTime()))
-            .Where(data => data.LastUpdate is not null)
-            .Select(data => (data.Item, LastUpdate: (DateTime)data.LastUpdate)).LastOrDefault();
-
-        var repbuilder = new ReplacementBuilder()
-            .WithOverride("%title%", () => feedItem.Title ?? "Unkown")
-            .WithOverride("%author%", () => feedItem.Author ?? "Unknown")
-            .WithOverride("%content%", () => feedItem.Description?.StripHtml())
-            .WithOverride("%image_url%", () =>
-            {
-                if (feedItem.SpecificItem is AtomFeedItem atomFeedItem)
-                {
-                    var previewElement =
-                        atomFeedItem.Element.Elements().FirstOrDefault(x => x.Name.LocalName == "preview") ??
-                        atomFeedItem.Element.Elements().FirstOrDefault(x => x.Name.LocalName == "thumbnail");
-                    var urlAttribute = previewElement?.Attribute("url");
-                    if (urlAttribute != null
-                        && !string.IsNullOrWhiteSpace(urlAttribute.Value)
-                        && Uri.IsWellFormedUriString(urlAttribute.Value, UriKind.Absolute))
-                        return urlAttribute.Value;
-                }
-
-                if (feedItem.SpecificItem is not MediaRssFeedItem mediaRssFeedItem ||
-                    !(mediaRssFeedItem.Enclosure?.MediaType?.StartsWith("image/") ?? false))
-                    return feed.ImageUrl;
-                var imgUrl = mediaRssFeedItem.Enclosure.Url;
-                if (!string.IsNullOrWhiteSpace(imgUrl) && Uri.IsWellFormedUriString(imgUrl, UriKind.Absolute))
-                    return imgUrl;
-
-                return feed.ImageUrl;
-            })
-            .WithOverride("%categories%", () => string.Join(", ", feedItem.Categories))
-            .WithOverride("%timestamp%",
-                () => TimestampTag.FromDateTime(feedItem.PublishingDate.Value, TimestampTagStyles.LongDateTime)
-                    .ToString())
-            .WithOverride("%url%", () => feedItem.Link ?? feedItem.SpecificItem.Link)
-            .WithOverride("%feedurl%", () => sub.Url).Build();
-        var embed = new EmbedBuilder().WithFooter(sub.Url);
-        var link = feedItem.SpecificItem.Link;
-        if (!string.IsNullOrWhiteSpace(link) && Uri.IsWellFormedUriString(link, UriKind.Absolute))
-            embed.WithUrl(link);
-
-        /*
-        var title = string.IsNullOrWhiteSpace(feedItem.Title) ? "-" : feedItem.Title;
-        */
-
-        var title = string.IsNullOrWhiteSpace(feedTitle)
-                            ? (string.IsNullOrWhiteSpace(feedItem.Title) ? "-" : feedItem.Title)
-                            : feedTitle;
-
-        var gotImage = false;
-
-        // Check for RSS 1.0 compliant media
-        if (feedItem.SpecificItem is MediaRssFeedItem mrfi &&
-            (mrfi.Enclosure?.MediaType?.StartsWith("image/") ?? false))
+        catch (Exception ex)
         {
-            var imgUrl = mrfi.Enclosure.Url;
-            if (!string.IsNullOrWhiteSpace(imgUrl) &&
-                Uri.IsWellFormedUriString(imgUrl, UriKind.Absolute))
-            {
-                embed.WithImageUrl(imgUrl);
-                gotImage = true;
-            }
+            Log.Error(ex, $"Error occurred while testing RSS feed: {sub.Url}");
+            await channel.SendMessageAsync($"An error occurred while testing the feed: {ex.Message}");
         }
-
-        /*
-        // Check for RSS 2.0 compliant media
-        if (!gotImage && feed.Type == FeedType.Rss_2_0)
-        {
-            var rss20feed = (Rss20Feed)feed.SpecificFeed;
-            var imageUrl = rss20feed?.Image?.Url;
-            if (!string.IsNullOrWhiteSpace(imageUrl) &&
-                Uri.IsWellFormedUriString(imageUrl, UriKind.Absolute))
-            {
-                embed.WithImageUrl(imageUrl);
-                gotImage = true;
-            }
-        }
-        */
-
-        // Check for ATOM format images
-        if (!gotImage && feedItem.SpecificItem is AtomFeedItem afi)
-        {
-            var previewElement = afi.Element.Elements()
-                .FirstOrDefault(x => x.Name.LocalName == "preview") ?? afi.Element.Elements()
-                .FirstOrDefault(x => x.Name.LocalName == "thumbnail");
-
-            var urlAttribute = previewElement?.Attribute("url");
-            if (urlAttribute != null && !string.IsNullOrWhiteSpace(urlAttribute.Value)
-                                     && Uri.IsWellFormedUriString(urlAttribute.Value,
-                                         UriKind.Absolute))
-            {
-                embed.WithImageUrl(urlAttribute.Value);
-            }
-        }
-
-        embed.WithTitle(title.TrimTo(256));
-        var desc = feedItem.Description?.StripHtml();
-
-        if (!string.IsNullOrWhiteSpace(feedItem.Description))
-            embed.WithDescription(desc.TrimTo(2048));
-
-        var (builder, content, componentBuilder) = await GetFeedEmbed(repbuilder.Replace(sub.Message), channel.GuildId);
-
-        if (sendBoth || sub.Message is "-" or null)
-        {
-            await channel.EmbedAsync(embed);
-        }
-
-        if (sendBoth || !(sub.Message is "-" or null))
-        {
-            await channel.SendMessageAsync(content ?? "", embeds: builder ?? null, components: componentBuilder?.Build());
-        }
-
-        /*
-        if (sub.Message is "-" or null) await channel.EmbedAsync(embed);
-        else await channel.SendMessageAsync(content ?? "", embeds: builder ?? null, components: componentBuilder?.Build());
-        */
     }
 
     private Task<(Embed[] builder, string content, ComponentBuilder componentBuilder)> GetFeedEmbed(string message,
