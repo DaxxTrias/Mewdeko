@@ -87,7 +87,7 @@
       <PackageReference Include="Microsoft.Extensions.Logging" Version="8.0.0-preview.3.23174.8" />
       <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="8.0.0-preview.3.23174.8" />
       <PackageReference Include="morelinq" Version="3.4.2" />
-      <PackageReference Include="NekosBestApiNet" Version="1.0.6" />
+      <PackageReference Include="NekosBestApiNet" Version="1.0.7" />
       <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
       <PackageReference Include="NHentaiAPI" Version="1.7.0" />
       <PackageReference Include="NonBlocking" Version="2.1.1" />

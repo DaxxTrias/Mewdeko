@@ -1,4 +1,4 @@
-﻿using System.Text.RegularExpressions;
+using System.Text.RegularExpressions;
 using Discord.Commands;
 using Mewdeko.Modules.Administration.Services;
 using NekosBestApiNet;
@@ -19,7 +19,7 @@ public partial class ReplacementBuilder
 
     public ReplacementBuilder(DiscordSocketClient? client = null)
     {
-        nekosBestApi = new NekosBestApi();
+        nekosBestApi = new NekosBestApi(client?.CurrentUser.Username ?? "Mewdeko");
         this.client = client;
         WithRngRegex();
     }
