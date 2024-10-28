@@ -1,7 +1,6 @@
 using CodeHollow.FeedReader;
 using CodeHollow.FeedReader.Feeds;
 using Microsoft.EntityFrameworkCore;
-using Serilog;
 using Embed = Discord.Embed;
 
 namespace Mewdeko.Modules.Searches.Services;
@@ -188,56 +187,12 @@ public class FeedsService : INService
                             }
                         }
 
-                        if (!gotImage)
-                        {
-                            try
-                            {
-                                // Try to extract image from 'media:content' or 'enclosure' elements
-                                var mediaContent = feedItem.SpecificItem.Element.Elements()
-                                    .FirstOrDefault(x => x.Name.LocalName == "media:content" || x.Name.LocalName == "enclosure");
-
-                                var urlAttribute = mediaContent?.Attribute("url");
-                                if (urlAttribute != null && Uri.IsWellFormedUriString(urlAttribute.Value, UriKind.Absolute))
-                                {
-                                    embed.WithImageUrl(urlAttribute.Value);
-                                    gotImage = true;
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                Log.Error(ex, $"Error processing feed image for URL: {rssUrl}");
-
-                                // Optionally, notify administrators or the channel about the issue
-                                // await channel.SendMessageAsync($"Error processing feed: {ex.Message}");
-                            }
-                        }
 
                         embed.WithTitle(title.TrimTo(256));
 
                         var desc = feedItem.Description?.StripHtml();
-
-                        // before rsshub integration
-                        //if (!string.IsNullOrWhiteSpace(feedItem.Description))
-                        //    embed.WithDescription(desc.TrimTo(2048));
-
-                        if (!string.IsNullOrWhiteSpace(desc))
-                        {
-                            try
-                            {
-                                // Convert HTML to Markdown or strip HTML tags
-                                var plainText = desc.StripHtml();
-                                // Alternatively, use a library to convert HTML to Markdown
-
-                                embed.WithDescription(plainText.TrimTo(2048));
-                            }
-                            catch (Exception ex)
-                            {
-                                Log.Error(ex, $"Error processing feed description for URL: {rssUrl}");
-
-                                // Optionally, notify administrators or the channel about the issue
-                                // await channel.SendMessageAsync($"Error processing feed: {ex.Message}");
-                            }
-                        }
+                        if (!string.IsNullOrWhiteSpace(feedItem.Description))
+                            embed.WithDescription(desc.TrimTo(2048));
 
                         //send the created embed to all subscribed channels
                         var feedSendTasks = value.Where(x => x.GuildConfig != null);

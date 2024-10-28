@@ -1,4 +1,4 @@
-using CodeHollow.FeedReader;
+﻿using CodeHollow.FeedReader;
 using Discord.Commands;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
@@ -33,20 +33,6 @@ public partial class Searches
                     url = baseString;
                     url = url.Replace("twitter.com", "nitter.cz");
                 }
-            }
-
-            else if (url.Contains("t.me") || url.Contains("telegram.me"))
-            {
-                // Extract the channel username from the URL
-                var channelName = url.Replace("https://t.me/", "")
-                                     .Replace("http://t.me/", "")
-                                     .Replace("https://telegram.me/", "")
-                                     .Replace("http://telegram.me/", "")
-                                     .TrimEnd('/')
-                                     .Split('?').First(); // Remove any query parameters
-
-                // Construct the RSS feed URL using your RSSHub instance
-                url = $"http://localhost:1200/telegram/channel/{channelName}";
             }
 
             var success = Uri.TryCreate(url, UriKind.Absolute, out var uri) &&
