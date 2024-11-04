@@ -312,8 +312,7 @@ public class FeedsService : INService
 
                 return feed.ImageUrl;
             })
-            .WithOverride("%categories%", () => string.
-            (", ", feedItem.Categories))
+            .WithOverride("%categories%", () => string.Join(", ", feedItem.Categories))
             .WithOverride("%timestamp%",
                 () => TimestampTag.FromDateTime(feedItem.PublishingDate.Value, TimestampTagStyles.LongDateTime)
                     .ToString())
