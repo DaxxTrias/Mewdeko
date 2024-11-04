@@ -1,4 +1,4 @@
-﻿#nullable enable
+#nullable enable
 using System.IO;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -64,7 +64,7 @@ public static partial class Extensions
     public static Task SendErrorAsync(this IDiscordInteraction interaction, string? message)
         => interaction.RespondAsync(embed: new EmbedBuilder().WithErrorColor().WithDescription(message).Build(),
             components: new ComponentBuilder()
-                .WithButton(label: "Support Server", style: ButtonStyle.Link, url: "https://discord.gg/mewdeko")
+                //.WithButton(label: "Support Server", style: ButtonStyle.Link, url: "https://discord.gg/mewdeko")
                 .Build());
 
     /// <summary>
@@ -76,7 +76,7 @@ public static partial class Extensions
     public static Task SendEphemeralErrorAsync(this IDiscordInteraction interaction, string? message)
         => interaction.RespondAsync(embed: new EmbedBuilder().WithErrorColor().WithDescription(message).Build(),
             ephemeral: true, components: new ComponentBuilder()
-                .WithButton(label: "Support Server", style: ButtonStyle.Link, url: "https://discord.gg/mewdeko")
+                //.WithButton(label: "Support Server", style: ButtonStyle.Link, url: "https://discord.gg/mewdeko")
                 .Build());
 
     /// <summary>
@@ -121,7 +121,7 @@ public static partial class Extensions
     public static Task<IUserMessage> SendErrorFollowupAsync(this IDiscordInteraction interaction, string message)
         => interaction.FollowupAsync(embed: new EmbedBuilder().WithErrorColor().WithDescription(message).Build(),
             components: new ComponentBuilder()
-                .WithButton(label: "Support Server", style: ButtonStyle.Link, url: "https://discord.gg/mewdeko")
+                //.WithButton(label: "Support Server", style: ButtonStyle.Link, url: "https://discord.gg/mewdeko")
                 .Build());
 
     /// <summary>
@@ -134,7 +134,7 @@ public static partial class Extensions
         string message)
         => interaction.FollowupAsync(embed: new EmbedBuilder().WithErrorColor().WithDescription(message).Build(),
             ephemeral: true, components: new ComponentBuilder()
-                .WithButton(label: "Support Server", style: ButtonStyle.Link, url: "https://discord.gg/mewdeko")
+                //.WithButton(label: "Support Server", style: ButtonStyle.Link, url: "https://discord.gg/mewdeko")
                 .Build());
 
     /// <summary>
