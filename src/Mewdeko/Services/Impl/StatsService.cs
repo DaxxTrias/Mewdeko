@@ -26,7 +26,7 @@ namespace Mewdeko.Services.Impl
         /// <summary>
         /// The version of the bot. I should make this set from commits somehow idk
         /// </summary>
-        public const string BotVersion = "7.4.3";
+        public const string BotVersion = "7.4.4";
 
         private readonly DateTime started;
         private PeriodicTimer statcordTimer;
@@ -68,7 +68,48 @@ namespace Mewdeko.Services.Impl
         /// <summary>
         /// Gets the version of the Discord.Net library.
         /// </summary>
-    public string Library => $"Discord.Net {DllVersionChecker.GetDllVersion()} ";
+        public string Library => $"Discord.Net {DllVersionChecker.GetDllVersion()} ";
+
+        // Define a delegate that matches the GetDllVersions method signature
+        public delegate Dictionary<string, string?> GetVersionsDelegate(List<string> dllNames);
+
+        public class LibraryInfo
+        {
+            private GetVersionsDelegate _versionChecker;
+
+            public LibraryInfo(GetVersionsDelegate versionChecker)
+            {
+                _versionChecker = versionChecker;
+            }
+
+            public string Library
+            {
+                get
+                {
+                    var versions = _versionChecker.Invoke(new List<string> { "Discord.Net.WebSocket.dll" });
+                    return $"Discord.Net {versions["Discord.Net.WebSocket.dll"] ?? "Version not found"}";
+                }
+            }
+
+            public string OpenAILib
+            {
+                get
+                {
+                    var versions = _versionChecker.Invoke(new List<string> { "OpenAI_API.dll" });
+                    return $"OpenAI_API {versions["OpenAI_API.dll"] ?? "Version not found"}";
+                }
+            }
+            public static string GetTargetFramework()
+            {
+                // Get the TargetFrameworkAttribute from the executing assembly
+                var attribute = Assembly.GetExecutingAssembly()
+                    .GetCustomAttributes(typeof(System.Runtime.Versioning.TargetFrameworkAttribute), false)
+                    .FirstOrDefault() as System.Runtime.Versioning.TargetFrameworkAttribute;
+
+                // If the attribute is not null, return its FrameworkName property
+                return attribute?.FrameworkName ?? "Unknown framework";
+            }
+        }
 
         /// <summary>
         /// Gets the memory usage of the bot.
