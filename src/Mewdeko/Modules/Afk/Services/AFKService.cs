@@ -228,7 +228,8 @@ public class AfkService : INService, IReadyExecutor
                 // Clear the AFK entry if the message is empty or cache the AFK entry
                 if (string.IsNullOrEmpty(userAfk.Value.Message))
                     await cache.ClearAfk(guild.Key, userAfk.Key);
-                await cache.CacheAfk(guild.Key, userAfk.Key, userAfk.Value);
+                else
+                    await cache.CacheAfk(guild.Key, userAfk.Key, userAfk.Value);
             }
         }
     }
