@@ -57,7 +57,7 @@
     <PackageReference Include="Humanizer" Version="3.0.0-beta.13"/>
     <PackageReference Include="JikanDotNet" Version="2.7.0"/>
     <PackageReference Include="Google.Apis.Urlshortener.v1" Version="1.41.1.138"/>
-    <PackageReference Include="Google.Apis.YouTube.v3" Version="1.67.0.3358"/>
+    <PackageReference Include="Google.Apis.YouTube.v3" Version="1.68.0.3556" />
     <PackageReference Include="Google.Apis.Customsearch.v1" Version="1.49.0.2084"/>
     <PackageReference Include="Google.Protobuf" Version="3.26.0"/>
     <PackageReference Include="Grpc.Net.ClientFactory" Version="2.62.0-pre1"/>
@@ -111,8 +111,8 @@
     <PackageReference Include="ServiceCollectionExtensions" Version="1.0.2"/>
     <PackageReference Include="SkiaSharp" Version="3.0.0-preview.2.1"/>
     <PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="3.0.0-preview.2.1"/>
-    <PackageReference Include="SpotifyAPI.Web" Version="7.1.1"/>
-    <PackageReference Include="SpotifyAPI.Web.Auth" Version="7.1.1"/>
+    <PackageReference Include="SpotifyAPI.Web" Version="7.2.1" />
+    <PackageReference Include="SpotifyAPI.Web.Auth" Version="7.2.1" />
     <PackageReference Include="StackExchange.Redis" Version="2.7.33"/>
     <PackageReference Include="System.Drawing.Common" Version="8.0.0"/>
     <PackageReference Include="System.IO.FileSystem.Watcher" Version="4.3.0"/>
