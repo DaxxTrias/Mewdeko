@@ -6,6 +6,7 @@ using Discord.Interactions;
 using Discord.Net;
 using Discord.Rest;
 using Fergun.Interactive;
+using Figgle;
 using Lavalink4NET;
 using Lavalink4NET.Extensions;
 using MartineApiNet;
@@ -14,12 +15,10 @@ using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Common.PubSub;
 using Mewdeko.Common.TypeReaders;
 using Mewdeko.Common.TypeReaders.Interactions;
-using Mewdeko.Database;
 using Mewdeko.Modules.Currency.Services;
 using Mewdeko.Modules.Currency.Services.Impl;
 using Mewdeko.Modules.Nsfw;
 using Mewdeko.Modules.Searches.Services;
-using Mewdeko.Services;
 using Mewdeko.Services.Impl;
 using Mewdeko.Services.Settings;
 using Microsoft.Extensions.DependencyInjection;
@@ -74,7 +73,8 @@ public class Mewdeko
         });
         CommandService = new CommandService(new CommandServiceConfig
         {
-            CaseSensitiveCommands = false, DefaultRunMode = RunMode.Async
+            CaseSensitiveCommands = false,
+            DefaultRunMode = RunMode.Async
         });
     }
 
@@ -315,6 +315,8 @@ public class Mewdeko
         Client.JoinedGuild += Client_JoinedGuild;
         Client.LeftGuild += Client_LeftGuild;
         Log.Information("Shard {0} logged in", Client.ShardId);
+        Log.Information("Logged in as:");
+        Console.WriteLine(FiggleFonts.Digital.Render(Client.CurrentUser.Username));
 
 #if !DEBUG
         Client.Log -= Client_Log;
@@ -469,7 +471,8 @@ public class Mewdeko
             {
                 var obj = new
                 {
-                    Name = default(string), Activity = ActivityType.Playing
+                    Name = default(string),
+                    Activity = ActivityType.Playing
                 };
                 obj = JsonConvert.DeserializeAnonymousType(game, obj);
                 await Client.SetGameAsync(obj.Name, type: obj.Activity).ConfigureAwait(false);
@@ -487,7 +490,8 @@ public class Mewdeko
             {
                 var obj = new
                 {
-                    Name = "", Url = ""
+                    Name = "",
+                    Url = ""
                 };
                 obj = JsonConvert.DeserializeAnonymousType(streamData, obj);
                 await Client.SetGameAsync(obj?.Name, obj!.Url, ActivityType.Streaming).ConfigureAwait(false);
@@ -508,7 +512,8 @@ public class Mewdeko
     {
         var obj = new
         {
-            Name = game, Activity = type
+            Name = game,
+            Activity = type
         };
         var sub = Services.GetService<IDataCache>().Redis.GetSubscriber();
         await sub.PublishAsync($"{Client.CurrentUser.Id}_status.game_set", JsonConvert.SerializeObject(obj))
