@@ -160,7 +160,7 @@ public class Mewdeko
             {
                 ReturnAfterSendingPaginator = true
             }))
-            .AddSingleton(new NekosBestApi())
+            .AddSingleton(new NekosBestApi("Mewdeko"))
             .AddSingleton<InteractionService>()
             .AddSingleton<Localization>()
             .AddSingleton<BotConfigService>()
