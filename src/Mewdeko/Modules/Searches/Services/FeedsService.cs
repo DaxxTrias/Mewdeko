@@ -560,7 +560,7 @@ public class FeedsService : INService
         try
         {
             isRunning = true;
-            _ = Task.Run(TrackFeeds); // Should we keep a reference to this task?
+            _ = Task.Run(async () => await TrackFeeds(client.Guilds.Select(x => x.Id))); // Should we keep a reference to this task?
             return true;
         }
         catch
