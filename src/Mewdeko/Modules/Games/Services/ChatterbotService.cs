@@ -1,4 +1,4 @@
-﻿using System.Net.Http;
+using System.Net.Http;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Modules.Games.Common.ChatterBot;
 using Mewdeko.Modules.Permissions.Services;
@@ -210,40 +210,6 @@ public class ChatterBotService : INService
             await channel.SendErrorAsync(
                     "GPT is pay-as-you-go dont abuse it or you lose access")
                 .ConfigureAwait(false);
-            return false;
-        }
-
-        await msg.ReplyAsync(embed: new EmbedBuilder().WithOkColor().WithDescription(response.SanitizeMentions(true)).Build()).ConfigureAwait(false);
-
-        return true;
-    }
-    */
-
-    private static async Task<bool> TryAsk(IChatterBotSession cleverbot, ITextChannel channel, string message,
-        IUserMessage msg)
-    {
-        if (cleverbot == null || channel == null)
-        {
-            // Log the error or handle as appropriate for your application.
-            return false;
-        }
-
-        await channel.TriggerTypingAsync().ConfigureAwait(false);
-        string response;
-        try
-        {
-            response = await cleverbot.Think(message).ConfigureAwait(false);
-            if (string.IsNullOrEmpty(response))
-            {
-                await channel.SendErrorAsync("Received an empty response from the bot.").ConfigureAwait(false);
-                return false;
-            }
-        }
-        catch
-        {
-            //todo: this is a lazy workaround to avoid the spam. not a proper fix. 
-            //await channel.SendErrorAsync("GPT is pay-as-you-go. Don't abuse it or you'll lose access.")
-            //    .ConfigureAwait(false);
             return false;
         }
 

@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using Mewdeko.Common.Yml;
 using SkiaSharp;
 using YamlDotNet.Core;
@@ -178,9 +178,6 @@ See RotatingStatuses submodule in Administration.")]
     /// </summary>
     [Comment("ChatGPT Channel ID")]
     public ulong ChatGptChannel { get; set; }
-
-    [Comment("ChatGPT Channel 2 ID")]
-    public ulong ChatGptChannel2 { get; set; }
 
     [Comment("ChatGPT Channel 2 ID")]
     public ulong ChatGptChannel2 { get; set; }
