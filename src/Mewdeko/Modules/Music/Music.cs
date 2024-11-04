@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 using System.Text.Json;
 using System.Threading;
 using Discord.Commands;
@@ -17,7 +17,7 @@ using Swan;
 namespace Mewdeko.Modules.Music;
 
 /// <summary>
-///     A module containing music commands.
+/// A module containing music commands.
 /// </summary>
 public class Music(
     IAudioService service,
@@ -26,16 +26,16 @@ public class Music(
     GuildSettingsService guildSettingsService) : MewdekoModule
 {
     /// <summary>
-    ///     Retrieves the music player an attempts to join the voice channel.
+    /// Retrieves the music player an attempts to join the voice channel.
     /// </summary>
-    [Cmd]
-    [Aliases]
-    [RequireContext(ContextType.Guild)]
+    [Cmd, Aliases, RequireContext(ContextType.Guild)]
     public async Task Join()
     {
         var (player, result) = await GetPlayerAsync();
         if (string.IsNullOrWhiteSpace(result))
+        {
             await ReplyConfirmLocalizedAsync("music_join_success", player.VoiceChannelId).ConfigureAwait(false);
+        }
         else
         {
             var eb = new EmbedBuilder()
@@ -48,11 +48,9 @@ public class Music(
     }
 
     /// <summary>
-    ///     Disconnects the bot from the voice channel.
+    /// Disconnects the bot from the voice channel.
     /// </summary>
-    [Cmd]
-    [Aliases]
-    [RequireContext(ContextType.Guild)]
+    [Cmd, Aliases, RequireContext(ContextType.Guild)]
     public async Task Leave()
     {
         var (player, result) = await GetPlayerAsync(false);
@@ -75,11 +73,9 @@ public class Music(
     }
 
     /// <summary>
-    ///     Clears the music queue.
+    /// Clears the music queue.
     /// </summary>
-    [Cmd]
-    [Aliases]
-    [RequireContext(ContextType.Guild)]
+    [Cmd, Aliases, RequireContext(ContextType.Guild)]
     public async Task ClearQueue()
     {
         var (player, result) = await GetPlayerAsync(false);
@@ -102,12 +98,10 @@ public class Music(
     }
 
     /// <summary>
-    ///     Plays a specified track in the current voice channel.
+    /// Plays a specified track in the current voice channel.
     /// </summary>
     /// <param name="queueNumber">The queue number to play.</param>
-    [Cmd]
-    [Aliases]
-    [RequireContext(ContextType.Guild)]
+    [Cmd, Aliases, RequireContext(ContextType.Guild)]
     public async Task Play([Remainder] int queueNumber)
     {
         var (player, result) = await GetPlayerAsync(false);
@@ -144,12 +138,10 @@ public class Music(
     }
 
     /// <summary>
-    ///     Plays a track in the current voice channel.
+    /// Plays a track in the current voice channel.
     /// </summary>
     /// <param name="query">The query to search for.</param>
-    [Cmd]
-    [Aliases]
-    [RequireContext(ContextType.Guild)]
+    [Cmd, Aliases, RequireContext(ContextType.Guild)]
     public async Task Play([Remainder] string query)
     {
         var (player, result) = await GetPlayerAsync();
@@ -281,16 +273,14 @@ public class Music(
             var message = await ctx.Channel.SendMessageAsync(embed: eb, components: components);
 
             await cache.Redis.GetDatabase().StringSetAsync($"{ctx.User.Id}_{message.Id}_tracks",
-                JsonSerializer.Serialize(trackList), TimeSpan.FromMinutes(5));
+                JsonSerializer.Serialize(trackList), expiry: TimeSpan.FromMinutes(5));
         }
     }
 
-    /// <summary>
-    ///     Pauses or unpauses the player based on the current state.
+    ///<summary>
+    /// Pauses or unpauses the player based on the current state.
     /// </summary>
-    [Cmd]
-    [Aliases]
-    [RequireContext(ContextType.Guild)]
+    [Cmd, Aliases, RequireContext(ContextType.Guild)]
     public async Task Pause()
     {
         var (player, result) = await GetPlayerAsync();
@@ -320,11 +310,9 @@ public class Music(
 
 
     /// <summary>
-    ///     Gets the now playing track, if any.
+    /// Gets the now playing track, if any.
     /// </summary>
-    [Cmd]
-    [Aliases]
-    [RequireContext(ContextType.Guild)]
+    [Cmd, Aliases, RequireContext(ContextType.Guild)]
     public async Task NowPlaying()
     {
         try
@@ -361,13 +349,10 @@ public class Music(
     }
 
     /// <summary>
-    ///     Removes the selected track from the queue. If the selected track is the current track, it will be skipped. If next
-    ///     track is not available, the player will stop.
+    /// Removes the selected track from the queue. If the selected track is the current track, it will be skipped. If next track is not available, the player will stop.
     /// </summary>
     /// <param name="queueNumber">The queue number to remove.</param>
-    [Cmd]
-    [Aliases]
-    [RequireContext(ContextType.Guild)]
+    [Cmd, Aliases, RequireContext(ContextType.Guild)]
     public async Task SongRemove(int queueNumber)
     {
         var (player, result) = await GetPlayerAsync(false);
@@ -422,14 +407,12 @@ public class Music(
         }
     }
 
-    /// <summary>
-    ///     Moves a song in the queue to a new position.
+    ///<summary>
+    /// Moves a song in the queue to a new position.
     /// </summary>
     /// <param name="from">The current position of the song.</param>
     /// <param name="to">The new position of the song.</param>
-    [Cmd]
-    [Aliases]
-    [RequireContext(ContextType.Guild)]
+    [Cmd, Aliases, RequireContext(ContextType.Guild)]
     public async Task MoveSong(int from, int to)
     {
         var (player, result) = await GetPlayerAsync(false);
@@ -486,12 +469,10 @@ public class Music(
     }
 
     /// <summary>
-    ///     Sets the players volume
+    /// Sets the players volume
     /// </summary>
     /// <param name="volume">The volume to set</param>
-    [Cmd]
-    [Aliases]
-    [RequireContext(ContextType.Guild)]
+    [Cmd, Aliases, RequireContext(ContextType.Guild)]
     public async Task Volume(int volume)
     {
         var (player, result) = await GetPlayerAsync(false);
@@ -517,12 +498,10 @@ public class Music(
         await ReplyConfirmLocalizedAsync("music_volume_set", volume).ConfigureAwait(false);
     }
 
-    /// <summary>
-    ///     Skips to the next track.
+    ///<summary>
+    /// Skips to the next track.
     /// </summary>
-    [Cmd]
-    [Aliases]
-    [RequireContext(ContextType.Guild)]
+    [Cmd, Aliases, RequireContext(ContextType.Guild)]
     public async Task Skip()
     {
         var (player, result) = await GetPlayerAsync(false);
@@ -547,11 +526,9 @@ public class Music(
     }
 
     /// <summary>
-    ///     The music queue.
+    /// The music queue.
     /// </summary>
-    [Cmd]
-    [Aliases]
-    [RequireContext(ContextType.Guild)]
+    [Cmd, Aliases, RequireContext(ContextType.Guild)]
     public async Task Queue()
     {
         var (player, result) = await GetPlayerAsync(false);
@@ -587,7 +564,6 @@ public class Music(
 
         async Task<PageBuilder> PageFactory(int index)
         {
-            await Task.CompletedTask;
             var tracks = queue.OrderBy(x => x.Index).Skip(index * 10).Take(10).ToList();
             var sb = new StringBuilder();
             foreach (var track in tracks)
@@ -609,12 +585,10 @@ public class Music(
     }
 
     /// <summary>
-    ///     Sets the autoplay amount in the guild. Uses spotify api so client secret and id must be valid.
+    /// Sets the autoplay amount in the guild. Uses spotify api so client secret and id must be valid.
     /// </summary>
     /// <param name="amount">The amount of tracks to autoplay. Max of 5</param>
-    [Cmd]
-    [Aliases]
-    [RequireContext(ContextType.Guild)]
+    [Cmd, Aliases, RequireContext(ContextType.Guild)]
     public async Task AutoPlay(int amount)
     {
         var (player, result) = await GetPlayerAsync(false);
@@ -647,11 +621,9 @@ public class Music(
     }
 
     /// <summary>
-    ///     Gets the guilds current settings for music.
+    /// Gets the guilds current settings for music.
     /// </summary>
-    [Cmd]
-    [Aliases]
-    [RequireContext(ContextType.Guild)]
+    [Cmd, Aliases, RequireContext(ContextType.Guild)]
     public async Task MusicSettings()
     {
         var (player, result) = await GetPlayerAsync(false);
@@ -684,12 +656,10 @@ public class Music(
     }
 
     /// <summary>
-    ///     Sets the channel where music events will be sent.
+    /// Sets the channel where music events will be sent.
     /// </summary>
     /// <param name="channel">The channel where music events will be sent.</param>
-    [Cmd]
-    [Aliases]
-    [RequireContext(ContextType.Guild)]
+    [Cmd, Aliases, RequireContext(ContextType.Guild)]
     public async Task SetMusicChannel(IMessageChannel channel = null)
     {
         var channelToUse = channel ?? ctx.Channel;
@@ -710,12 +680,10 @@ public class Music(
     }
 
     /// <summary>
-    ///     Sets if the bot should loop and how.
+    /// Sets if the bot should loop and how.
     /// </summary>
     /// <param name="repeatType">The repeat type.</param>
-    [Cmd]
-    [Aliases]
-    [RequireContext(ContextType.Guild)]
+    [Cmd, Aliases, RequireContext(ContextType.Guild)]
     public async Task Loop(PlayerRepeatType repeatType)
     {
         var (player, result) = await GetPlayerAsync(false);
@@ -743,7 +711,7 @@ public class Music(
                 ? PlayerChannelBehavior.Join
                 : PlayerChannelBehavior.None;
 
-            var retrieveOptions = new PlayerRetrieveOptions(channelBehavior);
+            var retrieveOptions = new PlayerRetrieveOptions(ChannelBehavior: channelBehavior);
 
             var options = new MewdekoPlayerOptions
             {
