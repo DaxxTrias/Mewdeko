@@ -20,7 +20,7 @@ namespace Mewdeko.Services.Impl
         /// <summary>
         /// The version of the bot. I should make this set from commits somehow idk
         /// </summary>
-        public const string BotVersion = "7.5.2";
+        public const string BotVersion = "7.6.0";
 
         private readonly IDataCache cache;
         private readonly DiscordShardedClient client;

@@ -134,9 +134,9 @@ public class Mewdeko
         gs2.Stop();
         Log.Information("Guild Configs cached in {ElapsedTotalSeconds}s", gs2.Elapsed.TotalSeconds);
 
-        var s = new ServiceCollection()
-            s.AddFusionCache();
-            s.AddScoped<INsfwSpy, NsfwSpy>()
+        var s = new ServiceCollection();
+        s.AddFusionCache();
+        s.AddScoped<INsfwSpy, NsfwSpy>()
             .AddSingleton<ApiKeyRepository>(provider => new ApiKeyRepository("Data Source=mewdeko.db"))
             .AddSingleton<ApiService>()
             .AddSingleton<FontProvider>()
