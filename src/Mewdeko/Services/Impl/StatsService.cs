@@ -26,7 +26,7 @@ namespace Mewdeko.Services.Impl
         /// <summary>
         /// The version of the bot. I should make this set from commits somehow idk
         /// </summary>
-        public const string BotVersion = "7.5.1";
+        public const string BotVersion = "7.5.2";
 
         private readonly DateTime started;
         private PeriodicTimer statcordTimer;
