@@ -1,4 +1,4 @@
-﻿#nullable enable
+#nullable enable
 using System.IO;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -112,8 +112,8 @@ public static partial class Extensions
         return interaction.RespondAsync(embed: new EmbedBuilder().WithErrorColor().WithDescription(message).Build(),
             components: config.ShowInviteButton
                 ? new ComponentBuilder()
-                    .WithButton("Support Server", style: ButtonStyle.Link, url: "https://discord.gg/mewdeko")
-                    .WithButton("Support Us!", style: ButtonStyle.Link, url: "https://ko-fi.com/mewdeko")
+                    //.WithButton("Support Server", style: ButtonStyle.Link, url: "https://discord.gg/mewdeko")
+                    //.WithButton("Support Us!", style: ButtonStyle.Link, url: "https://ko-fi.com/mewdeko")
                     .Build()
                 : null);
     }
@@ -131,8 +131,8 @@ public static partial class Extensions
         return interaction.RespondAsync(embed: new EmbedBuilder().WithErrorColor().WithDescription(message).Build(),
             ephemeral: true, components: config.ShowInviteButton
                 ? new ComponentBuilder()
-                    .WithButton("Support Server", style: ButtonStyle.Link, url: "https://discord.gg/mewdeko")
-                    .WithButton("Support Us!", style: ButtonStyle.Link, url: "https://ko-fi.com/mewdeko")
+                    //.WithButton("Support Server", style: ButtonStyle.Link, url: "https://discord.gg/mewdeko")
+                    //.WithButton("Support Us!", style: ButtonStyle.Link, url: "https://ko-fi.com/mewdeko")
                     .Build()
                 : null);
     }
@@ -190,8 +190,8 @@ public static partial class Extensions
         return interaction.FollowupAsync(embed: new EmbedBuilder().WithErrorColor().WithDescription(message).Build(),
             components: config.ShowInviteButton
                 ? new ComponentBuilder()
-                    .WithButton("Support Server", style: ButtonStyle.Link, url: "https://discord.gg/mewdeko")
-                    .WithButton("Support Us!", style: ButtonStyle.Link, url: "https://ko-fi.com/mewdeko")
+                    //.WithButton("Support Server", style: ButtonStyle.Link, url: "https://discord.gg/mewdeko")
+                    //.WithButton("Support Us!", style: ButtonStyle.Link, url: "https://ko-fi.com/mewdeko")
                     .Build()
                 : null);
     }
@@ -209,8 +209,8 @@ public static partial class Extensions
         return interaction.FollowupAsync(embed: new EmbedBuilder().WithErrorColor().WithDescription(message).Build(),
             ephemeral: true, components: config.ShowInviteButton
                 ? new ComponentBuilder()
-                    .WithButton("Support Server", style: ButtonStyle.Link, url: "https://discord.gg/mewdeko")
-                    .WithButton("Support Us!", style: ButtonStyle.Link, url: "https://ko-fi.com/mewdeko")
+                    //.WithButton("Support Server", style: ButtonStyle.Link, url: "https://discord.gg/mewdeko")
+                    //.WithButton("Support Us!", style: ButtonStyle.Link, url: "https://ko-fi.com/mewdeko")
                     .Build()
                 : null);
     }

@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Reflection;
 using CommandLine;
 using Discord.Commands;
 using Discord.Interactions;
@@ -209,11 +209,11 @@ public class HelpService : ILateExecutor, INService
                 eb.WithFooter(new EmbedFooterBuilder().WithText(client.CurrentUser.Username)
                     .WithIconUrl(client.CurrentUser.RealAvatarUrl().ToString()));
 
-                if (bss.Data.ShowInviteButton)
-                    cb.WithButton("Invite Me!", style: ButtonStyle.Link,
-                            url:
-                            "https://discord.com/oauth2/authorize?client_id=752236274261426212&permissions=8&response_type=code&redirect_uri=https%3A%2F%2Fmewdeko.tech&scope=bot%20applications.commands")
-                        .WithButton("Support Us!", style: ButtonStyle.Link, url: "https://ko-fi.com/Mewdeko");
+                //if (bss.Data.ShowInviteButton)
+                    //cb.WithButton("Invite Me!", style: ButtonStyle.Link,
+                    //        url:
+                    //        "https://discord.com/oauth2/authorize?client_id=752236274261426212&permissions=8&response_type=code&redirect_uri=https%3A%2F%2Fmewdeko.tech&scope=bot%20applications.commands")
+                    //    .WithButton("Support Us!", style: ButtonStyle.Link, url: "https://ko-fi.com/Mewdeko");
 
                 await chan.SendMessageAsync(embed: eb.Build(),
                     components: bss.Data.ShowInviteButton ? cb.Build() : null).ConfigureAwait(false);
@@ -242,11 +242,11 @@ public class HelpService : ILateExecutor, INService
         eb.WithThumbnailUrl(
             "https://cdn.discordapp.com/emojis/968564817784877066.gif");
         eb.WithOkColor();
-        if (bss.Data.ShowInviteButton)
-            cb.WithButton("Invite Me!", style: ButtonStyle.Link,
-                    url:
-                    "https://discord.com/oauth2/authorize?client_id=752236274261426212&permissions=8&response_type=code&redirect_uri=https%3A%2F%2Fmewdeko.tech&scope=bot%20applications.commands")
-                .WithButton("Support Us!", style: ButtonStyle.Link, url: "https://ko-fi.com/Mewdeko");
+        //if (bss.Data.ShowInviteButton)
+            //cb.WithButton("Invite Me!", style: ButtonStyle.Link,
+            //        url:
+            //        "https://discord.com/oauth2/authorize?client_id=752236274261426212&permissions=8&response_type=code&redirect_uri=https%3A%2F%2Fmewdeko.tech&scope=bot%20applications.commands")
+            //    .WithButton("Support Us!", style: ButtonStyle.Link, url: "https://ko-fi.com/Mewdeko");
         await e.SendMessageAsync(embed: eb.Build(), components: bss.Data.ShowInviteButton ? cb.Build() : null)
             .ConfigureAwait(false);
     }
@@ -328,13 +328,13 @@ public class HelpService : ILateExecutor, INService
         if (!string.IsNullOrWhiteSpace(hs))
             em.AddField(GetText("options", guild), hs);
 
-        if (bss.Data.ShowInviteButton)
-            cb.WithButton(style: ButtonStyle.Link,
-                    url:
-                    "https://discord.com/oauth2/authorize?client_id=752236274261426212&permissions=8&response_type=code&redirect_uri=https%3A%2F%2Fmewdeko.tech&scope=bot%20applications.commands",
-                    label: "Invite Me!",
-                    emote: "<a:HaneMeow:968564817784877066>".ToIEmote())
-                .WithButton("Support Us!", style: ButtonStyle.Link, url: "https://ko-fi.com/Mewdeko");
+        //if (bss.Data.ShowInviteButton)
+            //cb.WithButton(style: ButtonStyle.Link,
+                    //url:
+                    //"https://discord.com/oauth2/authorize?client_id=752236274261426212&permissions=8&response_type=code&redirect_uri=https%3A%2F%2Fmewdeko.tech&scope=bot%20applications.commands",
+                    //label: "Invite Me!",
+                    //emote: "<a:HaneMeow:968564817784877066>".ToIEmote())
+                //.WithButton("Support Us!", style: ButtonStyle.Link, url: "https://ko-fi.com/Mewdeko");
 
         return (em, cb);
     }
