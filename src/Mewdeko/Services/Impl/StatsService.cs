@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Globalization;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -240,9 +240,9 @@ public class StatsService : IStatsService, IDisposable
         /// </summary>
         public string? IconUrl { get; set; }
 
-            /// <summary>
-            /// Gets or sets the number of members in the guild.
-            /// </summary>
-            public int MemberCount { get; set; }
-        }
+        /// <summary>
+        ///     Gets or sets the number of members in the guild.
+        /// </summary>
+        public int MemberCount { get; set; }
+    }
 }

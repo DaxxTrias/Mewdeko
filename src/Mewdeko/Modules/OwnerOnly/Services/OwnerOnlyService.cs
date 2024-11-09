@@ -1,10 +1,9 @@
-using System.Collections.Immutable;
+﻿using System.Collections.Immutable;
 using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
 using System.Text;
 using System.Threading;
-using Google.Protobuf.WellKnownTypes;
 using LinqToDB.EntityFrameworkCore;
 using Mewdeko.Common.Configs;
 using Mewdeko.Common.ModuleBehaviors;
@@ -110,8 +109,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
                 var server = this.client.Guilds.FirstOrDefault(g => g.Id.ToString() == guildStr) ??
                              this.client.Guilds.FirstOrDefault(g => g.Name.Trim().ToUpperInvariant() == guildStr);
 
-                if (server == null)
-                    return;
+                if (server == null) return;
 
                 if (server.OwnerId != this.client.CurrentUser.Id)
                 {
@@ -287,8 +285,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
                     foreach (var i in creds.OwnerIds)
                     {
                         var user = await client.Rest.GetUserAsync(i);
-                        if (user is null)
-                            continue;
+                        if (user is null) continue;
                         var channel = await user.CreateDMChannelAsync();
                         await channel.SendMessageAsync(
                             $"Quarantined in {value.Guild.Name} [{value.Guild.Id}]");
@@ -350,8 +347,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
                                 foreach (var i in creds.OwnerIds)
                                 {
                                     var user = await client.Rest.GetUserAsync(i);
-                                    if (user is null)
-                                        continue;
+                                    if (user is null) continue;
                                     var channel = await user.CreateDMChannelAsync();
                                     await channel.SendMessageAsync(embed: eb.Build());
                                 }
@@ -398,8 +394,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
                                 foreach (var i in creds.OwnerIds)
                                 {
                                     var user = await client.Rest.GetUserAsync(i);
-                                    if (user is null)
-                                        continue;
+                                    if (user is null) continue;
                                     var channel = await user.CreateDMChannelAsync();
                                     await channel.SendMessageAsync(
                                         $"New commit found: {latestCommit.Sha}\n{latestCommit.HtmlUrl}");
@@ -654,7 +649,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         UserConversations.Remove(userId);
     }
 
-private async Task StreamResponseAndUpdateEmbedAsync(string apiKey, string model, string systemPrompt,
+    private async Task StreamResponseAndUpdateEmbedAsync(string apiKey, string model, string systemPrompt,
         IUserMessage loadingMsg,
         (Database.Models.OwnerOnly actualItem, bool added) toUpdate, SocketUser author, string userPrompt)
     {
@@ -757,6 +752,7 @@ private async Task StreamResponseAndUpdateEmbedAsync(string apiKey, string model
         var finalEmbeds = BuildEmbeds(responseBuilder.ToString(), author, toUpdate.actualItem.GptTokensUsed);
         await loadingMsg.ModifyAsync(m => m.Embeds = finalEmbeds.ToArray());
     }
+
     private static List<Embed> BuildEmbeds(string response, IUser requester, int totalTokensUsed)
     {
         var embeds = new List<Embed>();
@@ -809,8 +805,7 @@ private async Task StreamResponseAndUpdateEmbedAsync(string apiKey, string model
             {
                 await using var dbContext = await dbProvider.GetContextAsync();
 
-                if (!bss.Data.RotateStatuses)
-                    continue;
+                if (!bss.Data.RotateStatuses) continue;
 
                 IReadOnlyList<RotatingPlayingStatus> rotatingStatuses =
                     await dbContext.RotatingStatus.AsNoTracking().OrderBy(x => x.Id).ToListAsyncEF();
@@ -872,8 +867,7 @@ private async Task StreamResponseAndUpdateEmbedAsync(string apiKey, string model
 
         var toAdd = new RotatingPlayingStatus
         {
-            Status = status,
-            Type = t
+            Status = status, Type = t
         };
         dbContext.Add(toAdd);
         await dbContext.SaveChangesAsync().ConfigureAwait(false);
@@ -1020,8 +1014,7 @@ private async Task StreamResponseAndUpdateEmbedAsync(string apiKey, string model
     public bool RestartBot()
     {
         var cmd = creds.RestartCommand;
-        if (string.IsNullOrWhiteSpace(cmd.Cmd))
-            return false;
+        if (string.IsNullOrWhiteSpace(cmd.Cmd)) return false;
 
         Restart();
         return true;
@@ -1043,8 +1036,7 @@ private async Task StreamResponseAndUpdateEmbedAsync(string apiKey, string model
             .Skip(index)
             .FirstOrDefaultAsync();
 
-        if (cmd == null)
-            return false;
+        if (cmd == null) return false;
         dbContext.Remove(cmd);
         await dbContext.SaveChangesAsync();
         return true;
@@ -1066,8 +1058,7 @@ private async Task StreamResponseAndUpdateEmbedAsync(string apiKey, string model
             .Skip(index)
             .FirstOrDefaultAsync();
 
-        if (cmd == null)
-            return false;
+        if (cmd == null) return false;
         dbContext.Remove(cmd);
         if (autoCommands.TryGetValue(cmd.GuildId, out var autos))
         {

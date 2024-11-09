@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using Discord.Interactions;
 using Humanizer;
 using Mewdeko.Common.Attributes.InteractionCommands;
@@ -159,8 +159,7 @@ public class SlashUtility(
         channel ??= ctx.Channel as ITextChannel;
         var settings = new JsonSerializerSettings
         {
-            ContractResolver = new LowercaseContractResolver(),
-            NullValueHandling = NullValueHandling.Ignore
+            ContractResolver = new LowercaseContractResolver(), NullValueHandling = NullValueHandling.Ignore
         };
 
         var message = await channel.GetMessageAsync(messageId);
