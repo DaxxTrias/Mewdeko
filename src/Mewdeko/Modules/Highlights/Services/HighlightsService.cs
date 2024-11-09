@@ -1,4 +1,4 @@
-﻿using System.Text.RegularExpressions;
+using System.Text.RegularExpressions;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Database.DbContextStuff;
 using Serilog;
@@ -27,13 +27,14 @@ public class HighlightsService : INService, IReadyExecutor
     /// <param name="client">The discord client</param>
     /// <param name="cache">Fusion cache</param>
     /// <param name="db">The database provider</param>
-    public HighlightsService(DiscordShardedClient client, IFusionCache cache, DbContextProvider dbProvider)
+    public HighlightsService(DiscordShardedClient client, IFusionCache cache, DbContextProvider dbProvider,
+        EventHandler eventHandler)
     {
         this.client = client;
         this.cache = cache;
         this.dbProvider = dbProvider;
-        this.client.MessageReceived += StaggerHighlights;
-        this.client.UserIsTyping += AddHighlightTimer;
+        eventHandler.MessageReceived += StaggerHighlights;
+        eventHandler.UserIsTyping += AddHighlightTimer;
         _ = HighlightLoop();
     }
 
