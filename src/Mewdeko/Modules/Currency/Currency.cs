@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using Discord.Commands;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;

@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 using Discord.Commands;
 using Mewdeko.Modules.Administration.Services;
 using NekosBestApiNet;
@@ -405,8 +405,8 @@ public partial class ReplacementBuilder
     public ReplacementBuilder WithProviders(IEnumerable<IPlaceholderProvider> phProviders)
     {
         foreach (var provider in phProviders)
-            foreach (var ovr in provider.GetPlaceholders())
-                reps.TryAdd(ovr.Name, ovr.Func);
+        foreach (var ovr in provider.GetPlaceholders())
+            reps.TryAdd(ovr.Name, ovr.Func);
 
         return this;
     }

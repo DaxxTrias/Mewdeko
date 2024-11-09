@@ -1,4 +1,4 @@
-using Mewdeko.Database.DbContextStuff;
+﻿using Mewdeko.Database.DbContextStuff;
 using Microsoft.EntityFrameworkCore;
 
 namespace Mewdeko.Modules.Currency.Services.Impl;
