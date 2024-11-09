@@ -91,8 +91,8 @@ public class Program
 
         services
             .AddSingleton<INsfwSpy, NsfwSpy>()
-            .AddSingleton<ApiKeyRepository>(provider => new ApiKeyRepository("Data Source=mewdeko.db"))
-            .AddSingleton<ApiService>()
+            //.AddSingleton<ApiKeyRepository>(provider => new ApiKeyRepository("Data Source=mewdeko.db"))
+            //.AddSingleton<ApiService>()
             .AddSingleton<FontProvider>()
             .AddSingleton<IBotCredentials>(credentials)
             .AddDbContext<MewdekoPostgresContext>()
