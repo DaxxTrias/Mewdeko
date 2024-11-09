@@ -1,4 +1,4 @@
-﻿using CodeHollow.FeedReader;
+using CodeHollow.FeedReader;
 using Discord.Commands;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
@@ -145,7 +145,7 @@ public partial class Searches
         [Aliases]
         [RequireContext(ContextType.Guild)]
         [UserPerm(GuildPermission.ManageMessages)]
-        public async Task RssTest(int index)
+        public async Task RssTest(int index, bool sendBoth = false)
         {
             var feeds = await Service.GetFeeds(ctx.Guild.Id);
             if (feeds.ElementAt(index - 1) is null)

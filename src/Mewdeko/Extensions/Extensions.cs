@@ -112,15 +112,11 @@ public static partial class Extensions
         return interaction.RespondAsync(embed: new EmbedBuilder().WithErrorColor().WithDescription(message).Build(),
             components: config.ShowInviteButton
                 ? new ComponentBuilder()
-                    // .WithButton("Support Server", style: ButtonStyle.Link, url: "https://discord.gg/mewdeko")
-                    // .WithButton("Support Us!", style: ButtonStyle.Link, url: "https://ko-fi.com/mewdeko")
+                    .WithButton("Support Server", style: ButtonStyle.Link, url: "https://discord.gg/mewdeko")
+                    .WithButton("Support Us!", style: ButtonStyle.Link, url: "https://ko-fi.com/mewdeko")
                     .Build()
                 : null);
     }
-        => interaction.RespondAsync(embed: new EmbedBuilder().WithErrorColor().WithDescription(message).Build(),
-            components: new ComponentBuilder()
-                //.WithButton(label: "Support Server", style: ButtonStyle.Link, url: "https://discord.gg/mewdeko")
-                .Build());
 
     /// <summary>
     ///     Sends an error message asynchronously with ephemeral visibility.
@@ -135,15 +131,11 @@ public static partial class Extensions
         return interaction.RespondAsync(embed: new EmbedBuilder().WithErrorColor().WithDescription(message).Build(),
             ephemeral: true, components: config.ShowInviteButton
                 ? new ComponentBuilder()
-                    // .WithButton("Support Server", style: ButtonStyle.Link, url: "https://discord.gg/mewdeko")
-                    // .WithButton("Support Us!", style: ButtonStyle.Link, url: "https://ko-fi.com/mewdeko")
+                    .WithButton("Support Server", style: ButtonStyle.Link, url: "https://discord.gg/mewdeko")
+                    .WithButton("Support Us!", style: ButtonStyle.Link, url: "https://ko-fi.com/mewdeko")
                     .Build()
                 : null);
     }
-        => interaction.RespondAsync(embed: new EmbedBuilder().WithErrorColor().WithDescription(message).Build(),
-            ephemeral: true, components: new ComponentBuilder()
-                //.WithButton(label: "Support Server", style: ButtonStyle.Link, url: "https://discord.gg/mewdeko")
-                .Build());
 
     /// <summary>
     ///     Sends a confirmation follow-up message asynchronously.
@@ -198,15 +190,11 @@ public static partial class Extensions
         return interaction.FollowupAsync(embed: new EmbedBuilder().WithErrorColor().WithDescription(message).Build(),
             components: config.ShowInviteButton
                 ? new ComponentBuilder()
-                    // .WithButton("Support Server", style: ButtonStyle.Link, url: "https://discord.gg/mewdeko")
-                    // .WithButton("Support Us!", style: ButtonStyle.Link, url: "https://ko-fi.com/mewdeko")
+                    .WithButton("Support Server", style: ButtonStyle.Link, url: "https://discord.gg/mewdeko")
+                    .WithButton("Support Us!", style: ButtonStyle.Link, url: "https://ko-fi.com/mewdeko")
                     .Build()
                 : null);
     }
-        => interaction.FollowupAsync(embed: new EmbedBuilder().WithErrorColor().WithDescription(message).Build(),
-            components: new ComponentBuilder()
-                //.WithButton(label: "Support Server", style: ButtonStyle.Link, url: "https://discord.gg/mewdeko")
-                .Build());
 
     /// <summary>
     ///     Sends an ephemeral follow-up error message asynchronously.
@@ -221,15 +209,11 @@ public static partial class Extensions
         return interaction.FollowupAsync(embed: new EmbedBuilder().WithErrorColor().WithDescription(message).Build(),
             ephemeral: true, components: config.ShowInviteButton
                 ? new ComponentBuilder()
-                    // .WithButton("Support Server", style: ButtonStyle.Link, url: "https://discord.gg/mewdeko")
-                    // .WithButton("Support Us!", style: ButtonStyle.Link, url: "https://ko-fi.com/mewdeko")
+                    .WithButton("Support Server", style: ButtonStyle.Link, url: "https://discord.gg/mewdeko")
+                    .WithButton("Support Us!", style: ButtonStyle.Link, url: "https://ko-fi.com/mewdeko")
                     .Build()
                 : null);
     }
-        => interaction.FollowupAsync(embed: new EmbedBuilder().WithErrorColor().WithDescription(message).Build(),
-            ephemeral: true, components: new ComponentBuilder()
-                //.WithButton(label: "Support Server", style: ButtonStyle.Link, url: "https://discord.gg/mewdeko")
-                .Build());
 
     /// <summary>
     ///     Checks if the first attachment in the collection is a valid music URL.
@@ -290,7 +274,8 @@ public static partial class Extensions
     /// <param name="items">Items to add.</param>
     public static void AddRange<T>(this IList<T> list, IEnumerable<T> items)
     {
-        foreach (var i in items) list.Add(i);
+        foreach (var i in items)
+            list.Add(i);
     }
 
     /// <summary>
@@ -301,7 +286,8 @@ public static partial class Extensions
     /// <param name="items">Items to remove.</param>
     public static void RemoveRange<T>(this IList<T> list, IEnumerable<T> items)
     {
-        foreach (var i in items) list.Remove(i);
+        foreach (var i in items)
+            list.Remove(i);
     }
 
 
@@ -556,7 +542,8 @@ public static partial class Extensions
     /// <param name="seconds">Number of seconds to wait before deleting.</param>
     public static void DeleteAfter(this IUserMessage? msg, int seconds)
     {
-        if (msg is null) return;
+        if (msg is null)
+            return;
 
         Task.Run(async () =>
         {
@@ -579,7 +566,8 @@ public static partial class Extensions
     /// <param name="seconds">Number of seconds to wait before deleting.</param>
     public static void DeleteAfter(this IMessage? msg, int seconds)
     {
-        if (msg is null) return;
+        if (msg is null)
+            return;
 
         Task.Run(async () =>
         {
@@ -602,7 +590,8 @@ public static partial class Extensions
     /// <returns>Top-level module of the given module.</returns>
     public static ModuleInfo GetTopLevelModule(this ModuleInfo module)
     {
-        while (module.Parent != null) module = module.Parent;
+        while (module.Parent != null)
+            module = module.Parent;
         return module;
     }
 
@@ -674,7 +663,8 @@ public static partial class Extensions
     /// <returns>True if the response contains an image; otherwise, false.</returns>
     public static bool IsImage(this HttpResponseMessage msg, out string? mimeType)
     {
-        if (msg.Content.Headers.ContentType != null) _ = msg.Content.Headers.ContentType.MediaType;
+        if (msg.Content.Headers.ContentType != null)
+            _ = msg.Content.Headers.ContentType.MediaType;
         mimeType = msg.Content.Headers.ContentType.MediaType;
         return mimeType is "image/png" or "image/jpeg" or "image/gif";
     }
@@ -686,7 +676,8 @@ public static partial class Extensions
     /// <returns>The size of the image in bytes.</returns>
     public static long? GetImageSize(this HttpResponseMessage msg)
     {
-        if (msg.Content.Headers.ContentLength == null) return null;
+        if (msg.Content.Headers.ContentLength == null)
+            return null;
         return msg.Content.Headers.ContentLength / 1.Mb();
     }
 
@@ -741,23 +732,23 @@ public static partial class Extensions
             case SocketMessageCommand mCmd:
                 return mCmd.Data.Name;
             default:
-            {
-                if (interaction is not SocketSlashCommand sCmd)
-                    throw new ArgumentException("interaction is not a valid type");
-                return (sCmd.Data.Name
-                        + " "
-                        + ((sCmd.Data.Options?.FirstOrDefault()?.Type is ApplicationCommandOptionType.SubCommand
-                               or ApplicationCommandOptionType.SubCommandGroup
-                               ? sCmd.Data.Options?.First().Name
-                               : "")
-                           ?? "")
-                        + " "
-                        + (sCmd.Data.Options?.FirstOrDefault()?.Options?.FirstOrDefault()?.Type
-                           == ApplicationCommandOptionType.SubCommand
-                            ? sCmd.Data.Options?.FirstOrDefault()?.Options?.FirstOrDefault()?.Name
-                            : "")
-                        ?? "").Trim();
-            }
+                {
+                    if (interaction is not SocketSlashCommand sCmd)
+                        throw new ArgumentException("interaction is not a valid type");
+                    return (sCmd.Data.Name
+                            + " "
+                            + ((sCmd.Data.Options?.FirstOrDefault()?.Type is ApplicationCommandOptionType.SubCommand
+                                   or ApplicationCommandOptionType.SubCommandGroup
+                                   ? sCmd.Data.Options?.First().Name
+                                   : "")
+                               ?? "")
+                            + " "
+                            + (sCmd.Data.Options?.FirstOrDefault()?.Options?.FirstOrDefault()?.Type
+                               == ApplicationCommandOptionType.SubCommand
+                                ? sCmd.Data.Options?.FirstOrDefault()?.Options?.FirstOrDefault()?.Name
+                                : "")
+                            ?? "").Trim();
+                }
         }
     }
 

@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Reflection;
 using System.Threading;
 using Discord.Commands;
 using Humanizer;
@@ -53,51 +54,71 @@ public class StatsService : IStatsService, IDisposable
             _ = OnReadyAsync();
         }
 
+    /// <summary>
+    /// Gets the version of the Discord.Net library.
+    /// </summary>
+    public string Library => $"Discord.Net {DllVersionChecker.GetDllVersion()} ";
+
+    /// <summary>
+    /// Delegate for getting versions of specified DLLs.
+    /// </summary>
+    /// <param name="dllNames">List of DLL names to get versions for.</param>
+    /// <returns>A dictionary with DLL names as keys and their versions as values.</returns>
+    public delegate Dictionary<string, string?> GetVersionsDelegate(List<string> dllNames);
+
+    /// <summary>
+    /// Provides information about the libraries used by the bot.
+    /// </summary>
+    public class LibraryInfo
+    {
+        private GetVersionsDelegate _versionChecker;
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="LibraryInfo"/> class.
+        /// </summary>
+        /// <param name="versionChecker">The delegate to get versions of specified DLLs.</param>
+        public LibraryInfo(GetVersionsDelegate versionChecker)
+        {
+            _versionChecker = versionChecker;
+        }
+
         /// <summary>
         /// Gets the version of the Discord.Net library.
         /// </summary>
-        public string Library => $"Discord.Net {DllVersionChecker.GetDllVersion()} ";
-
-        // Define a delegate that matches the GetDllVersions method signature
-        public delegate Dictionary<string, string?> GetVersionsDelegate(List<string> dllNames);
-
-        public class LibraryInfo
+        public string Library
         {
-            private GetVersionsDelegate _versionChecker;
-
-            public LibraryInfo(GetVersionsDelegate versionChecker)
+            get
             {
-                _versionChecker = versionChecker;
-            }
-
-            public string Library
-            {
-                get
-                {
-                    var versions = _versionChecker.Invoke(new List<string> { "Discord.Net.WebSocket.dll" });
-                    return $"Discord.Net {versions["Discord.Net.WebSocket.dll"] ?? "Version not found"}";
-                }
-            }
-
-            public string OpenAILib
-            {
-                get
-                {
-                    var versions = _versionChecker.Invoke(new List<string> { "OpenAI_API.dll" });
-                    return $"OpenAI_API {versions["OpenAI_API.dll"] ?? "Version not found"}";
-                }
-            }
-            public static string GetTargetFramework()
-            {
-                // Get the TargetFrameworkAttribute from the executing assembly
-                var attribute = Assembly.GetExecutingAssembly()
-                    .GetCustomAttributes(typeof(System.Runtime.Versioning.TargetFrameworkAttribute), false)
-                    .FirstOrDefault() as System.Runtime.Versioning.TargetFrameworkAttribute;
-
-                // If the attribute is not null, return its FrameworkName property
-                return attribute?.FrameworkName ?? "Unknown framework";
+                var versions = _versionChecker.Invoke(new List<string> { "Discord.Net.WebSocket.dll" });
+                return $"Discord.Net {versions["Discord.Net.WebSocket.dll"] ?? "Version not found"}";
             }
         }
+
+        /// <summary>
+        /// Gets the version of the OpenAI_API library.
+        /// </summary>
+        public string OpenAILib
+        {
+            get
+            {
+                var versions = _versionChecker.Invoke(new List<string> { "OpenAI_API.dll" });
+                return $"OpenAI_API {versions["OpenAI_API.dll"] ?? "Version not found"}";
+            }
+        }
+
+        /// <summary>
+        /// Gets the target framework of the executing assembly.
+        /// </summary>
+        /// <returns>The target framework name.</returns>
+        public static string GetTargetFramework()
+        {
+            var attribute = Assembly.GetExecutingAssembly()
+                .GetCustomAttributes(typeof(System.Runtime.Versioning.TargetFrameworkAttribute), false)
+                .FirstOrDefault() as System.Runtime.Versioning.TargetFrameworkAttribute;
+
+            return attribute?.FrameworkName ?? "Unknown framework";
+        }
+    }
 
     /// <summary>
     ///     Disposes of the timers.
@@ -105,17 +126,6 @@ public class StatsService : IStatsService, IDisposable
     public void Dispose()
     {
         topGgTimer?.Dispose();
-    }
-
-    /// <summary>
-    ///     Gets the version of the Discord.Net library.
-    /// </summary>
-    public string Library
-    {
-        get
-        {
-            return $"Discord.Net {DllVersionChecker.GetDllVersion()}";
-        }
     }
 
     /// <summary>
