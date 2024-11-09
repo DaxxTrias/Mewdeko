@@ -367,8 +367,6 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         else if (!args.Content.StartsWith("-frog") && isDebugMode)
             return;
 
-        var loadingMsg = await usrMsg.Channel.SendConfirmAsync($"{bss.Data.LoadingEmote} Awaiting response...");
-
         Log.Information("ChatGPT request from {Author}: | ({AuthorId}): | {Content}", args.Author, args.Author.Id, args.Content);
 
         // lower any capitalization in message content
@@ -501,6 +499,8 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
                 throw;
             }
         }
+
+        var loadingMsg = await usrMsg.Channel.SendConfirmAsync($"{bss.Data.LoadingEmote} Awaiting response...");
 
         await StreamResponseAndUpdateEmbedAsync(bss.Data.ChatGptKey, bss.Data.ChatGptModel,
             bss.Data.ChatGptInitPrompt +
