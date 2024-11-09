@@ -79,3 +79,6 @@ plugins:
       - ANDROID_TESTSUITE
       - WEB
       - TVHTML5EMBEDDED
+    pot:
+      token: ""
+      visitorData: "" 
