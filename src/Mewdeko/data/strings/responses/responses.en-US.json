@@ -746,7 +746,7 @@
   "music_not_in_channel": "You need to be in a voice channel to use this command.",
   "music_auto_play_invalid": "Invalid auto-play value specified. The maximum value is 5.",
   "music_autoplay_set": "AutoPlay set to {0}",
-  "music_auto_play_disabled": "Auto-play disabled.",
+  "music_autoplay_disabled": "Auto-play disabled.",
   "music_settings": "Music settings",
   "music_pause": "Player has been paused.",
   "music_resume": "Player has been resumed.",
