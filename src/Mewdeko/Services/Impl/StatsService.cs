@@ -20,7 +20,7 @@ public class StatsService : IStatsService, IDisposable
     /// <summary>
     ///     The version of the bot. I should make this set from commits somehow idk
     /// </summary>
-    public const string BotVersion = "7.6.1";
+    public const string BotVersion = "7.6.4";
 
     private readonly IDataCache cache;
     private readonly DiscordShardedClient client;
