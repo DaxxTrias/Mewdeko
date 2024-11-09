@@ -383,3 +383,4 @@ __cottage_test/
 _site/*
 api/*
 /api
+src/Mewdeko/gcreds.json
