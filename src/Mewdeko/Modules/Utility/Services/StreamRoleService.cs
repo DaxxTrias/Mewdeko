@@ -1,4 +1,4 @@
-﻿using System.Net;
+using System.Net;
 using Discord.Net;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Common.TypeReaders;
@@ -66,6 +66,7 @@ public class StreamRoleService : INService, IUnloadableService, IReadyExecutor
 
     private async Task Client_GuildMemberUpdated(Cacheable<SocketGuildUser, ulong> cacheable, SocketGuildUser after)
     {
+        //todo: a nullref can trigger here. do we care?
         var config = await gss.GetGuildConfig(after.Guild.Id);
         if (config.StreamRole.Enabled)
             return;
