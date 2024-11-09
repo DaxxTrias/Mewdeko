@@ -90,16 +90,16 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         httpFactory = factory;
         this.bss = bss;
         handler.MessageReceived += OnMessageReceived;
-            rep = new ReplacementBuilder()
-                .WithClient(client)
-                .WithProviders(phProviders)
-                .Build();
+        rep = new ReplacementBuilder()
+            .WithClient(client)
+            .WithProviders(phProviders)
+            .Build();
 
-            _ = Task.Run(RotatingStatuses);
+        _ = Task.Run(RotatingStatuses);
 
         var sub = redis.GetSubscriber();
-            sub.Subscribe($"{this.creds.RedisKey()}_reload_images",
-                delegate { imgs.Reload(); }, CommandFlags.FireAndForget);
+        sub.Subscribe($"{this.creds.RedisKey()}_reload_images",
+            delegate { imgs.Reload(); }, CommandFlags.FireAndForget);
 
         sub.Subscribe($"{this.creds.RedisKey()}_leave_guild", async (_, v) =>
         {
@@ -165,7 +165,8 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
                     foreach (var i in creds.OwnerIds)
                     {
                         var user = await client.Rest.GetUserAsync(i);
-                        if (user is null) continue;
+                        if (user is null)
+                            continue;
                         var channel = await user.CreateDMChannelAsync();
                         await channel.SendMessageAsync(
                             $"Quarantined in {value.Guild.Name} [{value.Guild.Id}]");
@@ -227,7 +228,8 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
                                 foreach (var i in creds.OwnerIds)
                                 {
                                     var user = await client.Rest.GetUserAsync(i);
-                                    if (user is null) continue;
+                                    if (user is null)
+                                        continue;
                                     var channel = await user.CreateDMChannelAsync();
                                     await channel.SendMessageAsync(embed: eb.Build());
                                 }
@@ -274,7 +276,8 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
                                 foreach (var i in creds.OwnerIds)
                                 {
                                     var user = await client.Rest.GetUserAsync(i);
-                                    if (user is null) continue;
+                                    if (user is null)
+                                        continue;
                                     var channel = await user.CreateDMChannelAsync();
                                     await channel.SendMessageAsync(
                                         $"New commit found: {latestCommit.Sha}\n{latestCommit.HtmlUrl}");
@@ -595,10 +598,10 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         }
 
         if (toUpdate.added)
-            uow.OwnerOnly.Add(toUpdate.actualItem);
+            dbContext.OwnerOnly.Add(toUpdate.actualItem);
         else
-            uow.OwnerOnly.Update(toUpdate.actualItem);
-        await uow.SaveChangesAsync();
+            dbContext.OwnerOnly.Update(toUpdate.actualItem);
+        await dbContext.SaveChangesAsync();
 
         var finalEmbeds = BuildEmbeds(finalResponse, author, toUpdate.actualItem.GptTokensUsed, conversation);
         await loadingMsg.ModifyAsync(m => m.Embeds = finalEmbeds.ToArray());
@@ -623,8 +626,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
 
             if (partIndex + length == response.Length)
                 embedBuilder.WithFooter(
-                    $"Requested by {requester.Username}");
-                    //$"Requested by {requester.Username} | Response Tokens: {conversation.MostRecentApiResult.Usage?.TotalTokens} | Total Used: {totalTokensUsed}");
+                    $"Requested by {requester.Username} | Response Tokens: {conversation.MostRecentApiResult.Usage?.TotalTokens} | Total Used: {totalTokensUsed}");
 
             embeds.Add(embedBuilder.Build());
             partIndex += length;
@@ -644,8 +646,8 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         if (val is null)
             return;
         val.GptTokensUsed = 0;
-        uow.OwnerOnly.Update(val);
-        await uow.SaveChangesAsync();
+        dbContext.OwnerOnly.Update(val);
+        await dbContext.SaveChangesAsync();
     }
 
     /// <summary>
@@ -734,7 +736,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
                         .ToConcurrent())
                 .ToConcurrent();
 
-        foreach (var cmd in uow.AutoCommands.AsNoTracking().Where(x => x.Interval == 0))
+        foreach (var cmd in dbContext.AutoCommands.AsNoTracking().Where(x => x.Interval == 0))
         {
             try
             {
@@ -777,14 +779,9 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
             {
                 await using var dbContext = await dbProvider.GetContextAsync();
 
-                if (!bss.Data.RotateStatuses) continue;
+                if (!bss.Data.RotateStatuses)
+                    continue;
 
-                IReadOnlyList<RotatingPlayingStatus> rotatingStatuses;
-                var uow = db.GetDbContext();
-                await using (uow.ConfigureAwait(false))
-                {
-                    rotatingStatuses = uow.RotatingStatus.AsNoTracking().OrderBy(x => x.Id).ToList();
-                }
                 IReadOnlyList<RotatingPlayingStatus> rotatingStatuses = await dbContext.RotatingStatus.AsNoTracking().OrderBy(x => x.Id).ToListAsyncEF();
 
                 if (rotatingStatuses.Count == 0)
@@ -827,8 +824,8 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         if (toRemove is null)
             return null;
 
-        uow.Remove(toRemove);
-        await uow.SaveChangesAsync().ConfigureAwait(false);
+        dbContext.Remove(toRemove);
+        await dbContext.SaveChangesAsync().ConfigureAwait(false);
         return toRemove.Status;
     }
 
@@ -847,8 +844,8 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
             Status = status,
             Type = t
         };
-        uow.Add(toAdd);
-        await uow.SaveChangesAsync().ConfigureAwait(false);
+        dbContext.Add(toAdd);
+        await dbContext.SaveChangesAsync().ConfigureAwait(false);
     }
 
     /// <summary>
@@ -909,8 +906,8 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
     {
         await using var dbContext = await dbProvider.GetContextAsync();
 
-            dbContext.AutoCommands.Add(cmd);
-            await dbContext.SaveChangesAsync();
+        dbContext.AutoCommands.Add(cmd);
+        await dbContext.SaveChangesAsync();
 
         if (cmd.Interval >= 5)
         {
@@ -948,7 +945,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         await using var dbContext = await dbProvider.GetContextAsync();
 
         return
-            uow.AutoCommands
+            dbContext.AutoCommands
                 .AsNoTracking()
                 .Where(x => x.Interval == 0)
                 .OrderBy(x => x.Id)
@@ -964,7 +961,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         await using var dbContext = await dbProvider.GetContextAsync();
 
         return
-            uow.AutoCommands
+            dbContext.AutoCommands
                 .AsNoTracking()
                 .Where(x => x.Interval >= 5)
                 .OrderBy(x => x.Id)
@@ -1012,7 +1009,8 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
             .Skip(index)
             .FirstOrDefaultAsync();
 
-        if (cmd == null) return false;
+        if (cmd == null)
+            return false;
         dbContext.Remove(cmd);
         await dbContext.SaveChangesAsync();
         return true;
@@ -1037,14 +1035,14 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
 
         if (cmd == null)
             return false;
-        uow.Remove(cmd);
+        dbContext.Remove(cmd);
         if (autoCommands.TryGetValue(cmd.GuildId, out var autos))
         {
             if (autos.TryRemove(cmd.Id, out var timer))
                 timer.Change(Timeout.Infinite, Timeout.Infinite);
         }
 
-        uow.SaveChanges();
+        dbContext.SaveChanges();
         return true;
     }
 
