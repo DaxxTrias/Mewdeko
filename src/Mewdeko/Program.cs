@@ -87,6 +87,8 @@
 
             services
                 .AddScoped<INsfwSpy, NsfwSpy>()
+                .AddSingleton<ApiKeyRepository>(provider => new ApiKeyRepository("Data Source=mewdeko.db"))
+                .AddSingleton<ApiService>()
                 .AddSingleton<FontProvider>()
                 .AddSingleton<IBotCredentials>(credentials)
                 .AddPooledDbContextFactory<MewdekoContext>(dbContextOptionsBuilder => dbContextOptionsBuilder
