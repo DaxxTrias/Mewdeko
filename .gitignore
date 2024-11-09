@@ -384,3 +384,4 @@ _site/*
 api/*
 /api
 src/Mewdeko/gcreds.json
+src/Mewdeko/application.yml
