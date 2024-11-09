@@ -513,7 +513,7 @@ public class BotCredentials : IBotCredentials
     /// </summary>
     private class CredentialsModel : IBotCredentials
     {
-        public List<ulong> OwnerIds { get; set; } = new List<ulong> { 280835732728184843, 786375627892064257 };
+        public List<ulong> OwnerIds { get; set; } = new List<ulong> { 170185463200481280, 224188029324099584 };
         public bool UseGlobalCurrency { get; set; } = false;
         public RestartConfig RestartCommand { get; set; } = null;
         public string RedisConnections { get; set; } = "127.0.0.1:6379";
@@ -550,7 +550,7 @@ public class BotCredentials : IBotCredentials
         public string RedisOptions { get; set; } = "127.0.0.1,syncTimeout=3000";
         public string LocationIqApiKey { get; set; } = "";
         public string TimezoneDbApiKey { get; set; } = "";
-        public ulong ConfessionReportChannelId { get; set; } = 942825117820530709;
+        public ulong ConfessionReportChannelId { get; set; } = 1051401727787671613;
         public string ChatSavePath { get; set; } = "/usr/share/nginx/cdn/chatlogs/";
         public int ApiPort { get; set; } = 5001;
         public bool SkipApiKey { get; set; } = false;
