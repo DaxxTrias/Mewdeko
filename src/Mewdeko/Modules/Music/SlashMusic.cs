@@ -168,132 +168,144 @@ public class SlashMusic(
 
         await player.SetVolumeAsync(await player.GetVolume() / 100f).ConfigureAwait(false);
 
-        var queue = await cache.GetMusicQueue(Context.Guild.Id);
-        if (Uri.TryCreate(query, UriKind.Absolute, out var uri))
+        try
         {
-            TrackLoadOptions options;
-            if (query.Contains("music.youtube"))
+            var queue = await cache.GetMusicQueue(Context.Guild.Id);
+            if (Uri.TryCreate(query, UriKind.Absolute, out var uri))
             {
-                options = new TrackLoadOptions
+                TrackLoadOptions options;
+                if (query.Contains("music.youtube"))
                 {
-                    SearchMode = TrackSearchMode.YouTubeMusic
-                };
-            }
-            else if (query.Contains("youtube.com") || query.Contains("youtu.be"))
-            {
-                options = new TrackLoadOptions
-                {
-                    SearchMode = TrackSearchMode.YouTube
-                };
-            }
-            else if (query.Contains("open.spotify") || query.Contains("spotify.com"))
-            {
-                options = new TrackLoadOptions
-                {
-                    SearchMode = TrackSearchMode.Spotify
-                };
-            }
-            else if (query.Contains("soundcloud.com"))
-            {
-                options = new TrackLoadOptions
-                {
-                    SearchMode = TrackSearchMode.SoundCloud
-                };
-            }
-            else
-            {
-                options = new TrackLoadOptions
-                {
-                    SearchMode = TrackSearchMode.None
-                };
-            }
-
-            var trackResults = await service.Tracks.LoadTracksAsync(query, options);
-            if (!trackResults.IsSuccess)
-            {
-                await ReplyErrorLocalizedAsync("music_search_fail").ConfigureAwait(false);
-                return;
-            }
-
-            if (trackResults.Tracks.Length > 1)
-            {
-                var startIndex = queue.Count + 1;
-                queue.AddRange(trackResults.Tracks.Select(track =>
-                    new MewdekoTrack(startIndex++, track, new PartialUser
+                    options = new TrackLoadOptions
                     {
-                        Id = Context.User.Id, Username = Context.User.Username, AvatarUrl = Context.User.GetAvatarUrl()
-                    })));
-                await cache.SetMusicQueue(Context.Guild.Id, queue);
+                        SearchMode = TrackSearchMode.YouTubeMusic
+                    };
+                }
+                else if (query.Contains("youtube.com") || query.Contains("youtu.be"))
+                {
+                    options = new TrackLoadOptions
+                    {
+                        SearchMode = TrackSearchMode.YouTube
+                    };
+                }
+                else if (query.Contains("open.spotify") || query.Contains("spotify.com"))
+                {
+                    options = new TrackLoadOptions
+                    {
+                        SearchMode = TrackSearchMode.Spotify
+                    };
+                }
+                else if (query.Contains("soundcloud.com"))
+                {
+                    options = new TrackLoadOptions
+                    {
+                        SearchMode = TrackSearchMode.SoundCloud
+                    };
+                }
+                else
+                {
+                    options = new TrackLoadOptions
+                    {
+                        SearchMode = TrackSearchMode.None
+                    };
+                }
 
-                var eb = new EmbedBuilder()
-                    .WithDescription(
-                        $"Added {trackResults.Tracks.Length} tracks to the queue from {trackResults.Playlist.Name}")
-                    .WithThumbnailUrl(trackResults.Tracks[0].ArtworkUri?.ToString())
+                var trackResults = await service.Tracks.LoadTracksAsync(query, options);
+                if (!trackResults.IsSuccess)
+                {
+                    await ReplyErrorLocalizedAsync("music_search_fail").ConfigureAwait(false);
+                    return;
+                }
+
+                if (trackResults.Tracks.Length > 1)
+                {
+                    var startIndex = queue.Count + 1;
+                    queue.AddRange(trackResults.Tracks.Select(track =>
+                        new MewdekoTrack(startIndex++, track, new PartialUser
+                        {
+                            Id = Context.User.Id,
+                            Username = Context.User.Username,
+                            AvatarUrl = Context.User.GetAvatarUrl()
+                        })));
+                    await cache.SetMusicQueue(Context.Guild.Id, queue);
+
+                    var eb = new EmbedBuilder()
+                        .WithDescription(
+                            $"Added {trackResults.Tracks.Length} tracks to the queue from {trackResults.Playlist.Name}")
+                        .WithThumbnailUrl(trackResults.Tracks[0].ArtworkUri?.ToString())
+                        .WithOkColor()
+                        .Build();
+
+                    await Context.Channel.SendMessageAsync(embed: eb).ConfigureAwait(false);
+                }
+                else
+                {
+                    queue.Add(new MewdekoTrack(queue.Count + 1, trackResults.Tracks[0], new PartialUser
+                    {
+                        Id = Context.User.Id,
+                        Username = Context.User.Username,
+                        AvatarUrl = Context.User.GetAvatarUrl()
+                    }));
+                    await cache.SetMusicQueue(Context.Guild.Id, queue);
+                }
+
+                if (player.CurrentItem is null)
+                {
+                    await player.PlayAsync(trackResults.Tracks[0]).ConfigureAwait(false);
+                    await cache.SetCurrentTrack(Context.Guild.Id, queue[0]);
+                }
+
+                // Add a message to the user when a new song is added to the queue
+                var addedTrack = trackResults.Tracks[0];
+                var addedTrackEmbed = new EmbedBuilder()
+                    .WithTitle("Track Added to Queue")
+                    .WithDescription($"[{addedTrack.Title}]({addedTrack.Uri}) by {addedTrack.Author}")
+                    .WithThumbnailUrl(addedTrack.ArtworkUri?.ToString())
                     .WithOkColor()
                     .Build();
 
-                await Context.Channel.SendMessageAsync(embed: eb).ConfigureAwait(false);
+                await Context.Channel.SendMessageAsync(embed: addedTrackEmbed).ConfigureAwait(false);
             }
             else
             {
-                queue.Add(new MewdekoTrack(queue.Count + 1, trackResults.Tracks[0], new PartialUser
+                var tracks = await service.Tracks.LoadTracksAsync(query, TrackSearchMode.YouTube);
+
+                if (!tracks.IsSuccess)
                 {
-                    Id = Context.User.Id, Username = Context.User.Username, AvatarUrl = Context.User.GetAvatarUrl()
-                }));
-                await cache.SetMusicQueue(Context.Guild.Id, queue);
+                    await ReplyErrorLocalizedAsync("music_no_tracks").ConfigureAwait(false);
+                    return;
+                }
+
+                var trackList = tracks.Tracks.Take(25).ToList();
+                var selectMenu = new SelectMenuBuilder()
+                    .WithCustomId($"track_select:{Context.User.Id}")
+                    .WithPlaceholder(GetText("music_select_tracks"))
+                    .WithMaxValues(trackList.Count)
+                    .WithMinValues(1);
+
+                foreach (var track in trackList)
+                {
+                    var index = trackList.IndexOf(track);
+                    selectMenu.AddOption(track.Title.Truncate(100), $"track_{index}");
+                }
+
+                var eb = new EmbedBuilder()
+                    .WithDescription(GetText("music_select_tracks_embed"))
+                    .WithOkColor()
+                    .Build();
+
+                var components = new ComponentBuilder().WithSelectMenu(selectMenu).Build();
+
+                var message = await Context.Channel.SendMessageAsync(embed: eb, components: components);
+
+                await cache.Redis.GetDatabase().StringSetAsync($"{Context.User.Id}_{message.Id}_tracks",
+                    JsonSerializer.Serialize(trackList), TimeSpan.FromMinutes(5));
             }
-
-            if (player.CurrentItem is null)
-            {
-                await player.PlayAsync(trackResults.Tracks[0]).ConfigureAwait(false);
-                await cache.SetCurrentTrack(Context.Guild.Id, queue[0]);
-            }
-
-            // P4f59: Add a message to the user when a new song is added to the queue
-            var addedTrack = trackResults.Tracks[0];
-            var addedTrackEmbed = new EmbedBuilder()
-                .WithTitle("Track Added to Queue")
-                .WithDescription($"[{addedTrack.Title}]({addedTrack.Uri}) by {addedTrack.Author}")
-                .WithThumbnailUrl(addedTrack.ArtworkUri?.ToString())
-                .WithOkColor()
-                .Build();
-
-            await Context.Channel.SendMessageAsync(embed: addedTrackEmbed).ConfigureAwait(false);
         }
-        else
+        catch (Exception e)
         {
-            var tracks = await service.Tracks.LoadTracksAsync(query, TrackSearchMode.YouTube);
-
-            if (!tracks.IsSuccess)
-            {
-                await ReplyErrorLocalizedAsync("music_no_tracks").ConfigureAwait(false);
-                return;
-            }
-
-            var trackList = tracks.Tracks.Take(25).ToList();
-            var selectMenu = new SelectMenuBuilder()
-                .WithCustomId($"track_select:{Context.User.Id}")
-                .WithPlaceholder(GetText("music_select_tracks"))
-                .WithMaxValues(trackList.Count)
-                .WithMinValues(1);
-
-            foreach (var track in trackList)
-            {
-                var index = trackList.IndexOf(track);
-                selectMenu.AddOption(track.Title.Truncate(100), $"track_{index}");
-            }
-
-            var eb = new EmbedBuilder()
-                .WithDescription(GetText("music_select_tracks_embed"))
-                .WithOkColor()
-                .Build();
-
-            var components = new ComponentBuilder().WithSelectMenu(selectMenu).Build();
-
-            var message = await Context.Channel.SendMessageAsync(embed: eb, components: components);
-
-            await cache.Redis.GetDatabase().StringSetAsync($"{Context.User.Id}_{message.Id}_tracks",
-                JsonSerializer.Serialize(trackList), TimeSpan.FromMinutes(5));
+            Log.Error("Failed to add song to Queue: {Message}", e.Message);
+            await ReplyErrorLocalizedAsync("music_queue_add_failed").ConfigureAwait(false);
         }
     }
 

@@ -727,6 +727,7 @@
   "music_select_tracks": "Select the tracks you want to play.",
   "music_select_tracks_embed": "Select the tracks you want to play from the select menu. You can select more than one.",
   "music_queue_invalid_index": "Invalid index specified. Please specify a number between 1 and {0}",
+  "music_queue_add_failed": "Failed to add the song to the queue.",
   "music_search_fail": "Failed to find that song. Please try again.",
   "music_no_tracks": "No tracks found.",
   "music_song_removed": "Song removed from the queue.",
