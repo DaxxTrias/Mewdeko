@@ -544,6 +544,7 @@ public class Music(
         }
 
         await player.SeekAsync(player.CurrentItem.Track.Duration).ConfigureAwait(false);
+        await ReplyConfirmLocalizedAsync("music_track_skipped").ConfigureAwait(false);
     }
 
     /// <summary>
