@@ -2723,9 +2723,10 @@ play:
     - ''
     - '5'
     - Dream Of Venice
+    - https://www.youtube.com/watch?v=Tmfucm7t0Ko
   desc: >-
-    Plays/Queues a song. Use together with a song number in queue and it'll
-    play.
+    Plays/Pauses/Queues a song. Include a queued song number and it'll play that specific song.
+    Include youtube url of video. Can also parse entire playlists from youtube.
 playlist:
   args:
     - show playlistname
