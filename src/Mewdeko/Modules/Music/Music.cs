@@ -420,19 +420,30 @@ public class Music(
             return;
         }
 
-        if (nextTrack is not null)
+        var trackToRemove = queue.FirstOrDefault(x => x.Index == queueNumber);
+        if (trackToRemove == null)
         {
-            await player.StopAsync();
-            await player.PlayAsync(nextTrack.Track);
-            await cache.SetCurrentTrack(ctx.Guild.Id, nextTrack);
-        }
-        else
-        {
-            await player.StopAsync();
-            await cache.SetCurrentTrack(ctx.Guild.Id, null);
+            await ReplyErrorLocalizedAsync("music_track_not_found").ConfigureAwait(false);
+            return;
         }
 
-        queue.Remove(currentTrack);
+        queue.Remove(trackToRemove);
+
+        if (currentTrack.Index == trackToRemove.Index)
+        {
+            if (nextTrack != null)
+            {
+                await player.StopAsync();
+                await player.PlayAsync(nextTrack.Track);
+                await cache.SetCurrentTrack(ctx.Guild.Id, nextTrack);
+            }
+            else
+            {
+                await player.StopAsync();
+                await cache.SetCurrentTrack(ctx.Guild.Id, null);
+            }
+        }
+
         await cache.SetMusicQueue(ctx.Guild.Id, queue);
 
         if (player.State == PlayerState.Playing)
