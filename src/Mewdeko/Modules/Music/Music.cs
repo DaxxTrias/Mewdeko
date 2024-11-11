@@ -253,6 +253,17 @@ public class Music(
                     await player.PlayAsync(trackResults.Tracks[0]).ConfigureAwait(false);
                     await cache.SetCurrentTrack(ctx.Guild.Id, queue[0]);
                 }
+
+                // Add a message to the user when a new song is added to the queue
+                var addedTrack = trackResults.Tracks[0];
+                var addedTrackEmbed = new EmbedBuilder()
+                    .WithTitle("Track Added to Queue")
+                    .WithDescription($"[{addedTrack.Title}]({addedTrack.Uri}) by {addedTrack.Author}")
+                    .WithThumbnailUrl(addedTrack.ArtworkUri?.ToString())
+                    .WithOkColor()
+                    .Build();
+
+                await Context.Channel.SendMessageAsync(embed: addedTrackEmbed).ConfigureAwait(false);
             }
             else
             {
