@@ -38,7 +38,6 @@ public class Music(
         {
             var eb = new EmbedBuilder()
                 .WithErrorColor()
-                .WithTitle(GetText("music_player_error"))
                 .WithDescription(GetText("music_not_in_channel"));
 
             await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
