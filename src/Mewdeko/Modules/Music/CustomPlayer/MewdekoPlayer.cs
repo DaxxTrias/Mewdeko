@@ -1,4 +1,4 @@
-﻿using System.Net.Http;
+using System.Net.Http;
 using System.Text.RegularExpressions;
 using System.Threading;
 using Lavalink4NET;
@@ -63,67 +63,74 @@ public sealed class MewdekoPlayer : LavalinkPlayer
         var queue = await cache.GetMusicQueue(GuildId);
         var currentTrack = await cache.GetCurrentTrack(GuildId);
         var nextTrack = queue.FirstOrDefault(x => x.Index == currentTrack.Index + 1);
-        switch (reason)
+        try
         {
-            case TrackEndReason.Finished:
-                var repeatType = await GetRepeatType();
-                switch (repeatType)
-                {
-                    case PlayerRepeatType.None:
+            switch (reason)
+            {
+                case TrackEndReason.Finished:
+                    var repeatType = await GetRepeatType();
+                    switch (repeatType)
+                    {
+                        case PlayerRepeatType.None:
 
-                        if (nextTrack is null)
-                        {
-                            await musicChannel.SendMessageAsync("Queue is empty. Stopping.");
-                            await StopAsync(token);
-                            await cache.SetCurrentTrack(GuildId, null);
-                        }
-                        else
-                        {
-                            await PlayAsync(nextTrack.Track, cancellationToken: token);
-                            await cache.SetCurrentTrack(GuildId, nextTrack);
-                        }
+                            if (nextTrack is null)
+                            {
+                                await musicChannel.SendMessageAsync("Queue is empty. Stopping.");
+                                await StopAsync(token);
+                                await cache.SetCurrentTrack(GuildId, null);
+                            }
+                            else
+                            {
+                                await PlayAsync(nextTrack.Track, cancellationToken: token);
+                                await cache.SetCurrentTrack(GuildId, nextTrack);
+                            }
 
-                        break;
-                    case PlayerRepeatType.Track:
-                        await PlayAsync(item.Track, cancellationToken: token);
-                        break;
-                    case PlayerRepeatType.Queue:
-                        if (nextTrack is null)
-                        {
-                            await PlayAsync(queue[0].Track, cancellationToken: token);
-                            await cache.SetCurrentTrack(GuildId, queue[0]);
-                        }
-                        else
-                        {
-                            await PlayAsync(nextTrack.Track, cancellationToken: token);
-                            await cache.SetCurrentTrack(GuildId, nextTrack);
-                        }
+                            break;
+                        case PlayerRepeatType.Track:
+                            await PlayAsync(item.Track, cancellationToken: token);
+                            break;
+                        case PlayerRepeatType.Queue:
+                            if (nextTrack is null)
+                            {
+                                await PlayAsync(queue[0].Track, cancellationToken: token);
+                                await cache.SetCurrentTrack(GuildId, queue[0]);
+                            }
+                            else
+                            {
+                                await PlayAsync(nextTrack.Track, cancellationToken: token);
+                                await cache.SetCurrentTrack(GuildId, nextTrack);
+                            }
 
-                        break;
-                    default:
-                        throw new ArgumentOutOfRangeException();
-                }
+                            break;
+                        default:
+                            throw new ArgumentOutOfRangeException();
+                    }
 
-                break;
-            case TrackEndReason.LoadFailed:
-                var failedEmbed = new EmbedBuilder()
-                    .WithDescription($"Failed to load track {item.Track.Title}. Removing and skipping to the next one.")
-                    .WithOkColor()
-                    .Build();
-                await musicChannel.SendMessageAsync(embed: failedEmbed);
-                await PlayAsync(nextTrack.Track, cancellationToken: token);
-                await cache.SetCurrentTrack(GuildId, nextTrack);
-                queue.Remove(currentTrack);
-                await cache.SetMusicQueue(GuildId, queue);
-                break;
-            case TrackEndReason.Stopped:
-                return;
-            case TrackEndReason.Replaced:
-                break;
-            case TrackEndReason.Cleanup:
-                break;
-            default:
-                throw new ArgumentOutOfRangeException(nameof(reason), reason, null);
+                    break;
+                case TrackEndReason.LoadFailed:
+                    var failedEmbed = new EmbedBuilder()
+                        .WithDescription($"Failed to load track {item.Track.Title}. Removing and skipping to the next one.")
+                        .WithOkColor()
+                        .Build();
+                    await musicChannel.SendMessageAsync(embed: failedEmbed);
+                    await PlayAsync(nextTrack.Track, cancellationToken: token);
+                    await cache.SetCurrentTrack(GuildId, nextTrack);
+                    queue.Remove(currentTrack);
+                    await cache.SetMusicQueue(GuildId, queue);
+                    break;
+                case TrackEndReason.Stopped:
+                    return;
+                case TrackEndReason.Replaced:
+                    break;
+                case TrackEndReason.Cleanup:
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(reason), reason, null);
+            }
+        }
+        catch (Exception)
+        {
+            await musicChannel.SendErrorAsync(strings.GetText("music_lavalink_error"), config);
         }
     }
 
