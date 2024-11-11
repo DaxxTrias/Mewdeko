@@ -35,6 +35,18 @@ public class SlashMusic(
     [CheckPermissions]
     public async Task Join()
     {
+        var userVoiceChannel = (Context.User as IVoiceState)?.VoiceChannel;
+        if (userVoiceChannel == null)
+        {
+            var eb = new EmbedBuilder()
+                .WithErrorColor()
+                .WithTitle(GetText("music_player_error"))
+                .WithDescription(GetText("music_not_in_channel"));
+
+            await Context.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
+            return;
+        }
+
         var (player, result) = await GetPlayerAsync();
         if (string.IsNullOrWhiteSpace(result))
             await ReplyConfirmLocalizedAsync("music_join_success", player.VoiceChannelId).ConfigureAwait(false);
