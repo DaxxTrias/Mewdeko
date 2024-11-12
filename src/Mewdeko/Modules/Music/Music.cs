@@ -788,8 +788,44 @@ public class Music(
 
         await player.SetRepeatTypeAsync(repeatType).ConfigureAwait(false);
         await ReplyConfirmLocalizedAsync("music_repeat_type", repeatType).ConfigureAwait(false);
+
+        if (repeatType == PlayerRepeatType.Shuffle)
+        {
+            await ShuffleQueue();
+        }
     }
 
+    /// <summary>
+    ///     Shuffles the music queue
+    /// </summary>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    public async Task ShuffleQueue()
+    {
+        var (player, result) = await GetPlayerAsync(false);
+        if (result is not null)
+        {
+            var eb = new EmbedBuilder()
+                .WithErrorColor()
+                .WithTitle(GetText("music_player_error"))
+                .WithDescription(result);
+
+            await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
+            return;
+        }
+
+        var queue = await cache.GetMusicQueue(ctx.Guild.Id);
+        if (queue.Count == 0)
+        {
+            await ReplyErrorLocalizedAsync("music_queue_empty").ConfigureAwait(false);
+            return;
+        }
+
+        queue = queue.Shuffle().ToList();
+        await cache.SetMusicQueue(ctx.Guild.Id, queue);
+        await ReplyConfirmLocalizedAsync("music_queue_shuffled").ConfigureAwait(false);
+    }
 
     private async ValueTask<(MewdekoPlayer, string?)> GetPlayerAsync(bool connectToVoiceChannel = true)
     {
