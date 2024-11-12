@@ -99,10 +99,17 @@ public sealed class MewdekoPlayer : LavalinkPlayer
                             await cache.SetCurrentTrack(GuildId, nextTrack);
                         }
 
-                        break;
-                    default:
-                        throw new ArgumentOutOfRangeException();
-                }
+                            break;
+                        case PlayerRepeatType.Shuffle:
+                            queue = queue.Shuffle().ToList();
+                            await cache.SetMusicQueue(GuildId, queue);
+                            await PlayAsync(queue[0].Track,
+                                cancellationToken: token);
+                            await cache.SetCurrentTrack(GuildId, queue[0]);
+                            break;
+                        default:
+                            throw new ArgumentOutOfRangeException();
+                    }
 
                 break;
             case TrackEndReason.LoadFailed:
