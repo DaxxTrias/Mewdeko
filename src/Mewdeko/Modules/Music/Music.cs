@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 using System.Text.Json;
 using System.Threading;
 using Discord.Commands;
@@ -247,6 +247,9 @@ public class Music(
                         .Build();
 
                     await ctx.Channel.SendMessageAsync(embed: eb).ConfigureAwait(false);
+
+                    // Skip the track feedback if we've entered a whole playlist
+                    return;
                 }
                 else
                 {

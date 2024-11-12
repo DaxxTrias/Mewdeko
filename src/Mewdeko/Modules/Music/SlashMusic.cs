@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 using System.Text.Json;
 using System.Threading;
 using Discord.Interactions;
@@ -248,6 +248,9 @@ public class SlashMusic(
                         .Build();
 
                     await Context.Channel.SendMessageAsync(embed: eb).ConfigureAwait(false);
+
+                    // Skip the track feedback if we've entered a whole playlist
+                    return;
                 }
                 else
                 {
