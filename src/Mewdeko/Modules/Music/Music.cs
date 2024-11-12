@@ -732,6 +732,11 @@ public class Music(
 
         await player.SetRepeatTypeAsync(repeatType).ConfigureAwait(false);
         await ReplyConfirmLocalizedAsync("music_repeat_type", repeatType).ConfigureAwait(false);
+
+        if (repeatType == PlayerRepeatType.Shuffle)
+        {
+            await ShuffleQueue();
+        }
     }
 
 
