@@ -153,6 +153,13 @@ public class SlashMusic(
         await player.StopAsync();
         await player.PlayAsync(trackToPlay.Track).ConfigureAwait(false);
         await cache.SetCurrentTrack(Context.Guild.Id, trackToPlay);
+
+        // Update the indices of the tracks in the queue
+        for (var i = 0; i < queue.Count; i++)
+        {
+            queue[i].Index = i + 1;
+        }
+        await cache.SetMusicQueue(ctx.Guild.Id, queue);
     }
 
     /// <summary>
