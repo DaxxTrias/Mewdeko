@@ -338,7 +338,6 @@ public class SlashOwnerOnly(
         };
     }
 
-
     /// <summary>
     ///     Commands the bot to leave a server.
     /// </summary>
@@ -376,7 +375,6 @@ public class SlashOwnerOnly(
         Environment.SetEnvironmentVariable("AFK_CACHED", "0");
         Environment.Exit(0);
     }
-
 
     /// <summary>
     ///     Sends a message to a specified channel or user.
@@ -997,7 +995,6 @@ public class SlashOwnerOnly(
                     .ConfigureAwait(false);
             }
         }
-
         private string GetIntervalText(int interval)
         {
             return $"[{GetText("interval")}]: {interval}";

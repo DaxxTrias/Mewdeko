@@ -36,7 +36,6 @@ public class FeedsService : INService
         _ = Task.Run(async () => await TrackFeeds(client.Guilds.Select(x => x.Id)));
     }
 
-
     private async Task<GuildConfig> GetGuildConfigFromId(int guildConfigId)
     {
         await using var dbContext = await dbProvider.GetContextAsync();
@@ -446,7 +445,6 @@ public class FeedsService : INService
             : Task.FromResult<(Embed[], string, ComponentBuilder)>(([], message, null));
     }
 
-
     /// <summary>
     ///     Retrieves all feed subscriptions for a guild.
     /// </summary>
@@ -569,6 +567,11 @@ public class FeedsService : INService
         return true;
     }
 
+    /// <summary>
+    ///     Start the feed tracking service
+    /// </summary>
+    /// <param name="guildId"></param>
+    /// <returns></returns>
     public bool StartTracking(ulong guildId)
     {
         try
@@ -583,6 +586,12 @@ public class FeedsService : INService
         }
         return false;
     }
+
+    /// <summary>
+    ///     Stop the feed tracking service
+    /// </summary>
+    /// <param name="guildId"></param>
+    /// <returns></returns>
     public bool StopTracking(ulong guildId)
     {
         try
