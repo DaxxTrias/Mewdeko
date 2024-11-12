@@ -1809,8 +1809,6 @@ shufflequeue:
   - sh
   - sq
   - plsh
-shrug:
-  - shrug
 skip:
   - skip
   - next
