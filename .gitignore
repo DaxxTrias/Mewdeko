@@ -3,9 +3,15 @@
 patreon_rewards.json
 command_errors*.txt
 _output/
+_site/
+api/
 
 src/Mewdeko/Command Errors*.txt
 bot.yml
+
+application.yml
+
+*.jar
 
 src/Mewdeko/credentials.json
 # these 2 are used for migrations1
@@ -374,3 +380,8 @@ src\Mewdeko\data\*.yml
 # Cottage Test Utilities
 __cottage_test/
 
+_site/*
+api/*
+/api
+src/Mewdeko/gcreds.json
+src/Mewdeko/application.yml

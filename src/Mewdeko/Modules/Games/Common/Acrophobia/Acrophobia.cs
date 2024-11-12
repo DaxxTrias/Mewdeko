@@ -4,31 +4,45 @@ using CommandLine;
 
 namespace Mewdeko.Modules.Games.Common.Acrophobia;
 
+/// <summary>
+///     Represents an Acrophobia game.
+/// </summary>
 public sealed class AcrophobiaGame : IDisposable
 {
+    /// <summary>
+    ///     Represents the phase of a process.
+    /// </summary>
     public enum Phase
     {
+        /// <summary>
+        ///     Submission phase.
+        /// </summary>
         Submission,
+
+        /// <summary>
+        ///     Voting phase.
+        /// </summary>
         Voting,
+
+        /// <summary>
+        ///     Ended phase.
+        /// </summary>
         Ended
     }
 
-    public enum UserInputResult
-    {
-        Submitted,
-        SubmissionFailed,
-        Voted,
-        VotingFailed,
-        Failed
-    }
+    private readonly SemaphoreSlim locker = new(1, 1);
+
 
     private readonly MewdekoRandom rng;
 
-    private readonly HashSet<ulong> usersWhoVoted = new();
-    private readonly SemaphoreSlim locker = new(1, 1);
-
     private readonly Dictionary<AcrophobiaUser, int> submissions = new();
 
+    private readonly HashSet<ulong> usersWhoVoted = [];
+
+    /// <summary>
+    ///     Initializes a new instance of the <see cref="AcrophobiaGame" /> class.
+    /// </summary>
+    /// <param name="options">Represents the options in a acro game</param>
     public AcrophobiaGame(Options options)
     {
         Opts = options;
@@ -36,10 +50,24 @@ public sealed class AcrophobiaGame : IDisposable
         InitializeStartingLetters();
     }
 
+    /// <summary>
+    ///     Represents the current phase of the game.
+    /// </summary>
     public Phase CurrentPhase { get; private set; } = Phase.Submission;
+
+    /// <summary>
+    ///     Represents the starting letters for the game.
+    /// </summary>
     public ImmutableArray<char> StartingLetters { get; private set; }
+
+    /// <summary>
+    ///     Gets the options for the game.
+    /// </summary>
     public Options Opts { get; }
 
+    /// <summary>
+    ///     Disposes resources used by the game.
+    /// </summary>
     public void Dispose()
     {
         CurrentPhase = Phase.Ended;
@@ -52,18 +80,33 @@ public sealed class AcrophobiaGame : IDisposable
         locker.Dispose();
     }
 
+    /// <summary>
+    ///     Event triggered when the game starts.
+    /// </summary>
     public event Func<AcrophobiaGame, Task> OnStarted = delegate { return Task.CompletedTask; };
 
+    /// <summary>
+    ///     Event triggered when the voting phase of the game starts.
+    /// </summary>
     public event Func<AcrophobiaGame, ImmutableArray<KeyValuePair<AcrophobiaUser, int>>, Task> OnVotingStarted =
         delegate { return Task.CompletedTask; };
 
+    /// <summary>
+    ///     Event triggered when a user votes.
+    /// </summary>
     public event Func<string, Task> OnUserVoted = delegate { return Task.CompletedTask; };
 
+    /// <summary>
+    ///     Event triggered when the game ends.
+    /// </summary>
     public event Func<AcrophobiaGame, ImmutableArray<KeyValuePair<AcrophobiaUser, int>>, Task> OnEnded = delegate
     {
         return Task.CompletedTask;
     };
 
+    /// <summary>
+    ///     Runs the game.
+    /// </summary>
     public async Task Run()
     {
         await OnStarted(this).ConfigureAwait(false);
@@ -75,17 +118,17 @@ public sealed class AcrophobiaGame : IDisposable
             {
                 case 0:
                     CurrentPhase = Phase.Ended;
-                    await OnVotingStarted(this, ImmutableArray.Create<KeyValuePair<AcrophobiaUser, int>>())
+                    await OnVotingStarted(this, [])
                         .ConfigureAwait(false);
                     return;
                 case 1:
                     CurrentPhase = Phase.Ended;
-                    await OnVotingStarted(this, submissions.ToArray().ToImmutableArray()).ConfigureAwait(false);
+                    await OnVotingStarted(this, [..submissions.ToArray()]).ConfigureAwait(false);
                     return;
                 default:
                     CurrentPhase = Phase.Voting;
 
-                    await OnVotingStarted(this, submissions.ToArray().ToImmutableArray()).ConfigureAwait(false);
+                    await OnVotingStarted(this, [..submissions.ToArray()]).ConfigureAwait(false);
                     break;
             }
         }
@@ -99,13 +142,14 @@ public sealed class AcrophobiaGame : IDisposable
         try
         {
             CurrentPhase = Phase.Ended;
-            await OnEnded(this, submissions.ToArray().ToImmutableArray()).ConfigureAwait(false);
+            await OnEnded(this, [..submissions.ToArray()]).ConfigureAwait(false);
         }
         finally
         {
             locker.Release();
         }
     }
+
 
     private void InitializeStartingLetters()
     {
@@ -119,9 +163,16 @@ public sealed class AcrophobiaGame : IDisposable
             lettersArr[i] = randChar == 'X' ? (char)rng.Next(65, 88) : randChar;
         }
 
-        StartingLetters = lettersArr.ToImmutableArray();
+        StartingLetters = [..lettersArr];
     }
 
+    /// <summary>
+    ///     Handles user input for the game.
+    /// </summary>
+    /// <param name="userId">The ID of the user.</param>
+    /// <param name="userName">The name of the user.</param>
+    /// <param name="input">The input provided by the user.</param>
+    /// <returns>True if the input was processed successfully; otherwise, false.</returns>
     public async Task<bool> UserInput(ulong userId, string userName, string input)
     {
         var user = new AcrophobiaUser(userId, userName, input.ToLowerInvariant().ToTitleCase());
@@ -187,16 +238,28 @@ public sealed class AcrophobiaGame : IDisposable
         return true;
     }
 
+    /// <summary>
+    ///     Represents the options for a command.
+    /// </summary>
     public class Options : IMewdekoCommandOptions
     {
+        /// <summary>
+        ///     Gets or sets the time after which the submissions are closed and voting starts.
+        /// </summary>
         [Option('s', "submission-time", Required = false, Default = 60,
             HelpText = "Time after which the submissions are closed and voting starts.")]
         public int SubmissionTime { get; set; } = 60;
 
+        /// <summary>
+        ///     Gets or sets the time after which the voting is closed and the winner is declared.
+        /// </summary>
         [Option('v', "vote-time", Required = false, Default = 60,
             HelpText = "Time after which the voting is closed and the winner is declared.")]
         public int VoteTime { get; set; } = 30;
 
+        /// <summary>
+        ///     Normalizes the options by ensuring they are within acceptable ranges.
+        /// </summary>
         public void NormalizeOptions()
         {
             if (SubmissionTime is < 15 or > 300)

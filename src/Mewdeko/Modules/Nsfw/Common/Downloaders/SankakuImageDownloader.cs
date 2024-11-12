@@ -4,11 +4,20 @@ using System.Threading;
 
 namespace Mewdeko.Modules.Nsfw.Common.Downloaders;
 
-public sealed class SankakuImageDownloader(IHttpClientFactory http) : ImageDownloader<SankakuImageObject>(Booru.Sankaku,
-    http)
+/// <summary>
+///     Downloader for images from Sankakucomplex.
+/// </summary>
+public sealed class SankakuImageDownloader : ImageDownloader<SankakuImageObject>
 {
     private readonly string baseUrl = "https://capi-v2.sankakucomplex.com";
 
+    /// <summary>
+    ///     Initializes a new instance of the <see cref="SankakuImageDownloader" /> class.
+    /// </summary>
+    /// <param name="http">The HTTP client factory.</param>
+    public SankakuImageDownloader(IHttpClientFactory http) : base(Booru.Sankaku, http) { }
+
+    /// <inheritdoc />
     public override async Task<List<SankakuImageObject>> DownloadImagesAsync(
         string[] tags,
         int page,

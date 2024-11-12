@@ -1,17 +1,34 @@
 ﻿using Discord.Commands;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Modules.Administration.Services;
-using static Mewdeko.Modules.Administration.Services.LogCommandService;
+using LogType = Mewdeko.Modules.Administration.Services.LogCommandService.LogType;
 
 namespace Mewdeko.Modules.Administration;
 
 public partial class Administration
 {
+    /// <summary>
+    ///     Module for logging commands.
+    /// </summary>
     [Group]
-    public class LogCommands : MewdekoSubmodule<LogCommandService>
+    public class LogCommands(GuildSettingsService gss) : MewdekoSubmodule<LogCommandService>
     {
-        [Cmd, Aliases, RequireContext(ContextType.Guild), UserPerm(GuildPermission.Administrator), Priority(1)]
-        public async Task LogCategory(LogCategoryTypes type, ITextChannel? channel = null)
+        /// <summary>
+        ///     Sets the logging category for a specified type of logs.
+        /// </summary>
+        /// <remarks>
+        ///     This command is restricted to users with Administrator permissions.
+        /// </remarks>
+        /// <param name="type">The type of logs to set the category for.</param>
+        /// <param name="channel">The text channel where the logs will be sent.</param>
+        /// <example>.logcategory messages #log-channel</example>
+        /// <example>.logcategory messages</example>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.Administrator)]
+        [Priority(1)]
+        public async Task LogCategory(LogCommandService.LogCategoryTypes type, ITextChannel? channel = null)
         {
             await Service.LogSetByType(ctx.Guild.Id, channel?.Id ?? 0, type);
             if (channel is null)
@@ -23,42 +40,53 @@ public partial class Administration
             await ctx.Channel.SendConfirmAsync(GetText("logging_category_enabled", type, channel.Mention));
         }
 
-        [Cmd, Aliases, RequireContext(ContextType.Guild), UserPerm(GuildPermission.Administrator), Priority(0)]
-        public async Task LogIgnore()
-        {
-            var channel = (ITextChannel)ctx.Channel;
 
-            var removed = await Service.LogIgnore(ctx.Guild.Id, ctx.Channel.Id);
+        // [Cmd, Aliases, RequireContext(ContextType.Guild), UserPerm(GuildPermission.Administrator), Priority(0)]
+        // public async Task LogIgnore()
+        // {
+        //     var channel = (ITextChannel)ctx.Channel;
+        //
+        //     var removed = await Service.LogIgnore(ctx.Guild.Id, ctx.Channel.Id);
+        //
+        //     if (!removed)
+        //         await ReplyConfirmLocalizedAsync("log_ignore", Format.Bold($"{channel.Mention}({channel.Id})")).ConfigureAwait(false);
+        //     else
+        //         await ReplyConfirmLocalizedAsync("log_not_ignore", Format.Bold($"{channel.Mention}({channel.Id})")).ConfigureAwait(false);
+        // }
+        //
+        // [Cmd, Aliases, RequireContext(ContextType.Guild), UserPerm(GuildPermission.Administrator), Priority(1)]
+        // public async Task LogIgnore(ITextChannel channel)
+        // {
+        //     var removed = await Service.LogIgnore(ctx.Guild.Id, channel.Id);
+        //
+        //     if (!removed)
+        //         await ReplyConfirmLocalizedAsync("log_ignore", Format.Bold($"{channel.Mention}({channel.Id})")).ConfigureAwait(false);
+        //     else
+        //         await ReplyConfirmLocalizedAsync("log_not_ignore", Format.Bold($"{channel.Mention}({channel.Id})")).ConfigureAwait(false);
+        // }
+        //
+        // [Cmd, Aliases, RequireContext(ContextType.Guild), UserPerm(GuildPermission.Administrator), Priority(2)]
+        // public async Task LogIgnore(IVoiceChannel channel)
+        // {
+        //     var removed = await Service.LogIgnore(ctx.Guild.Id, channel.Id);
+        //
+        //     if (!removed)
+        //         await ReplyConfirmLocalizedAsync("log_ignore", Format.Bold($"{channel.Name}({channel.Id})")).ConfigureAwait(false);
+        //     else
+        //         await ReplyConfirmLocalizedAsync("log_not_ignore", Format.Bold($"{channel.Name}({channel.Id})")).ConfigureAwait(false);
+        // }
 
-            if (!removed)
-                await ReplyConfirmLocalizedAsync("log_ignore", Format.Bold($"{channel.Mention}({channel.Id})")).ConfigureAwait(false);
-            else
-                await ReplyConfirmLocalizedAsync("log_not_ignore", Format.Bold($"{channel.Mention}({channel.Id})")).ConfigureAwait(false);
-        }
-
-        [Cmd, Aliases, RequireContext(ContextType.Guild), UserPerm(GuildPermission.Administrator), Priority(1)]
-        public async Task LogIgnore(ITextChannel channel)
-        {
-            var removed = await Service.LogIgnore(ctx.Guild.Id, channel.Id);
-
-            if (!removed)
-                await ReplyConfirmLocalizedAsync("log_ignore", Format.Bold($"{channel.Mention}({channel.Id})")).ConfigureAwait(false);
-            else
-                await ReplyConfirmLocalizedAsync("log_not_ignore", Format.Bold($"{channel.Mention}({channel.Id})")).ConfigureAwait(false);
-        }
-
-        [Cmd, Aliases, RequireContext(ContextType.Guild), UserPerm(GuildPermission.Administrator), Priority(2)]
-        public async Task LogIgnore(IVoiceChannel channel)
-        {
-            var removed = await Service.LogIgnore(ctx.Guild.Id, channel.Id);
-
-            if (!removed)
-                await ReplyConfirmLocalizedAsync("log_ignore", Format.Bold($"{channel.Name}({channel.Id})")).ConfigureAwait(false);
-            else
-                await ReplyConfirmLocalizedAsync("log_not_ignore", Format.Bold($"{channel.Name}({channel.Id})")).ConfigureAwait(false);
-        }
-
-        [Cmd, Aliases, RequireContext(ContextType.Guild), UserPerm(GuildPermission.Administrator)]
+        /// <summary>
+        ///     Displays the current logging events configuration for the guild.
+        /// </summary>
+        /// <remarks>
+        ///     This command is restricted to users with Administrator permissions.
+        /// </remarks>
+        /// <example>.logevents</example>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.Administrator)]
         public async Task LogEvents()
         {
             Service.GuildLogSettings.TryGetValue(ctx.Guild.Id, out var l);
@@ -71,8 +99,10 @@ public partial class Administration
             await ctx.Channel.SendConfirmAsync($"{Format.Bold(GetText("log_events"))}\n{str}").ConfigureAwait(false);
         }
 
-        private static ulong? GetLogProperty(LogSetting l, LogType type) =>
-            type switch
+
+        private static ulong? GetLogProperty(LoggingV2 l, LogType type)
+        {
+            return type switch
             {
                 LogType.Other => l.LogOtherId,
                 LogType.MessageUpdated => l.MessageUpdatedId,
@@ -104,39 +134,72 @@ public partial class Administration
 
                 _ => null
             };
-
-        [Cmd, Aliases, RequireContext(ContextType.Guild), UserPerm(GuildPermission.Administrator), Priority(0)]
-        public async Task Log(LogType type)
-        {
-            await Service.SetLogChannel(ctx.Guild.Id, ctx.Channel.Id, type).ConfigureAwait(false);
-            await ReplyConfirmLocalizedAsync("log", Format.Bold(type.ToString())).ConfigureAwait(false);
         }
 
-        [Cmd, Aliases, RequireContext(ContextType.Guild), UserPerm(GuildPermission.Administrator), Priority(1)]
+
+        /// <summary>
+        ///     Sets the logging channel for a specific event type.
+        /// </summary>
+        /// <param name="type">The type of event to set the logging channel for.</param>
+        /// <remarks>
+        ///     This command is restricted to users with Administrator permissions.
+        /// </remarks>
+        /// <param name="channel">
+        ///     The channel to set as the logging channel. If not provided, the command will disable logging for
+        ///     the specified event type.
+        /// </param>
+        /// <example>.log UserJoined #log-channel</example>
+        /// <example>.log UserLeft</example>
+        /// <example>.log UserJoined</example>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.Administrator)]
+        [Priority(0)]
         public async Task Log(LogType type, ITextChannel? channel = null)
         {
-            await Service.SetLogChannel(ctx.Guild.Id, channel?.Id ?? 0, type).ConfigureAwait(false);
-            if (channel is not null)
+            try
             {
-                await ConfirmLocalizedAsync("logging_event_enabled", type, channel.Id).ConfigureAwait(false);
-                return;
-            }
+                await Service.SetLogChannel(ctx.Guild.Id, channel?.Id ?? 0, type).ConfigureAwait(false);
+                if (channel is not null)
+                {
+                    await ConfirmLocalizedAsync("logging_event_enabled", type, channel.Id).ConfigureAwait(false);
+                    return;
+                }
 
-            await ConfirmLocalizedAsync("logging_event_disabled", type);
+                await ConfirmLocalizedAsync("logging_event_disabled", type);
+            }
+            catch (Exception e)
+            {
+                Serilog.Log.Error(e, "There was an issue setting logs");
+                await ctx.Channel.SendErrorAsync(GetText("command_fatal_error"), Config);
+            }
         }
 
-        [Cmd, Aliases, RequireContext(ContextType.Guild), UserPerm(GuildPermission.Administrator)]
+
+        /// <summary>
+        ///     Sets a channel to log commands to
+        /// </summary>
+        /// <param name="channel">The channel to log commands to</param>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.Administrator)]
         public async Task CommandLogChannel(ITextChannel? channel = null)
         {
             if (channel is null)
             {
                 await ConfirmLocalizedAsync("command_logging_disabled");
-                await Service.UpdateCommandLogChannel(ctx.Guild, 0);
+                var gc = await gss.GetGuildConfig(ctx.Guild.Id);
+                gc.CommandLogChannel = 0;
+                await gss.UpdateGuildConfig(ctx.Guild.Id, gc);
             }
             else
             {
                 await ConfirmLocalizedAsync("command_logging_enabled");
-                await Service.UpdateCommandLogChannel(ctx.Guild, channel.Id);
+                var gc = await gss.GetGuildConfig(ctx.Guild.Id);
+                gc.CommandLogChannel = channel.Id;
+                await gss.UpdateGuildConfig(ctx.Guild.Id, gc);
             }
         }
     }

@@ -6,9 +6,18 @@ using Mewdeko.Services.Settings;
 
 namespace Mewdeko.Modules.RoleStates;
 
+/// <summary>
+/// </summary>
+/// <param name="bss">The BotConfigService instance.</param>
+/// <param name="interactivity">The InteractiveService instance.</param>
 public class RoleStates(BotConfigService bss, InteractiveService interactivity) : MewdekoModuleBase<RoleStatesService>
 {
-    [Cmd, Aliases, UserPerm(GuildPermission.Administrator)]
+    /// <summary>
+    ///     Toggles the role states feature on or off.
+    /// </summary>
+    [Cmd]
+    [Aliases]
+    [UserPerm(GuildPermission.Administrator)]
     public async Task ToggleRoleStates()
     {
         if (await Service.ToggleRoleStates(ctx.Guild.Id))
@@ -17,14 +26,19 @@ public class RoleStates(BotConfigService bss, InteractiveService interactivity) 
             await ctx.Channel.SendConfirmAsync($"{bss.Data.SuccessEmote} Role States are now disabled!");
     }
 
-    [Cmd, Aliases, UserPerm(GuildPermission.Administrator)]
+    /// <summary>
+    ///     Toggles whether bots should be ignored by the role states feature.
+    /// </summary>
+    [Cmd]
+    [Aliases]
+    [UserPerm(GuildPermission.Administrator)]
     public async Task ToggleRoleStatesIgnoreBots()
     {
         var roleStateSettings = await Service.GetRoleStateSettings(ctx.Guild.Id);
         if (roleStateSettings is null)
         {
             await ctx.Channel.SendErrorAsync(
-                $"{bss.Data.ErrorEmote} Role States are not enabled and have not been configured!");
+                $"{bss.Data.ErrorEmote} Role States are not enabled and have not been configured!", Config);
             return;
         }
 
@@ -34,14 +48,20 @@ public class RoleStates(BotConfigService bss, InteractiveService interactivity) 
             await ctx.Channel.SendConfirmAsync($"{bss.Data.SuccessEmote} Role States will not ignore bots!");
     }
 
-    [Cmd, Aliases, UserPerm(GuildPermission.Administrator)]
+
+    /// <summary>
+    ///     Toggles whether role states should be cleared when a user is banned.
+    /// </summary>
+    [Cmd]
+    [Aliases]
+    [UserPerm(GuildPermission.Administrator)]
     public async Task ToggleRoleStatesClearOnBan()
     {
         var roleStateSettings = await Service.GetRoleStateSettings(ctx.Guild.Id);
         if (roleStateSettings is null)
         {
             await ctx.Channel.SendErrorAsync(
-                $"{bss.Data.ErrorEmote} Role States are not enabled and have not been configured!");
+                $"{bss.Data.ErrorEmote} Role States are not enabled and have not been configured!", Config);
             return;
         }
 
@@ -51,22 +71,26 @@ public class RoleStates(BotConfigService bss, InteractiveService interactivity) 
             await ctx.Channel.SendConfirmAsync($"{bss.Data.SuccessEmote} Role states will not clear on ban!");
     }
 
-
-    [Cmd, Aliases, UserPerm(GuildPermission.Administrator)]
+    /// <summary>
+    ///     Displays the current settings for the role states feature.
+    /// </summary>
+    [Cmd]
+    [Aliases]
+    [UserPerm(GuildPermission.Administrator)]
     public async Task ViewRoleStatesSettings()
     {
         var roleStateSettings = await Service.GetRoleStateSettings(ctx.Guild.Id);
         if (roleStateSettings is null)
             await ctx.Channel.SendErrorAsync(
-                $"{bss.Data.ErrorEmote} Role States are not enabled and have not been configured!");
+                $"{bss.Data.ErrorEmote} Role States are not enabled and have not been configured!", Config);
         else
         {
             var deniedUsers = string.IsNullOrWhiteSpace(roleStateSettings.DeniedUsers)
-                ? new List<ulong>()
+                ? []
                 : roleStateSettings.DeniedUsers.Split(',').Select(ulong.Parse).ToList();
 
             var deniedRoles = string.IsNullOrWhiteSpace(roleStateSettings.DeniedRoles)
-                ? new List<ulong>()
+                ? []
                 : roleStateSettings.DeniedRoles.Split(',').Select(ulong.Parse).ToList();
 
 
@@ -82,14 +106,19 @@ public class RoleStates(BotConfigService bss, InteractiveService interactivity) 
         }
     }
 
-    [Cmd, Aliases, UserPerm(GuildPermission.Administrator)]
+    /// <summary>
+    ///     Displays the role states for all users.
+    /// </summary>
+    [Cmd]
+    [Aliases]
+    [UserPerm(GuildPermission.Administrator)]
     public async Task ViewUserRoleStates()
     {
         var userRoleStates = await Service.GetAllUserRoleStates(ctx.Guild.Id);
 
         if (!userRoleStates.Any())
         {
-            await ctx.Channel.SendErrorAsync($"{bss.Data.ErrorEmote} No user role states have been saved!");
+            await ctx.Channel.SendErrorAsync($"{bss.Data.ErrorEmote} No user role states have been saved!", Config);
         }
         else
         {
@@ -110,7 +139,7 @@ public class RoleStates(BotConfigService bss, InteractiveService interactivity) 
                 await Task.CompletedTask.ConfigureAwait(false);
 
                 var eb = new PageBuilder()
-                    .WithTitle($"User Role States")
+                    .WithTitle("User Role States")
                     .WithOkColor();
 
                 var roleStatesToShow = userRoleStates.Skip(5 * page).Take(3).ToList();
@@ -118,7 +147,7 @@ public class RoleStates(BotConfigService bss, InteractiveService interactivity) 
                 foreach (var userRoleState in roleStatesToShow)
                 {
                     var savedRoles = string.IsNullOrWhiteSpace(userRoleState.SavedRoles)
-                        ? new List<ulong>()
+                        ? []
                         : userRoleState.SavedRoles.Split(',').Select(ulong.Parse).ToList();
 
                     eb.AddField($"{userRoleState.UserName} ({userRoleState.UserId})",
@@ -130,19 +159,31 @@ public class RoleStates(BotConfigService bss, InteractiveService interactivity) 
         }
     }
 
-    [Cmd, Aliases, UserPerm(GuildPermission.Administrator)]
+    /// <summary>
+    ///     Deletes the role state for a specific user.
+    /// </summary>
+    /// <param name="user">The user whose role state should be deleted.</param>
+    [Cmd]
+    [Aliases]
+    [UserPerm(GuildPermission.Administrator)]
     public async Task DeleteUserRoleState(IGuildUser user)
     {
         var userRoleStates = await Service.DeleteUserRoleState(ctx.Guild.Id, user.Id);
         if (!userRoleStates)
-            await ctx.Channel.SendErrorAsync($"{bss.Data.ErrorEmote} There is no role state for {user}!");
+            await ctx.Channel.SendErrorAsync($"{bss.Data.ErrorEmote} There is no role state for {user}!", Config);
         else
         {
             await ctx.Channel.SendConfirmAsync($"{bss.Data.SuccessEmote} User role state for {user} has been deleted!");
         }
     }
 
-    [Cmd, Aliases, UserPerm(GuildPermission.Administrator)]
+    /// <summary>
+    ///     Adds roles to the deny list for the role states feature.
+    /// </summary>
+    /// <param name="roles">The roles to be added to the deny list.</param>
+    [Cmd]
+    [Aliases]
+    [UserPerm(GuildPermission.Administrator)]
     public async Task RoleStatesAddDenyRole(params IRole[] roles)
     {
         var roleStateSettings = await Service.GetRoleStateSettings(ctx.Guild.Id);
@@ -150,12 +191,12 @@ public class RoleStates(BotConfigService bss, InteractiveService interactivity) 
         if (roleStateSettings is null)
         {
             await ctx.Channel.SendErrorAsync(
-                $"{bss.Data.ErrorEmote} Role States are not enabled and have not been configured!");
+                $"{bss.Data.ErrorEmote} Role States are not enabled and have not been configured!", Config);
             return;
         }
 
         var deniedRoles = string.IsNullOrWhiteSpace(roleStateSettings.DeniedRoles)
-            ? new List<ulong>()
+            ? []
             : roleStateSettings.DeniedRoles.Split(',').Select(ulong.Parse).ToList();
 
         var addedCount = 0;
@@ -174,7 +215,13 @@ public class RoleStates(BotConfigService bss, InteractiveService interactivity) 
             $"{bss.Data.SuccessEmote} Successfully added {addedCount} role(s) to the deny list.");
     }
 
-    [Cmd, Aliases, UserPerm(GuildPermission.Administrator)]
+    /// <summary>
+    ///     Removes roles from the deny list for the role states feature.
+    /// </summary>
+    /// <param name="roles">The roles to be removed from the deny list.</param>
+    [Cmd]
+    [Aliases]
+    [UserPerm(GuildPermission.Administrator)]
     public async Task RoleStatesRemoveDenyRole(params IRole[] roles)
     {
         var roleStateSettings = await Service.GetRoleStateSettings(ctx.Guild.Id);
@@ -182,12 +229,12 @@ public class RoleStates(BotConfigService bss, InteractiveService interactivity) 
         if (roleStateSettings is null)
         {
             await ctx.Channel.SendErrorAsync(
-                $"{bss.Data.ErrorEmote} Role States are not enabled and have not been configured!");
+                $"{bss.Data.ErrorEmote} Role States are not enabled and have not been configured!", Config);
             return;
         }
 
         var deniedRoles = string.IsNullOrWhiteSpace(roleStateSettings.DeniedRoles)
-            ? new List<ulong>()
+            ? []
             : roleStateSettings.DeniedRoles.Split(',').Select(ulong.Parse).ToList();
 
         var removedCount = 0;
@@ -206,7 +253,13 @@ public class RoleStates(BotConfigService bss, InteractiveService interactivity) 
             $"{bss.Data.SuccessEmote} Successfully removed {removedCount} role(s) from the deny list.");
     }
 
-    [Cmd, Aliases, UserPerm(GuildPermission.Administrator)]
+    /// <summary>
+    ///     Adds users to the deny list for the role states feature.
+    /// </summary>
+    /// <param name="users">The users to be added to the deny list.</param>
+    [Cmd]
+    [Aliases]
+    [UserPerm(GuildPermission.Administrator)]
     public async Task RoleStatesAddDenyUser(params IGuildUser[] users)
     {
         var roleStateSettings = await Service.GetRoleStateSettings(ctx.Guild.Id);
@@ -214,12 +267,12 @@ public class RoleStates(BotConfigService bss, InteractiveService interactivity) 
         if (roleStateSettings is null)
         {
             await ctx.Channel.SendErrorAsync(
-                $"{bss.Data.ErrorEmote} Role States are not enabled and have not been configured!");
+                $"{bss.Data.ErrorEmote} Role States are not enabled and have not been configured!", Config);
             return;
         }
 
         var deniedUsers = string.IsNullOrWhiteSpace(roleStateSettings.DeniedUsers)
-            ? new List<ulong>()
+            ? []
             : roleStateSettings.DeniedUsers.Split(',').Select(ulong.Parse).ToList();
 
         var addedCount = 0;
@@ -238,7 +291,13 @@ public class RoleStates(BotConfigService bss, InteractiveService interactivity) 
             $"{bss.Data.SuccessEmote} Successfully added {addedCount} user(s) to the deny list.");
     }
 
-    [Cmd, Aliases, UserPerm(GuildPermission.Administrator)]
+    /// <summary>
+    ///     Removes users from the deny list for the role states feature.
+    /// </summary>
+    /// <param name="users">The users to be removed from the deny list.</param>
+    [Cmd]
+    [Aliases]
+    [UserPerm(GuildPermission.Administrator)]
     public async Task RoleStatesRemoveDenyUser(params IGuildUser[] users)
     {
         var roleStateSettings = await Service.GetRoleStateSettings(ctx.Guild.Id);
@@ -246,12 +305,12 @@ public class RoleStates(BotConfigService bss, InteractiveService interactivity) 
         if (roleStateSettings is null)
         {
             await ctx.Channel.SendErrorAsync(
-                $"{bss.Data.ErrorEmote} Role States are not enabled and have not been configured!");
+                $"{bss.Data.ErrorEmote} Role States are not enabled and have not been configured!", Config);
             return;
         }
 
         var deniedUsers = string.IsNullOrWhiteSpace(roleStateSettings.DeniedUsers)
-            ? new List<ulong>()
+            ? []
             : roleStateSettings.DeniedUsers.Split(',').Select(ulong.Parse).ToList();
 
         var removedCount = 0;
@@ -270,45 +329,72 @@ public class RoleStates(BotConfigService bss, InteractiveService interactivity) 
             $"{bss.Data.SuccessEmote} Successfully removed {removedCount} user(s) from the deny list.");
     }
 
-    [Cmd, Aliases, UserPerm(GuildPermission.Administrator)]
+    /// <summary>
+    ///     Sets the role state for a specific user.
+    /// </summary>
+    /// <param name="user">The user whose role state should be set.</param>
+    /// <param name="roles">The roles to be included in the user's role state.</param>
+    [Cmd]
+    [Aliases]
+    [UserPerm(GuildPermission.Administrator)]
     public async Task SetUserRoleState(IGuildUser user, params IRole[] roles)
     {
         var roleIds = roles.Where(x => x.Id != ctx.Guild.Id && !x.IsManaged).Select(x => x.Id);
         if (!roleIds.Any())
-            await ctx.Channel.SendErrorAsync($"{bss.Data.ErrorEmote} There are no valid roles specified!");
+            await ctx.Channel.SendErrorAsync($"{bss.Data.ErrorEmote} There are no valid roles specified!", Config);
         await Service.SetRoleStateManually(user, ctx.Guild.Id, roleIds);
         await ctx.Channel.SendConfirmAsync(
             $"{bss.Data.SuccessEmote} Successfully set the role state for user {user.Mention} with the specified roles.");
     }
 
-    [Cmd, Aliases, UserPerm(GuildPermission.Administrator)]
+    /// <summary>
+    ///     Removes roles from a user's role state.
+    /// </summary>
+    /// <param name="user">The user whose role state should be modified.</param>
+    /// <param name="roles">The roles to be removed from the user's role state.</param>
+    [Cmd]
+    [Aliases]
+    [UserPerm(GuildPermission.Administrator)]
     public async Task RemoveRolesFromRoleState(IUser user, params IRole[] roles)
     {
         var removed = await Service.RemoveRolesFromUserRoleState(ctx.Guild.Id, user.Id, roles.Select(x => x.Id));
         if (!removed.Item1)
-            await ctx.Channel.SendErrorAsync($"{bss.Data.ErrorEmote} Remove failed because:\n{removed.Item2}");
+            await ctx.Channel.SendErrorAsync($"{bss.Data.ErrorEmote} Remove failed because:\n{removed.Item2}", Config);
         else
             await ctx.Channel.SendConfirmAsync(
                 $"{bss.Data.SuccessEmote} Successfully removed those roles from {user}'s Role State!.");
     }
 
-    [Cmd, Aliases, UserPerm(GuildPermission.Administrator)]
+    /// <summary>
+    ///     Adds roles to a user's role state.
+    /// </summary>
+    /// <param name="user">The user whose role state should be modified.</param>
+    /// <param name="roles">The roles to be added to the user's role state.</param>
+    [Cmd]
+    [Aliases]
+    [UserPerm(GuildPermission.Administrator)]
     public async Task AddRolesToRoleState(IUser user, params IRole[] roles)
     {
         var removed = await Service.AddRolesToUserRoleState(ctx.Guild.Id, user.Id, roles.Select(x => x.Id));
         if (!removed.Item1)
-            await ctx.Channel.SendErrorAsync($"{bss.Data.ErrorEmote} Remove failed because:\n{removed.Item2}");
+            await ctx.Channel.SendErrorAsync($"{bss.Data.ErrorEmote} Remove failed because:\n{removed.Item2}", Config);
         else
             await ctx.Channel.SendConfirmAsync(
                 $"{bss.Data.SuccessEmote} Successfully removed those roles from {user}'s Role State!.");
     }
 
-    [Cmd, Aliases, UserPerm(GuildPermission.Administrator)]
+    /// <summary>
+    ///     Deletes the role state for a specific user.
+    /// </summary>
+    /// <param name="user">The user whose role state should be deleted.</param>
+    [Cmd]
+    [Aliases]
+    [UserPerm(GuildPermission.Administrator)]
     public async Task DeleteUserRoleState(IUser user)
     {
         var deleted = await Service.DeleteUserRoleState(user.Id, ctx.Guild.Id);
         if (!deleted)
-            await ctx.Channel.SendErrorAsync($"{bss.Data.ErrorEmote} No Role State to delete!");
+            await ctx.Channel.SendErrorAsync($"{bss.Data.ErrorEmote} No Role State to delete!", Config);
         else
             await ctx.Channel.SendConfirmAsync($"{bss.Data.SuccessEmote} Successfully deleted {user}'s Role State!");
     }

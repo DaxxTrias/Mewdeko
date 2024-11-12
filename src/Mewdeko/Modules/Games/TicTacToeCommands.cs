@@ -8,16 +8,24 @@ namespace Mewdeko.Modules.Games;
 
 public partial class Games
 {
+    /// <summary>
+    ///     A module containing TicTacToe commands.
+    /// </summary>
+    /// <param name="client"></param>
     [Group]
-    public class TicTacToeCommands : MewdekoSubmodule<GamesService>
+    public class TicTacToeCommands(DiscordShardedClient client) : MewdekoSubmodule<GamesService>
     {
-        private readonly DiscordSocketClient client;
         private readonly SemaphoreSlim sem = new(1, 1);
 
-        public TicTacToeCommands(DiscordSocketClient client) => this.client = client;
-
-        [Cmd, Aliases, RequireContext(ContextType.Guild),
-         MewdekoOptions(typeof(TicTacToe.Options))]
+        /// <summary>
+        ///     Starts a game of TicTacToe.
+        /// </summary>
+        /// <param name="args">Options for ttt</param>
+        /// <example>.ttt</example>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [MewdekoOptions(typeof(TicTacToe.Options))]
         public async Task TicTacToe(params string[] args)
         {
             var (options, _) = OptionsParser.ParseFrom(new TicTacToe.Options(), args);
@@ -28,11 +36,11 @@ public partial class Games
             {
                 if (Service.TicTacToeGames.TryGetValue(channel.Id, out var game))
                 {
-                    _ = Task.Run(async () => await game.Start((IGuildUser)ctx.User).ConfigureAwait(false));
+                    _ = Task.Run(() => game.Start((IGuildUser)ctx.User));
                     return;
                 }
 
-                game = new TicTacToe(Strings, client, channel, (IGuildUser)ctx.User, options);
+                game = new TicTacToe(Strings, client, channel, (IGuildUser)ctx.User, options, Config);
                 Service.TicTacToeGames.Add(channel.Id, game);
                 await ReplyConfirmLocalizedAsync("ttt_created").ConfigureAwait(false);
 

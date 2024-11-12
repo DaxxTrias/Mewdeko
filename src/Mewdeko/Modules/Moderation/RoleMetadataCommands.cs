@@ -8,12 +8,21 @@ namespace Mewdeko.Modules.Moderation;
 
 public partial class Moderation
 {
+    /// <summary>
+    ///     Module for managing role metadata.
+    /// </summary>
+    /// <param name="configS">Bot config service</param>
     [Group]
     public class RoleMetadataCommands(BotConfigService configS) : MewdekoSubmodule
     {
         private readonly BotConfig config = configS.Data;
 
-        [Cmd, Aliases, RequireDragon]
+        /// <summary>
+        ///     Authorizes Mewdeko to manage role connections. Must be a dragon. Geroar.
+        /// </summary>
+        [Cmd]
+        [Aliases]
+        [RequireDragon]
         public async Task Authorize()
         {
             var url =

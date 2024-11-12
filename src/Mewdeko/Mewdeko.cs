@@ -1,208 +1,86 @@
-using System.Diagnostics;
-using System.Net.Http;
+﻿using System.Diagnostics;
 using System.Reflection;
 using Discord.Commands;
 using Discord.Interactions;
 using Discord.Net;
 using Discord.Rest;
-using Fergun.Interactive;
+using Figgle;
 using Lavalink4NET;
-using Lavalink4NET.DiscordNet;
-using MartineApiNet;
-using Mewdeko.Common.Collections;
 using Mewdeko.Common.Configs;
 using Mewdeko.Common.ModuleBehaviors;
-using Mewdeko.Common.PubSub;
 using Mewdeko.Common.TypeReaders;
 using Mewdeko.Common.TypeReaders.Interactions;
-using Mewdeko.Modules.Currency.Services;
-using Mewdeko.Modules.Currency.Services.Impl;
-using Mewdeko.Modules.Music.Services;
-using Mewdeko.Modules.Nsfw;
-using Mewdeko.Modules.Searches.Services;
+using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Services.Impl;
-using Mewdeko.Services.Settings;
 using Microsoft.Extensions.DependencyInjection;
-using NekosBestApiNet;
 using Newtonsoft.Json;
-using NsfwSpyNS;
 using Serilog;
 using StackExchange.Redis;
-using RunMode = Discord.Commands.RunMode;
 using TypeReader = Discord.Commands.TypeReader;
 
 namespace Mewdeko;
 
+/// <summary>
+///     The main class for the Mewdeko bot, responsible for initializing services, handling events, and managing the bot's
+///     lifecycle.
+/// </summary>
 public class Mewdeko
 {
-    private readonly DbService db;
-
-    public Mewdeko(int shardId)
+    /// <summary>
+    ///     Initializes a new instance of the Mewdeko class.
+    /// </summary>
+    /// <param name="services">The service provider for dependency injection.</param>
+    public Mewdeko(IServiceProvider services)
     {
-        if (shardId < 0)
-            throw new ArgumentOutOfRangeException(nameof(shardId));
-
-        Credentials = new BotCredentials();
-        Cache = new RedisCache(Credentials, shardId);
-        db = new DbService(Credentials.TotalShards, Credentials.Token, Credentials.UsePsql,
-            Credentials.PsqlConnectionString);
-
-
-        if (shardId == 0)
-            db.Setup();
-
-
-        Client = new DiscordSocketClient(new DiscordSocketConfig
-        {
-            MessageCacheSize = 15,
-            LogLevel = LogSeverity.Info,
-            ConnectionTimeout = int.MaxValue,
-            TotalShards = Credentials.TotalShards,
-            ShardId = shardId,
-            AlwaysDownloadUsers = true,
-            GatewayIntents = GatewayIntents.All,
-            FormatUsersInBidirectionalUnicode = false,
-            LogGatewayIntentWarnings = false,
-            DefaultRetryMode = RetryMode.RetryRatelimit
-        });
-        CommandService = new CommandService(new CommandServiceConfig
-        {
-            CaseSensitiveCommands = false, DefaultRunMode = RunMode.Async
-        });
+        Services = services;
+        Credentials = Services.GetRequiredService<BotCredentials>();
+        Cache = Services.GetRequiredService<IDataCache>();
+        Client = Services.GetRequiredService<DiscordShardedClient>();
+        CommandService = Services.GetRequiredService<CommandService>();
     }
 
+    /// <summary>
+    ///     Gets the credentials used by the bot.
+    /// </summary>
     public BotCredentials Credentials { get; }
-    public DiscordSocketClient Client { get; }
-    private CommandService CommandService { get; }
-    public ConcurrentHashSet<GuildConfig> AllGuildConfigs;
 
+    private int ReadyCount { get; set; }
+
+    /// <summary>
+    ///     Gets the Discord client used by the bot.
+    /// </summary>
+    public DiscordShardedClient Client { get; }
+
+    private CommandService CommandService { get; }
+
+    /// <summary>
+    ///     Gets or sets the color used for successful operations.
+    /// </summary>
     public static Color OkColor { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the color used for error operations.
+    /// </summary>
     public static Color ErrorColor { get; set; }
 
+    /// <summary>
+    ///     Gets a TaskCompletionSource that completes when the bot is ready.
+    /// </summary>
     public TaskCompletionSource<bool> Ready { get; } = new();
 
-    private IServiceProvider Services { get; set; }
+    private IServiceProvider Services { get; }
     private IDataCache Cache { get; }
 
+    /// <summary>
+    ///     Event that occurs when the bot joins a guild.
+    /// </summary>
     public event Func<GuildConfig, Task> JoinedGuild = delegate { return Task.CompletedTask; };
 
-
-    private async Task AddServices()
-    {
-        var sw = Stopwatch.StartNew();
-        var gs2 = Stopwatch.StartNew();
-        var bot = Client.CurrentUser;
-        await using var uow = db.GetDbContext();
-        AllGuildConfigs =
-            new ConcurrentHashSet<GuildConfig>(
-                uow.GuildConfigs.GetAllGuildConfigs(Client.Guilds.Select(x => x.Id).ToList()));
-        var guildSettingsService = new GuildSettingsService(db, null, this);
-        await uow.EnsureUserCreated(bot.Id, bot.Username, bot.Discriminator, bot.AvatarId);
-        gs2.Stop();
-        Log.Information("Guild Configs cached in {ElapsedTotalSeconds}s", gs2.Elapsed.TotalSeconds);
-
-        var s = new ServiceCollection()
-            .AddScoped<INsfwSpy, NsfwSpy>()
-            .AddSingleton<FontProvider>()
-            .AddSingleton<IBotCredentials>(Credentials)
-            .AddSingleton(db)
-            .AddSingleton(Client)
-            .AddSingleton(new EventHandler(Client))
-            .AddSingleton(CommandService)
-            .AddSingleton(this)
-            .AddSingleton(Cache)
-            .AddSingleton(new MartineApi())
-            .AddSingleton(Cache.Redis)
-            .AddSingleton(guildSettingsService)
-            .AddTransient<ISeria, JsonSeria>()
-            .AddTransient<IPubSub, RedisPubSub>()
-            .AddTransient<IConfigSeria, YamlSeria>()
-            .AddSingleton(new InteractiveService(Client, new InteractiveConfig
-            {
-                ReturnAfterSendingPaginator = true
-            }))
-            .AddSingleton(new NekosBestApi("Mewdeko"))
-            .AddSingleton<InteractionService>()
-            .AddSingleton<Localization>()
-            .AddSingleton<MusicService>()
-            .AddSingleton<BotConfigService>()
-            .AddConfigServices()
-            .AddBotStringsServices(Credentials.TotalShards)
-            .AddMemoryCache()
-            .AddTransient<IDiscordClientWrapper, DiscordClientWrapper>()
-            .AddTransient<IAudioService, LavalinkNode>()
-            .AddSingleton<LavalinkNode>()
-            .AddSingleton(new LavalinkNodeOptions
-            {
-                Password = "Hope4a11",
-                WebSocketUri = "ws://127.0.0.1:2333",
-                RestUri = "http://127.0.0.1:2333",
-                DisconnectOnStop = false
-            })
-            .AddScoped<ISearchImagesService, SearchImagesService>()
-            .AddSingleton<ToneTagService>();
-        if (Credentials.UseGlobalCurrency)
-        {
-            s.AddTransient<ICurrencyService, GlobalCurrencyService>();
-        }
-        else
-        {
-            s.AddTransient<ICurrencyService, GuildCurrencyService>();
-        }
-
-
-        Log.Information("Passed Singletons");
-
-        s.AddHttpClient();
-        s.AddHttpClient("memelist").ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
-        {
-            AllowAutoRedirect = false
-        });
-        if (Credentials.TotalShards <= 1 &&
-            Environment.GetEnvironmentVariable($"{Client.CurrentUser.Id}_IS_COORDINATED") != "1")
-        {
-            s.AddSingleton<ICoordinator, SingleProcessCoordinator>();
-        }
-        else
-        {
-            s.AddSingleton<RemoteGrpcCoordinator>()
-                .AddSingleton<ICoordinator>(x => x.GetRequiredService<RemoteGrpcCoordinator>())
-                .AddSingleton<IReadyExecutor>(x => x.GetRequiredService<RemoteGrpcCoordinator>());
-        }
-
-        Log.Information("Passed Coord");
-
-        s.Scan(scan => scan.FromAssemblyOf<IReadyExecutor>()
-            .AddClasses(classes => classes.AssignableToAny(
-                // services
-                typeof(INService),
-                // behaviours
-                typeof(IEarlyBehavior),
-                typeof(ILateBlocker),
-                typeof(IInputTransformer),
-                typeof(ILateExecutor)))
-            .AsSelfWithInterfaces()
-            .WithSingletonLifetime()
-        );
-
-        Log.Information("Passed Interface Scanner");
-        //initialize Services
-        Services = s.BuildServiceProvider();
-        var commandHandler = Services.GetService<CommandHandler>();
-        commandHandler.AddServices(s);
-        _ = Task.Run(() => LoadTypeReaders(typeof(Mewdeko).Assembly));
-        var cache = Services.GetService<IDataCache>();
-        var sub = cache.Redis.GetSubscriber();
-        await sub.SubscribeAsync($"{Credentials.RedisKey()}_configsupdate", async (_, _) =>
-        {
-            await GuildConfigsUpdated();
-        });
-
-        sw.Stop();
-        Log.Information($"All services loaded in {sw.Elapsed.TotalSeconds:F2}s");
-    }
-
-    private IEnumerable<object> LoadTypeReaders(Assembly assembly)
+    /// <summary>
+    ///     Loads type readers from the specified assembly.
+    /// </summary>
+    /// <param name="assembly">The assembly to load type readers from.</param>
+    private void LoadTypeReaders(Assembly assembly)
     {
         var sw = new Stopwatch();
         sw.Start();
@@ -215,7 +93,7 @@ public class Mewdeko
         catch (ReflectionTypeLoadException ex)
         {
             Log.Warning(ex.LoaderExceptions[0], "Error getting types");
-            return Enumerable.Empty<object>();
+            return;
         }
 
         var filteredTypes = allTypes
@@ -245,7 +123,6 @@ public class Mewdeko
 
         sw.Stop();
         Log.Information("TypeReaders loaded in {ElapsedTotalSeconds}s", sw.Elapsed.TotalSeconds);
-        return toReturn;
     }
 
     private async Task LoginAsync(string token)
@@ -253,17 +130,20 @@ public class Mewdeko
         Client.Log += Client_Log;
         var clientReady = new TaskCompletionSource<bool>();
 
-        Task SetClientReady()
+        Task SetClientReady(DiscordSocketClient unused)
         {
+            ReadyCount++;
+            Log.Information($"Shard {unused.ShardId} is ready");
+            if (ReadyCount != Client.Shards.Count)
+                return Task.CompletedTask;
             _ = Task.Run(() => clientReady.TrySetResult(true));
             return Task.CompletedTask;
         }
 
-        //connect
-        Log.Information("Shard {0} logging in ...", Client.ShardId);
+        Log.Information("Logging in...");
         try
         {
-            await Client.LoginAsync(TokenType.Bot, token).ConfigureAwait(false);
+            await Client.LoginAsync(TokenType.Bot, token.Trim()).ConfigureAwait(false);
             await Client.StartAsync().ConfigureAwait(false);
         }
         catch (HttpException ex)
@@ -277,16 +157,14 @@ public class Mewdeko
             Helpers.ReadErrorAndExit(4);
         }
 
-        Client.Ready += SetClientReady;
+        Client.ShardReady += SetClientReady;
         await clientReady.Task.ConfigureAwait(false);
-        Client.Ready -= SetClientReady;
+        Client.ShardReady -= SetClientReady;
         Client.JoinedGuild += Client_JoinedGuild;
         Client.LeftGuild += Client_LeftGuild;
-        Log.Information("Shard {0} logged in", Client.ShardId);
-
-#if !DEBUG
-        Client.Log -= Client_Log;
-#endif
+        Log.Information("Logged in.");
+        Log.Information("Logged in as:");
+        Console.WriteLine(FiggleFonts.Digital.Render(Client.CurrentUser.Username));
     }
 
     private Task Client_LeftGuild(SocketGuild arg)
@@ -296,13 +174,11 @@ public class Mewdeko
             try
             {
                 var chan = await Client.Rest.GetChannelAsync(Credentials.GuildJoinsChannelId).ConfigureAwait(false);
-                await ((RestTextChannel)chan).SendErrorAsync($"Left server: {arg.Name} [{arg.Id}]", false,
-                    new[]
-                    {
-                        new EmbedFieldBuilder().WithName("Total Guilds")
-                            .WithValue(Services.GetRequiredService<ICoordinator>()
-                                .GetGuildCount().ToString())
-                    }).ConfigureAwait(false);
+                await ((RestTextChannel)chan).SendErrorAsync($"Left server: {arg.Name} [{arg.Id}]", new BotConfig(),
+                [
+                    new EmbedFieldBuilder().WithName("Total Guilds")
+                        .WithValue(Client.Guilds.Count)
+                ]).ConfigureAwait(false);
             }
             catch
             {
@@ -318,15 +194,11 @@ public class Mewdeko
     {
         _ = Task.Run(async () =>
         {
+            var dbContext = Services.GetRequiredService<MewdekoContext>();
             await arg.DownloadUsersAsync().ConfigureAwait(false);
             Log.Information("Joined server: {0} [{1}]", arg.Name, arg.Id);
 
-            GuildConfig gc;
-            var uow = db.GetDbContext();
-            await using (uow.ConfigureAwait(false))
-            {
-                gc = await uow.ForGuildId(arg.Id);
-            }
+            var gc = await dbContext.ForGuildId(arg.Id);
 
             await JoinedGuild.Invoke(gc).ConfigureAwait(false);
             var chan =
@@ -339,7 +211,7 @@ public class Mewdeko
             eb.AddField("Owner", $"Name: {arg.Owner}\nID: {arg.OwnerId}");
             eb.AddField("Text Channels", arg.TextChannels.Count);
             eb.AddField("Voice Channels", arg.VoiceChannels.Count);
-            eb.AddField("Total Guilds", Services.GetRequiredService<ICoordinator>().GetGuildCount());
+            eb.AddField("Total Guilds", Client.Guilds.Count);
             eb.WithThumbnailUrl(arg.IconUrl);
             eb.WithColor(OkColor);
             await chan.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
@@ -347,16 +219,48 @@ public class Mewdeko
         return Task.CompletedTask;
     }
 
-    private async Task RunAsync()
+    /// <summary>
+    ///     Runs the bot, initializing all necessary components and services.
+    /// </summary>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    public async Task RunAsync()
     {
         var sw = Stopwatch.StartNew();
 
+        var circularDependencies = FindCircularDependencies();
+
+        if (circularDependencies.Count > 0)
+        {
+            Console.WriteLine("Circular dependencies found:");
+            foreach (var dependency in circularDependencies)
+            {
+                Console.WriteLine(dependency);
+            }
+        }
+        else
+        {
+            Console.WriteLine("No circular dependencies found.");
+        }
+
         await LoginAsync(Credentials.Token).ConfigureAwait(false);
 
-        Log.Information("Shard {ShardId} loading services...", Client.ShardId);
+        Log.Information("Loading Services...");
         try
         {
-            await AddServices();
+            LoadTypeReaders(typeof(Mewdeko).Assembly);
+            var audioService = Services.GetService<IAudioService>();
+            try
+            {
+                await audioService.StartAsync();
+            }
+            catch (Exception e)
+            {
+                Log.Error("Unable to start audio service: {Message}", e.Message);
+            }
+
+            var dbProvider = Services.GetRequiredService<DbContextProvider>();
+            await using var dbContext = await dbProvider.GetContextAsync();
+            await dbContext.EnsureUserCreated(Client.CurrentUser.Id, Client.CurrentUser.Username, Client.CurrentUser.AvatarId);
         }
         catch (Exception ex)
         {
@@ -365,43 +269,41 @@ public class Mewdeko
         }
 
         sw.Stop();
-        Log.Information("Shard {ShardId} connected in {Elapsed:F2}s", Client.ShardId, sw.Elapsed.TotalSeconds);
+        Log.Information("Connected in {Elapsed:F2}s", sw.Elapsed.TotalSeconds);
         var commandService = Services.GetService<CommandService>();
+        commandService.Log += LogCommandsService;
         var interactionService = Services.GetRequiredService<InteractionService>();
-        await commandService.AddModulesAsync(GetType().GetTypeInfo().Assembly, Services)
-            .ConfigureAwait(false);
-        await interactionService.AddModulesAsync(GetType().GetTypeInfo().Assembly, Services)
-            .ConfigureAwait(false);
-        _ = Task.Run(async () =>
+        try
         {
-            var lava = Services.GetRequiredService<LavalinkNode>();
-            try
-            {
-                await lava.InitializeAsync().ConfigureAwait(false);
-            }
-            catch
-            {
-                Log.Information(
-                    "Unable to connect to lavalink. If you want music please launch tha lavalink binary separately");
-            }
-        });
+            await commandService.AddModulesAsync(Assembly.GetExecutingAssembly(), Services);
+            await interactionService.AddModulesAsync(Assembly.GetExecutingAssembly(), Services);
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine(e);
+            throw;
+        }
 #if !DEBUG
-        if (Client.ShardId == 0)
-            await interactionService.RegisterCommandsGloballyAsync().ConfigureAwait(false);
+        await interactionService.RegisterCommandsGloballyAsync().ConfigureAwait(false);
 #endif
 #if DEBUG
         if (Client.Guilds.Select(x => x.Id).Contains(Credentials.DebugGuildId))
             await interactionService.RegisterCommandsToGuildAsync(Credentials.DebugGuildId);
 #endif
 
-
         _ = Task.Run(HandleStatusChanges);
-        _ = Task.Run(ExecuteReadySubscriptions);
+        _ = Task.Run(async () => await ExecuteReadySubscriptions());
         Ready.TrySetResult(true);
-        Log.Information("Shard {ShardId} ready", Client.ShardId);
+        Log.Information("Ready.");
     }
 
-    private Task ExecuteReadySubscriptions()
+    private Task LogCommandsService(LogMessage arg)
+    {
+        Log.Information(arg.ToString());
+        return Task.CompletedTask;
+    }
+
+    private async Task ExecuteReadySubscriptions()
     {
         var readyExecutors = Services.GetServices<IReadyExecutor>();
         var tasks = readyExecutors.Select(async toExec =>
@@ -416,8 +318,7 @@ public class Mewdeko
                     ex.Message);
             }
         });
-
-        return tasks.WhenAll();
+        await tasks.WhenAll();
     }
 
     private static Task Client_Log(LogMessage arg)
@@ -430,16 +331,9 @@ public class Mewdeko
         return Task.CompletedTask;
     }
 
-    public async Task RunAndBlockAsync()
-    {
-        await RunAsync().ConfigureAwait(false);
-        await Task.Delay(-1).ConfigureAwait(false);
-    }
-
     private void HandleStatusChanges()
     {
         var sub = Services.GetService<IDataCache>().Redis.GetSubscriber();
-        // ReSharper disable once AsyncVoidLambda
         sub.Subscribe($"{Client.CurrentUser.Id}_status.game_set", async (_, game) =>
         {
             try
@@ -457,7 +351,6 @@ public class Mewdeko
             }
         }, CommandFlags.FireAndForget);
 
-        // ReSharper disable once AsyncVoidLambda
         sub.Subscribe($"{Client.CurrentUser.Id}_status.stream_set", async (_, streamData) =>
         {
             try
@@ -476,6 +369,12 @@ public class Mewdeko
         }, CommandFlags.FireAndForget);
     }
 
+    /// <summary>
+    ///     Sets the bot's game status.
+    /// </summary>
+    /// <param name="game">The name of the game to set.</param>
+    /// <param name="type">The type of activity.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
     public async Task SetGameAsync(string? game, ActivityType type)
     {
         var obj = new
@@ -487,11 +386,54 @@ public class Mewdeko
             .ConfigureAwait(false);
     }
 
-    public async Task GuildConfigsUpdated()
+    /// <summary>
+    ///     Self explanatory
+    /// </summary>
+    /// <returns></returns>
+    private static List<string> FindCircularDependencies()
     {
-        await using var uow = db.GetDbContext();
-        AllGuildConfigs =
-            new ConcurrentHashSet<GuildConfig>(
-                uow.GuildConfigs.GetAllGuildConfigs(Client.Guilds.Select(x => x.Id).ToList()));
+        var assembly = Assembly.GetExecutingAssembly();
+        var types = assembly.GetTypes();
+
+        return (from type in types
+            let path = new HashSet<Type>
+            {
+                type
+            }
+            where HasCircularDependency(type, path)
+            select string.Join(" -> ", path.Select(t => t.Name))).ToList();
+    }
+
+    private static bool HasCircularDependency(Type type, HashSet<Type> path)
+    {
+        var constructors = type.GetConstructors();
+
+        foreach (var constructor in constructors)
+        {
+            var parameters = constructor.GetParameters();
+
+            foreach (var parameter in parameters)
+            {
+                var parameterType = parameter.ParameterType;
+
+                if (path.Contains(parameterType))
+                {
+                    path.Add(parameterType);
+                    return true;
+                }
+
+                if (parameterType.Assembly != type.Assembly) continue;
+
+                path.Add(parameterType);
+                if (HasCircularDependency(parameterType, path))
+                {
+                    return true;
+                }
+
+                path.Remove(parameterType);
+            }
+        }
+
+        return false;
     }
 }

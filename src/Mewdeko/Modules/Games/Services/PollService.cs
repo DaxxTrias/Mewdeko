@@ -1,25 +1,49 @@
+using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Database.Common;
+using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.Games.Common;
 using Serilog;
 
 namespace Mewdeko.Modules.Games.Services;
 
-public class PollService : INService
+/// <summary>
+///     Service for managing polls in a guild.
+/// </summary>
+public class PollService : INService, IReadyExecutor
 {
-    private readonly DbService db;
+    private readonly DbContextProvider dbProvider;
 
-    public PollService(DbService db)
+    /// <summary>
+    ///     Initializes a new instance of the <see cref="PollService" /> class.
+    /// </summary>
+    /// <param name="db">The database service.</param>
+    public PollService(DbContextProvider dbProvider)
     {
-        this.db = db;
+        this.dbProvider = dbProvider;
+    }
 
-        using var uow = db.GetDbContext();
-        ActivePolls = uow.Poll.GetAllPolls()
-            .ToDictionary(x => x.GuildId, x => new PollRunner(db, x))
+    /// <summary>
+    ///     Gets the active polls in the guilds.
+    /// </summary>
+    public ConcurrentDictionary<ulong, PollRunner> ActivePolls { get; set; }
+
+    /// <inheritdoc />
+    public async Task OnReadyAsync()
+    {
+        await using var dbContext = await dbProvider.GetContextAsync();
+
+        ActivePolls = (await dbContext.Poll.GetAllPolls())
+            .ToDictionary(x => x.GuildId, x => new PollRunner(dbProvider, x))
             .ToConcurrent();
     }
 
-    public ConcurrentDictionary<ulong, PollRunner> ActivePolls { get; }
-
+    /// <summary>
+    ///     Tries to vote in the specified poll for the user.
+    /// </summary>
+    /// <param name="guild">The guild where the poll is taking place.</param>
+    /// <param name="num">The number representing the option selected.</param>
+    /// <param name="user">The user who is voting.</param>
+    /// <returns>A tuple indicating whether the vote was allowed and the type of poll.</returns>
     public async Task<(bool allowed, PollType type)> TryVote(IGuild guild, int num, IUser user)
     {
         if (!ActivePolls.TryGetValue(guild.Id, out var poll))
@@ -34,10 +58,18 @@ public class PollService : INService
             Log.Warning(ex, "Error voting");
         }
 
-        return (true, poll.Poll.PollType);
+        return (true, poll.Polls.PollType);
     }
 
-    public static Poll? CreatePoll(ulong guildId, ulong channelId, string input, PollType type)
+    /// <summary>
+    ///     Creates a new poll.
+    /// </summary>
+    /// <param name="guildId">The ID of the guild where the poll is created.</param>
+    /// <param name="channelId">The ID of the channel where the poll is created.</param>
+    /// <param name="input">The input string for creating the poll.</param>
+    /// <param name="type">The type of the poll.</param>
+    /// <returns>The created poll.</returns>
+    public static Polls? CreatePoll(ulong guildId, ulong channelId, string input, PollType type)
     {
         if (string.IsNullOrWhiteSpace(input) || !input.Contains(';'))
             return null;
@@ -45,42 +77,53 @@ public class PollService : INService
         if (data.Length < 3)
             return null;
 
-        var col = new IndexedCollection<PollAnswer>(data.Skip(1)
-            .Select(x => new PollAnswer
+        var col = new IndexedCollection<PollAnswers>(data.Skip(1)
+            .Select(x => new PollAnswers
             {
                 Text = x
             }));
 
-        return new Poll
+        return new Polls
         {
             Answers = col,
             Question = data[0],
             ChannelId = channelId,
             GuildId = guildId,
-            Votes = new List<PollVote>(),
+            Votes = [],
             PollType = type
         };
     }
 
-    public bool StartPoll(Poll p)
+    /// <summary>
+    ///     Starts a poll.
+    /// </summary>
+    /// <param name="p">The poll to start.</param>
+    /// <returns>True if the poll started successfully, otherwise false.</returns>
+    public async Task<bool> StartPoll(Polls p)
     {
-        var pr = new PollRunner(db, p);
+        await using var dbContext = await dbProvider.GetContextAsync();
+
+        var pr = new PollRunner(dbProvider, p);
         if (!ActivePolls.TryAdd(p.GuildId, pr)) return false;
-        using var uow = db.GetDbContext();
-        uow.Poll.Add(p);
-        uow.SaveChanges();
+
+        dbContext.Poll.Add(p);
+        await dbContext.SaveChangesAsync();
         return true;
     }
 
-    public async Task<Poll?> StopPoll(ulong guildId)
+    /// <summary>
+    ///     Stops a poll.
+    /// </summary>
+    /// <param name="guildId">The ID of the guild where the poll is taking place.</param>
+    /// <returns>The stopped poll.</returns>
+    public async Task<Polls?> StopPoll(ulong guildId)
     {
-        if (!ActivePolls.TryRemove(guildId, out var pr)) return null;
-        await using (var uow = db.GetDbContext())
-        {
-            await uow.RemovePoll(pr.Poll.Id);
-            await uow.SaveChangesAsync();
-        }
+        await using var dbContext = await dbProvider.GetContextAsync();
 
-        return pr.Poll;
+        if (!ActivePolls.TryRemove(guildId, out var pr)) return null;
+        await dbContext.RemovePoll(pr.Polls.Id);
+        await dbContext.SaveChangesAsync();
+
+        return pr.Polls;
     }
 }

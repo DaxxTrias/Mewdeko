@@ -6,13 +6,18 @@ using YamlDotNet.Serialization;
 namespace Mewdeko.Services.strings.impl;
 
 /// <summary>
-///     Loads strings from the local default filepath <see cref="responsesPath" />
+///     Loads strings from the local default file paths.
 /// </summary>
 public class LocalFileStringsSource : IStringsSource
 {
     private readonly string commandsPath;
     private readonly string responsesPath;
 
+    /// <summary>
+    ///     Initializes a new instance of the <see cref="LocalFileStringsSource" /> class.
+    /// </summary>
+    /// <param name="responsesPath">The path to the responses files.</param>
+    /// <param name="commandsPath">The path to the commands files.</param>
     public LocalFileStringsSource(string responsesPath = "data/strings/responses",
         string commandsPath = "data/strings/commands")
     {
@@ -20,6 +25,10 @@ public class LocalFileStringsSource : IStringsSource
         this.commandsPath = commandsPath;
     }
 
+    /// <summary>
+    ///     Gets the response strings from the local files.
+    /// </summary>
+    /// <returns>A dictionary containing response strings for each locale.</returns>
     public Dictionary<string, Dictionary<string, string>> GetResponseStrings()
     {
         var outputDict = new Dictionary<string, Dictionary<string, string>>();
@@ -40,11 +49,13 @@ public class LocalFileStringsSource : IStringsSource
         return outputDict;
     }
 
+    /// <summary>
+    ///     Gets the command strings from the local files.
+    /// </summary>
+    /// <returns>A dictionary containing command strings for each locale.</returns>
     public Dictionary<string, Dictionary<string, CommandStrings>> GetCommandStrings()
     {
-        var deserializer = new DeserializerBuilder()
-            .Build();
-
+        var deserializer = new DeserializerBuilder().Build();
         var outputDict = new Dictionary<string, Dictionary<string, CommandStrings>>();
         foreach (var file in Directory.GetFiles(commandsPath))
         {

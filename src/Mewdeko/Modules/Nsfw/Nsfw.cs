@@ -1,4 +1,4 @@
-﻿using System.Net.Http;
+using System.Net.Http;
 using System.Threading;
 using Discord.Commands;
 using Fergun.Interactive;
@@ -8,7 +8,6 @@ using MartineApiNet.Enums;
 using MartineApiNet.Models.Images;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Common.Collections;
-using Mewdeko.Services.Settings;
 using Newtonsoft.Json.Linq;
 using NHentaiAPI;
 using Refit;
@@ -16,21 +15,45 @@ using Serilog;
 
 namespace Mewdeko.Modules.Nsfw;
 
-public class Nsfw(InteractiveService interactivity, MartineApi martineApi,
-        GuildSettingsService guildSettings, HttpClient client,
-        BotConfigService config, IBotCredentials credentials)
+/// <summary>
+///     The most used module in Mewdeko, nsfw.
+/// </summary>
+/// <param name="interactivity">Used for sending paginated messages</param>
+/// <param name="martineApi">The Martine API</param>
+/// <param name="guildSettings">The guild settings service</param>
+/// <param name="client">The http client</param>
+/// <param name="credentials">The bot credentials</param>
+public class Nsfw(
+    InteractiveService interactivity,
+    MartineApi martineApi,
+    GuildSettingsService guildSettings,
+    HttpClient client,
+    IBotCredentials credentials)
     : MewdekoModuleBase<ISearchImagesService>
 {
-    private static readonly ConcurrentHashSet<ulong> HentaiBombBlacklist = new();
-    private static readonly ConcurrentHashSet<ulong> PornBombBlacklist = new();
+    private static readonly ConcurrentHashSet<ulong> HentaiBombBlacklist = [];
+    private static readonly ConcurrentHashSet<ulong> PornBombBlacklist = [];
     private readonly MewdekoRandom rng = new();
 
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild), RequireNsfw, Ratelimit(10)]
+    /// <summary>
+    ///     Command to retrieve NSFW content from a specified subreddit.
+    /// </summary>
+    /// <param name="subreddit">The name of the subreddit from which to fetch the content.</param>
+    /// <remarks>
+    ///     This command requires the context to be in a guild.
+    ///     NSFW (Not Safe For Work) content is required for this command.
+    ///     The command is rate-limited to 10 uses within a specified time frame.
+    /// </remarks>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    [RequireNsfw]
+    [Ratelimit(10)]
     public async Task RedditNsfw(string subreddit)
     {
         var msg = await ctx.Channel.SendConfirmAsync(
-            $"{config.Data.LoadingEmote} Trying to get a post from `{subreddit}`...");
+            $"{Config.LoadingEmote} Trying to get a post from `{subreddit}`...");
         try
         {
             RedditPost image;
@@ -44,9 +67,10 @@ public class Nsfw(InteractiveService interactivity, MartineApi martineApi,
                 await msg.DeleteAsync();
                 Log.Error(
                     "Seems that NSFW Subreddit fetching has failed. Here\'s the error:\\nCode:{ExStatusCode}\\nContent: {ExContent}",
-                    ex.StatusCode, (ex.HasContent ? ex.Content : "No Content."));
+                    ex.StatusCode, ex.HasContent ? ex.Content : "No Content.");
                 await ctx.Channel.SendErrorAsync(
-                    "Unable to fetch nsfw subreddit. Please check console or report the issue at https://discord.gg/mewdeko.");
+                    "Unable to fetch nsfw subreddit. Please check console or report the issue at https://discord.gg/mewdeko.",
+                    Config);
                 return;
             }
 
@@ -67,26 +91,30 @@ public class Nsfw(InteractiveService interactivity, MartineApi martineApi,
                 var imgStream = imgData.ToStream();
                 await using var _ = imgStream.ConfigureAwait(false);
                 await ctx.Channel.SendFileAsync(imgStream, "boobs.mp4", embed: eb.Build(),
-                    components: config.Data.ShowInviteButton
+                    components: Config.ShowInviteButton
                         ? new ComponentBuilder()
-                            .WithButton(style: ButtonStyle.Link,
-                                url:
-                                "",
-                                label: "",
-                                emote: "".ToIEmote()).Build()
-                        : null);
+                            //.WithButton(style: ButtonStyle.Link,
+                                //url:
+                                //"https://discord.com/oauth2/authorize?client_id=752236274261426212&permissions=8&response_type=code&redirect_uri=https%3A%2F%2Fmewdeko.tech&scope=bot%20applications.commands",
+                                //label: "Invite Me!",
+                                //emote: "<a:HaneMeow:968564817784877066>".ToIEmote())
+                            //.WithButton("Support Us!", style: ButtonStyle.Link, url: "https://ko-fi.com/Mewdeko")
+                            .Build()
+                        : null).ConfigureAwait(false);
                 await msg.DeleteAsync();
             }
             else
             {
                 await ctx.Channel.SendMessageAsync(embed: eb.Build(),
-                    components: config.Data.ShowInviteButton
+                    components: Config.ShowInviteButton
                         ? new ComponentBuilder()
-                            .WithButton(style: ButtonStyle.Link,
-                                url:
-                                "",
-                                label: "!",
-                                emote: "".ToIEmote()).Build()
+                            //.WithButton(style: ButtonStyle.Link,
+                                //url:
+                                //"https://discord.com/oauth2/authorize?client_id=752236274261426212&permissions=8&response_type=code&redirect_uri=https%3A%2F%2Fmewdeko.tech&scope=bot%20applications.commands",
+                                //label: "Invite Me!",
+                                //emote: "<a:HaneMeow:968564817784877066>".ToIEmote())
+                            //.WithButton("Support Us!", style: ButtonStyle.Link, url: "https://ko-fi.com/Mewdeko")
+                            .Build()
                         : null).ConfigureAwait(false);
                 await msg.DeleteAsync();
             }
@@ -95,12 +123,24 @@ public class Nsfw(InteractiveService interactivity, MartineApi martineApi,
         {
             await msg.DeleteAsync();
             await ctx.Channel.SendErrorAsync(
-                    $"Hey guys stop spamming the command! The api can only take so much man. Wait at least a few mins before trying again. If theres an issue join the support sevrer in {await guildSettings.GetPrefix(ctx.Guild)}vote.")
+                    $"Hey guys stop spamming the command! The api can only take so much man. Wait at least a few mins before trying again. If theres an issue join the support server in {await guildSettings.GetPrefix(ctx.Guild)}vote.",
+                    Config)
                 .ConfigureAwait(false);
         }
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild), RequireNsfw]
+    /// <summary>
+    ///     Command to fetch and display information about a manga from the NHentai website.
+    /// </summary>
+    /// <param name="num">The identification number of the manga to fetch.</param>
+    /// <remarks>
+    ///     This command requires the context to be in a guild.
+    ///     NSFW (Not Safe For Work) content is required for this command.
+    /// </remarks>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    [RequireNsfw]
     public async Task NHentai(int num)
     {
         var cookies = new Dictionary<string, string>
@@ -118,10 +158,9 @@ public class Nsfw(InteractiveService interactivity, MartineApi martineApi,
         var pages = book.Images.Pages;
         var tags = book.Tags.Select(i => i.Name).ToList();
         if (tags.Contains("lolicon") || tags.Contains("loli") || tags.Contains("shotacon") || tags.Contains("shota"))
-
         {
             await ctx.Channel
-                .SendErrorAsync("This manga contains loli/shota content and is not allowed by discord TOS!")
+                .SendErrorAsync("This manga contains loli/shota content and is not allowed by Discord TOS!", Config)
                 .ConfigureAwait(false);
             return;
         }
@@ -148,7 +187,7 @@ public class Nsfw(InteractiveService interactivity, MartineApi martineApi,
         }
     }
 
-    public async Task InternalNHentaiSearch(string search, int page = 1, string type = "popular",
+    private async Task InternalNHentaiSearch(string search, int page = 1, string type = "popular",
         string? exclude = null)
     {
         var cookies = new Dictionary<string, string>
@@ -165,7 +204,8 @@ public class Nsfw(InteractiveService interactivity, MartineApi martineApi,
             .GetSearchPageListAsync($"{search} {exclude} -lolicon -loli -shota -shotacon", page).ConfigureAwait(false);
         if (result.Result.Count == 0)
         {
-            await ctx.Channel.SendErrorAsync("The search returned no results. Try again with a different query!")
+            await ctx.Channel
+                .SendErrorAsync("The search returned no results. Try again with a different query!", Config)
                 .ConfigureAwait(false);
             return;
         }
@@ -198,42 +238,159 @@ public class Nsfw(InteractiveService interactivity, MartineApi martineApi,
         }
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild), RequireNsfw]
-    public async Task HentaiGif() => await RedditNsfw("HENTAI_GIF").ConfigureAwait(false);
+    /// <summary>
+    ///     Command to fetch and display NSFW content from the "HENTAI_GIF" subreddit.
+    /// </summary>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    [RequireNsfw]
+    public Task HentaiGif()
+    {
+        return RedditNsfw("HENTAI_GIF");
+    }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild), RequireNsfw]
-    public async Task Pussy() => await RedditNsfw("pussy").ConfigureAwait(false);
+    /// <summary>
+    ///     Command to fetch and display NSFW content from the "pussy" subreddit.
+    /// </summary>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    [RequireNsfw]
+    public Task Pussy()
+    {
+        return RedditNsfw("pussy");
+    }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild), RequireNsfw]
-    public async Task Anal() => await RedditNsfw("anal").ConfigureAwait(false);
+    /// <summary>
+    ///     Command to fetch and display NSFW content from the "anal" subreddit.
+    /// </summary>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    [RequireNsfw]
+    public Task Anal()
+    {
+        return RedditNsfw("anal");
+    }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild), RequireNsfw]
-    public async Task Porn() => await RedditNsfw("porn").ConfigureAwait(false);
+    /// <summary>
+    ///     Command to fetch and display NSFW content from the "porn" subreddit.
+    /// </summary>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    [RequireNsfw]
+    public Task Porn()
+    {
+        return RedditNsfw("porn");
+    }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild), RequireNsfw]
-    public async Task Bondage() => await RedditNsfw("bondage").ConfigureAwait(false);
+    /// <summary>
+    ///     Command to fetch and display NSFW content from the "bondage" subreddit.
+    /// </summary>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    [RequireNsfw]
+    public Task Bondage()
+    {
+        return RedditNsfw("bondage");
+    }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild), RequireNsfw]
-    public async Task NHentaiSearch([Remainder] string search) =>
-        await InternalNHentaiSearch(search).ConfigureAwait(false);
+    /// <summary>
+    ///     Command to search for hentai manga on NHentai based on the provided search query.
+    /// </summary>
+    /// <param name="search">The search query for NHentai.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    [RequireNsfw]
+    public Task NHentaiSearch([Remainder] string search)
+    {
+        return InternalNHentaiSearch(search);
+    }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild), RequireNsfw]
-    public async Task NHentaiSearch(string search, [Remainder] string blacklist) =>
-        await InternalNHentaiSearch(search, 1, blacklist).ConfigureAwait(false);
+    /// <summary>
+    ///     Command to search for hentai manga on NHentai based on the provided search query and blacklist.
+    /// </summary>
+    /// <param name="search">The search query for NHentai.</param>
+    /// <param name="blacklist">The blacklist for NHentai search.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    [RequireNsfw]
+    public Task NHentaiSearch(string search, [Remainder] string blacklist)
+    {
+        return InternalNHentaiSearch(search, 1, blacklist);
+    }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild), RequireNsfw]
-    public async Task NHentaiSearch(string search, int page) =>
-        await InternalNHentaiSearch(search, page).ConfigureAwait(false);
+    /// <summary>
+    ///     Command to search for hentai manga on NHentai based on the provided search query and page number.
+    /// </summary>
+    /// <param name="search">The search query for NHentai.</param>
+    /// <param name="page">The page number for NHentai search.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    [RequireNsfw]
+    public Task NHentaiSearch(string search, int page)
+    {
+        return InternalNHentaiSearch(search, page);
+    }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild), RequireNsfw]
-    public async Task NHentaiSearch(string search, int page, string type) =>
-        await InternalNHentaiSearch(search, page, type).ConfigureAwait(false);
+    /// <summary>
+    ///     Command to search for hentai manga on NHentai based on the provided search query, page number, and type.
+    /// </summary>
+    /// <param name="search">The search query for NHentai.</param>
+    /// <param name="page">The page number for NHentai search.</param>
+    /// <param name="type">The type of NHentai search.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    [RequireNsfw]
+    public Task NHentaiSearch(string search, int page, string type)
+    {
+        return InternalNHentaiSearch(search, page, type);
+    }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild), RequireNsfw]
-    public async Task NHentaiSearch(string search, int page, string type, [Remainder] string blacklist) =>
-        await InternalNHentaiSearch(search, page, type, blacklist).ConfigureAwait(false);
+    /// <summary>
+    ///     Command to search for hentai manga on NHentai based on the provided search query, page number, type, and blacklist.
+    /// </summary>
+    /// <param name="search">The search query for NHentai.</param>
+    /// <param name="page">The page number for NHentai search.</param>
+    /// <param name="type">The type of NHentai search.</param>
+    /// <param name="blacklist">The blacklist for NHentai search.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    [RequireNsfw]
+    public Task NHentaiSearch(string search, int page, string type, [Remainder] string blacklist)
+    {
+        return InternalNHentaiSearch(search, page, type, blacklist);
+    }
 
-    [Cmd, Aliases]
+    /// <summary>
+    ///     Command to start or stop automatic posting of NSFW content at specified intervals in the current guild channel.
+    /// </summary>
+    /// <param name="interval">The interval in seconds between each automatic posting. Set to 0 to stop automatic posting.</param>
+    /// <param name="tags">
+    ///     Optional tags to filter the NSFW content. Separate multiple tags with '|'. Leave blank for random
+    ///     NSFW content.
+    /// </param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    [Cmd]
+    [Aliases]
     [RequireNsfw]
     [RequireContext(ContextType.Guild)]
     [UserPerm(ChannelPermission.ManageMessages)]
@@ -286,7 +443,14 @@ public class Nsfw(InteractiveService interactivity, MartineApi martineApi,
             string.Join(", ", tags)).ConfigureAwait(false);
     }
 
-    [Cmd, Aliases]
+    /// <summary>
+    ///     Command to start or stop automatic posting of NSFW content from the "boobs" subreddit at specified intervals in the
+    ///     current guild channel.
+    /// </summary>
+    /// <param name="interval">The interval in seconds between each automatic posting. Set to 0 to stop automatic posting.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    [Cmd]
+    [Aliases]
     [RequireNsfw]
     [RequireContext(ContextType.Guild)]
     [UserPerm(ChannelPermission.ManageMessages)]
@@ -324,8 +488,16 @@ public class Nsfw(InteractiveService interactivity, MartineApi martineApi,
         await ReplyConfirmLocalizedAsync("started", interval).ConfigureAwait(false);
     }
 
-    [Cmd, Aliases]
-    [RequireNsfw(Group = "nsfw_or_dm"), RequireContext(ContextType.DM, Group = "nsfw_or_dm")]
+    /// <summary>
+    ///     Command to start or stop automatic posting of NSFW content from the "butts" subreddit at specified intervals in the
+    ///     current guild channel or direct messages.
+    /// </summary>
+    /// <param name="interval">The interval in seconds between each automatic posting. Set to 0 to stop automatic posting.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    [Cmd]
+    [Aliases]
+    [RequireNsfw(Group = "nsfw_or_dm")]
+    [RequireContext(ContextType.DM, Group = "nsfw_or_dm")]
     [UserPerm(ChannelPermission.ManageMessages)]
     public async Task AutoButts(int interval = 0)
     {
@@ -365,13 +537,31 @@ public class Nsfw(InteractiveService interactivity, MartineApi martineApi,
         await ReplyConfirmLocalizedAsync("started", interval).ConfigureAwait(false);
     }
 
-    [Cmd, Aliases]
-    [RequireNsfw(Group = "nsfw_or_dm"), RequireContext(ContextType.DM, Group = "nsfw_or_dm")]
+    /// <summary>
+    ///     Command to fetch and display NSFW content from the "hentai" subreddit with optional tags in the current guild
+    ///     channel or direct messages.
+    /// </summary>
+    /// <param name="tags">Optional tags to filter the NSFW content from the "hentai" subreddit.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    [Cmd]
+    [Aliases]
+    [RequireNsfw(Group = "nsfw_or_dm")]
+    [RequireContext(ContextType.DM, Group = "nsfw_or_dm")]
     public Task Hentai(params string[] tags)
-        => InternalDapiCommand(tags, true, Service.Hentai);
+    {
+        return InternalDapiCommand(tags, true, Service.Hentai);
+    }
 
-    [Cmd, Aliases]
-    [RequireNsfw(Group = "nsfw_or_dm"), RequireContext(ContextType.DM, Group = "nsfw_or_dm")]
+    /// <summary>
+    ///     Command to initiate a "hentai bomb" by fetching and displaying NSFW content from multiple sources with optional
+    ///     tags in the current guild channel or direct messages.
+    /// </summary>
+    /// <param name="tags">Optional tags to filter the NSFW content from each source.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    [Cmd]
+    [Aliases]
+    [RequireNsfw(Group = "nsfw_or_dm")]
+    [RequireContext(ContextType.DM, Group = "nsfw_or_dm")]
     public async Task HentaiBomb(params string[] tags)
     {
         if (!HentaiBombBlacklist.Add(ctx.Guild?.Id ?? ctx.User.Id))
@@ -391,15 +581,16 @@ public class Nsfw(InteractiveService interactivity, MartineApi martineApi,
             }
 
             await ctx.Channel.SendMessageAsync(string.Join("\n", linksEnum.Select(x => x.Url)),
-                    components: config.Data.ShowInviteButton
-                        ? new ComponentBuilder()
-                            .WithButton(style: ButtonStyle.Link,
-                                url:
-                                "",
-                                label: "",
-                                emote: "".ToIEmote()).Build()
-                        : null)
-                .ConfigureAwait(false);
+                components: Config.ShowInviteButton
+                    ? new ComponentBuilder()
+                        //.WithButton(style: ButtonStyle.Link,
+                            //url:
+                            //"https://discord.com/oauth2/authorize?client_id=752236274261426212&permissions=8&response_type=code&redirect_uri=https%3A%2F%2Fmewdeko.tech&scope=bot%20applications.commands",
+                            //label: "Invite Me!",
+                            //emote: "<a:HaneMeow:968564817784877066>".ToIEmote())
+                        //.WithButton("Support Us!", style: ButtonStyle.Link, url: "https://ko-fi.com/Mewdeko")
+                        .Build()
+                    : null).ConfigureAwait(false);
         }
         finally
         {
@@ -407,8 +598,16 @@ public class Nsfw(InteractiveService interactivity, MartineApi martineApi,
         }
     }
 
-    [Cmd, Aliases]
-    [RequireNsfw(Group = "nsfw_or_dm"), RequireContext(ContextType.DM, Group = "nsfw_or_dm")]
+    /// <summary>
+    ///     Command to initiate a "porn bomb" by fetching and displaying NSFW content from a RealBooru source with optional
+    ///     tags in the current guild channel or direct messages.
+    /// </summary>
+    /// <param name="tags">Optional tags to filter the NSFW content from the RealBooru source.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    [Cmd]
+    [Aliases]
+    [RequireNsfw(Group = "nsfw_or_dm")]
+    [RequireContext(ContextType.DM, Group = "nsfw_or_dm")]
     public async Task PornBomb(params string[] tags)
     {
         if (!PornBombBlacklist.Add(ctx.Guild?.Id ?? ctx.User.Id))
@@ -428,15 +627,16 @@ public class Nsfw(InteractiveService interactivity, MartineApi martineApi,
             }
 
             await ctx.Channel.SendMessageAsync(string.Join("\n", linksEnum.Select(x => x.Url)),
-                    components: config.Data.ShowInviteButton
-                        ? new ComponentBuilder()
-                            .WithButton(style: ButtonStyle.Link,
-                                url:
-                                "",
-                                label: "",
-                                emote: "".ToIEmote()).Build()
-                        : null)
-                .ConfigureAwait(false);
+                components: Config.ShowInviteButton
+                    ? new ComponentBuilder()
+                        //.WithButton(style: ButtonStyle.Link,
+                            //url:
+                            //"https://discord.com/oauth2/authorize?client_id=752236274261426212&permissions=8&response_type=code&redirect_uri=https%3A%2F%2Fmewdeko.tech&scope=bot%20applications.commands",
+                            //label: "Invite Me!",
+                            //emote: "<a:HaneMeow:968564817784877066>".ToIEmote())
+                        //.WithButton("Support Us!", style: ButtonStyle.Link, url: "https://ko-fi.com/Mewdeko")
+                        .Build()
+                    : null).ConfigureAwait(false);
         }
         finally
         {
@@ -444,65 +644,193 @@ public class Nsfw(InteractiveService interactivity, MartineApi martineApi,
         }
     }
 
-    [Cmd, Aliases]
-    [RequireNsfw(Group = "nsfw_or_dm"), RequireContext(ContextType.DM, Group = "nsfw_or_dm")]
+    /// <summary>
+    ///     Command to fetch and display NSFW content from the Yandere image board with optional tags in the current guild
+    ///     channel or direct messages.
+    /// </summary>
+    /// <param name="tags">Optional tags to filter the NSFW content from the Yandere image board.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    [Cmd]
+    [Aliases]
+    [RequireNsfw(Group = "nsfw_or_dm")]
+    [RequireContext(ContextType.DM, Group = "nsfw_or_dm")]
     public Task Yandere(params string[] tags)
-        => InternalDapiCommand(tags, false, Service.Yandere);
+    {
+        return InternalDapiCommand(tags, false, Service.Yandere);
+    }
 
-    [Cmd, Aliases]
-    [RequireNsfw(Group = "nsfw_or_dm"), RequireContext(ContextType.DM, Group = "nsfw_or_dm")]
+    /// <summary>
+    ///     Command to fetch and display NSFW content from the Konachan image board with optional tags in the current guild
+    ///     channel or direct messages.
+    /// </summary>
+    /// <param name="tags">Optional tags to filter the NSFW content from the Konachan image board.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    [Cmd]
+    [Aliases]
+    [RequireNsfw(Group = "nsfw_or_dm")]
+    [RequireContext(ContextType.DM, Group = "nsfw_or_dm")]
     public Task Konachan(params string[] tags)
-        => InternalDapiCommand(tags, false, Service.Konachan);
+    {
+        return InternalDapiCommand(tags, false, Service.Konachan);
+    }
 
-    [Cmd, Aliases]
-    [RequireNsfw(Group = "nsfw_or_dm"), RequireContext(ContextType.DM, Group = "nsfw_or_dm")]
+    /// <summary>
+    ///     Command to fetch and display NSFW content from the Sankaku image board with optional tags in the current guild
+    ///     channel or direct messages.
+    /// </summary>
+    /// <param name="tags">Optional tags to filter the NSFW content from the Sankaku image board.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    [Cmd]
+    [Aliases]
+    [RequireNsfw(Group = "nsfw_or_dm")]
+    [RequireContext(ContextType.DM, Group = "nsfw_or_dm")]
     public Task Sankaku(params string[] tags)
-        => InternalDapiCommand(tags, false, Service.Sankaku);
+    {
+        return InternalDapiCommand(tags, false, Service.Sankaku);
+    }
 
-    [Cmd, Aliases]
-    [RequireNsfw(Group = "nsfw_or_dm"), RequireContext(ContextType.DM, Group = "nsfw_or_dm")]
+    /// <summary>
+    ///     Command to fetch and display NSFW content from the E621 image board with optional tags in the current guild channel
+    ///     or direct messages.
+    /// </summary>
+    /// <param name="tags">Optional tags to filter the NSFW content from the E621 image board.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    [Cmd]
+    [Aliases]
+    [RequireNsfw(Group = "nsfw_or_dm")]
+    [RequireContext(ContextType.DM, Group = "nsfw_or_dm")]
     public Task E621(params string[] tags)
-        => InternalDapiCommand(tags, false, Service.E621);
+    {
+        return InternalDapiCommand(tags, false, Service.E621);
+    }
 
-    [Cmd, Aliases]
-    [RequireNsfw(Group = "nsfw_or_dm"), RequireContext(ContextType.DM, Group = "nsfw_or_dm")]
+    /// <summary>
+    ///     Command to fetch and display NSFW content from the Rule34 image board with optional tags in the current guild
+    ///     channel or direct messages.
+    /// </summary>
+    /// <param name="tags">Optional tags to filter the NSFW content from the Rule34 image board.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    [Cmd]
+    [Aliases]
+    [RequireNsfw(Group = "nsfw_or_dm")]
+    [RequireContext(ContextType.DM, Group = "nsfw_or_dm")]
     public Task Rule34(params string[] tags)
-        => InternalDapiCommand(tags, false, Service.Rule34);
+    {
+        return InternalDapiCommand(tags, false, Service.Rule34);
+    }
 
-    [Cmd, Aliases]
-    [RequireNsfw(Group = "nsfw_or_dm"), RequireContext(ContextType.DM, Group = "nsfw_or_dm")]
+    /// <summary>
+    ///     Command to fetch and display NSFW content from the Danbooru image board with optional tags in the current guild
+    ///     channel or direct messages.
+    /// </summary>
+    /// <param name="tags">Optional tags to filter the NSFW content from the Danbooru image board.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    [Cmd]
+    [Aliases]
+    [RequireNsfw(Group = "nsfw_or_dm")]
+    [RequireContext(ContextType.DM, Group = "nsfw_or_dm")]
     public Task Danbooru(params string[] tags)
-        => InternalDapiCommand(tags, false, Service.Danbooru);
+    {
+        return InternalDapiCommand(tags, false, Service.Danbooru);
+    }
 
-    [Cmd, Aliases]
-    [RequireNsfw(Group = "nsfw_or_dm"), RequireContext(ContextType.DM, Group = "nsfw_or_dm")]
+    /// <summary>
+    ///     Command to fetch and display NSFW content from the Gelbooru image board with optional tags in the current guild
+    ///     channel or direct messages.
+    /// </summary>
+    /// <param name="tags">Optional tags to filter the NSFW content from the Gelbooru image board.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    [Cmd]
+    [Aliases]
+    [RequireNsfw(Group = "nsfw_or_dm")]
+    [RequireContext(ContextType.DM, Group = "nsfw_or_dm")]
     public Task Gelbooru(params string[] tags)
-        => InternalDapiCommand(tags, false, Service.Gelbooru);
+    {
+        return InternalDapiCommand(tags, false, Service.Gelbooru);
+    }
 
-    [Cmd, Aliases]
-    [RequireNsfw(Group = "nsfw_or_dm"), RequireContext(ContextType.DM, Group = "nsfw_or_dm")]
+    /// <summary>
+    ///     Command to fetch and display NSFW content from the Derpibooru image board with optional tags in the current guild
+    ///     channel or direct messages.
+    /// </summary>
+    /// <param name="tags">Optional tags to filter the NSFW content from the Derpibooru image board.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    [Cmd]
+    [Aliases]
+    [RequireNsfw(Group = "nsfw_or_dm")]
+    [RequireContext(ContextType.DM, Group = "nsfw_or_dm")]
     public Task Derpibooru(params string[] tags)
-        => InternalDapiCommand(tags, false, Service.DerpiBooru);
+    {
+        return InternalDapiCommand(tags, false, Service.DerpiBooru);
+    }
 
-    [Cmd, Aliases]
-    [RequireNsfw(Group = "nsfw_or_dm"), RequireContext(ContextType.DM, Group = "nsfw_or_dm")]
+    /// <summary>
+    ///     Command to fetch and display NSFW content from the Safebooru image board with optional tags in the current guild
+    ///     channel or direct messages.
+    /// </summary>
+    /// <param name="tags">Optional tags to filter the NSFW content from the Safebooru image board.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    [Cmd]
+    [Aliases]
+    [RequireNsfw(Group = "nsfw_or_dm")]
+    [RequireContext(ContextType.DM, Group = "nsfw_or_dm")]
     public Task Safebooru(params string[] tags)
-        => InternalDapiCommand(tags, false, Service.SafeBooru);
+    {
+        return InternalDapiCommand(tags, false, Service.SafeBooru);
+    }
 
-    [Cmd, Aliases]
-    [RequireNsfw(Group = "nsfw_or_dm"), RequireContext(ContextType.DM, Group = "nsfw_or_dm")]
+    /// <summary>
+    ///     Command to fetch and display NSFW content from the Realbooru image board with optional tags in the current guild
+    ///     channel or direct messages.
+    /// </summary>
+    /// <param name="tags">Optional tags to filter the NSFW content from the Realbooru image board.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    [Cmd]
+    [Aliases]
+    [RequireNsfw(Group = "nsfw_or_dm")]
+    [RequireContext(ContextType.DM, Group = "nsfw_or_dm")]
     public Task Realbooru(params string[] tags)
-        => InternalDapiCommand(tags, false, Service.RealBooru);
+    {
+        return InternalDapiCommand(tags, false, Service.RealBooru);
+    }
 
-    [Cmd, Aliases]
-    [RequireNsfw(Group = "nsfw_or_dm"), RequireContext(ContextType.DM, Group = "nsfw_or_dm")]
-    public async Task Boobs() => await RedditNsfw("boobs").ConfigureAwait(false);
+    /// <summary>
+    ///     Command to fetch and display NSFW content from the "boobs" subreddit in the current guild channel or direct
+    ///     messages.
+    /// </summary>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    [Cmd]
+    [Aliases]
+    [RequireNsfw(Group = "nsfw_or_dm")]
+    [RequireContext(ContextType.DM, Group = "nsfw_or_dm")]
+    public Task Boobs()
+    {
+        return RedditNsfw("boobs");
+    }
 
-    [Cmd, Aliases]
-    [RequireNsfw(Group = "nsfw_or_dm"), RequireContext(ContextType.DM, Group = "nsfw_or_dm")]
-    public async Task Butts() => await RedditNsfw("ass").ConfigureAwait(false);
+    /// <summary>
+    ///     Command to fetch and display NSFW content from the "ass" subreddit in the current guild channel or direct messages.
+    /// </summary>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    [Cmd]
+    [Aliases]
+    [RequireNsfw(Group = "nsfw_or_dm")]
+    [RequireContext(ContextType.DM, Group = "nsfw_or_dm")]
+    public Task Butts()
+    {
+        return RedditNsfw("ass");
+    }
 
-    [Cmd, Aliases]
+    /// <summary>
+    ///     Command to manage the blacklist of NSFW tags in the current guild.
+    /// </summary>
+    /// <param name="tag">
+    ///     Optional tag to add or remove from the blacklist. If not provided, displays the current list of
+    ///     blacklisted tags.
+    /// </param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    [Cmd]
+    [Aliases]
     [RequireContext(ContextType.Guild)]
     [UserPerm(GuildPermission.ManageMessages)]
     public async Task NsfwTagBlacklist([Remainder] string? tag = null)
@@ -574,13 +902,15 @@ public class Nsfw(InteractiveService interactivity, MartineApi martineApi,
                     .WithFooter(
                         $"{data.Rating} ({data.Provider}) | {string.Join(" | ", data.Tags.Where(x => !string.IsNullOrWhiteSpace(x)).Take(5))}")
                     .Build(),
-                components: config.Data.ShowInviteButton
+                components: Config.ShowInviteButton
                     ? new ComponentBuilder()
-                        .WithButton(style: ButtonStyle.Link,
-                            url:
-                            "",
-                            label: "",
-                            emote: "".ToIEmote()).Build()
+                        //.WithButton(style: ButtonStyle.Link,
+                            //url:
+                            //"https://discord.com/oauth2/authorize?client_id=752236274261426212&permissions=8&response_type=code&redirect_uri=https%3A%2F%2Fmewdeko.tech&scope=bot%20applications.commands",
+                            //label: "Invite Me!",
+                            //emote: "<a:HaneMeow:968564817784877066>".ToIEmote())
+                        //.WithButton("Support Us!", style: ButtonStyle.Link, url: "https://ko-fi.com/Mewdeko")
+                        .Build()
                     : null).ConfigureAwait(false);
         }
         else
@@ -596,13 +926,15 @@ public class Nsfw(InteractiveService interactivity, MartineApi martineApi,
                     .WithFooter(
                         $"{data.Rating} ({data.Provider}) | {string.Join(" | ", data.Tags.Where(x => !string.IsNullOrWhiteSpace(x)).Take(5))}")
                     .Build(),
-                components: config.Data.ShowInviteButton
+                components: Config.ShowInviteButton
                     ? new ComponentBuilder()
-                        .WithButton(style: ButtonStyle.Link,
-                            url:
-                            "",
-                            label: "",
-                            emote: "".ToIEmote()).Build()
+                        //.WithButton(style: ButtonStyle.Link,
+                            //url:
+                            //"https://discord.com/oauth2/authorize?client_id=752236274261426212&permissions=8&response_type=code&redirect_uri=https%3A%2F%2Fmewdeko.tech&scope=bot%20applications.commands",
+                            //label: "Invite Me!",
+                            //emote: "<a:HaneMeow:968564817784877066>".ToIEmote())
+                        //.WithButton("Support Us!", style: ButtonStyle.Link, url: "https://ko-fi.com/Mewdeko")
+                        .Build()
                     : null).ConfigureAwait(false);
         }
     }

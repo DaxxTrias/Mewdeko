@@ -6,9 +6,11 @@ using Discord.Commands;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
 using Humanizer;
+using LinqToDB;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Common.JsonSettings;
 using Mewdeko.Common.TypeReaders.Models;
+using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.Utility.Common;
 using Mewdeko.Modules.Utility.Services;
 using Mewdeko.Services.Impl;
@@ -20,23 +22,111 @@ using StringExtensions = Mewdeko.Extensions.StringExtensions;
 
 namespace Mewdeko.Modules.Utility;
 
-public partial class Utility(DiscordSocketClient client,
-        IStatsService stats, IBotCredentials creds, DownloadTracker tracker, InteractiveService serv,
-        ICoordinator coordinator,
-        GuildSettingsService guildSettings,
-        HttpClient httpClient,
-        BotConfigService config, DbService db)
+/// <summary>
+///     Contains various utility commands like sniping deleted messages, getting a list of roles with specific permissions,
+///     etc.
+/// </summary>
+/// <param name="client"></param>
+/// <param name="stats"></param>
+/// <param name="creds"></param>
+/// <param name="tracker"></param>
+/// <param name="serv"></param>
+/// <param name="coordinator"></param>
+/// <param name="guildSettings"></param>
+/// <param name="httpClient"></param>
+/// <param name="config"></param>
+/// <param name="db"></param>
+public partial class Utility(
+    DiscordShardedClient client,
+    IStatsService stats,
+    IBotCredentials creds,
+    DownloadTracker tracker,
+    CommandService cmdServ,
+    InteractiveService serv,
+    GuildSettingsService guildSettings,
+    HttpClient httpClient,
+    BotConfigService config,
+    DbContextProvider dbProvider,
+    IDataCache cache,
+    CryptoService cryptoService)
     : MewdekoModuleBase<UtilityService>
 {
-    private static readonly SemaphoreSlim Sem = new(1, 1);
-
+    /// <summary>
+    ///     Parses the type of permission search.
+    /// </summary>
     public enum PermissionType
     {
+        /// <summary>
+        ///     Searches for roles that have all the specified permissions.
+        /// </summary>
         And,
+
+        /// <summary>
+        ///     Searches for roles that have any of the specified permissions.
+        /// </summary>
         Or
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
+    private static readonly SemaphoreSlim Sem = new(1, 1);
+
+    /// <summary>
+    ///     Crypto command to generate a chart with the given days
+    /// </summary>
+    /// <param name="cryptoName"></param>
+    /// <param name="time"></param>
+    [Cmd]
+    [Aliases]
+    public async Task Crypto(string cryptoName, StoopidTime? time = null)
+    {
+        var (image, embed) = await cryptoService.GenerateCryptoPriceChartAsync(cryptoName,
+            time is null ? TimeSpan.FromDays(1).Days : time.Time.Days);
+        await ctx.Channel.SendFileAsync(image, "cryptopricechart.png", embed: embed);
+    }
+
+
+    /// <summary>
+    ///     Debug command to test parsing of embeds.
+    /// </summary>
+    /// <param name="embedText">The text to parse as an embed.</param>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    [UserPerm(GuildPermission.Administrator)]
+    public async Task DebugEmbed([Remainder] string embedText)
+    {
+        var watch = Stopwatch.StartNew();
+        try
+        {
+            SmartEmbed.TryParse(embedText, ctx.Guild.Id, out var embeds, out var plainText, out var components);
+            var comps = components?.Build();
+            watch.Stop();
+            var eb = new EmbedBuilder()
+                .WithTitle("Embed Successfully Parsed")
+                .WithOkColor()
+                .WithDescription($"`PlainText Length:` ***{plainText.Length}***\n" +
+                                 $"`Embed Count:` ***{embeds?.Length}***\n" +
+                                 $"`Component Count:` ***{comps?.Components.Count}")
+                .WithFooter($"Execution Time: {watch.Elapsed}");
+            await ctx.Channel.SendMessageAsync(plainText, embeds: embeds, components: comps);
+            await ctx.Channel.SendMessageAsync(embed: eb.Build());
+        }
+        catch (Exception e)
+        {
+            var eb = new EmbedBuilder()
+                .WithTitle("Error Parsing Embed")
+                .WithDescription(e.ToString());
+            await ctx.Channel.SendMessageAsync(embed: eb.Build());
+        }
+    }
+
+    /// <summary>
+    ///     Lists all roles that have the specified permissions.
+    /// </summary>
+    /// <param name="searchType">The type of permission search (And or Or).</param>
+    /// <param name="perms">The permissions to search for.</param>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
     public async Task RolePermList(PermissionType searchType = PermissionType.And, params GuildPermission[] perms)
     {
         List<IRole> rolesWithPerms;
@@ -64,7 +154,7 @@ public partial class Utility(DiscordSocketClient client,
 
         if (!rolesWithPerms.Any() && !rolesWithMatchedPerms.Any())
         {
-            await ctx.Channel.SendErrorAsync("No roles with the specified permissions were found.");
+            await ctx.Channel.SendErrorAsync("No roles with the specified permissions were found.", Config);
             return;
         }
 
@@ -107,11 +197,28 @@ public partial class Utility(DiscordSocketClient client,
         }
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
-    public async Task RolePermList(params GuildPermission[] perms)
-        => await RolePermList(PermissionType.And, perms);
+    /// <summary>
+    ///     Lists all roles that have the specified permissions. Default search type is And.
+    /// </summary>
+    /// <param name="perms">The permissions to search for.</param>
+    /// <returns></returns>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    public Task RolePermList(params GuildPermission[] perms)
+    {
+        return RolePermList(PermissionType.And, perms);
+    }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild), UserPerm(GuildPermission.ManageMessages)]
+    /// <summary>
+    ///     Gets the mewdeko specific json of a message.
+    /// </summary>
+    /// <param name="id">The id of the message to get the json of.</param>
+    /// <param name="channel">The channel of the message.</param>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    [UserPerm(GuildPermission.ManageMessages)]
     public async Task GetJson(ulong id, ITextChannel channel = null)
     {
         channel ??= ctx.Channel as ITextChannel;
@@ -132,17 +239,37 @@ public partial class Utility(DiscordSocketClient client,
         await writer.DisposeAsync();
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild), UserPerm(GuildPermission.ManageMessages)]
-    public async Task GetJson(ITextChannel channel, ulong messageId)
-        => await GetJson(messageId, channel);
+    /// <summary>
+    ///     Gets the mewdeko specific json of a message.
+    /// </summary>
+    /// <param name="channel">The channel of the message.</param>
+    /// <param name="messageId">The id of the message to get the json of.</param>
+    /// <returns></returns>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    [UserPerm(GuildPermission.ManageMessages)]
+    public Task GetJson(ITextChannel channel, ulong messageId)
+    {
+        return GetJson(messageId, channel);
+    }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild), UserPerm(GuildPermission.ManageMessages)]
+    /// <summary>
+    ///     Saves the chat log of a channel. Public mewdeko saves this to the nginx cdn then sends you a link to display it on
+    ///     the cdn
+    /// </summary>
+    /// <param name="time"></param>
+    /// <param name="channel"></param>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    [UserPerm(GuildPermission.ManageMessages)]
     public async Task SaveChat(StoopidTime time, ITextChannel? channel = null)
     {
         var curTime = DateTime.UtcNow.Subtract(time.Time);
         if (!Directory.Exists(creds.ChatSavePath))
         {
-            await ctx.Channel.SendErrorAsync("Chat save directory does not exist. Please create it.")
+            await ctx.Channel.SendErrorAsync("Chat save directory does not exist. Please create it.", Config)
                 .ConfigureAwait(false);
             return;
         }
@@ -154,14 +281,15 @@ public partial class Utility(DiscordSocketClient client,
         }
         catch (Exception ex)
         {
-            await ctx.Channel.SendErrorAsync($"Failed to create directory. {ex.Message}").ConfigureAwait(false);
+            await ctx.Channel.SendErrorAsync($"Failed to create directory. {ex.Message}", Config).ConfigureAwait(false);
             return;
         }
 
         if (time.Time.Days > 3)
         {
             await ctx.Channel
-                .SendErrorAsync("Max time to grab messages is 3 days. This will be increased in the near future.")
+                .SendErrorAsync("Max time to grab messages is 3 days. This will be increased in the near future.",
+                    Config)
                 .ConfigureAwait(false);
             return;
         }
@@ -194,7 +322,12 @@ public partial class Utility(DiscordSocketClient client,
                 .ConfigureAwait(false);
     }
 
-    [Cmd, Aliases]
+    /// <summary>
+    ///     Gets the emotes in a guild. If an emote type is specified, only the emotes of that type will be listed.
+    /// </summary>
+    /// <param name="emotetype">The type of emotes to list (animated or nonanimated).</param>
+    [Cmd]
+    [Aliases]
     public async Task EmoteList([Remainder] string? emotetype = null)
     {
         var emotes = emotetype switch
@@ -206,7 +339,7 @@ public partial class Utility(DiscordSocketClient client,
 
         if (emotes.Length == 0)
         {
-            await ctx.Channel.SendErrorAsync("No emotes found!").ConfigureAwait(false);
+            await ctx.Channel.SendErrorAsync("No emotes found!", Config).ConfigureAwait(false);
             return;
         }
 
@@ -242,7 +375,11 @@ public partial class Utility(DiscordSocketClient client,
         }
     }
 
-    [Cmd, Aliases]
+    /// <summary>
+    ///     Gets the bots invite link. As well as showing the website, docs, and support server.
+    /// </summary>
+    [Cmd]
+    [Aliases]
     public async Task Invite()
     {
         var eb = new EmbedBuilder()
@@ -254,58 +391,14 @@ public partial class Utility(DiscordSocketClient client,
         await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
     }
 
-    [Cmd, Aliases]
-    public async Task TestSite(string url)
-    {
-        var response = await httpClient.GetAsync(url).ConfigureAwait(false);
-
-        await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-        var statusCode = response.StatusCode;
-        if (statusCode.ToString() == "Forbidden")
-            await ctx.Channel.SendErrorAsync("Sites down m8").ConfigureAwait(false);
-        else
-            await ctx.Channel.SendConfirmAsync("Sites ok m8").ConfigureAwait(false);
-    }
-
-    [Cmd, Aliases, UserPerm(GuildPermission.ManageChannels)]
-    public async Task ReactChannel(ITextChannel? chan = null)
-    {
-        var e = await Service.GetReactChans(ctx.Guild.Id);
-        if (chan == null)
-        {
-            if (e == 0)
-                return;
-            await Service.SetReactChan(ctx.Guild, 0).ConfigureAwait(false);
-            await ctx.Channel.SendConfirmAsync("React Channel Disabled!").ConfigureAwait(false);
-        }
-        else
-        {
-            if (e == 0)
-            {
-                await Service.SetReactChan(ctx.Guild, chan.Id).ConfigureAwait(false);
-                await ctx.Channel.SendConfirmAsync($"Your React Channel has been set to {chan.Mention}!")
-                    .ConfigureAwait(false);
-            }
-            else
-            {
-                var chan2 = await ctx.Guild.GetTextChannelAsync(e).ConfigureAwait(false);
-                if (e == chan.Id)
-                {
-                    await ctx.Channel.SendErrorAsync("This is already your React Channel!").ConfigureAwait(false);
-                }
-                else
-                {
-                    await Service.SetReactChan(ctx.Guild, chan.Id).ConfigureAwait(false);
-                    await ctx.Channel.SendConfirmAsync(
-                            $"Your React Channel has been switched from {chan2.Mention} to {chan.Mention}!")
-                        .ConfigureAwait(false);
-                }
-            }
-        }
-    }
-
-    [Cmd, Aliases, UserPerm(GuildPermission.Administrator),
-     RequireContext(ContextType.Guild)]
+    /// <summary>
+    ///     Enables or disables sniping of deleted messages. Default is disabled.
+    /// </summary>
+    /// <param name="value">The value to set.</param>
+    [Cmd]
+    [Aliases]
+    [UserPerm(GuildPermission.Administrator)]
+    [RequireContext(ContextType.Guild)]
     public async Task SnipeSet(PermissionAction value)
     {
         await Service.SnipeSet(ctx.Guild, value.Value).ConfigureAwait(false);
@@ -313,7 +406,12 @@ public partial class Utility(DiscordSocketClient client,
         await ReplyConfirmLocalizedAsync("snipe_set", t ? "Enabled" : "Disabled").ConfigureAwait(false);
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
+    /// <summary>
+    ///     Snipes the last deleted message in the channel.
+    /// </summary>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
     public async Task Snipe()
     {
         //todo: snipe ignores bots (default behavior is ignore bots. do we actually want this?
@@ -330,7 +428,7 @@ public partial class Utility(DiscordSocketClient client,
             x.ChannelId == ctx.Channel.Id && !x.Edited);
         if (msg is null)
         {
-            await ctx.Channel.SendErrorAsync("There is nothing to snipe here!").ConfigureAwait(false);
+            await ctx.Channel.SendErrorAsync("There is nothing to snipe here!", Config).ConfigureAwait(false);
             return;
         }
 
@@ -366,7 +464,13 @@ public partial class Utility(DiscordSocketClient client,
                 : null).ConfigureAwait(false);
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
+    /// <summary>
+    ///     Gets the last x amount of deleted messages in a channel.
+    /// </summary>
+    /// <param name="amount">The amount of messages to get.</param>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
     public async Task SnipeList(int amount = 5)
     {
         if (!await Service.GetSnipeSet(ctx.Guild.Id))
@@ -422,7 +526,14 @@ public partial class Utility(DiscordSocketClient client,
         }
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
+    /// <summary>
+    ///     Gets the last x amount of deleted messages by a user in a channel.
+    /// </summary>
+    /// <param name="user">The user to get the messages of.</param>
+    /// <param name="amount">The amount of messages to get.</param>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
     public async Task SnipeList(IUser user, int amount = 5)
     {
         if (!await Service.GetSnipeSet(ctx.Guild.Id))
@@ -478,7 +589,14 @@ public partial class Utility(DiscordSocketClient client,
         }
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
+    /// <summary>
+    ///     Gets the last x amount of deleted messages in a channel.
+    /// </summary>
+    /// <param name="channel">The channel to get the messages of.</param>
+    /// <param name="amount">The amount of messages to get.</param>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
     public async Task SnipeList(ITextChannel channel, int amount = 5)
     {
         if (!await Service.GetSnipeSet(ctx.Guild.Id))
@@ -489,7 +607,7 @@ public partial class Utility(DiscordSocketClient client,
         }
 
         var msgs = (await Service.GetSnipes(ctx.Guild.Id).ConfigureAwait(false)).Where(x =>
-            x.ChannelId == ctx.Channel.Id && x.ChannelId == channel.Id && !x.Edited);
+            x.ChannelId == channel.Id && !x.Edited);
         {
             var snipeStores = msgs as SnipeStore[] ?? msgs.ToArray();
             if (snipeStores.Length == 0)
@@ -534,7 +652,15 @@ public partial class Utility(DiscordSocketClient client,
         }
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
+    /// <summary>
+    ///     Gets the last x amount of deleted messages by a user in a specified channel.
+    /// </summary>
+    /// <param name="channel">The channel to get the messages of.</param>
+    /// <param name="user">The user to get the messages of.</param>
+    /// <param name="amount">The amount of messages to get.</param>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
     public async Task SnipeList(ITextChannel channel, IUser user, int amount = 5)
     {
         if (!await Service.GetSnipeSet(ctx.Guild.Id))
@@ -545,7 +671,7 @@ public partial class Utility(DiscordSocketClient client,
         }
 
         var msgs = (await Service.GetSnipes(ctx.Guild.Id).ConfigureAwait(false)).Where(x =>
-            x.ChannelId == ctx.Channel.Id && x.UserId == user.Id && x.ChannelId == channel.Id && !x.Edited);
+            x.UserId == user.Id && x.ChannelId == channel.Id && !x.Edited);
         {
             var snipeStores = msgs as SnipeStore[] ?? msgs.ToArray();
             if (snipeStores.Length == 0)
@@ -590,7 +716,13 @@ public partial class Utility(DiscordSocketClient client,
         }
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
+    /// <summary>
+    ///     Gets the last x amount of edited messages in the current channel.
+    /// </summary>
+    /// <param name="amount">The amount of messages to get.</param>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
     public async Task EditSnipeList(int amount = 5)
     {
         if (!await Service.GetSnipeSet(ctx.Guild.Id))
@@ -646,7 +778,14 @@ public partial class Utility(DiscordSocketClient client,
         }
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
+    /// <summary>
+    ///     Gets the last x amount of edited messages in a channel by a user.
+    /// </summary>
+    /// <param name="user">The user to get the messages of.</param>
+    /// <param name="amount">The amount of messages to get.</param>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
     public async Task EditSnipeList(IUser user, int amount = 5)
     {
         if (!await Service.GetSnipeSet(ctx.Guild.Id))
@@ -702,7 +841,14 @@ public partial class Utility(DiscordSocketClient client,
         }
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
+    /// <summary>
+    ///     Gets the last x amount of edited messages in a channel.
+    /// </summary>
+    /// <param name="channel">The channel to get the messages of.</param>
+    /// <param name="amount">The amount of messages to get.</param>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
     public async Task EditSnipeList(ITextChannel channel, int amount = 5)
     {
         if (!await Service.GetSnipeSet(ctx.Guild.Id))
@@ -713,7 +859,7 @@ public partial class Utility(DiscordSocketClient client,
         }
 
         var msgs = (await Service.GetSnipes(ctx.Guild.Id).ConfigureAwait(false)).Where(x =>
-            x.ChannelId == ctx.Channel.Id && x.ChannelId == channel.Id && x.Edited);
+            x.ChannelId == channel.Id && x.Edited);
         {
             var snipeStores = msgs as SnipeStore[] ?? msgs.ToArray();
             if (snipeStores.Length == 0)
@@ -758,7 +904,15 @@ public partial class Utility(DiscordSocketClient client,
         }
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
+    /// <summary>
+    ///     Gets the last x amount of edited messages by a user in a specified channel.
+    /// </summary>
+    /// <param name="channel">The channel to get the messages of.</param>
+    /// <param name="user">The user to get the messages of.</param>
+    /// <param name="amount">The amount of messages to get.</param>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
     public async Task EditSnipeList(ITextChannel channel, IUser user, int amount = 5)
     {
         if (!await Service.GetSnipeSet(ctx.Guild.Id))
@@ -769,7 +923,7 @@ public partial class Utility(DiscordSocketClient client,
         }
 
         var msgs = (await Service.GetSnipes(ctx.Guild.Id).ConfigureAwait(false)).Where(x =>
-            x.ChannelId == ctx.Channel.Id && x.UserId == user.Id && x.ChannelId == channel.Id && x.Edited);
+            x.UserId == user.Id && x.ChannelId == channel.Id && x.Edited);
         {
             var snipeStores = msgs as SnipeStore[] ?? msgs.ToArray();
             if (snipeStores.Length == 0)
@@ -815,7 +969,14 @@ public partial class Utility(DiscordSocketClient client,
     }
 
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild), Priority(1)]
+    /// <summary>
+    ///     Snipes the last deleted message by a user in the current channel.
+    /// </summary>
+    /// <param name="user1">The user to get the message of.</param>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    [Priority(1)]
     public async Task Snipe(IUser user1)
     {
         if (!await Service.GetSnipeSet(ctx.Guild.Id))
@@ -829,7 +990,7 @@ public partial class Utility(DiscordSocketClient client,
             .Find(x => x.ChannelId == ctx.Channel.Id && x.UserId == user1.Id && !x.Edited);
         if (msg is null)
         {
-            await ctx.Channel.SendErrorAsync("There is nothing to snipe for this user!").ConfigureAwait(false);
+            await ctx.Channel.SendErrorAsync("There is nothing to snipe for this user!", Config).ConfigureAwait(false);
             return;
         }
 
@@ -865,12 +1026,19 @@ public partial class Utility(DiscordSocketClient client,
                 : null).ConfigureAwait(false);
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild), Priority(2)]
+    /// <summary>
+    ///     Checks a url for viruses using the virustotal api.
+    /// </summary>
+    /// <param name="url">The url to check.</param>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    [Priority(2)]
     public async Task VCheck([Remainder] string? url = null)
     {
         if (string.IsNullOrWhiteSpace(url))
         {
-            await ctx.Channel.SendErrorAsync("You didn't specify a url").ConfigureAwait(false);
+            await ctx.Channel.SendErrorAsync("You didn't specify a url", Config).ConfigureAwait(false);
         }
         else
         {
@@ -884,7 +1052,14 @@ public partial class Utility(DiscordSocketClient client,
         }
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild), Priority(2)]
+    /// <summary>
+    ///     Snipes the last deleted message in a specified channel.
+    /// </summary>
+    /// <param name="chan">The channel to get the message of.</param>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    [Priority(2)]
     public async Task Snipe(ITextChannel chan)
     {
         if (!await Service.GetSnipeSet(ctx.Guild.Id))
@@ -935,7 +1110,15 @@ public partial class Utility(DiscordSocketClient client,
                 : null).ConfigureAwait(false);
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild), Priority(2)]
+    /// <summary>
+    ///     Snipes the last deleted message by a user in a specified channel.
+    /// </summary>
+    /// <param name="chan">The channel to get the message of.</param>
+    /// <param name="user1">The user to get the message of.</param>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    [Priority(2)]
     public async Task Snipe(ITextChannel chan, IUser user1)
     {
         if (!await Service.GetSnipeSet(ctx.Guild.Id))
@@ -950,7 +1133,7 @@ public partial class Utility(DiscordSocketClient client,
         {
             if (msg == null)
             {
-                await ctx.Channel.SendErrorAsync("There's nothing to snipe for that channel and user!")
+                await ctx.Channel.SendErrorAsync("There's nothing to snipe for that channel and user!", Config)
                     .ConfigureAwait(false);
                 return;
             }
@@ -989,23 +1172,12 @@ public partial class Utility(DiscordSocketClient client,
         }
     }
 
-    [Cmd, Aliases, UserPerm(GuildPermission.Administrator),
-     RequireContext(ContextType.Guild)]
-    public async Task PreviewLinks(string yesnt)
-    {
-        await Service.PreviewLinks(ctx.Guild, yesnt[..1].ToLower()).ConfigureAwait(false);
-        switch (await Service.GetPLinks(ctx.Guild.Id))
-        {
-            case 1:
-                await ctx.Channel.SendConfirmAsync("Link previews are now enabled!").ConfigureAwait(false);
-                break;
-            case 0:
-                await ctx.Channel.SendConfirmAsync("Link Previews are now disabled!").ConfigureAwait(false);
-                break;
-        }
-    }
-
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
+    /// <summary>
+    ///     Snipes the last edited message in the current channel.
+    /// </summary>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
     public async Task EditSnipe()
     {
         if (!await Service.GetSnipeSet(ctx.Guild.Id))
@@ -1021,7 +1193,7 @@ public partial class Utility(DiscordSocketClient client,
             .LastOrDefault(x => x.ChannelId == ctx.Channel.Id);
         if (msg == null)
         {
-            await ctx.Channel.SendErrorAsync("There's nothing to snipe!").ConfigureAwait(false);
+            await ctx.Channel.SendErrorAsync("There's nothing to snipe!", Config).ConfigureAwait(false);
             return;
         }
 
@@ -1058,7 +1230,14 @@ public partial class Utility(DiscordSocketClient client,
                 : null).ConfigureAwait(false);
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild), Priority(1)]
+    /// <summary>
+    ///     Snipes the last edited message by a user in the current channel.
+    /// </summary>
+    /// <param name="user1">The user to get the message of.</param>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    [Priority(1)]
     public async Task EditSnipe(IUser user1)
     {
         if (!await Service.GetSnipeSet(ctx.Guild.Id))
@@ -1112,7 +1291,14 @@ public partial class Utility(DiscordSocketClient client,
         }
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild), Priority(1)]
+    /// <summary>
+    ///     Snipes the last edited message in a specified channel.
+    /// </summary>
+    /// <param name="chan">The channel to get the message of.</param>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    [Priority(1)]
     public async Task EditSnipe(ITextChannel chan)
     {
         if (!await Service.GetSnipeSet(ctx.Guild.Id))
@@ -1167,7 +1353,15 @@ public partial class Utility(DiscordSocketClient client,
         }
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild), Priority(1)]
+    /// <summary>
+    ///     Snipes the last edited message by a user in a specified channel.
+    /// </summary>
+    /// <param name="chan">The channel to get the message of.</param>
+    /// <param name="user1">The user to get the message of.</param>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    [Priority(1)]
     public async Task EditSnipe(ITextChannel chan, IUser user1)
     {
         if (!await Service.GetSnipeSet(ctx.Guild.Id))
@@ -1222,7 +1416,13 @@ public partial class Utility(DiscordSocketClient client,
         }
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
+    /// <summary>
+    ///     Shows a list of users playing a specified game.
+    /// </summary>
+    /// <param name="game">The game to search for.</param>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
     public async Task WhosPlaying([Remainder] string? game)
     {
         game = game?.Trim().ToUpperInvariant();
@@ -1267,20 +1467,33 @@ public partial class Utility(DiscordSocketClient client,
                 var pagebuilder = new PageBuilder().WithOkColor()
                     .WithDescription(string.Join("\n",
                         arr.Skip(page * 20).Take(20).Select(x =>
-                            $"{(i++) + 1}. {x.Username}#{x.Discriminator} `{x.Id}`: `{(x.Activities.FirstOrDefault() is CustomStatusGame cs ? cs.State : x.Activities.FirstOrDefault().Name)}`")));
+                            $"{i++ + 1}. {x.Username}#{x.Discriminator} `{x.Id}`: `{(x.Activities.FirstOrDefault() is CustomStatusGame cs ? cs.State : x.Activities.FirstOrDefault().Name)}`")));
                 return pagebuilder;
             }
         }
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
-    public async Task Vote() =>
+    /// <summary>
+    ///     Shows a link to vote for mewdeko.
+    /// </summary>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    public async Task Vote()
+    {
         await ctx.Channel.EmbedAsync(new EmbedBuilder().WithOkColor()
                 .WithDescription(
                     "Vote here for Mewdeko!\n[Vote Link](https://top.gg/bot/752236274261426212)\nMake sure to join the support server! \n[Link](https://mewdeko.tech/support)"))
             .ConfigureAwait(false);
+    }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
+    /// <summary>
+    ///     Shows a list of users in a specified role.
+    /// </summary>
+    /// <param name="role">The role to search for.</param>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
     public async Task InRole([Remainder] IRole role)
     {
         await Context.Channel.TriggerTypingAsync().ConfigureAwait(false);
@@ -1316,7 +1529,14 @@ public partial class Utility(DiscordSocketClient client,
         }
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
+    /// <summary>
+    ///     Shows a list of users in the specified roles.
+    /// </summary>
+    /// <param name="role">The first role to search for.</param>
+    /// <param name="role2">The second role to search for.</param>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
     public async Task InRoles(IRole role, IRole role2)
     {
         await Context.Channel.TriggerTypingAsync().ConfigureAwait(false);
@@ -1350,7 +1570,13 @@ public partial class Utility(DiscordSocketClient client,
         }
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
+    /// <summary>
+    ///     Gets the user id of a specified user.
+    /// </summary>
+    /// <param name="target">The user to get the id of.</param>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
     public async Task UserId([Remainder] IGuildUser? target = null)
     {
         var usr = target ?? ctx.User;
@@ -1358,22 +1584,49 @@ public partial class Utility(DiscordSocketClient client,
             Format.Code(usr.Id.ToString())).ConfigureAwait(false);
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
-    public async Task RoleId([Remainder] IRole role) =>
+    /// <summary>
+    ///     Gets the role id of a specified role.
+    /// </summary>
+    /// <param name="role">The role to get the id of.</param>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    public async Task RoleId([Remainder] IRole role)
+    {
         await ReplyConfirmLocalizedAsync("roleid", "🆔", Format.Bold(role.ToString()),
             Format.Code(role.Id.ToString())).ConfigureAwait(false);
+    }
 
-    [Cmd, Aliases]
-    public async Task ChannelId() =>
+    /// <summary>
+    ///     Gets the channel id of the current channel.
+    /// </summary>
+    [Cmd]
+    [Aliases]
+    public async Task ChannelId()
+    {
         await ReplyConfirmLocalizedAsync("channelid", "🆔", Format.Code(ctx.Channel.Id.ToString()))
             .ConfigureAwait(false);
+    }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
-    public async Task ServerId() =>
+    /// <summary>
+    ///     Gets the server id of the current server.
+    /// </summary>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    public async Task ServerId()
+    {
         await ReplyConfirmLocalizedAsync("serverid", "🆔", Format.Code(ctx.Guild.Id.ToString()))
             .ConfigureAwait(false);
+    }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
+    /// <summary>
+    ///     Gets a list of roles in the current server. Shows a user's roles if a user is specified.
+    /// </summary>
+    /// <param name="target">The user to get the roles of.</param>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
     public async Task Roles(IGuildUser? target = null)
     {
         var channel = (ITextChannel)ctx.Channel;
@@ -1381,10 +1634,9 @@ public partial class Utility(DiscordSocketClient client,
 
         if (target != null)
         {
-            var roles = target.GetRoles().Except(new[]
-            {
+            var roles = target.GetRoles().Except([
                 guild.EveryoneRole
-            }).OrderBy(r => -r.Position);
+            ]).OrderBy(r => -r.Position);
             if (!roles.Any())
             {
                 await ReplyErrorLocalizedAsync("no_roles_on_page").ConfigureAwait(false);
@@ -1414,10 +1666,9 @@ public partial class Utility(DiscordSocketClient client,
         }
         else
         {
-            var roles = guild.Roles.Except(new[]
-            {
+            var roles = guild.Roles.Except([
                 guild.EveryoneRole
-            }).OrderBy(r => -r.Position);
+            ]).OrderBy(r => -r.Position);
             if (!roles.Any())
             {
                 await ReplyErrorLocalizedAsync("no_roles_on_page").ConfigureAwait(false);
@@ -1448,7 +1699,13 @@ public partial class Utility(DiscordSocketClient client,
         }
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
+    /// <summary>
+    ///     Gets the topic of the current channel. Shows the topic of a specified channel if one is specified.
+    /// </summary>
+    /// <param name="channel">The channel to get the topic of.</param>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
     public async Task ChannelTopic([Remainder] ITextChannel? channel = null)
     {
         channel ??= (ITextChannel)ctx.Channel;
@@ -1460,7 +1717,16 @@ public partial class Utility(DiscordSocketClient client,
             await ctx.Channel.SendConfirmAsync(GetText("channel_topic"), topic).ConfigureAwait(false);
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild), UserPerm(GuildPermission.ManageMessages), Priority(1)]
+    /// <summary>
+    ///     Used to say or embed a message as the bot.
+    /// </summary>
+    /// <param name="channel">The channel to send the message to.</param>
+    /// <param name="message">The message to send.</param>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    [UserPerm(GuildPermission.ManageMessages)]
+    [Priority(1)]
     public async Task Say(ITextChannel channel, [Remainder] string? message)
     {
         var isTextInAttachments = ctx.Message.Attachments.Any(x => x.Filename.EndsWith("txt"));
@@ -1473,7 +1739,7 @@ public partial class Utility(DiscordSocketClient client,
         var (attachments, processedMessage, streams) = await HandleAttachmentsAsync(isTextInAttachments, message);
 
         var rep = new ReplacementBuilder()
-            .WithDefault(ctx.User, channel, (SocketGuild)ctx.Guild, (DiscordSocketClient)ctx.Client)
+            .WithDefault(ctx.User, channel, (SocketGuild)ctx.Guild, (DiscordShardedClient)ctx.Client)
             .Build();
 
         var msg = rep.Replace(processedMessage);
@@ -1484,7 +1750,7 @@ public partial class Utility(DiscordSocketClient client,
             {
                 try
                 {
-                    await channel.SendFilesAsync(attachments: attachments, plainText, embeds: embedData,
+                    await channel.SendFilesAsync(attachments, plainText, embeds: embedData,
                             components: components?.Build(),
                             allowedMentions: !canMention
                                 ? new AllowedMentions(AllowedMentionTypes.Users)
@@ -1495,7 +1761,7 @@ public partial class Utility(DiscordSocketClient client,
                 }
                 catch (Exception ex)
                 {
-                    await ctx.Channel.SendErrorAsync(GetText("embed_failed"));
+                    await ctx.Channel.SendErrorAsync(GetText("embed_failed"), Config);
                     Log.Error("Error sending message: {Message}", ex.Message);
                 }
             }
@@ -1510,7 +1776,7 @@ public partial class Utility(DiscordSocketClient client,
                 }
                 catch (Exception ex)
                 {
-                    await ctx.Channel.SendErrorAsync(GetText("embed_failed"));
+                    await ctx.Channel.SendErrorAsync(GetText("embed_failed"), Config);
                     Log.Error("Error sending message: {Message}", ex.Message);
                 }
         }
@@ -1530,17 +1796,19 @@ public partial class Utility(DiscordSocketClient client,
                 }
                 catch
                 {
-                    await ctx.Channel.SendErrorAsync(GetText("embed_failed"));
+                    await ctx.Channel.SendErrorAsync(GetText("embed_failed"), Config);
                 }
             }
             else
                 try
                 {
-                    await channel.SendConfirmAsync(msg).ConfigureAwait(false);
+                    await channel.SendMessageAsync(msg, allowedMentions: !canMention
+                        ? new AllowedMentions(AllowedMentionTypes.Users)
+                        : AllowedMentions.All);
                 }
                 catch (Exception ex)
                 {
-                    await ctx.Channel.SendErrorAsync(GetText("embed_failed"));
+                    await ctx.Channel.SendErrorAsync(GetText("embed_failed"), Config);
                     Log.Error("Error sending message: {Message}", ex.Message);
                 }
         }
@@ -1578,36 +1846,168 @@ public partial class Utility(DiscordSocketClient client,
     }
 
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild), UserPerm(GuildPermission.ManageMessages), Priority(0)]
-    public async Task Say([Remainder] string? message = null) => await Say((ITextChannel)ctx.Channel, message);
+    /// <summary>
+    ///     Used to say or embed a message as the bot.
+    /// </summary>
+    /// <param name="message">The message to send.</param>
+    /// <returns>The task object representing the asynchronous operation.</returns>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    [UserPerm(GuildPermission.ManageMessages)]
+    [Priority(0)]
+    public Task Say([Remainder] string? message = null)
+    {
+        return Say((ITextChannel)ctx.Channel, message);
+    }
 
-    [Cmd, Aliases]
+    /// <summary>
+    ///     Shows the bot's stats.
+    /// </summary>
+    [Cmd]
+    [Aliases]
     public async Task Stats()
     {
-        await using var uow = db.GetDbContext();
-        var time = DateTime.UtcNow.Subtract(TimeSpan.FromSeconds(5));
-        var commandStats = uow.CommandStats.Count(x => x.DateAdded.Value >= time);
-        var users = new[]
+        await using var dbContext = await dbProvider.GetContextAsync();
+
+        var fiveSecondsAgo = DateTime.Now.AddSeconds(-5);
+        var commandStatsTask = dbContext.CommandStats
+            .Where(x => x.DateAdded >= fiveSecondsAgo)
+            .CountAsync();
+        var userTasks = new[]
         {
-            await client.Rest.GetUserAsync(280835732728184843).ConfigureAwait(false),
-            await client.Rest.GetUserAsync(786375627892064257).ConfigureAwait(false),
+            client.Rest.GetUserAsync(280835732728184843),
+            client.Rest.GetUserAsync(786375627892064257)
         };
+
+        var users = await Task.WhenAll(userTasks);
+        var commandStats = await commandStatsTask;
+
         var libraryInfo = new LibraryInfo(DllVersionChecker.GetDllVersions);
         var targetFramework = LibraryInfo.GetTargetFramework();
 
         await ctx.Channel.EmbedAsync(
-                new EmbedBuilder().WithOkColor()
-                    .WithAuthor($"{client.CurrentUser.Username} v{StatsService.BotVersion}", client.CurrentUser.GetAvatarUrl(), config.Data.SupportServer)
-                    //.AddField(GetText("authors"), $"[{users[0]}](https://github.com/SylveonDeko)\n[{users[1]}](https://github.com/CottageDwellingCat)")
-                    .AddField(GetText("commands_ran"), $"{commandStats}/5s")
-                    //.AddField("Library", stats.Library)
-                    .AddField(GetText("library"), $"{targetFramework} \n {libraryInfo.Library} \n {libraryInfo.OpenAILib}")
-                    .AddField(GetText("owner_ids"), string.Join("\n", creds.OwnerIds.Select(x => $"<@{x}>")))
-                    .AddField(GetText("shard"), $"#{client.ShardId} / {creds.TotalShards}")
-                    .AddField(GetText("memory"), $"{stats.Heap} MB")
-                    .AddField(GetText("uptime"), stats.GetUptimeString("\n"))
-                    .AddField("Servers", $"{coordinator.GetGuildCount()} Servers"))
-            .ConfigureAwait(false);
+            new EmbedBuilder().WithOkColor()
+                .WithAuthor($"{client.CurrentUser.Username} v{StatsService.BotVersion}",
+                    client.CurrentUser.GetAvatarUrl(), config.Data.SupportServer)
+                // .AddField(GetText("authors"),
+                    // $"[{users[0]}](https://github.com/SylveonDeko)\n[{users[1]}](https://github.com/CottageDwellingCat)")
+                .AddField(GetText("commands_ran"), $"{commandStats}/5s")
+                .AddField(GetText("command_count"), cmdServ.Commands.DistinctBy(x => x.Name).Count())
+                // .AddField("Library", stats.Library)
+                .AddField(GetText("library"), $"{targetFramework} \n {libraryInfo.Library} \n {libraryInfo.OpenAILib}")
+                .AddField(GetText("owner_ids"), string.Join("\n", creds.OwnerIds.Select(x => $"<@{x}>")))
+                .AddField(GetText("shard"), $"#{client.GetShardFor(ctx.Guild).ShardId} / {creds.TotalShards}")
+                .AddField(GetText("memory"), $"{stats.Heap} MB")
+                .AddField(GetText("uptime"), stats.GetUptimeString("\n"))
+                .AddField("Servers", $"{client.Guilds.Count} Servers"));
+    }
+
+    /// <summary>
+    ///     Enlarges one or more specified emojis.
+    /// </summary>
+    /// <param name="_"></param>
+    [Cmd]
+    [Aliases]
+    public async Task Showemojis([Remainder] string _)
+    {
+        var tags = ctx.Message.Tags.Where(t => t.Type == TagType.Emoji).Select(t => (Emote)t.Value);
+
+        var result = string.Join("\n", tags.Select(m => GetText("showemojis", m, m.Url)));
+
+        if (string.IsNullOrWhiteSpace(result))
+            await ReplyErrorLocalizedAsync("showemojis_none").ConfigureAwait(false);
+        else
+            await ctx.Channel.SendMessageAsync(result.TrimTo(2000)).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Shows the bot's ping.
+    /// </summary>
+    [Cmd]
+    [Ratelimit(30)]
+    public async Task Ping()
+    {
+        await Sem.WaitAsync(5000).ConfigureAwait(false);
+        try
+        {
+            var redisPing = await cache.Redis.GetDatabase().PingAsync();
+
+            var sw = Stopwatch.StartNew();
+            var msg = await ctx.Channel.SendMessageAsync("🏓").ConfigureAwait(false);
+            sw.Stop();
+            msg.DeleteAfter(0);
+
+            await ctx.Channel
+                .SendConfirmAsync(
+                    $"Bot Ping {(int)sw.Elapsed.TotalMilliseconds}ms" +
+                    $"\nBot Latency {((DiscordShardedClient)ctx.Client).Latency}ms" +
+                    $"\nRedis Ping {redisPing.Nanoseconds}ns")
+                .ConfigureAwait(false);
+        }
+        finally
+        {
+            Sem.Release();
+        }
+    }
+
+    /// <summary>
+    ///     Rolls a dice with the specified number of sides. Dnd dice are supported.
+    /// </summary>
+    /// <param name="roll">The roll to make.</param>
+    [Cmd]
+    [Aliases]
+    public async Task Roll([Remainder] string roll)
+    {
+        RollResult result;
+        try
+        {
+            result = RollCommandService.ParseRoll(roll);
+        }
+        catch (ArgumentException ex)
+        {
+            await ReplyErrorLocalizedAsync("roll_fail_new_dm", GetText(ex.Message)).ConfigureAwait(false);
+            return;
+        }
+
+        async Task<PageBuilder> PageFactory(int page)
+        {
+            await Task.CompletedTask.ConfigureAwait(false);
+            return new PageBuilder()
+                .WithOkColor()
+                .WithFields(result.Results.Skip(page * 10)
+                    .Take(10)
+                    .Select(x => new EmbedFieldBuilder()
+                        .WithName(x.Key.ToString())
+                        .WithValue(string.Join(',', x.Value))).ToArray())
+                .WithDescription(result.InacurateTotal
+                    // hide possible int rollover errors
+                    ? GetText("roll_fail_too_large")!
+                    : result.ToString());
+        }
+
+        var paginator = new LazyPaginatorBuilder()
+            .AddUser(ctx.User)
+            .WithPageFactory(PageFactory)
+            .WithFooter(PaginatorFooter.PageNumber | PaginatorFooter.Users)
+            .WithMaxPageIndex(result.Results.Count / 10)
+            .WithDefaultCanceledPage()
+            .WithDefaultEmotes()
+            .WithActionOnCancellation(ActionOnStop.DeleteMessage)
+            .Build();
+
+        await serv.SendPaginatorAsync(paginator, ctx.Channel, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     O-OwoIfy WoIfy's the specified input.
+    /// </summary>
+    /// <param name="input">The input to owoify woify.</param>
+    [Cmd]
+    [Aliases]
+    public async Task OwoIfy([Remainder] string input)
+    {
+        await ctx.Channel.SendMessageAsync(OwoServices.OwoIfy(input).SanitizeMentions(true)).ConfigureAwait(false);
     }
 
     [Cmd, Aliases]
@@ -1668,87 +2068,4 @@ public partial class Utility(DiscordSocketClient client,
             .AddField("Tealstreet Docs: " + originalPlatform, link))
             .ConfigureAwait(false);
     }
-
-    [Cmd, Aliases]
-    public async Task Showemojis([Remainder] string _)
-    {
-        var tags = ctx.Message.Tags.Where(t => t.Type == TagType.Emoji).Select(t => (Emote)t.Value);
-
-        var result = string.Join("\n", tags.Select(m => GetText("showemojis", m, m.Url)));
-
-        if (string.IsNullOrWhiteSpace(result))
-            await ReplyErrorLocalizedAsync("showemojis_none").ConfigureAwait(false);
-        else
-            await ctx.Channel.SendMessageAsync(result.TrimTo(2000)).ConfigureAwait(false);
-    }
-
-    [Cmd, Ratelimit(30)]
-    public async Task Ping()
-    {
-        await Sem.WaitAsync(5000).ConfigureAwait(false);
-        try
-        {
-            await using var uow = db.GetDbContext();
-            var sw = Stopwatch.StartNew();
-            var msg = await ctx.Channel.SendMessageAsync("🏓").ConfigureAwait(false);
-            sw.Stop();
-            msg.DeleteAfter(0);
-
-            await ctx.Channel
-                .SendConfirmAsync(
-                    $"Bot Ping {(int)sw.Elapsed.TotalMilliseconds}ms\nBot Latency {((DiscordSocketClient)ctx.Client).Latency}ms")
-                .ConfigureAwait(false);
-        }
-        finally
-        {
-            Sem.Release();
-        }
-    }
-
-    [Cmd, Aliases]
-    public async Task Roll([Remainder] string roll)
-    {
-        RollResult result;
-        try
-        {
-            result = RollCommandService.ParseRoll(roll);
-        }
-        catch (ArgumentException ex)
-        {
-            await ReplyErrorLocalizedAsync("roll_fail_new_dm", GetText(ex.Message)).ConfigureAwait(false);
-            return;
-        }
-
-        async Task<PageBuilder> PageFactory(int page)
-        {
-            await Task.CompletedTask.ConfigureAwait(false);
-            return new PageBuilder()
-                .WithOkColor()
-                .WithFields(result.Results.Skip(page * 10)
-                    .Take(10)
-                    .Select(x => new EmbedFieldBuilder()
-                        .WithName(x.Key.ToString())
-                        .WithValue(string.Join(',', x.Value))).ToArray())
-                .WithDescription(result.InacurateTotal
-                    // hide possible int rollover errors
-                    ? GetText("roll_fail_too_large")!
-                    : result.ToString());
-        }
-
-        var paginator = new LazyPaginatorBuilder()
-            .AddUser(ctx.User)
-            .WithPageFactory(PageFactory)
-            .WithFooter(PaginatorFooter.PageNumber | PaginatorFooter.Users)
-            .WithMaxPageIndex(result.Results.Count / 10)
-            .WithDefaultCanceledPage()
-            .WithDefaultEmotes()
-            .WithActionOnCancellation(ActionOnStop.DeleteMessage)
-            .Build();
-
-        await serv.SendPaginatorAsync(paginator, ctx.Channel, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
-    }
-
-    [Cmd, Aliases]
-    public async Task OwoIfy([Remainder] string input)
-        => await ctx.Channel.SendMessageAsync(OwoServices.OwoIfy(input).SanitizeMentions(true)).ConfigureAwait(false);
 }

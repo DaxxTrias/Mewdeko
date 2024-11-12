@@ -14,11 +14,22 @@ namespace Mewdeko.Modules.Server_Management;
 
 public partial class ServerManagement
 {
+    /// <summary>
+    ///     Provides commands for managing roles within a guild, including creation, deletion, synchronization, and user
+    ///     assignment.
+    /// </summary>
     [Group]
     public class RoleCommands(GuildSettingsService guildSettings, BotConfigService config)
         : MewdekoSubmodule<RoleCommandsService>
     {
-        [Cmd, Aliases, UserPerm(GuildPermission.ManageRoles), BotPerm(ChannelPermission.ManageRoles)]
+        /// <summary>
+        ///     Creates multiple roles within the guild based on a provided list of role names.
+        /// </summary>
+        /// <param name="roles">A space-separated list of role names to create.</param>
+        [Cmd]
+        [Aliases]
+        [UserPerm(GuildPermission.ManageRoles)]
+        [BotPerm(ChannelPermission.ManageRoles)]
         public async Task CreateRoles([Remainder] string roles)
         {
             var roleList = roles.Split(" ");
@@ -42,15 +53,22 @@ public partial class ServerManagement
             }
         }
 
-        [Cmd, Aliases, RequireContext(ContextType.Guild),
-         UserPerm(GuildPermission.ManageChannels), BotPerm(GuildPermission.ManageChannels)]
+        /// <summary>
+        ///     Synchronizes a role's permissions to all text channels and categories within the guild.
+        /// </summary>
+        /// <param name="role">The role to synchronize across the guild.</param>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.ManageChannels)]
+        [BotPerm(GuildPermission.ManageChannels)]
         public async Task SyncRoleToAll(IRole role)
         {
             var ch = ctx.Channel as ITextChannel;
             var perms = ch.GetPermissionOverwrite(role);
             if (perms is null)
             {
-                await ctx.Channel.SendErrorAsync("This role doesnt have perms setup in this channel!")
+                await ctx.Channel.SendErrorAsync("This role doesnt have perms setup in this channel!", Config)
                     .ConfigureAwait(false);
                 return;
             }
@@ -80,15 +98,22 @@ public partial class ServerManagement
             await msg.ModifyAsync(x => x.Embed = eb.Build()).ConfigureAwait(false);
         }
 
-        [Cmd, Aliases, RequireContext(ContextType.Guild),
-         UserPerm(GuildPermission.ManageChannels), BotPerm(GuildPermission.ManageChannels)]
+        /// <summary>
+        ///     Synchronizes a role's permissions to all text channels within the guild.
+        /// </summary>
+        /// <param name="role">The role to synchronize across text channels.</param>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.ManageChannels)]
+        [BotPerm(GuildPermission.ManageChannels)]
         public async Task SyncRoleToAllChannels(IRole role)
         {
             var ch = ctx.Channel as ITextChannel;
             var perms = ch.GetPermissionOverwrite(role);
             if (perms is null)
             {
-                await ctx.Channel.SendErrorAsync("This role doesnt have perms setup in this channel!")
+                await ctx.Channel.SendErrorAsync("This role doesnt have perms setup in this channel!", Config)
                     .ConfigureAwait(false);
                 return;
             }
@@ -112,15 +137,22 @@ public partial class ServerManagement
             await msg.ModifyAsync(x => x.Embed = eb.Build()).ConfigureAwait(false);
         }
 
-        [Cmd, Aliases, RequireContext(ContextType.Guild),
-         UserPerm(GuildPermission.ManageChannels), BotPerm(GuildPermission.ManageChannels)]
+        /// <summary>
+        ///     Synchronizes a role's permissions to all categories within the guild.
+        /// </summary>
+        /// <param name="role">The role to synchronize across categories.</param>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.ManageChannels)]
+        [BotPerm(GuildPermission.ManageChannels)]
         public async Task SyncRoleToAllCategories(IRole role)
         {
             var ch = ctx.Channel as ITextChannel;
             var perms = ch.GetPermissionOverwrite(role);
             if (perms is null)
             {
-                await ctx.Channel.SendErrorAsync("This role doesnt have perms setup in this channel!")
+                await ctx.Channel.SendErrorAsync("This role doesnt have perms setup in this channel!", Config)
                     .ConfigureAwait(false);
                 return;
             }
@@ -143,13 +175,21 @@ public partial class ServerManagement
             await msg.ModifyAsync(x => x.Embed = eb.Build()).ConfigureAwait(false);
         }
 
-        [Cmd, Aliases, RequireContext(ContextType.Guild),
-         UserPerm(GuildPermission.ManageRoles), BotPerm(GuildPermission.ManageRoles)]
+        /// <summary>
+        ///     Deletes a list of roles from the guild.
+        /// </summary>
+        /// <param name="roles">An array of roles to delete.</param>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.ManageRoles)]
+        [BotPerm(GuildPermission.ManageRoles)]
         public async Task DeleteRoles(params IRole[] roles)
         {
             if (roles.Count(x => !x.IsManaged) is 0)
             {
-                await ctx.Channel.SendErrorAsync("You cannot delete bot roles or boost roles!").ConfigureAwait(false);
+                await ctx.Channel.SendErrorAsync("You cannot delete bot roles or boost roles!", Config)
+                    .ConfigureAwait(false);
                 return;
             }
 
@@ -161,13 +201,13 @@ public partial class ServerManagement
                 if (ctx.User.Id != runnerUser.Guild.OwnerId &&
                     runnerUser.GetRoles().Max(x => x.Position) <= i.Position)
                 {
-                    await ctx.Channel.SendErrorAsync($"You cannot manage {i.Mention}").ConfigureAwait(false);
+                    await ctx.Channel.SendErrorAsync($"You cannot manage {i.Mention}", Config).ConfigureAwait(false);
                     return;
                 }
 
                 if (currentUser.GetRoles().Max(x => x.Position) <= i.Position)
                 {
-                    await ctx.Channel.SendErrorAsync($"I cannot manage {i.Mention}").ConfigureAwait(false);
+                    await ctx.Channel.SendErrorAsync($"I cannot manage {i.Mention}", Config).ConfigureAwait(false);
                     return;
                 }
 
@@ -193,8 +233,15 @@ public partial class ServerManagement
             }
         }
 
-        [Cmd, Aliases, RequireContext(ContextType.Guild),
-         UserPerm(GuildPermission.ManageRoles), BotPerm(GuildPermission.ManageRoles)]
+        /// <summary>
+        ///     Stops a mass role operation job by its job number.
+        /// </summary>
+        /// <param name="jobnum">The job number of the mass role operation to stop.</param>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.ManageRoles)]
+        [BotPerm(GuildPermission.ManageRoles)]
         public async Task StopJob(int jobnum)
         {
             var list = Service.Jobslist
@@ -202,7 +249,8 @@ public partial class ServerManagement
             if (list == null)
             {
                 await ctx.Channel.SendErrorAsync(
-                        $"No job with that ID exists, please check the list again with `{await guildSettings.GetPrefix(ctx.Guild)}rolejobs`")
+                        $"No job with that ID exists, please check the list again with `{await guildSettings.GetPrefix(ctx.Guild)}rolejobs`",
+                        Config)
                     .ConfigureAwait(false);
                 return;
             }
@@ -223,8 +271,16 @@ public partial class ServerManagement
             await Service.StopJob(ctx.Channel as ITextChannel, jobnum, ctx.Guild).ConfigureAwait(false);
         }
 
-        [Cmd, Aliases, RequireContext(ContextType.Guild),
-         UserPerm(GuildPermission.ManageRoles), BotPerm(GuildPermission.ManageRoles)]
+        /// <summary>
+        ///     Modifies the roles of a user by adding new roles and/or removing existing ones.
+        /// </summary>
+        /// <param name="user">The user whose roles will be modified.</param>
+        /// <param name="roles">The roles to be added to the user.</param>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.ManageRoles)]
+        [BotPerm(GuildPermission.ManageRoles)]
         public async Task SetRoles(IGuildUser user, params IRole[] roles)
         {
             foreach (var i in roles)
@@ -232,12 +288,14 @@ public partial class ServerManagement
                 if (ctx.User.Id != ctx.Guild.OwnerId &&
                     ((IGuildUser)ctx.User).GetRoles().Max(x => x.Position) <= i.Position)
                 {
-                    await ctx.Channel.SendErrorAsync($"You cannot manage the role {i.Mention}").ConfigureAwait(false);
+                    await ctx.Channel.SendErrorAsync($"You cannot manage the role {i.Mention}", Config)
+                        .ConfigureAwait(false);
                     return;
                 }
 
                 if (((IGuildUser)ctx.User).GetRoles().Max(x => x.Position) > i.Position) continue;
-                await ctx.Channel.SendErrorAsync($"I cannot manage the role {i.Mention}!").ConfigureAwait(false);
+                await ctx.Channel.SendErrorAsync($"I cannot manage the role {i.Mention}!", Config)
+                    .ConfigureAwait(false);
                 return;
             }
 
@@ -247,20 +305,28 @@ public partial class ServerManagement
                 .ConfigureAwait(false);
         }
 
-        [Cmd, Aliases, RequireContext(ContextType.Guild), UserPerm(GuildPermission.ManageRoles),
-         BotPerm(GuildPermission.ManageRoles)]
+        /// <summary>
+        ///     Assigns a specific role to a list of users, adding the role if they don't already have it.
+        /// </summary>
+        /// <param name="role">The role to be added to the users.</param>
+        /// <param name="users">The users to whom the role will be added.</param>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.ManageRoles)]
+        [BotPerm(GuildPermission.ManageRoles)]
         public async Task AddUsersToRole(IRole role, params IUser[] users)
         {
             if (ctx.User.Id != ctx.Guild.OwnerId &&
                 ((IGuildUser)ctx.User).GetRoles().Max(x => x.Position) <= role.Position)
             {
-                await ctx.Channel.SendErrorAsync("You cannot manage this role!").ConfigureAwait(false);
+                await ctx.Channel.SendErrorAsync("You cannot manage this role!", Config).ConfigureAwait(false);
                 return;
             }
 
             if (((IGuildUser)ctx.User).GetRoles().Max(x => x.Position) <= role.Position)
             {
-                await ctx.Channel.SendErrorAsync("I cannot manage this role!").ConfigureAwait(false);
+                await ctx.Channel.SendErrorAsync("I cannot manage this role!", Config).ConfigureAwait(false);
                 return;
             }
 
@@ -274,20 +340,28 @@ public partial class ServerManagement
                 .ConfigureAwait(false);
         }
 
-        [Cmd, Aliases, RequireContext(ContextType.Guild), UserPerm(GuildPermission.ManageRoles),
-         BotPerm(GuildPermission.ManageRoles)]
+        /// <summary>
+        ///     Removes a specific role from a list of users, if they have the role.
+        /// </summary>
+        /// <param name="role">The role to be removed from the users.</param>
+        /// <param name="users">The users from whom the role will be removed.</param>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.ManageRoles)]
+        [BotPerm(GuildPermission.ManageRoles)]
         public async Task RemoveUsersFromRole(IRole role, params IUser[] users)
         {
             if (ctx.User.Id != ctx.Guild.OwnerId &&
                 ((IGuildUser)ctx.User).GetRoles().Max(x => x.Position) <= role.Position)
             {
-                await ctx.Channel.SendErrorAsync("You cannot manage this role!").ConfigureAwait(false);
+                await ctx.Channel.SendErrorAsync("You cannot manage this role!", Config).ConfigureAwait(false);
                 return;
             }
 
             if (((IGuildUser)ctx.User).GetRoles().Max(x => x.Position) <= role.Position)
             {
-                await ctx.Channel.SendErrorAsync("I cannot manage this role!").ConfigureAwait(false);
+                await ctx.Channel.SendErrorAsync("I cannot manage this role!", Config).ConfigureAwait(false);
                 return;
             }
 
@@ -301,8 +375,16 @@ public partial class ServerManagement
                 .ConfigureAwait(false);
         }
 
-        [Cmd, Aliases, RequireContext(ContextType.Guild),
-         UserPerm(GuildPermission.ManageRoles), BotPerm(GuildPermission.ManageRoles)]
+        /// <summary>
+        ///     Removes specified roles from a user.
+        /// </summary>
+        /// <param name="user">The user from whom the roles will be removed.</param>
+        /// <param name="roles">The roles to be removed from the user.</param>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.ManageRoles)]
+        [BotPerm(GuildPermission.ManageRoles)]
         public async Task RemoveRoles(IGuildUser user, params IRole[] roles)
         {
             foreach (var i in roles)
@@ -310,12 +392,14 @@ public partial class ServerManagement
                 if (ctx.User.Id != ctx.Guild.OwnerId &&
                     ((IGuildUser)ctx.User).GetRoles().Max(x => x.Position) <= i.Position)
                 {
-                    await ctx.Channel.SendErrorAsync($"You cannot manage the role {i.Mention}").ConfigureAwait(false);
+                    await ctx.Channel.SendErrorAsync($"You cannot manage the role {i.Mention}", Config)
+                        .ConfigureAwait(false);
                     return;
                 }
 
                 if (((IGuildUser)ctx.User).GetRoles().Max(x => x.Position) > i.Position) continue;
-                await ctx.Channel.SendErrorAsync($"I cannot manage the role {i.Mention}!").ConfigureAwait(false);
+                await ctx.Channel.SendErrorAsync($"I cannot manage the role {i.Mention}!", Config)
+                    .ConfigureAwait(false);
                 return;
             }
 
@@ -325,14 +409,24 @@ public partial class ServerManagement
                 .ConfigureAwait(false);
         }
 
-        [Cmd, Aliases, RequireContext(ContextType.Guild),
-         UserPerm(GuildPermission.ManageRoles), BotPerm(GuildPermission.ManageRoles)]
+        /// <summary>
+        ///     Lists all ongoing mass role operations within the server, providing details about each.
+        /// </summary>
+        /// <remarks>
+        ///     This command helps in monitoring mass role operations, offering insights into the progress, type, and initiator of
+        ///     each operation.
+        /// </remarks>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.ManageRoles)]
+        [BotPerm(GuildPermission.ManageRoles)]
         public async Task RoleJobs()
         {
             var list = Service.Jobslist;
             if (list.Count == 0)
             {
-                await ctx.Channel.SendErrorAsync("No Mass Role Operations running!").ConfigureAwait(false);
+                await ctx.Channel.SendErrorAsync("No Mass Role Operations running!", Config).ConfigureAwait(false);
                 return;
             }
 
@@ -363,8 +457,18 @@ public partial class ServerManagement
             await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
         }
 
-        [Cmd, Aliases, RequireContext(ContextType.Guild),
-         UserPerm(GuildPermission.ManageRoles), BotPerm(GuildPermission.ManageRoles)]
+        /// <summary>
+        ///     Adds a specified role to all server members.
+        /// </summary>
+        /// <param name="role">The role to be added to all server members.</param>
+        /// <remarks>
+        ///     This command initiates a mass role application process, applying the specified role to every member in the server.
+        /// </remarks>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.ManageRoles)]
+        [BotPerm(GuildPermission.ManageRoles)]
         public async Task AddToAll(IRole role)
         {
             await Task.Delay(500).ConfigureAwait(false);
@@ -373,20 +477,21 @@ public partial class ServerManagement
             if (ctx.User.Id != runnerUser.Guild.OwnerId &&
                 runnerUser.GetRoles().Max(x => x.Position) <= role.Position)
             {
-                await ctx.Channel.SendErrorAsync("You cannot manage this role!").ConfigureAwait(false);
+                await ctx.Channel.SendErrorAsync("You cannot manage this role!", Config).ConfigureAwait(false);
                 return;
             }
 
             if (currentUser.GetRoles().Max(x => x.Position) <= role.Position)
             {
-                await ctx.Channel.SendErrorAsync("I cannot manage this role!").ConfigureAwait(false);
+                await ctx.Channel.SendErrorAsync("I cannot manage this role!", Config).ConfigureAwait(false);
                 return;
             }
 
             if (Service.Jobslist.Count == 5)
             {
                 await ctx.Channel.SendErrorAsync(
-                        $"Due to discord rate limits you may only have 5 mass role operations at a time, check your current jobs with `{await guildSettings.GetPrefix(ctx.Guild)}rolejobs`.")
+                        $"Due to discord rate limits you may only have 5 mass role operations at a time, check your current jobs with `{await guildSettings.GetPrefix(ctx.Guild)}rolejobs`.",
+                        Config)
                     .ConfigureAwait(false);
                 return;
             }
@@ -396,7 +501,7 @@ public partial class ServerManagement
             var count = users.Count();
             if (!users.Any())
             {
-                await ctx.Channel.SendErrorAsync("All users already have this role!").ConfigureAwait(false);
+                await ctx.Channel.SendErrorAsync("All users already have this role!", Config).ConfigureAwait(false);
                 return;
             }
 
@@ -444,8 +549,18 @@ public partial class ServerManagement
                 .ConfigureAwait(false);
         }
 
-        [Cmd, Aliases, RequireContext(ContextType.Guild),
-         UserPerm(GuildPermission.ManageRoles), BotPerm(GuildPermission.ManageRoles)]
+        /// <summary>
+        ///     Adds a specified role to all bots in the server.
+        /// </summary>
+        /// <param name="role">The role to be added to all bots.</param>
+        /// <remarks>
+        ///     This command targets only bot accounts within the server, applying the specified role to them.
+        /// </remarks>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.ManageRoles)]
+        [BotPerm(GuildPermission.ManageRoles)]
         public async Task AddToAllBots(IRole role)
         {
             var runnerUser = (IGuildUser)ctx.User;
@@ -453,20 +568,21 @@ public partial class ServerManagement
             if (ctx.User.Id != runnerUser.Guild.OwnerId &&
                 runnerUser.GetRoles().Max(x => x.Position) <= role.Position)
             {
-                await ctx.Channel.SendErrorAsync("You cannot manage this role!").ConfigureAwait(false);
+                await ctx.Channel.SendErrorAsync("You cannot manage this role!", Config).ConfigureAwait(false);
                 return;
             }
 
             if (currentUser.GetRoles().Max(x => x.Position) <= role.Position)
             {
-                await ctx.Channel.SendErrorAsync("I cannot manage this role!").ConfigureAwait(false);
+                await ctx.Channel.SendErrorAsync("I cannot manage this role!", Config).ConfigureAwait(false);
                 return;
             }
 
             if (Service.Jobslist.Count == 5)
             {
                 await ctx.Channel.SendErrorAsync(
-                        $"Due to discord rate limits you may only have 5 mass role operations at a time, check your current jobs with `{await guildSettings.GetPrefix(ctx.Guild)}rolejobs`.")
+                        $"Due to discord rate limits you may only have 5 mass role operations at a time, check your current jobs with `{await guildSettings.GetPrefix(ctx.Guild)}rolejobs`.",
+                        Config)
                     .ConfigureAwait(false);
                 return;
             }
@@ -476,7 +592,7 @@ public partial class ServerManagement
             var count = users.Count();
             if (!users.Any())
             {
-                await ctx.Channel.SendErrorAsync("All bots already have this role!").ConfigureAwait(false);
+                await ctx.Channel.SendErrorAsync("All bots already have this role!", Config).ConfigureAwait(false);
                 return;
             }
 
@@ -524,8 +640,18 @@ public partial class ServerManagement
                 .ConfigureAwait(false);
         }
 
-        [Cmd, Aliases, RequireContext(ContextType.Guild),
-         UserPerm(GuildPermission.ManageRoles), BotPerm(GuildPermission.ManageRoles)]
+        /// <summary>
+        ///     Adds a specified role to all human users in the server, excluding bots.
+        /// </summary>
+        /// <param name="role">The role to be added to all human users.</param>
+        /// <remarks>
+        ///     This command excludes bot accounts and applies the specified role only to human members of the server.
+        /// </remarks>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.ManageRoles)]
+        [BotPerm(GuildPermission.ManageRoles)]
         public async Task AddToAllUsers(IRole role)
         {
             var runnerUser = (IGuildUser)ctx.User;
@@ -533,20 +659,21 @@ public partial class ServerManagement
             if (ctx.User.Id != runnerUser.Guild.OwnerId &&
                 runnerUser.GetRoles().Max(x => x.Position) <= role.Position)
             {
-                await ctx.Channel.SendErrorAsync("You cannot manage this role!").ConfigureAwait(false);
+                await ctx.Channel.SendErrorAsync("You cannot manage this role!", Config).ConfigureAwait(false);
                 return;
             }
 
             if (currentUser.GetRoles().Max(x => x.Position) <= role.Position)
             {
-                await ctx.Channel.SendErrorAsync("I cannot manage this role!").ConfigureAwait(false);
+                await ctx.Channel.SendErrorAsync("I cannot manage this role!", Config).ConfigureAwait(false);
                 return;
             }
 
             if (Service.Jobslist.Count == 5)
             {
                 await ctx.Channel.SendErrorAsync(
-                        $"Due to discord rate limits you may only have 5 mass role operations at a time, check your current jobs with `{await guildSettings.GetPrefix(ctx.Guild)}rolejobs`.")
+                        $"Due to discord rate limits you may only have 5 mass role operations at a time, check your current jobs with `{await guildSettings.GetPrefix(ctx.Guild)}rolejobs`.",
+                        Config)
                     .ConfigureAwait(false);
                 return;
             }
@@ -561,7 +688,7 @@ public partial class ServerManagement
             var count = users.Count();
             if (!users.Any())
             {
-                await ctx.Channel.SendErrorAsync("All users already have this role!").ConfigureAwait(false);
+                await ctx.Channel.SendErrorAsync("All users already have this role!", Config).ConfigureAwait(false);
                 return;
             }
 
@@ -604,15 +731,21 @@ public partial class ServerManagement
                 .ConfigureAwait(false);
         }
 
-        [Cmd, Aliases, RequireContext(ContextType.Guild),
-         UserPerm(GuildPermission.ManageRoles), BotPerm(GuildPermission.ManageRoles)]
+        /// <summary>
+        ///     Exports a list of roles and their associated users to a text file, allowing for easy backup and transfer.
+        /// </summary>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.ManageRoles)]
+        [BotPerm(GuildPermission.ManageRoles)]
         public async Task ExportRoleList()
         {
             var roles = ctx.Guild.Roles.ToList();
             roles = roles.Where(x => !x.IsManaged && x.Id != ctx.Guild.Id).ToList();
             if (!roles.Any())
             {
-                await ctx.Channel.SendErrorAsync($"{config.Data.ErrorEmote} No manageable roles found!")
+                await ctx.Channel.SendErrorAsync($"{config.Data.ErrorEmote} No manageable roles found!", Config)
                     .ConfigureAwait(false);
                 return;
             }
@@ -641,13 +774,20 @@ public partial class ServerManagement
             await toSend.DisposeAsync();
         }
 
-        [Cmd, Aliases, RequireContext(ContextType.Guild),
-         UserPerm(GuildPermission.ManageRoles), BotPerm(GuildPermission.ManageRoles)]
+        /// <summary>
+        ///     Imports roles and user associations from a text file, applying the specified roles to the mentioned users.
+        /// </summary>
+        /// <param name="newRoles">Indicates whether new roles should be created based on the import data.</param>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.ManageRoles)]
+        [BotPerm(GuildPermission.ManageRoles)]
         public async Task ImportRoleList(bool newRoles = false)
         {
             if (!ctx.Message.Attachments.Any())
             {
-                await ctx.Channel.SendErrorAsync("Please attach a file with a list of roles to add to users.")
+                await ctx.Channel.SendErrorAsync("Please attach a file with a list of roles to add to users.", Config)
                     .ConfigureAwait(false);
                 return;
             }
@@ -687,14 +827,16 @@ public partial class ServerManagement
 
             if (!toProcess.Any())
             {
-                await ctx.Channel.SendErrorAsync("No roles or users to process in the file.").ConfigureAwait(false);
+                await ctx.Channel.SendErrorAsync("No roles or users to process in the file.", Config)
+                    .ConfigureAwait(false);
                 return;
             }
 
             if (Service.Jobslist.Count == 5)
             {
                 await ctx.Channel.SendErrorAsync(
-                        $"Due to discord rate limits you may only have 5 mass role operations at a time, check your current jobs with `{await guildSettings.GetPrefix(ctx.Guild)}rolejobs`.")
+                        $"Due to discord rate limits you may only have 5 mass role operations at a time, check your current jobs with `{await guildSettings.GetPrefix(ctx.Guild)}rolejobs`.",
+                        Config)
                     .ConfigureAwait(false);
                 return;
             }
@@ -709,7 +851,8 @@ public partial class ServerManagement
 
             if (!toProcess.Any())
             {
-                await ctx.Channel.SendErrorAsync("All roles are already applied to all users.").ConfigureAwait(false);
+                await ctx.Channel.SendErrorAsync("All roles are already applied to all users.", Config)
+                    .ConfigureAwait(false);
                 return;
             }
 
@@ -756,13 +899,25 @@ public partial class ServerManagement
                 .ConfigureAwait(false);
         }
 
-        [Cmd, Aliases, RequireContext(ContextType.Guild),
-         UserPerm(GuildPermission.ManageRoles), BotPerm(GuildPermission.ManageRoles)]
+        /// <summary>
+        ///     Adds a specified role to a list of users defined in an attached file.
+        /// </summary>
+        /// <param name="role">The role to be added to the users listed in the attached file.</param>
+        /// <remarks>
+        ///     This command adds a specified role to users listed in a text file attached to the command message. It streamlines
+        ///     the process of applying a role to a specific subset of users.
+        /// </remarks>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.ManageRoles)]
+        [BotPerm(GuildPermission.ManageRoles)]
         public async Task AddRoleToList(IRole role)
         {
             if (!ctx.Message.Attachments.Any())
             {
-                await ctx.Channel.SendErrorAsync("Please attach a file with a list of users to add the role to.")
+                await ctx.Channel
+                    .SendErrorAsync("Please attach a file with a list of users to add the role to.", Config)
                     .ConfigureAwait(false);
                 return;
             }
@@ -803,20 +958,21 @@ public partial class ServerManagement
             if (ctx.User.Id != runnerUser.Guild.OwnerId &&
                 runnerUser.GetRoles().Max(x => x.Position) <= role.Position)
             {
-                await ctx.Channel.SendErrorAsync("You cannot manage this role!").ConfigureAwait(false);
+                await ctx.Channel.SendErrorAsync("You cannot manage this role!", Config).ConfigureAwait(false);
                 return;
             }
 
             if (currentUser.GetRoles().Max(x => x.Position) <= role.Position)
             {
-                await ctx.Channel.SendErrorAsync("I cannot manage this role!").ConfigureAwait(false);
+                await ctx.Channel.SendErrorAsync("I cannot manage this role!", Config).ConfigureAwait(false);
                 return;
             }
 
             if (Service.Jobslist.Count == 5)
             {
                 await ctx.Channel.SendErrorAsync(
-                        $"Due to discord rate limits you may only have 5 mass role operations at a time, check your current jobs with `{await guildSettings.GetPrefix(ctx.Guild)}rolejobs`.")
+                        $"Due to discord rate limits you may only have 5 mass role operations at a time, check your current jobs with `{await guildSettings.GetPrefix(ctx.Guild)}rolejobs`.",
+                        Config)
                     .ConfigureAwait(false);
                 return;
             }
@@ -830,7 +986,7 @@ public partial class ServerManagement
             var count = actualUsers.Count;
             if (!actualUsers.Any())
             {
-                await ctx.Channel.SendErrorAsync("All users already have this role!").ConfigureAwait(false);
+                await ctx.Channel.SendErrorAsync("All users already have this role!", Config).ConfigureAwait(false);
                 return;
             }
 
@@ -873,8 +1029,20 @@ public partial class ServerManagement
                 .ConfigureAwait(false);
         }
 
-        [Cmd, Aliases, RequireContext(ContextType.Guild),
-         UserPerm(GuildPermission.ManageRoles), BotPerm(GuildPermission.ManageRoles)]
+        /// <summary>
+        ///     Adds a specified role to all users who have been a server member for longer than a specified duration.
+        /// </summary>
+        /// <param name="time">The minimum duration a user must have been a member of the server to receive the role.</param>
+        /// <param name="role">The role to be added to qualifying users.</param>
+        /// <remarks>
+        ///     This command targets users based on their membership duration, applying a role to those who have been part of the
+        ///     server for longer than the specified time.
+        /// </remarks>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.ManageRoles)]
+        [BotPerm(GuildPermission.ManageRoles)]
         public async Task AddToUsersOver(StoopidTime time, IRole role)
         {
             var runnerUser = (IGuildUser)ctx.User;
@@ -882,20 +1050,21 @@ public partial class ServerManagement
             if (ctx.User.Id != runnerUser.Guild.OwnerId &&
                 runnerUser.GetRoles().Max(x => x.Position) <= role.Position)
             {
-                await ctx.Channel.SendErrorAsync("You cannot manage this role!").ConfigureAwait(false);
+                await ctx.Channel.SendErrorAsync("You cannot manage this role!", Config).ConfigureAwait(false);
                 return;
             }
 
             if (currentUser.GetRoles().Max(x => x.Position) <= role.Position)
             {
-                await ctx.Channel.SendErrorAsync("I cannot manage this role!").ConfigureAwait(false);
+                await ctx.Channel.SendErrorAsync("I cannot manage this role!", Config).ConfigureAwait(false);
                 return;
             }
 
             if (Service.Jobslist.Count == 5)
             {
                 await ctx.Channel.SendErrorAsync(
-                        $"Due to discord rate limits you may only have 5 mass role operations at a time, check your current jobs with `{await guildSettings.GetPrefix(ctx.Guild)}rolejobs`.")
+                        $"Due to discord rate limits you may only have 5 mass role operations at a time, check your current jobs with `{await guildSettings.GetPrefix(ctx.Guild)}rolejobs`.",
+                        Config)
                     .ConfigureAwait(false);
                 return;
             }
@@ -907,7 +1076,7 @@ public partial class ServerManagement
             var count = users.Count();
             if (!users.Any())
             {
-                await ctx.Channel.SendErrorAsync("All users at this account age already have this role!")
+                await ctx.Channel.SendErrorAsync("All users at this account age already have this role!", Config)
                     .ConfigureAwait(false);
                 return;
             }
@@ -957,8 +1126,20 @@ public partial class ServerManagement
                 .ConfigureAwait(false);
         }
 
-        [Cmd, Aliases, RequireContext(ContextType.Guild),
-         UserPerm(GuildPermission.ManageRoles), BotPerm(GuildPermission.ManageRoles)]
+        /// <summary>
+        ///     Adds a specified role to all users who have been a server member for shorter than a specified duration.
+        /// </summary>
+        /// <param name="time">The maximum duration a user can have been a member of the server to receive the role.</param>
+        /// <param name="role">The role to be added to qualifying users.</param>
+        /// <remarks>
+        ///     Similar to 'AddToUsersOver', but targets new members by applying a role to those who have been part of the server
+        ///     for less than the specified time.
+        /// </remarks>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.ManageRoles)]
+        [BotPerm(GuildPermission.ManageRoles)]
         public async Task AddToUsersUnder(StoopidTime time, IRole role)
         {
             var runnerUser = (IGuildUser)ctx.User;
@@ -966,20 +1147,21 @@ public partial class ServerManagement
             if (ctx.User.Id != runnerUser.Guild.OwnerId &&
                 runnerUser.GetRoles().Max(x => x.Position) <= role.Position)
             {
-                await ctx.Channel.SendErrorAsync("You cannot manage this role!").ConfigureAwait(false);
+                await ctx.Channel.SendErrorAsync("You cannot manage this role!", Config).ConfigureAwait(false);
                 return;
             }
 
             if (currentUser.GetRoles().Max(x => x.Position) <= role.Position)
             {
-                await ctx.Channel.SendErrorAsync("I cannot manage this role!").ConfigureAwait(false);
+                await ctx.Channel.SendErrorAsync("I cannot manage this role!", Config).ConfigureAwait(false);
                 return;
             }
 
             if (Service.Jobslist.Count == 5)
             {
                 await ctx.Channel.SendErrorAsync(
-                        $"Due to discord rate limits you may only have 5 mass role operations at a time, check your current jobs with `{await guildSettings.GetPrefix(ctx.Guild)}rolejobs`.")
+                        $"Due to discord rate limits you may only have 5 mass role operations at a time, check your current jobs with `{await guildSettings.GetPrefix(ctx.Guild)}rolejobs`.",
+                        Config)
                     .ConfigureAwait(false);
                 return;
             }
@@ -991,7 +1173,7 @@ public partial class ServerManagement
             var count = users.Count();
             if (!users.Any())
             {
-                await ctx.Channel.SendErrorAsync("All users at this account age already have this role!")
+                await ctx.Channel.SendErrorAsync("All users at this account age already have this role!", Config)
                     .ConfigureAwait(false);
                 return;
             }
@@ -1040,8 +1222,18 @@ public partial class ServerManagement
                 .ConfigureAwait(false);
         }
 
-        [Cmd, Aliases, RequireContext(ContextType.Guild),
-         UserPerm(GuildPermission.ManageRoles), BotPerm(GuildPermission.ManageRoles)]
+        /// <summary>
+        ///     Removes a specified role from all server members.
+        /// </summary>
+        /// <param name="role">The role to be removed from all server members.</param>
+        /// <remarks>
+        ///     This command initiates a mass role removal process, removing the specified role from every member in the server.
+        /// </remarks>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.ManageRoles)]
+        [BotPerm(GuildPermission.ManageRoles)]
         public async Task RemoveFromAll(IRole role)
         {
             var runnerUser = (IGuildUser)ctx.User;
@@ -1049,20 +1241,21 @@ public partial class ServerManagement
             if (ctx.User.Id != runnerUser.Guild.OwnerId &&
                 runnerUser.GetRoles().Max(x => x.Position) <= role.Position)
             {
-                await ctx.Channel.SendErrorAsync("You cannot manage this role!").ConfigureAwait(false);
+                await ctx.Channel.SendErrorAsync("You cannot manage this role!", Config).ConfigureAwait(false);
                 return;
             }
 
             if (currentUser.GetRoles().Max(x => x.Position) <= role.Position)
             {
-                await ctx.Channel.SendErrorAsync("I cannot manage this role!").ConfigureAwait(false);
+                await ctx.Channel.SendErrorAsync("I cannot manage this role!", Config).ConfigureAwait(false);
                 return;
             }
 
             if (Service.Jobslist.Count == 5)
             {
                 await ctx.Channel.SendErrorAsync(
-                        $"Due to discord rate limits you may only have 5 mass role operations at a time, check your current jobs with `{await guildSettings.GetPrefix(ctx.Guild)}rolejobs`.")
+                        $"Due to discord rate limits you may only have 5 mass role operations at a time, check your current jobs with `{await guildSettings.GetPrefix(ctx.Guild)}rolejobs`.",
+                        Config)
                     .ConfigureAwait(false);
                 return;
             }
@@ -1072,7 +1265,7 @@ public partial class ServerManagement
             var count = users.Count();
             if (!users.Any())
             {
-                await ctx.Channel.SendErrorAsync("No users have this role!").ConfigureAwait(false);
+                await ctx.Channel.SendErrorAsync("No users have this role!", Config).ConfigureAwait(false);
                 return;
             }
 
@@ -1120,8 +1313,19 @@ public partial class ServerManagement
                 .ConfigureAwait(false);
         }
 
-        [Cmd, Aliases, RequireContext(ContextType.Guild),
-         UserPerm(GuildPermission.ManageRoles), BotPerm(GuildPermission.ManageRoles)]
+        /// <summary>
+        ///     Removes a specified role from all human users, excluding bots.
+        /// </summary>
+        /// <param name="role">The role to be removed from all human members.</param>
+        /// <remarks>
+        ///     This command targets only human members for role removal, allowing bots to retain their assigned roles. It's useful
+        ///     for adjusting roles among human users without affecting bots' configurations.
+        /// </remarks>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.ManageRoles)]
+        [BotPerm(GuildPermission.ManageRoles)]
         public async Task RemoveFromAllUsers(IRole role)
         {
             var runnerUser = (IGuildUser)ctx.User;
@@ -1129,20 +1333,21 @@ public partial class ServerManagement
             if (ctx.User.Id != runnerUser.Guild.OwnerId &&
                 runnerUser.GetRoles().Max(x => x.Position) <= role.Position)
             {
-                await ctx.Channel.SendErrorAsync("You cannot manage this role!").ConfigureAwait(false);
+                await ctx.Channel.SendErrorAsync("You cannot manage this role!", Config).ConfigureAwait(false);
                 return;
             }
 
             if (currentUser.GetRoles().Max(x => x.Position) <= role.Position)
             {
-                await ctx.Channel.SendErrorAsync("I cannot manage this role!").ConfigureAwait(false);
+                await ctx.Channel.SendErrorAsync("I cannot manage this role!", Config).ConfigureAwait(false);
                 return;
             }
 
             if (Service.Jobslist.Count == 5)
             {
                 await ctx.Channel.SendErrorAsync(
-                        $"Due to discord rate limits you may only have 5 mass role operations at a time, check your current jobs with `{await guildSettings.GetPrefix(ctx.Guild)}rolejobs`.")
+                        $"Due to discord rate limits you may only have 5 mass role operations at a time, check your current jobs with `{await guildSettings.GetPrefix(ctx.Guild)}rolejobs`.",
+                        Config)
                     .ConfigureAwait(false);
                 return;
             }
@@ -1152,7 +1357,7 @@ public partial class ServerManagement
             var count = users.Count();
             if (!users.Any())
             {
-                await ctx.Channel.SendErrorAsync("No users have this role!").ConfigureAwait(false);
+                await ctx.Channel.SendErrorAsync("No users have this role!", Config).ConfigureAwait(false);
                 return;
             }
 
@@ -1200,8 +1405,19 @@ public partial class ServerManagement
                 .ConfigureAwait(false);
         }
 
-        [Cmd, Aliases, RequireContext(ContextType.Guild),
-         UserPerm(GuildPermission.ManageRoles), BotPerm(GuildPermission.ManageRoles)]
+        /// <summary>
+        ///     Removes a specified role from all bots in the server.
+        /// </summary>
+        /// <param name="role">The role to be removed from all bots.</param>
+        /// <remarks>
+        ///     This command is specifically designed to remove a role from bot accounts only, leaving human users' roles intact.
+        ///     Ideal for managing bot permissions collectively.
+        /// </remarks>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.ManageRoles)]
+        [BotPerm(GuildPermission.ManageRoles)]
         public async Task RemoveFromAllBots(IRole role)
         {
             var runnerUser = (IGuildUser)ctx.User;
@@ -1209,20 +1425,21 @@ public partial class ServerManagement
             if (ctx.User.Id != runnerUser.Guild.OwnerId &&
                 runnerUser.GetRoles().Max(x => x.Position) <= role.Position)
             {
-                await ctx.Channel.SendErrorAsync("You cannot manage this role!").ConfigureAwait(false);
+                await ctx.Channel.SendErrorAsync("You cannot manage this role!", Config).ConfigureAwait(false);
                 return;
             }
 
             if (currentUser.GetRoles().Max(x => x.Position) <= role.Position)
             {
-                await ctx.Channel.SendErrorAsync("I cannot manage this role!").ConfigureAwait(false);
+                await ctx.Channel.SendErrorAsync("I cannot manage this role!", Config).ConfigureAwait(false);
                 return;
             }
 
             if (Service.Jobslist.Count == 5)
             {
                 await ctx.Channel.SendErrorAsync(
-                        $"Due to discord rate limits you may only have 5 mass role operations at a time, check your current jobs with `{await guildSettings.GetPrefix(ctx.Guild)}rolejobs`.")
+                        $"Due to discord rate limits you may only have 5 mass role operations at a time, check your current jobs with `{await guildSettings.GetPrefix(ctx.Guild)}rolejobs`.",
+                        Config)
                     .ConfigureAwait(false);
                 return;
             }
@@ -1232,7 +1449,7 @@ public partial class ServerManagement
             var count = users.Count();
             if (!users.Any())
             {
-                await ctx.Channel.SendErrorAsync("No bots have this role!").ConfigureAwait(false);
+                await ctx.Channel.SendErrorAsync("No bots have this role!", Config).ConfigureAwait(false);
                 return;
             }
 
@@ -1280,31 +1497,44 @@ public partial class ServerManagement
                 .ConfigureAwait(false);
         }
 
-        [Cmd, Aliases, RequireContext(ContextType.Guild),
-         UserPerm(GuildPermission.ManageRoles), BotPerm(GuildPermission.ManageRoles)]
+        /// <summary>
+        ///     Adds a specified role to all users who currently have another specified role.
+        /// </summary>
+        /// <param name="role">The role to add.</param>
+        /// <param name="role2">The role whose members will receive the new role.</param>
+        /// <remarks>
+        ///     This command allows for the targeted application of a role based on existing role memberships, enabling
+        ///     administrators to dynamically adjust role assignments based on evolving server roles and user groups.
+        /// </remarks>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.ManageRoles)]
+        [BotPerm(GuildPermission.ManageRoles)]
         public async Task AddRoleToRole(IRole role, IRole role2)
         {
             var runnerUser = (IGuildUser)ctx.User;
             var client = await ctx.Guild.GetUserAsync(ctx.Client.CurrentUser.Id).ConfigureAwait(false);
-            if ((ctx.User.Id != runnerUser.Guild.OwnerId &&
-                 runnerUser.GetRoles().Max(x => x.Position) <= role2.Position) ||
+            if (ctx.User.Id != runnerUser.Guild.OwnerId &&
+                runnerUser.GetRoles().Max(x => x.Position) <= role2.Position ||
                 runnerUser.GetRoles().Max(x => x.Position) <= role.Position)
             {
-                await ctx.Channel.SendErrorAsync("You cannot manage these roles!").ConfigureAwait(false);
+                await ctx.Channel.SendErrorAsync("You cannot manage these roles!", Config).ConfigureAwait(false);
                 return;
             }
 
             if (client.GetRoles().Max(x => x.Position) <= role2.Position ||
                 client.GetRoles().Max(x => x.Position) <= role.Position)
             {
-                await ctx.Channel.SendErrorAsync("I cannot manage these roles!").ConfigureAwait(false);
+                await ctx.Channel.SendErrorAsync("I cannot manage these roles!", Config).ConfigureAwait(false);
                 return;
             }
 
             if (Service.Jobslist.Count == 5)
             {
                 await ctx.Channel.SendErrorAsync(
-                        $"Due to discord rate limits you may only have 5 mass role operations at a time, check your current jobs with `{await guildSettings.GetPrefix(ctx.Guild)}rolejobs`.")
+                        $"Due to discord rate limits you may only have 5 mass role operations at a time, check your current jobs with `{await guildSettings.GetPrefix(ctx.Guild)}rolejobs`.",
+                        Config)
                     .ConfigureAwait(false);
                 return;
             }
@@ -1314,7 +1544,7 @@ public partial class ServerManagement
             var inrole2 = users.Where(x => x.GetRoles().Contains(role2));
             if (inrole.Count() == inrole2.Count())
             {
-                await ctx.Channel.SendErrorAsync($"All users in {role.Mention} already have {role2.Mention}!")
+                await ctx.Channel.SendErrorAsync($"All users in {role.Mention} already have {role2.Mention}!", Config)
                     .ConfigureAwait(false);
                 return;
             }
@@ -1362,24 +1592,37 @@ public partial class ServerManagement
             await ctx.Channel.SendConfirmAsync($"Added {role2.Mention} to {count2} users.").ConfigureAwait(false);
         }
 
-        [Cmd, Aliases, RequireContext(ContextType.Guild),
-         UserPerm(GuildPermission.ManageRoles), BotPerm(GuildPermission.ManageRoles)]
+        /// <summary>
+        ///     Removes a specified role from all users who currently have another specified role.
+        /// </summary>
+        /// <param name="role">The role to remove from users.</param>
+        /// <param name="role2">The role whose members will have the first role removed.</param>
+        /// <remarks>
+        ///     Facilitates the cleaning or reorganization of roles within the server by removing a role from users based on their
+        ///     membership in another role. This is particularly useful in situations where roles need to be reassigned or
+        ///     permissions updated en masse.
+        /// </remarks>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.ManageRoles)]
+        [BotPerm(GuildPermission.ManageRoles)]
         public async Task RemoveFromRole(IRole role, IRole role2)
         {
             var runnerUser = (IGuildUser)ctx.User;
             var client = await ctx.Guild.GetUserAsync(ctx.Client.CurrentUser.Id).ConfigureAwait(false);
-            if ((ctx.User.Id != runnerUser.Guild.OwnerId &&
-                 runnerUser.GetRoles().Max(x => x.Position) <= role2.Position) ||
+            if (ctx.User.Id != runnerUser.Guild.OwnerId &&
+                runnerUser.GetRoles().Max(x => x.Position) <= role2.Position ||
                 runnerUser.GetRoles().Max(x => x.Position) <= role.Position)
             {
-                await ctx.Channel.SendErrorAsync("You cannot manage these roles!").ConfigureAwait(false);
+                await ctx.Channel.SendErrorAsync("You cannot manage these roles!", Config).ConfigureAwait(false);
                 return;
             }
 
             if (client.GetRoles().Max(x => x.Position) <= role2.Position ||
                 client.GetRoles().Max(x => x.Position) <= role.Position)
             {
-                await ctx.Channel.SendErrorAsync("I cannot manage these roles!").ConfigureAwait(false);
+                await ctx.Channel.SendErrorAsync("I cannot manage these roles!", Config).ConfigureAwait(false);
                 return;
             }
 
@@ -1388,7 +1631,7 @@ public partial class ServerManagement
             var inrole2 = users.Where(x => x.GetRoles().Contains(role2));
             if (!inrole2.Any())
             {
-                await ctx.Channel.SendErrorAsync($"No users in {role.Mention} have {role2.Mention}!")
+                await ctx.Channel.SendErrorAsync($"No users in {role.Mention} have {role2.Mention}!", Config)
                     .ConfigureAwait(false);
                 return;
             }
@@ -1437,25 +1680,38 @@ public partial class ServerManagement
             await ctx.Channel.SendConfirmAsync($"Removed {role2.Mention} from {count2} users.").ConfigureAwait(false);
         }
 
-        [Cmd, Aliases, RequireContext(ContextType.Guild),
-         UserPerm(GuildPermission.ManageRoles), BotPerm(GuildPermission.ManageRoles)]
+        /// <summary>
+        ///     Adds a role to users and then removes a different role from them in one operation.
+        /// </summary>
+        /// <param name="role">The role to add to the users.</param>
+        /// <param name="role2">The role to remove from the same users.</param>
+        /// <remarks>
+        ///     This command combines role addition and removal into a single step for users who have a specific role, streamlining
+        ///     the process of updating user roles and permissions. It's especially useful during role transitions or server
+        ///     restructurings.
+        /// </remarks>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.ManageRoles)]
+        [BotPerm(GuildPermission.ManageRoles)]
         public async Task AddThenRemove(IRole role, IRole role2)
         {
             await Task.Delay(500).ConfigureAwait(false);
             var client = await ctx.Guild.GetUserAsync(ctx.Client.CurrentUser.Id).ConfigureAwait(false);
             var runnerUser = (IGuildUser)ctx.User;
-            if ((ctx.User.Id != runnerUser.Guild.OwnerId &&
-                 runnerUser.GetRoles().Max(x => x.Position) <= role2.Position) ||
+            if (ctx.User.Id != runnerUser.Guild.OwnerId &&
+                runnerUser.GetRoles().Max(x => x.Position) <= role2.Position ||
                 runnerUser.GetRoles().Max(x => x.Position) <= role.Position)
             {
-                await ctx.Channel.SendErrorAsync("You cannot manage these roles!").ConfigureAwait(false);
+                await ctx.Channel.SendErrorAsync("You cannot manage these roles!", Config).ConfigureAwait(false);
                 return;
             }
 
             if (client.GetRoles().Max(x => x.Position) <= role2.Position ||
                 client.GetRoles().Max(x => x.Position) <= role.Position)
             {
-                await ctx.Channel.SendErrorAsync("I cannot manage these roles!").ConfigureAwait(false);
+                await ctx.Channel.SendErrorAsync("I cannot manage these roles!", Config).ConfigureAwait(false);
                 return;
             }
 
@@ -1463,7 +1719,7 @@ public partial class ServerManagement
             var inrole = users.Where(x => x.GetRoles().Contains(role2));
             if (!inrole.Any())
             {
-                await ctx.Channel.SendErrorAsync("No users have the role you are trying to remove!")
+                await ctx.Channel.SendErrorAsync("No users have the role you are trying to remove!", Config)
                     .ConfigureAwait(false);
                 return;
             }
@@ -1513,10 +1769,24 @@ public partial class ServerManagement
                 $"Added {role2.Mention} to {count2} users and removed {role.Mention}.").ConfigureAwait(false);
         }
 
+        /// <summary>
+        ///     Represents a structure to hold exported role information.
+        /// </summary>
         public record ExportedRoles
         {
+            /// <summary>
+            ///     Gets or sets the unique identifier for the role.
+            /// </summary>
             public ulong RoleId { get; set; }
+
+            /// <summary>
+            ///     Gets or sets the unique identifier for the user.
+            /// </summary>
             public ulong UserId { get; set; }
+
+            /// <summary>
+            ///     Gets or sets the name of the role.
+            /// </summary>
             public string RoleName { get; set; }
         }
     }

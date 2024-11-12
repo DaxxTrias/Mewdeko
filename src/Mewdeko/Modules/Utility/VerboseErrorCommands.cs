@@ -6,10 +6,20 @@ namespace Mewdeko.Modules.Utility;
 
 public partial class Utility
 {
+    /// <summary>
+    ///     Contains commands for managing verbose error messages.
+    /// </summary>
     [Group]
     public class VerboseErrorCommands : MewdekoSubmodule<VerboseErrorsService>
     {
-        [Cmd, Aliases, RequireContext(ContextType.Guild), UserPerm(GuildPermission.ManageMessages)]
+        /// <summary>
+        ///     Toggles verbose error messages for commands.
+        /// </summary>
+        /// <param name="newstate">The new state of verbose errors. If null, the state will be toggled.</param>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.ManageMessages)]
         public async Task VerboseError(bool? newstate = null)
         {
             var state = await Service.ToggleVerboseErrors(ctx.Guild.Id, newstate);

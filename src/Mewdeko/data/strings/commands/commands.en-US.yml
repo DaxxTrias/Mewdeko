@@ -8,15 +8,177 @@ addstatusrole:
   args:
     - "status"
   desc: Adds a status to be configured with the rest of the statusrole commands
+resetmessagecounts:
+  args:
+    - ""
+    - "@user"
+    - "#channel"
+    - "@user #channel"
+  desc: >-
+    Resets message counts for the entire server, for a user, for a channel, or for a user in a specific channel.
 gpingrole:
   args:
     - "roleid"
     - "@role"
   desc: "Sets the role to ping when a giveaway starts"
+invites:
+  args:
+    - "@user"
+  desc: "Displays the number of invites for you or the specified user."
+greetdmoptout:
+  args:
+    - ""
+  desc: "Allows a user to optout of greet dms from mewdeko. Only works if mewdeko is the bot used for greet dms."
+invitesettings:
+  args:
+    - ""
+  desc: "Shows the current invite tracking settings for the server."
+toggleinvitetracking:
+  args:
+    - ""
+  desc: "Enables or disables invite tracking for the server."
+toggleremoveinviteonleave:
+  args:
+    - ""
+  desc: "Toggles whether invites should be removed when a user leaves the server."
+setminaccountage:
+  args:
+    - "days"
+  desc: "Sets the minimum account age required for an invite to be counted."
+inviteleaderboard:
+  args:
+    - ""
+  desc: "Displays a leaderboard of users with the most invites."
+whoinvited:
+  args:
+    - "@user"
+  desc: "Shows who invited the specified user or yourself to the server."
+invitedusers:
+  args:
+    - "@user"
+  desc: "Lists the users invited by you or the specified user."
+usermessages:
+  args:
+    - "user"
+  desc: "Retrieves message statistics for a specific user"
+minmsglength:
+  args:
+    - "20"
+  desc: "Sets the minimum length of a message before its counted"
+togglemsgcount:
+  args:
+    - ""
+  desc: "Toggles whether message counting is enabled/disabled."
+channelmessages:
+  args:
+    - "channel"
+  desc: "Retrieves message statistics for a specific channel"
+servermessages:
+  args: [ ]
+  desc: "Retrieves message statistics for the entire server"
+banbyhash:
+  args:
+    - "hash"
+  desc: "Bans a user by their avatar hash"
+antimassmention:
+  args:
+    - "max-mentions-in-one-message, time-window-in-seconds, max-mentions-in-time-window, punishment, [punishment-duration]"
+  desc: "Configures Anti-Mass-Mention protection for the guild with the specified settings."
+antimassmentionignorebots:
+  args: [ ]
+  desc: "Toggles whether bots are ignored in Anti-Mass-Mention protection."
+setdefaultpunishment:
+  args:
+    - "punishmentaction"
+  desc: "Sets the default punishment action for the guild."
+addblacklistedrole:
+  args:
+    - "role, [punishmentaction]"
+  desc: "Adds a role to the blacklist with an optional punishment action."
+removeblacklistedrole:
+  args:
+    - "role"
+  desc: "Removes a role from the blacklist."
+addblacklistedpermission:
+  args:
+    - "permission, [punishmentaction]"
+  desc: "Adds a permission to the blacklist with an optional punishment action."
+removeblacklistedpermission:
+  args:
+    - "permission"
+  desc: "Removes a permission from the blacklist."
+addwhitelisteduser:
+  args:
+    - "user"
+  desc: "Adds a user to the whitelist."
+removewhitelisteduser:
+  args:
+    - "user"
+  desc: "Removes a user from the whitelist."
+addwhitelistedrole:
+  args:
+    - "role"
+  desc: "Adds a role to the whitelist."
+removewhitelistedrole:
+  args:
+    - "role"
+  desc: "Removes a role from the whitelist."
+listblacklists:
+  args: [ ]
+  desc: "Lists all blacklisted and whitelisted roles and permissions."
+autobanroleadd:
+  args:
+    - "roleid"
+    - "@role"
+  desc: "Adds a role to be autobanned when a user adds the role to themselves in onboarding or another method. Usually used to fight join bots."
+purgeuser:
+  args:
+    - "user 1000"
+  desc: "Purges any messages found within x count of messages specified to search in all channels."
+autobanroleremove:
+  args:
+    - "roleid"
+    - "@role"
+  desc: "Removes a role from being autobanned when a user adds the role to themselves in onboarding or another method."
+baninrole:
+  args:
+    - "roleid"
+    - "@role"
+  desc: "Bans all users in a role"
+debugembed:
+  args:
+    - embedcode
+  desc: Allows you to see what is failing with an embed, and any stats you need to see with the embed.
+update:
+  args:
+    - ""
+  desc: "Updates the bot"
 gdmmessage:
   args:
     - "message"
   desc: "Sets the message to DM to a giveaway winner. Supports custom embed code! https://eb.mewdeko.tech"
+addautopublish:
+  args:
+    - "#announcechannel"
+  desc: "Adds an announcement channel to auto have its messages published."
+addpublishblacklist:
+  args:
+    - "user"
+    - "word"
+  desc: "Adds a user or word that makes auto publish ignore the message in the announcement channel."
+getautopublishes:
+  args:
+    - ""
+  desc: "Lists all auto publishes as well as their respective blacklists"
+removeautopublish:
+  args:
+    - "#announcechannel"
+  desc: "Removes a channel from the auto publish list. Does not clear blacklists."
+removepublishblacklist:
+  args:
+    - "@user"
+    - "word"
+  desc: "Removes a user or phrase from the blacklist."
 gdm:
   args:
     - ""
@@ -165,43 +327,43 @@ sanitize:
     - "@user"
   desc: "Removes unmentionable characters from a user's name"
 dehoist:
-    args:
-        - "@user"
-    desc: "Removes hoisting characters from a user's name"
+  args:
+    - "@user"
+  desc: "Removes hoisting characters from a user's name"
 sanitizeall:
   args:
     - ""
   desc: "Removes unmentionable characters from all users in the server"
 dehoistall:
-    args:
-        - ""
-        - "true"
-    desc: "Removes hoisting characters from all users in the server. Add true to only dehoist nicknames."
+  args:
+    - ""
+    - "true"
+  desc: "Removes hoisting characters from all users in the server. Add true to only dehoist nicknames."
 massnickprogress:
-    args:
-        - ""
-    desc: "Shows the progress of either the sanitizeall or dehoistall command"
+  args:
+    - ""
+  desc: "Shows the progress of either the sanitizeall or dehoistall command"
 massnickstop:
-    args:
-        - ""
-    desc: "Stops the sanitizeall or dehoistall command"
+  args:
+    - ""
+  desc: "Stops the sanitizeall or dehoistall command"
 setstatusroleembed:
   args:
     - 1 embedcode
     - 1
   desc: Preview or set embed code for a statusrole.
 masskick:
-    args:
-        - "@user1 @user2 \"User with spaces"
-    desc: "Kicks the mentioned users."
+  args:
+    - "@user1 @user2 \"User with spaces"
+  desc: "Kicks the mentioned users."
 banner:
-    args:
-        - "@user1"
-    desc: "Gets the banner of the mentioned user. If no user is mentioned, it gets the banner of the author. Does not get guild banners because discord sucks."
+  args:
+    - "@user1"
+  desc: "Gets the banner of the mentioned user. If no user is mentioned, it gets the banner of the author. Does not get guild banners because discord sucks."
 createwebhook:
-    args:
-        - "channel name avatar"
-    desc: "Creates a webhook in the mentioned channel. Avatar can be a url or an attachment."
+  args:
+    - "channel name avatar"
+  desc: "Creates a webhook in the mentioned channel. Avatar can be a url or an attachment."
 setstatusrolechannel:
   args:
     - channel
@@ -2139,16 +2301,14 @@ lock:
   args:
     - ''
   desc: 'Locks the current channel. '
-lockcheck:
-  args:
-    - ''
-  desc: Checks all roles to make sure they are lockdown compliant
 lockdown:
   args:
-    - ''
-  desc: >-
-    Locks the server, will tell you to run lockcheck if some roles are in the
-    way of lockdown.
+    - "lockdownType (joins/readonly/full), [action (kick/ban)], [overrideCheck]"
+  desc: "Locks down the server based on the specified type (joins, readonly, full). Optionally kicks or bans new users and can override permission checks."
+liftlockdown:
+  args:
+    - "lockdownType (joins/readonly/full)"
+  desc: "Lifts the specified lockdown (joins, readonly, full)."
 log:
   args:
     - userpresence
@@ -2183,10 +2343,13 @@ loop:
     - ''
     - none
     - track
+    - queue
+    - shuffle
   desc: |-
     - `none` Doesnt loop anything and stops when the queue ends
     - `track` Loops the current song. Skip replays the current song.
     - `queue` Loops the queue until its stopped
+    - `shuffle` Loops the queue but shuffles it every time it loops
 lsar:
   args:
     - ''
@@ -2563,9 +2726,10 @@ play:
     - ''
     - '5'
     - Dream Of Venice
+    - https://www.youtube.com/watch?v=Tmfucm7t0Ko
   desc: >-
-    Plays/Queues a song. Use together with a song number in queue and it'll
-    play.
+    Plays/Pauses/Queues a song. Include a queued song number and it'll play that specific song.
+    Include youtube url of video. Can also parse entire playlists from youtube.
 playlist:
   args:
     - show playlistname
@@ -2664,7 +2828,7 @@ purge:
     - '5'
     - 5 --safe
     - '@Someone'
-    - '@Someone --safe'
+    - '@Someone --safe --hasembed'
     - '@Someone X'
     - '@Someone X -s'
     - 20 --nb

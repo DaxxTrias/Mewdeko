@@ -4,9 +4,18 @@ using System.Threading;
 
 namespace Mewdeko.Modules.Nsfw.Common.Downloaders;
 
-public class RealbooruImageDownloader(IHttpClientFactory http) : ImageDownloader<RealBooruElement>(Booru.Realbooru,
-    http)
+/// <summary>
+///     Downloader for images from Realbooru.
+/// </summary>
+public class RealbooruImageDownloader : ImageDownloader<RealBooruElement>
 {
+    /// <summary>
+    ///     Initializes a new instance of the <see cref="RealbooruImageDownloader" /> class.
+    /// </summary>
+    /// <param name="http">The HTTP client factory.</param>
+    public RealbooruImageDownloader(IHttpClientFactory http) : base(Booru.Realbooru, http) { }
+
+    /// <inheritdoc />
     public override async Task<List<RealBooruElement>> DownloadImagesAsync(
         string[] tags,
         int page,
@@ -19,6 +28,6 @@ public class RealbooruImageDownloader(IHttpClientFactory http) : ImageDownloader
 
         using var http = Http.CreateClient();
         var images = await http.GetFromJsonAsync<List<RealBooruElement>>(uri, SerializerOptions, cancel);
-        return images ?? new List<RealBooruElement>();
+        return images ?? [];
     }
 }

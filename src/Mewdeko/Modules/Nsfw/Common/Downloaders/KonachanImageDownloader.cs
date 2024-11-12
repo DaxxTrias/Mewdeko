@@ -4,11 +4,20 @@ using System.Threading;
 
 namespace Mewdeko.Modules.Nsfw.Common.Downloaders;
 
-public sealed class KonachanImageDownloader(IHttpClientFactory http) : ImageDownloader<DapiImageObject>(Booru.Konachan,
-    http)
+/// <summary>
+///     Downloader for images from Konachan.
+/// </summary>
+public sealed class KonachanImageDownloader : ImageDownloader<DapiImageObject>
 {
     private const string BaseUrl = "https://konachan.com";
 
+    /// <summary>
+    ///     Initializes a new instance of the <see cref="KonachanImageDownloader" /> class.
+    /// </summary>
+    /// <param name="http">The HTTP client factory.</param>
+    public KonachanImageDownloader(IHttpClientFactory http) : base(Booru.Konachan, http) { }
+
+    /// <inheritdoc />
     public override async Task<List<DapiImageObject>> DownloadImagesAsync(
         string[] tags,
         int page,
@@ -20,7 +29,7 @@ public sealed class KonachanImageDownloader(IHttpClientFactory http) : ImageDown
         using var http = Http.CreateClient();
         var imageObjects = await http.GetFromJsonAsync<DapiImageObject[]>(uri, SerializerOptions, cancel);
         if (imageObjects is null)
-            return new();
+            return [];
         return imageObjects.Where(x => x.FileUrl is not null).ToList();
     }
 }

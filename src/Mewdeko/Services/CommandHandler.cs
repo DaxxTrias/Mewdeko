@@ -1,5 +1,5 @@
 ﻿using System.Collections.Concurrent;
-using System.Collections.Immutable;
+using System.Text;
 using System.Threading;
 using Discord.Commands;
 using Discord.Interactions;
@@ -7,6 +7,7 @@ using Discord.Net;
 using Discord.Rest;
 using Mewdeko.Common.Collections;
 using Mewdeko.Common.ModuleBehaviors;
+using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.Chat_Triggers.Services;
 using Mewdeko.Modules.Permissions.Common;
 using Mewdeko.Modules.Permissions.Services;
@@ -16,43 +17,54 @@ using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 using ExecuteResult = Discord.Commands.ExecuteResult;
 using IResult = Discord.Interactions.IResult;
-using PreconditionResult = Discord.Commands.PreconditionResult;
 
 namespace Mewdeko.Services;
 
+/// <summary>
+///     Handles command parsing and execution, integrating with various services to process Discord interactions and
+///     messages.
+/// </summary>
 public class CommandHandler : INService
 {
-    public const int GlobalCommandsCooldown = 750;
+    private const int GlobalCommandsCooldown = 750;
 
     private const float OneThousandth = 1.0f / 1000;
     private readonly Mewdeko bot;
     private readonly BotConfigService bss;
-    private readonly DiscordSocketClient client;
-    private readonly CommandService commandService;
-    private readonly DbService db;
-    private readonly IServiceProvider services;
+    private readonly IDataCache cache;
 
     // ReSharper disable once NotAccessedField.Local
     private readonly Timer clearUsersOnShortCooldown;
-    private readonly IBotStrings strings;
-    public IEnumerable<IEarlyBehavior> EarlyBehaviors;
-    private IEnumerable<IInputTransformer> inputTransformers;
-    public IEnumerable<ILateBlocker> LateBlockers;
-    private IEnumerable<ILateExecutor> lateExecutors;
-    public readonly InteractionService InteractionService;
-    private readonly GuildSettingsService gss;
+    private readonly DiscordShardedClient client;
+    private readonly CommandService commandService;
     private readonly IBotCredentials creds;
-    private readonly IDataCache cache;
+    private readonly DbContextProvider dbProvider;
+    private readonly GuildSettingsService gss;
+    private readonly InteractionService interactionService;
+    private readonly IServiceProvider services;
+    private readonly IBotStrings strings;
 
-    public NonBlocking.ConcurrentDictionary<ulong, ConcurrentQueue<IUserMessage>> CommandParseQueue { get; } = new();
-    public NonBlocking.ConcurrentDictionary<ulong, bool> CommandParseLock { get; } = new();
-
-    public CommandHandler(DiscordSocketClient client, DbService db, CommandService commandService,
+    /// <summary>
+    ///     Initializes a new instance of the <see cref="CommandHandler" /> class.
+    /// </summary>
+    /// <param name="client">The Discord client.</param>
+    /// <param name="db">The database service.</param>
+    /// <param name="commandService">The service for handling commands.</param>
+    /// <param name="bss">The bot configuration service.</param>
+    /// <param name="bot">The bot instance.</param>
+    /// <param name="services">The service provider for dependency injection.</param>
+    /// <param name="strngs">The strings resources service.</param>
+    /// <param name="interactionService">The service for handling interactions.</param>
+    /// <param name="gss">The guild settings service.</param>
+    /// <param name="eventHandler">The event handler for discord events.</param>
+    /// <param name="creds">The bot credentials.</param>
+    /// <param name="cache">The data cache service.</param>
+    public CommandHandler(DiscordShardedClient client, DbContextProvider dbProvider, CommandService commandService,
         BotConfigService bss, Mewdeko bot, IServiceProvider services, IBotStrings strngs,
         InteractionService interactionService,
         GuildSettingsService gss, EventHandler eventHandler, IBotCredentials creds, IDataCache cache)
     {
-        InteractionService = interactionService;
+        this.interactionService = interactionService;
         this.gss = gss;
         this.creds = creds;
         this.cache = cache;
@@ -61,55 +73,71 @@ public class CommandHandler : INService
         this.commandService = commandService;
         this.bss = bss;
         this.bot = bot;
-        this.db = db;
+        this.dbProvider = dbProvider;
         this.services = services;
-        client.InteractionCreated += x =>
-        {
-            Task.Run(() => TryRunInteraction(x));
-            return Task.CompletedTask;
-        };
-        InteractionService.SlashCommandExecuted += HandleCommands;
-        InteractionService.ContextCommandExecuted += HandleContextCommands;
+        eventHandler.InteractionCreated += TryRunInteraction;
+        this.interactionService.SlashCommandExecuted += HandleCommands;
+        this.interactionService.ContextCommandExecuted += HandleContextCommands;
         clearUsersOnShortCooldown = new Timer(_ => UsersOnShortCooldown.Clear(), null, GlobalCommandsCooldown,
             GlobalCommandsCooldown);
         eventHandler.MessageReceived += MessageReceivedHandler;
     }
 
-    public ConcurrentHashSet<ulong> UsersOnShortCooldown { get; } = new();
+    /// <summary>
+    ///     A thread-safe dictionary mapping channel IDs to command parse queues.
+    /// </summary>
+    private NonBlocking.ConcurrentDictionary<ulong, ConcurrentQueue<IUserMessage>> CommandParseQueue { get; } = new();
 
+    /// <summary>
+    ///     A thread-safe dictionary indicating whether a command parse lock is active for a channel.
+    /// </summary>
+    private NonBlocking.ConcurrentDictionary<ulong, bool> CommandParseLock { get; } = new();
+
+    private ConcurrentHashSet<ulong> UsersOnShortCooldown { get; } = [];
+
+    /// <summary>
+    ///     Event that occurs when a command is executed.
+    /// </summary>
     public event Func<IUserMessage, CommandInfo, Task> CommandExecuted = delegate { return Task.CompletedTask; };
 
+    /// <summary>
+    ///     Event that occurs when a command is errored.w
+    /// </summary>
     public event Func<CommandInfo, ITextChannel, string, IUser?, Task> CommandErrored = delegate
     {
         return Task.CompletedTask;
     };
 
+    /// <summary>
+    ///     Used for xp, for some reason.
+    /// </summary>
     public event Func<IUserMessage, Task> OnMessageNoTrigger = delegate { return Task.CompletedTask; };
 
-    public Task HandleContextCommands(ContextCommandInfo info, IInteractionContext ctx, IResult result)
+    private Task HandleContextCommands(ContextCommandInfo info, IInteractionContext ctx, IResult result)
     {
         _ = Task.Run(async () =>
         {
+            await using var dbContext = await dbProvider.GetContextAsync();
+
             if (ctx.Guild is not null)
             {
                 var gconf = await gss.GetGuildConfig(ctx.Guild.Id);
-                if (!false.ParseBoth(gconf.StatsOptOut.ToString()))
+                if (!gconf.StatsOptOut)
                 {
-                    await using var uow = db.GetDbContext();
-                    var user = await uow.GetOrCreateUser(ctx.User);
-                    if (!false.ParseBoth(user.StatsOptOut))
+                    var user = await dbContext.GetOrCreateUser(ctx.User);
+                    if (!user.StatsOptOut)
                     {
                         var comStats = new CommandStats
                         {
                             ChannelId = ctx.Channel.Id,
                             GuildId = ctx.Guild.Id,
-                            IsSlash = 1,
+                            IsSlash = true,
                             NameOrId = info.Name,
                             UserId = ctx.User.Id,
                             Module = info.Module.Name
                         };
-                        await uow.CommandStats.AddAsync(comStats);
-                        await uow.SaveChangesAsync();
+                        await dbContext.CommandStats.AddAsync(comStats);
+                        await dbContext.SaveChangesAsync();
                     }
                 }
             }
@@ -117,7 +145,8 @@ public class CommandHandler : INService
             if (!result.IsSuccess)
             {
                 await ctx.Interaction
-                    .SendEphemeralErrorAsync($"Command failed for the following reason:\n{result.ErrorReason}")
+                    .SendEphemeralErrorAsync($"Command failed for the following reason:\n{result.ErrorReason}",
+                        bss.Data)
                     .ConfigureAwait(false);
                 Log.Warning(
                     "Slash Command Errored\n\t" + "User: {0}\n\t" + "Server: {1}\n\t" + "Channel: {2}\n\t" +
@@ -222,26 +251,27 @@ public class CommandHandler : INService
     {
         _ = Task.Run(async () =>
         {
+            await using var dbContext = await dbProvider.GetContextAsync();
+
             if (ctx.Guild is not null)
             {
                 var gconf = await gss.GetGuildConfig(ctx.Guild.Id);
-                if (!false.ParseBoth(gconf.StatsOptOut.ToString()))
+                if (!gconf.StatsOptOut)
                 {
-                    await using var uow = db.GetDbContext();
-                    var user = await uow.GetOrCreateUser(ctx.User);
-                    if (!false.ParseBoth(user.StatsOptOut))
+                    var user = await dbContext.GetOrCreateUser(ctx.User);
+                    if (!user.StatsOptOut)
                     {
                         var comStats = new CommandStats
                         {
                             ChannelId = ctx.Channel.Id,
                             GuildId = ctx.Guild.Id,
-                            IsSlash = 1,
+                            IsSlash = true,
                             NameOrId = slashInfo.Name,
                             UserId = ctx.User.Id,
                             Module = slashInfo.Module.Name
                         };
-                        await uow.CommandStats.AddAsync(comStats);
-                        await uow.SaveChangesAsync();
+                        await dbContext.CommandStats.AddAsync(comStats);
+                        await dbContext.SaveChangesAsync();
                     }
                 }
             }
@@ -249,7 +279,8 @@ public class CommandHandler : INService
             if (!result.IsSuccess)
             {
                 await ctx.Interaction
-                    .SendEphemeralErrorAsync($"Command failed for the following reason:\n{result.ErrorReason}")
+                    .SendEphemeralErrorAsync($"Command failed for the following reason:\n{result.ErrorReason}",
+                        bss.Data)
                     .ConfigureAwait(false);
                 Log.Warning(
                     "Slash Command Errored\n\t" + "User: {0}\n\t" + "Server: {1}\n\t" + "Channel: {2}\n\t" +
@@ -353,78 +384,67 @@ public class CommandHandler : INService
 
     private async Task TryRunInteraction(SocketInteraction interaction)
     {
-        await Task.Delay(2500);
-        var blacklistService = services.GetService<BlacklistService>();
-        var cb = new ComponentBuilder().WithButton("Support Server", null, ButtonStyle.Link,
-            url: "https://discord.gg/mewdeko").Build();
-        foreach (var bl in blacklistService.BlacklistEntries)
+        try
         {
-            if ((interaction.Channel as IGuildChannel)?.Guild != null && bl.Type == BlacklistType.Server &&
-                bl.ItemId == (interaction.Channel as IGuildChannel)?.Guild?.Id)
+            var blacklistService = services.GetService<BlacklistService>();
+            var cb = new ComponentBuilder().WithButton("Support Server", null, ButtonStyle.Link,
+                url: "https://discord.gg/mewdeko").Build();
+            foreach (var bl in blacklistService.BlacklistEntries)
             {
-                await interaction.RespondAsync(
-                    $"*This guild is blacklisted from Mewdeko for **{bl.Reason}**! You can visit the support server below to try and resolve this.*",
-                    components: cb).ConfigureAwait(false);
-                return;
+                if ((interaction.Channel as IGuildChannel)?.Guild != null && bl.Type == BlacklistType.Server &&
+                    bl.ItemId == (interaction.Channel as IGuildChannel)?.Guild?.Id)
+                {
+                    await interaction.RespondAsync(
+                        $"*This guild is blacklisted from Mewdeko for **{bl.Reason}**! You can visit the support server below to try and resolve this.*",
+                        components: cb).ConfigureAwait(false);
+                    return;
+                }
+
+                if (bl.Type == BlacklistType.User && bl.ItemId == interaction.User.Id)
+                {
+                    await interaction.RespondAsync(
+                        $"*You are blacklisted from Mewdeko for **{bl.Reason}**! You can visit the support server below to try and resolve this.*",
+                        ephemeral: true, components: cb).ConfigureAwait(false);
+                    return;
+                }
             }
 
-            if (bl.Type == BlacklistType.User && bl.ItemId == interaction.User.Id)
+            if (interaction.Type == InteractionType.ApplicationCommand)
             {
-                await interaction.RespondAsync(
-                    $"*You are blacklisted from Mewdeko for **{bl.Reason}**! You can visit the support server below to try and resolve this.*",
-                    ephemeral: true, components: cb).ConfigureAwait(false);
-                return;
+                var ctS = services.GetService<ChatTriggersService>();
+                var triggers = await ctS.GetChatTriggersFor((interaction.Channel as IGuildChannel)?.Guild?.Id);
+                var trigger = triggers.FirstOrDefault(x => x.RealName == interaction.GetRealName());
+                if (trigger is not null)
+                {
+                    await ctS.RunInteractionTrigger(interaction, trigger).ConfigureAwait(false);
+                    return;
+                }
             }
-        }
+            // i hate discord
+            // if (interaction is IComponentInteraction compInter
+            //     && compInter.Message.Author.IsWebhook
+            //     && !compInter.Data.CustomId.StartsWith("trigger.")) return;
 
-        if (interaction.Type == InteractionType.ApplicationCommand)
-        {
-            var ctS = services.GetService<ChatTriggersService>();
-            var triggers = ctS.GetChatTriggersFor((interaction.Channel as IGuildChannel)?.Guild?.Id);
-            var trigger = triggers.FirstOrDefault(x => x.RealName == interaction.GetRealName());
-            if (trigger is not null)
-            {
-                await ctS.RunInteractionTrigger(interaction, trigger).ConfigureAwait(false);
-                return;
-            }
-        }
-        // i hate discord
-        // if (interaction is IComponentInteraction compInter
-        //     && compInter.Message.Author.IsWebhook
-        //     && !compInter.Data.CustomId.StartsWith("trigger.")) return;
-
-        var ctx = new SocketInteractionContext(client, interaction);
-        var result = await InteractionService.ExecuteCommandAsync(ctx, services).ConfigureAwait(false);
+            var ctx = new ShardedInteractionContext(client, interaction);
+            var result = await interactionService.ExecuteCommandAsync(ctx, services).ConfigureAwait(false);
 #if DEBUG
-        Log.Information($"Button was executed:{result.IsSuccess}\nReason:{result.ErrorReason}");
+            Log.Information($"Button was executed:{result.IsSuccess}\nReason:{result.ErrorReason}");
 #endif
+        }
+        catch (Exception e)
+        {
+            Log.Error(e, "Interaction failed to execute");
+            throw;
+        }
     }
 
-
-    public void AddServices(IServiceCollection services)
-    {
-        LateBlockers = services
-            .Where(x => x.ImplementationType?.GetInterfaces().Contains(typeof(ILateBlocker)) ?? false)
-            .Select(x => this.services.GetService(x.ImplementationType) as ILateBlocker)
-            .OrderByDescending(x => x.Priority)
-            .ToArray();
-
-        lateExecutors = services.Where(x =>
-                x.ImplementationType?.GetInterfaces().Contains(typeof(ILateExecutor)) ?? false)
-            .Select(x => this.services.GetService(x.ImplementationType) as ILateExecutor)
-            .ToArray();
-
-        inputTransformers = services.Where(x =>
-                x.ImplementationType?.GetInterfaces().Contains(typeof(IInputTransformer)) ?? false)
-            .Select(x => this.services.GetService(x.ImplementationType) as IInputTransformer)
-            .ToArray();
-
-        EarlyBehaviors = services.Where(x =>
-                x.ImplementationType?.GetInterfaces().Contains(typeof(IEarlyBehavior)) ?? false)
-            .Select(x => this.services.GetService(x.ImplementationType) as IEarlyBehavior)
-            .ToArray();
-    }
-
+    /// <summary>
+    ///     Executes an external command within a specific guild and channel context.
+    /// </summary>
+    /// <param name="guildId">The ID of the guild.</param>
+    /// <param name="channelId">The ID of the channel.</param>
+    /// <param name="commandText">The text of the command to execute.</param>
+    /// <returns>A task that represents the asynchronous operation.</returns>
     public async Task ExecuteExternal(ulong? guildId, ulong channelId, string commandText)
     {
         if (guildId != null)
@@ -449,92 +469,7 @@ public class CommandHandler : INService
         }
     }
 
-    private Task LogSuccessfulExecution(IMessage usrMsg, IGuildChannel? channel, params int[] execPoints)
-    {
-        _ = Task.Run(async () =>
-        {
-            Log.Information(
-                "Command Executed after "
-                + string.Join("/", execPoints.Select(x => (x * OneThousandth).ToString("F3")))
-                + "s\n\t"
-                + "User: {0}\n\t"
-                + "Server: {1}\n\t"
-                + "Channel: {2}\n\t"
-                + "Message: {3}", $"{usrMsg.Author} [{usrMsg.Author.Id}]", // {0}
-                channel == null ? "PRIVATE" : $"{channel.Guild.Name} [{channel.Guild.Id}]", // {1}
-                channel == null ? "PRIVATE" : $"{channel.Name} [{channel.Id}]", // {2}
-                usrMsg.Content); // {3}
-            var toFetch = await client.Rest.GetChannelAsync(bss.Data.CommandLogChannel).ConfigureAwait(false);
-            if (toFetch is RestTextChannel restChannel)
-            {
-                var eb = new EmbedBuilder()
-                    .WithOkColor()
-                    .WithTitle("Text Command Executed")
-                    .AddField("Executed Time",
-                        string.Join("/", execPoints.Select(x => (x * OneThousandth).ToString("F3"))))
-                    .AddField("User", $"{usrMsg.Author.Mention} {usrMsg.Author} {usrMsg.Author.Id}")
-                    .AddField("Guild", channel == null ? "PRIVATE" : $"{channel.Guild.Name} `{channel.Guild.Id}`")
-                    .AddField("Channel", channel == null ? "PRIVATE" : $"{channel.Name} `{channel.Id}`")
-                    .AddField("Message", usrMsg.Content.TrimTo(1000));
-
-                await restChannel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
-            }
-
-            if (channel?.Guild is null)
-                return;
-            var guildChannel = (await gss.GetGuildConfig(channel.Guild.Id)).CommandLogChannel;
-            if (guildChannel == 0)
-                return;
-            var toSend = await client.Rest.GetChannelAsync(guildChannel).ConfigureAwait(false);
-            if (toSend is RestTextChannel restTextChannel)
-            {
-                var eb = new EmbedBuilder()
-                    .WithOkColor()
-                    .WithTitle("Text Command Executed")
-                    .AddField("Executed Time",
-                        string.Join("/", execPoints.Select(x => (x * OneThousandth).ToString("F3"))))
-                    .AddField("User", $"{usrMsg.Author.Mention} {usrMsg.Author} {usrMsg.Author.Id}")
-                    .AddField("Channel", channel == null ? "PRIVATE" : $"{channel.Name} `{channel.Id}`")
-                    .AddField("Message", usrMsg.Content.TrimTo(1000));
-
-                await restTextChannel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
-            }
-        });
-        return Task.CompletedTask;
-    }
-
-    private Task LogErroredExecution(string errorMessage, IMessage usrMsg, IGuildChannel? channel,
-        params int[] execPoints)
-    {
-        _ = Task.Run(async () =>
-        {
-            var errorafter = string.Join("/", execPoints.Select(x => (x * OneThousandth).ToString("F3")));
-            Log.Warning(
-                $"Command Errored after {errorafter}\n\t" + "User: {0}\n\t" + "Server: {1}\n\t" + "Channel: {2}\n\t" +
-                "Message: {3}\n\t" + "Error: {4}",
-                $"{usrMsg.Author} [{usrMsg.Author.Id}]", // {0}
-                channel == null ? "PRIVATE" : $"{channel.Guild.Name} [{channel.Guild.Id}]", // {1}
-                channel == null ? "PRIVATE" : $"{channel.Name} [{channel.Id}]", // {2}
-                usrMsg.Content, errorMessage);
-
-            var toFetch = await client.Rest.GetChannelAsync(bss.Data.CommandLogChannel).ConfigureAwait(false);
-            if (toFetch is RestTextChannel restChannel)
-            {
-                var eb = new EmbedBuilder().WithOkColor().WithTitle("Text Command Errored")
-                    .AddField("Error Reason", errorMessage)
-                    .AddField("Errored Time", execPoints.Select(x => (x * OneThousandth).ToString("F3")))
-                    .AddField("User", $"{usrMsg.Author} {usrMsg.Author.Id}")
-                    .AddField("Guild", channel == null ? "PRIVATE" : $"{channel.Guild.Name} `{channel.Guild.Id}`")
-                    .AddField("Channel", channel == null ? "PRIVATE" : $"{channel.Name} `{channel.Id}`")
-                    .AddField("Message", usrMsg.Content.TrimTo(1000));
-
-                await restChannel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
-            }
-        });
-        return Task.CompletedTask;
-    }
-
-    public async Task MessageReceivedHandler(IMessage msg)
+    private async Task MessageReceivedHandler(IMessage msg)
     {
         try
         {
@@ -558,16 +493,28 @@ public class CommandHandler : INService
         }
     }
 
-    public void AddCommandToParseQueue(IUserMessage usrMsg) => CommandParseQueue.AddOrUpdate(usrMsg.Channel.Id,
-        _ => new ConcurrentQueue<IUserMessage>(new List<IUserMessage>
-        {
-            usrMsg
-        }), (_, y) =>
-        {
-            y.Enqueue(usrMsg);
-            return y;
-        });
+    /// <summary>
+    ///     Adds a command to the parse queue for a given channel.
+    /// </summary>
+    /// <param name="usrMsg">The user message to add to the queue.</param>
+    public void AddCommandToParseQueue(IUserMessage usrMsg)
+    {
+        CommandParseQueue.AddOrUpdate(usrMsg.Channel.Id,
+            _ => new ConcurrentQueue<IUserMessage>(new List<IUserMessage>
+            {
+                usrMsg
+            }), (_, y) =>
+            {
+                y.Enqueue(usrMsg);
+                return y;
+            });
+    }
 
+    /// <summary>
+    ///     Attempts to execute commands in the parse queue for a given channel.
+    /// </summary>
+    /// <param name="channelId">The ID of the channel.</param>
+    /// <returns>A task that represents the asynchronous operation, returning true if commands were executed.</returns>
     public async Task<bool> ExecuteCommandsInChannelAsync(ulong channelId)
     {
         if (CommandParseLock.GetValueOrDefault(channelId, false) ||
@@ -585,7 +532,7 @@ public class CommandHandler : INService
                 }
                 catch (Exception e)
                 {
-                    Log.Error("Error occured in the handler:", e);
+                    Log.Error("Error occured in the handler: {E}", e);
                 }
             }
 
@@ -606,111 +553,60 @@ public class CommandHandler : INService
     {
         var execTime = Environment.TickCount;
 
-        foreach (var beh in EarlyBehaviors)
+        var lateExecutors = services.GetServices<ILateExecutor>();
+        var inputTransformers = services.GetServices<IInputTransformer>();
+        var earlyBehaviors = services.GetServices<IEarlyBehavior>().ToArray();
+
+        foreach (var beh in earlyBehaviors)
         {
-            if (!await beh.RunBehavior(client, guild, usrMsg).ConfigureAwait(false))
-                continue;
-
-            switch (beh.BehaviorType)
-            {
-                case ModuleBehaviorType.Blocker:
-                    Log.Information("Blocked User: [{0}] Message: [{1}] Service: [{2}]",
-                        $"{usrMsg.Author} | {usrMsg.Author.Id}", usrMsg.Content, beh.GetType().Name);
-                    break;
-                case ModuleBehaviorType.Executor:
-                    Log.Information("User [{0}] executed [{1}] in [{2}] User ID: {3}", usrMsg.Author, usrMsg.Content,
-                        beh.GetType().Name, usrMsg.Author.Id);
-                    break;
-            }
-
+            if (!await beh.RunBehavior(client, guild, usrMsg).ConfigureAwait(false)) continue;
+            Log.Information("Executed {BehaviorType} behavior: {BehaviorName} for user: {User} in: {Guild}",
+                beh.BehaviorType, beh.GetType().Name, $"{usrMsg.Author} | {usrMsg.Id}", $"{guild} | {guild.Id}");
             return;
         }
-
-        var exec2 = Environment.TickCount - execTime;
 
         var messageContent = usrMsg.Content;
         foreach (var exec in inputTransformers)
         {
-            var newContent = await exec.TransformInput(guild, usrMsg.Channel, usrMsg.Author, messageContent)
+            messageContent = await exec.TransformInput(guild, usrMsg.Channel, usrMsg.Author, messageContent)
                 .ConfigureAwait(false);
-
-            if (newContent.Equals(messageContent, StringComparison.OrdinalIgnoreCase))
-                continue;
-            messageContent = newContent;
-            break;
+            if (messageContent != usrMsg.Content) break;
         }
 
         var prefix = await gss.GetPrefix(guild?.Id);
+        if (prefix == null) return;
 
-        var startsWithPrefix = messageContent.StartsWith(prefix, StringComparison.InvariantCulture);
-        var startsWithBotMention =
-            messageContent.StartsWith($"<@{client.CurrentUser.Id}> ", StringComparison.InvariantCulture) ||
-            messageContent.StartsWith($"<@!{client.CurrentUser.Id}> ", StringComparison.InvariantCulture);
-
-        if (!startsWithPrefix && !startsWithBotMention)
+        var prefixLength = GetPrefixLength(messageContent, prefix);
+        if (prefixLength == 0)
         {
             await OnMessageNoTrigger(usrMsg).ConfigureAwait(false);
             return;
         }
 
-        if (startsWithBotMention)
-        {
-            prefix = messageContent.IndexOf('!') == -1
-                ? $"<@{client.CurrentUser.Id}> "
-                : $"<@!{client.CurrentUser.Id}> ";
-        }
-
-        if (messageContent.Equals(prefix.Trim(), StringComparison.InvariantCulture))
-        {
-            return;
-        }
-
         var (success, error, info) = await ExecuteCommandAsync(new CommandContext(client, usrMsg),
-                messageContent, prefix.Length, MultiMatchHandling.Best)
-            .ConfigureAwait(false);
+            messageContent, prefixLength, MultiMatchHandling.Best).ConfigureAwait(false);
 
         execTime = Environment.TickCount - execTime;
 
-        if (guild is not null)
-        {
-            var gconf = await gss.GetGuildConfig(guild.Id);
-            if (!false.ParseBoth(gconf.StatsOptOut.ToString()) && info is not null)
-            {
-                await using var uow = db.GetDbContext();
-                var user = await uow.GetOrCreateUser(usrMsg.Author);
-                if (!false.ParseBoth(user.StatsOptOut))
-                {
-                    var comStats = new CommandStats
-                    {
-                        ChannelId = channel.Id,
-                        GuildId = guild.Id,
-                        NameOrId = info.Name,
-                        UserId = usrMsg.Author.Id,
-                        Module = info.Module.Name
-                    };
-                    await uow.CommandStats.AddAsync(comStats);
-                    await uow.SaveChangesAsync();
-                }
-            }
-        }
+        await UpdateCommandStats(guild, channel, usrMsg, info).ConfigureAwait(false);
 
         if (success)
         {
-            await LogSuccessfulExecution(usrMsg, channel as ITextChannel, exec2, execTime).ConfigureAwait(false);
+            await LogCommandExecution(usrMsg, channel as ITextChannel, info, true, execTime).ConfigureAwait(false);
             await CommandExecuted(usrMsg, info).ConfigureAwait(false);
-            return;
         }
-
-        if (!string.IsNullOrEmpty(error))
+        else if (!string.IsNullOrEmpty(error))
         {
-            await LogErroredExecution(error, usrMsg, channel as ITextChannel, exec2, execTime);
+            if (info is null)
+                return;
+
+            await LogCommandExecution(usrMsg, channel as ITextChannel, info, false, execTime, error)
+                .ConfigureAwait(false);
             if (guild != null)
             {
-                var perms = new PermissionService(db, strings, gss, bot);
-                var pc = await perms.GetCacheFor(guild.Id);
-                if (pc != null && pc.Permissions.CheckPermissions(usrMsg, info.Name, info.Module.Name, out _))
-                    await CommandErrored(info, channel as ITextChannel, error, usrMsg.Author).ConfigureAwait(false);
-                if (pc == null)
+                var permissionService = services.GetService<PermissionService>();
+                var pc = await permissionService.GetCacheFor(guild.Id).ConfigureAwait(false);
+                if (pc?.Permissions.CheckPermissions(usrMsg, info?.Name, info?.Module.Name, out _) ?? true)
                     await CommandErrored(info, channel as ITextChannel, error, usrMsg.Author).ConfigureAwait(false);
             }
         }
@@ -723,131 +619,165 @@ public class CommandHandler : INService
 
 
     private async Task<(bool Success, string Error, CommandInfo Info)> ExecuteCommandAsync(CommandContext context,
-        string input, int argPos,
-        MultiMatchHandling multiMatchHandling = MultiMatchHandling.Exception) =>
-        await ExecuteCommand(context, input[argPos..], multiMatchHandling).ConfigureAwait(false);
-
-    private async Task<(bool Success, string Error, CommandInfo Info)> ExecuteCommand(CommandContext context,
-        string input,
-        MultiMatchHandling multiMatchHandling = MultiMatchHandling.Exception)
+        string input, int argPos, MultiMatchHandling multiMatchHandling = MultiMatchHandling.Exception)
     {
-        var searchResult = commandService.Search(context, input);
+        var searchResult = commandService.Search(context, input[argPos..]);
         if (!searchResult.IsSuccess)
-            return (false, null, null);
+            return (false, searchResult.ErrorReason, null);
+
+        var lateBlockers = services.GetServices<ILateBlocker>().ToArray();
 
         var commands = searchResult.Commands;
-        var preconditionResults = new Dictionary<CommandMatch, PreconditionResult>();
+        var preconditionResults = await Task.WhenAll(commands.Select(async match =>
+            (match, await match.Command.CheckPreconditionsAsync(context, services).ConfigureAwait(false))));
 
-        foreach (var match in commands)
-        {
-            preconditionResults[match] =
-                await match.Command.CheckPreconditionsAsync(context, services).ConfigureAwait(false);
-        }
-
-        var successfulPreconditions = preconditionResults
-            .Where(x => x.Value.IsSuccess)
-            .ToArray();
+        var successfulPreconditions = preconditionResults.Where(x => x.Item2.IsSuccess).ToArray();
 
         if (successfulPreconditions.Length == 0)
         {
-            //All preconditions failed, return the one from the highest priority command
             var bestCandidate = preconditionResults
-                .OrderByDescending(x => x.Key.Command.Priority)
-                .FirstOrDefault(x => !x.Value.IsSuccess);
-            return (false, bestCandidate.Value.ErrorReason, commands[0].Command);
+                .OrderByDescending(x => x.match.Command.Priority)
+                .FirstOrDefault(x => !x.Item2.IsSuccess);
+            return (false, bestCandidate.Item2.ErrorReason, commands[0].Command);
         }
 
-        var parseResultsDict = new Dictionary<CommandMatch, Discord.Commands.ParseResult>();
-        foreach (var pair in successfulPreconditions)
+        var parseResults = await Task.WhenAll(successfulPreconditions.Select(async x =>
         {
-            var parseResult = await pair.Key.ParseAsync(context, searchResult, pair.Value, services)
-                .ConfigureAwait(false);
-
-            if (parseResult.Error == CommandError.MultipleMatches)
-            {
-                switch (multiMatchHandling)
-                {
-                    case MultiMatchHandling.Best:
-                        IReadOnlyList<TypeReaderValue> argList = parseResult.ArgValues
-                            .Select(x => x.Values.MaxBy(y => y.Score)).ToImmutableArray();
-                        IReadOnlyList<TypeReaderValue> paramList = parseResult.ParamValues
-                            .Select(x => x.Values.MaxBy(y => y.Score)).ToImmutableArray();
-                        parseResult = Discord.Commands.ParseResult.FromSuccess(argList, paramList);
-                        break;
-                }
-            }
-
-            parseResultsDict[pair.Key] = parseResult;
-        }
-
-        // Calculates the 'score' of a command given a parse result
-        static float CalculateScore(CommandMatch match, Discord.Commands.ParseResult parseResult)
-        {
-            float argValuesScore = 0, paramValuesScore = 0;
-
-            if (match.Command.Parameters.Count > 0)
-            {
-                var argValuesSum =
-                    parseResult.ArgValues?.Sum(x =>
-                        x.Values.OrderByDescending(y => y.Score).FirstOrDefault().Score) ?? 0;
-                var paramValuesSum = parseResult.ParamValues?.Sum(x =>
-                    x.Values.OrderByDescending(y => y.Score).FirstOrDefault().Score) ?? 0;
-
-                argValuesScore = argValuesSum / match.Command.Parameters.Count;
-                paramValuesScore = paramValuesSum / match.Command.Parameters.Count;
-            }
-
-            var totalArgsScore = (argValuesScore + paramValuesScore) / 2;
-            return match.Command.Priority + (totalArgsScore * 0.99f);
-        }
-
-        //Order the parse results by their score so that we choose the most likely result to execute
-        var parseResults = parseResultsDict
-            .OrderByDescending(x => CalculateScore(x.Key, x.Value));
+            var parseResult = await x.match.ParseAsync(context, searchResult, x.Item2, services).ConfigureAwait(false);
+            return (x.match, parseResult);
+        }));
 
         var successfulParses = parseResults
-            .Where(x => x.Value.IsSuccess)
+            .Where(x => x.parseResult.IsSuccess)
+            .OrderByDescending(x => x.match.Command.Priority)
+            .ThenByDescending(x => x.parseResult.ArgValues.Sum(y => y.Values.Sum(z => z.Score)))
             .ToArray();
 
         if (successfulParses.Length == 0)
         {
-            //All parses failed, return the one from the highest priority command, using score as a tie breaker
-            var bestMatch = parseResults
-                .FirstOrDefault(x => !x.Value.IsSuccess);
-            return (false, bestMatch.Value.ErrorReason, commands[0].Command);
+            var bestMatch = parseResults.FirstOrDefault(x => !x.parseResult.IsSuccess);
+            return (false, bestMatch.parseResult.ErrorReason, commands[0].Command);
         }
 
-        var cmd = successfulParses[0].Key.Command;
+        var cmd = successfulParses[0].match.Command;
 
-        // Bot will ignore commands which are ran more often than what specified by
-        // GlobalCommandsCooldown constant (milliseconds)
-        if (!UsersOnShortCooldown.Add(context.Message.Author.Id))
-            return (false, null, cmd);
+        if (!UsersOnShortCooldown.Add(context.User.Id))
+            return (false, "You are on a short cooldown.", cmd);
 
-        var commandName = cmd.Aliases[0];
-        foreach (var exec in LateBlockers)
-        {
-            if (await exec.TryBlockLate(client, context, cmd.Module.GetTopLevelModule().Name, cmd)
-                    .ConfigureAwait(false))
-            {
-                Log.Information("Late blocking User [{0}] Command: [{1}] in [{2}]", context.User, commandName,
-                    exec.GetType().Name);
-                return (false, null, cmd);
-            }
-        }
-
-        //If we get this far, at least one parse was successful. Execute the most likely overload.
         var chosenOverload = successfulParses[0];
-        var execResult = (ExecuteResult)await chosenOverload.Key
-            .ExecuteAsync(context, chosenOverload.Value, services).ConfigureAwait(false);
 
-        if (execResult.Exception != null &&
-            (execResult.Exception is not HttpException he ||
-             he.DiscordCode == DiscordErrorCode.InsufficientPermissions))
+        foreach (var i in lateBlockers)
         {
-            Log.Warning(execResult.Exception, "Command Error");
+            var blocked = await i.TryBlockLate(client, context, chosenOverload.match.Command.Module.Name, chosenOverload.match.Command);
+            if (blocked)
+                return (false, "lateblocker", null);
         }
 
-        return (true, null, cmd);
+        var result = await chosenOverload.match.ExecuteAsync(context, chosenOverload.parseResult, services)
+            .ConfigureAwait(false);
+
+        if (result is not ExecuteResult executeResult) return (result.IsSuccess, result.ErrorReason, cmd);
+        if (executeResult.Exception != null && executeResult.Exception is not HttpException
+            {
+                DiscordCode: DiscordErrorCode.InsufficientPermissions
+            })
+        {
+            Log.Warning(executeResult.Exception, "Command execution error");
+        }
+
+        return (executeResult.IsSuccess, executeResult.ErrorReason, cmd);
+    }
+
+    private async Task LogCommandExecution(IMessage usrMsg, ITextChannel channel, CommandInfo? commandInfo,
+        bool success, int executionTime, string errorMessage = null)
+    {
+        var gc = await gss.GetGuildConfig(channel.GuildId);
+        var logBuilder = new StringBuilder()
+            .AppendLine(success ? "Command Executed" : "Command Errored")
+            .AppendLine($"User: {usrMsg.Author} [{usrMsg.Author.Id}]")
+            .AppendLine($"Server: {(channel == null ? "PRIVATE" : $"{channel.Guild.Name} [{channel.Guild.Id}]")}")
+            .AppendLine($"Channel: {(channel == null ? "PRIVATE" : $"{channel.Name} [{channel.Id}]")}")
+            .AppendLine($"Message: {usrMsg.Content}")
+            .AppendLine($"Execution Time: {executionTime}ms");
+
+        if (!success && !string.IsNullOrEmpty(errorMessage))
+            logBuilder.AppendLine($"Error: {errorMessage}");
+
+        if (success)
+            Log.Information(logBuilder.ToString());
+        else
+            Log.Warning(logBuilder.ToString());
+
+
+        var embed = new EmbedBuilder()
+            .WithColor(success ? Mewdeko.OkColor : Mewdeko.ErrorColor)
+            .WithTitle(success ? "Command Executed" : "Command Errored")
+            .AddField("User", $"{usrMsg.Author.Mention} {usrMsg.Author} {usrMsg.Author.Id}")
+            .AddField("Guild", channel == null ? "PRIVATE" : $"{channel.Guild.Name} `{channel.Guild.Id}`")
+            .AddField("Channel", channel == null ? "PRIVATE" : $"{channel.Name} `{channel.Id}`")
+            .AddField("Message", usrMsg.Content.TrimTo(1000))
+            .AddField("Execution Time", $"{executionTime}ms");
+
+        if (!success && !string.IsNullOrEmpty(errorMessage))
+            embed.AddField("Error", errorMessage);
+
+        if (commandInfo != null)
+            embed.AddField("Command", $"{commandInfo.Module.Name} | {commandInfo.Name}");
+
+        if (bss.Data.CommandLogChannel > 0)
+        {
+            if (await client.Rest.GetChannelAsync(bss.Data.CommandLogChannel) is ITextChannel logChannel)
+                await logChannel.SendMessageAsync(embed: embed.Build()).ConfigureAwait(false);
+        }
+
+        if (gc.CommandLogChannel != 0)
+        {
+            if (await client.Rest.GetChannelAsync(gc.CommandLogChannel) is ITextChannel commandLogChannel)
+                await commandLogChannel.SendMessageAsync(embed: embed.Build()).ConfigureAwait(false);
+        }
+    }
+
+    private int GetPrefixLength(string content, string prefix)
+    {
+        // Check if content starts with the custom prefix
+        if (content.StartsWith(prefix, StringComparison.InvariantCulture))
+            return prefix.Length;
+
+        // Get possible mention formats
+        var mentions = new[]
+        {
+            client.CurrentUser.Mention, // e.g., "@BotName"
+            $"<@{client.CurrentUser.Id}>", // e.g., "<@1234567890>"
+            $"<@!{client.CurrentUser.Id}>" // e.g., "<@!1234567890>" (for nicknames)
+        };
+
+        // Find the longest matching mention at the start
+        return (from mention in mentions
+            where content.StartsWith(mention + " ", StringComparison.InvariantCulture)
+            select mention.Length + 1).FirstOrDefault();
+    }
+
+    private async Task UpdateCommandStats(IGuild? guild, IChannel channel, IUserMessage usrMsg, CommandInfo? info)
+    {
+        if (guild == null || info == null) return;
+
+        var guildConfig = await gss.GetGuildConfig(guild.Id).ConfigureAwait(false);
+        if (guildConfig.StatsOptOut) return;
+
+        await using var dbContext = await dbProvider.GetContextAsync().ConfigureAwait(false);
+        var user = await dbContext.GetOrCreateUser(usrMsg.Author).ConfigureAwait(false);
+        if (user.StatsOptOut) return;
+
+        var commandStats = new CommandStats
+        {
+            ChannelId = channel.Id,
+            GuildId = guild.Id,
+            IsSlash = false,
+            NameOrId = info.Name,
+            UserId = usrMsg.Author.Id,
+            Module = info.Module.Name
+        };
+        await dbContext.CommandStats.AddAsync(commandStats).ConfigureAwait(false);
+        await dbContext.SaveChangesAsync().ConfigureAwait(false);
     }
 }

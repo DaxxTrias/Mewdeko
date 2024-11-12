@@ -6,17 +6,26 @@ using YamlDotNet.Serialization;
 
 namespace Mewdeko.Common.Yml;
 
+/// <summary>
+///     YamlDotNet type converter for serializing and deserializing SKColor objects.
+/// </summary>
 public class SkColorConverter : IYamlTypeConverter
 {
-    public bool Accepts(Type type) => type == typeof(SKColor);
+    /// <inheritdoc />
+    public bool Accepts(Type type)
+    {
+        return type == typeof(SKColor);
+    }
 
-    public object ReadYaml(IParser parser, Type type)
+    /// <inheritdoc />
+    public object? ReadYaml(IParser parser, Type type, ObjectDeserializer rootDeserializer)
     {
         var scalar = parser.Consume<Scalar>();
         return SKColor.Parse(scalar.Value);
     }
 
-    public void WriteYaml(IEmitter emitter, object? value, Type type)
+    /// <inheritdoc />
+    public void WriteYaml(IEmitter emitter, object? value, Type type, ObjectSerializer serializer)
     {
         var color = (SKColor)value;
         var val = (uint)((color.Blue << 0) | (color.Green << 8) | (color.Red << 16));
@@ -24,17 +33,26 @@ public class SkColorConverter : IYamlTypeConverter
     }
 }
 
+/// <summary>
+///     YamlDotNet type converter for serializing and deserializing CultureInfo objects.
+/// </summary>
 public class CultureInfoConverter : IYamlTypeConverter
 {
-    public bool Accepts(Type type) => type == typeof(CultureInfo);
+    /// <inheritdoc />
+    public bool Accepts(Type type)
+    {
+        return type == typeof(CultureInfo);
+    }
 
-    public object ReadYaml(IParser parser, Type type)
+    /// <inheritdoc />
+    public object? ReadYaml(IParser parser, Type type, ObjectDeserializer rootDeserializer)
     {
         var scalar = parser.Consume<Scalar>();
         return new CultureInfo(scalar.Value);
     }
 
-    public void WriteYaml(IEmitter emitter, object? value, Type type)
+    /// <inheritdoc />
+    public void WriteYaml(IEmitter emitter, object? value, Type type, ObjectSerializer serializer)
     {
         var ci = (CultureInfo)value;
         emitter.Emit(new Scalar(ci.Name));

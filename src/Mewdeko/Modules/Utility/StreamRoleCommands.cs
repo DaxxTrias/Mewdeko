@@ -8,10 +8,23 @@ namespace Mewdeko.Modules.Utility;
 
 public partial class Utility
 {
+    /// <summary>
+    ///     Contains commands related to stream roles in Discord servers.
+    /// </summary>
     public class StreamRoleCommands : MewdekoSubmodule<StreamRoleService>
     {
-        [Cmd, Aliases, BotPerm(GuildPermission.ManageRoles),
-         UserPerm(GuildPermission.ManageRoles), RequireContext(ContextType.Guild)]
+        /// <summary>
+        ///     Sets a stream role for users in the server. When users start streaming, they are automatically assigned a specific
+        ///     role.
+        /// </summary>
+        /// <param name="fromRole">The role to monitor for streaming activity.</param>
+        /// <param name="addRole">The role to assign to users who start streaming.</param>
+        /// <returns>A task representing the asynchronous operation.</returns>
+        [Cmd]
+        [Aliases]
+        [BotPerm(GuildPermission.ManageRoles)]
+        [UserPerm(GuildPermission.ManageRoles)]
+        [RequireContext(ContextType.Guild)]
         public async Task StreamRole(IRole fromRole, IRole addRole)
         {
             await Service.SetStreamRole(fromRole, addRole).ConfigureAwait(false);
@@ -20,16 +33,32 @@ public partial class Utility
                 Format.Bold(addRole.ToString())).ConfigureAwait(false);
         }
 
-        [Cmd, Aliases, BotPerm(GuildPermission.ManageRoles),
-         UserPerm(GuildPermission.ManageRoles), RequireContext(ContextType.Guild)]
+        /// <summary>
+        ///     Disables the stream role feature in the server.
+        /// </summary>
+        /// <returns>A task representing the asynchronous operation.</returns>
+        [Cmd]
+        [Aliases]
+        [BotPerm(GuildPermission.ManageRoles)]
+        [UserPerm(GuildPermission.ManageRoles)]
+        [RequireContext(ContextType.Guild)]
         public async Task StreamRole()
         {
             await Service.StopStreamRole(ctx.Guild).ConfigureAwait(false);
             await ReplyConfirmLocalizedAsync("stream_role_disabled").ConfigureAwait(false);
         }
 
-        [Cmd, Aliases, BotPerm(GuildPermission.ManageRoles),
-         UserPerm(GuildPermission.ManageRoles), RequireContext(ContextType.Guild)]
+        /// <summary>
+        ///     Sets a keyword for the stream role feature. Only users with streams containing this keyword will receive the stream
+        ///     role.
+        /// </summary>
+        /// <param name="keyword">The keyword to set for the stream role feature.</param>
+        /// <returns>A task representing the asynchronous operation.</returns>
+        [Cmd]
+        [Aliases]
+        [BotPerm(GuildPermission.ManageRoles)]
+        [UserPerm(GuildPermission.ManageRoles)]
+        [RequireContext(ContextType.Guild)]
         public async Task StreamRoleKeyword([Remainder] string? keyword = null)
         {
             var kw = await Service.SetKeyword(ctx.Guild, keyword).ConfigureAwait(false);
@@ -40,8 +69,17 @@ public partial class Utility
                 await ReplyConfirmLocalizedAsync("stream_role_kw_set", Format.Bold(kw)).ConfigureAwait(false);
         }
 
-        [Cmd, Aliases, BotPerm(GuildPermission.ManageRoles),
-         UserPerm(GuildPermission.ManageRoles), RequireContext(ContextType.Guild)]
+        /// <summary>
+        ///     Adds or removes a user to/from the blacklist for the stream role feature.
+        /// </summary>
+        /// <param name="action">The action to perform (add or remove).</param>
+        /// <param name="user">The user to add or remove from the list.</param>
+        /// <returns>A task representing the asynchronous operation.</returns>
+        [Cmd]
+        [Aliases]
+        [BotPerm(GuildPermission.ManageRoles)]
+        [UserPerm(GuildPermission.ManageRoles)]
+        [RequireContext(ContextType.Guild)]
         public async Task StreamRoleBlacklist(AddRemove action, [Remainder] IGuildUser user)
         {
             var success = await Service
@@ -73,8 +111,17 @@ public partial class Utility
             }
         }
 
-        [Cmd, Aliases, BotPerm(GuildPermission.ManageRoles),
-         UserPerm(GuildPermission.ManageRoles), RequireContext(ContextType.Guild)]
+        /// <summary>
+        ///     Adds or removes a user to/from the whitelist for the stream role feature.
+        /// </summary>
+        /// <param name="action">The action to perform (add or remove).</param>
+        /// <param name="user">The user to add or remove from the list.</param>
+        /// <returns>A task representing the asynchronous operation.</returns>
+        [Cmd]
+        [Aliases]
+        [BotPerm(GuildPermission.ManageRoles)]
+        [UserPerm(GuildPermission.ManageRoles)]
+        [RequireContext(ContextType.Guild)]
         public async Task StreamRoleWhitelist(AddRemove action, [Remainder] IGuildUser user)
         {
             var success = await Service

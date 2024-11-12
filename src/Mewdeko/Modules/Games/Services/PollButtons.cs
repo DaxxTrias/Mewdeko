@@ -1,14 +1,17 @@
 ﻿using Discord.Interactions;
+using Mewdeko.Common.Configs;
 
 namespace Mewdeko.Modules.Games.Services;
 
-public class PollButtons : MewdekoSlashCommandModule
+/// <summary>
+///     Handles interaction with poll buttons for voting.
+/// </summary>
+public class PollButtons(PollService pollService, BotConfig config) : MewdekoSlashCommandModule
 {
-    private readonly PollService pollService;
-
-    public PollButtons(PollService pollService)
-        => this.pollService = pollService;
-
+    /// <summary>
+    ///     Handles interaction with poll buttons for voting.
+    /// </summary>
+    /// <param name="num">The number representing the option selected.</param>
     [ComponentInteraction("pollbutton:*")]
     public async Task Pollbutton(string num)
     {
@@ -16,23 +19,23 @@ public class PollButtons : MewdekoSlashCommandModule
         switch (type)
         {
             case PollType.PollEnded:
-                await ctx.Interaction.SendEphemeralErrorAsync("That poll has already ended!");
+                await ctx.Interaction.SendEphemeralErrorAsync("That poll has already ended!", config);
                 break;
             case PollType.SingleAnswer:
                 if (!allowed)
-                    await ctx.Interaction.SendEphemeralErrorAsync("You can't change your vote!");
+                    await ctx.Interaction.SendEphemeralErrorAsync("You can't change your vote!", config);
                 else
                     await ctx.Interaction.SendEphemeralConfirmAsync("Voted!");
                 break;
             case PollType.AllowChange:
                 if (!allowed)
-                    await ctx.Interaction.SendEphemeralErrorAsync("That's already your vote!");
+                    await ctx.Interaction.SendEphemeralErrorAsync("That's already your vote!", config);
                 else
                     await ctx.Interaction.SendEphemeralConfirmAsync("Vote changed.");
                 break;
             case PollType.MultiAnswer:
                 if (!allowed)
-                    await ctx.Interaction.SendEphemeralErrorAsync("Removed that vote!");
+                    await ctx.Interaction.SendEphemeralErrorAsync("Removed that vote!", config);
                 else
                     await ctx.Interaction.SendEphemeralConfirmAsync("Vote added!");
                 break;

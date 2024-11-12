@@ -1,4 +1,5 @@
 using System.Net.Http;
+using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.UserProfile.Common;
 using Mewdeko.Modules.Utility.Common;
 using Microsoft.EntityFrameworkCore;
@@ -6,23 +7,24 @@ using Newtonsoft.Json;
 
 namespace Mewdeko.Modules.Utility.Services;
 
-public class PronounsService : INService
+/// <summary>
+///     Service for fetching and managing user pronouns from an external API.
+/// </summary>
+public class PronounsService(DbContextProvider dbProvider, HttpClient http) : INService
 {
-    private readonly DbService db;
-    private readonly HttpClient http;
-
-    public PronounsService(DbService db, HttpClient http)
-    {
-        this.db = db;
-        this.http = http;
-    }
-
+    /// <summary>
+    ///     Asynchronously gets a user's pronouns from the local database or queries an external API if not found.
+    /// </summary>
+    /// <param name="discordId">The Discord user ID to fetch pronouns for.</param>
+    /// <returns>A PronounSearchResult object containing the pronouns or indicating if unspecified.</returns>
     public async Task<PronounSearchResult> GetPronounsOrUnspecifiedAsync(ulong discordId)
     {
-        await using var uow = db.GetDbContext();
-        var user = await uow.DiscordUser.FirstOrDefaultAsync(x => x.UserId == discordId).ConfigureAwait(false);
+        await using var dbContext = await dbProvider.GetContextAsync();
+
+        var user = await dbContext.DiscordUser.FirstOrDefaultAsync(x => x.UserId == discordId).ConfigureAwait(false);
         if (!string.IsNullOrWhiteSpace(user?.Pronouns)) return new PronounSearchResult(user.Pronouns, false);
-        var result = await http.GetStringAsync(@$"https://pronoundb.org/api/v1/lookup?platform=discord&id={user.UserId}").ConfigureAwait(false);
+        var result = await http.GetStringAsync($"https://pronoundb.org/api/v1/lookup?platform=discord&id={user.UserId}")
+            .ConfigureAwait(false);
         var pronouns = JsonConvert.DeserializeObject<PronounDbResult>(result);
         return new PronounSearchResult((pronouns?.Pronouns ?? "unspecified") switch
         {

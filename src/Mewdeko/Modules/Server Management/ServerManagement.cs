@@ -2,16 +2,23 @@ using System.Net.Http;
 using Discord.Commands;
 using Discord.Net;
 using Mewdeko.Common.Attributes.TextCommands;
-using Mewdeko.Modules.Server_Management.Services;
 using Mewdeko.Services.Settings;
 using Image = Discord.Image;
 
 namespace Mewdeko.Modules.Server_Management;
 
-public partial class ServerManagement
-    (IHttpClientFactory factory, BotConfigService config) : MewdekoModuleBase<ServerManagementService>
+/// <summary>
+///     Contains commands related to server management.
+/// </summary>
+public partial class ServerManagement(IHttpClientFactory factory, BotConfigService config)
+    : MewdekoModule
 {
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
+    /// <summary>
+    ///     Displays the list of allowed permissions for the invoking user.
+    /// </summary>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
     public async Task PermView()
     {
         var perms = ((IGuildUser)ctx.User).GuildPermissions;
@@ -24,7 +31,14 @@ public partial class ServerManagement
         await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild), Priority(0)]
+    /// <summary>
+    ///     Displays the list of allowed permissions for the specified user.
+    /// </summary>
+    /// <param name="user">The user whose permissions will be displayed.</param>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    [Priority(0)]
     public async Task PermView(IGuildUser user)
     {
         var perms = user.GuildPermissions;
@@ -37,7 +51,14 @@ public partial class ServerManagement
         await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild), Priority(1)]
+    /// <summary>
+    ///     Displays the list of allowed permissions for the specified role.
+    /// </summary>
+    /// <param name="user">The role whose permissions will be displayed.</param>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    [Priority(1)]
     public async Task PermView(IRole user)
     {
         var perms = user.Permissions;
@@ -50,8 +71,14 @@ public partial class ServerManagement
         await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild),
-     UserPerm(GuildPermission.Administrator)]
+    /// <summary>
+    ///     Sets the splash image of the server.
+    /// </summary>
+    /// <param name="img">The URL of the new splash image.</param>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    [UserPerm(GuildPermission.Administrator)]
     public async Task SetSplash(string img)
     {
         var guild = ctx.Guild;
@@ -65,8 +92,14 @@ public partial class ServerManagement
         await ctx.Channel.SendConfirmAsync("New splash image has been set!").ConfigureAwait(false);
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild),
-     UserPerm(GuildPermission.Administrator)]
+    /// <summary>
+    ///     Sets the icon of the server.
+    /// </summary>
+    /// <param name="img">The URL of the new server icon.</param>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    [UserPerm(GuildPermission.Administrator)]
     public async Task SetIcon(string img)
     {
         var guild = ctx.Guild;
@@ -80,8 +113,14 @@ public partial class ServerManagement
         await ctx.Channel.SendConfirmAsync("New server icon has been set!").ConfigureAwait(false);
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild),
-     UserPerm(GuildPermission.Administrator)]
+    /// <summary>
+    ///     Sets the banner of the server.
+    /// </summary>
+    /// <param name="img">The URL of the new server banner.</param>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    [UserPerm(GuildPermission.Administrator)]
     public async Task SetBanner(string img)
     {
         var guild = ctx.Guild;
@@ -95,8 +134,14 @@ public partial class ServerManagement
         await ctx.Channel.SendConfirmAsync("New server banner has been set!").ConfigureAwait(false);
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild),
-     UserPerm(GuildPermission.Administrator)]
+    /// <summary>
+    ///     Sets the name of the server.
+    /// </summary>
+    /// <param name="name">The new name for the server.</param>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    [UserPerm(GuildPermission.Administrator)]
     public async Task SetServerName([Remainder] string name)
     {
         var guild = ctx.Guild;
@@ -104,8 +149,17 @@ public partial class ServerManagement
         await ctx.Channel.SendConfirmAsync($"Succesfuly set server name to {name}").ConfigureAwait(false);
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild),
-     UserPerm(GuildPermission.ManageEmojisAndStickers), BotPerm(GuildPermission.ManageEmojisAndStickers), Priority(0)]
+    /// <summary>
+    ///     Adds a new emote to the server.
+    /// </summary>
+    /// <param name="name">The name of the emote.</param>
+    /// <param name="url">The URL of the emote image. If not provided, the image will be taken from the message attachments.</param>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    [UserPerm(GuildPermission.ManageEmojisAndStickers)]
+    [BotPerm(GuildPermission.ManageEmojisAndStickers)]
+    [Priority(0)]
     public async Task AddEmote(string name, string? url = null)
     {
         string acturl;
@@ -140,13 +194,21 @@ public partial class ServerManagement
         catch (Exception)
         {
             await ctx.Channel.SendErrorAsync(
-                    "The emote could not be added because it is either: Too Big(Over 256kb), != a direct link, Or exceeds server emoji limit.")
+                    "The emote could not be added because it is either: Too Big(Over 256kb), is not a direct link, Or exceeds server emoji limit.",
+                    Config)
                 .ConfigureAwait(false);
         }
     }
 
-    [Cmd, Aliases, UserPerm(GuildPermission.ManageEmojisAndStickers),
-     BotPerm(GuildPermission.ManageEmojisAndStickers), RequireContext(ContextType.Guild)]
+    /// <summary>
+    ///     Removes an emote from the server.
+    /// </summary>
+    /// <param name="_">Placeholder parameter to satisfy command signature requirements.</param>
+    [Cmd]
+    [Aliases]
+    [UserPerm(GuildPermission.ManageEmojisAndStickers)]
+    [BotPerm(GuildPermission.ManageEmojisAndStickers)]
+    [RequireContext(ContextType.Guild)]
     public async Task RemoveEmote(string _)
     {
         var tags = ctx.Message.Tags.Where(t => t.Type == TagType.Emoji).Select(x => (Emote)x.Value)
@@ -159,17 +221,25 @@ public partial class ServerManagement
         }
         catch (HttpException)
         {
-            await ctx.Channel.SendErrorAsync("This emote is not from this guild!").ConfigureAwait(false);
+            await ctx.Channel.SendErrorAsync("This emote is not from this guild!", Config).ConfigureAwait(false);
         }
     }
 
-    [Cmd, Aliases, UserPerm(GuildPermission.ManageEmojisAndStickers),
-     BotPerm(GuildPermission.ManageEmojisAndStickers), RequireContext(ContextType.Guild)]
+    /// <summary>
+    ///     Renames an existing emote on the server.
+    /// </summary>
+    /// <param name="emote">The existing emote to rename.</param>
+    /// <param name="name">The new name for the emote.</param>
+    [Cmd]
+    [Aliases]
+    [UserPerm(GuildPermission.ManageEmojisAndStickers)]
+    [BotPerm(GuildPermission.ManageEmojisAndStickers)]
+    [RequireContext(ContextType.Guild)]
     public async Task RenameEmote(string emote, string name)
     {
         if (name.StartsWith("<"))
         {
-            await ctx.Channel.SendErrorAsync("You cant use an emote as a name!").ConfigureAwait(false);
+            await ctx.Channel.SendErrorAsync("You cant use an emote as a name!", Config).ConfigureAwait(false);
             return;
         }
 
@@ -187,12 +257,20 @@ public partial class ServerManagement
         }
         catch (HttpException)
         {
-            await ctx.Channel.SendErrorAsync("This emote != from this guild!").ConfigureAwait(false);
+            await ctx.Channel.SendErrorAsync("This emote != from this guild!", Config).ConfigureAwait(false);
         }
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild),
-     UserPerm(GuildPermission.ManageEmojisAndStickers), BotPerm(GuildPermission.ManageEmojisAndStickers), Priority(1)]
+    /// <summary>
+    ///     Steals emotes from a message and adds them to the server.
+    /// </summary>
+    /// <param name="e">The message containing the emotes to steal.</param>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    [UserPerm(GuildPermission.ManageEmojisAndStickers)]
+    [BotPerm(GuildPermission.ManageEmojisAndStickers)]
+    [Priority(1)]
     public async Task StealEmotes([Remainder] string e)
     {
         var eb = new EmbedBuilder
@@ -234,18 +312,26 @@ public partial class ServerManagement
         await msg.ModifyAsync(x => x.Embed = b.Build()).ConfigureAwait(false);
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild),
-     UserPerm(GuildPermission.ManageEmojisAndStickers), BotPerm(GuildPermission.ManageEmojisAndStickers), Priority(0)]
+    /// <summary>
+    ///     Steals emotes from a message and locks them to a specified role.
+    /// </summary>
+    /// <param name="role">The role to add the emotes to.</param>
+    /// <param name="e">The message containing the emotes to steal.</param>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    [UserPerm(GuildPermission.ManageEmojisAndStickers)]
+    [BotPerm(GuildPermission.ManageEmojisAndStickers)]
+    [Priority(0)]
     public async Task StealForRole(IRole role, [Remainder] string e)
     {
         var eb = new EmbedBuilder
         {
             Description = $"{config.Data.LoadingEmote} Adding Emotes to {role.Mention}...", Color = Mewdeko.OkColor
         };
-        var list = new Optional<IEnumerable<IRole>>(new[]
-        {
+        var list = new Optional<IEnumerable<IRole>>([
             role
-        });
+        ]);
         var errored = new List<string>();
         var emotes = new List<string>();
         var tags = ctx.Message.Tags.Where(t => t.Type == TagType.Emoji).Select(x => (Emote)x.Value).Distinct();

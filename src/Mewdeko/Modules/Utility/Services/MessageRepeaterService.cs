@@ -1,55 +1,57 @@
-﻿using Mewdeko.Modules.Utility.Common;
+﻿using Mewdeko.Common.ModuleBehaviors;
+using Mewdeko.Database.DbContextStuff;
+using Mewdeko.Modules.Utility.Common;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 
 namespace Mewdeko.Modules.Utility.Services;
 
-public class MessageRepeaterService : INService
+/// <summary>
+///     Manages the scheduling and execution of repeating messages across guilds.
+/// </summary>
+public class MessageRepeaterService(
+    DiscordShardedClient client,
+    DbContextProvider dbProvider,
+    Mewdeko bot,
+    GuildSettingsService gss)
+    : INService, IReadyExecutor
 {
-    private readonly DiscordSocketClient client;
-    private readonly DbService db;
-
-    public MessageRepeaterService(DiscordSocketClient client, DbService db, Mewdeko bot)
-    {
-        this.db = db;
-        this.client = client;
-        _ = OnReadyAsync(client, bot);
-    }
-
+    /// <summary>
+    ///     A collection of repeaters organized by guild ID and then by repeater ID.
+    /// </summary>
     public ConcurrentDictionary<ulong, ConcurrentDictionary<int, RepeatRunner>> Repeaters { get; set; }
+
+    /// <summary>
+    ///     Indicates whether the repeater service has finished initializing and loading all repeaters.
+    /// </summary>
     public bool RepeaterReady { get; private set; }
 
-    public async Task OnReadyAsync(DiscordSocketClient discordSocketClient, Mewdeko bot)
+    /// <inheritdoc />
+    public async Task OnReadyAsync()
     {
+        Log.Information($"Starting {GetType()} Cache");
         await bot.Ready.Task.ConfigureAwait(false);
-        Log.Information("Loading message repeaters on shard {ShardId}", this.client.ShardId);
-        await using var uow = db.GetDbContext();
-        // tolist resolves invalid state issues
-        var allgc = bot.AllGuildConfigs;
+        Log.Information("Loading message repeaters");
+
+
         var repeaters = new Dictionary<ulong, ConcurrentDictionary<int, RepeatRunner>>();
-        foreach (var gc in allgc)
+        foreach (var gc in client.Guilds)
         {
             try
             {
-                var guild = this.client.GetGuild(gc.GuildId);
-                if (guild is null)
-                {
-                    Log.Information("Unable to find guild {GuildId} for message repeaters", gc.GuildId);
-                    continue;
-                }
-
-                var idToRepeater = gc.GuildRepeaters
+                var config = await gss.GetGuildConfig(gc.Id, x => x.Include(x => x.GuildRepeaters));
+                var idToRepeater = config.GuildRepeaters
                     .Where(gr => gr.DateAdded is not null)
                     .Select(gr =>
-                        new KeyValuePair<int, RepeatRunner>(gr.Id, new RepeatRunner(this.client, guild, gr, this)))
+                        new KeyValuePair<int, RepeatRunner>(gr.Id, new RepeatRunner(client, gc, gr, this)))
                     .ToDictionary(x => x.Key, y => y.Value)
                     .ToConcurrent();
 
-                repeaters.TryAdd(gc.GuildId, idToRepeater);
+                repeaters.TryAdd(gc.Id, idToRepeater);
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Failed to load repeaters on Guild {0}", gc.GuildId);
+                Log.Error(ex, "Failed to load repeaters on Guild {0}", gc.Id);
             }
         }
 
@@ -57,20 +59,32 @@ public class MessageRepeaterService : INService
         RepeaterReady = true;
     }
 
+    /// <summary>
+    ///     Removes a specific repeater from the database.
+    /// </summary>
+    /// <param name="r">The repeater configuration to remove.</param>
     public async Task RemoveRepeater(Repeater r)
     {
-        await using var uow = db.GetDbContext();
-        var gr = (await uow.ForGuildId(r.GuildId, x => x.Include(y => y.GuildRepeaters))).GuildRepeaters;
+        await using var dbContext = await dbProvider.GetContextAsync();
+
+        var gr = (await dbContext.ForGuildId(r.GuildId, x => x.Include(y => y.GuildRepeaters))).GuildRepeaters;
         var toDelete = gr.Find(x => x.Id == r.Id);
         if (toDelete != null)
-            uow.Set<Repeater>().Remove(toDelete);
-        await uow.SaveChangesAsync().ConfigureAwait(false);
+            dbContext.Set<Repeater>().Remove(toDelete);
+        await dbContext.SaveChangesAsync().ConfigureAwait(false);
     }
 
-    public void SetRepeaterLastMessage(int repeaterId, ulong lastMsgId)
+
+    /// <summary>
+    ///     Sets the ID of the last message sent by a repeater, updating the database with this new value.
+    /// </summary>
+    /// <param name="repeaterId">The ID of the repeater.</param>
+    /// <param name="lastMsgId">The ID of the last message sent by the repeater.</param>
+    public async Task SetRepeaterLastMessage(int repeaterId, ulong lastMsgId)
     {
-        using var uow = db.GetDbContext();
-        uow.Database.ExecuteSqlInterpolated($@"UPDATE GuildRepeater SET
+        await using var dbContext = await dbProvider.GetContextAsync();
+
+        await dbContext.Database.ExecuteSqlInterpolatedAsync($@"UPDATE GuildRepeater SET
                     LastMessageId={lastMsgId} WHERE Id={repeaterId}");
     }
 }

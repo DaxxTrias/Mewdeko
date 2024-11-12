@@ -4,26 +4,46 @@ using Mewdeko.Modules.Games.Services;
 
 namespace Mewdeko.Modules.Games;
 
+/// <summary>
+///     Slash command group for managing activities and game master roles.
+/// </summary>
 [Group("games", "Some of mewdekos games!")]
 public class ActivitySlashCommand : MewdekoSlashSubmodule<ActivityService>
 {
-    [SlashCommand("activity", "Launch a discord activity in a voice channel!"), RequireContext(ContextType.Guild), CheckPermissions]
+    /// <summary>
+    ///     Starts a Discord activity in a voice channel.
+    /// </summary>
+    /// <param name="chan">The voice channel where the activity will be launched.</param>
+    /// <param name="app">The default application to use for the activity.</param>
+    /// <example>/games activity voicechannel activityname</example>
+    [SlashCommand("activity", "Launch a discord activity in a voice channel!")]
+    [RequireContext(ContextType.Guild)]
+    [CheckPermissions]
     public async Task Activity(IVoiceChannel chan, DefaultApplications app)
     {
         var eb = new EmbedBuilder().WithOkColor();
         var gmrole = await Service.GetGameMasterRole(ctx.Guild.Id);
         if (gmrole != 0 && !((IGuildUser)ctx.User).RoleIds.Contains(gmrole))
         {
-            await ctx.Interaction.RespondAsync(embed: eb.WithDescription("You are not a Game Master!").WithErrorColor().Build(), ephemeral: true);
+            await ctx.Interaction.RespondAsync(
+                embed: eb.WithDescription("You are not a Game Master!").WithErrorColor().Build(), ephemeral: true);
             return;
         }
 
         var invite = await chan.CreateInviteToApplicationAsync(app);
-        await ctx.Interaction.RespondAsync(embed: eb.WithDescription($"[Click here to join the vc and start {app.ToString()}]({invite.Url})").Build());
+        await ctx.Interaction.RespondAsync(embed: eb
+            .WithDescription($"[Click here to join the vc and start {app.ToString()}]({invite.Url})").Build());
     }
 
-    [SlashCommand("setgamemasterrole", "Allows you to set the game master role"),
-     RequireUserPermission(GuildPermission.ManageGuild), RequireContext(ContextType.Guild), CheckPermissions]
+    /// <summary>
+    ///     Sets the game master role.
+    /// </summary>
+    /// <param name="role">The role to set as the game master role.</param>
+    /// <example>/games setgamemasterrole @role</example>
+    [SlashCommand("setgamemasterrole", "Allows you to set the game master role")]
+    [RequireUserPermission(GuildPermission.ManageGuild)]
+    [RequireContext(ContextType.Guild)]
+    [CheckPermissions]
     public async Task SetGameMaster(IRole? role = null)
     {
         var eb = new EmbedBuilder().WithOkColor();
@@ -35,6 +55,7 @@ public class ActivitySlashCommand : MewdekoSlashSubmodule<ActivityService>
         }
 
         await Service.GameMasterRoleSet(ctx.Guild.Id, role.Id);
-        await ctx.Interaction.RespondAsync(embed: eb.WithDescription("Successfully set the Game Master Role!").Build());
+        await ctx.Interaction.RespondAsync(embed: eb.WithDescription("Successfully set the Game Master Role!")
+            .Build());
     }
 }

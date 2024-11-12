@@ -4,20 +4,31 @@ using Mewdeko.Common.TypeReaders.Models;
 namespace Mewdeko.Common.TypeReaders;
 
 /// <summary>
-///     Used instead of bool for more flexible keywords for true/false only in the permission module
+///     Type reader for parsing permission action inputs into PermissionAction objects.
+///     Used instead of bool for more flexible keywords for true/false only in the permission module.
 /// </summary>
 public class PermissionActionTypeReader : MewdekoTypeReader<PermissionAction>
 {
-    public PermissionActionTypeReader(DiscordSocketClient client, CommandService cmds) : base(client, cmds)
+    /// <summary>
+    ///     Initializes a new instance of the <see cref="PermissionActionTypeReader" /> class.
+    /// </summary>
+    /// <param name="client">The DiscordShardedClient instance.</param>
+    /// <param name="cmds">The CommandService instance.</param>
+    public PermissionActionTypeReader(DiscordShardedClient client, CommandService cmds) : base(client, cmds)
     {
     }
 
-    public override async Task<TypeReaderResult> ReadAsync(ICommandContext context, string input, IServiceProvider _)
+    /// <inheritdoc />
+    public override async Task<TypeReaderResult> ReadAsync(ICommandContext context, string input,
+        IServiceProvider _)
     {
-        await Task.CompletedTask;
-        input = input.ToUpperInvariant();
+        await Task.CompletedTask; // Async method requires an awaitable expression, Task.CompletedTask is used as a placeholder
+        input = input.ToUpperInvariant(); // Converts input string to uppercase for case-insensitive comparison
+
+        // Switch statement to map input strings to PermissionAction values
         return input switch
         {
+            // Enable values
             "1" => TypeReaderResult.FromSuccess(PermissionAction.Enable),
             "T" => TypeReaderResult.FromSuccess(PermissionAction.Enable),
             "TRUE" => TypeReaderResult.FromSuccess(PermissionAction.Enable),
@@ -26,6 +37,8 @@ public class PermissionActionTypeReader : MewdekoTypeReader<PermissionAction>
             "ALLOW" => TypeReaderResult.FromSuccess(PermissionAction.Enable),
             "PERMIT" => TypeReaderResult.FromSuccess(PermissionAction.Enable),
             "UNBAN" => TypeReaderResult.FromSuccess(PermissionAction.Enable),
+
+            // Disable values
             "0" => TypeReaderResult.FromSuccess(PermissionAction.Disable),
             "F" => TypeReaderResult.FromSuccess(PermissionAction.Disable),
             "FALSE" => TypeReaderResult.FromSuccess(PermissionAction.Disable),
@@ -34,7 +47,10 @@ public class PermissionActionTypeReader : MewdekoTypeReader<PermissionAction>
             "DISABLED" => TypeReaderResult.FromSuccess(PermissionAction.Disable),
             "DISALLOW" => TypeReaderResult.FromSuccess(PermissionAction.Disable),
             "BAN" => TypeReaderResult.FromSuccess(PermissionAction.Disable),
-            _ => TypeReaderResult.FromError(CommandError.ParseFailed, "Must be either deny/allow or enabled/disabled.")
+
+            // Error case
+            _ => TypeReaderResult.FromError(CommandError.ParseFailed,
+                "Must be either deny/allow or enabled/disabled.")
         };
     }
 }

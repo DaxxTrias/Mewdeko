@@ -3,8 +3,19 @@ using Mewdeko.Common.Modals;
 
 namespace Mewdeko.Modules.Suggestions.Services;
 
+/// <summary>
+///     Handles button interactions for suggestions, including voting and starting discussion threads.
+/// </summary>
 public class SuggestButtonService : MewdekoSlashSubmodule<SuggestionsService>
 {
+    /// <summary>
+    ///     Updates the vote count for a suggestion based on user interaction with emote buttons.
+    /// </summary>
+    /// <param name="number">The number associated with the emote button, representing a specific suggestion option.</param>
+    /// <remarks>
+    ///     This method allows users to vote on suggestions using emote buttons. Users can change their vote or remove it
+    ///     entirely.
+    /// </remarks>
     [ComponentInteraction("emotebutton:*")]
     public async Task UpdateCount(string number)
     {
@@ -24,7 +35,8 @@ public class SuggestButtonService : MewdekoSlashSubmodule<SuggestionsService>
             }
             else
             {
-                await ctx.Interaction.SendEphemeralFollowupErrorAsync("Vote not removed.").ConfigureAwait(false);
+                await ctx.Interaction.SendEphemeralFollowupErrorAsync("Vote not removed.", Config)
+                    .ConfigureAwait(false);
                 return;
             }
         }
@@ -34,7 +46,8 @@ public class SuggestButtonService : MewdekoSlashSubmodule<SuggestionsService>
             if (!await PromptUserConfirmAsync("Are you sure you wanna change your vote?", ctx.User.Id, true, false)
                     .ConfigureAwait(false))
             {
-                await ctx.Interaction.SendEphemeralFollowupErrorAsync("Vote not changed.").ConfigureAwait(false);
+                await ctx.Interaction.SendEphemeralFollowupErrorAsync("Vote not changed.", Config)
+                    .ConfigureAwait(false);
                 return;
             }
 
@@ -73,25 +86,34 @@ public class SuggestButtonService : MewdekoSlashSubmodule<SuggestionsService>
             }
 
             builder.WithButton(i.Label,
-                customId: $"emotebutton:{count}", await Service.GetButtonStyle(ctx.Guild, count),
+                $"emotebutton:{count}", await Service.GetButtonStyle(ctx.Guild, count),
                 await Service.GetSuggestMote(ctx.Guild, count));
         }
 
         if (await Service.GetThreadType(ctx.Guild) == 1)
         {
-            builder.WithButton("Join/Create Public Discussion", customId: $"publicsuggestthread:{suggest.SuggestionId}",
+            builder.WithButton("Join/Create Public Discussion", $"publicsuggestthread:{suggest.SuggestionId}",
                 ButtonStyle.Secondary, row: 1);
         }
 
         if (await Service.GetThreadType(ctx.Guild) == 2)
         {
             builder.WithButton("Join/Create Private Discussion",
-                customId: $"privatesuggestthread:{suggest.SuggestionId}", ButtonStyle.Secondary, row: 1);
+                $"privatesuggestthread:{suggest.SuggestionId}", ButtonStyle.Secondary, row: 1);
         }
 
         await componentInteraction.Message.ModifyAsync(x => x.Components = builder.Build()).ConfigureAwait(false);
     }
 
+
+    /// <summary>
+    ///     Starts or joins a public discussion thread for a suggestion.
+    /// </summary>
+    /// <param name="suggestnum">The unique identifier of the suggestion for which to start or join the discussion thread.</param>
+    /// <remarks>
+    ///     This method checks if a public discussion thread already exists for the suggestion and either joins it or creates a
+    ///     new one.
+    /// </remarks>
     [ComponentInteraction("publicsuggestthread:*")]
     public async Task PublicThreadStartOrJoin(string suggestnum)
     {
@@ -118,10 +140,18 @@ public class SuggestButtonService : MewdekoSlashSubmodule<SuggestionsService>
 
         var thread = await ctx.Guild.GetThreadChannelAsync(await Service.GetThreadByMessage(suggest.MessageId))
             .ConfigureAwait(false);
-        await ctx.Interaction.SendEphemeralErrorAsync($"There is already a thread open. {thread.Mention}")
+        await ctx.Interaction.SendEphemeralErrorAsync($"There is already a thread open. {thread.Mention}", Config)
             .ConfigureAwait(false);
     }
 
+    /// <summary>
+    ///     Starts or joins a private discussion thread for a suggestion.
+    /// </summary>
+    /// <param name="suggestnum">The unique identifier of the suggestion for which to start or join the discussion thread.</param>
+    /// <remarks>
+    ///     Similar to <see cref="PublicThreadStartOrJoin" />, but for private threads. It ensures that discussion threads are
+    ///     accessible only to relevant members.
+    /// </remarks>
     [ComponentInteraction("privatesuggestthread:*")]
     public async Task PrivateThreadStartOrJoin(string suggestnum)
     {
@@ -148,15 +178,23 @@ public class SuggestButtonService : MewdekoSlashSubmodule<SuggestionsService>
 
         var thread = await ctx.Guild.GetThreadChannelAsync(await Service.GetThreadByMessage(suggest.MessageId))
             .ConfigureAwait(false);
-        await ctx.Interaction.SendEphemeralErrorAsync($"There is already a thread open. {thread.Mention}")
+        await ctx.Interaction.SendEphemeralErrorAsync($"There is already a thread open. {thread.Mention}", Config)
             .ConfigureAwait(false);
     }
 
+    /// <summary>
+    ///     Initiates the process for a user to send a suggestion through a modal interaction.
+    /// </summary>
+    /// <remarks>
+    ///     This method prompts the user with a modal to input their suggestion, which is then processed accordingly.
+    /// </remarks>
     [ComponentInteraction("suggestbutton")]
-    public async Task SendSuggestModal()
-        => await ctx.Interaction.RespondWithModalAsync<SuggestionModal>("suggest.sendsuggestion",
+    public Task SendSuggestModal()
+    {
+        return ctx.Interaction.RespondWithModalAsync<SuggestionModal>("suggest.sendsuggestion",
             null,
             x => x.UpdateTextInput("suggestion", async s
                 => s.WithMaxLength(Math.Min(4000, await Service.GetMaxLength(ctx.Guild.Id)))
-                    .WithMinLength(Math.Min(await Service.GetMinLength(ctx.Guild.Id), 4000)))).ConfigureAwait(false);
+                    .WithMinLength(Math.Min(await Service.GetMinLength(ctx.Guild.Id), 4000))));
+    }
 }

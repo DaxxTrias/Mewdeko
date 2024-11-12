@@ -3,18 +3,32 @@
 // THANKS @ShoMinamimoto for suggestions and coding help
 namespace Mewdeko.Modules.Games.Common.Trivia;
 
+/// <summary>
+///     Represents a trivia question.
+/// </summary>
 public class TriviaQuestion
 {
+    /// <summary>
+    ///     The maximum length of the string.
+    /// </summary>
     public const int MaxStringLength = 22;
 
-    //represents the min size to judge levDistance with
-    private static readonly HashSet<Tuple<int, int>> Strictness = new()
-    {
-        new Tuple<int, int>(9, 0), new Tuple<int, int>(14, 1), new Tuple<int, int>(19, 2), new Tuple<int, int>(22, 3)
-    };
+    private static readonly HashSet<Tuple<int, int>> Strictness =
+    [
+        new(9, 0), new(14, 1), new(19, 2),
+        new(22, 3)
+    ];
 
     private string? cleanAnswer;
 
+    /// <summary>
+    ///     Initializes a new instance of the <see cref="TriviaQuestion" /> class.
+    /// </summary>
+    /// <param name="q">The question.</param>
+    /// <param name="a">The answer.</param>
+    /// <param name="c">The category.</param>
+    /// <param name="img">The image URL.</param>
+    /// <param name="answerImage">The answer image URL.</param>
     public TriviaQuestion(string q, string a, string c, string? img = null, string? answerImage = null)
     {
         Question = q;
@@ -24,15 +38,56 @@ public class TriviaQuestion
         AnswerImageUrl = answerImage ?? img;
     }
 
+    /// <summary>
+    ///     Gets or sets the category of the question.
+    /// </summary>
     public string Category { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the question.
+    /// </summary>
     public string Question { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the image URL associated with the question.
+    /// </summary>
     public string ImageUrl { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the answer image URL associated with the question.
+    /// </summary>
     public string AnswerImageUrl { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the answer to the question.
+    /// </summary>
     public string Answer { get; set; }
-    public string CleanAnswer => cleanAnswer ??= Clean(Answer);
 
-    public string GetHint() => Scramble(Answer);
+    /// <summary>
+    ///     Gets the clean version of the answer.
+    /// </summary>
+    public string CleanAnswer
+    {
+        get
+        {
+            return cleanAnswer ??= Clean(Answer);
+        }
+    }
 
+    /// <summary>
+    ///     Generates a hint for the answer.
+    /// </summary>
+    /// <returns>A scrambled version of the answer.</returns>
+    public string GetHint()
+    {
+        return Scramble(Answer);
+    }
+
+    /// <summary>
+    ///     Checks if the given guess matches the answer.
+    /// </summary>
+    /// <param name="guess">The guess to check.</param>
+    /// <returns>True if the guess is correct, otherwise false.</returns>
     public bool IsAnswerCorrect(string guess)
     {
         if (Answer.Equals(guess, StringComparison.InvariantCulture)) return true;

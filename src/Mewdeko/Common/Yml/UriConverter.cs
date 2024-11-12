@@ -4,19 +4,29 @@ using YamlDotNet.Serialization;
 
 namespace Mewdeko.Common.Yml;
 
+/// <summary>
+///     YamlDotNet type converter for serializing and deserializing Uri objects.
+/// </summary>
 public class UriConverter : IYamlTypeConverter
 {
-    public bool Accepts(Type type) => type == typeof(Uri);
+    /// <inheritdoc />
+    public bool Accepts(Type type)
+    {
+        return type == typeof(Uri);
+    }
 
-    public object ReadYaml(IParser parser, Type type)
+    /// <inheritdoc />
+    public object? ReadYaml(IParser parser, Type type, ObjectDeserializer rootDeserializer)
     {
         var scalar = parser.Consume<Scalar>();
         return new Uri(scalar.Value);
     }
 
-    public void WriteYaml(IEmitter emitter, object? value, Type type)
+    /// <inheritdoc />
+    public void WriteYaml(IEmitter emitter, object? value, Type type, ObjectSerializer serializer)
     {
         var uri = (Uri)value;
         emitter.Emit(new Scalar(uri.ToString()));
     }
+
 }

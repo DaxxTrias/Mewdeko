@@ -2,6 +2,7 @@
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Common.TypeReaders;
 using Mewdeko.Common.TypeReaders.Models;
+using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.Utility.Common;
 using Mewdeko.Modules.Utility.Services;
 using Microsoft.EntityFrameworkCore;
@@ -10,10 +11,28 @@ namespace Mewdeko.Modules.Utility;
 
 public partial class Utility
 {
+    /// <summary>
+    ///     Provides commands for managing message repeaters within the guild.
+    ///     Allows for setting up automated messages that can be repeated at specified intervals.
+    /// </summary>
     [Group]
-    public class RepeatCommands(DiscordSocketClient client, DbService db) : MewdekoSubmodule<MessageRepeaterService>
+    public class RepeatCommands(DiscordShardedClient client, DbContextProvider dbProvider)
+        : MewdekoSubmodule<MessageRepeaterService>
     {
-        [Cmd, Aliases, RequireContext(ContextType.Guild), UserPerm(GuildPermission.ManageMessages)]
+        /// <summary>
+        ///     Invokes a repeater immediately by its index.
+        /// </summary>
+        /// <param name="index">
+        ///     The one-based index of the repeater to invoke. The list of repeaters can be viewed with the
+        ///     RepeatList command.
+        /// </param>
+        /// <remarks>
+        ///     The repeater is reset after invocation. Requires Manage Messages permission.
+        /// </remarks>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.ManageMessages)]
         public async Task RepeatInvoke(int index)
         {
             if (!Service.RepeaterReady)
@@ -47,7 +66,17 @@ public partial class Utility
             }
         }
 
-        [Cmd, Aliases, RequireContext(ContextType.Guild), UserPerm(GuildPermission.ManageMessages)]
+        /// <summary>
+        ///     Removes a repeater by its index.
+        /// </summary>
+        /// <param name="index">The one-based index of the repeater to remove.</param>
+        /// <remarks>
+        ///     This action cannot be undone. Requires Manage Messages permission.
+        /// </remarks>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.ManageMessages)]
         public async Task RepeatRemove(int index)
         {
             if (!Service.RepeaterReady)
@@ -76,20 +105,18 @@ public partial class Utility
             var description = GetRepeaterInfoString(runner);
             runner.Stop();
 
-            var uow = db.GetDbContext();
-            await using (uow.ConfigureAwait(false))
+
+            await using var dbContext = await dbProvider.GetContextAsync();
+            var guildConfig = await dbContext.ForGuildId(ctx.Guild.Id, set => set.Include(gc => gc.GuildRepeaters));
+
+            var item = guildConfig.GuildRepeaters.Find(r => r.Id == value.Repeater.Id);
+            if (item != null)
             {
-                var guildConfig = await uow.ForGuildId(ctx.Guild.Id, set => set.Include(gc => gc.GuildRepeaters));
-
-                var item = guildConfig.GuildRepeaters.Find(r => r.Id == value.Repeater.Id);
-                if (item != null)
-                {
-                    guildConfig.GuildRepeaters.Remove(item);
-                    uow.Remove(item);
-                }
-
-                await uow.SaveChangesAsync().ConfigureAwait(false);
+                guildConfig.GuildRepeaters.Remove(item);
+                dbContext.Remove(item);
             }
+
+            await dbContext.SaveChangesAsync().ConfigureAwait(false);
 
             await ctx.Channel.EmbedAsync(new EmbedBuilder()
                 .WithOkColor()
@@ -97,7 +124,18 @@ public partial class Utility
                 .WithDescription(description)).ConfigureAwait(false);
         }
 
-        [Cmd, Aliases, RequireContext(ContextType.Guild), UserPerm(GuildPermission.ManageMessages)]
+        /// <summary>
+        ///     Toggles the redundancy setting of a repeater by its index.
+        /// </summary>
+        /// <param name="index">The one-based index of the repeater to modify.</param>
+        /// <remarks>
+        ///     When enabled, the repeater will not trigger if the message is identical to the last. Requires Manage Messages
+        ///     permission.
+        /// </remarks>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.ManageMessages)]
         public async Task RepeatRedundant(int index)
         {
             if (!Service.RepeaterReady)
@@ -119,21 +157,21 @@ public partial class Utility
             }
 
             var repeater = repeaterList[index].Value.Repeater;
-            var newValue = repeater.NoRedundant == 0 ? 1 : 0;
-            repeater.NoRedundant = newValue;
+            repeater.NoRedundant = !repeater.NoRedundant;
 
-            await using var uow = db.GetDbContext();
+            await using var dbContext = await dbProvider.GetContextAsync();
 
-            var guildConfig = await uow.ForGuildId(ctx.Guild.Id, set => set.Include(gc => gc.GuildRepeaters));
+
+            var guildConfig = await dbContext.ForGuildId(ctx.Guild.Id, set => set.Include(gc => gc.GuildRepeaters));
 
             var item = guildConfig.GuildRepeaters.Find(r => r.Id == repeater.Id);
             if (item != null)
             {
-                item.NoRedundant = newValue;
-                await uow.SaveChangesAsync().ConfigureAwait(false);
+                item.NoRedundant = !item.NoRedundant;
+                await dbContext.SaveChangesAsync().ConfigureAwait(false);
             }
 
-            if (newValue == 1)
+            if (repeater.NoRedundant)
             {
                 await ReplyConfirmLocalizedAsync("repeater_redundant_no", index + 1).ConfigureAwait(false);
             }
@@ -143,20 +181,68 @@ public partial class Utility
             }
         }
 
-        [Cmd, Aliases, RequireContext(ContextType.Guild),
-         UserPerm(GuildPermission.ManageMessages), Priority(-1)]
-        public Task Repeat([Remainder] string? message) => Repeat(null, null, message);
 
-        [Cmd, Aliases, RequireContext(ContextType.Guild),
-         UserPerm(GuildPermission.ManageMessages), Priority(0)]
-        public Task Repeat(StoopidTime interval, [Remainder] string? message) => Repeat(null, interval, message);
+        /// <summary>
+        ///     Creates a new repeater with the specified message.
+        /// </summary>
+        /// <param name="message">The message to repeat.</param>
+        /// <returns>A task representing the asynchronous operation of creating a new repeater.</returns>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.ManageMessages)]
+        [Priority(-1)]
+        public Task Repeat([Remainder] string? message)
+        {
+            return Repeat(null, null, message);
+        }
 
-        [Cmd, Aliases, RequireContext(ContextType.Guild),
-         UserPerm(GuildPermission.ManageMessages), Priority(1)]
-        public Task Repeat(GuildDateTime dt, [Remainder] string? message) => Repeat(dt, null, message);
+        /// <summary>
+        ///     Creates a new repeater with the specified message and interval.
+        /// </summary>
+        /// <param name="interval">The interval at which to repeat the message.</param>
+        /// <param name="message">The message to repeat.</param>
+        /// <returns>A task representing the asynchronous operation of creating a new repeater.</returns>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.ManageMessages)]
+        [Priority(0)]
+        public Task Repeat(StoopidTime interval, [Remainder] string? message)
+        {
+            return Repeat(null, interval, message);
+        }
 
-        [Cmd, Aliases, RequireContext(ContextType.Guild),
-         UserPerm(GuildPermission.ManageMessages), Priority(2)]
+        /// <summary>
+        ///     Creates a new repeater with the specified message and time of day.
+        /// </summary>
+        /// <param name="dt">The time of day at which to repeat the message.</param>
+        /// <param name="message">The message to repeat.</param>
+        /// <returns></returns>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.ManageMessages)]
+        [Priority(1)]
+        public Task Repeat(GuildDateTime dt, [Remainder] string? message)
+        {
+            return Repeat(dt, null, message);
+        }
+
+        /// <summary>
+        ///     Creates or updates a repeater with the given message, interval, and optional start time.
+        /// </summary>
+        /// <param name="dt">The date and time when the repeater should first run. Optional.</param>
+        /// <param name="interval">The interval between each repetition. Required if no start time is specified.</param>
+        /// <param name="message">The message to be repeated. Can include placeholders for dynamic content.</param>
+        /// <remarks>
+        ///     Use either a start time (dt) or an interval, not both. Requires Manage Messages permission.
+        /// </remarks>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.ManageMessages)]
+        [Priority(2)]
         public async Task Repeat(GuildDateTime? dt, StoopidTime? interval, [Remainder] string? message)
         {
             try
@@ -175,8 +261,8 @@ public partial class Utility
                     : TimeSpan.FromDays(1));
 
                 if (string.IsNullOrWhiteSpace(message)
-                    || (interval != null &&
-                        (interval.Time > TimeSpan.FromMinutes(25000) || interval.Time < TimeSpan.FromSeconds(10))))
+                    || interval != null &&
+                    (interval.Time > TimeSpan.FromMinutes(25000) || interval.Time < TimeSpan.FromSeconds(10)))
                 {
                     return;
                 }
@@ -189,33 +275,31 @@ public partial class Utility
                     Message = ((IGuildUser)ctx.User).GuildPermissions.MentionEveryone
                         ? message
                         : message.SanitizeMentions(true),
-                    NoRedundant = 0,
+                    NoRedundant = false,
                     StartTimeOfDay = startTimeOfDay?.ToString()
                 };
 
-                var uow = db.GetDbContext();
-                await using (uow.ConfigureAwait(false))
+
+                await using var dbContext = await dbProvider.GetContextAsync();
+                await using var db = await dbProvider.GetContextAsync();
+                var gc = await db.ForGuildId(ctx.Guild.Id, set => set.Include(x => x.GuildRepeaters));
+                gc.GuildRepeaters.Add(toAdd);
+                try
                 {
-                    var gc = await uow.ForGuildId(ctx.Guild.Id, set => set.Include(x => x.GuildRepeaters));
-                    gc.GuildRepeaters.Add(toAdd);
-                    try
-                    {
-                        await uow.SaveChangesAsync().ConfigureAwait(false);
-                    }
-                    catch (Exception e)
-                    {
-                        Console.WriteLine(e);
-                        throw;
-                    }
+                    await dbContext.SaveChangesAsync().ConfigureAwait(false);
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine(e);
+                    throw;
                 }
 
                 var runner = new RepeatRunner(client, (SocketGuild)ctx.Guild, toAdd, Service);
 
                 Service.Repeaters.AddOrUpdate(ctx.Guild.Id,
-                    new ConcurrentDictionary<int, RepeatRunner>(new[]
-                    {
+                    new ConcurrentDictionary<int, RepeatRunner>([
                         new KeyValuePair<int, RepeatRunner>(toAdd.Id, runner)
-                    }), (_, old) =>
+                    ]), (_, old) =>
                     {
                         old.TryAdd(runner.Repeater.Id, runner);
                         return old;
@@ -234,7 +318,17 @@ public partial class Utility
             }
         }
 
-        [Cmd, Aliases, RequireContext(ContextType.Guild), UserPerm(GuildPermission.ManageMessages)]
+        /// <summary>
+        ///     Lists all repeaters in the guild.
+        /// </summary>
+        /// <remarks>
+        ///     Repeaters are listed with their index, message, interval, and next trigger time. Requires Manage Messages
+        ///     permission.
+        /// </remarks>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.ManageMessages)]
         public async Task RepeatList()
         {
             if (!Service.RepeaterReady)
@@ -268,7 +362,18 @@ public partial class Utility
             await Context.Channel.EmbedAsync(embed).ConfigureAwait(false);
         }
 
-        [Cmd, Aliases, RequireContext(ContextType.Guild), UserPerm(GuildPermission.ManageMessages)]
+        /// <summary>
+        ///     Updates the message of an existing repeater by its index.
+        /// </summary>
+        /// <param name="index">The one-based index of the repeater to update.</param>
+        /// <param name="text">The new message for the repeater.</param>
+        /// <remarks>
+        ///     Requires Manage Messages permission.
+        /// </remarks>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.ManageMessages)]
         public async Task RepeatMessage(int index, [Remainder] string? text)
         {
             if (!Service.RepeaterReady)
@@ -292,9 +397,10 @@ public partial class Utility
             repeater.Message = ((IGuildUser)ctx.User).GuildPermissions.MentionEveryone
                 ? text
                 : text.SanitizeMentions(true);
-            var uow = db.GetDbContext();
-            await using var _ = uow.ConfigureAwait(false);
-            var guildConfig = await uow.ForGuildId(ctx.Guild.Id, set => set.Include(gc => gc.GuildRepeaters));
+
+            await using var dbContext = await dbProvider.GetContextAsync();
+
+            var guildConfig = await dbContext.ForGuildId(ctx.Guild.Id, set => set.Include(gc => gc.GuildRepeaters));
             var item = guildConfig.GuildRepeaters.Find(r => r.Id == repeater.Id);
             if (item != null)
             {
@@ -303,12 +409,23 @@ public partial class Utility
                     : text.SanitizeMentions(true);
             }
 
-            await uow.SaveChangesAsync().ConfigureAwait(false);
+            await dbContext.SaveChangesAsync().ConfigureAwait(false);
 
             await ReplyConfirmLocalizedAsync("repeater_msg_update", text).ConfigureAwait(false);
         }
 
-        [Cmd, Aliases, RequireContext(ContextType.Guild), UserPerm(GuildPermission.ManageMessages)]
+        /// <summary>
+        ///     Changes the channel where an existing repeater sends its message.
+        /// </summary>
+        /// <param name="index">The one-based index of the repeater to modify.</param>
+        /// <param name="textChannel">The new channel for the repeater's messages.</param>
+        /// <remarks>
+        ///     Requires Manage Messages permission.
+        /// </remarks>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.ManageMessages)]
         public async Task RepeatChannel(int index, [Remainder] ITextChannel? textChannel)
         {
             if (!Service.RepeaterReady)
@@ -327,12 +444,13 @@ public partial class Utility
 
             var repeater = repeaterList[index].Value.Repeater;
             repeater.ChannelId = textChannel.Id;
-            var uow = db.GetDbContext();
-            await using var _ = uow.ConfigureAwait(false);
-            var guildConfig = await uow.ForGuildId(ctx.Guild.Id, set => set.Include(gc => gc.GuildRepeaters));
+
+            await using var dbContext = await dbProvider.GetContextAsync();
+
+            var guildConfig = await dbContext.ForGuildId(ctx.Guild.Id, set => set.Include(gc => gc.GuildRepeaters));
             var item = guildConfig.GuildRepeaters.Find(r => r.Id == repeater.Id);
             if (item != null) item.ChannelId = textChannel.Id;
-            await uow.SaveChangesAsync().ConfigureAwait(false);
+            await dbContext.SaveChangesAsync().ConfigureAwait(false);
 
             await ReplyConfirmLocalizedAsync("repeater_channel_update", textChannel.Mention).ConfigureAwait(false);
         }
@@ -345,7 +463,7 @@ public partial class Utility
             var message = Format.Sanitize(runner.Repeater.Message.TrimTo(50));
 
             var description = "";
-            if (runner.Repeater.NoRedundant == 1)
+            if (runner.Repeater.NoRedundant)
                 description = $"{Format.Underline(Format.Bold(GetText("no_redundant:")))}\n\n";
 
             description +=

@@ -1,69 +1,71 @@
 ﻿using System.Globalization;
-using System.IO;
+using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Services.Settings;
-using Newtonsoft.Json;
 
 namespace Mewdeko.Services.Impl;
 
-public class Localization : ILocalization
+/// <summary>
+///     Provides functionality for managing localization settings and retrieving localized data.
+/// </summary>
+public class Localization(BotConfigService bss, DbContextProvider dbProvider, GuildSettingsService service)
+    : ILocalization
 {
-    private static readonly Dictionary<string, CommandData> CommandData =
-        JsonConvert.DeserializeObject<Dictionary<string, CommandData>>(
-            File.ReadAllText("./data/strings/commands/commands.en-US.json"));
-
-    private readonly BotConfigService bss;
-    private readonly DbService db;
-
-    public Localization(BotConfigService bss, DbService db, Mewdeko bot)
+    /// <inheritdoc />
+    public CultureInfo? DefaultCultureInfo
     {
-        this.bss = bss;
-        this.db = db;
-        using var uow = db.GetDbContext();
-        var allgc = bot.AllGuildConfigs;
-        var cultureInfoNames = allgc
-            .ToDictionary(x => x.GuildId, x => x.Locale);
-
-        GuildCultureInfos = new ConcurrentDictionary<ulong, CultureInfo?>(cultureInfoNames.ToDictionary(x => x.Key,
-            x =>
-            {
-                var cultureInfo = new CultureInfo("en-US");
-                try
-                {
-                    switch (x.Value)
-                    {
-                        case null:
-                            return null;
-                        case "english":
-                            cultureInfo = new CultureInfo("en-US");
-                            break;
-                        default:
-                            try
-                            {
-                                cultureInfo = new CultureInfo(x.Value);
-                            }
-                            catch
-                            {
-                                cultureInfo = new CultureInfo("en-US");
-                            }
-
-                            break;
-                    }
-                }
-                catch
-                {
-                    // ignored
-                }
-
-                return cultureInfo;
-            }).Where(x => x.Value != null));
+        get
+        {
+            return bss.Data.DefaultLocale;
+        }
     }
 
-    public ConcurrentDictionary<ulong, CultureInfo?> GuildCultureInfos { get; }
-    public CultureInfo? DefaultCultureInfo => bss.Data.DefaultLocale;
+    /// <inheritdoc />
+    public void SetGuildCulture(IGuild guild, CultureInfo? ci)
+    {
+        SetGuildCulture(guild.Id, ci);
+    }
 
-    public void SetGuildCulture(IGuild guild, CultureInfo? ci) => SetGuildCulture(guild.Id, ci);
+    /// <inheritdoc />
+    public void RemoveGuildCulture(IGuild guild)
+    {
+        RemoveGuildCulture(guild.Id);
+    }
 
-    public async void SetGuildCulture(ulong guildId, CultureInfo? ci)
+    /// <inheritdoc />
+    public void SetDefaultCulture(CultureInfo? ci)
+    {
+        bss.ModifyConfig(bs => bs.DefaultLocale = ci);
+    }
+
+    /// <inheritdoc />
+    public void ResetDefaultCulture()
+    {
+        SetDefaultCulture(CultureInfo.CurrentCulture);
+    }
+
+    /// <inheritdoc />
+    public CultureInfo? GetCultureInfo(IGuild? guild)
+    {
+        return GetCultureInfo(guild?.Id);
+    }
+
+    /// <inheritdoc />
+    public CultureInfo? GetCultureInfo(ulong? guildId)
+    {
+        if (!guildId.HasValue)
+            return DefaultCultureInfo;
+
+        var guildConfig = service.GetGuildConfig(guildId.Value).Result;
+
+        return guildConfig.Locale == null ? DefaultCultureInfo : new CultureInfo(guildConfig.Locale);
+    }
+
+    /// <summary>
+    ///     Sets the culture info for the specified guild.
+    /// </summary>
+    /// <param name="guildId">The ID of the guild.</param>
+    /// <param name="ci">The culture info to set.</param>
+    private async void SetGuildCulture(ulong guildId, CultureInfo? ci)
     {
         if (ci?.Name == bss.Data.DefaultLocale?.Name)
         {
@@ -71,58 +73,22 @@ public class Localization : ILocalization
             return;
         }
 
-        await using (var uow = db.GetDbContext())
-        {
-            var gc = await uow.ForGuildId(guildId, set => set);
-            gc.Locale = ci.Name;
-            await uow.SaveChangesAsync().ConfigureAwait(false);
-        }
 
-        GuildCultureInfos.AddOrUpdate(guildId, ci, (_, _) => ci);
+        await using var db = await dbProvider.GetContextAsync();
+        var gc = await db.ForGuildId(guildId, set => set);
+        gc.Locale = ci.Name;
+        await service.UpdateGuildConfig(guildId, gc);
     }
 
-    public void RemoveGuildCulture(IGuild guild) => RemoveGuildCulture(guild.Id);
-
-    public async void RemoveGuildCulture(ulong guildId)
+    /// <summary>
+    ///     Removes the culture info for the specified guild.
+    /// </summary>
+    /// <param name="guildId">The ID of the guild.</param>
+    private async void RemoveGuildCulture(ulong guildId)
     {
-        if (!GuildCultureInfos.TryRemove(guildId, out _)) return;
-        await using var uow = db.GetDbContext();
-        var gc = await uow.ForGuildId(guildId, set => set);
+        await using var db = await dbProvider.GetContextAsync();
+        var gc = await db.ForGuildId(guildId, set => set);
         gc.Locale = null;
-        await uow.SaveChangesAsync().ConfigureAwait(false);
-    }
-
-    public void SetDefaultCulture(CultureInfo? ci) => bss.ModifyConfig(bs => bs.DefaultLocale = ci);
-
-    public void ResetDefaultCulture() => SetDefaultCulture(CultureInfo.CurrentCulture);
-
-    public CultureInfo? GetCultureInfo(IGuild? guild) => GetCultureInfo(guild?.Id);
-
-    public CultureInfo? GetCultureInfo(ulong? guildId)
-    {
-        if (guildId is null || !GuildCultureInfos.TryGetValue(guildId.Value, out var info) || info is null)
-            return bss.Data.DefaultLocale;
-
-        return info;
-    }
-
-    public static CommandData LoadCommand(string key)
-    {
-        CommandData.TryGetValue(key, out var toReturn);
-
-        if (toReturn == null)
-        {
-            return new CommandData
-            {
-                Cmd = key,
-                Desc = key,
-                Usage = new[]
-                {
-                    key
-                }
-            };
-        }
-
-        return toReturn;
+        await service.UpdateGuildConfig(guildId, gc);
     }
 }

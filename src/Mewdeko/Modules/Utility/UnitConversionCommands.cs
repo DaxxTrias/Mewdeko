@@ -6,10 +6,18 @@ namespace Mewdeko.Modules.Utility;
 
 public partial class Utility
 {
+    /// <summary>
+    ///     Contains commands for converting units from one system to another.
+    /// </summary>
     [Group]
     public class UnitConverterCommands : MewdekoSubmodule<ConverterService>
     {
-        [Cmd, Aliases]
+        /// <summary>
+        ///     Lists all available units that can be converted.
+        /// </summary>
+        /// <returns>A task that represents the asynchronous operation.</returns>
+        [Cmd]
+        [Aliases]
         public async Task ConvertList()
         {
             var units = Service.Units;
@@ -23,7 +31,16 @@ public partial class Utility
             await ctx.Channel.EmbedAsync(res).ConfigureAwait(false);
         }
 
-        [Cmd, Aliases, Priority(0)]
+        /// <summary>
+        ///     Converts a specified value from one unit to another.
+        /// </summary>
+        /// <param name="origin">The original unit of the value.</param>
+        /// <param name="target">The target unit to convert to.</param>
+        /// <param name="value">The value to be converted.</param>
+        /// <returns>A task that represents the asynchronous operation.</returns>
+        [Cmd]
+        [Aliases]
+        [Priority(0)]
         public async Task Convert(string origin, string target, decimal value)
         {
             var originUnit = Array.Find(Service.Units, x =>
@@ -56,7 +73,7 @@ public partial class Utility
                 {
                     "C" => res - 273.15m //celcius!
                     ,
-                    "F" => (res * (9m / 5m)) - 459.67m,
+                    "F" => res * (9m / 5m) - 459.67m,
                     //don't really care too much about efficiency, so just convert to Kelvin, then to target
                     _ => originUnit.Triggers.First().ToUpperInvariant() switch
                     {
