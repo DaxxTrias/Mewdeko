@@ -740,7 +740,6 @@
   "music_added": "Added to the queue.",
   "music_now_playing": "Now playing",
   "music_queue_cleared": "Queue cleared and player stopped.",
-  "music_queue_shuffled":  "Queue shuffled.",
   "music_nothing_playing": "Nothing is currently playing.",
   "music_player_error": "An error occurred while trying to play the song.",
   "music_added_amount": "Added {0} songs to the queue.",
