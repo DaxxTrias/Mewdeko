@@ -87,6 +87,12 @@ public enum PlayerRepeatType
     /// </summary>
     Queue,
 
+
+    /// <summary>
+    ///     Shuffle the queue
+    /// </summary>
+    Shuffle,
+
     /// <summary>
     ///     Repeat the current song.
     /// </summary>

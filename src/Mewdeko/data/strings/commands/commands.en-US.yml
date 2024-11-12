@@ -2343,10 +2343,13 @@ loop:
     - ''
     - none
     - track
+    - queue
+    - shuffle
   desc: |-
     - `none` Doesnt loop anything and stops when the queue ends
     - `track` Loops the current song. Skip replays the current song.
     - `queue` Loops the queue until its stopped
+    - `shuffle` Loops the queue but shuffles it every time it loops
 lsar:
   args:
     - ''
