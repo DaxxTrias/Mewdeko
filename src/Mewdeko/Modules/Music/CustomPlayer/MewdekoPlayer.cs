@@ -31,6 +31,8 @@ public sealed class MewdekoPlayer : LavalinkPlayer
     private readonly DiscordShardedClient client;
     private readonly DbContextProvider dbProvider;
     private readonly IBotStrings strings;
+    private Timer aloneCheckTimer;
+    private int aloneTime;
 
     /// <summary>
     ///     Initializes a new instance of <see cref="MewdekoPlayer" />.
@@ -47,8 +49,36 @@ public sealed class MewdekoPlayer : LavalinkPlayer
         dbProvider = properties.ServiceProvider.GetRequiredService<DbContextProvider>();
         cache = properties.ServiceProvider.GetRequiredService<IDataCache>();
         strings = properties.ServiceProvider.GetRequiredService<IBotStrings>();
+        aloneCheckTimer = new Timer(CheckIfAlone, null, TimeSpan.FromMicroseconds(1), TimeSpan.FromMinutes(1));
     }
 
+    /// <summary>
+    ///     Check if bot is alone in a voice channel and stop the music player if it is.
+    /// </summary>
+    /// <param name="state"></param>
+    private async void CheckIfAlone(object state)
+    {
+        var voicechannel = client.GetGuild(GuildId)?.GetVoiceChannel(VoiceChannelId);
+        if (voicechannel == null)
+            return;
+
+        var userCount = voicechannel.Users.Count;
+        if (userCount == 1)
+        {
+            aloneTime++;
+            if (aloneTime >= 5)
+            {
+                await StopAsync();
+                await cache.SetMusicQueue(GuildId, new List<MewdekoTrack>());
+                await cache.SetCurrentTrack(GuildId, null);
+                aloneTime = 0;
+            }
+        }
+        else
+        {
+            aloneTime = 0;
+        }
+    }
 
     /// <summary>
     ///     Handles the event the track ended, resolves stuff like auto play, auto playing the next track, and looping.
