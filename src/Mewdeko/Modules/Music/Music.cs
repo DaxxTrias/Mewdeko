@@ -822,8 +822,19 @@ public class Music(
             return;
         }
 
-        queue = queue.Shuffle().ToList();
-        await cache.SetMusicQueue(ctx.Guild.Id, queue);
+        var shuffledQueue = queue.Shuffle().ToList();
+
+        // verify shuffled
+        if (queue.SequenceEqual(shuffledQueue))
+        {
+            await ReplyErrorLocalizedAsync("music_queue_shuffle_failed").ConfigureAwait(false);
+            return;
+        }
+
+        // debug log it
+        Log.Information("Shuffled Queue: {Queue}", string.Join(", ", shuffledQueue.Select(x => x.Track.Title)));
+
+        await cache.SetMusicQueue(ctx.Guild.Id, shuffledQueue);
         await ReplyConfirmLocalizedAsync("music_queue_shuffled").ConfigureAwait(false);
     }
 
