@@ -81,7 +81,10 @@ public partial class RemindService : INService
                 ch = await user.CreateDMChannelAsync().ConfigureAwait(false);
             }
             else
-                ch = client.GetGuild(reminder.ServerId)?.GetTextChannel(reminder.ChannelId);
+            {
+                ch = client.GetGuild(reminder.ServerId)?.GetTextChannel(reminder.ChannelId) ??
+                     client.GetUser(reminder.ChannelId) as IMessageChannel;
+            }
 
             if (ch == null)
                 return;
