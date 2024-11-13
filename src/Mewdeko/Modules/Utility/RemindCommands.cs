@@ -28,12 +28,7 @@ public partial class Utility
             /// <summary>
             ///     Sends the reminder to the channel.
             /// </summary>
-            Here,
-
-            /// <summary>
-            ///     Sends the reminder to another user
-            /// </summary>
-            User
+            Here
         }
 
         /// <summary>
@@ -89,32 +84,6 @@ public partial class Utility
             }
 
             if (!await RemindInternal(channel.Id, false, remindData.Time, remindData.What)
-                    .ConfigureAwait(false))
-            {
-                await ReplyErrorLocalizedAsync("remind_too_long").ConfigureAwait(false);
-            }
-        }
-
-        /// <summary>
-        ///     Creates a reminder for another user.
-        /// </summary>
-        /// <param name="user">The target user for the reminder.</param>
-        /// <param name="remindString">The reminder message and time.</param>
-        /// <returns>A task that represents the asynchronous operation of creating a reminder for another user.</returns>
-        [Cmd]
-        [Aliases]
-        [RequireContext(ContextType.Guild)]
-        [UserPerm(GuildPermission.BanMembers)]
-        [Priority(0)]
-        public async Task RemindUser(IUser user, [Remainder] string remindString)
-        {
-            if (!Service.TryParseRemindMessage(remindString, out var remindData))
-            {
-                await ReplyErrorLocalizedAsync("remind_invalid").ConfigureAwait(false);
-                return;
-            }
-
-            if (!await RemindInternal(user.Id, true, remindData.Time, remindData.What)
                     .ConfigureAwait(false))
             {
                 await ReplyErrorLocalizedAsync("remind_too_long").ConfigureAwait(false);
