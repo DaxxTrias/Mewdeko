@@ -435,10 +435,13 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
             return;
         if (args.Author.IsBot)
             return;
-        if (args.Channel.Id != bss.Data.ChatGptChannel && args.Channel.Id != bss.Data.ChatGptChannel2)
-            return;
         if (args is not IUserMessage usrMsg)
             return;
+        if (args.Channel.Id != bss.Data.ChatGptChannel && args.Channel.Id != bss.Data.ChatGptChannel2)
+        {
+            await usrMsg.Channel.SendMessageAsync("GPT/Grok not enabled for this channel.");
+            return;
+        }
 
         //bad hackfix to separate handling of nightly vs stable
 #if DEBUG
