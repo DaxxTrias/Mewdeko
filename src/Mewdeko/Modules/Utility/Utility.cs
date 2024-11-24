@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading;
 using Discord.Commands;
 using Fergun.Interactive;
@@ -15,7 +17,7 @@ using Mewdeko.Modules.Utility.Common;
 using Mewdeko.Modules.Utility.Services;
 using Mewdeko.Services.Impl;
 using Mewdeko.Services.Settings;
-using Newtonsoft.Json;
+
 using Serilog;
 using static Mewdeko.Services.Impl.StatsService;
 using StringExtensions = Mewdeko.Extensions.StringExtensions;
@@ -31,11 +33,9 @@ namespace Mewdeko.Modules.Utility;
 /// <param name="creds"></param>
 /// <param name="tracker"></param>
 /// <param name="serv"></param>
-/// <param name="coordinator"></param>
 /// <param name="guildSettings"></param>
 /// <param name="httpClient"></param>
 /// <param name="config"></param>
-/// <param name="db"></param>
 public partial class Utility(
     DiscordShardedClient client,
     IStatsService stats,
@@ -154,7 +154,7 @@ public partial class Utility(
 
         if (!rolesWithPerms.Any() && !rolesWithMatchedPerms.Any())
         {
-            await ctx.Channel.SendErrorAsync("No roles with the specified permissions were found.", Config);
+            await ctx.Channel.SendErrorAsync(Strings.NoRolesWithPerms(ctx.Guild.Id), Config);
             return;
         }
 
@@ -222,21 +222,25 @@ public partial class Utility(
     public async Task GetJson(ulong id, ITextChannel channel = null)
     {
         channel ??= ctx.Channel as ITextChannel;
-        var settings = new JsonSerializerSettings
+
+        var options = new JsonSerializerOptions
         {
-            ContractResolver = new LowercaseContractResolver(), NullValueHandling = NullValueHandling.Ignore
+            PropertyNamingPolicy = new LowercaseNamingPolicy(),
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+            WriteIndented = true
         };
 
         var message = await channel.GetMessageAsync(id);
-        var serialized = JsonConvert.SerializeObject(message.GetNewEmbedSource(), Formatting.Indented, settings);
-        using var ms = new MemoryStream();
+        var serialized = JsonSerializer.Serialize(message.GetNewEmbedSource(), options);
+
+        await using var ms = new MemoryStream();
         await using var writer = new StreamWriter(ms);
+
         await writer.WriteAsync(serialized);
         await writer.FlushAsync();
         ms.Position = 0;
+
         await ctx.Channel.SendFileAsync(ms, "EmbedJson.txt");
-        await ms.DisposeAsync();
-        await writer.DisposeAsync();
     }
 
     /// <summary>
@@ -269,8 +273,7 @@ public partial class Utility(
         var curTime = DateTime.UtcNow.Subtract(time.Time);
         if (!Directory.Exists(creds.ChatSavePath))
         {
-            await ctx.Channel.SendErrorAsync("Chat save directory does not exist. Please create it.", Config)
-                .ConfigureAwait(false);
+            await ctx.Channel.SendErrorAsync(Strings.ChatSaveMissing(ctx.Guild.Id), Config);
             return;
         }
 
@@ -287,10 +290,7 @@ public partial class Utility(
 
         if (time.Time.Days > 3)
         {
-            await ctx.Channel
-                .SendErrorAsync("Max time to grab messages is 3 days. This will be increased in the near future.",
-                    Config)
-                .ConfigureAwait(false);
+            await ctx.Channel.SendErrorAsync(Strings.MaxTimeLimit(ctx.Guild.Id), Config);
             return;
         }
 
@@ -339,7 +339,7 @@ public partial class Utility(
 
         if (emotes.Length == 0)
         {
-            await ctx.Channel.SendErrorAsync("No emotes found!", Config).ConfigureAwait(false);
+            await ctx.Channel.SendErrorAsync(Strings.NoEmotes(ctx.Guild.Id), Config);
             return;
         }
 
@@ -403,7 +403,7 @@ public partial class Utility(
     {
         await Service.SnipeSet(ctx.Guild, value.Value).ConfigureAwait(false);
         var t = await Service.GetSnipeSet(ctx.Guild.Id);
-        await ReplyConfirmLocalizedAsync("snipe_set", t ? "Enabled" : "Disabled").ConfigureAwait(false);
+        await ReplyConfirmAsync(Strings.SnipeSet(ctx.Guild.Id, t ? "Enabled" : "Disabled")).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -418,7 +418,7 @@ public partial class Utility(
         //todo: snipe doesnt capture images if they were the deleted message
         if (!await Service.GetSnipeSet(ctx.Guild.Id))
         {
-            await ReplyErrorLocalizedAsync("snipe_not_enabled", await guildSettings.GetPrefix(ctx.Guild))
+            await ReplyErrorAsync(Strings.SnipeNotEnabled(ctx.Guild.Id, await guildSettings.GetPrefix(ctx.Guild)))
                 .ConfigureAwait(false);
             return;
         }
@@ -428,7 +428,7 @@ public partial class Utility(
             x.ChannelId == ctx.Channel.Id && !x.Edited);
         if (msg is null)
         {
-            await ctx.Channel.SendErrorAsync("There is nothing to snipe here!", Config).ConfigureAwait(false);
+            await ctx.Channel.SendErrorAsync(Strings.NothingToSnipe(ctx.Guild.Id), Config);
             return;
         }
 
@@ -446,7 +446,7 @@ public partial class Utility(
             {
                 IconUrl = ctx.User.GetAvatarUrl(),
                 Text =
-                    GetText("snipe_request", ctx.User.ToString(), (DateTime.UtcNow - msg.DateAdded).Humanize())
+                    Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(), (DateTime.UtcNow - msg.DateAdded).Humanize())
             },
             Color = Mewdeko.OkColor
         };
@@ -475,7 +475,7 @@ public partial class Utility(
     {
         if (!await Service.GetSnipeSet(ctx.Guild.Id))
         {
-            await ReplyErrorLocalizedAsync("snipe_not_enabled", await guildSettings.GetPrefix(ctx.Guild))
+            await ReplyErrorAsync(Strings.SnipeNotEnabled(ctx.Guild.Id, await guildSettings.GetPrefix(ctx.Guild)))
                 .ConfigureAwait(false);
             return;
         }
@@ -486,7 +486,7 @@ public partial class Utility(
             var snipeStores = msgs as SnipeStore[] ?? msgs.ToArray();
             if (snipeStores.Length == 0)
             {
-                await ReplyErrorLocalizedAsync("no_snipes").ConfigureAwait(false);
+                await ReplyErrorAsync(Strings.NoSnipes(ctx.Guild.Id)).ConfigureAwait(false);
                 return;
             }
 
@@ -538,7 +538,7 @@ public partial class Utility(
     {
         if (!await Service.GetSnipeSet(ctx.Guild.Id))
         {
-            await ReplyErrorLocalizedAsync("snipe_not_enabled", await guildSettings.GetPrefix(ctx.Guild))
+            await ReplyErrorAsync(Strings.SnipeNotEnabled(ctx.Guild.Id, await guildSettings.GetPrefix(ctx.Guild)))
                 .ConfigureAwait(false);
             return;
         }
@@ -549,7 +549,7 @@ public partial class Utility(
             var snipeStores = msgs as SnipeStore[] ?? msgs.ToArray();
             if (snipeStores.Length == 0)
             {
-                await ReplyErrorLocalizedAsync("no_snipes").ConfigureAwait(false);
+                await ReplyErrorAsync(Strings.NoSnipes(ctx.Guild.Id)).ConfigureAwait(false);
                 return;
             }
 
@@ -601,7 +601,7 @@ public partial class Utility(
     {
         if (!await Service.GetSnipeSet(ctx.Guild.Id))
         {
-            await ReplyErrorLocalizedAsync("snipe_not_enabled", await guildSettings.GetPrefix(ctx.Guild))
+            await ReplyErrorAsync(Strings.SnipeNotEnabled(ctx.Guild.Id, await guildSettings.GetPrefix(ctx.Guild)))
                 .ConfigureAwait(false);
             return;
         }
@@ -612,7 +612,7 @@ public partial class Utility(
             var snipeStores = msgs as SnipeStore[] ?? msgs.ToArray();
             if (snipeStores.Length == 0)
             {
-                await ReplyErrorLocalizedAsync("no_snipes").ConfigureAwait(false);
+                await ReplyErrorAsync(Strings.NoSnipes(ctx.Guild.Id)).ConfigureAwait(false);
                 return;
             }
 
@@ -665,7 +665,7 @@ public partial class Utility(
     {
         if (!await Service.GetSnipeSet(ctx.Guild.Id))
         {
-            await ReplyErrorLocalizedAsync("snipe_not_enabled", await guildSettings.GetPrefix(ctx.Guild))
+            await ReplyErrorAsync(Strings.SnipeNotEnabled(ctx.Guild.Id, await guildSettings.GetPrefix(ctx.Guild)))
                 .ConfigureAwait(false);
             return;
         }
@@ -676,7 +676,7 @@ public partial class Utility(
             var snipeStores = msgs as SnipeStore[] ?? msgs.ToArray();
             if (snipeStores.Length == 0)
             {
-                await ReplyErrorLocalizedAsync("no_snipes").ConfigureAwait(false);
+                await ReplyErrorAsync(Strings.NoSnipes(ctx.Guild.Id)).ConfigureAwait(false);
                 return;
             }
 
@@ -727,7 +727,7 @@ public partial class Utility(
     {
         if (!await Service.GetSnipeSet(ctx.Guild.Id))
         {
-            await ReplyErrorLocalizedAsync("snipe_not_enabled", await guildSettings.GetPrefix(ctx.Guild))
+            await ReplyErrorAsync(Strings.SnipeNotEnabled(ctx.Guild.Id, await guildSettings.GetPrefix(ctx.Guild)))
                 .ConfigureAwait(false);
             return;
         }
@@ -738,7 +738,7 @@ public partial class Utility(
             var snipeStores = msgs as SnipeStore[] ?? msgs.ToArray();
             if (snipeStores.Length == 0)
             {
-                await ReplyErrorLocalizedAsync("no_snipes").ConfigureAwait(false);
+                await ReplyErrorAsync(Strings.NoSnipes(ctx.Guild.Id)).ConfigureAwait(false);
                 return;
             }
 
@@ -790,7 +790,7 @@ public partial class Utility(
     {
         if (!await Service.GetSnipeSet(ctx.Guild.Id))
         {
-            await ReplyErrorLocalizedAsync("snipe_not_enabled", await guildSettings.GetPrefix(ctx.Guild))
+            await ReplyErrorAsync(Strings.SnipeNotEnabled(ctx.Guild.Id, await guildSettings.GetPrefix(ctx.Guild)))
                 .ConfigureAwait(false);
             return;
         }
@@ -801,7 +801,7 @@ public partial class Utility(
             var snipeStores = msgs as SnipeStore[] ?? msgs.ToArray();
             if (snipeStores.Length == 0)
             {
-                await ReplyErrorLocalizedAsync("no_snipes").ConfigureAwait(false);
+                await ReplyErrorAsync(Strings.NoSnipes(ctx.Guild.Id)).ConfigureAwait(false);
                 return;
             }
 
@@ -853,7 +853,7 @@ public partial class Utility(
     {
         if (!await Service.GetSnipeSet(ctx.Guild.Id))
         {
-            await ReplyErrorLocalizedAsync("snipe_not_enabled", await guildSettings.GetPrefix(ctx.Guild))
+            await ReplyErrorAsync(Strings.SnipeNotEnabled(ctx.Guild.Id, await guildSettings.GetPrefix(ctx.Guild)))
                 .ConfigureAwait(false);
             return;
         }
@@ -864,7 +864,7 @@ public partial class Utility(
             var snipeStores = msgs as SnipeStore[] ?? msgs.ToArray();
             if (snipeStores.Length == 0)
             {
-                await ReplyErrorLocalizedAsync("no_snipes").ConfigureAwait(false);
+                await ReplyErrorAsync(Strings.NoSnipes(ctx.Guild.Id)).ConfigureAwait(false);
                 return;
             }
 
@@ -917,7 +917,7 @@ public partial class Utility(
     {
         if (!await Service.GetSnipeSet(ctx.Guild.Id))
         {
-            await ReplyErrorLocalizedAsync("snipe_not_enabled", await guildSettings.GetPrefix(ctx.Guild))
+            await ReplyErrorAsync(Strings.SnipeNotEnabled(ctx.Guild.Id, await guildSettings.GetPrefix(ctx.Guild)))
                 .ConfigureAwait(false);
             return;
         }
@@ -928,7 +928,7 @@ public partial class Utility(
             var snipeStores = msgs as SnipeStore[] ?? msgs.ToArray();
             if (snipeStores.Length == 0)
             {
-                await ReplyErrorLocalizedAsync("no_snipes").ConfigureAwait(false);
+                await ReplyErrorAsync(Strings.NoSnipes(ctx.Guild.Id)).ConfigureAwait(false);
                 return;
             }
 
@@ -981,7 +981,7 @@ public partial class Utility(
     {
         if (!await Service.GetSnipeSet(ctx.Guild.Id))
         {
-            await ReplyErrorLocalizedAsync("snipe_not_enabled", await guildSettings.GetPrefix(ctx.Guild))
+            await ReplyErrorAsync(Strings.SnipeNotEnabled(ctx.Guild.Id, await guildSettings.GetPrefix(ctx.Guild)))
                 .ConfigureAwait(false);
             return;
         }
@@ -990,7 +990,7 @@ public partial class Utility(
             .Find(x => x.ChannelId == ctx.Channel.Id && x.UserId == user1.Id && !x.Edited);
         if (msg is null)
         {
-            await ctx.Channel.SendErrorAsync("There is nothing to snipe for this user!", Config).ConfigureAwait(false);
+            await ctx.Channel.SendErrorAsync(Strings.NothingToSnipeUser(ctx.Guild.Id), Config);
             return;
         }
 
@@ -1007,7 +1007,7 @@ public partial class Utility(
             {
                 IconUrl = ctx.User.GetAvatarUrl(),
                 Text =
-                    GetText("snipe_request", ctx.User.ToString(), (DateTime.UtcNow - msg.DateAdded).Humanize())
+                    Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(), (DateTime.UtcNow - msg.DateAdded).Humanize())
             },
             Color = Mewdeko.OkColor
         };
@@ -1038,7 +1038,7 @@ public partial class Utility(
     {
         if (string.IsNullOrWhiteSpace(url))
         {
-            await ctx.Channel.SendErrorAsync("You didn't specify a url", Config).ConfigureAwait(false);
+            await ctx.Channel.SendErrorAsync(Strings.UrlMissing(ctx.Guild.Id), Config);
         }
         else
         {
@@ -1064,7 +1064,7 @@ public partial class Utility(
     {
         if (!await Service.GetSnipeSet(ctx.Guild.Id))
         {
-            await ReplyErrorLocalizedAsync("snipe_not_enabled", await guildSettings.GetPrefix(ctx.Guild))
+            await ReplyErrorAsync(Strings.SnipeNotEnabled(ctx.Guild.Id, await guildSettings.GetPrefix(ctx.Guild)))
                 .ConfigureAwait(false);
             return;
         }
@@ -1073,7 +1073,7 @@ public partial class Utility(
             .LastOrDefault(x => x.ChannelId == chan.Id);
         if (msg == null)
         {
-            await ReplyErrorLocalizedAsync("no_snipes").ConfigureAwait(false);
+            await ReplyErrorAsync(Strings.NoSnipes(ctx.Guild.Id)).ConfigureAwait(false);
             return;
         }
 
@@ -1091,7 +1091,7 @@ public partial class Utility(
             {
                 IconUrl = ctx.User.GetAvatarUrl(),
                 Text =
-                    GetText("snipe_request", ctx.User.ToString(), (DateTime.UtcNow - msg.DateAdded).Humanize())
+                    Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(), (DateTime.UtcNow - msg.DateAdded).Humanize())
             },
             Color = Mewdeko.OkColor
         };
@@ -1123,7 +1123,7 @@ public partial class Utility(
     {
         if (!await Service.GetSnipeSet(ctx.Guild.Id))
         {
-            await ReplyErrorLocalizedAsync("snipe_not_enabled", await guildSettings.GetPrefix(ctx.Guild))
+            await ReplyErrorAsync(Strings.SnipeNotEnabled(ctx.Guild.Id, await guildSettings.GetPrefix(ctx.Guild)))
                 .ConfigureAwait(false);
             return;
         }
@@ -1133,8 +1133,7 @@ public partial class Utility(
         {
             if (msg == null)
             {
-                await ctx.Channel.SendErrorAsync("There's nothing to snipe for that channel and user!", Config)
-                    .ConfigureAwait(false);
+                await ctx.Channel.SendErrorAsync(Strings.NothingToSnipeChannelUser(ctx.Guild.Id), Config);
                 return;
             }
 
@@ -1152,7 +1151,7 @@ public partial class Utility(
                 {
                     IconUrl = ctx.User.GetAvatarUrl(),
                     Text =
-                        GetText("snipe_request", ctx.User.ToString(), (DateTime.UtcNow - msg.DateAdded).Humanize())
+                        Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(), (DateTime.UtcNow - msg.DateAdded).Humanize())
                 },
                 Color = Mewdeko.OkColor
             };
@@ -1182,7 +1181,7 @@ public partial class Utility(
     {
         if (!await Service.GetSnipeSet(ctx.Guild.Id))
         {
-            await ReplyErrorLocalizedAsync("snipe_not_enabled", await guildSettings.GetPrefix(ctx.Guild))
+            await ReplyErrorAsync(Strings.SnipeNotEnabled(ctx.Guild.Id, await guildSettings.GetPrefix(ctx.Guild)))
                 .ConfigureAwait(false);
             return;
         }
@@ -1193,7 +1192,7 @@ public partial class Utility(
             .LastOrDefault(x => x.ChannelId == ctx.Channel.Id);
         if (msg == null)
         {
-            await ctx.Channel.SendErrorAsync("There's nothing to snipe!", Config).ConfigureAwait(false);
+            await ctx.Channel.SendErrorAsync(Strings.NothingToSnipe(ctx.Guild.Id), Config);
             return;
         }
 
@@ -1211,7 +1210,7 @@ public partial class Utility(
             {
                 IconUrl = ctx.User.GetAvatarUrl(),
                 Text =
-                    GetText("snipe_request", ctx.User.ToString(), (DateTime.UtcNow - msg.DateAdded).Humanize())
+                    Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(), (DateTime.UtcNow - msg.DateAdded).Humanize())
             },
             Color = Mewdeko.OkColor
         };
@@ -1242,7 +1241,7 @@ public partial class Utility(
     {
         if (!await Service.GetSnipeSet(ctx.Guild.Id))
         {
-            await ReplyErrorLocalizedAsync("snipe_not_enabled", await guildSettings.GetPrefix(ctx.Guild))
+            await ReplyErrorAsync(Strings.SnipeNotEnabled(ctx.Guild.Id, await guildSettings.GetPrefix(ctx.Guild)))
                 .ConfigureAwait(false);
             return;
         }
@@ -1253,7 +1252,7 @@ public partial class Utility(
                 .LastOrDefault(x => x.ChannelId == ctx.Channel.Id && x.UserId == user1.Id);
             if (msg == null)
             {
-                await ReplyErrorLocalizedAsync("no_snipes").ConfigureAwait(false);
+                await ReplyErrorAsync(Strings.NoSnipes(ctx.Guild.Id)).ConfigureAwait(false);
                 return;
             }
 
@@ -1271,7 +1270,7 @@ public partial class Utility(
                 {
                     IconUrl = ctx.User.GetAvatarUrl(),
                     Text =
-                        GetText("snipe_request", ctx.User.ToString(), (DateTime.UtcNow - msg.DateAdded).Humanize())
+                        Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(), (DateTime.UtcNow - msg.DateAdded).Humanize())
                 },
                 Color = Mewdeko.OkColor
             };
@@ -1303,7 +1302,7 @@ public partial class Utility(
     {
         if (!await Service.GetSnipeSet(ctx.Guild.Id))
         {
-            await ReplyErrorLocalizedAsync("snipe_not_enabled", await guildSettings.GetPrefix(ctx.Guild))
+            await ReplyErrorAsync(Strings.SnipeNotEnabled(ctx.Guild.Id, await guildSettings.GetPrefix(ctx.Guild)))
                 .ConfigureAwait(false);
             return;
         }
@@ -1314,7 +1313,7 @@ public partial class Utility(
                 .LastOrDefault(x => x.ChannelId == chan.Id);
             if (msg == null)
             {
-                await ReplyErrorLocalizedAsync("no_snipes").ConfigureAwait(false);
+                await ReplyErrorAsync(Strings.NoSnipes(ctx.Guild.Id)).ConfigureAwait(false);
                 return;
             }
 
@@ -1332,7 +1331,7 @@ public partial class Utility(
                 {
                     IconUrl = ctx.User.GetAvatarUrl(),
                     Text =
-                        GetText("snipe_request", ctx.User.ToString(), (DateTime.UtcNow - msg.DateAdded).Humanize())
+                        Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(), (DateTime.UtcNow - msg.DateAdded).Humanize())
                 },
                 Color = Mewdeko.OkColor
             };
@@ -1366,7 +1365,7 @@ public partial class Utility(
     {
         if (!await Service.GetSnipeSet(ctx.Guild.Id))
         {
-            await ReplyErrorLocalizedAsync("snipe_not_enabled", await guildSettings.GetPrefix(ctx.Guild))
+            await ReplyErrorAsync(Strings.SnipeNotEnabled(ctx.Guild.Id, await guildSettings.GetPrefix(ctx.Guild)))
                 .ConfigureAwait(false);
             return;
         }
@@ -1377,7 +1376,7 @@ public partial class Utility(
                 .LastOrDefault(x => x.ChannelId == chan.Id && x.UserId == user1.Id);
             if (msg == null)
             {
-                await ReplyErrorLocalizedAsync("no_snipes").ConfigureAwait(false);
+                await ReplyErrorAsync(Strings.NoSnipes(ctx.Guild.Id)).ConfigureAwait(false);
                 return;
             }
 
@@ -1395,7 +1394,7 @@ public partial class Utility(
                 {
                     IconUrl = ctx.User.GetAvatarUrl(),
                     Text =
-                        GetText("snipe_request", ctx.User.ToString(), (DateTime.UtcNow - msg.DateAdded).Humanize())
+                        Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(), (DateTime.UtcNow - msg.DateAdded).Humanize())
                 },
                 Color = Mewdeko.OkColor
             };
@@ -1445,7 +1444,7 @@ public partial class Utility(
         var i = 0;
         if (arr.Length == 0)
         {
-            await ReplyErrorLocalizedAsync("nobody_playing_game").ConfigureAwait(false);
+            await ReplyErrorAsync(Strings.NobodyPlayingGame(ctx.Guild.Id)).ConfigureAwait(false);
         }
         else
         {
@@ -1521,7 +1520,7 @@ public partial class Utility(
             await Task.CompletedTask.ConfigureAwait(false);
             return new PageBuilder().WithOkColor()
                 .WithTitle(
-                    $"{Format.Bold(GetText("inrole_list", Format.Bold(role.Name)))} - {roleUsers.Length}")
+                    $"{Format.Bold(Strings.InroleList(ctx.Guild.Id, Format.Bold(role.Name)))} - {roleUsers.Length}")
                 .WithDescription(string.Join("\n",
                     roleUsers.Skip(page * 20).Take(20)
                         .Select(x => $"{x} `{x.Id}`"))).AddField("User Stats",
@@ -1580,8 +1579,8 @@ public partial class Utility(
     public async Task UserId([Remainder] IGuildUser? target = null)
     {
         var usr = target ?? ctx.User;
-        await ReplyConfirmLocalizedAsync("userid", "🆔", Format.Bold(usr.ToString()),
-            Format.Code(usr.Id.ToString())).ConfigureAwait(false);
+        await ReplyConfirmAsync(Strings.Userid(ctx.Guild.Id, "🆔", Format.Bold(usr.ToString()),
+            Format.Code(usr.Id.ToString()))).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -1593,8 +1592,8 @@ public partial class Utility(
     [RequireContext(ContextType.Guild)]
     public async Task RoleId([Remainder] IRole role)
     {
-        await ReplyConfirmLocalizedAsync("roleid", "🆔", Format.Bold(role.ToString()),
-            Format.Code(role.Id.ToString())).ConfigureAwait(false);
+        await ReplyConfirmAsync(Strings.Roleid(ctx.Guild.Id, "🆔", Format.Bold(role.ToString()),
+            Format.Code(role.Id.ToString()))).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -1604,7 +1603,7 @@ public partial class Utility(
     [Aliases]
     public async Task ChannelId()
     {
-        await ReplyConfirmLocalizedAsync("channelid", "🆔", Format.Code(ctx.Channel.Id.ToString()))
+        await ReplyConfirmAsync(Strings.Channelid(ctx.Guild.Id, "🆔", Format.Code(ctx.Channel.Id.ToString())))
             .ConfigureAwait(false);
     }
 
@@ -1616,7 +1615,7 @@ public partial class Utility(
     [RequireContext(ContextType.Guild)]
     public async Task ServerId()
     {
-        await ReplyConfirmLocalizedAsync("serverid", "🆔", Format.Code(ctx.Guild.Id.ToString()))
+        await ReplyConfirmAsync(Strings.Serverid(ctx.Guild.Id, "🆔", Format.Code(ctx.Guild.Id.ToString())))
             .ConfigureAwait(false);
     }
 
@@ -1639,7 +1638,7 @@ public partial class Utility(
             ]).OrderBy(r => -r.Position);
             if (!roles.Any())
             {
-                await ReplyErrorLocalizedAsync("no_roles_on_page").ConfigureAwait(false);
+                await ReplyErrorAsync(Strings.NoRolesOnPage(ctx.Guild.Id)).ConfigureAwait(false);
             }
             else
             {
@@ -1671,7 +1670,7 @@ public partial class Utility(
             ]).OrderBy(r => -r.Position);
             if (!roles.Any())
             {
-                await ReplyErrorLocalizedAsync("no_roles_on_page").ConfigureAwait(false);
+                await ReplyErrorAsync(Strings.NoRolesOnPage(ctx.Guild.Id)).ConfigureAwait(false);
             }
             else
             {
@@ -1712,9 +1711,9 @@ public partial class Utility(
 
         var topic = channel.Topic;
         if (string.IsNullOrWhiteSpace(topic))
-            await ReplyErrorLocalizedAsync("no_topic_set").ConfigureAwait(false);
+            await ReplyErrorAsync(Strings.NoTopicSet(ctx.Guild.Id)).ConfigureAwait(false);
         else
-            await ctx.Channel.SendConfirmAsync(GetText("channel_topic"), topic).ConfigureAwait(false);
+            await ctx.Channel.SendConfirmAsync(Strings.ChannelTopic(ctx.Guild.Id), topic).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -1761,7 +1760,7 @@ public partial class Utility(
                 }
                 catch (Exception ex)
                 {
-                    await ctx.Channel.SendErrorAsync(GetText("embed_failed"), Config);
+                    await ctx.Channel.SendErrorAsync(Strings.EmbedFailed(ctx.Guild.Id), Config);
                     Log.Error("Error sending message: {Message}", ex.Message);
                 }
             }
@@ -1776,7 +1775,7 @@ public partial class Utility(
                 }
                 catch (Exception ex)
                 {
-                    await ctx.Channel.SendErrorAsync(GetText("embed_failed"), Config);
+                    await ctx.Channel.SendErrorAsync(Strings.EmbedFailed(ctx.Guild.Id), Config);
                     Log.Error("Error sending message: {Message}", ex.Message);
                 }
         }
@@ -1796,7 +1795,7 @@ public partial class Utility(
                 }
                 catch
                 {
-                    await ctx.Channel.SendErrorAsync(GetText("embed_failed"), Config);
+                    await ctx.Channel.SendErrorAsync(Strings.EmbedFailed(ctx.Guild.Id), Config);
                 }
             }
             else
@@ -1808,7 +1807,7 @@ public partial class Utility(
                 }
                 catch (Exception ex)
                 {
-                    await ctx.Channel.SendErrorAsync(GetText("embed_failed"), Config);
+                    await ctx.Channel.SendErrorAsync(Strings.EmbedFailed(ctx.Guild.Id), Config);
                     Log.Error("Error sending message: {Message}", ex.Message);
                 }
         }
@@ -1824,8 +1823,7 @@ public partial class Utility(
         var userAttachments = new List<IAttachment>(ctx.Message.Attachments);
 
         if (isTextInAttachments &&
-            await PromptUserConfirmAsync("Do you want to use the text file in your attachments as the message?",
-                ctx.User.Id))
+            await PromptUserConfirmAsync(Strings.UseAttachmentConfirm(ctx.Guild.Id), ctx.User.Id))
         {
             var txtAttachment = userAttachments.First(x => x.Filename.EndsWith("txt"));
             message = await httpClient.GetStringAsync(txtAttachment.Url);
@@ -1890,16 +1888,16 @@ public partial class Utility(
             new EmbedBuilder().WithOkColor()
                 .WithAuthor($"{client.CurrentUser.Username} v{StatsService.BotVersion}",
                     client.CurrentUser.GetAvatarUrl(), config.Data.SupportServer)
-                // .AddField(GetText("authors"),
+                // .AddField(Strings.Authors(ctx.Guild.Id),
                     // $"[{users[0]}](https://github.com/SylveonDeko)\n[{users[1]}](https://github.com/CottageDwellingCat)")
-                .AddField(GetText("commands_ran"), $"{commandStats}/5s")
-                .AddField(GetText("command_count"), cmdServ.Commands.DistinctBy(x => x.Name).Count())
+                .AddField(Strings.CommandsRan(ctx.Guild.Id), $"{commandStats}/5s")
+                .AddField(Strings.CommandCount(ctx.Guild.Id), cmdServ.Commands.DistinctBy(x => x.Name).Count())
                 // .AddField("Library", stats.Library)
                 .AddField(GetText("library"), $"{targetFramework} \n {libraryInfo.Library} \n {libraryInfo.OpenAILib}")
-                .AddField(GetText("owner_ids"), string.Join("\n", creds.OwnerIds.Select(x => $"<@{x}>")))
-                .AddField(GetText("shard"), $"#{client.GetShardFor(ctx.Guild).ShardId} / {creds.TotalShards}")
-                .AddField(GetText("memory"), $"{stats.Heap} MB")
-                .AddField(GetText("uptime"), stats.GetUptimeString("\n"))
+                .AddField(Strings.OwnerIds(ctx.Guild.Id), string.Join("\n", creds.OwnerIds.Select(x => $"<@{x}>")))
+                .AddField(Strings.Shard(ctx.Guild.Id), $"#{client.GetShardFor(ctx.Guild).ShardId} / {creds.TotalShards}")
+                .AddField(Strings.Memory(ctx.Guild.Id), $"{stats.Heap} MB")
+                .AddField(Strings.Uptime(ctx.Guild.Id), stats.GetUptimeString("\n"))
                 .AddField("Servers", $"{client.Guilds.Count} Servers"));
     }
 
@@ -1913,10 +1911,10 @@ public partial class Utility(
     {
         var tags = ctx.Message.Tags.Where(t => t.Type == TagType.Emoji).Select(t => (Emote)t.Value);
 
-        var result = string.Join("\n", tags.Select(m => GetText("showemojis", m, m.Url)));
+        var result = string.Join("\n", tags.Select(m => Strings.Showemojis(ctx.Guild.Id, m, m.Url)));
 
         if (string.IsNullOrWhiteSpace(result))
-            await ReplyErrorLocalizedAsync("showemojis_none").ConfigureAwait(false);
+            await ReplyErrorAsync(Strings.ShowemojisNone(ctx.Guild.Id)).ConfigureAwait(false);
         else
             await ctx.Channel.SendMessageAsync(result.TrimTo(2000)).ConfigureAwait(false);
     }
@@ -1966,7 +1964,7 @@ public partial class Utility(
         }
         catch (ArgumentException ex)
         {
-            await ReplyErrorLocalizedAsync("roll_fail_new_dm", GetText(ex.Message)).ConfigureAwait(false);
+            await ReplyErrorAsync(Strings.RollFailNewDm(ctx.Guild.Id, ex.Message)).ConfigureAwait(false);
             return;
         }
 
@@ -1982,7 +1980,7 @@ public partial class Utility(
                         .WithValue(string.Join(',', x.Value))).ToArray())
                 .WithDescription(result.InacurateTotal
                     // hide possible int rollover errors
-                    ? GetText("roll_fail_too_large")!
+                    ? Strings.RollFailTooLarge(ctx.Guild.Id)!
                     : result.ToString());
         }
 

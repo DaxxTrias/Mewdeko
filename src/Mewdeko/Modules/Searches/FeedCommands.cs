@@ -74,13 +74,13 @@ public partial class Searches
                 success = await Service.AddFeed(ctx.Guild.Id, channel.Id, url);
                 if (success)
                 {
-                    await ReplyConfirmLocalizedAsync("feed_added").ConfigureAwait(false);
+                    await ReplyConfirmAsync(Strings.FeedAdded(ctx.Guild.Id)).ConfigureAwait(false);
                     return;
                 }
             }
 
             Log.Information("error in url: " + url);
-            await ReplyErrorLocalizedAsync("feed_not_valid").ConfigureAwait(false);
+            await ReplyErrorAsync(Strings.FeedNotValid(ctx.Guild.Id)).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -101,9 +101,9 @@ public partial class Searches
         public async Task FeedRemove(int index)
         {
             if (await Service.RemoveFeed(ctx.Guild.Id, --index))
-                await ReplyConfirmLocalizedAsync("feed_removed").ConfigureAwait(false);
+                await ReplyConfirmAsync(Strings.FeedRemoved(ctx.Guild.Id)).ConfigureAwait(false);
             else
-                await ReplyErrorLocalizedAsync("feed_out_of_range").ConfigureAwait(false);
+                await ReplyErrorAsync(Strings.FeedOutOfRange(ctx.Guild.Id)).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -125,9 +125,9 @@ public partial class Searches
         public async Task FeedMessage(int index, [Remainder] string message)
         {
             if (await Service.AddFeedMessage(ctx.Guild.Id, --index, message).ConfigureAwait(false))
-                await ReplyConfirmLocalizedAsync("feed_msg_updated").ConfigureAwait(false);
+                await ReplyConfirmAsync(Strings.FeedMsgUpdated(ctx.Guild.Id)).ConfigureAwait(false);
             else
-                await ReplyErrorLocalizedAsync("feed_out_of_range").ConfigureAwait(false);
+                await ReplyErrorAsync(Strings.FeedOutOfRange(ctx.Guild.Id)).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -150,7 +150,7 @@ public partial class Searches
             var feeds = await Service.GetFeeds(ctx.Guild.Id);
             if (feeds.ElementAt(index - 1) is null)
             {
-                await ReplyErrorLocalizedAsync("feed_out_of_range").ConfigureAwait(false);
+                await ReplyErrorAsync(Strings.FeedOutOfRange(ctx.Guild.Id)).ConfigureAwait(false);
                 return;
             }
 
@@ -179,7 +179,7 @@ public partial class Searches
             {
                 await ctx.Channel.EmbedAsync(new EmbedBuilder()
                         .WithOkColor()
-                        .WithDescription(GetText("feed_no_feed")))
+                        .WithDescription(Strings.FeedNoFeed(ctx.Guild.Id)))
                     .ConfigureAwait(false);
                 return;
             }
