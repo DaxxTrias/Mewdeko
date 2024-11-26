@@ -110,6 +110,38 @@ public class SlashRemindCommands(DbContextProvider dbProvider, GuildTimezoneServ
     }
 
     /// <summary>
+    ///     Sends a reminder to a specified user.
+    /// </summary>
+    /// <param name="user">The target user for the reminder.</param>
+    /// <param name="time">When the reminder should trigger.</param>
+    /// <param name="reminder">The message for the reminder. If empty, prompts the user to input the reminder text.</param>
+    /// <returns>A task that represents the asynchronous operation of adding a reminder to a specific user.</returns>
+    [SlashCommand("reminduser", "Send a reminder to a user.")]
+    [UserPerm(GuildPermission.ManageMessages)]
+    public async Task RemindUser
+    (
+        [Summary("user", "who should the reminder be sent to?")]
+        IUser user,
+        [Summary("time", "When should the reminder respond.")]
+        TimeSpan time,
+        [Summary("reminder", "(optional) what should the reminder message be")]
+        string? reminder = ""
+    )
+    {
+        if (string.IsNullOrEmpty(reminder))
+        {
+            await RespondWithModalAsync<ReminderModal>($"remind:{user.Id},1,{time};").ConfigureAwait(false);
+            return;
+        }
+
+        if (!await RemindInternal(user.Id, true, time, reminder)
+                .ConfigureAwait(false))
+        {
+            await ReplyErrorLocalizedAsync("remind_too_long").ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
     ///     Handles the modal interaction for creating a reminder.
     /// </summary>
     /// <param name="sId">The target ID for the reminder, either a user or a channel.</param>
