@@ -26,7 +26,7 @@ namespace MewdekoSourceGen;
 ///     5. Provide comprehensive documentation about locale support
 /// </remarks>
 [Generator]
-public class LocalizationGenerator : IIncrementalGenerator
+public partial class LocalizationGenerator : IIncrementalGenerator
 {
     /// <summary>
     ///     Regular expression pattern to match locale files and extract the culture code.
@@ -353,7 +353,7 @@ public class LocalizationGenerator : IIncrementalGenerator
         if (string.IsNullOrEmpty(input))
             return string.Empty;
 
-        return SecurityElement.Escape(input)
+        return System.Security.SecurityElement.Escape(input)
             .Replace("\r\n", "\\n")
             .Replace("\n", "\\n")
             .Replace("\r", "\\n")
@@ -413,22 +413,22 @@ public class LocalizationGenerator : IIncrementalGenerator
         };
 
         // Replace leading numbers with words
-        var result = StartsWithDigitRegex.Replace(input, match =>
+        var result = MyRegex1().Replace(input, match =>
         {
             var numbers = match.Value.ToCharArray();
             return string.Concat(numbers.Select(n => numberWords[n.ToString()]));
         });
 
         // Replace remaining numbers and special characters
-        result = ContainsDigitRegex.Replace(result, match => numberWords[match.Value]);
+        result = MyRegex2().Replace(result, match => numberWords[match.Value]);
 
         // Remove invalid characters and split into words
-        var words = InvalidCharsRegex.Replace(result, "_")
-            .Split(['_', '-'], StringSplitOptions.RemoveEmptyEntries);
+        var words = MyRegex().Replace(result, "_")
+            .Split(new[] { '_', '-' }, StringSplitOptions.RemoveEmptyEntries);
 
         // Convert to PascalCase
         var identifier = string.Join("", words.Select(word =>
-            char.ToUpperInvariant(word[0]) + word.Substring(1).ToLowerInvariant()));
+            char.ToUpperInvariant(word[0]) + word[1..].ToLowerInvariant()));
 
         // Handle empty or invalid starting character
         if (string.IsNullOrEmpty(identifier) || (!char.IsLetter(identifier[0]) && identifier[0] != '_'))
@@ -453,131 +453,10 @@ public class LocalizationGenerator : IIncrementalGenerator
         return finalIdentifier;
     }
 
-    /// <summary>
-    ///     Simple JSON parser that extracts string key-value pairs from a JSON object.
-    ///     This is a minimal implementation for source generators targeting netstandard2.0.
-    /// </summary>
-    /// <param name="json">The JSON string to parse.</param>
-    /// <returns>A dictionary of string keys to string values.</returns>
-    private static Dictionary<string, string> ParseJsonToDictionary(string json)
-    {
-        var result = new Dictionary<string, string>();
-        if (string.IsNullOrWhiteSpace(json))
-            return result;
-
-        // Remove whitespace and brackets
-        json = json.Trim();
-        if (json.StartsWith("{") && json.EndsWith("}"))
-        {
-            json = json.Substring(1, json.Length - 2);
-        }
-
-        // Simple state machine to parse key-value pairs
-        var inString = false;
-        var escaped = false;
-        var currentKey = "";
-        var currentValue = "";
-        var parsingKey = true;
-        var currentStr = new StringBuilder();
-
-        for (var i = 0; i < json.Length; i++)
-        {
-            var c = json[i];
-
-            if (escaped)
-            {
-                // Handle escaped characters
-                switch (c)
-                {
-                    case 'n':
-                        currentStr.Append('\n');
-                        break;
-                    case 'r':
-                        currentStr.Append('\r');
-                        break;
-                    case 't':
-                        currentStr.Append('\t');
-                        break;
-                    case '\\':
-                        currentStr.Append('\\');
-                        break;
-                    case '"':
-                        currentStr.Append('"');
-                        break;
-                    case '/':
-                        currentStr.Append('/');
-                        break;
-                    default:
-                        currentStr.Append(c);
-                        break;
-                }
-
-                escaped = false;
-                continue;
-            }
-
-            if (c == '\\' && inString)
-            {
-                escaped = true;
-                continue;
-            }
-
-            if (c == '"')
-            {
-                if (inString)
-                {
-                    // End of string
-                    if (parsingKey)
-                    {
-                        currentKey = currentStr.ToString();
-                    }
-                    else
-                    {
-                        currentValue = currentStr.ToString();
-                    }
-
-                    currentStr.Clear();
-                }
-
-                inString = !inString;
-                continue;
-            }
-
-            if (inString)
-            {
-                currentStr.Append(c);
-                continue;
-            }
-
-            // Skip whitespace outside strings
-            if (char.IsWhiteSpace(c))
-                continue;
-
-            if (c == ':' && parsingKey)
-            {
-                parsingKey = false;
-                continue;
-            }
-
-            if (c == ',')
-            {
-                if (!string.IsNullOrEmpty(currentKey))
-                {
-                    result[currentKey] = currentValue ?? "";
-                }
-
-                currentKey = "";
-                currentValue = "";
-                parsingKey = true;
-            }
-        }
-
-        // Process the final key-value pair if it exists
-        if (!string.IsNullOrEmpty(currentKey))
-        {
-            result[currentKey] = currentValue ?? "";
-        }
-
-        return result;
-    }
+    [GeneratedRegex(@"[^A-Za-z0-9_]")]
+    private static partial Regex MyRegex();
+    [GeneratedRegex(@"^\d+")]
+    private static partial Regex MyRegex1();
+    [GeneratedRegex(@"\d")]
+    private static partial Regex MyRegex2();
 }
