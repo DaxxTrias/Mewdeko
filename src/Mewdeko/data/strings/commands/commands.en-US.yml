@@ -2350,6 +2350,10 @@ loop:
     - `track` Loops the current song. Skip replays the current song.
     - `queue` Loops the queue until its stopped
     - `shuffle` Loops the queue but shuffles it every time it loops
+shufflequeue:
+  args:
+    - ''
+  desc: Shuffles the current queue.
 lsar:
   args:
     - ''

@@ -209,6 +209,10 @@ public partial class Searches
             }
         }
 
+        /// <summary>
+        ///    Starts the tracking of feed updates
+        /// </summary>
+        /// <returns></returns>
         [Cmd, Aliases, RequireContext(ContextType.Guild), UserPerm(GuildPermission.ManageMessages)]
         public async Task FeedStart()
         {
@@ -217,6 +221,11 @@ public partial class Searches
             else
                 await ReplyErrorLocalizedAsync("feed_already_started").ConfigureAwait(false);
         }
+
+        /// <summary>
+        ///     Stops the tracking of feed updates
+        /// </summary>
+        /// <returns></returns>
         [Cmd, Aliases, RequireContext(ContextType.Guild), UserPerm(GuildPermission.ManageMessages)]
         public async Task FeedStop()
         {

@@ -1803,12 +1803,11 @@ showchattrigger:
 showemojis:
   - showemojis
   - se
-shrug:
-  - shrug
-shuffle:
+shufflequeue:
   - shuffle
   - playlistshuffle
   - sh
+  - sq
   - plsh
 skip:
   - skip

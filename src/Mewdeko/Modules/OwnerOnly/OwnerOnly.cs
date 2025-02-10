@@ -1058,8 +1058,6 @@ public class OwnerOnly(
                 .WithDescription(str);
         }
     }
-
-
     private static string ConnectionStateToEmoji(ConnectionState status)
     {
         return status switch

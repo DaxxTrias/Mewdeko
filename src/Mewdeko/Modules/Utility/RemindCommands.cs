@@ -91,6 +91,32 @@ public partial class Utility
         }
 
         /// <summary>
+        ///     Creates a reminder for a specific user.
+        /// </summary>
+        /// <param name="user">The target user for the reminder.</param>
+        /// <param name="remindString">The reminder message and time.</param>
+        /// <returns>A task that represents the asynchronous operation of creating a reminder for a user.</returns>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.ManageMessages)]
+        [Priority(0)]
+        public async Task RemindUser(IUser user, [Remainder] string remindString)
+        {
+            if (!Service.TryParseRemindMessage(remindString, out var remindData))
+            {
+                await ReplyErrorLocalizedAsync("remind_invalid").ConfigureAwait(false);
+                return;
+            }
+
+            if (!await RemindInternal(user.Id, true, remindData.Time, remindData.What)
+                    .ConfigureAwait(false))
+            {
+                await ReplyErrorLocalizedAsync("remind_too_long").ConfigureAwait(false);
+            }
+        }
+
+        /// <summary>
         ///     Lists reminders for the user.
         /// </summary>
         /// <param name="page">The page number of reminders to list.</param>

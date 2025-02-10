@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using Discord.Interactions;
 using Humanizer;
 using Mewdeko.Common.Attributes.InteractionCommands;
@@ -285,11 +285,13 @@ public class SlashUtility(
             "brackets" or "bracketorders" or "bracket-orders" => "https://docs.tealstreet.io/docs/trade/bracket-orders",
             "bybitv5" => "https://docs.tealstreet.io/docs/connect/bybitv5",
             "bingx" => "https://docs.tealstreet.io/docs/connect/bingx",
+            "coincatch" => "https://docs.tealstreet.io/docs/connect/coincatch",
             "cli" or "console" or "commandline" => "https://docs.tealstreet.io/docs/cli",
             "okx" or "okex" => "https://docs.tealstreet.io/docs/connect/okex",
             "phm" or "phemex" => "https://docs.tealstreet.io/docs/connect/phemex",
             "woo" or "woox" => "https://docs.tealstreet.io/docs/connect/woo",
             "woofi" => "https://docs.tealstreet.io/docs/connect/woofi",
+            "hyperliquid" or "hl" => "https://docs.tealstreet.io/docs/connect/hyperliquid",
             "terminal" or "term" => "https://docs.tealstreet.io/docs/trade/terminal",
             "ref" or "reflink" or "referral" or "ref-link" => "https://docs.tealstreet.io/docs/ref-links",
             "changelog" or "changes" or "patchnotes" => "https://docs.tealstreet.io/docs/changelog",
