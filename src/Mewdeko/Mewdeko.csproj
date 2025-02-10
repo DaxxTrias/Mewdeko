@@ -18,6 +18,7 @@
   <!--    happy pride 🏳️‍⚧️ 🏳️‍🌈-->
 
   <ItemGroup>
+    <PackageReference Include="Claudia" Version="1.3.1" />
     <PackageReference Include="Discord.Net.WebSocket" Version="3.16.0"/>
     <PackageReference Include="Discord.Net.Rest" Version="3.16.0"/>
     <PackageReference Include="Discord.Net.Webhook" Version="3.16.0"/>
@@ -26,13 +27,18 @@
     <PackageReference Include="Discord.Addons.Hosting" Version="6.1.0"/>
     <PackageReference Include="EFCore.BulkExtensions" Version="8.1.1"/>
     <PackageReference Include="Google.Cloud.Vision.V1" Version="3.7.0"/>
+    <PackageReference Include="GroqApiLibrary" Version="1.0.8" />
     <PackageReference Include="HarfBuzzSharp" Version="8.3.0-preview.4.1"/>
     <PackageReference Include="HarfBuzzSharp.NativeAssets.Linux" Version="8.3.0-preview.4.1"/>
     <PackageReference Include="LibGit2Sharp" Version="0.30.0"/>
     <PackageReference Include="MathNet.Symbolics" Version="0.25.0"/>
+    <PackageReference Include="Microsoft.IO.RecyclableMemoryStream" Version="3.0.1" />
+    <PackageReference Include="OpenAI" Version="2.1.0" />
     <PackageReference Include="OxyPlot.Core" Version="2.2.0"/>
     <PackageReference Include="OxyPlot.SkiaSharp" Version="2.2.0"/>
+    <PackageReference Include="Polly" Version="8.5.0" />
     <PackageReference Include="Serilog.AspNetCore" Version="8.0.3" />
+    <PackageReference Include="System.ServiceProcess.ServiceController" Version="9.0.0" />
     <PackageReference Include="ZiggyCreatures.FusionCache" Version="1.4.0" />
   </ItemGroup>
 
@@ -87,8 +93,7 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="9.0.0-preview.5.24306.7"/>
     <PackageReference Include="morelinq" Version="4.3.0" />
     <PackageReference Include="NekosBestApiNet" Version="1.0.7"/>
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.3"/>
-    <PackageReference Include="NHentaiAPI" Version="1.7.0"/>
+    <PackageReference Include="NHentaiAPI" Version="1.8.0"/>
     <PackageReference Include="NonBlocking" Version="2.1.2"/>
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.8"/>
     <PackageReference Include="Octokit" Version="13.0.1" />
@@ -105,6 +110,7 @@
     <PackageReference Include="SpotifyAPI.Web" Version="7.2.1" />
     <PackageReference Include="SpotifyAPI.Web.Auth" Version="7.2.1" />
     <PackageReference Include="StackExchange.Redis" Version="2.8.16" />
+    <PackageReference Include="System.Text.Json" Version="9.0.0" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.8.1" />
     <PackageReference Include="System.Drawing.Common" Version="9.0.0-preview.5.24306.5"/>
     <PackageReference Include="System.IO.FileSystem.Watcher" Version="4.3.0"/>
@@ -145,6 +151,21 @@
     <None Remove="DiscordChatExporter\DiscordChatExporter.Cli.deps.json"/>
     <None Remove="DiscordChatExporter\CliFx.dll"/>
     <None Remove="data\http.txt"/>
+    <Compile Update="Database\Migrations\PostgreSql\SeperateVcRoles.cs">
+      <DependentUpon>SeparateVcRoles.Designer.cs</DependentUpon>
+    </Compile>
+  </ItemGroup>
+
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <NoWarn>CS8603,CS8601,CS8618,CS1998,CS8625,CS8604,CS0618,CS9113,CS4014,CS8509,CS8602,CS0168,CS0184,CS8600,CS8619,CS0649,CS0169,CS0067,CS1573,CS1572,CS1571,CS1574</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MewdekoSourceGen\MewdekoSourceGen.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+
+    <AdditionalFiles Include="data\strings\responses\responses.en-US.json" />
   </ItemGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
@@ -153,25 +174,14 @@
   </PropertyGroup>
   <ItemGroup>
     <Content Remove="credentials_example.json"/>
-    <Content Update="gcreds1.json">
+    <Content Update="gcreds.json">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
   </ItemGroup>
-
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
-    <DefineConstants>DEBUG;TRACE;DNETLABS</DefineConstants>
-    <NoWarn>
-      $(NoWarn);CS8625;CS8609;CS8767;CS8603;CS8618;CS8600;CS8602;CS8605;CS8601;CS8619;CS8604;CS8619;CS8607;CS9627;CS8629;CS8620;CS8620;CS8622;CS9714;CS8621;CS8714;CS8634
-    </NoWarn>
-    <Optimize>false</Optimize>
-  </PropertyGroup>
-
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
-    <DefineConstants>TRACE;DNETLABS</DefineConstants>
-    <NoWarn>
-      $(NoWarn);CS8625;CS8609;CS8767;CS8603;CS8618;CS8600;CS8602;CS8605;CS8601;CS8619;CS8604;CS8619;CS8607;CS9627;CS8629;CS8620;CS8620;CS8622;CS9714;CS8621;CS8714;CS8634
-    </NoWarn>
-    <WarningLevel>0</WarningLevel>
-  </PropertyGroup>
+<!--  <ItemGroup>-->
+<!--    <Reference Include="NHentaiAPI">-->
+<!--      <HintPath>..\..\..\NHentaiAPI\NHentaiAPI\bin\Release\net8.0\NHentaiAPI.dll</HintPath>-->
+<!--    </Reference>-->
+<!--  </ItemGroup>-->
 
 </Project>

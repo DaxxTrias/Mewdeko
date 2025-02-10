@@ -8,7 +8,7 @@ using Mewdeko.Common.PubSub;
 using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.Administration.Services;
 using Mewdeko.Modules.Moderation.Services;
-using Mewdeko.Services.strings;
+using Mewdeko.Services.Strings;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 
@@ -37,7 +37,7 @@ public class FilterService : IEarlyBehavior, INService
     ///     for real-time monitoring and filtering of messages across all guilds the bot is part of.
     /// </remarks>
     public FilterService(DiscordShardedClient client, DbContextProvider dbProvider, IPubSub pubSub,
-        UserPunishService upun2, IBotStrings strng, AdministrationService ass,
+        UserPunishService upun2, GeneratedBotStrings strng, AdministrationService ass,
         GuildSettingsService gss, EventHandler eventHandler, BotConfig config)
     {
         this.dbProvider = dbProvider;
@@ -62,7 +62,7 @@ public class FilterService : IEarlyBehavior, INService
     /// <summary>
     ///     Stores localized strings for bot messages.
     /// </summary>
-    private IBotStrings Strings { get; }
+    private GeneratedBotStrings Strings { get; }
 
 
     /// <summary>
@@ -251,10 +251,6 @@ public class FilterService : IEarlyBehavior, INService
         return config.FilteredWords.Select(x => x.Word).ToHashSet();
     }
 
-    private string? GetText(string? key, params object?[] args)
-    {
-        return Strings.GetText(key, cultureInfo, args);
-    }
 
     /// <summary>
     ///     Filters messages containing banned words and takes appropriate action.
@@ -264,64 +260,20 @@ public class FilterService : IEarlyBehavior, INService
     /// <returns>True if the message contained banned words and was acted upon; otherwise, false.</returns>
     private async Task<bool> FilterBannedWords(IGuild? guild, IUserMessage? msg)
     {
-        if (guild is null)
+        if (guild is null || msg is null)
             return false;
-        if (msg is null)
-            return false;
-        await using var dbContext = await dbProvider.GetContextAsync();
 
-        var blacklist = dbContext.AutoBanWords.ToLinqToDB().Where(x => x.GuildId == guild.Id);
-        foreach (var i in blacklist)
+        var bannedWords = await GetBannedWordsForServer(guild.Id);
+        if (bannedWords.Count == 0)
+            return false;
+
+        var lowerContent = msg.Content.ToLower();
+        foreach (var word in bannedWords)
         {
-            Regex regex;
-            try
+            var match = await IsWordBanned(word, lowerContent, guild.Id);
+            if (match.banned)
             {
-                regex = new Regex(i.Word, RegexOptions.Compiled, TimeSpan.FromMilliseconds(250));
-            }
-            catch
-            {
-                Log.Error("Invalid regex, removing.: {IWord}", i.Word);
-
-                dbContext.AutoBanWords.Remove(i);
-                await dbContext.SaveChangesAsync();
-                return false;
-            }
-
-            var match = regex.Match(msg.Content.ToLower()).Value;
-            if (!regex.IsMatch(msg.Content.ToLower())) continue;
-            try
-            {
-                await msg.DeleteAsync().ConfigureAwait(false);
-                var defaultMessage = GetText("bandm", Format.Bold(guild.Name),
-                    $"Banned for saying autoban word {i}");
-                var embed = await userPunServ.GetBanUserDmEmbed(client, guild as SocketGuild,
-                    await guild.GetUserAsync(client.CurrentUser.Id).ConfigureAwait(false), msg.Author as IGuildUser,
-                    defaultMessage,
-                    $"Banned for saying autoban word {match}", null).ConfigureAwait(false);
-                await (await msg.Author.CreateDMChannelAsync().ConfigureAwait(false)).SendMessageAsync(embed.Item2,
-                        embeds: embed.Item1, components: embed.Item3.Build())
-                    .ConfigureAwait(false);
-                await guild.AddBanAsync(msg.Author, options: new RequestOptions
-                {
-                    AuditLogReason = $"AutoBan word detected: {match}"
-                }).ConfigureAwait(false);
-                return true;
-            }
-            catch
-            {
-                try
-                {
-                    await guild.AddBanAsync(msg.Author, 1, options: new RequestOptions
-                    {
-                        AuditLogReason = $"AutoBan word detected: {match}"
-                    }).ConfigureAwait(false);
-                    return true;
-                }
-                catch
-                {
-                    Log.Error("Im unable to autoban in {ChannelName}", msg.Channel.Name);
-                    return false;
-                }
+                return await HandleBannedWord(msg, guild, word, match.matchedText);
             }
         }
 
@@ -373,6 +325,84 @@ public class FilterService : IEarlyBehavior, INService
         return config.FilteredWords.Select(x => x.Word).ToHashSet();
     }
 
+
+    private async Task<HashSet<string>> GetBannedWordsForServer(ulong guildId)
+{
+    await using var dbContext = await dbProvider.GetContextAsync();
+    return dbContext.AutoBanWords.ToLinqToDB()
+        .Where(x => x.GuildId == guildId)
+        .Select(x => x.Word)
+        .ToHashSet();
+}
+
+private async Task<(bool banned, string matchedText)> IsWordBanned(string word, string content, ulong guildId)
+{
+    try
+    {
+        var regex = new Regex(word, RegexOptions.Compiled, TimeSpan.FromMilliseconds(250));
+        var match = regex.Match(content);
+        return (match.Success, match.Value);
+    }
+    catch (ArgumentException)
+    {
+        await RemoveInvalidBannedRegex(word, guildId);
+        return (false, string.Empty);
+    }
+}
+
+private async Task RemoveInvalidBannedRegex(string word, ulong guildId)
+{
+    Log.Error("Invalid regex, removing.: {Word}", word);
+    await using var dbContext = await dbProvider.GetContextAsync();
+    var toRemove = await dbContext.AutoBanWords
+        .FirstOrDefaultAsync(bi => bi.Word == word && bi.GuildId == guildId);
+
+    if (toRemove is not null)
+    {
+        dbContext.AutoBanWords.Remove(toRemove);
+        await dbContext.SaveChangesAsync();
+    }
+}
+
+private async Task<bool> HandleBannedWord(IUserMessage msg, IGuild guild, string word, string matchedText)
+{
+    try
+    {
+        await msg.DeleteAsync().ConfigureAwait(false);
+        var defaultMessage = Strings.BanDm(guild.Id, Format.Bold(guild.Name),
+            Strings.AutobanWordDetected(guild.Id, word));
+
+        try
+        {
+            var embed = await userPunServ.GetBanUserDmEmbed(client, guild as SocketGuild,
+                await guild.GetUserAsync(client.CurrentUser.Id).ConfigureAwait(false),
+                msg.Author as IGuildUser,
+                defaultMessage,
+                $"Banned for saying autoban word {matchedText}",
+                null).ConfigureAwait(false);
+
+            await (await msg.Author.CreateDMChannelAsync().ConfigureAwait(false))
+                .SendMessageAsync(embed.Item2, embeds: embed.Item1, components: embed.Item3.Build())
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            // DM failed, continue with ban anyway
+        }
+
+        await guild.AddBanAsync(msg.Author, options: new RequestOptions {
+            AuditLogReason = Strings.AutobanReason(guild.Id, matchedText)
+        }).ConfigureAwait(false);
+
+        return true;
+    }
+    catch (Exception ex)
+    {
+        Log.Error(ex, Strings.AutobanError(guild.Id, msg.Channel.Name));
+        return false;
+    }
+}
+
     private async Task<bool> IsWordMatched(string word, string content, ulong guildId)
     {
         try
@@ -410,13 +440,12 @@ public class FilterService : IEarlyBehavior, INService
             if (await GetFw(guild.Id) == 0) return true;
             await userPunServ.Warn(guild, usrMsg.Author.Id, client.CurrentUser, "Warned for Filtered Word");
             var user = await usrMsg.Author.CreateDMChannelAsync();
-            await user.SendErrorAsync($"You have been warned for using a filtered word: {Format.Code(word)}", config);
+            await user.SendErrorAsync(Strings.FilteredWordWarning(guild.Id, Format.Code(word)), config);
             return true;
         }
         catch (HttpException ex)
         {
-            Log.Warning(ex, "Failed to filter word in channel {ChannelId}. Possible permission issue",
-                usrMsg.Channel.Id);
+            Log.Warning(ex, Strings.FilterError(guild.Id, usrMsg.Channel.Id));
             return false;
         }
     }
@@ -447,23 +476,21 @@ public class FilterService : IEarlyBehavior, INService
             await usrMsg.DeleteAsync();
 
             if (await GetInvWarn(guild.Id) == 0) return true;
-            await userPunServ.Warn(guild, usrMsg.Author.Id, client.CurrentUser, "Warned for Posting Invite");
+            await userPunServ.Warn(guild, usrMsg.Author.Id, client.CurrentUser, Strings.InviteWarnReason(guild.Id));
 
             var userDmChannel = await usrMsg.Author.CreateDMChannelAsync();
-            await userDmChannel.SendErrorAsync("You have been warned for sending an invite, this is not allowed!",
-                config);
+            await userDmChannel.SendErrorAsync(Strings.InviteWarning(guild.Id), config);
 
             return true;
         }
         catch (HttpException ex)
         {
-            Log.Warning(ex, "Failed to filter invite in channel {ChannelId}. Possible permission issue",
-                usrMsg.Channel.Id);
+            Log.Warning(ex, Strings.InviteFilterError(guild.Id, usrMsg.Channel.Id));
             return false;
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Unexpected error while filtering invite in channel {ChannelId}", usrMsg.Channel.Id);
+            Log.Error(ex, Strings.InviteFilterUnexpected(guild.Id, usrMsg.Channel.Id));
             return false;
         }
     }
@@ -495,14 +522,12 @@ public class FilterService : IEarlyBehavior, INService
         }
         catch (HttpException ex)
         {
-            Log.Warning(ex,
-                "Failed to delete message containing link in channel {ChannelId}. Possible permission issue",
-                usrMsg.Channel.Id);
+            Log.Warning(ex, Strings.LinkFilterError(guild.Id, usrMsg.Channel.Id));
             return false;
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Unexpected error while filtering link in channel {ChannelId}", usrMsg.Channel.Id);
+            Log.Error(ex, Strings.LinkFilterUnexpected(guild.Id, usrMsg.Channel.Id));
             return false;
         }
     }

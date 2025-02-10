@@ -11,7 +11,7 @@ using Mewdeko.Modules.Chat_Triggers.Extensions;
 using Mewdeko.Modules.Permissions.Common;
 using Mewdeko.Modules.Permissions.Services;
 using Mewdeko.Services.Settings;
-using Mewdeko.Services.strings;
+using Mewdeko.Services.Strings;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 using YamlDotNet.Serialization;
@@ -115,6 +115,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
     private readonly TypedKey<CTModel> crAdded = new("cr.added");
     private readonly IBotCredentials creds;
     private readonly TypedKey<bool> crsReloadedKey = new("crs.reloaded");
+    private readonly GeneratedBotStrings strings;
 
     private readonly DbContextProvider dbProvider;
     private readonly DiscordPermOverrideService discordPermOverride;
@@ -129,7 +130,6 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
     private readonly PermissionService perms;
     private readonly IPubSub pubSub;
     private readonly Random rng;
-    private readonly IBotStrings strings;
 
     // it is perfectly fine to have global chattriggers as an array
     // 1. custom reactions are almost never added (compared to how many times they are being looped through)
@@ -158,7 +158,6 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
     public ChatTriggersService(
         PermissionService perms,
         DbContextProvider dbProvider,
-        IBotStrings strings,
         Mewdeko bot,
         DiscordShardedClient client,
         GlobalPermissionService gperm,
@@ -167,12 +166,11 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
         DiscordPermOverrideService discordPermOverride,
         GuildSettingsService guildSettings,
         BotConfigService configService,
-        IBotCredentials creds)
+        IBotCredentials creds, GeneratedBotStrings strings)
     {
         this.dbProvider = dbProvider;
         this.client = client;
         this.perms = perms;
-        this.strings = strings;
         this.cmdCds = cmdCds;
         this.gperm = gperm;
         this.pubSub = pubSub;
@@ -180,6 +178,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
         this.guildSettings = guildSettings;
         this.configService = configService;
         this.creds = creds;
+        this.strings = strings;
         rng = new MewdekoRandom();
 
         pubSub.Sub(crsReloadedKey, OnCrsShouldReload);
@@ -252,7 +251,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
                 {
                     if (pc.Verbose)
                     {
-                        var returnMsg = strings.GetText("perm_prevent", sg.Id,
+                        var returnMsg = strings.PermPrevent(guild.Id,
                             index + 1,
                             Format.Bold(pc.Permissions[index].GetCommand(await guildSettings.GetPrefix(guild), sg)));
                         try
@@ -508,7 +507,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
                             // If verbose mode is enabled, provide a detailed message about the prevented action.
                             if (!pc.Verbose)
                                 return;
-                            var returnMsg = strings.GetText("perm_prevent", guild.Id,
+                            var returnMsg = strings.PermPrevent(guild.Id,
                                 index + 1,
                                 Format.Bold(pc.Permissions[index]
                                     .GetCommand(await guildSettings.GetPrefix(guild), guild)));
@@ -1749,59 +1748,98 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
     /// <returns>An embed builder containing information about the chat trigger.</returns>
     public EmbedBuilder GetEmbed(CTModel ct, ulong? gId = null, string? title = null)
     {
-        var eb = new EmbedBuilder().WithOkColor() // Create a new embed builder
-            .WithTitle(title) // Set the title
-            .WithDescription($"#{ct.Id}") // Set the description
-            .AddField(strings.GetText("ct_interaction_type_title", gId), // Add fields for various trigger properties
-                strings.GetText("ct_interaction_type_body", gId, ct.ApplicationCommandType.ToString()))
-            .AddField(strings.GetText("ct_realname", gId), ct.RealName)
-            .AddField(efb => efb.WithName(strings.GetText("trigger", gId)).WithValue(ct.Trigger.TrimTo(1024)))
+        var eb = new EmbedBuilder().WithOkColor()
+            .WithTitle(title)
+            .WithDescription($"#{ct.Id}");
+
+        try
+        {
+            eb.AddField(strings.CtInteractionTypeTitle(gId),
+                strings.CtInteractionTypeBody(gId, ct.ApplicationCommandType.ToString()));
+        }
+        catch
+        {
+            eb.AddField(strings.CtInteractionTypeTitle(gId), "Unknown");
+        }
+
+        eb.AddField(strings.CtRealname(gId), ct.RealName ?? "N/A")
+            .AddField(efb => efb.WithName(strings.Trigger(gId)).WithValue(ct.Trigger?.TrimTo(1024) ?? "N/A"))
             .AddField(efb =>
-                efb.WithName(strings.GetText("response", gId))
-                    .WithValue($"{(ct.Response + "\n```css\n" + ct.Response).TrimTo(1024 - 11)}```"))
-            .AddField(strings.GetText("ct_prefix_type"), ct.PrefixType);
+                efb.WithName(strings.Response(gId))
+                    .WithValue($"```css\n{(ct.Response ?? "N/A").TrimTo(1024 - 11)}```"))
+            .AddField(strings.CtPrefixType(gId), ct.PrefixType.ToString());
 
-        var reactions = ct.GetReactions(); // Get trigger reactions
-        if (reactions.Length >= 1)
-            eb.AddField(strings.GetText("trigger_reactions", gId), string.Concat(reactions)); // Add trigger reactions
+        try
+        {
+            var reactions = ct.GetReactions();
+            if (reactions is { Length: > 0 })
+            {
+                eb.AddField(strings.TriggerReactions(gId), string.Join("", reactions));
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Error");
+        }
 
-        var addedRoles = ct.GetGrantedRoles(); // Get granted roles
-        if (addedRoles.Count >= 1)
-            eb.AddField(strings.GetText("added_roles", gId),
-                addedRoles.Select(x => $"<@&{x}>").Aggregate((x, y) => $"{x}, {y}")); // Add granted roles
+        try
+        {
+            var addedRoles = ct.GetGrantedRoles();
+            if (addedRoles?.Count > 0)
+            {
+                eb.AddField(strings.AddedRoles(gId),
+                    string.Join(", ", addedRoles.Select(x => $"<@&{x}>")));
+            }
 
-        var removedRoles = ct.GetRemovedRoles(); // Get removed roles
-        if (removedRoles.Count >= 1)
-            eb.AddField(strings.GetText("removed_roles", gId),
-                removedRoles.Select(x => $"<@&{x}>").Aggregate((x, y) => $"{x}, {y}")); // Add removed roles
+            var removedRoles = ct.GetRemovedRoles();
+            if (removedRoles?.Count > 0)
+            {
+                eb.AddField(strings.RemovedRoles(gId),
+                    string.Join(", ", removedRoles.Select(x => $"<@&{x}>")));
+            }
 
-        if (addedRoles.Count >= 1 || removedRoles.Count >= 1)
-            eb.AddField(strings.GetText("role_grant_type", gId), ct.RoleGrantType); // Add role grant type
+            if (addedRoles?.Count > 0 || removedRoles?.Count > 0)
+            {
+                eb.AddField(strings.RoleGrantType(gId), ct.RoleGrantType.ToString());
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Error");
+        }
 
-        if (!ct.ApplicationCommandDescription.IsNullOrWhiteSpace())
-            eb.AddField(strings.GetText("ct_interaction_description", gId),
-                ct.ApplicationCommandDescription); // Add interaction description
+        if (!string.IsNullOrWhiteSpace(ct.ApplicationCommandDescription))
+        {
+            eb.AddField(strings.CtInteractionDescription(gId), ct.ApplicationCommandDescription);
+        }
 
         if (ct.ApplicationCommandId != 0)
-            eb.AddField(strings.GetText("ct_interaction_id", gId),
-                ct.ApplicationCommandId.ToString()); // Add interaction ID
+        {
+            eb.AddField(strings.CtInteractionId(gId), ct.ApplicationCommandId.ToString());
+        }
 
         if (ct.ValidTriggerTypes != (ChatTriggerType)0b1111)
-            eb.AddField(strings.GetText("ct_valid_fields", gId),
-                ct.ValidTriggerTypes.ToString()); // Add valid trigger types
+        {
+            eb.AddField(strings.CtValidFields(gId), ct.ValidTriggerTypes.ToString());
+        }
 
-        if (!ct.CrosspostingWebhookUrl.IsNullOrWhiteSpace())
-            eb.AddField(strings.GetText("ct_crossposting", gId),
-                strings.GetText("ct_crossposting_webhook")); // Add crossposting webhook
+        if (!string.IsNullOrWhiteSpace(ct.CrosspostingWebhookUrl))
+        {
+            eb.AddField(strings.CtCrossposting(gId), strings.CtCrosspostingWebhook(gId));
+        }
 
         if (ct.CrosspostingChannelId != 0)
-            eb.AddField(strings.GetText("ct_crossposting", gId),
-                strings.GetText("ct_crossposting_channel", gId, ct.CrosspostingChannelId)); // Add crossposting channel
+        {
+            eb.AddField(strings.CtCrossposting(gId),
+                strings.CtCrosspostingChannel(gId, ct.CrosspostingChannelId));
+        }
 
-        if (ct.PrefixType == RequirePrefixType.Custom)
-            eb.AddField(strings.GetText("ct_custom_prefix", gId), ct.CustomPrefix); // Add custom prefix
+        if (ct.PrefixType == RequirePrefixType.Custom && !string.IsNullOrWhiteSpace(ct.CustomPrefix))
+        {
+            eb.AddField(strings.CtCustomPrefix(gId), ct.CustomPrefix);
+        }
 
-        return eb; // Return the embed builder
+        return eb;
     }
 
     /// <summary>

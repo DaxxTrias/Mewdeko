@@ -4,6 +4,7 @@ using Mewdeko.Common.Configs;
 using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.Utility.Services;
 using Mewdeko.Services.Impl;
+using Mewdeko.Services.Strings;
 using Serilog;
 using Swan;
 
@@ -21,6 +22,7 @@ public class GiveawayService : INService
     private readonly ConcurrentDictionary<int, Timer> giveawayTimers = new();
     private readonly GuildSettingsService guildSettings1;
     private readonly MessageCountService msgCntService;
+    private readonly GeneratedBotStrings Strings;
 
     /// <summary>
     ///     Service for handling giveaways.
@@ -31,7 +33,7 @@ public class GiveawayService : INService
     public GiveawayService(DiscordShardedClient client,
         DbContextProvider dbProvider,
         GuildSettingsService guildSettings,
-        BotConfig config, BotCredentials credentials, MessageCountService msgCntService)
+        BotConfig config, BotCredentials credentials, MessageCountService msgCntService, GeneratedBotStrings strings)
     {
         client1 = client;
         this.dbProvider = dbProvider;
@@ -39,6 +41,7 @@ public class GiveawayService : INService
         config1 = config;
         this.credentials = credentials;
         this.msgCntService = msgCntService;
+        Strings = strings;
         _ = InitializeGiveawaysAsync();
     }
 
@@ -476,9 +479,9 @@ public class GiveawayService : INService
         await ScheduleGiveaway(entry.Entity);
 
         if (interaction is not null)
-            await interaction.SendConfirmFollowupAsync($"Giveaway started in {chan.Mention}").ConfigureAwait(false);
+            await interaction.SendConfirmFollowupAsync(Strings.GiveawayStarted(guild.Id, chan.Mention)).ConfigureAwait(false);
         else
-            await currentChannel.SendConfirmAsync($"Giveaway started in {chan.Mention}").ConfigureAwait(false);
+            await currentChannel.SendConfirmAsync(Strings.GiveawayStarted(guild.Id, chan.Mention)).ConfigureAwait(false);
         return;
 
         bool IsHex(string value)
@@ -525,7 +528,7 @@ public class GiveawayService : INService
             return;
         }
 
-        var prefix = await guildSettings1.GetPrefix(guild.Id).ConfigureAwait(false);
+        var prefix = await guildSettings1.GetPrefix(guild).ConfigureAwait(false);
 
 
         var emote = r.Emote.ToIEmote();
@@ -788,7 +791,7 @@ public class GiveawayService : INService
                 var winbed = ch.Embeds.FirstOrDefault().ToEmbedBuilder()
                     .WithErrorColor()
                     .WithDescription(
-                        $"Winner: {string.Join(", ", winners.Take(5).Select(x => x.Mention))}!\nHosted by: <@{r.UserId}>")
+                        $"Winner: {string.Join(", ", winners.Select(x => x.Mention))}!\nHosted by: <@{r.UserId}>")
                     .WithFooter($"Ended at {DateTime.UtcNow:dd.MM.yyyy HH:mm:ss}");
 
                 await ch.ModifyAsync(x =>

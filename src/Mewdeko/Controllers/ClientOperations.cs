@@ -1,6 +1,8 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Newtonsoft.Json;
+
 
 namespace Mewdeko.Controllers;
 
@@ -15,6 +17,7 @@ public class ClientOperations(DiscordShardedClient client) : Controller
     /// <summary>
     ///     Used for getting a specific channel type in the api
     /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum ChannelType
     {
         /// <summary>
@@ -43,9 +46,9 @@ public class ClientOperations(DiscordShardedClient client) : Controller
         None
     }
 
-    private readonly JsonSerializerSettings settings = new()
+    private static readonly JsonSerializerOptions options = new()
     {
-        ReferenceLoopHandling = ReferenceLoopHandling.Ignore
+        ReferenceHandler = ReferenceHandler.IgnoreCycles
     };
 
     /// <summary>
@@ -82,14 +85,32 @@ public class ClientOperations(DiscordShardedClient client) : Controller
         if (guild == null)
             return NotFound();
 
-        return channelType switch
+        var channels = channelType switch
         {
-            ChannelType.Text => Ok(guild.Channels.Where(x => x is ITextChannel)),
-            ChannelType.Voice => Ok(guild.Channels.Where(x => x is IVoiceChannel)),
-            ChannelType.Category => Ok(guild.Channels.Where(x => x is ICategoryChannel)),
-            ChannelType.Announcement => Ok(guild.Channels.Where(x => x is INewsChannel)),
-            _ => Ok(guild.Channels)
+            ChannelType.Text => guild.Channels
+                .Where(x => x is ITextChannel)
+                .Select(c => new NeededRoleInfo
+                {
+                    Id = c.Id,
+                    Name = c.Name
+                }),
+            ChannelType.Voice => guild.Channels
+                .Where(x => x is IVoiceChannel)
+                .Select(c => new NeededRoleInfo
+                {
+                    Id = c.Id,
+                    Name = c.Name
+                }),
+            // ... similar for other types
+            _ => guild.Channels
+                .Select(c => new NeededRoleInfo
+                {
+                    Id = c.Id,
+                    Name = c.Name
+                })
         };
+
+        return Ok(channels);
     }
 
     /// <summary>
@@ -100,12 +121,37 @@ public class ClientOperations(DiscordShardedClient client) : Controller
     [HttpGet("users/{guildId}")]
     public async Task<IActionResult> GetUsers(ulong guildId)
     {
+        var guild = client.Guilds.FirstOrDefault(g => g.Id == guildId);
+        if (guild == null)
+            return NotFound();
+
+        return Ok(JsonSerializer.Serialize(guild.Users.Select(x => new
+        {
+            UserId = x.Id, x.Username, AvatarUrl = x.GetAvatarUrl()
+        }), options));
+    }
+
+
+    /// <summary>
+    /// Gets text channels from a guild
+    /// </summary>
+    /// <param name="guildId">The guild id to get text channels from</param>
+    /// <returns>Text channels or 404 if the guild is not found</returns>
+    [HttpGet("textchannels/{guildId}")]
+    public async Task<IActionResult> GetTextChannels(ulong guildId)
+    {
+        await Task.CompletedTask;
         var guild = client.GetGuild(guildId);
         if (guild == null)
             return NotFound();
 
-        var users = await guild.GetUsersAsync().FlattenAsync();
-        return Ok(JsonConvert.SerializeObject(users, settings));
+        var channels = guild.TextChannels.Select(x => new
+        {
+            Id = x.Id,
+            Name = x.Name
+        });
+
+        return Ok(channels);
     }
 
     /// <summary>
@@ -117,16 +163,47 @@ public class ClientOperations(DiscordShardedClient client) : Controller
     public async Task<IActionResult> GetUser(ulong guildId, ulong userId)
     {
         await Task.CompletedTask;
-        var guild = client.GetGuild(guildId);
+        var guild = client.Guilds.FirstOrDefault(x => x.Id == guildId);
         if (guild == null)
             return NotFound();
 
-        var user = guild.GetUser(userId);
+        var user = guild.Users.FirstOrDefault(x => x.Id == userId);
+        if (user == null)
+            return NotFound();
         var partial = new
         {
             UserId = user.Id, user.Username, AvatarUrl = user.GetAvatarUrl()
         };
         return Ok(partial);
+    }
+
+    /// <summary>
+    ///     Gets a list of guilds the bot and user have mutual
+    /// </summary>
+    /// <param name="userId"></param>
+    /// <returns></returns>
+    [HttpGet("mutualguilds/{userId}")]
+    public async Task<IActionResult> GetMutualAdminGuilds(ulong userId)
+    {
+        var guilds = client.Guilds;
+        var mutuals = guilds
+            .Where(x => x.Users.Any(y => y.Id == userId && y.GuildPermissions.Has(GuildPermission.Administrator)))
+            .Select(g => new
+            {
+
+                id = g.Id,
+                name = g.Name,
+                icon = g.IconId,
+                owner = g.OwnerId == userId,
+                permissions = (int)g.GetUser(userId).GuildPermissions.RawValue,
+                features =  Enum.GetValues(typeof(GuildFeature)).Cast<GuildFeature>().Where(x => g.Features.Value.HasFlag(x)),
+                banner = g.BannerUrl + "?size=4096",
+            })
+            .ToList();
+
+        if (mutuals.Count!=0)
+            return Ok(mutuals);
+        return NotFound();
     }
 
     /// <summary>
@@ -137,7 +214,7 @@ public class ClientOperations(DiscordShardedClient client) : Controller
     public async Task<IActionResult> GetGuilds()
     {
         await Task.CompletedTask;
-        return Ok(JsonConvert.SerializeObject(client.Guilds.Select(x => x.Id)));
+        return Ok(JsonSerializer.Serialize(client.Guilds.Select(x => x.Id), options));
     }
 
     /// <summary>
@@ -148,11 +225,13 @@ public class ClientOperations(DiscordShardedClient client) : Controller
         /// <summary>
         ///     Name
         /// </summary>
+        [JsonPropertyName("name")]
         public string Name { get; set; }
 
         /// <summary>
         ///     And badge number
         /// </summary>
+        [JsonPropertyName("id")]
         public ulong Id { get; set; }
     }
 }

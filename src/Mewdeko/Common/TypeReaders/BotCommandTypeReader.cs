@@ -77,9 +77,14 @@ public class CommandOrCrTypeReader : MewdekoTypeReader<CommandOrCrInfo>
 
         Debug.Assert(crs != null, $"{nameof(crs)} != null");
 
+        var triggers = await crs.GetChatTriggersFor(context.Guild.Id);
+        var trigger = int.TryParse(input, out var id)
+            ? triggers.FirstOrDefault(x => x.Id == id)
+            : triggers.FirstOrDefault(x => x.Trigger == input);
+
         // Checks if the input matches any custom reaction
-        if (await crs.ReactionExists(context.Guild?.Id, input))
-            return TypeReaderResult.FromSuccess(new CommandOrCrInfo(input, CommandOrCrInfo.Type.Custom));
+        if (trigger is not null)
+            return TypeReaderResult.FromSuccess(new CommandOrCrInfo(trigger.Trigger!, CommandOrCrInfo.Type.Custom));
 
         // Parses the input as a command if not a custom reaction
         var cmd = await new CommandTypeReader(client, cmds).ReadAsync(context, input, services)

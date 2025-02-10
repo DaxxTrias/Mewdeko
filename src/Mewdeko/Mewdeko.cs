@@ -1,5 +1,6 @@
 ﻿using System.Diagnostics;
 using System.Reflection;
+using System.Text.Json;
 using Discord.Commands;
 using Discord.Interactions;
 using Discord.Net;
@@ -13,8 +14,9 @@ using Mewdeko.Common.TypeReaders.Interactions;
 using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Services.Impl;
 using Microsoft.Extensions.DependencyInjection;
-using Newtonsoft.Json;
+
 using Serilog;
+using Serilog.Events;
 using StackExchange.Redis;
 using TypeReader = Discord.Commands.TypeReader;
 
@@ -37,6 +39,7 @@ public class Mewdeko
         Cache = Services.GetRequiredService<IDataCache>();
         Client = Services.GetRequiredService<DiscordShardedClient>();
         CommandService = Services.GetRequiredService<CommandService>();
+        GuildSettingsService = Services.GetRequiredService<GuildSettingsService>();
     }
 
     /// <summary>
@@ -50,6 +53,8 @@ public class Mewdeko
     ///     Gets the Discord client used by the bot.
     /// </summary>
     public DiscordShardedClient Client { get; }
+
+    private GuildSettingsService GuildSettingsService { get; }
 
     private CommandService CommandService { get; }
 
@@ -101,7 +106,6 @@ public class Mewdeko
                         && x.BaseType.GetGenericArguments().Length > 0
                         && !x.IsAbstract);
 
-        var toReturn = new List<object>();
         foreach (var ft in filteredTypes)
         {
             var x = (TypeReader)ActivatorUtilities.CreateInstance(Services, ft);
@@ -109,7 +113,6 @@ public class Mewdeko
             var typeArgs = baseType?.GetGenericArguments();
             if (typeArgs != null)
                 CommandService.AddTypeReader(typeArgs[0], x);
-            toReturn.Add(x);
         }
 
         CommandService.AddTypeReaders<IEmote>(
@@ -120,6 +123,7 @@ public class Mewdeko
         interactionService.AddTypeConverter(typeof(IRole[]), new RoleArrayConverter());
         interactionService.AddTypeConverter(typeof(IUser[]), new UserArrayConverter());
         interactionService.AddTypeConverter<StatusRolesTable>(new StatusRolesTypeConverter());
+
 
         sw.Stop();
         Log.Information("TypeReaders loaded in {ElapsedTotalSeconds}s", sw.Elapsed.TotalSeconds);
@@ -134,6 +138,7 @@ public class Mewdeko
         {
             ReadyCount++;
             Log.Information($"Shard {unused.ShardId} is ready");
+            Log.Information($"{ReadyCount}/{Client.Shards.Count} shards connected");
             if (ReadyCount != Client.Shards.Count)
                 return Task.CompletedTask;
             _ = Task.Run(() => clientReady.TrySetResult(true));
@@ -194,11 +199,10 @@ public class Mewdeko
     {
         _ = Task.Run(async () =>
         {
-            var dbContext = Services.GetRequiredService<MewdekoContext>();
             await arg.DownloadUsersAsync().ConfigureAwait(false);
             Log.Information("Joined server: {0} [{1}]", arg.Name, arg.Id);
 
-            var gc = await dbContext.ForGuildId(arg.Id);
+            var gc = await GuildSettingsService.GetGuildConfig(arg.Id).ConfigureAwait(false);
 
             await JoinedGuild.Invoke(gc).ConfigureAwait(false);
             var chan =
@@ -321,29 +325,38 @@ public class Mewdeko
         await tasks.WhenAll();
     }
 
-    private static Task Client_Log(LogMessage arg)
+    private async static Task Client_Log(LogMessage arg)
     {
-        if (arg.Exception != null)
-            Log.Warning(arg.Exception, arg.Source + " | " + arg.Message);
-        else
-            Log.Information(arg.Source + " | " + arg.Message);
-
-        return Task.CompletedTask;
+        var severity = arg.Severity switch
+        {
+            LogSeverity.Critical => LogEventLevel.Fatal,
+            LogSeverity.Error => LogEventLevel.Error,
+            LogSeverity.Warning => LogEventLevel.Warning,
+            LogSeverity.Info => LogEventLevel.Information,
+            LogSeverity.Verbose => LogEventLevel.Verbose,
+            LogSeverity.Debug => LogEventLevel.Debug,
+            _ => LogEventLevel.Information
+        };
+        Log.Write(severity, arg.Exception, "[{Source}] {Message}", arg.Source, arg.Message);
+        await Task.CompletedTask;
     }
 
     private void HandleStatusChanges()
     {
         var sub = Services.GetService<IDataCache>().Redis.GetSubscriber();
+
         sub.Subscribe($"{Client.CurrentUser.Id}_status.game_set", async (_, game) =>
         {
             try
             {
-                var obj = new
+                var options = new JsonSerializerOptions
                 {
-                    Name = default(string), Activity = ActivityType.Playing
+                    PropertyNameCaseInsensitive = true
                 };
-                obj = JsonConvert.DeserializeAnonymousType(game, obj);
-                await Client.SetGameAsync(obj.Name, type: obj.Activity).ConfigureAwait(false);
+
+                var status = JsonSerializer.Deserialize<GameStatus>(game, options);
+                await Client.SetGameAsync(status?.Name, type: status?.Activity ?? ActivityType.Playing)
+                    .ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -355,12 +368,14 @@ public class Mewdeko
         {
             try
             {
-                var obj = new
+                var options = new JsonSerializerOptions
                 {
-                    Name = "", Url = ""
+                    PropertyNameCaseInsensitive = true
                 };
-                obj = JsonConvert.DeserializeAnonymousType(streamData, obj);
-                await Client.SetGameAsync(obj?.Name, obj!.Url, ActivityType.Streaming).ConfigureAwait(false);
+
+                var stream = JsonSerializer.Deserialize<StreamStatus>(streamData, options);
+                await Client.SetGameAsync(stream?.Name, stream?.Url, ActivityType.Streaming)
+                    .ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -382,7 +397,7 @@ public class Mewdeko
             Name = game, Activity = type
         };
         var sub = Services.GetService<IDataCache>().Redis.GetSubscriber();
-        await sub.PublishAsync($"{Client.CurrentUser.Id}_status.game_set", JsonConvert.SerializeObject(obj))
+        await sub.PublishAsync($"{Client.CurrentUser.Id}_status.game_set", JsonSerializer.Serialize(obj))
             .ConfigureAwait(false);
     }
 

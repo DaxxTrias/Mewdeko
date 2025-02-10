@@ -1,7 +1,7 @@
 using System.Globalization;
 using Discord.Commands;
 using Mewdeko.Common.Configs;
-using Mewdeko.Services.strings;
+using Mewdeko.Services.Strings;
 
 // ReSharper disable NotNullOrRequiredMemberIsNotInitialized
 
@@ -18,14 +18,9 @@ public abstract class MewdekoModule : ModuleBase
     protected CultureInfo? CultureInfo { get; set; }
 
     /// <summary>
-    ///     Gets or sets the string resources provider for the current module.
+    /// Source generated strings.
     /// </summary>
-    public IBotStrings Strings { get; set; }
-
-    /// <summary>
-    ///     Gets or sets the localization service for the current module.
-    /// </summary>
-    public ILocalization Localization { get; set; }
+    public GeneratedBotStrings Strings { get; set; }
 
     // ReSharper disable once InconsistentNaming
     /// <summary>
@@ -44,105 +39,64 @@ public abstract class MewdekoModule : ModuleBase
     /// </summary>
     public BotConfig Config { get; set; }
 
-    /// <summary>
-    ///     Performs tasks before executing a command.
-    /// </summary>
-    /// <param name="command">The command being executed.</param>
-    protected override void BeforeExecute(CommandInfo command)
-    {
-        CultureInfo = Localization.GetCultureInfo(ctx.Guild?.Id);
-    }
-
-    /// <summary>
-    ///     Retrieves a localized text string using the specified key.
-    /// </summary>
-    /// <param name="key">The key identifying the text string.</param>
-    /// <returns>The localized text string.</returns>
-    protected string? GetText(string? key)
-    {
-        return Strings.GetText(key, CultureInfo);
-    }
-
-    /// <summary>
-    ///     Retrieves a formatted localized text string using the specified key and arguments.
-    /// </summary>
-    /// <param name="key">The key identifying the text string.</param>
-    /// <param name="args">The arguments to format into the text string.</param>
-    /// <returns>The formatted localized text string.</returns>
-    protected string GetText(string? key, params object?[] args)
-    {
-        return Strings.GetText(key, CultureInfo, args);
-    }
 
     /// <summary>
     ///     Sends an error message to the channel with localized text.
     /// </summary>
-    /// <param name="textKey">The key identifying the text string.</param>
-    /// <param name="args">The arguments to format into the text string.</param>
+    /// <param name="text">The key identifying the text string.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    public Task<IUserMessage> ErrorLocalizedAsync(string? textKey, params object?[] args)
+    public Task<IUserMessage> ErrorAsync(string? text)
     {
-        var text = GetText(textKey, args);
         return ctx.Channel.SendErrorAsync($"{Config.ErrorEmote} {text}", Config);
     }
 
     /// <summary>
     ///     Sends an error message to the channel with localized text, mentioning the user who invoked the command.
     /// </summary>
-    /// <param name="textKey">The key identifying the text string.</param>
-    /// <param name="args">The arguments to format into the text string.</param>
+    /// <param name="text">The key identifying the text string.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    public Task<IUserMessage> ReplyErrorLocalizedAsync(string? textKey, params object?[] args)
+    public Task<IUserMessage> ReplyErrorAsync(string? text)
     {
-        var text = GetText(textKey, args);
         return ctx.Channel.SendErrorAsync($"{Format.Bold(ctx.User.ToString())} {text}", Config);
     }
 
     /// <summary>
     ///     Sends a confirmation message to the channel with localized text.
     /// </summary>
-    /// <param name="textKey">The key identifying the text string.</param>
-    /// <param name="args">The arguments to format into the text string.</param>
+    /// <param name="text">The key identifying the text string.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    public Task<IUserMessage> ConfirmLocalizedAsync(string? textKey, params object?[] args)
+    public Task<IUserMessage> ConfirmAsync(string? text)
     {
-        var text = GetText(textKey, args);
         return ctx.Channel.SendConfirmAsync(text);
     }
 
     /// <summary>
     ///     Sends a confirmation message to the channel with localized text.
     /// </summary>
-    /// <param name="textKey">The key identifying the text string.</param>
-    /// <param name="args">The arguments to format into the text string.</param>
+    /// <param name="text">The key identifying the text string.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    public Task<IUserMessage> SuccessLocalizedAsync(string? textKey, params object?[] args)
+    public Task<IUserMessage> SuccessAsync(string? text)
     {
-        var text = GetText(textKey, args);
         return ctx.Channel.SendConfirmAsync($"{Config.SuccessEmote} {text}");
     }
 
     /// <summary>
     ///     Sends a confirmation message to the channel with localized text.
     /// </summary>
-    /// <param name="textKey">The key identifying the text string.</param>
-    /// <param name="args">The arguments to format into the text string.</param>
+    /// <param name="text">The key identifying the text string.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    public Task<IUserMessage> LoadingLocalizedAsync(string? textKey, params object?[] args)
+    public Task<IUserMessage> LoadingLocalizedAsync(string? text)
     {
-        var text = GetText(textKey, args);
         return ctx.Channel.SendConfirmAsync($"{Config.LoadingEmote} {text}");
     }
 
     /// <summary>
     ///     Sends a confirmation message to the channel with localized text, mentioning the user who invoked the command.
     /// </summary>
-    /// <param name="textKey">The key identifying the text string.</param>
-    /// <param name="args">The arguments to format into the text string.</param>
+    /// <param name="text">The key identifying the text string.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    public Task<IUserMessage> ReplyConfirmLocalizedAsync(string? textKey, params object?[] args)
+    public Task<IUserMessage> ReplyConfirmAsync(string? text)
     {
-        var text = GetText(textKey, args);
         return ctx.Channel.SendConfirmAsync($"{Format.Bold(ctx.User.ToString())} {text}");
     }
 
@@ -204,7 +158,7 @@ public abstract class MewdekoModule : ModuleBase
             : botMaxRole >= targetMaxRole && modMaxRole > targetMaxRole;
 
         if (!hierarchyCheck && displayError)
-            await ReplyErrorLocalizedAsync("hierarchy").ConfigureAwait(false);
+            await ReplyErrorAsync(Strings.Hierarchy(ctx.Guild.Id)).ConfigureAwait(false);
 
         return hierarchyCheck;
     }
@@ -239,7 +193,7 @@ public abstract class MewdekoModule : ModuleBase
     /// <param name="userId">The ID of the user who interacted with the button.</param>
     /// <param name="alreadyDeferred">Determines whether the interaction has already been deferred.</param>
     /// <returns>A task representing the asynchronous operation, containing the user input string.</returns>
-    public async Task<string>? GetButtonInputAsync(ulong channelId, ulong msgId, ulong userId,
+    public async Task<string?>? GetButtonInputAsync(ulong channelId, ulong msgId, ulong userId,
         bool alreadyDeferred = false)
     {
         var userInputTask = new TaskCompletionSource<string>();
@@ -293,7 +247,7 @@ public abstract class MewdekoModule : ModuleBase
     /// <param name="channelId">The ID of the channel where the message is expected.</param>
     /// <param name="userId">The ID of the user whose message is awaited.</param>
     /// <returns>A task representing the asynchronous operation, containing the user's message content.</returns>
-    public async Task<string>? NextMessageAsync(ulong channelId, ulong userId)
+    public async Task<string?>? NextMessageAsync(ulong channelId, ulong userId)
     {
         var userInputTask = new TaskCompletionSource<string>();
         var dsc = (DiscordShardedClient)ctx.Client;
@@ -337,7 +291,7 @@ public abstract class MewdekoModule : ModuleBase
     /// <param name="channelId">The ID of the channel where the message is expected.</param>
     /// <param name="userId">The ID of the user whose message is awaited.</param>
     /// <returns>A task representing the asynchronous operation, containing the user's message.</returns>
-    public async Task<SocketMessage>? NextFullMessageAsync(ulong channelId, ulong userId)
+    public async Task<SocketMessage?>? NextFullMessageAsync(ulong channelId, ulong userId)
     {
         var userInputTask = new TaskCompletionSource<SocketMessage>();
         var dsc = (DiscordShardedClient)ctx.Client;

@@ -1,6 +1,7 @@
 ﻿using System.Diagnostics;
 using CommandLine;
 using Mewdeko.Modules.Games.Services;
+using Mewdeko.Services.Strings;
 using Serilog;
 
 namespace Mewdeko.Modules.Games.Common;
@@ -21,6 +22,8 @@ public class TypingGame
     private readonly Options options;
     private readonly string? prefix;
     private readonly Stopwatch sw;
+    private readonly EventHandler handler;
+    private readonly GeneratedBotStrings Strings;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="TypingGame" /> class.
@@ -31,12 +34,14 @@ public class TypingGame
     /// <param name="prefix">The bots prefix</param>
     /// <param name="options">Options along with starting the game</param>
     public TypingGame(GamesService games, DiscordShardedClient client, ITextChannel channel,
-        string? prefix, Options options)
+        string? prefix, Options options, EventHandler handler, GeneratedBotStrings strings)
     {
         this.games = games;
         this.client = client;
         this.prefix = prefix;
         this.options = options;
+        this.handler = handler;
+        Strings = strings;
 
         Channel = channel;
         IsActive = false;
@@ -47,7 +52,7 @@ public class TypingGame
     /// <summary>
     ///     Gets the text channel associated with the typing game.
     /// </summary>
-    public ITextChannel? Channel { get; }
+    public ITextChannel Channel { get; }
 
     /// <summary>
     ///     Gets or sets the current sentence being typed in the typing game.
@@ -69,14 +74,14 @@ public class TypingGame
     public async Task<bool> Stop()
     {
         if (!IsActive) return false;
-        client.MessageReceived -= AnswerReceived;
+        handler.MessageReceived -= AnswerReceived;
         finishedUserIds.Clear();
         IsActive = false;
         sw.Stop();
         sw.Reset();
         try
         {
-            await Channel.SendConfirmAsync("Typing contest stopped.").ConfigureAwait(false);
+            await Channel.SendConfirmAsync(Strings.TypingContestStopped(Channel.Guild.Id)).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -99,17 +104,15 @@ public class TypingGame
         try
         {
             await Channel
-                .SendConfirmAsync(
-                    $":clock2: Next contest will last for {i} seconds. Type the bolded text as fast as you can.")
+                .SendConfirmAsync(Strings.TypingContestStart(Channel.Guild.Id, i))
                 .ConfigureAwait(false);
 
             var time = options.StartTime;
 
-            var msg = await Channel.SendMessageAsync($"Starting new typing contest in **{time}**...",
-                options: new RequestOptions
-                {
-                    RetryMode = RetryMode.AlwaysRetry
-                }).ConfigureAwait(false);
+            var msg = await Channel.SendMessageAsync(
+                Strings.TypingContestCountdown(Channel.Guild.Id, time, "..."),
+                options: new RequestOptions { RetryMode = RetryMode.AlwaysRetry }
+            ).ConfigureAwait(false);
 
             do
             {
@@ -117,7 +120,8 @@ public class TypingGame
                 time -= 2;
                 try
                 {
-                    await msg.ModifyAsync(m => m.Content = $"Starting new typing contest in **{time}**..")
+                    await msg.ModifyAsync(m =>
+                            m.Content = Strings.TypingContestCountdown(Channel.Guild.Id, time, "..."))
                         .ConfigureAwait(false);
                 }
                 catch
@@ -158,61 +162,66 @@ public class TypingGame
     {
         if (games.TypingArticles.Count > 0)
             return games.TypingArticles[new MewdekoRandom().Next(0, games.TypingArticles.Count)].Text;
-        return $"No typing articles found. Use {prefix}typeadd command to add a new article for typing.";
-    }
+        return games.TypingArticles.Count > 0
+            ? games.TypingArticles[new MewdekoRandom().Next(0, games.TypingArticles.Count)].Text
+            : Strings.TypingNoArticles(Channel.Guild.Id, prefix);    }
 
 
     private void HandleAnswers()
     {
-        client.MessageReceived += AnswerReceived;
+        handler.MessageReceived += AnswerReceived;
     }
 
-    private Task AnswerReceived(SocketMessage imsg)
+    private async Task AnswerReceived(SocketMessage imsg)
     {
-        _ = Task.Run(async () =>
+        try
         {
-            try
+            if (imsg.Author.IsBot)
+                return;
+            if (imsg is not SocketUserMessage msg)
+                return;
+
+            if (Channel == null || Channel.Id != msg.Channel.Id) return;
+
+            var guess = msg.Content;
+
+            var distance = CurrentSentence.LevenshteinDistance(guess);
+            var decision = Judge(distance, guess.Length);
+            if (decision && !finishedUserIds.Contains(msg.Author.Id))
             {
-                if (imsg.Author.IsBot)
-                    return;
-                if (imsg is not SocketUserMessage msg)
-                    return;
-
-                if (Channel == null || Channel.Id != msg.Channel.Id) return;
-
-                var guess = msg.Content;
-
-                var distance = CurrentSentence.LevenshteinDistance(guess);
-                var decision = Judge(distance, guess.Length);
-                if (decision && !finishedUserIds.Contains(msg.Author.Id))
+                var elapsed = sw.Elapsed;
+                var wpm = CurrentSentence.Length / WordValue / elapsed.TotalSeconds * 60;
+                finishedUserIds.Add(msg.Author.Id);
+             await Channel.EmbedAsync(new EmbedBuilder().WithOkColor()
+    .WithTitle(Strings.TypingRaceFinishTitle(Channel.Guild.Id, msg.Author))
+    .AddField(efb => efb
+        .WithName("Place")
+        .WithValue(Strings.TypingRaceFinishPlace(Channel.Guild.Id, finishedUserIds.Count))
+        .WithIsInline(true))
+    .AddField(efb => efb
+        .WithName("WPM")
+        .WithValue(Strings.TypingRaceFinishWpm(
+            Channel.Guild.Id,
+            wpm.ToString("F1"),
+            elapsed.TotalSeconds.ToString("F2")))
+        .WithIsInline(true))
+    .AddField(efb => efb
+        .WithName("Errors")
+        .WithValue(Strings.TypingRaceFinishErrors(Channel.Guild.Id, distance))
+        .WithIsInline(true)))
+.ConfigureAwait(false);
+                if (finishedUserIds.Count % 4 == 0)
                 {
-                    var elapsed = sw.Elapsed;
-                    var wpm = CurrentSentence.Length / WordValue / elapsed.TotalSeconds * 60;
-                    finishedUserIds.Add(msg.Author.Id);
-                    await Channel.EmbedAsync(new EmbedBuilder().WithOkColor()
-                            .WithTitle($"{msg.Author} finished the race!")
-                            .AddField(efb =>
-                                efb.WithName("Place").WithValue($"#{finishedUserIds.Count}").WithIsInline(true))
-                            .AddField(efb =>
-                                efb.WithName("WPM").WithValue($"{wpm:F1} *[{elapsed.TotalSeconds:F2}sec]*")
-                                    .WithIsInline(true))
-                            .AddField(efb =>
-                                efb.WithName("Errors").WithValue(distance.ToString()).WithIsInline(true)))
+                    await Channel.SendConfirmAsync(
+                            $":exclamation: A lot of people finished, here is the text for those still typing:\n\n**{Format.Sanitize(CurrentSentence.Replace(" ", " \x200B", StringComparison.InvariantCulture)).SanitizeMentions(true)}**")
                         .ConfigureAwait(false);
-                    if (finishedUserIds.Count % 4 == 0)
-                    {
-                        await Channel.SendConfirmAsync(
-                                $":exclamation: A lot of people finished, here is the text for those still typing:\n\n**{Format.Sanitize(CurrentSentence.Replace(" ", " \x200B", StringComparison.InvariantCulture)).SanitizeMentions(true)}**")
-                            .ConfigureAwait(false);
-                    }
                 }
             }
-            catch (Exception ex)
-            {
-                Log.Warning(ex.ToString());
-            }
-        });
-        return Task.CompletedTask;
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex.ToString());
+        }
     }
 
     private static bool Judge(int errors, int textLength)

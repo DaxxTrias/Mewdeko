@@ -1,7 +1,7 @@
-using System.Globalization;
 using Discord.Interactions;
 using Mewdeko.Common.Configs;
-using Mewdeko.Services.strings;
+using Mewdeko.Services.Strings;
+using Microsoft.Extensions.DependencyInjection;
 
 // ReSharper disable NotNullOrRequiredMemberIsNotInitialized
 
@@ -13,24 +13,14 @@ namespace Mewdeko.Common;
 public abstract class MewdekoSlashCommandModule : InteractionModuleBase
 {
     /// <summary>
-    ///     The culture information used for localization.
-    /// </summary>
-    protected CultureInfo? CultureInfo { get; set; }
-
-    /// <summary>
     ///     The bot strings service for localization.
     /// </summary>
-    public IBotStrings? Strings { get; set; }
+    public GeneratedBotStrings Strings { get; set; }
 
     /// <summary>
     ///     The command handler service.
     /// </summary>
     public CommandHandler? CmdHandler { get; set; }
-
-    /// <summary>
-    ///     The localization service.
-    /// </summary>
-    public ILocalization? Localization { get; set; }
 
     /// <summary>
     ///     The bot configuration.
@@ -49,37 +39,12 @@ public abstract class MewdekoSlashCommandModule : InteractionModuleBase
         }
     }
 
-    /// <summary>
-    ///     Executed before the command is executed.
-    ///     Sets the culture information based on the guild's localization settings.
-    /// </summary>
-    public override void BeforeExecute(ICommandInfo cmd)
-    {
-        CultureInfo = Localization.GetCultureInfo(ctx.Guild);
-    }
-
-    /// <summary>
-    ///     Retrieves a localized text message for the given key.
-    /// </summary>
-    protected string? GetText(string? key)
-    {
-        return Strings.GetText(key, CultureInfo);
-    }
-
-    /// <summary>
-    ///     Retrieves a localized text message for the given key with optional arguments.
-    /// </summary>
-    protected string? GetText(string? key, params object?[] args)
-    {
-        return Strings.GetText(key, CultureInfo, args);
-    }
 
     /// <summary>
     ///     Sends an error message based on the specified key with optional arguments.
     /// </summary>
-    public Task ErrorLocalizedAsync(string? textKey, params object?[] args)
+    public Task ErrorAsync(string? text)
     {
-        var text = GetText(textKey, args);
         return !ctx.Interaction.HasResponded
             ? ctx.Interaction.SendErrorAsync(text, Config)
             : ctx.Interaction.SendErrorFollowupAsync(text, Config);
@@ -88,9 +53,8 @@ public abstract class MewdekoSlashCommandModule : InteractionModuleBase
     /// <summary>
     ///     Sends an error message as a reply to the user with the specified key and optional arguments.
     /// </summary>
-    public Task ReplyErrorLocalizedAsync(string? textKey, params object?[] args)
+    public Task ReplyErrorAsync(string? text)
     {
-        var text = GetText(textKey, args);
         return !ctx.Interaction.HasResponded
             ? ctx.Interaction.SendErrorAsync($"{Format.Bold(ctx.User.ToString())} {text}", Config)
             : ctx.Interaction.SendErrorFollowupAsync($"{Format.Bold(ctx.User.ToString())} {text}", Config);
@@ -99,9 +63,8 @@ public abstract class MewdekoSlashCommandModule : InteractionModuleBase
     /// <summary>
     ///     Sends an ephemeral error message as a reply to the user with the specified key and optional arguments.
     /// </summary>
-    public Task EphemeralReplyErrorLocalizedAsync(string? textKey, params object?[] args)
+    public Task EphemeralReplyErrorAsync(string? text)
     {
-        var text = GetText(textKey, args);
         return !ctx.Interaction.HasResponded
             ? ctx.Interaction.SendEphemeralFollowupErrorAsync($"{Format.Bold(ctx.User.ToString())} {text}", Config)
             : ctx.Interaction.SendEphemeralErrorAsync($"{Format.Bold(ctx.User.ToString())} {text}", Config);
@@ -110,9 +73,8 @@ public abstract class MewdekoSlashCommandModule : InteractionModuleBase
     /// <summary>
     ///     Sends a confirmation message based on the specified key with optional arguments.
     /// </summary>
-    public Task ConfirmLocalizedAsync(string? textKey, params object?[] args)
+    public Task ConfirmAsync(string? text)
     {
-        var text = GetText(textKey, args);
         return !ctx.Interaction.HasResponded
             ? ctx.Interaction.SendConfirmAsync(text)
             : ctx.Interaction.SendConfirmFollowupAsync(text);
@@ -121,9 +83,8 @@ public abstract class MewdekoSlashCommandModule : InteractionModuleBase
     /// <summary>
     ///     Sends a confirmation message as a reply to the user with the specified key and optional arguments.
     /// </summary>
-    public Task ReplyConfirmLocalizedAsync(string? textKey, params object?[] args)
+    public Task ReplyConfirmAsync(string? text)
     {
-        var text = GetText(textKey, args);
         return ctx.Interaction.HasResponded
             ? ctx.Interaction.SendConfirmFollowupAsync($"{Format.Bold(ctx.User.ToString())} {text}")
             : ctx.Interaction.SendConfirmAsync($"{Format.Bold(ctx.User.ToString())} {text}");
@@ -132,9 +93,8 @@ public abstract class MewdekoSlashCommandModule : InteractionModuleBase
     /// <summary>
     ///     Sends an ephemeral confirmation message as a reply to the user with the specified key and optional arguments.
     /// </summary>
-    public Task EphemeralReplyConfirmLocalizedAsync(string? textKey, params object?[] args)
+    public Task EphemeralReplyConfirmAsync(string? text)
     {
-        var text = GetText(textKey, args);
         return !ctx.Interaction.HasResponded
             ? ctx.Interaction.SendEphemeralConfirmAsync($"{Format.Bold(ctx.User.ToString())} {text}")
             : ctx.Interaction.SendEphemeralFollowupConfirmAsync($"{Format.Bold(ctx.User.ToString())} {text}");
@@ -189,7 +149,7 @@ public abstract class MewdekoSlashCommandModule : InteractionModuleBase
             : botMaxRole >= targetMaxRole && modMaxRole > targetMaxRole;
 
         if (!hierarchyCheck && displayError)
-            await ReplyErrorLocalizedAsync("hierarchy").ConfigureAwait(false);
+            await ReplyErrorAsync("hierarchy").ConfigureAwait(false);
 
         return hierarchyCheck;
     }
@@ -207,10 +167,11 @@ public abstract class MewdekoSlashCommandModule : InteractionModuleBase
         bool alreadyDeferred = false)
     {
         var userInputTask = new TaskCompletionSource<string>();
-        var dsc = (DiscordShardedClient)ctx.Client;
+        var dsc = CmdHandler.Services.GetRequiredService<DiscordShardedClient>();
+        var handler = new EventHandler(dsc);
         try
         {
-            dsc.InteractionCreated += Interaction;
+            handler.InteractionCreated += Interaction;
             if (await Task.WhenAny(userInputTask.Task, Task.Delay(30000)).ConfigureAwait(false) !=
                 userInputTask.Task)
             {
@@ -221,35 +182,27 @@ public abstract class MewdekoSlashCommandModule : InteractionModuleBase
         }
         finally
         {
-            dsc.InteractionCreated -= Interaction;
+            handler.InteractionCreated -= Interaction;
         }
 
-        Task Interaction(SocketInteraction arg)
+        async Task Interaction(SocketInteraction arg)
         {
-            if (arg is SocketMessageComponent c)
+            if (arg is not SocketMessageComponent c) return;
+            if (c.Channel.Id != channelId || c.Message.Id != msgId || c.User.Id != userId)
             {
-                Task.Run(() =>
-                {
-                    if (c.Channel.Id != channelId || c.Message.Id != msgId || c.User.Id != userId)
-                    {
-                        if (!alreadyDeferred) c.DeferAsync();
-                        return Task.CompletedTask;
-                    }
-
-                    if (c.Data.CustomId == "yes")
-                    {
-                        if (!alreadyDeferred) c.DeferAsync();
-                        userInputTask.TrySetResult("Yes");
-                        return Task.CompletedTask;
-                    }
-
-                    if (!alreadyDeferred) c.DeferAsync();
-                    userInputTask.TrySetResult(c.Data.CustomId);
-                    return Task.CompletedTask;
-                });
+                if (!alreadyDeferred) await c.DeferAsync();
+                return;
             }
 
-            return Task.CompletedTask;
+            if (c.Data.CustomId == "yes")
+            {
+                if (!alreadyDeferred) await c.DeferAsync();
+                userInputTask.TrySetResult("Yes");
+                return;
+            }
+
+            if (!alreadyDeferred) await c.DeferAsync();
+            userInputTask.TrySetResult(c.Data.CustomId);
         }
     }
 
@@ -262,10 +215,11 @@ public abstract class MewdekoSlashCommandModule : InteractionModuleBase
     public async Task<string>? NextMessageAsync(ulong channelId, ulong userId)
     {
         var userInputTask = new TaskCompletionSource<string>();
-        var dsc = (DiscordShardedClient)ctx.Client;
+        var dsc = CmdHandler.Services.GetRequiredService<DiscordShardedClient>();
+        var handler = new EventHandler(dsc);
         try
         {
-            dsc.MessageReceived += Interaction;
+            handler.MessageReceived += Interaction;
             if (await Task.WhenAny(userInputTask.Task, Task.Delay(60000)).ConfigureAwait(false) !=
                 userInputTask.Task)
             {
@@ -279,24 +233,19 @@ public abstract class MewdekoSlashCommandModule : InteractionModuleBase
             dsc.MessageReceived -= Interaction;
         }
 
-        Task Interaction(SocketMessage arg)
+        async Task Interaction(SocketMessage arg)
         {
-            Task.Run(() =>
-            {
-                if (arg.Author.Id != userId || arg.Channel.Id != channelId) return Task.CompletedTask;
+                if (arg.Author.Id != userId || arg.Channel.Id != channelId) return;
                 userInputTask.TrySetResult(arg.Content);
                 try
                 {
-                    arg.DeleteAsync();
+                    await arg.DeleteAsync();
                 }
                 catch
                 {
                     //Exclude
                 }
 
-                return Task.CompletedTask;
-            });
-            return Task.CompletedTask;
         }
     }
 }
@@ -315,13 +264,9 @@ public abstract class MewdekoSlashModuleBase<TService> : MewdekoSlashCommandModu
 /// <summary>
 ///     Base class for generic slash submodule in Mewdeko.
 /// </summary>
-public abstract class MewdekoSlashSubmodule : MewdekoSlashCommandModule
-{
-}
+public abstract class MewdekoSlashSubmodule : MewdekoSlashCommandModule;
 
 /// <summary>
 ///     Base class for generic slash submodule with a service in Mewdeko.
 /// </summary>
-public abstract class MewdekoSlashSubmodule<TService> : MewdekoSlashModuleBase<TService>
-{
-}
+public abstract class MewdekoSlashSubmodule<TService> : MewdekoSlashModuleBase<TService>;

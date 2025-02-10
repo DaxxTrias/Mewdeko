@@ -2,6 +2,7 @@
 using System.IO;
 using System.Reflection;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using LinqToDB;
 using LinqToDB.Data;
@@ -12,7 +13,7 @@ using Mewdeko.Services.Impl;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Migrations;
-using Newtonsoft.Json;
+
 using Serilog;
 
 namespace Mewdeko.Database;
@@ -22,7 +23,7 @@ namespace Mewdeko.Database;
 /// </summary>
 public class MigrationService
 {
-    private readonly DbContextProvider provider;
+    private readonly DbContextProvider? provider;
     private readonly string token;
 
     /// <summary>
@@ -38,12 +39,6 @@ public class MigrationService
         {
             throw new ArgumentException("PostgreSQL connection string must be provided.");
         }
-
-
-        var builder = new DbContextOptionsBuilder()
-            .UseNpgsql(psqlConnection)
-            .EnableDetailedErrors()
-            .EnableSensitiveDataLogging();
 
         if (migrate)
         {
@@ -76,6 +71,8 @@ public class MigrationService
                 folderpath + $"/.local/share/Mewdeko/{clientId}/data/Mewdeko.db";
         else
             builder.DataSource = builder.DataSource = folderpath + $"/Mewdeko/{clientId}/data/Mewdeko.db";
+
+        Log.Information(builder.DataSource);
 
         return builder.ToString();
     }
@@ -130,14 +127,10 @@ public class MigrationService
         await TransferEntityDataAsync<HighlightSettings, HighlightSettings>(sourceContext, destinationContext, x => x);
         await TransferEntityDataAsync<JoinLeaveLogs, JoinLeaveLogs>(sourceContext, destinationContext, x => x);
         await TransferEntityDataAsync<MultiGreet, MultiGreet>(sourceContext, destinationContext, x => x);
-        await TransferEntityDataAsync<MusicPlaylist, MusicPlaylist>(sourceContext, destinationContext, x => x);
-        await TransferEntityDataAsync<MusicPlayerSettings, MusicPlayerSettings>(sourceContext, destinationContext,
-            x => x);
         await TransferEntityDataAsync<MutedUserId, MutedUserId>(sourceContext, destinationContext, x => x);
         await TransferEntityDataAsync<GlobalUserBalance, GlobalUserBalance>(sourceContext, destinationContext, x => x);
         await TransferEntityDataAsync<GuildUserBalance, GuildUserBalance>(sourceContext, destinationContext, x => x);
         await TransferEntityDataAsync<OwnerOnly, OwnerOnly>(sourceContext, destinationContext, x => x);
-        await TransferEntityDataAsync<PlaylistSong, PlaylistSong>(sourceContext, destinationContext, x => x);
         await TransferEntityDataAsync<PublishUserBlacklist, PublishUserBlacklist>(sourceContext, destinationContext,
             x => x);
         await TransferEntityDataAsync<PublishWordBlacklist, PublishWordBlacklist>(sourceContext, destinationContext,
@@ -150,7 +143,7 @@ public class MigrationService
             x => x);
         await TransferEntityDataAsync<ServerRecoveryStore, ServerRecoveryStore>(sourceContext, destinationContext,
             x => x);
-        await TransferEntityDataAsync<StarboardPosts, StarboardPosts>(sourceContext, destinationContext, x => x);
+        await TransferEntityDataAsync<StarboardPost, StarboardPost>(sourceContext, destinationContext, x => x);
         await TransferEntityDataAsync<StatusRolesTable, StatusRolesTable>(sourceContext, destinationContext, x => x);
         await TransferEntityDataAsync<SuggestionsModel, SuggestionsModel>(sourceContext, destinationContext, x => x);
         await TransferEntityDataAsync<SuggestThreads, SuggestThreads>(sourceContext, destinationContext, x => x);
@@ -173,15 +166,8 @@ public class MigrationService
         await destinationContext.ExecuteAsync("SET session_replication_role = default;");
 
         Log.Warning(
-            "Copy Complete. Shutting down bot and turning off migration mode...");
-        var creds = new BotCredentials
-        {
-            MigrateToPsql = false
-        };
-        var json = JsonConvert.SerializeObject(creds, Formatting.Indented);
-
-        await File.WriteAllTextAsync("./credentials.json", json);
-        Helpers.ReadErrorAndExit(0);
+            "Copy Complete. Please set migratetopsql to false in credentials and relaunch.");
+        Environment.Exit(0);
     }
 
     /// <summary>
@@ -250,7 +236,7 @@ public class MigrationService
     /// <param name="context">The database context.</param>
     public async Task ApplyMigrations(DbContext? context = null)
     {
-        context ??= await provider.GetContextAsync();
+        context ??= await provider!.GetContextAsync();
         var toApply = (await context.Database.GetPendingMigrationsAsync().ConfigureAwait(false)).ToList();
         if (toApply.Count != 0)
         {
