@@ -6,27 +6,74 @@ namespace Mewdeko.Modules.Searches;
 
 public partial class Searches
 {
+    /// <summary>
+    ///     Module for retrieving various types of jokes.
+    /// </summary>
     [Group]
     public class JokeCommands : MewdekoSubmodule<SearchesService>
     {
-        [Cmd, Aliases]
-        public async Task Yomama() =>
+        /// <summary>
+        ///     Retrieves a Yo Mama joke.
+        /// </summary>
+        /// <remarks>
+        ///     This command retrieves a Yo Mama joke and sends it to the channel.
+        /// </remarks>
+        /// <example>
+        ///     <code>.yomama</code>
+        /// </example>
+        [Cmd]
+        [Aliases]
+        public async Task Yomama()
+        {
             await ctx.Channel.SendConfirmAsync(await Service.GetYomamaJoke().ConfigureAwait(false))
                 .ConfigureAwait(false);
+        }
 
-        [Cmd, Aliases]
+        /// <summary>
+        ///     Retrieves a random joke.
+        /// </summary>
+        /// <remarks>
+        ///     This command retrieves a random joke and sends its setup and punchline to the channel.
+        /// </remarks>
+        /// <example>
+        ///     <code>.randjoke</code>
+        /// </example>
+        [Cmd]
+        [Aliases]
         public async Task Randjoke()
         {
             var (setup, punchline) = await Service.GetRandomJoke().ConfigureAwait(false);
             await ctx.Channel.SendConfirmAsync(setup, punchline).ConfigureAwait(false);
         }
 
-        [Cmd, Aliases]
-        public async Task ChuckNorris() =>
+        /// <summary>
+        ///     Retrieves a Chuck Norris joke.
+        /// </summary>
+        /// <remarks>
+        ///     This command retrieves a Chuck Norris joke and sends it to the channel.
+        /// </remarks>
+        /// <example>
+        ///     <code>.chucknorris</code>
+        /// </example>
+        [Cmd]
+        [Aliases]
+        public async Task ChuckNorris()
+        {
             await ctx.Channel.SendConfirmAsync(await Service.GetChuckNorrisJoke().ConfigureAwait(false))
                 .ConfigureAwait(false);
+        }
 
-        [Cmd, Aliases]
+        /// <summary>
+        ///     Retrieves a joke related to World of Warcraft.
+        /// </summary>
+        /// <remarks>
+        ///     This command retrieves a joke related to World of Warcraft and sends it to the channel.
+        /// </remarks>
+        /// <example>
+        ///     <code>.wowjoke</code>
+        /// </example>
+        [Cmd]
+        [Aliases]
         public async Task WowJoke()
         {
             if (Service.WowJokes.Count == 0)
@@ -39,7 +86,17 @@ public partial class Searches
             await ctx.Channel.SendConfirmAsync(joke.Question, joke.Answer).ConfigureAwait(false);
         }
 
-        [Cmd, Aliases]
+        /// <summary>
+        ///     Retrieves a magic item description related to World of Warcraft.
+        /// </summary>
+        /// <remarks>
+        ///     This command retrieves a magic item description related to World of Warcraft and sends it to the channel.
+        /// </remarks>
+        /// <example>
+        ///     <code>.magicitem</code>
+        /// </example>
+        [Cmd]
+        [Aliases]
         public async Task MagicItem()
         {
             if (Service.WowJokes.Count == 0)

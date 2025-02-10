@@ -3,53 +3,77 @@ using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
 using Mewdeko.Common.Attributes.InteractionCommands;
 using Mewdeko.Common.Autocompleters;
+using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.Highlights.Services;
 
 namespace Mewdeko.Modules.Highlights;
 
+/// <summary>
+///     Slash module for managing highlights.
+/// </summary>
 [Group("highlights", "Set or manage highlights")]
 public class SlashHighlights : MewdekoSlashModuleBase<HighlightsService>
 {
+    private readonly DbContextProvider dbProvider;
     private readonly InteractiveService interactivity;
-    private readonly DbService db;
 
-    public SlashHighlights(InteractiveService interactivity, DbService db)
+    /// <summary>
+    ///     Initializes a new instance of <see cref="SlashHighlights" />.
+    /// </summary>
+    /// <param name="interactivity">Embed pagination service</param>
+    /// <param name="db">The database provider</param>
+    public SlashHighlights(InteractiveService interactivity, DbContextProvider dbProvider)
     {
         this.interactivity = interactivity;
-        this.db = db;
+        this.dbProvider = dbProvider;
     }
 
-    [SlashCommand("add", "Add new highlights."), RequireContext(ContextType.Guild), CheckPermissions]
+    /// <summary>
+    ///     Adds a new highlight.
+    /// </summary>
+    /// <param name="words">Word or regex to add</param>
+    [SlashCommand("add", "Add new highlights.")]
+    [RequireContext(ContextType.Guild)]
+    [CheckPermissions]
     public async Task AddHighlight([Summary("words", "Words to highlight.")] string words)
     {
-        await using var uow = db.GetDbContext();
-        var highlights = uow.Highlights.ForUser(ctx.Guild.Id, ctx.User.Id).ToList();
+        await using var dbContext = await dbProvider.GetContextAsync();
+
+        var highlights = (await dbContext.Highlights.ForUser(ctx.Guild.Id, ctx.User.Id)).ToList();
         if (string.IsNullOrWhiteSpace(words))
         {
-            await ctx.Interaction.SendErrorAsync("You need to specify a phrase to highlight.").ConfigureAwait(false);
+            await ctx.Interaction.SendErrorAsync("You need to specify a phrase to highlight.", Config)
+                .ConfigureAwait(false);
             return;
         }
 
         if (highlights.Count > 0 && highlights.Select(x => x.Word.ToLower()).Contains(words.ToLower()))
         {
-            await ctx.Interaction.SendErrorAsync("That's already in your highlights").ConfigureAwait(false);
+            await ctx.Interaction.SendErrorAsync("That's already in your highlights", Config).ConfigureAwait(false);
         }
         else
         {
             await Service.AddHighlight(ctx.Guild.Id, ctx.User.Id, words).ConfigureAwait(false);
-            await ctx.Interaction.SendConfirmAsync($"Added {Format.Code(words)} to your highlights!").ConfigureAwait(false);
+            await ctx.Interaction.SendConfirmAsync($"Added {Format.Code(words)} to your highlights!")
+                .ConfigureAwait(false);
         }
     }
 
-    [SlashCommand("list", "List your current highlights."), RequireContext(ContextType.Guild), CheckPermissions]
+    /// <summary>
+    ///     Lists the current highlights.
+    /// </summary>
+    [SlashCommand("list", "List your current highlights.")]
+    [RequireContext(ContextType.Guild)]
+    [CheckPermissions]
     public async Task ListHighlights()
     {
-        await using var uow = db.GetDbContext();
-        var highlightsForUser = uow.Highlights.ForUser(ctx.Guild.Id, ctx.User.Id).ToList();
+        await using var dbContext = await dbProvider.GetContextAsync();
+
+        var highlightsForUser = (await dbContext.Highlights.ForUser(ctx.Guild.Id, ctx.User.Id)).ToList();
 
         if (highlightsForUser.Count == 0)
         {
-            await ctx.Interaction.SendErrorAsync("You have no highlights set.").ConfigureAwait(false);
+            await ctx.Interaction.SendErrorAsync("You have no highlights set.", Config).ConfigureAwait(false);
             return;
         }
 
@@ -71,27 +95,36 @@ public class SlashHighlights : MewdekoSlashModuleBase<HighlightsService>
             var highlightsEnumerable = highlightsForUser.Skip(page * 10).Take(10);
             return new PageBuilder().WithOkColor()
                 .WithTitle($"{highlightsForUser.Count()} Highlights")
-                .WithDescription(string.Join("\n", highlightsEnumerable.Select(x => $"{highlightsForUser.IndexOf(x) + 1}. {x.Word}")));
+                .WithDescription(string.Join("\n",
+                    highlightsEnumerable.Select(x => $"{highlightsForUser.IndexOf(x) + 1}. {x.Word}")));
         }
     }
 
-    [SlashCommand("delete", "Delete a highlight."), RequireContext(ContextType.Guild), CheckPermissions]
+    /// <summary>
+    ///     Deletes a highlight.
+    /// </summary>
+    /// <param name="words">Autocomplete list of highlights to delete</param>
+    [SlashCommand("delete", "Delete a highlight.")]
+    [RequireContext(ContextType.Guild)]
+    [CheckPermissions]
     public async Task DeleteHighlight(
-        [Autocomplete(typeof(HighlightAutocompleter)), Summary("words", "The highlight to delete.")]
+        [Autocomplete(typeof(HighlightAutocompleter))] [Summary("words", "The highlight to delete.")]
         string words)
     {
         if (string.IsNullOrWhiteSpace(words))
         {
-            await ctx.Interaction.SendErrorAsync("Cannot delete an empty highlight.").ConfigureAwait(false);
+            await ctx.Interaction.SendErrorAsync("Cannot delete an empty highlight.", Config).ConfigureAwait(false);
             return;
         }
 
-        await using var uow = db.GetDbContext();
-        var highlightsForUser = uow.Highlights.ForUser(ctx.Guild.Id, ctx.User.Id).ToList();
+        await using var dbContext = await dbProvider.GetContextAsync();
+
+        var highlightsForUser = await dbContext.Highlights.ForUser(ctx.Guild.Id, ctx.User.Id);
 
         if (highlightsForUser.Count == 0)
         {
-            await ctx.Interaction.SendErrorAsync("Cannot delete because you have no highlights set!").ConfigureAwait(false);
+            await ctx.Interaction.SendErrorAsync("Cannot delete because you have no highlights set!", Config)
+                .ConfigureAwait(false);
             return;
         }
 
@@ -100,43 +133,53 @@ public class SlashHighlights : MewdekoSlashModuleBase<HighlightsService>
             var todelete = highlightsForUser.ElementAt(number - 1);
             if (todelete is null)
             {
-                await ctx.Interaction.SendErrorAsync("That Highlight does not exist!").ConfigureAwait(false);
+                await ctx.Interaction.SendErrorAsync("That Highlight does not exist!", Config).ConfigureAwait(false);
                 return;
             }
 
             await Service.RemoveHighlight(todelete).ConfigureAwait(false);
-            await ctx.Interaction.SendConfirmAsync($"Successfully removed {Format.Code(todelete.Word)} from your highlights.").ConfigureAwait(false);
+            await ctx.Interaction
+                .SendConfirmAsync($"Successfully removed {Format.Code(todelete.Word)} from your highlights.")
+                .ConfigureAwait(false);
             return;
         }
 
         if (!highlightsForUser.Select(x => x.Word).Contains(words))
         {
-            await ctx.Interaction.SendErrorAsync("This is not in your highlights!").ConfigureAwait(false);
+            await ctx.Interaction.SendErrorAsync("This is not in your highlights!", Config).ConfigureAwait(false);
             return;
         }
 
         await Service.RemoveHighlight(highlightsForUser.Find(x => x.Word == words)).ConfigureAwait(false);
-        await ctx.Interaction.SendConfirmAsync($"Successfully removed {Format.Code(words)} from your highlights.").ConfigureAwait(false);
+        await ctx.Interaction.SendConfirmAsync($"Successfully removed {Format.Code(words)} from your highlights.")
+            .ConfigureAwait(false);
     }
 
-    [SlashCommand("match", "Find a matching highlight."), RequireContext(ContextType.Guild), CheckPermissions]
+    /// <summary>
+    ///     Attempts to match a highlight in a given message.
+    /// </summary>
+    /// <param name="words">The phrase to match</param>
+    [SlashCommand("match", "Find a matching highlight.")]
+    [RequireContext(ContextType.Guild)]
+    [CheckPermissions]
     public async Task MatchHighlight(
-        [Autocomplete(typeof(HighlightAutocompleter)), Summary("words", "The highlight to find.")]
+        [Autocomplete(typeof(HighlightAutocompleter))] [Summary("words", "The highlight to find.")]
         string words)
     {
         if (string.IsNullOrWhiteSpace(words))
         {
-            await ctx.Interaction.SendErrorAsync("Cannot match an empty highlight.").ConfigureAwait(false);
+            await ctx.Interaction.SendErrorAsync("Cannot match an empty highlight.", Config).ConfigureAwait(false);
             return;
         }
 
-        await using var uow = db.GetDbContext();
-        var highlightsForUser = uow.Highlights.ForUser(ctx.Guild.Id, ctx.User.Id).ToList();
+        await using var dbContext = await dbProvider.GetContextAsync();
+
+        var highlightsForUser = await dbContext.Highlights.ForUser(ctx.Guild.Id, ctx.User.Id);
 
         var matched = highlightsForUser.Where(x => words.ToLower().Contains(x.Word.ToLower()));
         if (!matched.Any())
         {
-            await ctx.Interaction.SendErrorAsync("No matches found.").ConfigureAwait(false);
+            await ctx.Interaction.SendErrorAsync("No matches found.", Config).ConfigureAwait(false);
             return;
         }
 
@@ -158,11 +201,18 @@ public class SlashHighlights : MewdekoSlashModuleBase<HighlightsService>
             var highlightsEnumerable = matched.Skip(page * 10).Take(10);
             return new PageBuilder().WithOkColor()
                 .WithTitle($"{highlightsForUser.Count()} Highlights")
-                .WithDescription(string.Join("\n", highlightsEnumerable.Select(x => $"{highlightsForUser.IndexOf(x) + 1}. {x.Word}")));
+                .WithDescription(string.Join("\n",
+                    highlightsEnumerable.Select(x => $"{highlightsForUser.IndexOf(x) + 1}. {x.Word}")));
         }
     }
 
-    [SlashCommand("toggle-user", "Ignore a specified user."), RequireContext(ContextType.Guild), CheckPermissions]
+    /// <summary>
+    ///     Toggles a user to be ignored.
+    /// </summary>
+    /// <param name="user">User to be ignored</param>
+    [SlashCommand("toggle-user", "Ignore a specified user.")]
+    [RequireContext(ContextType.Guild)]
+    [CheckPermissions]
     public async Task ToggleUser(IUser user)
     {
         if (await Service.ToggleIgnoredUser(ctx.Guild.Id, ctx.User.Id, user.Id.ToString()).ConfigureAwait(false))
@@ -174,19 +224,33 @@ public class SlashHighlights : MewdekoSlashModuleBase<HighlightsService>
         await ctx.Interaction.SendConfirmAsync($"Removed {user.Mention} from ignored users!").ConfigureAwait(false);
     }
 
-    [SlashCommand("toggle-channel", "Ignore a specified channel."), RequireContext(ContextType.Guild), CheckPermissions]
+    /// <summary>
+    ///     Toggles a channel to be ignored.
+    /// </summary>
+    /// <param name="channel">The channel to be toggled</param>
+    [SlashCommand("toggle-channel", "Ignore a specified channel.")]
+    [RequireContext(ContextType.Guild)]
+    [CheckPermissions]
     public async Task ToggleChannel(ITextChannel channel)
     {
         if (await Service.ToggleIgnoredUser(ctx.Guild.Id, ctx.User.Id, channel.Id.ToString()).ConfigureAwait(false))
         {
-            await ctx.Interaction.SendConfirmAsync($"Added {channel.Mention} to ignored channels!").ConfigureAwait(false);
+            await ctx.Interaction.SendConfirmAsync($"Added {channel.Mention} to ignored channels!")
+                .ConfigureAwait(false);
             return;
         }
 
-        await ctx.Interaction.SendConfirmAsync($"Removed {channel.Mention} from ignored channels!").ConfigureAwait(false);
+        await ctx.Interaction.SendConfirmAsync($"Removed {channel.Mention} from ignored channels!")
+            .ConfigureAwait(false);
     }
 
-    [SlashCommand("toggle-global", "Enable or disable highlights globally."), RequireContext(ContextType.Guild), CheckPermissions]
+    /// <summary>
+    ///     Toggles highlights globally.
+    /// </summary>
+    /// <param name="enabled"></param>
+    [SlashCommand("toggle-global", "Enable or disable highlights globally.")]
+    [RequireContext(ContextType.Guild)]
+    [CheckPermissions]
     public async Task ToggleGlobal([Summary("enabled", "Are highlights enabled globally?")] bool enabled)
     {
         if (enabled)

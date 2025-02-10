@@ -1,52 +1,317 @@
 using System.Net.Http;
 using System.Threading;
+using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.Nsfw.Common;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 
 namespace Mewdeko.Modules.Nsfw;
 
+/// <summary>
+///     Represents a response containing information about a URL.
+/// </summary>
 public record UrlReply
 {
+    /// <summary>
+    ///     Gets or initializes the error message, if any.
+    /// </summary>
     public string Error { get; init; }
+
+    /// <summary>
+    ///     Gets or initializes the URL.
+    /// </summary>
     public string Url { get; init; }
+
+    /// <summary>
+    ///     Gets or initializes the rating associated with the URL.
+    /// </summary>
     public string Rating { get; init; }
+
+    /// <summary>
+    ///     Gets or initializes the provider of the URL.
+    /// </summary>
     public string Provider { get; init; }
-    public List<string> Tags { get; } = new();
+
+    /// <summary>
+    ///     Gets the list of tags associated with the URL.
+    /// </summary>
+    public List<string> Tags { get; } = [];
 }
 
+/// <summary>
+///     Represents a service for searching images.
+/// </summary>
 public class SearchImagesService : ISearchImagesService, INService
 {
-    private readonly HttpClient http;
     private readonly SearchImageCacher cache;
-    private readonly DbService db;
-    private readonly ConcurrentDictionary<ulong, HashSet<string>> blacklistedTags;
+    private readonly DbContextProvider dbProvider;
+    private readonly HttpClient http;
+    private readonly GuildSettingsService service;
 
-    public ConcurrentDictionary<ulong, Timer> AutoHentaiTimers { get; } = new();
-    public ConcurrentDictionary<ulong, Timer> AutoBoobTimers { get; } = new();
-    public ConcurrentDictionary<ulong, Timer> AutoButtTimers { get; } = new();
+    private readonly object taglock = new();
 
+    /// <summary>
+    ///     Initializes a new instance of the SearchImagesService class.
+    /// </summary>
+    /// <param name="http">The HTTP client factory for creating HttpClient instances.</param>
+    /// <param name="cacher">The search image cacher.</param>
+    /// <param name="db">The database service.</param>
+    /// <param name="service">The guild settings service.</param>
     public SearchImagesService(
         IHttpClientFactory http,
-        SearchImageCacher cacher, DiscordSocketClient client,
-        DbService db)
+        SearchImageCacher cacher,
+        DbContextProvider dbProvider,
+        GuildSettingsService service)
     {
         this.http = http.CreateClient();
         this.http.AddFakeHeaders();
         cache = cacher;
-        this.db = db;
-        using var uow = db.GetDbContext();
-        var gc = uow.GuildConfigs.Include(x => x.NsfwBlacklistedTags).Where(x => client.Guilds.Select(x => x.Id).Contains(x.GuildId));
-        blacklistedTags = new ConcurrentDictionary<ulong, HashSet<string>>(
-            gc.ToDictionary(
-                x => x.GuildId,
-                x => new HashSet<string>(x.NsfwBlacklistedTags.Select(y => y.Tag))));
+        this.dbProvider = dbProvider;
+        this.service = service;
     }
 
-    private Task<UrlReply?> GetNsfwImageAsync(ulong? guildId, bool forceExplicit, string[]? tags, Booru dapi, CancellationToken cancel = default) =>
-        GetNsfwImageAsync(guildId ?? 0, tags ?? Array.Empty<string>(), forceExplicit, dapi, cancel);
+    /// <summary>
+    ///     Represents a collection of timers associated with auto-hentai functionality.
+    /// </summary>
+    public ConcurrentDictionary<ulong, Timer> AutoHentaiTimers { get; } = new();
 
-    private static bool IsValidTag(string tag) => tag.All(x => x != '+' && x != '?' && x != '/'); // tags mustn't contain + or ? or /
+    /// <summary>
+    ///     Represents a collection of timers associated with auto-boob functionality.
+    /// </summary>
+    public ConcurrentDictionary<ulong, Timer> AutoBoobTimers { get; } = new();
+
+    /// <summary>
+    ///     Represents a collection of timers associated with auto-butt functionality.
+    /// </summary>
+    public ConcurrentDictionary<ulong, Timer> AutoButtTimers { get; } = new();
+
+    /// <summary>
+    ///     Retrieves an NSFW image URL from Gelbooru.
+    /// </summary>
+    /// <param name="guildId">The ID of the guild.</param>
+    /// <param name="forceExplicit">A boolean value indicating whether to force explicit content.</param>
+    /// <param name="tags">An array of tags used to filter the image.</param>
+    /// <returns>A task representing the asynchronous operation, containing the URL reply if successful; otherwise, null.</returns>
+    public Task<UrlReply?> Gelbooru(ulong? guildId, bool forceExplicit, string[] tags)
+    {
+        return GetNsfwImageAsync(guildId, forceExplicit, tags, Booru.Gelbooru);
+    }
+
+    /// <summary>
+    ///     Retrieves an NSFW image URL from Danbooru.
+    /// </summary>
+    /// <param name="guildId">The ID of the guild.</param>
+    /// <param name="forceExplicit">A boolean value indicating whether to force explicit content.</param>
+    /// <param name="tags">An array of tags used to filter the image.</param>
+    /// <returns>A task representing the asynchronous operation, containing the URL reply if successful; otherwise, null.</returns>
+    public Task<UrlReply?> Danbooru(ulong? guildId, bool forceExplicit, string[] tags)
+    {
+        return GetNsfwImageAsync(guildId, forceExplicit, tags, Booru.Danbooru);
+    }
+
+    /// <summary>
+    ///     Retrieves an NSFW image URL from Konachan.
+    /// </summary>
+    /// <param name="guildId">The ID of the guild.</param>
+    /// <param name="forceExplicit">A boolean value indicating whether to force explicit content.</param>
+    /// <param name="tags">An array of tags used to filter the image.</param>
+    /// <returns>A task representing the asynchronous operation, containing the URL reply if successful; otherwise, null.</returns>
+    public Task<UrlReply?> Konachan(ulong? guildId, bool forceExplicit, string[] tags)
+    {
+        return GetNsfwImageAsync(guildId, forceExplicit, tags, Booru.Konachan);
+    }
+
+    /// <summary>
+    ///     Retrieves an NSFW image URL from Yandere.
+    /// </summary>
+    /// <param name="guildId">The ID of the guild.</param>
+    /// <param name="forceExplicit">A boolean value indicating whether to force explicit content.</param>
+    /// <param name="tags">An array of tags used to filter the image.</param>
+    /// <returns>A task representing the asynchronous operation, containing the URL reply if successful; otherwise, null.</returns>
+    public Task<UrlReply?> Yandere(ulong? guildId, bool forceExplicit, string[] tags)
+    {
+        return GetNsfwImageAsync(guildId, forceExplicit, tags, Booru.Yandere);
+    }
+
+    /// <summary>
+    ///     Retrieves an NSFW image URL from Rule34.
+    /// </summary>
+    /// <param name="guildId">The ID of the guild.</param>
+    /// <param name="forceExplicit">A boolean value indicating whether to force explicit content.</param>
+    /// <param name="tags">An array of tags used to filter the image.</param>
+    /// <returns>A task representing the asynchronous operation, containing the URL reply if successful; otherwise, null.</returns>
+    public Task<UrlReply?> Rule34(ulong? guildId, bool forceExplicit, string[] tags)
+    {
+        return GetNsfwImageAsync(guildId, forceExplicit, tags, Booru.Rule34);
+    }
+
+    /// <summary>
+    ///     Retrieves an NSFW image URL from E621.
+    /// </summary>
+    /// <param name="guildId">The ID of the guild.</param>
+    /// <param name="forceExplicit">A boolean value indicating whether to force explicit content.</param>
+    /// <param name="tags">An array of tags used to filter the image.</param>
+    /// <returns>A task representing the asynchronous operation, containing the URL reply if successful; otherwise, null.</returns>
+    public Task<UrlReply?> E621(ulong? guildId, bool forceExplicit, string[] tags)
+    {
+        return GetNsfwImageAsync(guildId, forceExplicit, tags, Booru.E621);
+    }
+
+    /// <summary>
+    ///     Retrieves an NSFW image URL from DerpiBooru.
+    /// </summary>
+    /// <param name="guildId">The ID of the guild.</param>
+    /// <param name="forceExplicit">A boolean value indicating whether to force explicit content.</param>
+    /// <param name="tags">An array of tags used to filter the image.</param>
+    /// <returns>A task representing the asynchronous operation, containing the URL reply if successful; otherwise, null.</returns>
+    public Task<UrlReply?> DerpiBooru(ulong? guildId, bool forceExplicit, string[] tags)
+    {
+        return GetNsfwImageAsync(guildId, forceExplicit, tags, Booru.Derpibooru);
+    }
+
+    /// <summary>
+    ///     Retrieves an NSFW image URL from SafeBooru.
+    /// </summary>
+    /// <param name="guildId">The ID of the guild.</param>
+    /// <param name="forceExplicit">A boolean value indicating whether to force explicit content.</param>
+    /// <param name="tags">An array of tags used to filter the image.</param>
+    /// <returns>A task representing the asynchronous operation, containing the URL reply if successful; otherwise, null.</returns>
+    public Task<UrlReply?> SafeBooru(ulong? guildId, bool forceExplicit, string[] tags)
+    {
+        return GetNsfwImageAsync(guildId, forceExplicit, tags, Booru.Safebooru);
+    }
+
+    /// <summary>
+    ///     Retrieves an NSFW image URL from Sankaku.
+    /// </summary>
+    /// <param name="guildId">The ID of the guild.</param>
+    /// <param name="forceExplicit">A boolean value indicating whether to force explicit content.</param>
+    /// <param name="tags">An array of tags used to filter the image.</param>
+    /// <returns>A task representing the asynchronous operation, containing the URL reply if successful; otherwise, null.</returns>
+    public Task<UrlReply?> Sankaku(ulong? guildId, bool forceExplicit, string[] tags)
+    {
+        return GetNsfwImageAsync(guildId, forceExplicit, tags, Booru.Sankaku);
+    }
+
+    /// <summary>
+    ///     Retrieves an NSFW image URL from RealBooru.
+    /// </summary>
+    /// <param name="guildId">The ID of the guild.</param>
+    /// <param name="forceExplicit">A boolean value indicating whether to force explicit content.</param>
+    /// <param name="tags">An array of tags used to filter the image.</param>
+    /// <returns>A task representing the asynchronous operation, containing the URL reply if successful; otherwise, null.</returns>
+    public Task<UrlReply?> RealBooru(ulong? guildId, bool forceExplicit, string[] tags)
+    {
+        return GetNsfwImageAsync(guildId, forceExplicit, tags, Booru.Realbooru);
+    }
+
+    /// <summary>
+    ///     Retrieves an NSFW image URL from multiple providers, including Danbooru, Konachan, Gelbooru, and Yandere.
+    /// </summary>
+    /// <param name="guildId">The ID of the guild.</param>
+    /// <param name="forceExplicit">A boolean value indicating whether to force explicit content.</param>
+    /// <param name="tags">An array of tags used to filter the image.</param>
+    /// <returns>A task representing the asynchronous operation, containing the URL reply if successful; otherwise, null.</returns>
+    public async Task<UrlReply?> Hentai(ulong? guildId, bool forceExplicit, string[] tags)
+    {
+        var providers = new[]
+        {
+            Booru.Danbooru, Booru.Konachan, Booru.Gelbooru, Booru.Yandere
+        };
+
+        using var cancelSource = new CancellationTokenSource();
+
+        // create a task for each type
+        var tasks = providers.Select(type => GetNsfwImageAsync(guildId, forceExplicit, tags, type, cancelSource.Token))
+            .ToList();
+        do
+        {
+            // wait for any of the tasks to complete
+            var task = await Task.WhenAny(tasks).ConfigureAwait(false);
+
+            // get its result
+            var result = task.GetAwaiter().GetResult();
+            if (string.IsNullOrEmpty(result.Error))
+            {
+                // if we have a non-error result, cancel other searches and return the result
+                cancelSource.Cancel();
+                return result;
+            }
+
+            // if the result is an error, remove that task from the waiting list,
+            // and wait for another task to complete
+            tasks.Remove(task);
+        } while (tasks.Count > 0); // keep looping as long as there is any task remaining to be attempted
+
+        // if we ran out of tasks, that means all tasks failed - return an error
+        return new UrlReply
+        {
+            Error = "No hentai image found."
+        };
+    }
+
+    /// <summary>
+    ///     Toggles the blacklisting of a tag for the specified guild.
+    /// </summary>
+    /// <param name="guildId">The ID of the guild.</param>
+    /// <param name="tag">The tag to toggle.</param>
+    /// <returns>
+    ///     A task representing the asynchronous operation, containing a boolean value indicating whether the tag was
+    ///     added or removed.
+    /// </returns>
+    public async ValueTask<bool> ToggleBlacklistTag(ulong guildId, string tag)
+    {
+        var tagObj = new NsfwBlacklitedTag
+        {
+            Tag = tag
+        };
+
+        bool added;
+
+        await using var db = await dbProvider.GetContextAsync();
+        var gc = await db.ForGuildId(guildId, set => set.Include(y => y.NsfwBlacklistedTags));
+        if (gc.NsfwBlacklistedTags.Add(tagObj))
+        {
+            added = true;
+        }
+        else
+        {
+            gc.NsfwBlacklistedTags.Remove(tagObj);
+            var toRemove = gc.NsfwBlacklistedTags.FirstOrDefault(x => x.Equals(tagObj));
+            if (toRemove != null)
+                db.Remove(toRemove);
+            added = false;
+        }
+
+        await service.UpdateGuildConfig(guildId, gc).ConfigureAwait(false);
+
+        return await new ValueTask<bool>(added);
+    }
+
+    /// <summary>
+    ///     Gets the list of blacklisted tags for the specified guild.
+    /// </summary>
+    /// <param name="guildId">The ID of the guild.</param>
+    /// <returns>A task representing the asynchronous operation, containing an array of blacklisted tags.</returns>
+    public async ValueTask<string[]?> GetBlacklistedTags(ulong guildId)
+    {
+        var config = await service.GetGuildConfig(guildId);
+        return config.NsfwBlacklistedTags.Count != 0
+            ? config.NsfwBlacklistedTags.Select(x => x.Tag).ToArray()
+            : [];
+    }
+
+    private Task<UrlReply?> GetNsfwImageAsync(ulong? guildId, bool forceExplicit, string[]? tags, Booru dapi,
+        CancellationToken cancel = default)
+    {
+        return GetNsfwImageAsync(guildId ?? 0, tags ?? [], forceExplicit, dapi, cancel);
+    }
+
+    private static bool IsValidTag(string tag)
+    {
+        return tag.All(x => x != '+' && x != '?' && x != '/');
+        // tags mustn't contain + or ? or /
+    }
 
     private async Task<UrlReply?> GetNsfwImageAsync(
         ulong guildId,
@@ -67,7 +332,7 @@ public class SearchImagesService : ISearchImagesService, INService
 #endif
         try
         {
-            blacklistedTags.TryGetValue(guildId, out var blTags);
+            var blTags = await GetBlacklistedTags(guildId).ConfigureAwait(false);
 
             switch (dapi)
             {
@@ -93,7 +358,7 @@ public class SearchImagesService : ISearchImagesService, INService
                 }
             }
 
-            var result = await cache.GetImageNew(tags, forceExplicit, dapi, blTags ?? new HashSet<string>(), cancel)
+            var result = await cache.GetImageNew(tags, forceExplicit, dapi, blTags?.ToHashSet() ?? [], cancel)
                 .ConfigureAwait(false);
 
             if (result is null)
@@ -121,115 +386,6 @@ public class SearchImagesService : ISearchImagesService, INService
             {
                 Error = ex.Message, Url = ""
             };
-        }
-    }
-
-    public Task<UrlReply?> Gelbooru(ulong? guildId, bool forceExplicit, string[] tags)
-        => GetNsfwImageAsync(guildId, forceExplicit, tags, Booru.Gelbooru);
-
-    public Task<UrlReply?> Danbooru(ulong? guildId, bool forceExplicit, string[] tags)
-        => GetNsfwImageAsync(guildId, forceExplicit, tags, Booru.Danbooru);
-
-    public Task<UrlReply?> Konachan(ulong? guildId, bool forceExplicit, string[] tags)
-        => GetNsfwImageAsync(guildId, forceExplicit, tags, Booru.Konachan);
-
-    public Task<UrlReply?> Yandere(ulong? guildId, bool forceExplicit, string[] tags)
-        => GetNsfwImageAsync(guildId, forceExplicit, tags, Booru.Yandere);
-
-    public Task<UrlReply?> Rule34(ulong? guildId, bool forceExplicit, string[] tags)
-        => GetNsfwImageAsync(guildId, forceExplicit, tags, Booru.Rule34);
-
-    public Task<UrlReply?> E621(ulong? guildId, bool forceExplicit, string[] tags)
-        => GetNsfwImageAsync(guildId, forceExplicit, tags, Booru.E621);
-
-    public Task<UrlReply?> DerpiBooru(ulong? guildId, bool forceExplicit, string[] tags)
-        => GetNsfwImageAsync(guildId, forceExplicit, tags, Booru.Derpibooru);
-
-    public Task<UrlReply?> SafeBooru(ulong? guildId, bool forceExplicit, string[] tags)
-        => GetNsfwImageAsync(guildId, forceExplicit, tags, Booru.Safebooru);
-
-    public Task<UrlReply?> Sankaku(ulong? guildId, bool forceExplicit, string[] tags)
-        => GetNsfwImageAsync(guildId, forceExplicit, tags, Booru.Sankaku);
-
-    public Task<UrlReply?> RealBooru(ulong? guildId, bool forceExplicit, string[] tags)
-        => GetNsfwImageAsync(guildId, forceExplicit, tags, Booru.Realbooru);
-
-    public async Task<UrlReply?> Hentai(ulong? guildId, bool forceExplicit, string[] tags)
-    {
-        var providers = new[]
-        {
-            Booru.Danbooru, Booru.Konachan, Booru.Gelbooru, Booru.Yandere
-        };
-
-        using var cancelSource = new CancellationTokenSource();
-
-        // create a task for each type
-        var tasks = providers.Select(type => GetNsfwImageAsync(guildId, forceExplicit, tags, type, cancelSource.Token)).ToList();
-        do
-        {
-            // wait for any of the tasks to complete
-            var task = await Task.WhenAny(tasks).ConfigureAwait(false);
-
-            // get its result
-            var result = task.GetAwaiter().GetResult();
-            if (string.IsNullOrEmpty(result.Error))
-            {
-                // if we have a non-error result, cancel other searches and return the result
-                cancelSource.Cancel();
-                return result;
-            }
-
-            // if the result is an error, remove that task from the waiting list,
-            // and wait for another task to complete
-            tasks.Remove(task);
-        } while (tasks.Count > 0); // keep looping as long as there is any task remaining to be attempted
-
-        // if we ran out of tasks, that means all tasks failed - return an error
-        return new UrlReply
-        {
-            Error = "No hentai image found."
-        };
-    }
-
-
-    private readonly object taglock = new();
-
-    public async ValueTask<bool> ToggleBlacklistTag(ulong guildId, string tag)
-    {
-        var tagObj = new NsfwBlacklitedTag
-        {
-            Tag = tag
-        };
-
-        bool added;
-        await using var uow = db.GetDbContext();
-        var gc = await uow.ForGuildId(guildId, set => set.Include(y => y.NsfwBlacklistedTags));
-        if (gc.NsfwBlacklistedTags.Add(tagObj))
-        {
-            added = true;
-        }
-        else
-        {
-            gc.NsfwBlacklistedTags.Remove(tagObj);
-            var toRemove = gc.NsfwBlacklistedTags.FirstOrDefault(x => x.Equals(tagObj));
-            if (toRemove != null)
-                uow.Remove(toRemove);
-            added = false;
-        }
-
-        var newTags = new HashSet<string>(gc.NsfwBlacklistedTags.Select(x => x.Tag));
-        blacklistedTags.AddOrUpdate(guildId, newTags, delegate { return newTags; });
-
-        await uow.SaveChangesAsync().ConfigureAwait(false);
-
-        return await new ValueTask<bool>(added);
-    }
-
-    public ValueTask<string[]> GetBlacklistedTags(ulong guildId)
-    {
-        lock (taglock)
-        {
-            return blacklistedTags.TryGetValue(guildId, out var tags) ? new ValueTask<string[]>(tags.ToArray()) : new ValueTask<string[]>(Array.Empty<string>());
         }
     }
 }

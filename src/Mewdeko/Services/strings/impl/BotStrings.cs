@@ -5,6 +5,9 @@ using YamlDotNet.Serialization;
 
 namespace Mewdeko.Services.strings.impl;
 
+/// <summary>
+///     Represents a service for retrieving bot strings.
+/// </summary>
 public class BotStrings : IBotStrings
 {
     private readonly ILocalization localization;
@@ -15,14 +18,28 @@ public class BotStrings : IBotStrings
     /// </summary>
     private readonly CultureInfo? usCultureInfo = new("en-US");
 
+    /// <summary>
+    ///     Initializes a new instance of the <see cref="BotStrings" /> class.
+    /// </summary>
+    /// <param name="loc">The localization service.</param>
+    /// <param name="stringsProvider">The provider for bot strings.</param>
     public BotStrings(ILocalization loc, IBotStringsProvider stringsProvider)
     {
         localization = loc;
         this.stringsProvider = stringsProvider;
     }
 
-    public string? GetText(string? key, ulong? guildId = null, params object?[] data) => GetText(key, localization.GetCultureInfo(guildId), data);
+    /// <summary>
+    ///     Retrieves the localized text corresponding to the specified key, optionally for the specified guild.
+    /// </summary>
+    public string? GetText(string? key, ulong? guildId = null, params object?[] data)
+    {
+        return GetText(key, localization.GetCultureInfo(guildId), data);
+    }
 
+    /// <summary>
+    ///     Retrieves the localized text corresponding to the specified key and culture information.
+    /// </summary>
     public string? GetText(string? key, CultureInfo? cultureInfo, params object?[] data)
     {
         // ReSharper disable once CoVariantArrayConversion
@@ -44,8 +61,17 @@ public class BotStrings : IBotStrings
         }
     }
 
-    public CommandStrings GetCommandStrings(string commandName, ulong? guildId = null) => GetCommandStrings(commandName, localization.GetCultureInfo(guildId));
+    /// <summary>
+    ///     Retrieves the strings associated with a command, optionally for the specified guild.
+    /// </summary>
+    public CommandStrings GetCommandStrings(string commandName, ulong? guildId = null)
+    {
+        return GetCommandStrings(commandName, localization.GetCultureInfo(guildId));
+    }
 
+    /// <summary>
+    ///     Retrieves the strings associated with a command and the specified culture information.
+    /// </summary>
     public CommandStrings GetCommandStrings(string commandName, CultureInfo? cultureInfo)
     {
         var cmdStrings = stringsProvider.GetCommandStrings(cultureInfo.Name, commandName);
@@ -65,18 +91,30 @@ public class BotStrings : IBotStrings
 
         return new CommandStrings
         {
-            Args = new[]
-            {
+            Args =
+            [
                 ""
-            },
+            ],
             Desc = "?"
         };
     }
 
-    public void Reload() => stringsProvider.Reload();
+    /// <summary>
+    ///     Reloads the bot strings.
+    /// </summary>
+    public void Reload()
+    {
+        stringsProvider.Reload();
+    }
 
-    private string? GetString(string? key, CultureInfo? cultureInfo) => stringsProvider.GetText(cultureInfo.Name, key);
+    private string? GetString(string? key, CultureInfo? cultureInfo)
+    {
+        return stringsProvider.GetText(cultureInfo.Name, key);
+    }
 
+    /// <summary>
+    ///     Retrieves the localized text corresponding to the specified key and culture information.
+    /// </summary>
     public string GetText(string? key, CultureInfo? cultureInfo)
     {
         var text = GetString(key, cultureInfo);
@@ -100,11 +138,19 @@ public class BotStrings : IBotStrings
     }
 }
 
+/// <summary>
+///     Represents strings associated with a command.
+/// </summary>
 public class CommandStrings
 {
+    /// <summary>
+    ///     Gets or sets the description of the command.
+    /// </summary>
     [YamlMember(Alias = "desc")]
     public string Desc { get; set; }
 
+    /// <summary>
+    /// </summary>
     [YamlMember(Alias = "args")]
     public string[] Args { get; set; }
 }

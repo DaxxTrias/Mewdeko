@@ -1,83 +1,102 @@
-﻿namespace Mewdeko.Common.PubSub;
+﻿using Serilog;
 
+namespace Mewdeko.Common.PubSub;
+
+/// <summary>
+///     Class that implements the IPubSub interface for Redis.
+/// </summary>
 public class EventPubSub : IPubSub
 {
-    private readonly Dictionary<string, Dictionary<Delegate, List<Func<object, ValueTask>>>> actions = new();
-    private readonly object locker = new();
+    /// <summary>
+    ///     A dictionary to store actions for each key.
+    /// </summary>
+    private readonly ConcurrentDictionary<string, ConcurrentDictionary<Delegate, List<Func<object, ValueTask>>>> actions
+        = new();
 
-    public Task Sub<TData>(in TypedKey<TData> key, Func<TData, ValueTask> action)
+    /// <summary>
+    ///     Subscribes an action to a specific key.
+    /// </summary>
+    /// <typeparam name="TData">The type of data the key represents.</typeparam>
+    /// <param name="key">The key to subscribe to.</param>
+    /// <param name="action">The action to execute when the key is published.</param>
+    /// <returns>A task that represents the asynchronous operation.</returns>
+    public async Task Sub<TData>(TypedKey<TData> key, Func<TData, ValueTask> action)
         where TData : notnull
     {
-        ValueTask LocalAction(object obj) => action((TData)obj);
+        var keyActions = actions.GetOrAdd(key.Key,
+            _ => new ConcurrentDictionary<Delegate, List<Func<object, ValueTask>>>());
+        var sameActions = keyActions.GetOrAdd(action, _ => []);
 
-        lock (locker)
+        lock (sameActions) // Lock the list since List<T> is not thread-safe
         {
-            if (!actions.TryGetValue(key.Key, out var keyActions))
-            {
-                keyActions = new Dictionary<Delegate, List<Func<object, ValueTask>>>();
-                actions[key.Key] = keyActions;
-            }
-
-            if (!keyActions.TryGetValue(action, out var sameActions))
-            {
-                sameActions = new List<Func<object, ValueTask>>();
-                keyActions[action] = sameActions;
-            }
-
             sameActions.Add(LocalAction);
+        }
 
-            return Task.CompletedTask;
+        return;
+
+        ValueTask LocalAction(object obj)
+        {
+            return action((TData)obj);
         }
     }
 
-    public Task Pub<TData>(in TypedKey<TData> key, TData data)
-        where TData : notnull
+    /// <summary>
+    ///     Publishes a key with associated data.
+    /// </summary>
+    /// <typeparam name="TData">The type of data the key represents.</typeparam>
+    /// <param name="key">The key to publish.</param>
+    /// <param name="data">The data associated with the key.</param>
+    /// <returns>A task that represents the asynchronous operation.</returns>
+    public async Task Pub<TData>(TypedKey<TData> key, TData data) where TData : notnull
     {
-        lock (locker)
+        if (actions.TryGetValue(key.Key, out var dictionary))
         {
-            if (this.actions.TryGetValue(key.Key, out var dictionary))
+            var tasks = new List<Task>();
+            foreach (var kvp in dictionary)
             {
-                // if this class ever gets used, this needs to be properly implemented
-                // 1. ignore all valuetasks which are completed
-                // 2. run all other tasks in parallel
-                return dictionary.SelectMany(kvp => kvp.Value).Select(action => action(data).AsTask()).WhenAll();
-            }
-
-            return Task.CompletedTask;
-        }
-    }
-
-    public Task Unsub<TData>(in TypedKey<TData> key, Func<TData, ValueTask> action)
-    {
-        lock (locker)
-        {
-            // get subscriptions for this action
-            if (this.actions.TryGetValue(key.Key, out var dictionary))
-                // get subscriptions which have the same action hash code
-                // note: having this as a list allows for multiple subscriptions of
-                //       the same insance's/static method
-            {
-                if (dictionary.TryGetValue(action, out var sameActions))
+                foreach (var action in kvp.Value)
                 {
-                    // remove last subscription
-                    sameActions.RemoveAt(sameActions.Count - 1);
-
-                    // if the last subscription was the only subscription
-                    // we can safely remove this action's dictionary entry
-                    if (sameActions.Count == 0)
+                    try
                     {
-                        dictionary.Remove(action);
-
-                        // if our dictionary has no more elements after
-                        // removing the entry
-                        // it's safe to remove it from the key's subscriptions
-                        if (dictionary.Count == 0)
-                            this.actions.Remove(key.Key);
+                        tasks.Add(action(data).AsTask());
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Error(ex, "Error while executing event handler");
                     }
                 }
             }
 
-            return Task.CompletedTask;
+            await Task.WhenAll(tasks);
         }
+    }
+
+    /// <summary>
+    ///     Unsubscribes an action from a specific key.
+    /// </summary>
+    /// <typeparam name="TData">The type of data the key represents.</typeparam>
+    /// <param name="key">The key to unsubscribe from.</param>
+    /// <param name="action">The action to unsubscribe.</param>
+    /// <returns>A task that represents the asynchronous operation.</returns>
+    public Task Unsub<TData>(in TypedKey<TData> key, Func<TData, ValueTask> action)
+    {
+        if (!actions.TryGetValue(key.Key, out var dictionary) || !dictionary.TryGetValue(action, out var sameActions))
+            return Task.CompletedTask;
+        lock (sameActions)
+        {
+            sameActions.RemoveAll(a => (Func<TData, ValueTask>)a.Target == action); // Remove the specific subscription
+
+            // Clean up if there are no more subscriptions for this action
+            if (sameActions.Count != 0) return Task.CompletedTask;
+            dictionary.TryRemove(action, out _);
+
+            // Clean up if there are no more actions for this key
+            if (dictionary.Count == 0)
+            {
+                actions.TryRemove(key.Key, out _);
+            }
+        }
+
+        return Task.CompletedTask;
     }
 }

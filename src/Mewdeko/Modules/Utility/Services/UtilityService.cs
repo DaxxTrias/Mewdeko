@@ -1,54 +1,79 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
+using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.Utility.Common;
 using VirusTotalNet;
 using VirusTotalNet.Results;
 
 namespace Mewdeko.Modules.Utility.Services;
 
-public class UtilityService : INService
+/// <summary>
+///     Provides various utility functionalities including message sniping, link previews, reaction management, and URL
+///     checking.
+/// </summary>
+public partial class UtilityService : INService
 {
-    private readonly DbService db;
     private readonly IDataCache cache;
+    private readonly DiscordShardedClient client;
+    private readonly DbContextProvider dbProvider;
     private readonly GuildSettingsService guildSettings;
-    private readonly DiscordSocketClient client;
 
+    /// <summary>
+    ///     Initializes a new instance of the <see cref="UtilityService" /> class.
+    /// </summary>
+    /// <param name="db">The database service.</param>
+    /// <param name="cache">The data cache service.</param>
+    /// <param name="guildSettings">The guild settings service.</param>
+    /// <param name="eventHandler">The event handler service.</param>
+    /// <param name="client">The Discord client.</param>
     public UtilityService(
-        DbService db,
+        DbContextProvider dbProvider,
         IDataCache cache,
         GuildSettingsService guildSettings,
         EventHandler eventHandler,
-        DiscordSocketClient client)
+        DiscordShardedClient client)
     {
         eventHandler.MessageDeleted += MsgStore;
         eventHandler.MessageUpdated += MsgStore2;
         eventHandler.MessageReceived += MsgReciev;
-        eventHandler.MessageReceived += MsgReciev2;
         eventHandler.MessagesBulkDeleted += BulkMsgStore;
-        this.db = db;
+        this.dbProvider = dbProvider;
         this.cache = cache;
         this.guildSettings = guildSettings;
         this.client = client;
     }
 
-    public async Task<List<SnipeStore>> GetSnipes(ulong guildId) => await cache.GetSnipesForGuild(guildId).ConfigureAwait(false);
-
-    public async Task<int> GetPLinks(ulong id) => (await guildSettings.GetGuildConfig(id)).PreviewLinks;
-
-    public async Task<ulong> GetReactChans(ulong id) => (await guildSettings.GetGuildConfig(id)).ReactChannel;
-
-    public async Task SetReactChan(IGuild guild, ulong yesnt)
+    /// <summary>
+    ///     Retrieves sniped messages for a specific guild.
+    /// </summary>
+    /// <param name="guildId">The ID of the guild to retrieve sniped messages for.</param>
+    /// <returns>A task that represents the asynchronous operation, containing a list of sniped messages.</returns>
+    public Task<List<SnipeStore>> GetSnipes(ulong guildId)
     {
-        await using var uow = db.GetDbContext();
-        var gc = await uow.ForGuildId(guild.Id, set => set);
-        gc.ReactChannel = yesnt;
-        await uow.SaveChangesAsync().ConfigureAwait(false);
-        guildSettings.UpdateGuildConfig(guild.Id, gc);
+        return cache.GetSnipesForGuild(guildId);
     }
 
+    /// <summary>
+    ///     Checks whether link previewing is enabled for a specific guild.
+    /// </summary>
+    /// <param name="id">The ID of the guild to check.</param>
+    /// <returns>
+    ///     A task that represents the asynchronous operation, containing a boolean indicating if link previewing is
+    ///     enabled.
+    /// </returns>
+    public async Task<int> GetPLinks(ulong id)
+    {
+        return (await guildSettings.GetGuildConfig(id)).PreviewLinks;
+    }
+
+    /// <summary>
+    ///     Toggles link previewing for a specific guild.
+    /// </summary>
+    /// <param name="guild">The guild to toggle link previewing for.</param>
+    /// <param name="yesnt">A string indicating whether to enable or disable link previewing.</param>
     public async Task PreviewLinks(IGuild guild, string yesnt)
     {
         var yesno = -1;
-        await using (db.GetDbContext().ConfigureAwait(false))
+        await using var dbContext = await dbProvider.GetContextAsync();
         {
             yesno = yesnt switch
             {
@@ -58,37 +83,39 @@ public class UtilityService : INService
             };
         }
 
-        var uow = db.GetDbContext();
-        await using (uow.ConfigureAwait(false))
-        {
-            var gc = await uow.ForGuildId(guild.Id, set => set);
-            gc.PreviewLinks = yesno;
-            await uow.SaveChangesAsync().ConfigureAwait(false);
-            guildSettings.UpdateGuildConfig(guild.Id, gc);
-        }
+        var gc = await dbContext.ForGuildId(guild.Id, set => set);
+        gc.PreviewLinks = yesno;
+        await guildSettings.UpdateGuildConfig(guild.Id, gc);
     }
 
-    public async Task<bool> GetSnipeSet(ulong id) => (await guildSettings.GetGuildConfig(id)).snipeset;
+    /// <summary>
+    ///     Retrieves the snipe set status for a specific guild.
+    /// </summary>
+    /// <param name="id">The ID of the guild to check.</param>
+    /// <returns>A task that represents the asynchronous operation, containing a boolean indicating if snipe set is enabled.</returns>
+    public async Task<bool> GetSnipeSet(ulong id)
+    {
+        return (await guildSettings.GetGuildConfig(id)).snipeset;
+    }
 
+    /// <summary>
+    ///     Sets the snipe set status for a specific guild.
+    /// </summary>
+    /// <param name="guild">The guild to set the snipe set status for.</param>
+    /// <param name="enabled">A boolean indicating whether to enable or disable snipe set.</param>
     public async Task SnipeSet(IGuild guild, bool enabled)
     {
-        await using var uow = db.GetDbContext();
-        var gc = await uow.ForGuildId(guild.Id, set => set);
-        gc.snipeset = enabled;
-        await uow.SaveChangesAsync().ConfigureAwait(false);
-        guildSettings.UpdateGuildConfig(guild.Id, gc);
+        await using var dbContext = await dbProvider.GetContextAsync();
+
+        var gc = await dbContext.ForGuildId(guild.Id, set => set);
+        gc.snipeset = enabled; // Converting bool to long
+        await dbContext.SaveChangesAsync().ConfigureAwait(false);
+        await guildSettings.UpdateGuildConfig(guild.Id, gc);
     }
 
-    public async Task SnipeSetBool(IGuild guild, bool enabled)
-    {
-        await using var uow = db.GetDbContext();
-        var gc = await uow.ForGuildId(guild.Id, set => set);
-        gc.snipeset = enabled;
-        await uow.SaveChangesAsync().ConfigureAwait(false);
-        guildSettings.UpdateGuildConfig(guild.Id, gc);
-    }
 
-    private async Task BulkMsgStore(IReadOnlyCollection<Cacheable<IMessage, ulong>> messages, Cacheable<IMessageChannel, ulong> channel)
+    private async Task BulkMsgStore(IReadOnlyCollection<Cacheable<IMessage, ulong>> messages,
+        Cacheable<IMessageChannel, ulong> channel)
     {
         if (!channel.HasValue)
             return;
@@ -120,7 +147,7 @@ public class UtilityService : INService
         if (!msgs.Any())
             return;
 
-        var snipes = await cache.GetSnipesForGuild(chan.Guild.Id).ConfigureAwait(false) ?? new List<SnipeStore>();
+        var snipes = await cache.GetSnipesForGuild(chan.Guild.Id).ConfigureAwait(false) ?? [];
         if (snipes.Count == 0)
         {
             var todelete = snipes.Where(x => DateTime.UtcNow.Subtract(x.DateAdded) >= TimeSpan.FromDays(3));
@@ -146,12 +173,15 @@ public class UtilityService : INService
             GuildId = channel.Guild.Id,
             ChannelId = channel.Id,
             Message = msg.Content,
-            ReferenceMessage = msg.ReferencedMessage == null ? null : $"{Format.Bold(msg.ReferencedMessage.Author.ToString())}: {msg.ReferencedMessage.Content.TrimTo(400)}",
+            ReferenceMessage =
+                msg.ReferencedMessage == null
+                    ? null
+                    : $"{Format.Bold(msg.ReferencedMessage.Author.ToString())}: {msg.ReferencedMessage.Content.TrimTo(400)}",
             UserId = msg.Author.Id,
             Edited = false,
             DateAdded = DateTime.UtcNow
         };
-        var snipes = await cache.GetSnipesForGuild(channel.Guild.Id).ConfigureAwait(false) ?? new List<SnipeStore>();
+        var snipes = await cache.GetSnipesForGuild(channel.Guild.Id).ConfigureAwait(false) ?? [];
         if (snipes.Count == 0)
         {
             var todelete = snipes.Where(x => DateTime.UtcNow.Subtract(x.DateAdded) >= TimeSpan.FromDays(3));
@@ -176,12 +206,15 @@ public class UtilityService : INService
             GuildId = channel.GuildId,
             ChannelId = channel.Id,
             Message = msg.Content,
-            ReferenceMessage = msg.ReferencedMessage == null ? null : $"{Format.Bold(msg.ReferencedMessage.Author.ToString())}: {msg.ReferencedMessage.Content.TrimTo(1048)}",
+            ReferenceMessage =
+                msg.ReferencedMessage == null
+                    ? null
+                    : $"{Format.Bold(msg.ReferencedMessage.Author.ToString())}: {msg.ReferencedMessage.Content.TrimTo(1048)}",
             UserId = msg.Author.Id,
             Edited = true,
             DateAdded = DateTime.UtcNow
         };
-        var snipes = await cache.GetSnipesForGuild(channel.Guild.Id).ConfigureAwait(false) ?? new List<SnipeStore>();
+        var snipes = await cache.GetSnipesForGuild(channel.Guild.Id).ConfigureAwait(false) ?? [];
         if (snipes.Count == 0)
         {
             var todelete = snipes.Where(x => DateTime.UtcNow.Subtract(x.DateAdded) >= TimeSpan.FromDays(3));
@@ -193,30 +226,18 @@ public class UtilityService : INService
         await cache.AddSnipeToCache(channel.Guild.Id, snipes).ConfigureAwait(false);
     }
 
-    public async Task MsgReciev2(IMessage msg)
-    {
-        if (msg.Author.IsBot) return;
-        if (msg.Channel is SocketDMChannel) return;
-        var guild = ((SocketGuildChannel)msg.Channel).Guild.Id;
-        var id = await GetReactChans(guild);
-        if (msg.Channel.Id == id)
-        {
-            Emote.TryParse("<:upvote:863122283283742791>", out var emote);
-            Emote.TryParse("<:D_downvote:863122244527980613>", out var emote2);
-            await Task.Delay(200).ConfigureAwait(false);
-            await msg.AddReactionAsync(emote).ConfigureAwait(false);
-            await Task.Delay(200).ConfigureAwait(false);
-            await msg.AddReactionAsync(emote2).ConfigureAwait(false);
-        }
-    }
-
-    public static async Task<UrlReport> UrlChecker(string url)
+    /// <summary>
+    ///     Checks a URL for malware and other security threats.
+    /// </summary>
+    /// <param name="url">The URL to check.</param>
+    /// <returns>A task that represents the asynchronous operation, containing a report on the URL's security status.</returns>
+    public static Task<UrlReport> UrlChecker(string url)
     {
         var vcheck = new VirusTotal("e49046afa41fdf4e8ca72ea58a5542d0b8fbf72189d54726eed300d2afe5d9a9");
-        return await vcheck.GetUrlReportAsync(url, true).ConfigureAwait(false);
+        return vcheck.GetUrlReportAsync(url, true);
     }
 
-    public async Task MsgReciev(IMessage msg)
+    private async Task MsgReciev(IMessage msg)
     {
         if (msg.Channel is SocketTextChannel t)
         {
@@ -224,8 +245,7 @@ public class UtilityService : INService
             var gid = t.Guild;
             if (await GetPLinks(gid.Id) == 1)
             {
-                var linkParser = new Regex(@"https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)",
-                    RegexOptions.Compiled | RegexOptions.IgnoreCase);
+                var linkParser = MyRegex();
                 foreach (Match m in linkParser.Matches(msg.Content))
                 {
                     var e = new Uri(m.Value);
@@ -277,9 +297,15 @@ public class UtilityService : INService
 
                     if (msg2.Attachments.Count > 0) en2.ImageUrl = msg2.Attachments.FirstOrDefault().Url;
 
-                    await msg.Channel.SendMessageAsync(embed: en2.WithTimestamp(msg2.Timestamp).Build()).ConfigureAwait(false);
+                    await msg.Channel.SendMessageAsync(embed: en2.WithTimestamp(msg2.Timestamp).Build())
+                        .ConfigureAwait(false);
                 }
             }
         }
     }
+
+    [GeneratedRegex(
+        @"https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled, "en-US")]
+    private static partial Regex MyRegex();
 }

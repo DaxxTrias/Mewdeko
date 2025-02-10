@@ -8,31 +8,64 @@ using Mewdeko.Common.Yml;
 namespace Mewdeko.Services.Settings;
 
 /// <summary>
-///     Base service for all settings services
+///     Base service for all settings services.
 /// </summary>
-/// <typeparam name="TSettings">Type of the settings</typeparam>
+/// <typeparam name="TSettings">Type of the settings.</typeparam>
 public abstract class ConfigServiceBase<TSettings> : IConfigService
     where TSettings : new()
 {
+    /// <summary>
+    ///     The change key used for signaling when settings are updated.
+    /// </summary>
     private readonly TypedKey<TSettings> changeKey;
-    private readonly Dictionary<string, string> propComments = new();
-    private readonly Dictionary<string, Func<object, string>> propPrinters = new();
-    private readonly Dictionary<string, Func<object>> propSelectors = new();
 
-    private readonly Dictionary<string, Func<TSettings, string, bool>> propSetters = new();
-    protected readonly IPubSub PubSub;
-    protected readonly IConfigSeria Serializer;
+    /// <summary>
+    ///     The path to the file where the settings are serialized/deserialized.
+    /// </summary>
     protected readonly string FilePath;
 
+    /// <summary>
+    ///     Dictionary to store property comments.
+    /// </summary>
+    private readonly Dictionary<string, string> propComments = new();
+
+    /// <summary>
+    ///     Dictionary to store property printers.
+    /// </summary>
+    private readonly Dictionary<string, Func<object, string>> propPrinters = new();
+
+    /// <summary>
+    ///     Dictionary to store property selectors.
+    /// </summary>
+    private readonly Dictionary<string, Func<object>> propSelectors = new();
+
+    /// <summary>
+    ///     Dictionary to store property setters.
+    /// </summary>
+    private readonly Dictionary<string, Func<TSettings, string, bool>> propSetters = new();
+
+    /// <summary>
+    ///     The PubSub implementation for signaling when settings are updated.
+    /// </summary>
+    protected readonly IPubSub PubSub;
+
+    /// <summary>
+    ///     The serializer used for serialization/deserialization of settings.
+    /// </summary>
+    protected readonly IConfigSeria Serializer;
+
+    /// <summary>
+    ///     The settings data.
+    /// </summary>
     protected TSettings data;
 
     /// <summary>
-    ///     Initialized an instance of <see cref="ConfigServiceBase{TSettings}" />
+    ///     Initializes a new instance of the <see cref="ConfigServiceBase{TSettings}" /> class.
     /// </summary>
-    /// <param name="filePath">Path to the file where the settings are serialized/deserialized to and from</param>
-    /// <param name="serializer">Serializer which will be used</param>
-    /// <param name="pubSub">Pubsub implementation for signaling when settings are updated</param>
-    /// <param name="changeKey">Key used to signal changed event</param>
+    /// <param name="filePath">The path to the file where the settings are serialized/deserialized to and from.</param>
+    /// <param name="serializer">The serializer which will be used.</param>
+    /// <param name="pubSub">The Pubsub implementation for signaling when settings are updated.</param>
+    /// <param name="changeKey">The key used to signal changed event.</param>
     protected ConfigServiceBase(string filePath, IConfigSeria serializer, IPubSub pubSub,
         TypedKey<TSettings> changeKey)
     {
@@ -45,12 +78,24 @@ public abstract class ConfigServiceBase<TSettings> : IConfigService
         PubSub.Sub(this.changeKey, OnChangePublished);
     }
 
-    public TSettings Data => CreateCopy1();
+    /// <summary>
+    ///     Gets the current settings data.
+    /// </summary>
+    public TSettings Data
+    {
+        get
+        {
+            return CreateCopy1();
+        }
+    }
 
+    /// <summary>
+    ///     Gets the name of the settings service.
+    /// </summary>
     public abstract string Name { get; }
 
     /// <summary>
-    ///     Loads new data and publishes the new state
+    ///     Reloads the settings.
     /// </summary>
     public void Reload()
     {
@@ -58,8 +103,20 @@ public abstract class ConfigServiceBase<TSettings> : IConfigService
         PubSub.Pub(changeKey, data);
     }
 
-    public IReadOnlyList<string> GetSettableProps() => propSetters.Keys.ToList();
+    /// <summary>
+    ///     Gets the list of settable properties.
+    /// </summary>
+    /// <returns>The list of settable properties.</returns>
+    public IReadOnlyList<string> GetSettableProps()
+    {
+        return propSetters.Keys.ToList();
+    }
 
+    /// <summary>
+    ///     Gets the value of a setting.
+    /// </summary>
+    /// <param name="prop">The property name.</param>
+    /// <returns>The value of the setting.</returns>
     public string? GetSetting(string prop)
     {
         prop = prop.ToLowerInvariant();
@@ -72,8 +129,22 @@ public abstract class ConfigServiceBase<TSettings> : IConfigService
         return printer(selector());
     }
 
-    public string? GetComment(string prop) => propComments.TryGetValue(prop, out var comment) ? comment : null;
+    /// <summary>
+    ///     Gets the comment associated with a property.
+    /// </summary>
+    /// <param name="prop">The property name.</param>
+    /// <returns>The comment associated with the property.</returns>
+    public string? GetComment(string prop)
+    {
+        return propComments.TryGetValue(prop, out var comment) ? comment : null;
+    }
 
+    /// <summary>
+    ///     Sets the value of a setting.
+    /// </summary>
+    /// <param name="prop">The property name.</param>
+    /// <param name="newValue">The new value.</param>
+    /// <returns>True if the setting was successfully set, otherwise false.</returns>
     public bool SetSetting(string prop, string newValue)
     {
         var success = true;
@@ -85,8 +156,19 @@ public abstract class ConfigServiceBase<TSettings> : IConfigService
         return success;
     }
 
-    private void PublishChange() => PubSub.Pub(changeKey, data);
+    /// <summary>
+    ///     Publishes a change in settings.
+    /// </summary>
+    private void PublishChange()
+    {
+        PubSub.Pub(changeKey, data);
+    }
 
+    /// <summary>
+    ///     Handles the event when settings are published.
+    /// </summary>
+    /// <param name="newData">The new settings data.</param>
+    /// <returns>A <see cref="ValueTask" /> representing the asynchronous operation.</returns>
     private ValueTask OnChangePublished(TSettings newData)
     {
         data = newData;
@@ -94,6 +176,10 @@ public abstract class ConfigServiceBase<TSettings> : IConfigService
         return default;
     }
 
+    /// <summary>
+    ///     Creates a copy of the settings data.
+    /// </summary>
+    /// <returns>A copy of the settings data.</returns>
     private TSettings CreateCopy1()
     {
         var serializedData = Serializer.Serialize(data);
@@ -101,7 +187,7 @@ public abstract class ConfigServiceBase<TSettings> : IConfigService
     }
 
     /// <summary>
-    ///     Loads data from disk. If file doesn't exist, it will be created with default values
+    ///     Loads the settings from the file.
     /// </summary>
     private void Load()
     {
@@ -116,15 +202,18 @@ public abstract class ConfigServiceBase<TSettings> : IConfigService
     }
 
     /// <summary>
-    ///     Doesn't do anything by default. This method will be executed after
-    ///     <see cref="data" /> is reloaded from <see cref="FilePath" /> or new data is recieved
-    ///     from the publish event
+    ///     Method that is executed after the settings data is updated.
     /// </summary>
     protected virtual void OnStateUpdate()
     {
     }
 
-    public void ModifyConfig(Action<TSettings> action)
+    /// <summary>
+    ///     Modifies the settings configuration.
+    /// </summary>
+    /// <param name="action">The action to modify the settings.</param>
+    public void ModifyConfig(Action<TSettings
+    > action)
     {
         var copy = CreateCopy1();
         action(copy);
@@ -133,12 +222,24 @@ public abstract class ConfigServiceBase<TSettings> : IConfigService
         PublishChange();
     }
 
+    /// <summary>
+    ///     Saves the settings to the file.
+    /// </summary>
     private void Save()
     {
         var strData = Serializer.Serialize(data);
         File.WriteAllText(FilePath, strData);
     }
 
+    /// <summary>
+    ///     Adds a parsed property to the settings.
+    /// </summary>
+    /// <typeparam name="TProp">The type of the property.</typeparam>
+    /// <param name="key">The key of the property.</param>
+    /// <param name="selector">The selector expression for the property.</param>
+    /// <param name="parser">The parser for the property.</param>
+    /// <param name="printer">The printer for the property.</param>
+    /// <param name="checker">An optional checker function for the property.</param>
     protected void AddParsedProp<TProp>(
         string key,
         Expression<Func<TSettings, TProp>> selector,
@@ -155,9 +256,13 @@ public abstract class ConfigServiceBase<TSettings> : IConfigService
             ?.Comment;
     }
 
+    /// <summary>
+    ///     The magic method to set a property value using an expression tree.
+    /// </summary>
     private static Func<TSettings, string, bool> Magic<TProp>(Expression<Func<TSettings, TProp>> selector,
-        SettingParser<TProp> parser, Func<TProp, bool> checker) =>
-        (target, input) =>
+        SettingParser<TProp> parser, Func<TProp, bool> checker)
+    {
+        return (target, input) =>
         {
             if (!parser(input, out var value))
                 return false;
@@ -189,8 +294,14 @@ public abstract class ConfigServiceBase<TSettings> : IConfigService
             prop.SetValue(targetObject, value, null);
             return true;
         };
+    }
 
-    private bool SetProperty(TSettings target, string key, string value) =>
-        propSetters.TryGetValue(key.ToLowerInvariant(), out var magic)
-        && magic(target, value);
+    /// <summary>
+    ///     Sets a property value.
+    /// </summary>
+    private bool SetProperty(TSettings target, string key, string value)
+    {
+        return propSetters.TryGetValue(key.ToLowerInvariant(), out var magic)
+               && magic(target, value);
+    }
 }

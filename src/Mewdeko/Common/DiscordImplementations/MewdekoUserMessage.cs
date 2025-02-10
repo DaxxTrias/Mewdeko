@@ -1,82 +1,285 @@
 // ReSharper disable NotNullMemberIsNotInitialized
 
+// ReSharper disable UnassignedGetOnlyAutoProperty
+
+// ReSharper disable AssignNullToNotNullAttribute
+
+using Poll = Discord.Poll;
+
 namespace Mewdeko.Common.DiscordImplementations;
 
+/// <summary>
+///     Class used for faking messages for commands like Sudo
+/// </summary>
 public class MewdekoUserMessage : IUserMessage
 {
-    public ulong Id => 0;
-    public DateTimeOffset CreatedAt => DateTime.Now;
-    public Task DeleteAsync(RequestOptions options = null) => throw new NotImplementedException();
+    /// <inheritdoc />
+    public ulong Id
+    {
+        get
+        {
+            return 0;
+        }
+    }
 
-    public Task AddReactionAsync(IEmote emote, RequestOptions options = null) => throw new NotImplementedException();
+    /// <inheritdoc />
+    public DateTimeOffset CreatedAt
+    {
+        get
+        {
+            return DateTime.Now;
+        }
+    }
 
-    public Task RemoveReactionAsync(IEmote emote, IUser user, RequestOptions options = null) => throw new NotImplementedException();
+    /// <inheritdoc />
+    public Task DeleteAsync(RequestOptions options = null)
+    {
+        throw new NotImplementedException();
+    }
 
-    public Task RemoveReactionAsync(IEmote emote, ulong userId, RequestOptions options = null) => throw new NotImplementedException();
+    /// <inheritdoc />
+    public Task AddReactionAsync(IEmote emote, RequestOptions options = null)
+    {
+        throw new NotImplementedException();
+    }
 
-    public Task RemoveAllReactionsAsync(RequestOptions options = null) => throw new NotImplementedException();
+    /// <inheritdoc />
+    public Task RemoveReactionAsync(IEmote emote, IUser user, RequestOptions options = null)
+    {
+        throw new NotImplementedException();
+    }
 
-    public Task RemoveAllReactionsForEmoteAsync(IEmote emote, RequestOptions options = null) => throw new NotImplementedException();
+    /// <inheritdoc />
+    public Task RemoveReactionAsync(IEmote emote, ulong userId, RequestOptions options = null)
+    {
+        throw new NotImplementedException();
+    }
 
-    public IAsyncEnumerable<IReadOnlyCollection<IUser>> GetReactionUsersAsync(IEmote emoji, int limit, RequestOptions options = null) => throw new NotImplementedException();
+    /// <inheritdoc />
+    public Task RemoveAllReactionsAsync(RequestOptions options = null)
+    {
+        throw new NotImplementedException();
+    }
 
-    public IAsyncEnumerable<IReadOnlyCollection<IUser>> GetReactionUsersAsync(IEmote emoji, int limit, RequestOptions options = null, ReactionType type = ReactionType.Normal) => throw new NotImplementedException();
+    /// <inheritdoc />
+    public Task RemoveAllReactionsForEmoteAsync(IEmote emote, RequestOptions options = null)
+    {
+        throw new NotImplementedException();
+    }
 
-    public MessageType Type => MessageType.Default;
-    public MessageSource Source => MessageSource.User;
-    public bool IsTTS => false;
-    public bool IsPinned => false;
-    public bool IsSuppressed => false;
+    /// <inheritdoc />
+    public IAsyncEnumerable<IReadOnlyCollection<IUser>> GetReactionUsersAsync(IEmote emoji, int limit,
+        RequestOptions options = null,
+        ReactionType type = ReactionType.Normal)
+    {
+        throw new NotImplementedException();
+    }
+
+    /// <inheritdoc />
+    public MessageType Type
+    {
+        get
+        {
+            return MessageType.Default;
+        }
+    }
+
+    /// <inheritdoc />
+    public MessageSource Source
+    {
+        get
+        {
+            return MessageSource.User;
+        }
+    }
+
+    /// <inheritdoc />
+    public bool IsTTS
+    {
+        get
+        {
+            return false;
+        }
+    }
+
+    /// <inheritdoc />
+    public bool IsPinned
+    {
+        get
+        {
+            return false;
+        }
+    }
+
+    /// <inheritdoc />
+    public bool IsSuppressed
+    {
+        get
+        {
+            return false;
+        }
+    }
+
+    /// <inheritdoc />
     public string Content { get; set; }
+
+    /// <inheritdoc />
     public string CleanContent { get; set; }
-    public DateTimeOffset Timestamp => DateTimeOffset.Now;
-    public DateTimeOffset? EditedTimestamp => DateTimeOffset.Now;
+
+    /// <inheritdoc />
+    public DateTimeOffset Timestamp
+    {
+        get
+        {
+            return DateTimeOffset.Now;
+        }
+    }
+
+    /// <inheritdoc />
+    public DateTimeOffset? EditedTimestamp
+    {
+        get
+        {
+            return DateTimeOffset.Now;
+        }
+    }
+
+    /// <inheritdoc />
     public IMessageChannel Channel { get; set; }
+
+    /// <inheritdoc />
     public IUser Author { get; set; }
-    public IReadOnlyCollection<IAttachment> Attachments { get; set; }
-    public IReadOnlyCollection<IEmbed> Embeds { get; set; }
+
+    /// <inheritdoc />
+    public IReadOnlyCollection<IAttachment> Attachments { get; set; } = new List<IAttachment>();
+
+    /// <inheritdoc />
+    public IReadOnlyCollection<IEmbed> Embeds { get; set; } = new List<IEmbed>();
+
+    /// <inheritdoc />
     public IReadOnlyCollection<ITag> Tags { get; set; }
+
+    /// <inheritdoc />
     public IReadOnlyCollection<ulong> MentionedChannelIds { get; set; }
+
+    /// <inheritdoc />
     public IReadOnlyCollection<ulong> MentionedRoleIds { get; set; }
+
+    /// <inheritdoc />
     public IReadOnlyCollection<ulong> MentionedUserIds { get; set; }
+
+    /// <inheritdoc />
     public bool MentionedEveryone { get; set; }
+
+    /// <inheritdoc />
     public MessageActivity Activity { get; set; }
+
+    /// <inheritdoc />
     public MessageApplication Application { get; set; }
+
+    /// <inheritdoc />
     public MessageReference Reference { get; set; }
+
+    /// <inheritdoc />
     public IReadOnlyDictionary<IEmote, ReactionMetadata> Reactions { get; set; }
+
+    /// <inheritdoc />
     public IReadOnlyCollection<IMessageComponent> Components { get; set; }
+
+    /// <inheritdoc />
     public IReadOnlyCollection<IStickerItem> Stickers { get; set; }
+
+    /// <inheritdoc />
     public MessageFlags? Flags { get; set; }
+
+    /// <inheritdoc />
     public IMessageInteraction Interaction { get; set; }
-    public Task ModifyAsync(Action<MessageProperties> func, RequestOptions options = null) => throw new NotImplementedException();
 
-    public Task PinAsync(RequestOptions options = null) => throw new NotImplementedException();
+    /// <inheritdoc />
+    public Task ModifyAsync(Action<MessageProperties> func, RequestOptions options = null)
+    {
+        throw new NotImplementedException();
+    }
 
-    public Task UnpinAsync(RequestOptions options = null) => throw new NotImplementedException();
+    /// <inheritdoc />
+    public Task PinAsync(RequestOptions options = null)
+    {
+        throw new NotImplementedException();
+    }
 
-    public Task CrosspostAsync(RequestOptions options = null) => throw new NotImplementedException();
+    /// <inheritdoc />
+    public Task UnpinAsync(RequestOptions options = null)
+    {
+        throw new NotImplementedException();
+    }
 
+    /// <inheritdoc />
+    public Task CrosspostAsync(RequestOptions options = null)
+    {
+        throw new NotImplementedException();
+    }
+
+    /// <inheritdoc />
     public string Resolve(
         TagHandling userHandling = TagHandling.Name,
         TagHandling channelHandling = TagHandling.Name,
         TagHandling roleHandling = TagHandling.Name,
         TagHandling everyoneHandling = TagHandling.Ignore,
-        TagHandling emojiHandling = TagHandling.Name) =>
+        TagHandling emojiHandling = TagHandling.Name)
+    {
         throw new NotImplementedException();
+    }
 
+    /// <inheritdoc />
+    public Task EndPollAsync(RequestOptions options)
+    {
+        throw new NotImplementedException();
+    }
+
+    /// <inheritdoc />
+    public IAsyncEnumerable<IReadOnlyCollection<IUser>> GetPollAnswerVotersAsync(uint answerId, int? limit = null,
+        ulong? afterId = null,
+        RequestOptions options = null)
+    {
+        throw new NotImplementedException();
+    }
+
+    /// <inheritdoc />
+    public MessageResolvedData ResolvedData { get; }
+
+    /// <inheritdoc />
     public IUserMessage ReferencedMessage { get; set; }
 
-    public IThreadChannel Thread => throw new NotImplementedException();
+    /// <inheritdoc />
+    public IMessageInteractionMetadata InteractionMetadata { get; }
 
-    public MessageRoleSubscriptionData RoleSubscriptionData => throw new NotImplementedException();
+    /// <inheritdoc />
+    public IReadOnlyCollection<MessageSnapshot> ForwardedMessages { get; }
 
-    public MessageResolvedData ResolvedData => throw new NotImplementedException();
+    /// <inheritdoc />
+    public Poll? Poll { get; }
 
-    public IMessageInteractionMetadata InteractionMetadata
+    /// <inheritdoc />
+    public IThreadChannel Thread
     {
         get
         {
             throw new NotImplementedException();
         }
     }
+
+    /// <inheritdoc />
+    public MessageRoleSubscriptionData RoleSubscriptionData
+    {
+        get
+        {
+            throw new NotImplementedException();
+        }
+    }
+
+    /// <inheritdoc />
+    public PurchaseNotification PurchaseNotification { get; }
+
+    /// <inheritdoc />
+    public MessageCallData? CallData { get; }
 }

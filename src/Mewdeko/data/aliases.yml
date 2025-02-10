@@ -2,8 +2,187 @@ accept:
   - accept
   - suggestaccept
   - acceptsuggest
+autobanroleadd:
+  - autobanroleadd
+  - abra
+autobanroleremove:
+  - autobanroleremove
+  - abrr
+baninrole:
+  - baninrole
+banbyhash:
+  - banbyhash
+  - bbh
+debugembed:
+  - debugembed
+  - embeddebug
+invites:
+  - invites
+invitesettings:
+  - invitesettings
+  - inviteconfig
+toggleinvitetracking:
+  - toggleinvitetracking
+toggleremoveinviteonleave:
+  - toggleremoveinviteonleave
+  - triol
+setminaccountage:
+  - setminaccountage
+  - inviteminage
+inviteleaderboard:
+  - inviteleaderboard
+  - inviteslb
+whoinvited:
+  - whoinvited
+  - invitedby
+invitedusers:
+  - invitedusers
+  - userinvites
+greetdmoptout:
+  - greetdmoptout
+  - gdmoptout
+purgeuser:
+  - purgeuser
+  - pruneuser
+antimassmention:
+  - antimassmention
+  - amm
+  - massmention
+  - stopmassmention
+resetmessagecounts:
+  - resetmessagecounts
+  - rmc
+  - resetmsgcounts
+  - resetmessages
+  - resetcounts
+antimassmentionignorebots:
+  - antimassmentionignorebots
+  - ammignorebots
+  - ignorebotsmassmention
+  - massmentionignorebots
+setdefaultpunishment:
+  - setdefaultpunishment
+  - sdp
+  - defaultpunishment
+  - setdefpunishment
+addblacklistedrole:
+  - addblacklistedrole
+  - abr
+  - blacklistrole
+  - addbrole
+removeblacklistedrole:
+  - removeblacklistedrole
+  - rbr
+  - unblacklistrole
+  - removebrole
+addblacklistedpermission:
+  - addblacklistedpermission
+  - abp
+  - blacklistpermission
+  - addbpermission
+removeblacklistedpermission:
+  - removeblacklistedpermission
+  - rbp
+  - unblacklistpermission
+  - removebpermission
+addwhitelisteduser:
+  - addwhitelisteduser
+  - awu
+  - whitelistuser
+  - addwuser
+removewhitelisteduser:
+  - removewhitelisteduser
+  - rwu
+  - unwhitelistuser
+  - removewuser
+addwhitelistedrole:
+  - addwhitelistedrole
+  - awr
+  - whitelistrole
+  - addwrole
+removewhitelistedrole:
+  - removewhitelistedrole
+  - rwr
+  - unwhitelistrole
+  - removewrole
+listblacklists:
+  - listblacklists
+  - lbl
+  - blacklists
+  - listbws
+lockdown:
+  - lockdown
+  - lockdownserver
+liftlockdown:
+  - liftlockdown
+  - unlockserver
 acceptchannel:
   - acceptchannel
+usermessages:
+  - usermessages
+  - usermsg
+  - umsg
+graph:
+  - plot
+  - graphfunction
+symbolic:
+  - sym
+  - symbolicmath
+channelmessages:
+  - channelmessages
+  - channelmsg
+  - cmsg
+servermessages:
+  - servermessages
+  - servermsg
+  - smsg
+  - guildmessages
+  - guildmsg
+  - gmsg
+minmessagecountlength:
+  - minmsglength
+  - mmlength
+  - minmlength
+togglemessagecount:
+  - togglemsgcount
+  - togglemessagecount
+gpingrole:
+  - gpingrole
+  - giveawaypingrole
+gdmmmessage:
+  - gdmmmessage
+  - giveawaydmmessage
+update:
+  - update
+  - upd
+addautopublish:
+  - addautopublish
+  - addautopub
+  - aap
+addpublishblacklist:
+  - addpublishblacklist
+  - addpubbl
+getautopublishes:
+  - getautopublishes
+  - getaps
+removeautopublish:
+  - removeautopublish
+  - removeautopub
+removepublishblacklist:
+  - removepublishblacklist
+  - removepubbl
+gbanner:
+  - gbanner
+  - giveawaybanner
+gwinembedcolor:
+  - gwinembedcolor
+  - giveawaywinembedcolor
+gembedcolor:
+  - gembedcolor
+  - giveawayembedcolor
+gdm:
+  - gdm
+  - giveawaydm
 acceptmessage:
   - acceptmessage
   - acceptmsg
@@ -19,6 +198,10 @@ exportcommandsjson:
   - excj
 getjson:
   - getjson
+manualblacklistcheck:
+  - manualblacklistcheck
+  - manualblcheck
+  - mbc
 joinstats:
   - joinstats
   - jstats
@@ -87,16 +270,16 @@ dehoistall:
   - dehoistall
   - dehoista
 sanitizeall:
-    - sanitizeall
-    - sanitizea
+  - sanitizeall
+  - sanitizea
 massnickprogress:
-    - massnickprogress
-    - mnickprogress
-    - mnp
+  - massnickprogress
+  - mnickprogress
+  - mnp
 massnickstop:
-    - massnickstop
-    - mnstop
-    - mns
+  - massnickstop
+  - mnstop
+  - mns
 exportrolelist:
   - exportrolelist
   - exportroles
@@ -995,10 +1178,6 @@ lock:
   - lockchannel
 lockcheck:
   - lockcheck
-lockdown:
-  - lockdown
-  - lockserver
-  - lockall
 log:
   - log
 logcategory:
@@ -1624,12 +1803,11 @@ showchattrigger:
 showemojis:
   - showemojis
   - se
-shrug:
-  - shrug
-shuffle:
+shufflequeue:
   - shuffle
   - playlistshuffle
   - sh
+  - sq
   - plsh
 skip:
   - skip
@@ -2128,7 +2306,7 @@ profile:
 setzodiac:
   - setzodiac
 setprofilecolor:
-  -  setprofilecolor
+  - setprofilecolor
 setbirthday:
   - setbirthday
 setbirthdayprivacy:

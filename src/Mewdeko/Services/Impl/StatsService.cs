@@ -1,56 +1,90 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Reflection;
 using System.Threading;
 using Discord.Commands;
-using Humanizer.Bytes;
-using Mewdeko.Common.ModuleBehaviors;
+using Humanizer;
 using Mewdeko.Modules.Utility.Services;
 using Serilog;
 using Swan.Formatters;
 
 namespace Mewdeko.Services.Impl;
 
-public class StatsService : IStatsService, IReadyExecutor
+/// <summary>
+///     Service for collecting and posting statistics about the bot.
+/// </summary>
+public class StatsService : IStatsService, IDisposable
 {
-    public readonly DiscordSocketClient Client;
-    public readonly IBotCredentials Creds;
-    public readonly ICoordinator Coord;
+    /// <summary>
+    ///     The version of the bot. I should make this set from commits somehow idk
+    /// </summary>
+    public const string BotVersion = "7.6.8";
+
     private readonly IDataCache cache;
+    private readonly DiscordShardedClient client;
+    private readonly IBotCredentials creds;
     private readonly HttpClient http;
-    public const string BotVersion = "7.2.7";
 
     private readonly DateTime started;
+    private PeriodicTimer topGgTimer;
 
+    /// <summary>
+    ///     Initializes a new instance of the <see cref="StatsService" /> class.
+    /// </summary>
+    /// <param name="client">The discord client</param>
+    /// <param name="creds">The bots credentials</param>
+    /// <param name="cmdServ">The command service</param>
+    /// <param name="http">The http client</param>
+    /// <param name="cache">The caching service</param>
+    /// <exception cref="ArgumentNullException"></exception>
     public StatsService(
-        DiscordSocketClient client, IBotCredentials creds, ICoordinator coord, CommandService cmdServ,
-        HttpClient http, IDataCache cache, EventHandler handler)
+        DiscordShardedClient client, IBotCredentials creds, CommandService cmdServ,
+        HttpClient http, IDataCache cache)
     {
-        Client = client;
-        Creds = creds;
-        Coord = coord;
-        this.http = http;
-        this.cache = cache;
-        _ = new DllVersionChecker();
-        started = DateTime.UtcNow;
-        _ = PostToTopGg();
-        _ = PostToStatcord(coord, client, cmdServ);
-    }
+        this.client = client ?? throw new ArgumentNullException(nameof(client));
+        this.creds = creds ?? throw new ArgumentNullException(nameof(creds));
+        this.http = http ?? throw new ArgumentNullException(nameof(http));
+        this.cache = cache ?? throw new ArgumentNullException(nameof(cache));
 
+        started = DateTime.UtcNow;
+
+            _ = Task.Run(async () => await PostToTopGg());
+            _ = OnReadyAsync();
+        }
+
+    /// <summary>
+    /// Gets the version of the Discord.Net library.
+    /// </summary>
     public string Library => $"Discord.Net {DllVersionChecker.GetDllVersion()} ";
 
-    // Define a delegate that matches the GetDllVersions method signature
+    /// <summary>
+    /// Delegate for getting versions of specified DLLs.
+    /// </summary>
+    /// <param name="dllNames">List of DLL names to get versions for.</param>
+    /// <returns>A dictionary with DLL names as keys and their versions as values.</returns>
     public delegate Dictionary<string, string?> GetVersionsDelegate(List<string> dllNames);
 
+    /// <summary>
+    /// Provides information about the libraries used by the bot.
+    /// </summary>
     public class LibraryInfo
     {
         private GetVersionsDelegate _versionChecker;
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="LibraryInfo"/> class.
+        /// </summary>
+        /// <param name="versionChecker">The delegate to get versions of specified DLLs.</param>
         public LibraryInfo(GetVersionsDelegate versionChecker)
         {
             _versionChecker = versionChecker;
         }
 
+        /// <summary>
+        /// Gets the version of the Discord.Net library.
+        /// </summary>
         public string Library
         {
             get
@@ -60,6 +94,9 @@ public class StatsService : IStatsService, IReadyExecutor
             }
         }
 
+        /// <summary>
+        /// Gets the version of the OpenAI_API library.
+        /// </summary>
         public string OpenAILib
         {
             get
@@ -68,115 +105,144 @@ public class StatsService : IStatsService, IReadyExecutor
                 return $"OpenAI_API {versions["OpenAI_API.dll"] ?? "Version not found"}";
             }
         }
+
+        /// <summary>
+        /// Gets the target framework of the executing assembly.
+        /// </summary>
+        /// <returns>The target framework name.</returns>
+        public static string GetTargetFramework()
+        {
+            var attribute = Assembly.GetExecutingAssembly()
+                .GetCustomAttributes(typeof(System.Runtime.Versioning.TargetFrameworkAttribute), false)
+                .FirstOrDefault() as System.Runtime.Versioning.TargetFrameworkAttribute;
+
+            return attribute?.FrameworkName ?? "Unknown framework";
+        }
     }
 
-    public string Heap => ByteSize.FromBytes(Process.GetCurrentProcess().PrivateMemorySize64).Megabytes
-        .ToString(CultureInfo.InvariantCulture);
+    /// <summary>
+    ///     Disposes of the timers.
+    /// </summary>
+    public void Dispose()
+    {
+        topGgTimer?.Dispose();
+    }
 
-    private TimeSpan GetUptime() => DateTime.UtcNow - started;
+    /// <summary>
+    ///     Gets the memory usage of the bot.
+    /// </summary>
+    public string Heap
+    {
+        get
+        {
+            return ByteSize.FromBytes(Process.GetCurrentProcess().PrivateMemorySize64).Megabytes
+                .ToString(CultureInfo.InvariantCulture);
+        }
+    }
 
+    /// <summary>
+    ///     Gets the uptime of the bot as a human-readable string.
+    /// </summary>
+    /// <param name="separator">The separator</param>
+    /// <returns>A string used in .stats to display uptime</returns>
     public string GetUptimeString(string separator = ", ")
     {
-        var time = GetUptime();
-        return $"{time.Days} days{separator}{time.Hours} hours{separator}{time.Minutes} minutes";
+        return GetUptime().Humanize(2, minUnit: TimeUnit.Minute, collectionSeparator: separator);
     }
 
-    public async Task PostToStatcord(ICoordinator coord, DiscordSocketClient socketClient, CommandService cmdServ)
+    /// <inheritdoc />
+    public Task OnReadyAsync()
     {
-        if (string.IsNullOrWhiteSpace(Creds.StatcordKey))
-            return;
-        var timer = new PeriodicTimer(TimeSpan.FromMinutes(1));
-        while (await timer.WaitForNextTickAsync().ConfigureAwait(false))
+        _ = Task.Run(async () =>
         {
-            using var content = new StringContent(
-                $"{{\n  \"id\": \"{socketClient.CurrentUser.Id}\",\n  \"key\": \"{Creds.StatcordKey}\",\n  \"servers\": \"{coord.GetGuildCount()}\",\n  \"users\": \"{coord.GetUserCount()}\",\n  \"active\":[],\n  \"commands\": \"0\",\n  \"popular\": \"[]\",\n  \"memactive\": \"{ByteSize.FromBytes(Process.GetCurrentProcess().PrivateMemorySize64).Bytes}\",\n  \"memload\": \"0\",\n  \"cpuload\": \"0\",\n  \"bandwidth\": \"0\", \n\"custom1\":  \"{cmdServ.Commands.Count()}\"}}");
-            content.Headers.Clear();
-            content.Headers.Add("Content-Type", "application/json");
-            await http.PostAsync("https://api.statcord.com/beta/stats", content).ConfigureAwait(false);
-        }
-    }
+            var periodicTimer = new PeriodicTimer(TimeSpan.FromHours(12));
 
-    public async Task PostToTopGg()
-    {
-        if (Client.ShardId != 0)
-            return;
-        //
-        // if (Client.CurrentUser.Id != 752236274261426212)
-        //     return;
-        if (string.IsNullOrEmpty(Creds.VotesToken))
-            return;
-        var timer = new PeriodicTimer(TimeSpan.FromSeconds(10));
-        while (await timer.WaitForNextTickAsync().ConfigureAwait(false))
-        {
-            using var httclient = new HttpClient();
-            try
+            do
             {
-                using var content = new FormUrlEncodedContent(
-                    new Dictionary<string, string>
-                    {
-                        {
-                            "shard_count", Creds.TotalShards.ToString()
-                        },
-                        {
-                            "shard_id", Client.ShardId.ToString()
-                        },
-                        {
-                            "server_count", (Coord.GetGuildCount()).ToString()
-                        }
-                    });
-                content.Headers.Clear();
-                content.Headers.Add("Content-Type", "application/x-www-form-urlencoded");
-                httclient.DefaultRequestHeaders.Add("Authorization", Creds.VotesToken);
-
-                using (await httclient
-                           .PostAsync(new Uri($"https://top.gg/api/bots/{Client.CurrentUser.Id}/stats"),
-                               content).ConfigureAwait(false))
+                try
                 {
+                    Log.Information("Updating top guilds");
+                    var guilds = await client.Rest.GetGuildsAsync(true);
+                    var servers = guilds.OrderByDescending(x => x.ApproximateMemberCount.Value)
+                        .Where(x => !x.Name.Contains("botlist", StringComparison.CurrentCultureIgnoreCase)).Take(11)
+                        .Select(x =>
+                            new MewdekoPartialGuild
+                            {
+                                IconUrl = x.IconId.StartsWith("a_") ? x.IconUrl.Replace(".jpg", ".gif") : x.IconUrl,
+                                MemberCount = x.ApproximateMemberCount.Value,
+                                Name = x.Name
+                            });
+
+                    var serialied = Json.Serialize(servers);
+                    await cache.Redis.GetDatabase().StringSetAsync($"{client.CurrentUser.Id}_topguilds", serialied)
+                        .ConfigureAwait(false);
+                    Log.Information("Updated top guilds");
                 }
-            }
-            catch (Exception ex)
+                catch
+                {
+                    Log.Error("Failed to update top guilds: {0}");
+                    return;
+                }
+            } while (await periodicTimer.WaitForNextTickAsync());
+        });
+        return Task.CompletedTask;
+    }
+
+
+    private TimeSpan GetUptime()
+    {
+        return DateTime.UtcNow - started;
+    }
+
+
+    private async Task PostToTopGg()
+    {
+        if (string.IsNullOrEmpty(creds.VotesToken)) return;
+
+        topGgTimer = new PeriodicTimer(TimeSpan.FromSeconds(10));
+
+        while (await topGgTimer.WaitForNextTickAsync().ConfigureAwait(false))
+        {
+            var content = new FormUrlEncodedContent(new Dictionary<string, string>
             {
-                Log.Error(ex.ToString());
-                // ignored
-            }
+                {
+                    "shard_count", creds.TotalShards.ToString()
+                },
+                {
+                    "server_count", client.Guilds.Count.ToString()
+                }
+            });
+
+            http.DefaultRequestHeaders.Authorization =
+                new AuthenticationHeaderValue("Authorization", creds.VotesToken);
+            var response = await http
+                .PostAsync(new Uri($"https://top.gg/api/bots/{client.CurrentUser.Id}/stats"), content)
+                .ConfigureAwait(false);
+
+            if (response.IsSuccessStatusCode) continue;
+            Log.Error("Failed to post stats to Top.gg");
+            return;
         }
     }
 
-    public class MewdekoPartialGuild
+    /// <summary>
+    ///     Represents a partial guild information.
+    /// </summary>
+    private class MewdekoPartialGuild
     {
-        public string Name { get; set; }
-        public string IconUrl { get; set; }
+        /// <summary>
+        ///     Gets or sets the name of the guild.
+        /// </summary>
+        public string? Name { get; set; }
+
+        /// <summary>
+        ///     Gets or sets the URL of the guild's icon.
+        /// </summary>
+        public string? IconUrl { get; set; }
+
+        /// <summary>
+        ///     Gets or sets the number of members in the guild.
+        /// </summary>
         public int MemberCount { get; set; }
-    }
-
-    public async Task OnReadyAsync()
-    {
-        if (Client.ShardId != 0)
-            return;
-
-        var periodicTimer = new PeriodicTimer(TimeSpan.FromHours(12));
-        // Set it once before executing the 12h loop
-
-        do
-        {
-            try
-            {
-                Log.Information("Updating top guilds");
-                var guilds = await Client.Rest.GetGuildsAsync(true);
-                var servers = guilds.OrderByDescending(x => x.ApproximateMemberCount.Value).Where(x => !x.Name.ToLower().Contains("botlist")).Take(11).Select(x =>
-                    new MewdekoPartialGuild
-                    {
-                        IconUrl = x.IconId.StartsWith("a_") ? x.IconUrl.Replace(".jpg", ".gif") : x.IconUrl, MemberCount = x.ApproximateMemberCount.Value, Name = x.Name
-                    });
-
-                var serialied = Json.Serialize(servers);
-                await cache.Redis.GetDatabase().StringSetAsync($"{Client.CurrentUser.Id}_topguilds", serialied).ConfigureAwait(false);
-                Log.Information("Updated top guilds");
-            }
-            catch (Exception e)
-            {
-                Log.Error("Failed to update top guilds: {0}", e);
-            }
-        } while (await periodicTimer.WaitForNextTickAsync());
     }
 }

@@ -1,22 +1,38 @@
-﻿using Serilog;
+﻿using Mewdeko.Database.DbContextStuff;
+using Serilog;
 
 namespace Mewdeko.Modules.Administration.Services;
 
+/// <summary>
+///     Service for managing game voice channels.
+/// </summary>
 public class GameVoiceChannelService : INService
 {
-    private readonly DbService db;
+    private readonly DbContextProvider dbProvider;
     private readonly GuildSettingsService guildSettings;
 
-    public GameVoiceChannelService(DbService db,
+    /// <summary>
+    ///     Constructs a new instance of the GameVoiceChannelService.
+    /// </summary>
+    /// <param name="db">The database service.</param>
+    /// <param name="guildSettings">The guild settings service.</param>
+    /// <param name="eventHandler">The event handler.</param>
+    public GameVoiceChannelService(DbContextProvider dbProvider,
         GuildSettingsService guildSettings, EventHandler eventHandler)
     {
-        this.db = db;
+        this.dbProvider = dbProvider;
         this.guildSettings = guildSettings;
 
         eventHandler.UserVoiceStateUpdated += Client_UserVoiceStateUpdated;
         eventHandler.GuildMemberUpdated += _client_GuildMemberUpdated;
     }
 
+    /// <summary>
+    ///     Handles the GuildMemberUpdated event.
+    /// </summary>
+    /// <param name="cacheable">The cacheable guild user.</param>
+    /// <param name="after">The guild user after the update.</param>
+    /// <returns>A task that represents the asynchronous operation.</returns>
     private async Task _client_GuildMemberUpdated(Cacheable<SocketGuildUser, ulong> cacheable, SocketGuildUser? after)
     {
         try
@@ -43,29 +59,45 @@ public class GameVoiceChannelService : INService
         }
     }
 
+    /// <summary>
+    ///     Toggles the game voice channel for a guild.
+    /// </summary>
+    /// <param name="guildId">The ID of the guild.</param>
+    /// <param name="vchId">The ID of the voice channel.</param>
+    /// <returns>
+    ///     A task that represents the asynchronous operation. The task result contains the ID of the toggled game voice
+    ///     channel.
+    /// </returns>
     public async Task<ulong?> ToggleGameVoiceChannel(ulong guildId, ulong vchId)
     {
         ulong? id;
-        await using var uow = db.GetDbContext();
-        var gc = await uow.ForGuildId(guildId, set => set);
+
+        await using var db = await dbProvider.GetContextAsync();
+        var gc = await db.ForGuildId(guildId, set => set);
 
         if (gc.GameVoiceChannel == vchId)
         {
             id = gc.GameVoiceChannel = 0;
-            guildSettings.UpdateGuildConfig(guildId, gc);
+            await guildSettings.UpdateGuildConfig(guildId, gc);
         }
         else
         {
             id = gc.GameVoiceChannel = vchId;
-            guildSettings.UpdateGuildConfig(guildId, gc);
+            await guildSettings.UpdateGuildConfig(guildId, gc);
         }
-
-        await uow.SaveChangesAsync().ConfigureAwait(false);
 
         return id;
     }
 
-    private async Task Client_UserVoiceStateUpdated(SocketUser usr, SocketVoiceState oldState, SocketVoiceState newState)
+    /// <summary>
+    ///     Handles the UserVoiceStateUpdated event.
+    /// </summary>
+    /// <param name="usr">The user whose voice state was updated.</param>
+    /// <param name="oldState">The old voice state.</param>
+    /// <param name="newState">The new voice state.</param>
+    /// <returns>A task that represents the asynchronous operation.</returns>
+    private async Task Client_UserVoiceStateUpdated(SocketUser usr, SocketVoiceState oldState,
+        SocketVoiceState newState)
     {
         try
         {
@@ -94,6 +126,13 @@ public class GameVoiceChannelService : INService
         }
     }
 
+
+    /// <summary>
+    ///     Triggers the game voice channel for a guild user.
+    /// </summary>
+    /// <param name="gUser">The guild user.</param>
+    /// <param name="game">The game.</param>
+    /// <returns>A task that represents the asynchronous operation.</returns>
     private static async Task TriggerGvc(SocketGuildUser gUser, string game)
     {
         if (string.IsNullOrWhiteSpace(game))

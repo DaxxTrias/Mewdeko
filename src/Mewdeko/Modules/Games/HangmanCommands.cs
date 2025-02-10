@@ -8,25 +8,38 @@ namespace Mewdeko.Modules.Games;
 
 public partial class Games
 {
+    /// <summary>
+    ///     A module containing Hangman commands.
+    /// </summary>
+    /// <param name="client">The discord client</param>
+    /// <param name="guildSettings">The guild settings service</param>
     [Group]
-    public class HangmanCommands : MewdekoSubmodule<GamesService>
+    public class HangmanCommands(DiscordShardedClient client, GuildSettingsService guildSettings)
+        : MewdekoSubmodule<GamesService>
     {
-        private readonly DiscordSocketClient client;
-        private readonly GuildSettingsService guildSettings;
-
-        public HangmanCommands(DiscordSocketClient client, GuildSettingsService guildSettings)
+        /// <summary>
+        ///     Lists the available hangman types in the current guild.
+        /// </summary>
+        /// <example>.hangmanlist</example>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        public async Task Hangmanlist()
         {
-            this.client = client;
-            this.guildSettings = guildSettings;
-        }
-
-        [Cmd, Aliases, RequireContext(ContextType.Guild)]
-        public async Task Hangmanlist() =>
             await ctx.Channel
                 .SendConfirmAsync(
-                    $"{Format.Code(GetText("hangman_types", await guildSettings.GetPrefix(ctx.Guild.Id)))}\n{string.Join("\n", Service.TermPool.Data.Keys)}").ConfigureAwait(false);
+                    $"{Format.Code(GetText("hangman_types", await guildSettings.GetPrefix(ctx.Guild.Id)))}\n{string.Join("\n", Service.TermPool.Data.Keys)}")
+                .ConfigureAwait(false);
+        }
 
-        [Cmd, Aliases, RequireContext(ContextType.Guild)]
+        /// <summary>
+        ///     Starts a hangman game with the specified type.
+        /// </summary>
+        /// <param name="type">The type of hangman game to start.</param>
+        /// <example>.hangman countries</example>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
         public async Task Hangman([Remainder] string type = "random")
         {
             Hangman hm;
@@ -81,6 +94,11 @@ public partial class Games
             }
         }
 
+        /// <summary>
+        ///     Handles the event when the hangman game ends.
+        /// </summary>
+        /// <param name="game">The hangman game that ended.</param>
+        /// <param name="winner">The winner of the hangman game. Null if no winner.</param>
         private Task Hm_OnGameEnded(Hangman game, string? winner)
         {
             if (winner == null)
@@ -109,22 +127,52 @@ public partial class Games
             return ctx.Channel.EmbedAsync(winEmbed);
         }
 
-        private Task Hm_OnLetterAlreadyUsed(Hangman game, string user, char guess) =>
-            ctx.Channel.SendErrorAsync($"Hangman Game ({game.TermType})",
+        /// <summary>
+        ///     Handles the event when a letter is already used in the hangman game.
+        /// </summary>
+        /// <param name="game">The hangman game.</param>
+        /// <param name="user">The user who attempted to guess the letter.</param>
+        /// <param name="guess">The letter that was guessed.</param>
+        private Task Hm_OnLetterAlreadyUsed(Hangman game, string user, char guess)
+        {
+            return ctx.Channel.SendErrorAsync($"Hangman Game ({game.TermType})",
                 $"{user} Letter `{guess}` has already been used. You can guess again in 3 seconds.\n{game.ScrambledWord}\n{game.GetHangman()}",
                 footer: string.Join(" ", game.PreviousGuesses));
+        }
 
-        private Task Hm_OnGuessSucceeded(Hangman game, string user, char guess) =>
-            ctx.Channel.SendConfirmAsync($"Hangman Game ({game.TermType})",
+        /// <summary>
+        ///     Handles the event when a guess in the hangman game is successful.
+        /// </summary>
+        /// <param name="game">The hangman game.</param>
+        /// <param name="user">The user who made the successful guess.</param>
+        /// <param name="guess">The letter that was guessed.</param>
+        private Task Hm_OnGuessSucceeded(Hangman game, string user, char guess)
+        {
+            return ctx.Channel.SendConfirmAsync($"Hangman Game ({game.TermType})",
                 $"{user} guessed a letter `{guess}`!\n{game.ScrambledWord}\n{game.GetHangman()}",
                 footer: string.Join(" ", game.PreviousGuesses));
+        }
 
-        private Task Hm_OnGuessFailed(Hangman game, string user, char guess) =>
-            ctx.Channel.SendErrorAsync($"Hangman Game ({game.TermType})",
+        /// <summary>
+        ///     Handles the event when a guess in the hangman game fails.
+        /// </summary>
+        /// <param name="game">The hangman game.</param>
+        /// <param name="user">The user who made the unsuccessful guess.</param>
+        /// <param name="guess">The letter that was guessed.</param>
+        private Task Hm_OnGuessFailed(Hangman game, string user, char guess)
+        {
+            return ctx.Channel.SendErrorAsync($"Hangman Game ({game.TermType})",
                 $"{user} Letter `{guess}` does not exist. You can guess again in 3 seconds.\n{game.ScrambledWord}\n{game.GetHangman()}",
                 footer: string.Join(" ", game.PreviousGuesses));
+        }
 
-        [Cmd, Aliases, RequireContext(ContextType.Guild)]
+        /// <summary>
+        ///     Stops the currently running hangman game in the current channel.
+        /// </summary>
+        /// <example>.hangmanstop</example>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
         public async Task HangmanStop()
         {
             if (Service.HangmanGames.TryRemove(ctx.Channel.Id, out var removed))

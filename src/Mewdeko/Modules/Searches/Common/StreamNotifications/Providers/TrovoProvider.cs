@@ -6,17 +6,15 @@ using Serilog;
 
 namespace Mewdeko.Modules.Searches.Common.StreamNotifications.Providers;
 
+/// <inheritdoc />
 public class TrovoProvider : Provider
 {
+    private readonly IBotCredentials creds;
     private readonly IHttpClientFactory httpClientFactory;
-
-    public override FollowedStream.FType Platform
-        => FollowedStream.FType.Trovo;
 
     private readonly Regex urlRegex = new(@"trovo.live\/(Mewdeko<channel>[\w\d\-_]+)/Mewdeko", RegexOptions.Compiled);
 
-    private readonly IBotCredentials creds;
-
+    /// <inheritdoc />
     public TrovoProvider(IHttpClientFactory httpClientFactory, IBotCredentials creds)
     {
         (this.httpClientFactory, this.creds) = (httpClientFactory, creds);
@@ -28,9 +26,22 @@ If you are experiencing ratelimits, you should create your own application at: h
         }
     }
 
-    public override Task<bool> IsValidUrl(string url)
-        => Task.FromResult(urlRegex.IsMatch(url));
+    /// <inheritdoc />
+    public override FollowedStream.FType Platform
+    {
+        get
+        {
+            return FollowedStream.FType.Trovo;
+        }
+    }
 
+    /// <inheritdoc />
+    public override Task<bool> IsValidUrl(string url)
+    {
+        return Task.FromResult(urlRegex.IsMatch(url));
+    }
+
+    /// <inheritdoc />
     public override Task<StreamData> GetStreamDataByUrlAsync(string url)
     {
         var match = urlRegex.Match(url);
@@ -40,6 +51,7 @@ If you are experiencing ratelimits, you should create your own application at: h
         return GetStreamDataAsync(match.Groups["channel"].Value);
     }
 
+    /// <inheritdoc />
     public override async Task<StreamData?> GetStreamDataAsync(string login)
     {
         using var http = httpClientFactory.CreateClient();
@@ -100,6 +112,7 @@ If you are experiencing ratelimits, you should create your own application at: h
         }
     }
 
+    /// <inheritdoc />
     public override async Task<IReadOnlyCollection<StreamData?>> GetStreamDataAsync(List<string> usernames)
     {
         var trovoClientId = creds.TrovoClientId;

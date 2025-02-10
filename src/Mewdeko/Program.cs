@@ -1,159 +1,253 @@
-using System.IO;
-using System.Text;
-using Figgle;
+using System.Net.Http;
+using Discord.Commands;
+using Discord.Interactions;
+using Fergun.Interactive;
+using Lavalink4NET.Extensions;
+using MartineApiNet;
+using Mewdeko.Api.Services;
+using Mewdeko.AuthHandlers;
+using Mewdeko.Common.Configs;
+using Mewdeko.Common.ModuleBehaviors;
+using Mewdeko.Common.PubSub;
+using Mewdeko.Database.DbContextStuff;
+using Mewdeko.Modules.Currency.Services;
+using Mewdeko.Modules.Currency.Services.Impl;
+using Mewdeko.Modules.Nsfw;
+using Mewdeko.Modules.Searches.Services;
 using Mewdeko.Services.Impl;
+using Mewdeko.Services.Settings;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using NekosBestApiNet;
 using Serilog;
+using ZiggyCreatures.Caching.Fusion;
+using RunMode = Discord.Commands.RunMode;
 
-var v = StatsService.BotVersion;
+namespace Mewdeko;
 
-Console.WriteLine(
-    FiggleFonts.Ogre.Render($"Mewdeko v{v}"));
-
-var pid = Environment.ProcessId;
-var shardId = 0;
-
-if (args.Length > 0)
+/// <summary>
+///     The main entry point class for the Mewdeko application.
+/// </summary>
+public class Program
 {
-    if (!int.TryParse(args[0], out shardId))
-    {
-        Console.Error.WriteLine("Invalid first argument (shard id): {0}", args[0]);
-        return;
-    }
+    private static IDataCache Cache { get; set; }
 
-    if (args.Length > 1)
+    /// <summary>
+    ///     The entry point of the application.
+    /// </summary>
+    /// <param name="args">Command-line arguments passed to the application.</param>
+    /// <returns>A <see cref="Task" /> representing the asynchronous operation of running the application.</returns>
+    public static async Task Main(string[] args)
     {
-        if (!int.TryParse(args[1], out _))
+        AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
+        var log = LogSetup.SetupLogger("Mewdeko");
+        var credentials = new BotCredentials();
+        Cache = new RedisCache(credentials);
+
+        if (!Uri.TryCreate(credentials.LavalinkUrl, UriKind.Absolute, out _))
         {
-            Console.Error.WriteLine("Invalid second argument (total shards): {0}", args[1]);
-            return;
+            Log.Error("The Lavalink URL is invalid! Please check the Lavalink URL in the configuration");
+            Helpers.ReadErrorAndExit(5);
         }
-    }
-}
 
-LogSetup.SetupLogger(shardId);
-var credentials = new BotCredentials();
-if (string.IsNullOrEmpty(credentials.Token))
-{
-    Console.Error.WriteLine("No token provided. Exiting...");
-    return;
-}
+        var migrationService = new MigrationService(
+            null,
+            credentials.Token,
+            credentials.PsqlConnectionString,
+            credentials.MigrateToPsql);
 
-var tokenPart = credentials.Token.Split(".")[0];
-var paddingNeeded = 28 - tokenPart.Length;
-if (paddingNeeded > 0 && tokenPart.Length % 4 != 0)
-{
-    tokenPart = tokenPart.PadRight(28, '=');
-}
+        await migrationService.ApplyMigrations(
+            new MewdekoPostgresContext(new DbContextOptions<MewdekoPostgresContext>()));
 
-var clientId = Encoding.UTF8.GetString(Convert.FromBase64String(tokenPart));
+        Log.Information("Waiting 5 seconds for migrations, if any...");
+        await Task.Delay(5000);
 
-Log.Information("Attempting to migrate database to a less annoying place...");
-var dbPath = Path.Combine(AppContext.BaseDirectory, "data/Mewdeko.db");
-if (Environment.OSVersion.Platform == PlatformID.Unix)
-{
-    var folderpath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-    try
-    {
-        if (Directory.Exists(folderpath + "/.local/share/Mewdeko"))
+        // Set up the Host or WebApplication based on IsApiEnabled
+
+        if (credentials.IsApiEnabled)
         {
-            if (File.Exists(folderpath + $"/.local/share/Mewdeko/{clientId}/data/Mewdeko.db"))
-            {
-                Log.Information("Mewdeko db already exists!");
-            }
-            else
-            {
-                Directory.CreateDirectory(folderpath + $"/.local/share/Mewdeko/{clientId}/data");
-                File.Copy(dbPath, folderpath + $"/.local/share/Mewdeko/{clientId}/data/Mewdeko.db");
-                try
-                {
-                    File.Copy(dbPath + "-wal", folderpath + $"/.local/share/Mewdeko/{clientId}/data/Mewdeko.db-wal");
-                    File.Copy(dbPath + "-shm", folderpath + $"/.local/share/Mewdeko/{clientId}/data/Mewdeko.db-shm");
-                }
-                catch
-                {
-                    // ignored, used if the bot didnt shutdown properly and left behind db files
-                }
+            var builder = WebApplication.CreateBuilder(args);
+            var services = builder.Services;
 
-                Log.Information("Mewdeko folder created!");
-                Log.Information($"Mewdeko folder created! Your database has been migrated to {folderpath}/.local/share/Mewdeko/Mewdeko/{clientId}/data");
+            // Configure logging
+            builder.Logging.ClearProviders();
+            builder.Logging.AddSerilog(log);
+
+            // Configure services
+            ConfigureServices(services, credentials, Cache);
+
+            // Configure web host settings
+            builder.WebHost.UseUrls($"http://localhost:{credentials.ApiPort}");
+
+            if (!credentials.SkipApiKey)
+            {
+                services.AddTransient<IApiKeyValidation, ApiKeyValidation>();
+                services.AddAuthorization();
             }
+
+            services.AddControllers()
+                .AddJsonOptions(options =>
+                {
+                    options.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
+                });
+            services.AddEndpointsApiExplorer();
+            services.AddSwaggerGen();
+
+            var auth = services.AddAuthentication(options =>
+            {
+                options.AddScheme<AuthHandler>(AuthHandler.SchemeName, AuthHandler.SchemeName);
+            });
+
+            if (!credentials.SkipApiKey)
+                auth.AddScheme<AuthenticationSchemeOptions, ApiKeyAuthHandler>("ApiKey", null);
+
+            services.AddAuthorization(options =>
+            {
+                if (!credentials.SkipApiKey)
+                    options.AddPolicy("ApiKeyPolicy", policy =>
+                        policy.RequireAuthenticatedUser().AddAuthenticationSchemes("ApiKey"));
+                options.AddPolicy("TopggPolicy",
+                    policy => policy.RequireClaim(AuthHandler.TopggClaim)
+                        .AddAuthenticationSchemes(AuthHandler.SchemeName));
+            });
+
+            var app = builder.Build();
+
+            // Configure the HTTP request pipeline.
+            if (builder.Environment.IsDevelopment())
+            {
+                app.UseSwagger();
+                app.UseSwaggerUI();
+            }
+
+            app.UseAuthorization();
+            app.MapControllers();
+
+            foreach (var address in app.Urls)
+            {
+                Log.Information("Listening on {Address}", address);
+            }
+
+            // Start the app and the bot
+            await app.RunAsync();
         }
         else
         {
-            Directory.CreateDirectory(folderpath + $"/.local/share/Mewdeko/{clientId}/data");
-            File.Copy(dbPath, folderpath + $"/.local/share/Mewdeko/{clientId}/data/Mewdeko.db");
-            try
-            {
-                File.Copy(dbPath + "-wal", folderpath + $"/.local/share/Mewdeko/{clientId}/data/Mewdeko.db-wal");
-                File.Copy(dbPath + "-shm", folderpath + $"/.local/share/Mewdeko/{clientId}/data/Mewdeko.db-shm");
-            }
-            catch
-            {
-                // ignored, used if the bot didnt shutdown properly and left behind db files
-            }
+            // Create a generic host when IsApiEnabled is false
+            var host = Host.CreateDefaultBuilder(args)
+                .ConfigureLogging(logging =>
+                {
+                    logging.ClearProviders();
+                    logging.AddSerilog(log);
+                })
+                .ConfigureServices((context, services) =>
+                {
+                    // Configure services without web-specific services
+                    ConfigureServices(services, credentials, Cache);
+                })
+                .Build();
 
-            Log.Information($"Mewdeko folder created! Your database has been migrated to {folderpath}/.local/share/Mewdeko/Mewdeko/{clientId}/data");
+            // Start the bot without hosting any servers
+            await host.RunAsync();
         }
     }
-    catch (Exception e)
-    {
-        Log.Error(e, "Failed to create Mewdeko folder! The application may be missing permissions!");
-        Console.Read();
-    }
-}
-else
-{
-    var folderpath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-    try
-    {
-        if (Directory.Exists(folderpath + "/Mewdeko"))
-        {
-            if (File.Exists(folderpath + $"/Mewdeko/{clientId}/data/Mewdeko.db"))
-            {
-                Log.Information("Mewdeko folder already exists!");
-            }
-            else
-            {
-                Directory.CreateDirectory(folderpath + $"/Mewdeko/{clientId}/data");
-                File.Copy(dbPath, folderpath + $"/Mewdeko/{clientId}/data/Mewdeko.db");
-                try
-                {
-                    File.Copy(dbPath + "-wal", folderpath + $"/Mewdeko/{clientId}/data/Mewdeko.db-wal");
-                    File.Copy(dbPath + "-shm", folderpath + $"/Mewdeko/{clientId}/data/Mewdeko.db-shm");
-                }
-                catch
-                {
-                    // ignored, used if the bot didnt shutdown properly and left behind db files
-                }
 
-                Log.Information($"Mewdeko folder created! Your database has been migrated to {folderpath}/Mewdeko/{clientId}");
-            }
+    private static void ConfigureServices(IServiceCollection services, BotCredentials credentials, IDataCache cache)
+    {
+        var client = new DiscordShardedClient(new DiscordSocketConfig
+        {
+            MessageCacheSize = 15,
+            LogLevel = LogSeverity.Info,
+            ConnectionTimeout = int.MaxValue,
+            AlwaysDownloadUsers = true,
+            GatewayIntents = GatewayIntents.All,
+            FormatUsersInBidirectionalUnicode = false,
+            LogGatewayIntentWarnings = false,
+            DefaultRetryMode = RetryMode.RetryRatelimit
+        });
+
+        services.AddSingleton(client);
+        services.AddSingleton(credentials);
+        services.AddSingleton(cache);
+        services.AddSingleton(cache.Redis);
+
+        services
+            //.AddSingleton<ApiKeyRepository>(provider => new ApiKeyRepository("Data Source=mewdeko.db"))
+            //.AddSingleton<ApiService>()
+            .AddSingleton<FontProvider>()
+            .AddSingleton<IBotCredentials>(credentials)
+            //.AddDbContext<MewdekoPostgresContext>()
+            .AddPooledDbContextFactory<MewdekoContext>(dbContextOptionsBuilder => dbContextOptionsBuilder
+                .UseNpgsql(credentials.PsqlConnectionString,
+                    x => x.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery))
+                .EnableDetailedErrors()
+                .EnableSensitiveDataLogging())
+            .AddSingleton<DbContextProvider>()
+            .AddSingleton<EventHandler>()
+            .AddSingleton(new CommandService(new CommandServiceConfig
+            {
+                CaseSensitiveCommands = false, DefaultRunMode = RunMode.Async
+            }))
+            .AddSingleton(new MartineApi())
+            .AddTransient<ISeria, JsonSeria>()
+            .AddTransient<IPubSub, RedisPubSub>()
+            .AddTransient<IConfigSeria, YamlSeria>()
+            .AddSingleton(new InteractiveService(client, new InteractiveConfig
+            {
+                ReturnAfterSendingPaginator = true
+            }))
+            .AddSingleton(new NekosBestApi("Mewdeko"))
+            .AddSingleton(p => new InteractionService(p.GetRequiredService<DiscordShardedClient>()))
+            .AddSingleton<Localization>()
+            .AddSingleton<BotConfigService>()
+            .AddSingleton<BotConfig>()
+            .AddConfigServices()
+            .AddBotStringsServices(credentials.TotalShards)
+            .AddMemoryCache()
+            .AddLavalink()
+            .ConfigureLavalink(x =>
+            {
+                x.Passphrase = "Hope4a11";
+                x.BaseAddress = new Uri(credentials.LavalinkUrl);
+            })
+            .AddSingleton<ISearchImagesService, SearchImagesService>()
+            .AddSingleton<ToneTagService>()
+            .AddTransient<GuildSettingsService>();
+
+        services.AddFusionCache().TryWithAutoSetup();
+
+        if (credentials.UseGlobalCurrency)
+        {
+            services.AddTransient<ICurrencyService, GlobalCurrencyService>();
         }
         else
         {
-            Directory.CreateDirectory(folderpath + $"/Mewdeko/{clientId}/data");
-            File.Copy(dbPath, folderpath + $"/Mewdeko/{clientId}/data/Mewdeko.db");
-            try
-            {
-                File.Copy(dbPath + "-wal", folderpath + $"/Mewdeko/{clientId}/data/Mewdeko.db-wal");
-                File.Copy(dbPath + "-shm", folderpath + $"/Mewdeko/{clientId}/data/Mewdeko.db-shm");
-            }
-            catch
-            {
-                // ignored, used if the bot didnt shutdown properly and left behind db files
-            }
-
-            Log.Information($"Mewdeko folder created! Your database has been migrated to {folderpath}/Mewdeko/{clientId}");
+            services.AddTransient<ICurrencyService, GuildCurrencyService>();
         }
-    }
-    catch (Exception e)
-    {
-        Log.Error(e, "Failed to create Mewdeko folder! The application may be missing permissions!");
-        Console.Read();
+
+        services.AddHttpClient();
+        services.AddHttpClient("memelist").ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+        {
+            AllowAutoRedirect = false
+        });
+
+        services.Scan(scan => scan.FromAssemblyOf<IReadyExecutor>()
+            .AddClasses(classes => classes.AssignableToAny(
+                typeof(INService),
+                typeof(IEarlyBehavior),
+                typeof(ILateBlocker),
+                typeof(IInputTransformer),
+                typeof(ILateExecutor)))
+            .AsSelfWithInterfaces()
+            .WithSingletonLifetime()
+        );
+
+        services.AddSingleton<Mewdeko>()
+            .AddHostedService<MewdekoService>();
     }
 }
-
-Environment.SetEnvironmentVariable($"AFK_CACHED_{shardId}", "0");
-Log.Information($"Pid: {pid}");
-
-await new Mewdeko.Mewdeko(shardId).RunAndBlockAsync().ConfigureAwait(false);

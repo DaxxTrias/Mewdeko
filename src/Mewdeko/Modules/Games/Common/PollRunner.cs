@@ -1,41 +1,62 @@
 ﻿using System.Threading;
+using Mewdeko.Database.DbContextStuff;
 
 namespace Mewdeko.Modules.Games.Common;
 
+/// <summary>
+///     Represents a runner for managing and handling votes in a poll.
+/// </summary>
 public class PollRunner
 {
-    private readonly DbService db;
-
+    private readonly DbContextProvider dbProvider;
     private readonly SemaphoreSlim locker = new(1, 1);
 
-    public PollRunner(DbService db, Poll poll)
+    /// <summary>
+    ///     Initializes a new instance of the <see cref="PollRunner" /> class with the specified database service and poll.
+    /// </summary>
+    /// <param name="db">The database service.</param>
+    /// <param name="polls">The poll to manage.</param>
+    public PollRunner(DbContextProvider dbProvider, Polls polls)
     {
-        this.db = db;
-        Poll = poll;
+        this.dbProvider = dbProvider;
+        Polls = polls;
     }
 
-    public Poll Poll { get; }
+    /// <summary>
+    ///     Gets the poll managed by this poll runner.
+    /// </summary>
+    public Polls Polls { get; }
 
+    /// <summary>
+    ///     Tries to vote in the poll with the specified vote number and user.
+    /// </summary>
+    /// <param name="num">The vote number.</param>
+    /// <param name="user">The user who is voting.</param>
+    /// <returns>
+    ///     A tuple containing a boolean indicating whether the vote is allowed,
+    ///     and the type of poll.
+    /// </returns>
     public async Task<(bool allowed, PollType type)> TryVote(int num, IUser user)
     {
         PollVote voteObj;
         await locker.WaitAsync().ConfigureAwait(false);
         try
         {
+            await using var dbContext = await dbProvider.GetContextAsync();
+
             voteObj = new PollVote
             {
                 UserId = user.Id, VoteIndex = num
             };
-            var voteCheck = Poll.Votes.Find(x => x.UserId == user.Id && x.VoteIndex == num) == null;
-            switch (Poll.PollType)
+            var voteCheck = Polls.Votes.Find(x => x.UserId == user.Id && x.VoteIndex == num) == null;
+            switch (Polls.PollType)
             {
-                case PollType.SingleAnswer when !Poll.Votes.Contains(voteObj):
+                case PollType.SingleAnswer when !Polls.Votes.Contains(voteObj):
                 {
-                    await using var uow = db.GetDbContext();
-                    var trackedPoll = await uow.Poll.GetById(Poll.Id);
+                    var trackedPoll = await dbContext.Poll.GetById(Polls.Id);
                     trackedPoll.Votes.Add(voteObj);
-                    await uow.SaveChangesAsync().ConfigureAwait(false);
-                    Poll.Votes.Add(voteObj);
+                    await dbContext.SaveChangesAsync().ConfigureAwait(false);
+                    Polls.Votes.Add(voteObj);
                     return (true, PollType.SingleAnswer);
                 }
 
@@ -44,13 +65,12 @@ public class PollRunner
 
                 case PollType.AllowChange when voteCheck:
                 {
-                    await using var uow = db.GetDbContext();
-                    var trackedPoll = await uow.Poll.GetById(Poll.Id);
+                    var trackedPoll = await dbContext.Poll.GetById(Polls.Id);
                     trackedPoll.Votes.Remove(trackedPoll.Votes.Find(x => x.UserId == user.Id));
                     trackedPoll.Votes.Add(voteObj);
-                    Poll.Votes.Remove(Poll.Votes.Find(x => x.UserId == user.Id));
-                    Poll.Votes.Add(voteObj);
-                    await uow.SaveChangesAsync().ConfigureAwait(false);
+                    Polls.Votes.Remove(Polls.Votes.Find(x => x.UserId == user.Id));
+                    Polls.Votes.Add(voteObj);
+                    await dbContext.SaveChangesAsync().ConfigureAwait(false);
                     return (true, PollType.AllowChange);
                 }
 
@@ -59,21 +79,19 @@ public class PollRunner
 
                 case PollType.MultiAnswer when !voteCheck:
                 {
-                    await using var uow = db.GetDbContext();
-                    var trackedPoll = await uow.Poll.GetById(Poll.Id);
+                    var trackedPoll = await dbContext.Poll.GetById(Polls.Id);
                     trackedPoll.Votes.Remove(voteObj);
-                    Poll.Votes.Remove(voteObj);
-                    await uow.SaveChangesAsync().ConfigureAwait(false);
+                    Polls.Votes.Remove(voteObj);
+                    await dbContext.SaveChangesAsync().ConfigureAwait(false);
                     return (false, PollType.MultiAnswer);
                 }
 
                 case PollType.MultiAnswer when voteCheck:
                 {
-                    await using var uow = db.GetDbContext();
-                    var trackedPoll = await uow.Poll.GetById(Poll.Id);
+                    var trackedPoll = await dbContext.Poll.GetById(Polls.Id);
                     trackedPoll.Votes.Add(voteObj);
-                    Poll.Votes.Add(voteObj);
-                    await uow.SaveChangesAsync().ConfigureAwait(false);
+                    Polls.Votes.Add(voteObj);
+                    await dbContext.SaveChangesAsync().ConfigureAwait(false);
                     return (true, PollType.MultiAnswer);
                 }
             }
@@ -83,6 +101,6 @@ public class PollRunner
             locker.Release();
         }
 
-        return (true, Poll.PollType);
+        return (true, Polls.PollType);
     }
 }

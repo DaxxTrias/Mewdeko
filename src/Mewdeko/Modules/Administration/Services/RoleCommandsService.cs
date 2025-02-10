@@ -1,26 +1,41 @@
 ﻿using Mewdeko.Database.Common;
+using Mewdeko.Database.DbContextStuff;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 
 namespace Mewdeko.Modules.Administration.Services;
 
+/// <summary>
+///     Service for managing role commands.
+/// </summary>
 public class RoleCommandsService : INService
 {
-    private readonly DbService db;
-    private readonly ConcurrentDictionary<ulong, IndexedCollection<ReactionRoleMessage>> models;
+    private readonly DbContextProvider dbProvider;
+    private readonly GuildSettingsService gss;
 
-    public RoleCommandsService(DiscordSocketClient client, DbService db, EventHandler eventHandler)
+    /// <summary>
+    ///     Initializes a new instance of the <see cref="RoleCommandsService" /> class.
+    /// </summary>
+    /// <param name="db">The database service.</param>
+    /// <param name="eventHandler">The event handler.</param>
+    /// <param name="bot">The bot.</param>
+    /// ///
+    /// <param name="gss">The guild config service.</param>
+    public RoleCommandsService(DbContextProvider dbProvider, EventHandler eventHandler, Mewdeko bot,
+        GuildSettingsService gss)
     {
-        this.db = db;
-        using var uow = db.GetDbContext();
-        var gc = uow.GuildConfigs.Include(x => x.ReactionRoleMessages).ThenInclude(x => x.ReactionRoles).Where(x => client.Guilds.Select(socketGuild => socketGuild.Id).Contains(x.GuildId));
-        models = gc.ToDictionary(x => x.GuildId,
-                x => x.ReactionRoleMessages)
-            .ToConcurrent();
+        this.dbProvider = dbProvider;
+        this.gss = gss;
         eventHandler.ReactionAdded += _client_ReactionAdded;
         eventHandler.ReactionRemoved += _client_ReactionRemoved;
     }
 
+    /// <summary>
+    ///     Handles the ReactionAdded event of the client.
+    /// </summary>
+    /// <param name="msg">The message.</param>
+    /// <param name="chan">The channel.</param>
+    /// <param name="reaction">The reaction.</param>
     private async Task _client_ReactionAdded(Cacheable<IUserMessage, ulong> msg, Cacheable<IMessageChannel, ulong> chan,
         SocketReaction reaction)
     {
@@ -36,15 +51,19 @@ public class RoleCommandsService : INService
             if (chan.Value is not SocketGuildChannel gch)
                 return;
 
-            if (!models.TryGetValue(gch.Guild.Id, out var confs))
+            var config = await gss.GetGuildConfig(gch.Guild.Id);
+            var reactRoles = config.ReactionRoleMessages;
+
+            if (reactRoles == null || reactRoles.Count == 0)
                 return;
+
             IUserMessage message;
             if (msg.HasValue)
                 message = msg.Value;
             else
                 message = await msg.GetOrDownloadAsync();
 
-            var conf = confs.FirstOrDefault(x => x.MessageId == message.Id);
+            var conf = reactRoles.FirstOrDefault(x => x.MessageId == message.Id);
 
             // compare emote names for backwards compatibility :facepalm:
             var reactionRole = conf?.ReactionRoles.Find(x =>
@@ -89,10 +108,9 @@ public class RoleCommandsService : INService
 
             var toAdd = gusr.Guild.GetRole(reactionRole.RoleId);
             if (toAdd != null && !gusr.Roles.Contains(toAdd))
-                await gusr.AddRolesAsync(new[]
-                {
+                await gusr.AddRolesAsync([
                     toAdd
-                }).ConfigureAwait(false);
+                ]).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -101,7 +119,14 @@ public class RoleCommandsService : INService
         }
     }
 
-    private async Task _client_ReactionRemoved(Cacheable<IUserMessage, ulong> msg, Cacheable<IMessageChannel, ulong> chan,
+    /// <summary>
+    ///     Handles the ReactionRemoved event of the client.
+    /// </summary>
+    /// <param name="msg">The message.</param>
+    /// <param name="chan">The channel.</param>
+    /// <param name="reaction">The reaction.</param>
+    private async Task _client_ReactionRemoved(Cacheable<IUserMessage, ulong> msg,
+        Cacheable<IMessageChannel, ulong> chan,
         SocketReaction reaction)
     {
         try
@@ -116,15 +141,19 @@ public class RoleCommandsService : INService
             if (chan.Value is not SocketGuildChannel gch)
                 return;
 
-            if (!models.TryGetValue(gch.Guild.Id, out var confs))
+            var config = await gss.GetGuildConfig(gch.Guild.Id);
+            var reactRoles = config.ReactionRoleMessages;
+
+            if (reactRoles == null || reactRoles.Count == 0)
                 return;
+
             IUserMessage message;
             if (msg.HasValue)
                 message = msg.Value;
             else
                 message = await msg.GetOrDownloadAsync();
 
-            var conf = confs.FirstOrDefault(x => x.MessageId == message.Id);
+            var conf = reactRoles.FirstOrDefault(x => x.MessageId == message.Id);
 
             // compare emote names for backwards compatibility :facepalm:
             var reactionRole = conf?.ReactionRoles.Find(x =>
@@ -134,10 +163,9 @@ public class RoleCommandsService : INService
 
             var toRemove = gusr.Guild.GetRole(reactionRole.RoleId);
             if (toRemove != null && gusr.Roles.Contains(toRemove))
-                await gusr.RemoveRolesAsync(new[]
-                {
+                await gusr.RemoveRolesAsync([
                     toRemove
-                }).ConfigureAwait(false);
+                ]).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -146,35 +174,59 @@ public class RoleCommandsService : INService
         }
     }
 
-    public bool Get(ulong id, out IndexedCollection<ReactionRoleMessage> rrs) => models.TryGetValue(id, out rrs);
+    /// <summary>
+    ///     Gets the reaction role messages for a guild.
+    /// </summary>
+    /// <param name="id">The guild ID.</param>
+    /// <returns>A boolean indicating whether the operation was successful.</returns>
+    public async Task<(bool, IndexedCollection<ReactionRoleMessage>)> Get(ulong id)
+    {
+        var config = await gss.GetGuildConfig(id);
+        var reactRoles = config.ReactionRoleMessages;
 
+        if (reactRoles == null || reactRoles.Count == 0)
+        {
+            return (false, null);
+        }
+
+        return (true, reactRoles);
+    }
+
+    /// <summary>
+    ///     Adds a reaction role message to a guild.
+    /// </summary>
+    /// <param name="id">The guild ID.</param>
+    /// <param name="rrm">The reaction role message.</param>
+    /// <returns>
+    ///     A task that represents the asynchronous operation and contains a boolean indicating whether the operation was
+    ///     successful.
+    /// </returns>
     public async Task<bool> Add(ulong id, ReactionRoleMessage rrm)
     {
-        await using var uow = db.GetDbContext();
-        var gc = await uow.ForGuildId(id, set => set
+        await using var db = await dbProvider.GetContextAsync();
+        var gc = await db.ForGuildId(id, set => set
             .Include(x => x.ReactionRoleMessages)
             .ThenInclude(x => x.ReactionRoles));
         gc.ReactionRoleMessages.Add(rrm);
-        models.AddOrUpdate(id,
-            gc.ReactionRoleMessages,
-            delegate { return gc.ReactionRoleMessages; });
-        await uow.SaveChangesAsync().ConfigureAwait(false);
-
+        await gss.UpdateGuildConfig(id, gc);
         return true;
     }
 
+    /// <summary>
+    ///     Removes a reaction role message from a guild.
+    /// </summary>
+    /// <param name="id">The guild ID.</param>
+    /// <param name="index">The index of the reaction role message to remove.</param>
+    /// <returns>A task that represents the asynchronous operation.</returns>
     public async Task Remove(ulong id, int index)
     {
-        await using var uow = db.GetDbContext();
-        var gc = await uow.ForGuildId(id,
+        await using var dbContext = await dbProvider.GetContextAsync();
+        var gc = await dbContext.ForGuildId(id,
             set => set.Include(x => x.ReactionRoleMessages)
                 .ThenInclude(x => x.ReactionRoles));
-        uow.Set<ReactionRole>()
+        dbContext.Set<ReactionRole>()
             .RemoveRange(gc.ReactionRoleMessages[index].ReactionRoles);
         gc.ReactionRoleMessages.RemoveAt(index);
-        models.AddOrUpdate(id,
-            gc.ReactionRoleMessages,
-            delegate { return gc.ReactionRoleMessages; });
-        await uow.SaveChangesAsync().ConfigureAwait(false);
+        await gss.UpdateGuildConfig(id, gc);
     }
 }

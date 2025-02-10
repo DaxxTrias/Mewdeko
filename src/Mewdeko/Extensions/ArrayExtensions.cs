@@ -1,16 +1,17 @@
 ﻿namespace Mewdeko.Extensions;
 
-// made for customreactions because they almost never get added
-// and they get looped through constantly
+/// <summary>
+///     Provides extension methods for arrays.
+/// </summary>
 public static class ArrayExtensions
 {
     /// <summary>
-    ///     Create a new array from the old array + new element at the end
+    ///     Creates a new array from the old array with a new element added at the end.
     /// </summary>
-    /// <param name="input">Input array</param>
-    /// <param name="added">Item to add to the end of the output array</param>
-    /// <typeparam name="T">Type of the array</typeparam>
-    /// <returns>A new array with the new element at the end</returns>
+    /// <typeparam name="T">The type of the array elements.</typeparam>
+    /// <param name="input">The input array.</param>
+    /// <param name="added">The item to add to the end of the output array.</param>
+    /// <returns>A new array with the new element added at the end.</returns>
     public static T[] With<T>(this T[] input, T added)
     {
         var newCrs = new T[input.Length + 1];

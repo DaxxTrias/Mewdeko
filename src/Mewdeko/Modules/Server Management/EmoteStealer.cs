@@ -9,21 +9,24 @@ using Image = Discord.Image;
 
 namespace Mewdeko.Modules.Server_Management;
 
-public class EmoteStealer : MewdekoSlashCommandModule
+/// <summary>
+///     A module for stealing emotes and stickers from messages and adding them to the server.
+/// </summary>
+public class EmoteStealer(IHttpClientFactory httpFactory, BotConfigService config) : MewdekoSlashCommandModule
 {
-    private readonly IHttpClientFactory httpFactory;
-    private readonly BotConfigService config;
-
-    public EmoteStealer(IHttpClientFactory factory, BotConfigService config)
-    {
-        httpFactory = factory;
-        this.config = config;
-    }
-
-    [MessageCommand("Steal Emotes"),
-     RequireBotPermission(GuildPermission.ManageEmojisAndStickers),
-     SlashUserPerm(GuildPermission.ManageEmojisAndStickers),
-     CheckPermissions]
+    /// <summary>
+    ///     Steals emotes from a message and adds them to the server's emote collection.
+    /// </summary>
+    /// <param name="message">The message containing emotes to be stolen.</param>
+    /// <remarks>
+    ///     This command requires the "Manage Emojis and Stickers" permission.
+    ///     It goes through all the emotes in the specified message, downloads them, and attempts to add them to the guild.
+    ///     Errors are logged, and a summary of successful and failed additions is provided.
+    /// </remarks>
+    [MessageCommand("Steal Emotes")]
+    [RequireBotPermission(GuildPermission.ManageEmojisAndStickers)]
+    [SlashUserPerm(GuildPermission.ManageEmojisAndStickers)]
+    [CheckPermissions]
     public async Task Steal(IMessage message)
     {
         await ctx.Interaction.DeferAsync(true).ConfigureAwait(false);
@@ -36,13 +39,14 @@ public class EmoteStealer : MewdekoSlashCommandModule
         var tags = message.Tags.Where(x => x.Type == TagType.Emoji).Select(x => (Emote)x.Value).Distinct();
         if (!tags.Any())
         {
-            await ctx.Interaction.SendEphemeralFollowupErrorAsync("No emotes in this message!").ConfigureAwait(false);
+            await ctx.Interaction.SendEphemeralFollowupErrorAsync("No emotes in this message!", Config)
+                .ConfigureAwait(false);
             return;
         }
+
         var errored = new List<string>();
         var emotes = new List<string>();
         var msg = await ctx.Interaction.FollowupAsync(embed: eb.Build()).ConfigureAwait(false);
-
         foreach (var i in tags)
         {
             var emoteName = i.Name; // Default to the emote name
@@ -113,10 +117,19 @@ public class EmoteStealer : MewdekoSlashCommandModule
         await msg.ModifyAsync(x => x.Embed = b.Build()).ConfigureAwait(false);
     }
 
-    [MessageCommand("Steal Sticker"),
-     RequireBotPermission(GuildPermission.ManageEmojisAndStickers),
-     SlashUserPerm(GuildPermission.ManageEmojisAndStickers),
-     CheckPermissions]
+    /// <summary>
+    ///     Steals stickers from a message and adds them to the server's sticker collection.
+    /// </summary>
+    /// <param name="message">The message containing stickers to be stolen.</param>
+    /// <remarks>
+    ///     Similar to the emote stealing function, this command requires "Manage Emojis and Stickers" permission.
+    ///     It processes all the stickers in the provided message, attempting to add each to the server.
+    ///     Successes and failures are reported, with errors logged for troubleshooting.
+    /// </remarks>
+    [MessageCommand("Steal Sticker")]
+    [RequireBotPermission(GuildPermission.ManageEmojisAndStickers)]
+    [SlashUserPerm(GuildPermission.ManageEmojisAndStickers)]
+    [CheckPermissions]
     public async Task StealSticker(IMessage message)
     {
         await ctx.Interaction.DeferAsync(true).ConfigureAwait(false);
@@ -129,13 +142,14 @@ public class EmoteStealer : MewdekoSlashCommandModule
         var tags = message.Stickers.Select(x => x as SocketUnknownSticker).Distinct();
         if (!tags.Any())
         {
-            await ctx.Interaction.SendEphemeralFollowupErrorAsync("No stickers in this message!").ConfigureAwait(false);
+            await ctx.Interaction.SendEphemeralFollowupErrorAsync("No stickers in this message!", Config)
+                .ConfigureAwait(false);
             return;
         }
 
         var errored = new List<string>();
         var emotes = new List<string>();
-        var msg = await ctx.Interaction.FollowupAsync(embed: eb.Build(), ephemeral: true).ConfigureAwait(false);
+        await ctx.Interaction.FollowupAsync(embed: eb.Build(), ephemeral: true).ConfigureAwait(false);
         foreach (var i in tags)
         {
             using var http = httpFactory.CreateClient();
@@ -147,12 +161,11 @@ public class EmoteStealer : MewdekoSlashCommandModule
             {
                 try
                 {
-                    var emote = await ctx.Guild.CreateStickerAsync(i.Name, new Image(imgStream), new[]
-                        {
+                    var emote = await ctx.Guild.CreateStickerAsync(i.Name, new Image(imgStream), [
                             "Mewdeko"
-                        }, i.Description)
+                        ], i.Description)
                         .ConfigureAwait(false);
-                    emotes.Add($"{emote.Name} [Url]({(emote.GetStickerUrl())})");
+                    emotes.Add($"{emote.Name} [Url]({emote.GetStickerUrl()})");
                 }
                 catch (Exception ex)
                 {

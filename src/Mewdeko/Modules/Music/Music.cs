@@ -1,1371 +1,892 @@
-﻿#nullable enable
-using System.Net.Http;
+using System.Text;
+using System.Text.Json;
+using System.Threading;
 using Discord.Commands;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
-using Genius;
-using Genius.Models.Song;
-using HtmlAgilityPack;
 using Lavalink4NET;
-using Lavalink4NET.Artwork;
 using Lavalink4NET.DiscordNet;
-using Lavalink4NET.Player;
-using Lavalink4NET.Rest;
+using Lavalink4NET.Players;
+using Lavalink4NET.Rest.Entities.Tracks;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Modules.Music.Common;
-using Mewdeko.Modules.Music.Services;
-using Mewdeko.Services.Settings;
+using Mewdeko.Modules.Music.CustomPlayer;
+using Serilog;
+using Swan;
 
 namespace Mewdeko.Modules.Music;
 
-public class Music : MewdekoModuleBase<MusicService>
+/// <summary>
+///     A module containing music commands.
+/// </summary>
+public class Music(
+    IAudioService service,
+    IDataCache cache,
+    InteractiveService interactiveService,
+    GuildSettingsService guildSettingsService) : MewdekoModule
 {
-    private readonly InteractiveService interactivity;
-    private readonly LavalinkNode lavaNode;
-    private readonly DbService db;
-    private readonly DiscordSocketClient client;
-    private readonly GuildSettingsService guildSettings;
-    private readonly IBotCredentials creds;
-    private readonly BotConfigService config;
-
-    public Music(LavalinkNode lava, InteractiveService interactive, DbService dbService,
-        DiscordSocketClient client,
-        GuildSettingsService guildSettings,
-        BotConfigService config, IBotCredentials creds)
-    {
-        db = dbService;
-        this.client = client;
-        this.guildSettings = guildSettings;
-        this.config = config;
-        this.creds = creds;
-        interactivity = interactive;
-        lavaNode = lava;
-    }
-
-    public enum PlaylistAction
-    {
-        Show,
-        Delete,
-        Create,
-        Remove,
-        Add,
-        Load,
-        Save,
-        Default
-    }
-
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
-    public async Task SongRemove(int songNum)
-    {
-        var player = lavaNode.GetPlayer<MusicPlayer>(ctx.Guild.Id);
-        if (player is not null)
-        {
-            var voiceChannel = await ctx.Guild.GetVoiceChannelAsync(player.VoiceChannelId.Value).ConfigureAwait(false);
-            var chanUsers = await voiceChannel.GetUsersAsync().FlattenAsync().ConfigureAwait(false);
-            if (!chanUsers.Contains(ctx.User as IGuildUser))
-            {
-                await ctx.Channel.SendErrorAsync("You are not in the bots music channel!").ConfigureAwait(false);
-                return;
-            }
-
-            if (await Service.RemoveSong(ctx.Guild, songNum).ConfigureAwait(false))
-            {
-                await ctx.Channel.SendConfirmAsync($"Track {songNum} removed.").ConfigureAwait(false);
-            }
-            else
-            {
-                await ctx.Channel.SendErrorAsync("Seems like that track doesn't exist or you have nothing in queue.").ConfigureAwait(false);
-            }
-        }
-    }
-
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
-    public async Task AutoDisconnect(AutoDisconnect disconnect)
-    {
-        await Service.ModifySettingsInternalAsync(ctx.Guild.Id,
-            (settings, _) => settings.AutoDisconnect = disconnect, disconnect).ConfigureAwait(false);
-        await ctx.Channel.SendConfirmAsync(
-            $"Successfully set AutoDisconnect to {Format.Code(disconnect.ToString())}").ConfigureAwait(false);
-    }
-
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
-    public async Task MoveSong(int index, int newIndex)
-    {
-        if (await Service.MoveSong(ctx.Guild.Id, index, newIndex).ConfigureAwait(false))
-        {
-            await ctx.Channel.SendConfirmAsync($"Sucessfully moved track {index} to {newIndex}!").ConfigureAwait(false);
-        }
-        else
-        {
-            await ctx.Channel.SendErrorAsync("That track was not found.").ConfigureAwait(false);
-        }
-    }
-
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
-    public async Task Playlists()
-    {
-        var plists = Service.GetPlaylists(ctx.User);
-        if (!plists.Any())
-        {
-            await ctx.Channel.SendErrorAsync("You dont have any saved playlists!").ConfigureAwait(false);
-            return;
-        }
-
-        var paginator = new LazyPaginatorBuilder()
-            .AddUser(ctx.User)
-            .WithPageFactory(PageFactory)
-            .WithFooter(PaginatorFooter.PageNumber | PaginatorFooter.Users)
-            .WithMaxPageIndex(plists.Count() / 15)
-            .WithDefaultCanceledPage()
-            .WithDefaultEmotes()
-            .WithActionOnCancellation(ActionOnStop.DeleteMessage)
-            .Build();
-        await interactivity.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
-
-        async Task<PageBuilder> PageFactory(int page)
-        {
-            await Task.CompletedTask.ConfigureAwait(false);
-            var e = 1;
-            return new PageBuilder().WithOkColor().WithDescription(string.Join("\n",
-                plists.Skip(page).Take(15).Select(x =>
-                    $"{e++}. {x.Name} - {x.Songs.Count()} songs")));
-        }
-    }
-
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
-    public async Task Playlist(PlaylistAction action, [Remainder] string? playlistOrSongName = null)
-    {
-        var plists = Service.GetPlaylists(ctx.User);
-        switch (action)
-        {
-            case PlaylistAction.Show:
-                MusicPlaylist? plist;
-                if (playlistOrSongName is null)
-                {
-                    if (await Service.GetDefaultPlaylist(ctx.User) is not null)
-                    {
-                        plist = await Service.GetDefaultPlaylist(ctx.User);
-                    }
-                    else
-                    {
-                        await ctx.Channel.SendErrorAsync(
-                            "You have not specified a playlist name and do not have a default playlist set, there's nothing to show!").ConfigureAwait(false);
-                        return;
-                    }
-                }
-                else
-                {
-                    plist = Service.GetPlaylists(ctx.User)
-                        .FirstOrDefault(x => string.Equals(x.Name, playlistOrSongName, StringComparison.CurrentCultureIgnoreCase))!;
-                }
-
-                var songcount = 1;
-                if (plist is null)
-                {
-                    await ctx.Channel.SendErrorAsync("This is not a valid playlist!").ConfigureAwait(false);
-                    return;
-                }
-
-                if (!plist.Songs.Any())
-                {
-                    await ctx.Channel.SendErrorAsync("This playlist has no songs!").ConfigureAwait(false);
-                    return;
-                }
-
-                var paginator = new LazyPaginatorBuilder().AddUser(ctx.User).WithPageFactory(PageFactory)
-                    .WithFooter(
-                        PaginatorFooter.PageNumber | PaginatorFooter.Users)
-                    .WithMaxPageIndex(plist.Songs.Count() / 15)
-                    .WithDefaultCanceledPage().WithDefaultEmotes()
-                    .WithActionOnCancellation(ActionOnStop.DeleteMessage).Build();
-                await interactivity.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
-
-                async Task<PageBuilder> PageFactory(int page)
-                {
-                    await Task.CompletedTask.ConfigureAwait(false);
-                    return new PageBuilder().WithOkColor().WithDescription(string.Join("\n",
-                        plist.Songs.Select(x =>
-                            $"`{songcount++}.` [{x.Title.TrimTo(45)}]({x.Query}) `{x.Provider}`")));
-                }
-
-                break;
-            case PlaylistAction.Delete:
-                var plist1 = plists.FirstOrDefault(x => x.Name.ToLower() == playlistOrSongName?.ToLower());
-                if (plist1 == null)
-                {
-                    await ctx.Channel.SendErrorAsync("Playlist with that name could not be found!").ConfigureAwait(false);
-                    return;
-                }
-
-                if (await PromptUserConfirmAsync("Are you sure you want to delete this playlist", ctx.User.Id).ConfigureAwait(false))
-                {
-                    var uow = db.GetDbContext();
-                    await using var _ = uow.ConfigureAwait(false);
-                    uow.MusicPlaylists.Remove(plist1);
-                    await uow.SaveChangesAsync().ConfigureAwait(false);
-                    await ctx.Channel.SendConfirmAsync("Playlist deleted.").ConfigureAwait(false);
-                }
-
-                break;
-
-            case PlaylistAction.Create:
-                if (playlistOrSongName is null)
-                {
-                    await ctx.Channel.SendErrorAsync("You need to specify a playlist name!").ConfigureAwait(false);
-                    return;
-                }
-
-                if (Service.GetPlaylists(ctx.User).Select(x => x.Name.ToLower()).Contains(playlistOrSongName.ToLower()))
-                {
-                    await ctx.Channel.SendErrorAsync("You already have a playlist with this name!").ConfigureAwait(false);
-                }
-                else
-                {
-                    var toadd = new MusicPlaylist
-                    {
-                        Author = ctx.User.ToString(), AuthorId = ctx.User.Id, Name = playlistOrSongName, Songs = new List<PlaylistSong>()
-                    };
-                    var uow = db.GetDbContext();
-                    await using var _ = uow.ConfigureAwait(false);
-                    uow.MusicPlaylists.Add(toadd);
-                    await uow.SaveChangesAsync().ConfigureAwait(false);
-                    await ctx.Channel.SendConfirmAsync(
-                        $"Successfully created playlist with name `{playlistOrSongName}`!").ConfigureAwait(false);
-                }
-
-                break;
-            case PlaylistAction.Load:
-                if (!string.IsNullOrEmpty(playlistOrSongName))
-                {
-                    var vstate = ctx.User as IVoiceState;
-                    if (vstate?.VoiceChannel is null)
-                    {
-                        await ctx.Channel.SendErrorAsync("You must be in a channel to use this!").ConfigureAwait(false);
-                        return;
-                    }
-
-                    if (!lavaNode.HasPlayer(ctx.Guild))
-                    {
-                        try
-                        {
-                            await lavaNode.JoinAsync(() => new MusicPlayer(client, Service, config), ctx.Guild.Id, vstate.VoiceChannel.Id).ConfigureAwait(false);
-                            if (vstate.VoiceChannel is IStageChannel chan)
-                            {
-                                await chan.BecomeSpeakerAsync().ConfigureAwait(false);
-                            }
-                        }
-                        catch (Exception)
-                        {
-                            await ctx.Channel.SendErrorAsync("Seems I may not have permission to join...").ConfigureAwait(false);
-                            return;
-                        }
-                    }
-
-                    var plist3 = Service.GetPlaylists(ctx.User).Where(x => x.Name.ToLower() == playlistOrSongName);
-                    var musicPlaylists = plist3 as MusicPlaylist?[] ?? plist3.ToArray();
-                    if (musicPlaylists.Length == 0)
-                    {
-                        await ctx.Channel.SendErrorAsync("A playlist with that name wasnt found!").ConfigureAwait(false);
-                        return;
-                    }
-
-                    var songs3 = musicPlaylists.Select(x => x.Songs).FirstOrDefault();
-                    var msg = await ctx.Channel.SendConfirmAsync(
-                        $"Queueing {songs3!.Count()} songs from {musicPlaylists.FirstOrDefault()?.Name}...").ConfigureAwait(false);
-                    foreach (var i in songs3!)
-                    {
-                        var search = await lavaNode.GetTrackAsync(i.Query).ConfigureAwait(false);
-                        var platform = Platform.Youtube;
-                        if (search is not null)
-                        {
-                            platform = i.Provider switch
-                            {
-                                "Spotify" => Platform.Spotify,
-                                "Soundcloud" => Platform.Soundcloud,
-                                "Direct Url / File" => Platform.Url,
-                                "Youtube" => Platform.Youtube,
-                                "Twitch" => Platform.Twitch,
-                                _ => platform
-                            };
-
-                            await Service.Enqueue(ctx.Guild.Id, ctx.User, search, platform).ConfigureAwait(false);
-                        }
-
-                        var player = lavaNode.GetPlayer<MusicPlayer>(ctx.Guild);
-                        if (player.State == PlayerState.Playing) continue;
-                        await player.PlayAsync(search).ConfigureAwait(false);
-                        await player.SetVolumeAsync(await Service.GetVolume(ctx.Guild.Id).ConfigureAwait(false) / 100).ConfigureAwait(false);
-                    }
-
-                    await msg.ModifyAsync(x => x.Embed = new EmbedBuilder()
-                        .WithOkColor()
-                        .WithDescription(
-                            $"Successfully loaded {songs3.Count()} songs from {musicPlaylists.FirstOrDefault()?.Name}!")
-                        .Build()).ConfigureAwait(false);
-                    return;
-                }
-
-                if (await Service.GetDefaultPlaylist(ctx.User) is not null && !string.IsNullOrEmpty(playlistOrSongName))
-                {
-                    var vstate = ctx.User as IVoiceState;
-                    if (vstate?.VoiceChannel is null)
-                    {
-                        await ctx.Channel.SendErrorAsync("You must be in a channel to use this!").ConfigureAwait(false);
-                        return;
-                    }
-
-                    var uow = db.GetDbContext();
-                    await using var _ = uow.ConfigureAwait(false);
-                    var plist2 = await uow.MusicPlaylists.GetDefaultPlaylist(ctx.User.Id);
-                    var songs2 = plist2.Songs;
-                    if (!songs2.Any())
-                    {
-                        await ctx.Channel.SendErrorAsync(
-                            "Your default playlist has no songs! Please add songs and try again.").ConfigureAwait(false);
-                        return;
-                    }
-
-                    if (!lavaNode.HasPlayer(ctx.Guild))
-                    {
-                        try
-                        {
-                            await lavaNode.JoinAsync(() => new MusicPlayer(client, Service, config), ctx.Guild.Id, vstate.VoiceChannel.Id).ConfigureAwait(false);
-                            if (vstate.VoiceChannel is IStageChannel chan)
-                            {
-                                await chan.BecomeSpeakerAsync().ConfigureAwait(false);
-                            }
-                        }
-                        catch (Exception)
-                        {
-                            await ctx.Channel.SendErrorAsync("Seems I may not have permission to join...").ConfigureAwait(false);
-                            return;
-                        }
-                    }
-
-                    var msg = await ctx.Channel.SendConfirmAsync(
-                        $"Queueing {songs2.Count()} songs from {plist2.Name}...").ConfigureAwait(false);
-                    foreach (var i in songs2)
-                    {
-                        var search = await lavaNode.GetTrackAsync(i.Query).ConfigureAwait(false);
-                        if (search is not null)
-                            await Service.Enqueue(ctx.Guild.Id, ctx.User, search).ConfigureAwait(false);
-                        var player = lavaNode.GetPlayer<MusicPlayer>(ctx.Guild);
-                        if (player.State == PlayerState.Playing) continue;
-                        await player.PlayAsync(search).ConfigureAwait(false);
-                        await player.SetVolumeAsync(await Service.GetVolume(ctx.Guild.Id).ConfigureAwait(false) / 100).ConfigureAwait(false);
-                    }
-
-                    await msg.ModifyAsync(x => x.Embed = new EmbedBuilder()
-                        .WithOkColor()
-                        .WithDescription(
-                            $"Successfully loaded {songs2.Count()} songs from {plist2.Name}!")
-                        .Build()).ConfigureAwait(false);
-                    return;
-                }
-
-                if (await Service.GetDefaultPlaylist(ctx.User) is null && string.IsNullOrEmpty(playlistOrSongName))
-                {
-                    await ctx.Channel.SendErrorAsync(
-                        "You don't have a default playlist set and have not specified a playlist name!").ConfigureAwait(false);
-                }
-
-                break;
-            case PlaylistAction.Save:
-                var queue = Service.GetQueue(ctx.Guild.Id);
-                var plists5 = Service.GetPlaylists(ctx.User);
-                if (!plists5.Any())
-                {
-                    await ctx.Channel.SendErrorAsync("You do not have any playlists!").ConfigureAwait(false);
-                    return;
-                }
-
-                var trysearch = queue.Where(x => x.Title.ToLower().Contains(playlistOrSongName?.ToLower() ?? "")).Take(20);
-                var advancedLavaTracks = trysearch as LavalinkTrack[] ?? trysearch.ToArray();
-
-                if (advancedLavaTracks.Length == 1)
-                {
-                    var msg = await ctx.Channel.SendConfirmAsync(
-                        "Please type the name of the playlist you wanna save this to!").ConfigureAwait(false);
-                    var nmsg = await NextMessageAsync(ctx.Channel.Id, ctx.User.Id).ConfigureAwait(false);
-                    var plists6 = plists5.FirstOrDefault(x => string.Equals(x.Name.ToLower(), nmsg.ToLower(), StringComparison.OrdinalIgnoreCase));
-                    if (plists6 is not null)
-                    {
-                        var currentContext =
-                            advancedLavaTracks.FirstOrDefault().Context as AdvancedTrackContext;
-                        var toadd = new PlaylistSong
-                        {
-                            Title = advancedLavaTracks.FirstOrDefault()?.Title,
-                            ProviderType = currentContext.QueuedPlatform,
-                            Provider = currentContext.QueuedPlatform.ToString(),
-                            Query = advancedLavaTracks.FirstOrDefault()!.Uri.AbsoluteUri
-                        };
-                        var newsongs = plists6.Songs.ToList();
-                        newsongs.Add(toadd);
-                        var toupdate = new MusicPlaylist
-                        {
-                            Id = plists6.Id,
-                            AuthorId = plists6.AuthorId,
-                            Author = plists6.Author,
-                            DateAdded = plists6.DateAdded,
-                            IsDefault = plists6.IsDefault,
-                            Name = plists6.Name,
-                            Songs = newsongs
-                        };
-                        var uow = db.GetDbContext();
-                        await using var _ = uow.ConfigureAwait(false);
-                        uow.MusicPlaylists.Update(toupdate);
-                        await uow.SaveChangesAsync().ConfigureAwait(false);
-                        await msg.DeleteAsync().ConfigureAwait(false);
-                        await ctx.Channel.SendConfirmAsync(
-                            $"Added {advancedLavaTracks.FirstOrDefault()?.Title} to {plists6.Name}.").ConfigureAwait(false);
-                    }
-                    else
-                    {
-                        await ctx.Channel.SendErrorAsync("Please make sure you put in the right playlist name.").ConfigureAwait(false);
-                    }
-                }
-                else
-                {
-                    var components = new ComponentBuilder().WithButton("Save All", "all")
-                        .WithButton("Choose", "choose");
-                    var msg = await ctx.Channel.SendConfirmAsync(
-                        "I found more than one result for that name. Would you like me to save all or choose from 10?",
-                        components).ConfigureAwait(false);
-                    switch (await GetButtonInputAsync(ctx.Channel.Id, msg.Id, ctx.User.Id).ConfigureAwait(false))
-                    {
-                        case "all":
-                            msg = await ctx.Channel.SendConfirmAsync(
-                                "Please type the name of the playlist you wanna save this to!").ConfigureAwait(false);
-                            var nmsg1 = await NextMessageAsync(ctx.Channel.Id, ctx.User.Id).ConfigureAwait(false);
-                            var plists7 = plists5.FirstOrDefault(x => string.Equals(x.Name.ToLower(), nmsg1.ToLower(), StringComparison.OrdinalIgnoreCase));
-                            if (plists7 is not null)
-                            {
-                                var toadd = advancedLavaTracks.Select(x => new PlaylistSong
-                                {
-                                    Title = x.Title,
-                                    ProviderType = (x.Context as AdvancedTrackContext).QueuedPlatform,
-                                    Provider = (x.Context as AdvancedTrackContext).QueuedPlatform.ToString(),
-                                    Query = x.Uri.AbsoluteUri
-                                });
-                                var newsongs = plists7.Songs.ToList();
-                                newsongs.AddRange(toadd);
-                                var toupdate = new MusicPlaylist
-                                {
-                                    Id = plists7.Id,
-                                    AuthorId = plists7.AuthorId,
-                                    Author = plists7.Author,
-                                    DateAdded = plists7.DateAdded,
-                                    IsDefault = plists7.IsDefault,
-                                    Name = plists7.Name,
-                                    Songs = newsongs
-                                };
-                                var uow = db.GetDbContext();
-                                await using var _ = uow.ConfigureAwait(false);
-                                uow.MusicPlaylists.Update(toupdate);
-                                await uow.SaveChangesAsync().ConfigureAwait(false);
-                                await msg.DeleteAsync().ConfigureAwait(false);
-                                await ctx.Channel.SendConfirmAsync($"Added {toadd.Count()} tracks to {plists7.Name}.").ConfigureAwait(false);
-                            }
-                            else
-                            {
-                                await ctx.Channel.SendErrorAsync(
-                                    "Please make sure you put in the right playlist name.").ConfigureAwait(false);
-                            }
-
-                            break;
-
-                        case "choose":
-                            var components1 = new ComponentBuilder();
-                            var count1 = 1;
-                            var count = 1;
-                            foreach (var _ in advancedLavaTracks)
-                            {
-                                if (count1 >= 6)
-                                {
-                                    components1.WithButton(count1++.ToString(), count1.ToString(), ButtonStyle.Primary,
-                                        row: 1);
-                                }
-                                else
-                                {
-                                    components1.WithButton(count1++.ToString(), count1.ToString());
-                                }
-                            }
-
-                            await msg.DeleteAsync().ConfigureAwait(false);
-                            var msg2 = await ctx.Channel.SendConfirmAsync(
-                                string.Join("\n",
-                                    advancedLavaTracks.Select(x => $"{count++}. {x.Title.TrimTo(140)} - {x.Author}")),
-                                components1).ConfigureAwait(false);
-                            var response = await GetButtonInputAsync(ctx.Channel.Id, msg2.Id, ctx.User.Id).ConfigureAwait(false);
-                            var track = advancedLavaTracks.ElementAt(int.Parse(response) - 2);
-                            msg = await ctx.Channel.SendConfirmAsync(
-                                "Please type the name of the playlist you wanna save this to!").ConfigureAwait(false);
-                            var nmsg = await NextMessageAsync(ctx.Channel.Id, ctx.User.Id).ConfigureAwait(false);
-                            var plists6 = plists5.FirstOrDefault(x => string.Equals(x.Name, nmsg, StringComparison.CurrentCultureIgnoreCase));
-                            if (plists6 is not null)
-                            {
-                                var currentContext = track.Context as AdvancedTrackContext;
-                                var toadd = new PlaylistSong
-                                {
-                                    Title = track.Title,
-                                    ProviderType = currentContext.QueuedPlatform,
-                                    Provider = currentContext.QueuedPlatform.ToString(),
-                                    Query = track.Uri.AbsoluteUri
-                                };
-                                var newsongs = plists6.Songs.ToList();
-                                newsongs.Add(toadd);
-                                var toupdate = new MusicPlaylist
-                                {
-                                    Id = plists6.Id,
-                                    AuthorId = plists6.AuthorId,
-                                    Author = plists6.Author,
-                                    DateAdded = plists6.DateAdded,
-                                    IsDefault = plists6.IsDefault,
-                                    Name = plists6.Name,
-                                    Songs = newsongs
-                                };
-                                var uow = db.GetDbContext();
-                                await using var _ = uow.ConfigureAwait(false);
-                                uow.MusicPlaylists.Update(toupdate);
-                                await uow.SaveChangesAsync().ConfigureAwait(false);
-                                await msg.DeleteAsync().ConfigureAwait(false);
-                                await ctx.Channel.SendConfirmAsync($"Added {track.Title} to {plists6.Name}.").ConfigureAwait(false);
-                            }
-                            else
-                            {
-                                await ctx.Channel.SendErrorAsync(
-                                    "Please make sure you put in the right playlist name.").ConfigureAwait(false);
-                            }
-
-                            break;
-                    }
-                }
-
-                break;
-            case PlaylistAction.Default:
-                var defaultplaylist = await Service.GetDefaultPlaylist(ctx.User);
-                if (string.IsNullOrEmpty(playlistOrSongName) && defaultplaylist is not null)
-                {
-                    await ctx.Channel.SendConfirmAsync($"Your current default playlist is {defaultplaylist.Name}").ConfigureAwait(false);
-                    return;
-                }
-
-                if (string.IsNullOrEmpty(playlistOrSongName) && defaultplaylist is null)
-                {
-                    await ctx.Channel.SendErrorAsync("You do not have a default playlist set.").ConfigureAwait(false);
-                    return;
-                }
-
-                if (!string.IsNullOrEmpty(playlistOrSongName) && defaultplaylist is not null)
-                {
-                    var plist4 = Service.GetPlaylists(ctx.User)
-                        .FirstOrDefault(x => string.Equals(x.Name, playlistOrSongName, StringComparison.CurrentCultureIgnoreCase));
-                    if (plist4 is null)
-                    {
-                        await ctx.Channel.SendErrorAsync(
-                            "Playlist by that name wasn't found. Please try another name!").ConfigureAwait(false);
-                        return;
-                    }
-
-                    if (plist4.Name == defaultplaylist.Name)
-                    {
-                        await ctx.Channel.SendErrorAsync("This is already your default playlist!").ConfigureAwait(false);
-                        return;
-                    }
-
-                    if (await PromptUserConfirmAsync("Are you sure you want to switch default playlists?", ctx.User.Id).ConfigureAwait(false))
-                    {
-                        await Service.UpdateDefaultPlaylist(ctx.User, plist4).ConfigureAwait(false);
-                        await ctx.Channel.SendConfirmAsync("Default Playlist Updated.").ConfigureAwait(false);
-                    }
-                }
-
-                if (!string.IsNullOrEmpty(playlistOrSongName) && defaultplaylist is null)
-                {
-                    var plist4 = Service.GetPlaylists(ctx.User)
-                        .FirstOrDefault(x => string.Equals(x.Name, playlistOrSongName, StringComparison.CurrentCultureIgnoreCase));
-                    if (plist4 is null)
-                    {
-                        await ctx.Channel.SendErrorAsync(
-                            "Playlist by that name wasn't found. Please try another name!").ConfigureAwait(false);
-                        return;
-                    }
-
-                    await Service.UpdateDefaultPlaylist(ctx.User, plist4).ConfigureAwait(false);
-                    await ctx.Channel.SendConfirmAsync("Default Playlist Set.").ConfigureAwait(false);
-                }
-
-                break;
-        }
-    }
-
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
-    public async Task Lyrics([Remainder] string? name = null)
-    {
-        if (string.IsNullOrEmpty(creds.GeniusKey))
-        {
-            await ctx.Channel.SendErrorAsync("Genius API key is not set up.").ConfigureAwait(false);
-            return;
-        }
-
-        var api = new GeniusClient(creds.GeniusKey);
-        if (api is null)
-        {
-            await ctx.Channel.SendErrorAsync("Wrong genius key.");
-            return;
-        }
-
-        Song song;
-        if (name is null)
-        {
-            var player = lavaNode.GetPlayer<MusicPlayer>(ctx.Guild.Id);
-            if (player is null)
-            {
-                await ctx.Channel.SendErrorAsync("Theres nothing playing.").ConfigureAwait(false);
-                return;
-            }
-
-            var search = await api.SearchClient.Search($"{player.CurrentTrack.Author} {player.CurrentTrack.Title}").ConfigureAwait(false);
-            if (!search.Response.Hits.Any())
-            {
-                await ctx.Channel.SendErrorAsync("No lyrics found for this song.").ConfigureAwait(false);
-                return;
-            }
-
-            song = search.Response.Hits.First().Result;
-        }
-        else
-        {
-            var search = await api.SearchClient.Search(name).ConfigureAwait(false);
-            if (!search.Response.Hits.Any())
-            {
-                await ctx.Channel.SendErrorAsync("No lyrics found for this song.").ConfigureAwait(false);
-                return;
-            }
-
-            song = search.Response.Hits.First().Result;
-        }
-
-        var httpClient = new HttpClient();
-        var songPage = await httpClient.GetStringAsync($"{song.Url}?bagon=1");
-        var htmlDoc = new HtmlDocument();
-        htmlDoc.LoadHtml(songPage);
-        var lyricsDiv = htmlDoc.DocumentNode.SelectSingleNode("//*[contains(@class, 'Lyrics__Container-sc-1ynbvzw-5')]");
-        if (lyricsDiv is null)
-        {
-            await ctx.Channel.SendErrorAsync("Could not find lyrics for this song.").ConfigureAwait(false);
-            return;
-        }
-
-        var htmlWithLineBreaks = lyricsDiv.InnerHtml.Replace("<br>", "\n").Replace("<p>", "\n");
-        var htmlDocWithLineBreaks = new HtmlDocument();
-        htmlDocWithLineBreaks.LoadHtml(htmlWithLineBreaks);
-
-        var fullLyrics = htmlDocWithLineBreaks.DocumentNode.InnerText.Trim();
-        var lyricsPages = new List<string>();
-        for (var i = 0; i < fullLyrics.Length; i += 4000)
-        {
-            lyricsPages.Add(fullLyrics.Substring(i, Math.Min(4000, fullLyrics.Length - i)));
-        }
-
-        var paginator = new LazyPaginatorBuilder()
-            .AddUser(ctx.User)
-            .WithPageFactory(PageFactory)
-            .WithFooter(PaginatorFooter.Users | PaginatorFooter.PageNumber)
-            .WithMaxPageIndex(lyricsPages.Count - 1)
-            .WithDefaultCanceledPage()
-            .WithDefaultEmotes()
-            .WithActionOnCancellation(ActionOnStop.DeleteMessage)
-            .Build();
-
-        await interactivity.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
-
-        async Task<PageBuilder> PageFactory(int page)
-        {
-            await Task.CompletedTask.ConfigureAwait(false);
-            return new PageBuilder()
-                .WithTitle($"{song.PrimaryArtist.Name} - {song.Title}")
-                .WithDescription(lyricsPages[page])
-                .WithOkColor();
-        }
-    }
-
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
+    /// <summary>
+    ///     Retrieves the music player an attempts to join the voice channel.
+    /// </summary>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
     public async Task Join()
     {
-        var currentUser = await ctx.Guild.GetUserAsync(Context.Client.CurrentUser.Id).ConfigureAwait(false);
-        if (lavaNode.GetPlayer<MusicPlayer>(Context.Guild) != null && currentUser.VoiceChannel != null)
+        var userVoiceChannel = (ctx.User as IVoiceState)?.VoiceChannel;
+        if (userVoiceChannel == null)
         {
-            await ctx.Channel.SendErrorAsync("I'm already connected to a voice channel!").ConfigureAwait(false);
-            return;
-        }
-
-        var voiceState = Context.User as IVoiceState;
-        if (voiceState?.VoiceChannel == null)
-        {
-            await ctx.Channel.SendErrorAsync("You must be connected to a voice channel!").ConfigureAwait(false);
-            return;
-        }
-
-        await lavaNode.JoinAsync(() => new MusicPlayer(client, Service, config), ctx.Guild.Id, voiceState.VoiceChannel.Id).ConfigureAwait(false);
-        if (voiceState.VoiceChannel is IStageChannel chan)
-        {
-            try
-            {
-                await chan.BecomeSpeakerAsync().ConfigureAwait(false);
-            }
-            catch
-            {
-                //
-            }
-        }
-
-        await ctx.Channel.SendConfirmAsync($"Joined {voiceState.VoiceChannel.Name}!").ConfigureAwait(false);
-    }
-
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
-    public async Task Leave()
-    {
-        var player = lavaNode.GetPlayer<MusicPlayer>(ctx.Guild.Id);
-        if (player == null)
-        {
-            await ctx.Channel.SendErrorAsync("I'm not connected to any voice channels!").ConfigureAwait(false);
-            return;
-        }
-
-        var voiceChannel = (Context.User as IVoiceState)?.VoiceChannel.Id ?? player.VoiceChannelId;
-        if (voiceChannel == null)
-        {
-            await ctx.Channel.SendErrorAsync("Not sure which voice channel to disconnect from.").ConfigureAwait(false);
-            return;
-        }
-
-        await player.StopAsync(true).ConfigureAwait(false);
-        await ctx.Channel.SendConfirmAsync("I've left the channel and cleared the queue!").ConfigureAwait(false);
-        await Service.QueueClear(ctx.Guild.Id).ConfigureAwait(false);
-    }
-
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
-    public async Task Play(int number)
-    {
-        var player = lavaNode.GetPlayer<MusicPlayer>(ctx.Guild.Id);
-        var queue = Service.GetQueue(ctx.Guild.Id);
-        if (player is null)
-        {
-            var vc = ctx.User as IVoiceState;
-            if (vc?.VoiceChannel is null)
-            {
-                await ctx.Channel.SendErrorAsync("Looks like both you and the bot are not in a voice channel.").ConfigureAwait(false);
-                return;
-            }
-        }
-
-        if (queue.Count > 0)
-        {
-            var track = queue.ElementAt(number - 1);
-            if (track.Uri is null)
-            {
-                await Play($"{number}").ConfigureAwait(false);
-                return;
-            }
-
-            await player.PlayAsync(track).ConfigureAwait(false);
-            using var artworkService = new ArtworkService();
-            var e = await artworkService.ResolveAsync(track).ConfigureAwait(false);
             var eb = new EmbedBuilder()
-                .WithDescription($"Playing {track.Title}")
-                .WithFooter($"Track {queue.IndexOf(track) + 1} | {track.Duration:hh\\:mm\\:ss} | {((AdvancedTrackContext)track.Context).QueueUser}")
-                .WithThumbnailUrl(e.AbsoluteUri)
-                .WithOkColor();
+                .WithErrorColor()
+                .WithDescription(GetText("music_not_in_channel"));
+
+            await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
+            return;
+        }
+
+        var (player, result) = await GetPlayerAsync();
+        if (string.IsNullOrWhiteSpace(result))
+            await ReplyConfirmLocalizedAsync("music_join_success", player.VoiceChannelId).ConfigureAwait(false);
+        else
+        {
+            var eb = new EmbedBuilder()
+                .WithErrorColor()
+                .WithTitle(GetText("music_player_error"))
+                .WithDescription(result);
+
             await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
         }
-        else
-        {
-            await Play($"{number}").ConfigureAwait(false);
-        }
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
-    // ReSharper disable once MemberCanBePrivate.Global
-    public async Task Play([Remainder] string? searchQuery = null)
+    /// <summary>
+    ///     Disconnects the bot from the voice channel.
+    /// </summary>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    public async Task Leave()
     {
-        int count;
-        if (string.IsNullOrWhiteSpace(searchQuery))
+        var (player, result) = await GetPlayerAsync(false);
+        if (result is not null)
         {
-            var firstattach = ctx.Message.Attachments;
-            if (firstattach.Count == 0)
-            {
-                await ctx.Channel.SendErrorAsync("Please provide a url or file to play.").ConfigureAwait(false);
-                return;
-            }
+            var eb = new EmbedBuilder()
+                .WithErrorColor()
+                .WithTitle(GetText("music_player_error"))
+                .WithDescription(result);
 
-            searchQuery = firstattach.FirstOrDefault()?.Url;
-        }
-
-        if (!lavaNode.HasPlayer(Context.Guild))
-        {
-            var vc = ctx.User as IVoiceState;
-            if (vc?.VoiceChannel is null)
-            {
-                await ctx.Channel.SendErrorAsync("Looks like both you and the bot are not in a voice channel.").ConfigureAwait(false);
-                return;
-            }
-
-            try
-            {
-                await lavaNode.JoinAsync(() => new MusicPlayer(client, Service, config), ctx.Guild.Id, vc.VoiceChannel.Id).ConfigureAwait(false);
-                if (vc.VoiceChannel is SocketStageChannel chan)
-                {
-                    try
-                    {
-                        await chan.BecomeSpeakerAsync().ConfigureAwait(false);
-                    }
-                    catch
-                    {
-                        await ctx.Channel.SendErrorAsync(
-                            "I tried to join as a speaker but I'm unable to! Please drag me to the channel manually.").ConfigureAwait(false);
-                    }
-                }
-            }
-            catch
-            {
-                await ctx.Channel.SendErrorAsync("Seems I'm unable to join the channel! Check permissions!").ConfigureAwait(false);
-                return;
-            }
-        }
-
-        var player = lavaNode.GetPlayer<MusicPlayer>(ctx.Guild);
-        if (Uri.IsWellFormedUriString(searchQuery, UriKind.RelativeOrAbsolute))
-        {
-            if ((!config.Data.YoutubeSupport && searchQuery.Contains("youtube.com")) ||
-                (!config.Data.YoutubeSupport && searchQuery.Contains("youtu.be")))
-            {
-                var eb = new EmbedBuilder().WithErrorColor()
-                    .WithTitle("YouTube support on this instance of Mewdeko has been disabled.")
-                    .WithDescription(Format.Bold(
-                        "YouTube support has most likely been disabled due to unfair unverification from Discord that is targetting smaller bots that use YouTube for music.\n\n This does not mean Mewdeko is going premium. You have options below."))
-                    .AddField("Donate for a Selfhost", Format.Bold("https://ko-fi.com/mewdeko"))
-                    .AddField("Host one yourself", Format.Bold("https://github.com/Pusheon/Mewdeko"))
-                    .AddField("More Info", Format.Bold("https://youtu.be/fOpEdS3JVYQ"))
-                    .AddField("Support Server", Format.Bold(config.Data.SupportServer))
-                    .Build();
-                await ctx.Channel.SendMessageAsync(embed: eb);
-                return;
-            }
-
-            if (searchQuery.Contains("youtube.com") || searchQuery.Contains("youtu.be") || searchQuery.Contains("soundcloud.com") || searchQuery.Contains("twitch.tv") ||
-                searchQuery.Contains("soundcloud.app.goo.gl") || searchQuery.CheckIfMusicUrl() || ctx.Message.Attachments.IsValidAttachment())
-            {
-                if (player is null)
-                {
-                    await Service.ModifySettingsInternalAsync(ctx.Guild.Id,
-                        (settings, _) => settings.MusicChannelId = ctx.Channel.Id, ctx.Channel.Id).ConfigureAwait(false);
-                }
-
-                if (ctx.Message.Attachments.IsValidAttachment())
-                    searchQuery = ctx.Message.Attachments.FirstOrDefault()?.Url;
-                TrackLoadResponsePayload searchResponse;
-                if (config.Data.YoutubeSupport)
-                    searchResponse = await lavaNode.LoadTracksAsync(searchQuery)
-                        .ConfigureAwait(false);
-                else
-                    searchResponse = await lavaNode.LoadTracksAsync(searchQuery, SearchMode.SoundCloud)
-                        .ConfigureAwait(false);
-                var platform = Platform.Youtube;
-                if (client.CurrentUser.Id == 1092943806732710058)
-                    platform = Platform.Soundcloud;
-                if (searchQuery.Contains("soundcloud.com"))
-                    platform = Platform.Soundcloud;
-                if (searchQuery.CheckIfMusicUrl())
-                    platform = Platform.Url;
-                if (searchQuery.Contains("twitch.tv"))
-                    platform = Platform.Twitch;
-                await Service.Enqueue(ctx.Guild.Id, ctx.User, searchResponse.Tracks, platform).ConfigureAwait(false);
-                count = Service.GetQueue(ctx.Guild.Id).Count;
-                if (searchResponse.PlaylistInfo.Name is not null)
-                {
-                    var eb = new EmbedBuilder()
-                        .WithOkColor()
-                        .WithDescription(
-                            $"Queued {searchResponse.Tracks.Length} tracks from {searchResponse.PlaylistInfo.Name}")
-                        .WithFooter($"{count} songs now in the queue");
-                    await ctx.Channel.SendMessageAsync(embed: eb.Build(),
-                        components: config.Data.ShowInviteButton
-                            ? new ComponentBuilder()
-                                .WithButton(style: ButtonStyle.Link,
-                                    url:
-                                    "",
-                                    label: "",
-                                    emote: "".ToIEmote()).Build()
-                            : null).ConfigureAwait(false);
-                    if (player.State != PlayerState.Playing)
-                        await player.PlayAsync(searchResponse.Tracks.FirstOrDefault()).ConfigureAwait(false);
-                    await player.SetVolumeAsync(await Service.GetVolume(ctx.Guild.Id).ConfigureAwait(false) / 100.0F).ConfigureAwait(false);
-                    return;
-                }
-                else
-                {
-                    var artworkService = new ArtworkService();
-                    var art = await artworkService.ResolveAsync(searchResponse.Tracks.FirstOrDefault()).ConfigureAwait(false);
-                    var eb = new EmbedBuilder()
-                        .WithOkColor()
-                        .WithThumbnailUrl(art?.AbsoluteUri)
-                        .WithDescription(
-                            $"Queued {searchResponse.Tracks.FirstOrDefault().Title} by {searchResponse.Tracks.FirstOrDefault().Author}!");
-                    await ctx.Channel.SendMessageAsync(embed: eb.Build(),
-                        components: config.Data.ShowInviteButton
-                            ? new ComponentBuilder()
-                                .WithButton(style: ButtonStyle.Link,
-                                    url:
-                                    "",
-                                    label: "",
-                                    emote: "".ToIEmote()).Build()
-                            : null).ConfigureAwait(false);
-                    if (player.State != PlayerState.Playing)
-                        await player.PlayAsync(searchResponse.Tracks.FirstOrDefault()).ConfigureAwait(false);
-                    await player.SetVolumeAsync(await Service.GetVolume(ctx.Guild.Id).ConfigureAwait(false) / 100.0F).ConfigureAwait(false);
-                    return;
-                }
-            }
-        }
-
-        if (searchQuery.Contains("spotify"))
-        {
-            await Service.SpotifyQueue(ctx.Guild, ctx.User, ctx.Channel as ITextChannel, player, searchQuery).ConfigureAwait(false);
+            await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
             return;
         }
 
-        IEnumerable<LavalinkTrack> searchResponse2;
-        if (config.Data.YoutubeSupport)
-            searchResponse2 = await lavaNode.GetTracksAsync(searchQuery, SearchMode.YouTube)
-                .ConfigureAwait(false);
-        else
-            searchResponse2 = await lavaNode.GetTracksAsync(searchQuery, SearchMode.SoundCloud)
-                .ConfigureAwait(false);
-        if (!searchResponse2.Any())
-        {
-            await ctx.Channel.SendErrorAsync("Seems like I can't find that video, please try again.").ConfigureAwait(false);
-            return;
-        }
+        await cache.SetMusicQueue(ctx.Guild.Id, []).ConfigureAwait(false);
+        await cache.SetCurrentTrack(ctx.Guild.Id, null);
 
-        var components = new ComponentBuilder().WithButton("Play All", "all").WithButton("Select", "select")
-            .WithButton("Play First", "pf").WithButton("Cancel", "cancel", ButtonStyle.Danger);
-        var eb12 = new EmbedBuilder()
-            .WithOkColor()
-            .WithTitle("Would you like me to:")
-            .WithDescription("Play all that I found\n" +
-                             "Let you select from the top 5\n" +
-                             "Just play the first thing I found");
-        var msg = await ctx.Channel.SendMessageAsync(embed: eb12.Build(), components: components.Build()).ConfigureAwait(false);
-        var button = await GetButtonInputAsync(ctx.Channel.Id, msg.Id, ctx.User.Id).ConfigureAwait(false);
-        switch (button)
-        {
-            case "all":
-                await Service.Enqueue(ctx.Guild.Id, ctx.User, searchResponse2.ToArray()).ConfigureAwait(false);
-                count = Service.GetQueue(ctx.Guild.Id).Count;
-                var track = searchResponse2.FirstOrDefault();
-                var e = new ArtworkService();
-                var info = await e.ResolveAsync(track).ConfigureAwait(false);
-                var eb1 = new EmbedBuilder()
-                    .WithOkColor()
-                    .WithDescription($"Added {track.Title} along with {searchResponse2.Count()} other tracks.")
-                    .WithThumbnailUrl(info.AbsoluteUri)
-                    .WithFooter($"{count} songs in queue");
-                if (player.State != PlayerState.Playing)
-                {
-                    await player.PlayAsync(track).ConfigureAwait(false);
-                    await player.SetVolumeAsync(await Service.GetVolume(ctx.Guild.Id).ConfigureAwait(false) / 100.0F).ConfigureAwait(false);
-                    await Service.ModifySettingsInternalAsync(ctx.Guild.Id,
-                        (settings, _) => settings.MusicChannelId = ctx.Channel.Id, ctx.Channel.Id).ConfigureAwait(false);
-                }
-
-                await msg.ModifyAsync(x =>
-                {
-                    x.Components = null;
-                    x.Embed = eb1.Build();
-                }).ConfigureAwait(false);
-                break;
-            case "select":
-                var tracks = searchResponse2.Take(5).ToArray();
-                var count1 = 1;
-                var eb = new EmbedBuilder()
-                    .WithDescription(string.Join("\n", tracks.Select(x => $"{count1++}. {x.Title} by {x.Author}")))
-                    .WithOkColor()
-                    .WithTitle("Pick which one!");
-                count1 = 0;
-                var components1 = new ComponentBuilder();
-                foreach (var _ in tracks)
-                {
-                    var component =
-                        new ButtonBuilder(customId: (count1 + 1).ToString(), label: (count1 + 1).ToString());
-                    count1++;
-                    components1.WithButton(component);
-                }
-
-                await msg.ModifyAsync(x =>
-                {
-                    x.Components = components1.Build();
-                    x.Embed = eb.Build();
-                }).ConfigureAwait(false);
-                var input = await GetButtonInputAsync(ctx.Channel.Id, msg.Id, ctx.User.Id).ConfigureAwait(false);
-                var chosen = tracks[int.Parse(input) - 1];
-                var e1 = new ArtworkService();
-                var info1 = await e1.ResolveAsync(chosen).ConfigureAwait(false);
-                await Service.Enqueue(ctx.Guild.Id, ctx.User, chosen).ConfigureAwait(false);
-                count = Service.GetQueue(ctx.Guild.Id).Count;
-                eb1 = new EmbedBuilder()
-                    .WithOkColor()
-                    .WithDescription($"Added {chosen.Title} by {chosen.Author} to the queue.")
-                    .WithThumbnailUrl(info1.AbsoluteUri)
-                    .WithFooter($"{count} songs in queue");
-                if (player.State != PlayerState.Playing)
-                {
-                    await player.PlayAsync(chosen).ConfigureAwait(false);
-                    await player.SetVolumeAsync(await Service.GetVolume(ctx.Guild.Id).ConfigureAwait(false) / 100.0F).ConfigureAwait(false);
-                    await Service.ModifySettingsInternalAsync(ctx.Guild.Id,
-                        (settings, _) => settings.MusicChannelId = ctx.Channel.Id, ctx.Channel.Id).ConfigureAwait(false);
-                }
-
-                await msg.ModifyAsync(x =>
-                {
-                    x.Components = null;
-                    x.Embed = eb1.Build();
-                }).ConfigureAwait(false);
-                break;
-            case "pf":
-                track = searchResponse2.FirstOrDefault();
-                await Service.Enqueue(ctx.Guild.Id, ctx.User, track).ConfigureAwait(false);
-                var a = new ArtworkService();
-                var info2 = await a.ResolveAsync(track).ConfigureAwait(false);
-                count = Service.GetQueue(ctx.Guild.Id).Count;
-                eb1 = new EmbedBuilder()
-                    .WithOkColor()
-                    .WithDescription($"Added {track.Title} by {track.Author} to the queue.")
-                    .WithThumbnailUrl(info2.AbsoluteUri)
-                    .WithFooter($"{count} songs in queue");
-                await msg.ModifyAsync(x =>
-                {
-                    x.Embed = eb1.Build();
-                    x.Components = null;
-                }).ConfigureAwait(false);
-                if (player.State != PlayerState.Playing)
-                {
-                    await player.PlayAsync(track).ConfigureAwait(false);
-                    await player.SetVolumeAsync(await Service.GetVolume(ctx.Guild.Id).ConfigureAwait(false) / 100.0F).ConfigureAwait(false);
-                    await Service.ModifySettingsInternalAsync(ctx.Guild.Id,
-                        (settings, _) => settings.MusicChannelId = ctx.Channel.Id, ctx.Channel.Id).ConfigureAwait(false);
-                }
-
-                break;
-            case "cancel":
-                var eb13 = new EmbedBuilder()
-                    .WithDescription("Cancelled.")
-                    .WithErrorColor();
-                await msg.ModifyAsync(x =>
-                {
-                    x.Embed = eb13.Build();
-                    x.Components = null;
-                }).ConfigureAwait(false);
-                break;
-        }
+        await player.DisconnectAsync().ConfigureAwait(false);
+        await ReplyConfirmLocalizedAsync("music_disconnect").ConfigureAwait(false);
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
-    public async Task Pause()
-    {
-        var player = lavaNode.GetPlayer<MusicPlayer>(ctx.Guild.Id);
-        if (player is null)
-        {
-            await ctx.Channel.SendErrorAsync("I'm not connected to a voice channel.").ConfigureAwait(false);
-            return;
-        }
-
-        if (player.State != PlayerState.Playing)
-        {
-            await player.ResumeAsync().ConfigureAwait(false);
-            await ctx.Channel.SendConfirmAsync("Resumed player.").ConfigureAwait(false);
-            return;
-        }
-
-        await player.PauseAsync().ConfigureAwait(false);
-        await ctx.Channel.SendConfirmAsync($"Paused player. Do {await guildSettings.GetPrefix(ctx.Guild)}pause again to resume.",
-            builder: config.Data.ShowInviteButton
-                ? new ComponentBuilder()
-                    .WithButton(style: ButtonStyle.Link,
-                        url:
-                        "",
-                        label: "",
-                        emote: "".ToIEmote())
-                : null).ConfigureAwait(false);
-    }
-
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
-    public async Task Shuffle()
-    {
-        var player = lavaNode.GetPlayer<MusicPlayer>(ctx.Guild.Id);
-        if (player is null)
-        {
-            await ctx.Channel.SendErrorAsync("I'm not even playing anything.").ConfigureAwait(false);
-            return;
-        }
-
-        if (Service.GetQueue(ctx.Guild.Id).Count == 0)
-        {
-            await ctx.Channel.SendErrorAsync("There's nothing in queue.").ConfigureAwait(false);
-            return;
-        }
-
-        if (Service.GetQueue(ctx.Guild.Id).Count == 1)
-        {
-            await ctx.Channel.SendErrorAsync("... There's literally only one thing in queue.").ConfigureAwait(false);
-            return;
-        }
-
-        Service.Shuffle(ctx.Guild);
-        await ctx.Channel.SendConfirmAsync("Successfully shuffled the queue!",
-            builder: config.Data.ShowInviteButton
-                ? new ComponentBuilder()
-                    .WithButton(style: ButtonStyle.Link,
-                        url:
-                        "",
-                        label: "",
-                        emote: "".ToIEmote())
-                : null).ConfigureAwait(false);
-    }
-
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
-    public async Task Stop()
-    {
-        var player = lavaNode.GetPlayer<MusicPlayer>(ctx.Guild.Id);
-        if (player is null)
-        {
-            await ctx.Channel.SendErrorAsync("I'm not connected to a channel!").ConfigureAwait(false);
-            return;
-        }
-
-        await player.StopAsync().ConfigureAwait(false);
-        await Service.QueueClear(ctx.Guild.Id).ConfigureAwait(false);
-        await ctx.Channel.SendConfirmAsync("Stopped the player and cleared the queue!").ConfigureAwait(false);
-    }
-
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
-    public async Task Skip(int num = 1)
-    {
-        if (num < 1)
-        {
-            await ctx.Channel.SendErrorAsync("You can only skip ahead.").ConfigureAwait(false);
-            return;
-        }
-
-        var player = lavaNode.GetPlayer<MusicPlayer>(ctx.Guild.Id);
-        if (player is null)
-        {
-            await ctx.Channel.SendErrorAsync("I'm not connected to a voice channel.").ConfigureAwait(false);
-            return;
-        }
-
-        await Service.Skip(ctx.Guild, ctx.Channel as ITextChannel, player, num: num).ConfigureAwait(false);
-    }
-
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
-    public async Task Seek(TimeSpan timeSpan)
-    {
-        var player = lavaNode.GetPlayer<MusicPlayer>(ctx.Guild.Id);
-        if (player is null)
-        {
-            await ctx.Channel.SendErrorAsync("I'm not connected to a voice channel.").ConfigureAwait(false);
-            return;
-        }
-
-        if (player.State != PlayerState.Playing)
-        {
-            await ctx.Channel.SendErrorAsync("Woaaah there, I can't seek when nothing is playing.").ConfigureAwait(false);
-            return;
-        }
-
-        if (timeSpan > player.CurrentTrack.Duration)
-            await ctx.Channel.SendErrorAsync("That's longer than the song lol, try again.").ConfigureAwait(false);
-        await player.SeekPositionAsync(timeSpan).ConfigureAwait(false);
-        await ctx.Channel.SendConfirmAsync($"I've seeked `{player.CurrentTrack.Title}` to {timeSpan}.",
-            builder: config.Data.ShowInviteButton
-                ? new ComponentBuilder()
-                    .WithButton(style: ButtonStyle.Link,
-                        url:
-                        "",
-                        label: "",
-                        emote: "".ToIEmote())
-                : null).ConfigureAwait(false);
-    }
-
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
+    /// <summary>
+    ///     Clears the music queue.
+    /// </summary>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
     public async Task ClearQueue()
     {
-        var player = lavaNode.GetPlayer<MusicPlayer>(ctx.Guild.Id);
-        if (player is null)
+        var (player, result) = await GetPlayerAsync(false);
+
+        if (result is not null)
         {
-            await ctx.Channel.SendErrorAsync("I'm not connected to a voice channel.").ConfigureAwait(false);
+            var eb = new EmbedBuilder()
+                .WithErrorColor()
+                .WithTitle(GetText("music_player_error"))
+                .WithDescription(result);
+
+            await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
             return;
         }
 
-        await player.StopAsync().ConfigureAwait(false);
-        await Service.QueueClear(ctx.Guild.Id).ConfigureAwait(false);
-        await ctx.Channel.SendConfirmAsync("Cleared the queue!").ConfigureAwait(false);
+        await cache.SetMusicQueue(ctx.Guild.Id, []).ConfigureAwait(false);
+        await ReplyConfirmLocalizedAsync("music_queue_cleared").ConfigureAwait(false);
+        await player.StopAsync();
+        await cache.SetCurrentTrack(ctx.Guild.Id, null);
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
-    public async Task Loop(PlayerRepeatType reptype = PlayerRepeatType.None)
+    /// <summary>
+    ///     Plays a specified track in the current voice channel.
+    /// </summary>
+    /// <param name="queueNumber">The queue number to play.</param>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    public async Task Play([Remainder] int queueNumber)
     {
-        await Service.ModifySettingsInternalAsync(ctx.Guild.Id, (settings, _) => settings.PlayerRepeat = reptype,
-            reptype).ConfigureAwait(false);
-        await ctx.Channel.SendConfirmAsync($"Loop has now been set to {reptype}").ConfigureAwait(false);
+        var (player, result) = await GetPlayerAsync(false);
+
+        if (result is not null)
+        {
+            var eb = new EmbedBuilder()
+                .WithErrorColor()
+                .WithTitle(GetText("music_player_error"))
+                .WithDescription(result);
+
+            await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
+            return;
+        }
+
+        var queue = await cache.GetMusicQueue(ctx.Guild.Id);
+        if (queue.Count == 0)
+        {
+            await ReplyErrorLocalizedAsync("music_queue_empty").ConfigureAwait(false);
+            return;
+        }
+
+        var actualNumber = queueNumber - 1;
+        if (queueNumber < 1 || queueNumber > queue.Count)
+        {
+            await ReplyErrorLocalizedAsync("music_queue_invalid_index", queue.Count).ConfigureAwait(false);
+            return;
+        }
+
+        var trackToPlay = queue.FirstOrDefault(x => x.Index == queueNumber);
+        await player.StopAsync();
+        await player.PlayAsync(trackToPlay.Track).ConfigureAwait(false);
+        await cache.SetCurrentTrack(ctx.Guild.Id, trackToPlay);
+
+        // Update the indices of the tracks in the queue
+        for (var i = 0; i< queue.Count; i++)
+        {
+            queue[i].Index = i + 1;
+        }
+        await cache.SetMusicQueue(ctx.Guild.Id, queue);
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
-    public async Task Volume(ushort volume)
+    /// <summary>
+    ///     Plays a track in the current voice channel.
+    /// </summary>
+    /// <param name="query">The query to search for.</param>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    public async Task Play([Remainder] string query)
     {
-        var player = lavaNode.GetPlayer<MusicPlayer>(ctx.Guild.Id);
-        if (player is null)
+        var (player, result) = await GetPlayerAsync();
+
+        if (result is not null)
         {
-            await ctx.Channel.SendErrorAsync("I'm not connected to a voice channel.").ConfigureAwait(false);
+            var eb = new EmbedBuilder()
+                .WithErrorColor()
+                .WithTitle(GetText("music_player_error"))
+                .WithDescription(result);
+
+            await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
             return;
         }
-
-        if (volume > 100)
-        {
-            await ctx.Channel.SendErrorAsync("Max is 100 m8").ConfigureAwait(false);
-            return;
-        }
-
-        await player.SetVolumeAsync(volume / 100.0F).ConfigureAwait(false);
-        await Service.ModifySettingsInternalAsync(ctx.Guild.Id, (settings, _) => settings.Volume = volume, volume).ConfigureAwait(false);
-        await ctx.Channel.SendConfirmAsync($"Set the volume to {volume}").ConfigureAwait(false);
-    }
-
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
-    public async Task SetMusicChannel()
-    {
-        var user = await ctx.Guild.GetUserAsync(ctx.Client.CurrentUser.Id).ConfigureAwait(false);
-        if (!user.GetPermissions(ctx.Channel as ITextChannel).EmbedLinks)
-            return;
-        await Service.ModifySettingsInternalAsync(ctx.Guild.Id, (settings, _) => settings.MusicChannelId = ctx.Channel.Id, ctx.Channel.Id).ConfigureAwait(false);
-        await ctx.Channel.SendConfirmAsync("Set this channel to recieve music events.").ConfigureAwait(false);
-    }
-
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
-    public async Task AutoPlay(int autoPlayNum)
-    {
-        await Service.ModifySettingsInternalAsync(ctx.Guild.Id, (settings, _) => settings.AutoPlay = autoPlayNum, autoPlayNum).ConfigureAwait(false);
-        switch (autoPlayNum)
-        {
-            case > 0 and < 6:
-                await ctx.Channel.SendConfirmAsync($"When the last song is reached autoplay will attempt to add `{autoPlayNum}` songs to the queue.",
-                    builder: config.Data.ShowInviteButton
-                        ? new ComponentBuilder()
-                            .WithButton(style: ButtonStyle.Link,
-                                url:
-                                "",
-                                label: "",
-                                emote: "".ToIEmote())
-                        : null);
-                break;
-            case > 5:
-                await ctx.Channel.SendErrorAsync("I can only do so much. Keep it to a maximum of 5 please.");
-                break;
-            case 0:
-                await ctx.Channel.SendConfirmAsync("Autoplay has been disabled.",
-                    builder: config.Data.ShowInviteButton
-                        ? new ComponentBuilder()
-                            .WithButton(style: ButtonStyle.Link,
-                                url:
-                                "",
-                                label: "",
-                                emote: "".ToIEmote())
-                        : null);
-                break;
-        }
-    }
-
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
-    public async Task NowPlaying()
-    {
-        var player = lavaNode.GetPlayer<MusicPlayer>(ctx.Guild.Id);
-        if (player is null)
-        {
-            await ReplyAsync("I'm not connected to a voice channel.").ConfigureAwait(false);
-            return;
-        }
-
-        if (player.State != PlayerState.Playing)
-        {
-            await ReplyAsync("Woaaah there, I'm not playing any tracks.").ConfigureAwait(false);
-            return;
-        }
-
-        var qcount = Service.GetQueue(ctx.Guild.Id);
-        var track = player.CurrentTrack;
-        var artService = new ArtworkService();
-        var info = await artService.ResolveAsync(track).ConfigureAwait(false);
 
         try
         {
-            var eb = new EmbedBuilder()
-                .WithOkColor()
-                .WithTitle($"Track #{qcount.IndexOf(track) + 1}")
-                .WithDescription($"Now Playing {track.Title} by {track.Author}")
-                .WithThumbnailUrl(info?.AbsoluteUri)
-                .WithFooter(
-                    await Service.GetPrettyInfo(player, ctx.Guild).ConfigureAwait(false));
-            await ctx.Channel.SendMessageAsync(embed: eb.Build(),
-                components: config.Data.ShowInviteButton
-                    ? new ComponentBuilder()
-                        .WithButton(style: ButtonStyle.Link,
-                            url:
-                            "",
-                            label: "",
-                            emote: "".ToIEmote()).Build()
-                    : null).ConfigureAwait(false);
+            await player.SetVolumeAsync(await player.GetVolume() / 100f).ConfigureAwait(false);
+
+            var queue = await cache.GetMusicQueue(ctx.Guild.Id);
+            if (Uri.TryCreate(query, UriKind.Absolute, out var uri))
+            {
+                TrackLoadOptions options;
+                if (query.Contains("music.youtube"))
+                {
+                    options = new TrackLoadOptions
+                    {
+                        SearchMode = TrackSearchMode.YouTubeMusic
+                    };
+                }
+                else if (query.Contains("youtube.com") || query.Contains("youtu.be"))
+                {
+                    options = new TrackLoadOptions
+                    {
+                        SearchMode = TrackSearchMode.YouTube
+                    };
+                }
+                else if (query.Contains("open.spotify") || query.Contains("spotify.com"))
+                {
+                    options = new TrackLoadOptions
+                    {
+                        SearchMode = TrackSearchMode.Spotify
+                    };
+                }
+                else if (query.Contains("soundcloud.com"))
+                {
+                    options = new TrackLoadOptions
+                    {
+                        SearchMode = TrackSearchMode.SoundCloud
+                    };
+                }
+                else
+                {
+                    options = new TrackLoadOptions
+                    {
+                        SearchMode = TrackSearchMode.None
+                    };
+                }
+
+                var trackResults = await service.Tracks.LoadTracksAsync(query, options);
+                if (!trackResults.IsSuccess)
+                {
+                    await ReplyErrorLocalizedAsync("music_search_fail").ConfigureAwait(false);
+                    return;
+                }
+
+                if (trackResults.Tracks.Length > 1)
+                {
+                    var startIndex = queue.Count + 1;
+                    queue.AddRange(trackResults.Tracks.Select(track =>
+                        new MewdekoTrack(startIndex++, track, new PartialUser
+                        {
+                            Id = ctx.User.Id,
+                            Username = ctx.User.Username,
+                            AvatarUrl = ctx.User.GetAvatarUrl()
+                        })));
+                    await cache.SetMusicQueue(ctx.Guild.Id, queue);
+
+                    var eb = new EmbedBuilder()
+                        .WithDescription(
+                            $"Added {trackResults.Tracks.Length} tracks to the queue from {trackResults.Playlist.Name}")
+                        .WithThumbnailUrl(trackResults.Tracks[0].ArtworkUri?.ToString())
+                        .WithOkColor()
+                        .Build();
+
+                    await ctx.Channel.SendMessageAsync(embed: eb).ConfigureAwait(false);
+
+                    // Skip the track feedback if we've entered a whole playlist
+                    return;
+                }
+                else
+                {
+                    queue.Add(new MewdekoTrack(queue.Count + 1, trackResults.Tracks[0], new PartialUser
+                    {
+                        Id = ctx.User.Id,
+                        Username = ctx.User.Username,
+                        AvatarUrl = ctx.User.GetAvatarUrl()
+                    }));
+                    await cache.SetMusicQueue(ctx.Guild.Id, queue);
+                }
+
+                if (player.CurrentItem is null)
+                {
+                    await player.PlayAsync(trackResults.Tracks[0]).ConfigureAwait(false);
+                    await cache.SetCurrentTrack(ctx.Guild.Id, queue[0]);
+                }
+
+                // Add a message to the user when a new song is added to the queue
+                var addedTrack = trackResults.Tracks[0];
+                var addedTrackEmbed = new EmbedBuilder()
+                    .WithTitle("Track Added to Queue")
+                    .WithDescription($"[{addedTrack.Title}]({addedTrack.Uri}) by {addedTrack.Author}")
+                    .WithThumbnailUrl(addedTrack.ArtworkUri?.ToString())
+                    .WithOkColor()
+                    .Build();
+
+                await Context.Channel.SendMessageAsync(embed: addedTrackEmbed).ConfigureAwait(false);
+            }
+            else
+            {
+                var tracks = await service.Tracks.LoadTracksAsync(query, TrackSearchMode.YouTube);
+
+                if (!tracks.IsSuccess)
+                {
+                    await ReplyErrorLocalizedAsync("music_no_tracks").ConfigureAwait(false);
+                    return;
+                }
+
+                var trackList = tracks.Tracks.Take(25).ToList();
+                var selectMenu = new SelectMenuBuilder()
+                    .WithCustomId($"track_select:{ctx.User.Id}")
+                    .WithPlaceholder(GetText("music_select_tracks"))
+                    .WithMaxValues(trackList.Count)
+                    .WithMinValues(1);
+
+                foreach (var track in trackList)
+                {
+                    var index = trackList.IndexOf(track);
+                    selectMenu.AddOption(track.Title.Truncate(100), $"track_{index}");
+                }
+
+                var eb = new EmbedBuilder()
+                    .WithDescription(GetText("music_select_tracks_embed"))
+                    .WithOkColor()
+                    .Build();
+
+                var components = new ComponentBuilder().WithSelectMenu(selectMenu).Build();
+
+                var message = await ctx.Channel.SendMessageAsync(embed: eb, components: components);
+
+                await cache.Redis.GetDatabase().StringSetAsync($"{ctx.User.Id}_{message.Id}_tracks",
+                    JsonSerializer.Serialize(trackList), TimeSpan.FromMinutes(5));
+            }
         }
         catch (Exception e)
         {
-            Console.WriteLine(e);
-            throw;
+            Log.Error("Failed to add song to Queue: {Message}", e.Message);
+            await ReplyErrorLocalizedAsync("music_queue_add_failed").ConfigureAwait(false);
         }
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
-    public async Task Queue()
+    /// <summary>
+    ///     Pauses or unpauses the player based on the current state.
+    /// </summary>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    public async Task Pause()
     {
-        var player = lavaNode.GetPlayer<MusicPlayer>(ctx.Guild.Id);
-        if (player is null)
+        var (player, result) = await GetPlayerAsync();
+
+        if (result is not null)
         {
-            await ctx.Channel.SendErrorAsync("I am not playing anything at the moment!").ConfigureAwait(false);
+            var eb = new EmbedBuilder()
+                .WithErrorColor()
+                .WithTitle(GetText("music_player_error"))
+                .WithDescription(result);
+
+            await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
             return;
         }
 
-        var queue = Service.GetQueue(ctx.Guild.Id);
-        var paginator = new LazyPaginatorBuilder()
-            .AddUser(ctx.User)
+        if (player.State == PlayerState.Paused)
+        {
+            await player.ResumeAsync();
+            await ReplyConfirmLocalizedAsync("music_resume").ConfigureAwait(false);
+        }
+        else
+        {
+            await player.PauseAsync();
+            await ReplyConfirmLocalizedAsync("music_pause").ConfigureAwait(false);
+        }
+    }
+
+
+    /// <summary>
+    ///     Gets the now playing track, if any.
+    /// </summary>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    public async Task NowPlaying()
+    {
+        try
+        {
+            var (player, result) = await GetPlayerAsync(false);
+
+            if (result is not null)
+            {
+                var eb = new EmbedBuilder()
+                    .WithErrorColor()
+                    .WithTitle(GetText("music_player_error"))
+                    .WithDescription(result);
+
+                await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
+                return;
+            }
+
+            var queue = await cache.GetMusicQueue(ctx.Guild.Id);
+
+            if (queue.Count == 0)
+            {
+                await ReplyErrorLocalizedAsync("music_queue_empty").ConfigureAwait(false);
+                return;
+            }
+
+
+            var embed = await player.PrettyNowPlayingAsync(queue);
+            await ctx.Channel.SendMessageAsync(embed: embed).ConfigureAwait(false);
+        }
+        catch (Exception e)
+        {
+            Log.Error("Failed to get now playing track: {Message}", e.Message);
+        }
+    }
+
+    /// <summary>
+    ///     Removes the selected track from the queue. If the selected track is the current track, it will be skipped. If next
+    ///     track is not available, the player will stop.
+    /// </summary>
+    /// <param name="queueNumber">The queue number to remove.</param>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    public async Task SongRemove(int queueNumber)
+    {
+        var (player, result) = await GetPlayerAsync(false);
+        if (result is not null)
+        {
+            var eb = new EmbedBuilder()
+                .WithErrorColor()
+                .WithTitle(GetText("music_player_error"))
+                .WithDescription(result);
+
+            await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
+            return;
+        }
+
+        var queue = await cache.GetMusicQueue(ctx.Guild.Id);
+        var currentTrack = await cache.GetCurrentTrack(ctx.Guild.Id);
+        var nextTrack = queue.FirstOrDefault(x => x.Index == currentTrack.Index + 1);
+        if (queue.Count == 0)
+        {
+            await ReplyErrorLocalizedAsync("music_queue_empty").ConfigureAwait(false);
+            return;
+        }
+
+        if (queueNumber < 1 || queueNumber > queue.Count)
+        {
+            await ReplyErrorLocalizedAsync("music_queue_invalid").ConfigureAwait(false);
+            return;
+        }
+
+        var trackToRemove = queue.FirstOrDefault(x => x.Index == queueNumber);
+        if (trackToRemove == null)
+        {
+            await ReplyErrorLocalizedAsync("music_track_not_found").ConfigureAwait(false);
+            return;
+        }
+
+        queue.Remove(trackToRemove);
+
+        if (currentTrack.Index == trackToRemove.Index)
+        {
+            if (nextTrack != null)
+            {
+                await player.StopAsync();
+                await player.PlayAsync(nextTrack.Track);
+                await cache.SetCurrentTrack(ctx.Guild.Id, nextTrack);
+            }
+            else
+            {
+                await player.StopAsync();
+                await cache.SetCurrentTrack(ctx.Guild.Id, null);
+            }
+        }
+
+        await cache.SetMusicQueue(ctx.Guild.Id, queue);
+
+        if (player.State == PlayerState.Playing)
+        {
+            await ReplyConfirmLocalizedAsync("music_song_removed").ConfigureAwait(false);
+        }
+        else
+        {
+            await ReplyConfirmLocalizedAsync("music_song_removed_stop").ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    ///     Moves a song in the queue to a new position.
+    /// </summary>
+    /// <param name="from">The current position of the song.</param>
+    /// <param name="to">The new position of the song.</param>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    public async Task MoveSong(int from, int to)
+    {
+        var (player, result) = await GetPlayerAsync(false);
+        if (result is not null)
+        {
+            var eb = new EmbedBuilder()
+                .WithErrorColor()
+                .WithTitle(GetText("music_player_error"))
+                .WithDescription(result);
+
+            await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
+            return;
+        }
+
+        var queue = await cache.GetMusicQueue(ctx.Guild.Id);
+        if (queue.Count == 0)
+        {
+            await ReplyErrorLocalizedAsync("music_queue_empty").ConfigureAwait(false);
+            return;
+        }
+
+        if (from < 1 || from > queue.Count || to < 1 || to > queue.Count + 1)
+        {
+            await ReplyErrorLocalizedAsync("music_queue_invalid").ConfigureAwait(false);
+            return;
+        }
+
+        var track = queue.FirstOrDefault(x => x.Index == from);
+        var replace = queue.FirstOrDefault(x => x.Index == to);
+        var currentSong = await cache.GetCurrentTrack(ctx.Guild.Id);
+
+        queue[queue.IndexOf(track)].Index = to;
+
+        if (currentSong is not null && currentSong.Index == from)
+        {
+            track.Index = to;
+            await cache.SetCurrentTrack(ctx.Guild.Id, track);
+        }
+
+        if (replace is not null)
+        {
+            queue[queue.IndexOf(replace)].Index = from;
+        }
+
+        try
+        {
+            await cache.SetMusicQueue(ctx.Guild.Id, queue);
+            await ReplyConfirmLocalizedAsync("music_song_moved", track.Track.Title, to).ConfigureAwait(false);
+        }
+        catch (Exception e)
+        {
+            Log.Error(e, "Failed to move song.");
+        }
+    }
+
+    /// <summary>
+    ///     Sets the players volume
+    /// </summary>
+    /// <param name="volume">The volume to set</param>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    public async Task Volume(int volume)
+    {
+        var (player, result) = await GetPlayerAsync(false);
+        if (result is not null)
+        {
+            var eb = new EmbedBuilder()
+                .WithErrorColor()
+                .WithTitle(GetText("music_player_error"))
+                .WithDescription(result);
+
+            await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
+            return;
+        }
+
+        if (volume is < 0 or > 100)
+        {
+            await ReplyErrorLocalizedAsync("music_volume_invalid").ConfigureAwait(false);
+            return;
+        }
+
+        await player.SetVolumeAsync(volume / 100f).ConfigureAwait(false);
+        await player.SetGuildVolumeAsync(volume).ConfigureAwait(false);
+        await ReplyConfirmLocalizedAsync("music_volume_set", volume).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Skips to the next track.
+    /// </summary>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    public async Task Skip()
+    {
+        var (player, result) = await GetPlayerAsync(false);
+        if (result is not null)
+        {
+            var eb = new EmbedBuilder()
+                .WithErrorColor()
+                .WithTitle(GetText("music_player_error"))
+                .WithDescription(result);
+
+            await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
+            return;
+        }
+
+        if (player.CurrentItem is null)
+        {
+            await ReplyErrorLocalizedAsync("music_no_current_track").ConfigureAwait(false);
+            return;
+        }
+
+        await player.SeekAsync(player.CurrentItem.Track.Duration).ConfigureAwait(false);
+        await ReplyConfirmLocalizedAsync("music_track_skipped").ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     The music queue.
+    /// </summary>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    public async Task Queue()
+    {
+        var (player, result) = await GetPlayerAsync(false);
+        if (result is not null)
+        {
+            var eb = new EmbedBuilder()
+                .WithErrorColor()
+                .WithTitle(GetText("music_player_error"))
+                .WithDescription(result);
+
+            await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
+            return;
+        }
+
+        var queue = await cache.GetMusicQueue(ctx.Guild.Id);
+        if (queue.Count == 0)
+        {
+            await ReplyErrorLocalizedAsync("music_queue_empty").ConfigureAwait(false);
+            return;
+        }
+
+        var currentTrack = await cache.GetCurrentTrack(ctx.Guild.Id);
+
+        var paginator = new LazyPaginatorBuilder().AddUser(ctx.User)
             .WithPageFactory(PageFactory)
             .WithFooter(PaginatorFooter.PageNumber | PaginatorFooter.Users)
-            .WithMaxPageIndex(queue.Count / 10)
-            .WithDefaultCanceledPage()
+            .WithMaxPageIndex((queue.Count - 1) / 10)
             .WithDefaultEmotes()
             .WithActionOnCancellation(ActionOnStop.DeleteMessage)
             .Build();
 
-        await interactivity.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
+        await interactiveService.SendPaginatorAsync(paginator, ctx.Channel, TimeSpan.FromMinutes(5));
 
-        async Task<PageBuilder> PageFactory(int page)
+        async Task<PageBuilder> PageFactory(int index)
         {
-            await Task.CompletedTask.ConfigureAwait(false);
-            var tracks = queue.OrderBy(x => queue.IndexOf(x)).Skip(page * 10).Take(10);
+            await Task.CompletedTask;
+            var tracks = queue.OrderBy(x => x.Index).Skip(index * 10).Take(10).ToList();
+            var sb = new StringBuilder();
+            foreach (var track in tracks)
+            {
+                if (currentTrack.Index == track.Index)
+                    sb.AppendLine(
+                        $":loud_sound: **{track.Index}. [{track.Track.Title}]({track.Track.Uri})**" +
+                        $"\n`{track.Track.Duration} {track.Requester.Username} {track.Track.Provider}`");
+                else
+                    sb.AppendLine($"{track.Index}. [{track.Track.Title}]({track.Track.Uri})" +
+                                  $"\n`{track.Track.Duration} {track.Requester.Username} {track.Track.Provider}`");
+            }
+
             return new PageBuilder()
-                .WithDescription(string.Join("\n", tracks.Select(x =>
-                    $"`{queue.IndexOf(x) + 1}.` [{x.Title}]({x.Uri})\n`{x.Duration:mm\\:ss} {GetContext(x).QueueUser} {GetContext(x).QueuedPlatform}`")))
+                .WithTitle($"Queue - {queue.Count} tracks")
+                .WithDescription(sb.ToString())
                 .WithOkColor();
         }
     }
 
-    private static AdvancedTrackContext GetContext(LavalinkTrack track)
-        => track.Context as AdvancedTrackContext;
+    /// <summary>
+    ///     Sets the autoplay amount in the guild. Uses spotify api so client secret and id must be valid.
+    /// </summary>
+    /// <param name="amount">The amount of tracks to autoplay. Max of 5</param>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    public async Task AutoPlay(int amount)
+    {
+        var (player, result) = await GetPlayerAsync(false);
+        if (result is not null)
+        {
+            var eb = new EmbedBuilder()
+                .WithErrorColor()
+                .WithTitle(GetText("music_player_error"))
+                .WithDescription(result);
+
+            await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
+            return;
+        }
+
+        if (amount is < 0 or > 5)
+        {
+            await ReplyErrorLocalizedAsync("music_autoplay_invalid").ConfigureAwait(false);
+            return;
+        }
+
+        await player.SetAutoPlay(amount).ConfigureAwait(false);
+        if (amount == 0)
+        {
+            await ReplyConfirmLocalizedAsync("music_autoplay_disabled").ConfigureAwait(false);
+        }
+        else
+        {
+            await ReplyConfirmLocalizedAsync("music_autoplay_set", amount).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    ///     Gets the guilds current settings for music.
+    /// </summary>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    public async Task MusicSettings()
+    {
+        var (player, result) = await GetPlayerAsync(false);
+        if (result is not null)
+        {
+            var eb = new EmbedBuilder()
+                .WithErrorColor()
+                .WithTitle(GetText("music_player_error"))
+                .WithDescription(result);
+
+            await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
+            return;
+        }
+
+        var volume = await player.GetVolume();
+        var autoplay = await player.GetAutoPlay();
+        var repeat = await player.GetRepeatType();
+        var musicChannel = await player.GetMusicChannel();
+
+        var toSend = new EmbedBuilder()
+            .WithOkColor()
+            .WithTitle(GetText("music_settings"))
+            .WithDescription(
+                $"{(autoplay == 0 ? GetText("musicsettings_autoplay_disabled") : GetText("musicsettings_autoplay", autoplay))}\n" +
+                $"{GetText("musicsettings_volume", volume)}\n" +
+                $"{GetText("musicsettings_repeat", repeat)}\n" +
+                $"{(musicChannel == null ? GetText("musicsettings_channel_none") : GetText("musicsettings_channel", musicChannel.Id))}");
+
+        await ctx.Channel.SendMessageAsync(embed: toSend.Build()).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Sets the channel where music events will be sent.
+    /// </summary>
+    /// <param name="channel">The channel where music events will be sent.</param>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    public async Task SetMusicChannel(IMessageChannel channel = null)
+    {
+        var channelToUse = channel ?? ctx.Channel;
+        var (player, result) = await GetPlayerAsync(false);
+        if (result is not null)
+        {
+            var eb = new EmbedBuilder()
+                .WithErrorColor()
+                .WithTitle(GetText("music_player_error"))
+                .WithDescription(result);
+
+            await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
+            return;
+        }
+
+        await player.SetMusicChannelAsync(channelToUse.Id).ConfigureAwait(false);
+        await ReplyConfirmLocalizedAsync("music_channel_set", channelToUse.Id).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Sets if the bot should loop and how.
+    /// </summary>
+    /// <param name="repeatType">The repeat type.</param>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    public async Task Loop(PlayerRepeatType repeatType)
+    {
+        var (player, result) = await GetPlayerAsync(false);
+        if (result is not null)
+        {
+            var eb = new EmbedBuilder()
+                .WithErrorColor()
+                .WithTitle(GetText("music_player_error"))
+                .WithDescription(result);
+
+            await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
+            return;
+        }
+
+        await player.SetRepeatTypeAsync(repeatType).ConfigureAwait(false);
+        await ReplyConfirmLocalizedAsync("music_repeat_type", repeatType).ConfigureAwait(false);
+
+        if (repeatType == PlayerRepeatType.Shuffle)
+        {
+            await ShuffleQueue();
+        }
+    }
+
+    /// <summary>
+    ///     Shuffles the music queue
+    /// </summary>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    public async Task ShuffleQueue()
+    {
+        var (player, result) = await GetPlayerAsync(false);
+        if (result is not null)
+        {
+            var eb = new EmbedBuilder()
+                .WithErrorColor()
+                .WithTitle(GetText("music_player_error"))
+                .WithDescription(result);
+
+            await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
+            return;
+        }
+
+        var queue = await cache.GetMusicQueue(ctx.Guild.Id);
+        if (queue.Count == 0)
+        {
+            await ReplyErrorLocalizedAsync("music_queue_empty").ConfigureAwait(false);
+            return;
+        }
+
+        var shuffledQueue = queue.Shuffle().ToList();
+
+        // verify shuffled
+        if (queue.SequenceEqual(shuffledQueue))
+        {
+            await ReplyErrorLocalizedAsync("music_queue_shuffle_failed").ConfigureAwait(false);
+            return;
+        }
+
+        // debug log it
+        Log.Information("Shuffled Queue: {Queue}", string.Join(", ", shuffledQueue.Select(x => x.Track.Title)));
+
+        await cache.SetMusicQueue(ctx.Guild.Id, shuffledQueue);
+        await ReplyConfirmLocalizedAsync("music_queue_shuffled").ConfigureAwait(false);
+    }
+
+    private async ValueTask<(MewdekoPlayer, string?)> GetPlayerAsync(bool connectToVoiceChannel = true)
+    {
+        try
+        {
+            var channelBehavior = connectToVoiceChannel
+                ? PlayerChannelBehavior.Join
+                : PlayerChannelBehavior.None;
+
+            var retrieveOptions = new PlayerRetrieveOptions(channelBehavior);
+
+            var options = new MewdekoPlayerOptions
+            {
+                Channel = ctx.Channel as ITextChannel
+            };
+
+            var result = await service.Players
+                .RetrieveAsync<MewdekoPlayer, MewdekoPlayerOptions>(Context, CreatePlayerAsync, options,
+                    retrieveOptions)
+                .ConfigureAwait(false);
+
+            await result.Player.SetVolumeAsync(await result.Player.GetVolume() / 100f).ConfigureAwait(false);
+
+            if (result.IsSuccess) return (result.Player, null);
+            var errorMessage = result.Status switch
+            {
+                PlayerRetrieveStatus.UserNotInVoiceChannel => GetText("music_not_in_channel"),
+                PlayerRetrieveStatus.BotNotConnected => GetText("music_bot_not_connect",
+                    await guildSettingsService.GetPrefix(ctx.Guild)),
+                PlayerRetrieveStatus.VoiceChannelMismatch => GetText("music_voice_channel_mismatch"),
+                PlayerRetrieveStatus.Success => null,
+                PlayerRetrieveStatus.UserInSameVoiceChannel => null,
+                PlayerRetrieveStatus.PreconditionFailed => null,
+                _ => throw new ArgumentOutOfRangeException()
+            };
+            return (null, errorMessage);
+        }
+        catch (TimeoutException)
+        {
+            return (null, GetText("music_lavalink_disconnected"));
+        }
+    }
+
+    private static ValueTask<MewdekoPlayer> CreatePlayerAsync(
+        IPlayerProperties<MewdekoPlayer, MewdekoPlayerOptions> properties,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        ArgumentNullException.ThrowIfNull(properties);
+
+        return ValueTask.FromResult(new MewdekoPlayer(properties));
+    }
 }

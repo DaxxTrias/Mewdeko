@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Net;
 using System.Net.Http;
 using Discord.Commands;
@@ -20,48 +20,54 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Refit;
 using Serilog;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Drawing.Processing;
-using SixLabors.ImageSharp.PixelFormats;
-using SixLabors.ImageSharp.Processing;
-using Color = SixLabors.ImageSharp.Color;
+using SkiaSharp;
 
 namespace Mewdeko.Modules.Searches;
 
-public partial class Searches : MewdekoModuleBase<SearchesService>
+/// <summary>
+///     The Searches module provides commands for searching and retrieving various types of information. It includes
+///     commands for searching memes, Reddit posts, weather, and more.
+/// </summary>
+/// <param name="creds">The bot credentials.</param>
+/// <param name="google">The Google API service.</param>
+/// <param name="factory">The HTTP client factory.</param>
+/// <param name="cache">The memory cache service.</param>
+/// <param name="tzSvc">The guild timezone service.</param>
+/// <param name="serv">The interactive service.</param>
+/// <param name="martineApi">The Martine API service.</param>
+/// <param name="toneTagService">The ToneTag service.</param>
+/// <param name="config">The bot configuration service.</param>
+/// <param name="nsfwSpy">The NSFW spy service.</param>
+public partial class Searches(
+    IBotCredentials creds,
+    IGoogleApiService google,
+    IHttpClientFactory factory,
+    IMemoryCache cache,
+    GuildTimezoneService tzSvc,
+    InteractiveService serv,
+    MartineApi martineApi,
+    ToneTagService toneTagService,
+    BotConfigService config)
+    : MewdekoModuleBase<SearchesService>
 {
     private static readonly ConcurrentDictionary<string, string> CachedShortenedLinks = new();
-    private readonly IMemoryCache cache;
-    private readonly IBotCredentials creds;
-    private readonly IGoogleApiService google;
-    private readonly IHttpClientFactory httpFactory;
-    private readonly GuildTimezoneService tzSvc;
-    private readonly InteractiveService interactivity;
-    private readonly MartineApi martineApi;
-    private readonly ToneTagService toneTagService;
-    private readonly BotConfigService config;
 
-    public Searches(IBotCredentials creds, IGoogleApiService google, IHttpClientFactory factory, IMemoryCache cache,
-        GuildTimezoneService tzSvc,
-        InteractiveService serv,
-        MartineApi martineApi, ToneTagService toneTagService,
-        BotConfigService config)
-    {
-        interactivity = serv;
-        this.martineApi = martineApi;
-        this.creds = creds;
-        this.google = google;
-        httpFactory = factory;
-        this.cache = cache;
-        this.tzSvc = tzSvc;
-        this.toneTagService = toneTagService;
-        this.config = config;
-    }
-
-    [Cmd, Aliases]
+    /// <summary>
+    ///     Fetches and displays a random meme from Reddit.
+    /// </summary>
+    /// <remarks>
+    ///     This command uses the MartineApi to retrieve a random meme from a predefined list of subreddits.
+    ///     It displays the meme in an embed format, including the title, author, subreddit, and a link to the original post.
+    /// </remarks>
+    /// <example>
+    ///     <code>.meme</code>
+    /// </example>
+    [Cmd]
+    [Aliases]
     public async Task Meme()
     {
-        var msg = await ctx.Channel.SendConfirmAsync($"{config.Data.LoadingEmote} Fetching random meme...").ConfigureAwait(false);
+        var msg = await ctx.Channel.SendConfirmAsync($"{config.Data.LoadingEmote} Fetching random meme...")
+            .ConfigureAwait(false);
         var image = await martineApi.RedditApi.GetRandomMeme(Toptype.year).ConfigureAwait(false);
 
         var button = new ComponentBuilder().WithButton("Another!", $"meme:{ctx.User.Id}");
@@ -87,7 +93,19 @@ public partial class Searches : MewdekoModuleBase<SearchesService>
         }).ConfigureAwait(false);
     }
 
-    [Cmd, Aliases]
+    /// <summary>
+    ///     Fetches and displays a random post from a specified subreddit.
+    /// </summary>
+    /// <param name="subreddit">The subreddit from which to fetch a random post.</param>
+    /// <remarks>
+    ///     This command checks if the specified subreddit is marked as NSFW. If it is not, it fetches a random post.
+    ///     It displays the post in an embed format, including the title, author, subreddit, and a link to the original post.
+    /// </remarks>
+    /// <example>
+    ///     <code>.randomreddit sylveon</code>
+    /// </example>
+    [Cmd]
+    [Aliases]
     public async Task RandomReddit(string subreddit)
     {
         var msg = await ctx.Channel.SendConfirmAsync("Checking if the subreddit is nsfw...").ConfigureAwait(false);
@@ -95,8 +113,7 @@ public partial class Searches : MewdekoModuleBase<SearchesService>
         {
             var emt = new EmbedBuilder
             {
-                Description = "This subreddit is nsfw!",
-                Color = Mewdeko.ErrorColor
+                Description = "This subreddit is nsfw!", Color = Mewdeko.ErrorColor
             };
             await msg.ModifyAsync(x => x.Embed = emt.Build()).ConfigureAwait(false);
             return;
@@ -111,8 +128,11 @@ public partial class Searches : MewdekoModuleBase<SearchesService>
         catch (ApiException ex)
         {
             await msg.DeleteAsync().ConfigureAwait(false);
-            await ctx.Channel.SendErrorAsync("Seems like that subreddit wasn't found, please try something else!").ConfigureAwait(false);
-            Log.Error($"Seems that Meme fetching has failed. Here's the error:\nCode: {ex.StatusCode}\nContent: {(ex.HasContent ? ex.Content : "No Content.")}");
+            await ctx.Channel.SendErrorAsync("Seems like that subreddit wasn't found, please try something else!",
+                    Config)
+                .ConfigureAwait(false);
+            Log.Error(
+                $"Seems that Meme fetching has failed. Here's the error:\nCode: {ex.StatusCode}\nContent: {(ex.HasContent ? ex.Content : "No Content.")}");
             return;
         }
 
@@ -137,7 +157,19 @@ public partial class Searches : MewdekoModuleBase<SearchesService>
         }).ConfigureAwait(false);
     }
 
-    [Cmd, Aliases]
+    /// <summary>
+    ///     Displays a RIP image with the user's name and avatar.
+    /// </summary>
+    /// <param name="usr">The user for whom to generate the RIP image.</param>
+    /// <remarks>
+    ///     This command generates a "Rest In Peace" image featuring the specified user's name and avatar.
+    ///     It then sends this image in the channel where the command was used.
+    /// </remarks>
+    /// <example>
+    ///     <code>.rip @username</code>
+    /// </example>
+    [Cmd]
+    [Aliases]
     public async Task Rip([Remainder] IGuildUser usr)
     {
         var av = usr.RealAvatarUrl();
@@ -150,8 +182,19 @@ public partial class Searches : MewdekoModuleBase<SearchesService>
             .ConfigureAwait(false);
     }
 
-    // done in 3.0
-    [Cmd, Aliases]
+    /// <summary>
+    ///     Fetches and displays weather information for a given location query.
+    /// </summary>
+    /// <param name="query">The location query to search for weather information.</param>
+    /// <remarks>
+    ///     This command searches for current weather conditions based on the provided location query.
+    ///     It displays the weather information in an embed format, including temperature, humidity, wind speed, and more.
+    /// </remarks>
+    /// <example>
+    ///     <code>.weather New York</code>
+    /// </example>
+    [Cmd]
+    [Aliases]
     public async Task Weather([Remainder] string query)
     {
         if (!await ValidateQuery(ctx.Channel, query).ConfigureAwait(false))
@@ -218,8 +261,19 @@ public partial class Searches : MewdekoModuleBase<SearchesService>
         await ctx.Channel.EmbedAsync(embed).ConfigureAwait(false);
     }
 
-    // done in 3.0
-    [Cmd, Aliases]
+    /// <summary>
+    ///     Displays the current time in a specified location.
+    /// </summary>
+    /// <param name="query">The location query to search for the current time.</param>
+    /// <remarks>
+    ///     This command searches for the current time based on the provided location query.
+    ///     It displays the time and timezone information in the channel where the command was used.
+    /// </remarks>
+    /// <example>
+    ///     <code>.time Tokyo</code>
+    /// </example>
+    [Cmd]
+    [Aliases]
     public async Task Time([Remainder] string query)
     {
         if (!await ValidateQuery(ctx.Channel, query).ConfigureAwait(false))
@@ -258,8 +312,19 @@ public partial class Searches : MewdekoModuleBase<SearchesService>
         await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
     }
 
-    // done in 3.0
-    [Cmd, Aliases]
+    /// <summary>
+    ///     Searches for YouTube videos based on a provided query and displays the results.
+    /// </summary>
+    /// <param name="query">The search query to find YouTube videos.</param>
+    /// <remarks>
+    ///     This command utilizes the Google API to search for YouTube videos matching the provided query.
+    ///     It presents the search results in a paginated format, allowing users to browse through video titles and links.
+    /// </remarks>
+    /// <example>
+    ///     <code>.youtube query</code>
+    /// </example>
+    [Cmd]
+    [Aliases]
     public async Task Youtube([Remainder] string query)
     {
         if (!await ValidateQuery(ctx.Channel, query).ConfigureAwait(false))
@@ -280,7 +345,7 @@ public partial class Searches : MewdekoModuleBase<SearchesService>
             .WithActionOnCancellation(ActionOnStop.DeleteMessage)
             .Build();
 
-        await interactivity.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
+        await serv.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
 
         async Task<PageBuilder> PageFactory(int page)
         {
@@ -291,12 +356,24 @@ public partial class Searches : MewdekoModuleBase<SearchesService>
                 .WithTitle(result[page].Snippet.Title)
                 .WithUrl($"https://www.youtube.com/watch?v={result[page].Id.VideoId}")
                 .WithImageUrl(result[page].Snippet.Thumbnails.High.Url)
-                .WithColor(new Discord.Color(255, 0, 0));
+                .WithColor(new Color(255, 0, 0));
         }
     }
 
-    // done in 3.0
-    [Cmd, Aliases]
+    /// <summary>
+    ///     Fetches and displays information about a movie from IMDb based on the provided query.
+    /// </summary>
+    /// <param name="query">The movie title to search for on IMDb.</param>
+    /// <remarks>
+    ///     This command searches IMDb for a movie matching the provided query and displays detailed information,
+    ///     including the plot, rating, genre, and year of release. The response is shown in an embed format with a link to the
+    ///     IMDb page.
+    /// </remarks>
+    /// <example>
+    ///     <code>.movie "The Matrix"</code>
+    /// </example>
+    [Cmd]
+    [Aliases]
     public async Task Movie([Remainder] string? query = null)
     {
         if (!await ValidateQuery(ctx.Channel, query).ConfigureAwait(false))
@@ -321,24 +398,78 @@ public partial class Searches : MewdekoModuleBase<SearchesService>
             .WithImageUrl(movie.Poster)).ConfigureAwait(false);
     }
 
-    // done in 3.0
-    [Cmd, Aliases]
-    public Task RandomCat() => InternalRandomImage(SearchesService.ImageTag.Cats);
+    /// <summary>
+    ///     Displays a random cat image.
+    /// </summary>
+    /// <remarks>
+    ///     This command fetches a random cat image from an online source and posts it in the channel.
+    ///     It's a fun command intended to provide users with a random cute cat picture to lighten the mood.
+    /// </remarks>
+    /// <example>
+    ///     <code>.randomcat</code>
+    /// </example>
+    [Cmd]
+    [Aliases]
+    public Task RandomCat()
+    {
+        return InternalRandomImage(SearchesService.ImageTag.Cats);
+    }
 
-    // done in 3.0
-    [Cmd, Aliases]
-    public Task RandomDog() => InternalRandomImage(SearchesService.ImageTag.Dogs);
+    /// <summary>
+    ///     Displays a random dog image.
+    /// </summary>
+    /// <remarks>
+    ///     Similar to the RandomCat command, this fetches and displays a random dog image.
+    ///     It aims to delight users with a surprise dog picture, contributing to a positive and engaging community atmosphere.
+    /// </remarks>
+    /// <example>
+    ///     <code>.randomdog</code>
+    /// </example>
+    [Cmd]
+    [Aliases]
+    public Task RandomDog()
+    {
+        return InternalRandomImage(SearchesService.ImageTag.Dogs);
+    }
 
-    // done in 3.0
-    [Cmd, Aliases]
-    public Task RandomFood() => InternalRandomImage(SearchesService.ImageTag.Food);
+    /// <summary>
+    ///     Displays a random food image.
+    /// </summary>
+    /// <remarks>
+    ///     Similar to the RandomCat command, this fetches and displays a random food image.
+    ///     It aims to delight users with a surprise food picture, contributing to a positive and engaging community
+    ///     atmosphere. Maybe even leaving some salivating. Maybe disgusted. Idk.
+    /// </remarks>
+    /// <example>
+    ///     <code>.randomfood</code>
+    /// </example>
+    [Cmd]
+    [Aliases]
+    public Task RandomFood()
+    {
+        return InternalRandomImage(SearchesService.ImageTag.Food);
+    }
 
-    // done in 3.0
-    [Cmd, Aliases]
-    public Task RandomBird() => InternalRandomImage(SearchesService.ImageTag.Birds);
+    /// <summary>
+    ///     Displays birb.
+    /// </summary>
+    /// <remarks>
+    ///     Similar to the RandomCat command, this fetches and displays a random birb.
+    ///     It aims to delight users with a surprise birb picture, contributing to a positive and engaging community
+    ///     atmosphere.
+    /// </remarks>
+    /// <example>
+    ///     <code>.randombird</code>
+    /// </example>
+    [Cmd]
+    [Aliases]
+    public Task RandomBird()
+    {
+        return InternalRandomImage(SearchesService.ImageTag.Birds);
+    }
 
-    // done in 3.0
-    private Task InternalRandomImage(SearchesService.ImageTag tag)
+
+    private Task<IUserMessage> InternalRandomImage(SearchesService.ImageTag tag)
     {
         var url = Service.GetRandomImageUrl(tag);
         return ctx.Channel.EmbedAsync(new EmbedBuilder()
@@ -346,77 +477,146 @@ public partial class Searches : MewdekoModuleBase<SearchesService>
             .WithImageUrl(url.ToString()));
     }
 
-    // done in 3.0
-    [Cmd, Aliases]
+    /// <summary>
+    ///     Performs an image search using Google and DuckDuckGo, then filters out NSFW results.
+    /// </summary>
+    /// <param name="query">The search query for the image.</param>
+    /// <remarks>
+    ///     This command uses both Google and DuckDuckGo to perform an image search based on the provided query.
+    ///     It then filters out NSFW results using NsfwSpy and presents the safe images in a paginated embed format.
+    /// </remarks>
+    /// <example>
+    ///     <code>.image query</code>
+    /// </example>
+    [Cmd]
+    [Aliases]
+    [Ratelimit(20)]
     public async Task Image([Remainder] string query)
     {
-        using var gscraper = new GoogleScraper();
-        using var dscraper = new DuckDuckGoScraper();
-        var search = await gscraper.GetImagesAsync(query, SafeSearchLevel.Strict).ConfigureAwait(false);
-        var googleImageResults = search as GoogleImageResult[] ?? search.ToArray();
-        if (googleImageResults.Length == 0)
+        // Send a message indicating that images are being checked
+        var checkingMessage = await ctx.Channel.SendConfirmAsync(GetText("image_checking")).ConfigureAwait(false);
+
+        IEnumerable<IImageResult> images = null;
+        string sourceName = null;
+        string sourceIconUrl = null;
+
+        // Try to get images from Google
+        using (var gscraper = new GoogleScraper())
         {
+            var search = await gscraper.GetImagesAsync(query, SafeSearchLevel.Strict).ConfigureAwait(false);
+            search = search.Take(20);
+
+            if (search.Any())
+            {
+                images = search;
+                sourceName = "Google";
+                sourceIconUrl = "https://www.google.com/favicon.ico";
+            }
+        }
+
+        // If Google didn't return any results, try DuckDuckGo
+        if (images == null)
+        {
+            using var dscraper = new DuckDuckGoScraper();
             var search2 = await dscraper.GetImagesAsync(query, SafeSearchLevel.Strict).ConfigureAwait(false);
-            var duckDuckGoImageResults = search2 as DuckDuckGoImageResult[] ?? search2.ToArray();
-            if (duckDuckGoImageResults.Length == 0)
-            {
-                await ctx.Channel.SendErrorAsync("Unable to find that or the image is nsfw!").ConfigureAwait(false);
-            }
-            else
-            {
-                var paginator = new LazyPaginatorBuilder().AddUser(ctx.User).WithPageFactory(PageFactory)
-                    .WithFooter(
-                        PaginatorFooter.PageNumber | PaginatorFooter.Users)
-                    .WithMaxPageIndex(duckDuckGoImageResults.Length)
-                    .WithDefaultEmotes()
-                    .WithActionOnCancellation(ActionOnStop.DeleteMessage).Build();
-                await interactivity.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
+            search2 = search2.Take(20);
 
-                async Task<PageBuilder> PageFactory(int page)
-                {
-                    await Task.CompletedTask.ConfigureAwait(false);
-                    var result = duckDuckGoImageResults.Skip(page).FirstOrDefault();
-                    return new PageBuilder().WithOkColor().WithDescription(result!.Title)
-                        .WithImageUrl(result.Url)
-                        .WithAuthor(name: "DuckDuckGo Image Result",
-                            iconUrl:
-                            "https://media.discordapp.net/attachments/915770282579484693/941382938547863572/5847f32fcef1014c0b5e4877.png%22");
-                }
+            if (search2.Any())
+            {
+                images = search2;
+                sourceName = "DuckDuckGo";
+                sourceIconUrl = "https://duckduckgo.com/assets/logo_homepage.normal.v108.svg";
             }
         }
-        else
+
+        // If no images were found by either scraper
+        if (images == null)
         {
-            var paginator = new LazyPaginatorBuilder().AddUser(ctx.User).WithPageFactory(PageFactory)
-                .WithFooter(PaginatorFooter.PageNumber | PaginatorFooter.Users)
-                .WithMaxPageIndex(googleImageResults.Length).WithDefaultEmotes()
-                .WithActionOnCancellation(ActionOnStop.DeleteMessage)
-                .Build();
-            await interactivity.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
-
-            async Task<PageBuilder> PageFactory(int page)
-            {
-                await Task.CompletedTask.ConfigureAwait(false);
-                var result = googleImageResults.Skip(page).FirstOrDefault();
-
-                // Check for null result
-                if (result == null)
-                {
-                    return new PageBuilder().WithOkColor().WithDescription("No results found.")
-                        .WithAuthor(name: "Google Image Result",
-                                    iconUrl: "https://media.discordapp.net/attachments/915770282579484693/941383056609144832/superG_v3.max-200x200.png%22");
-                }
-
-                return new PageBuilder().WithOkColor()
-                    .WithDescription(result?.Title) // Using safe navigation
-                    .WithImageUrl(result?.Url) // Using safe navigation
-                    .WithAuthor(name: "Google Image Result",
-                                iconUrl: "https://media.discordapp.net/attachments/915770282579484693/941383056609144832/superG_v3.max-200x200.png%22");
-            }
+            await checkingMessage.DeleteAsync().ConfigureAwait(false);
+            await ctx.Channel.SendErrorAsync(GetText("image_no_results"), Config)
+                .ConfigureAwait(false);
+            return;
         }
 
+        // Now, filter the images using Safe Search Detection
+        var imagesList = images.ToList(); // Convert to list for indexing
+
+        var filteredImages = new List<IImageResult>();
+        var tasks = imagesList.Select(async image =>
+        {
+            try
+            {
+                var safeSearchResult = await google.DetectSafeSearchAsync(image.Url);
+
+                if (google.IsImageSafe(safeSearchResult))
+                {
+                    lock (filteredImages)
+                    {
+                        filteredImages.Add(image);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // Handle exceptions (e.g., logging)
+                Console.WriteLine($"Error processing image: {ex.Message}");
+            }
+        }).ToList();
+
+        await Task.WhenAll(tasks);
+
+        await checkingMessage.DeleteAsync().ConfigureAwait(false);
+
+        if (filteredImages.Count == 0)
+        {
+            await ctx.Channel.SendErrorAsync(GetText("image_no_safe_images"), Config)
+                .ConfigureAwait(false);
+            return;
+        }
+
+        // Proceed with displaying the images using a paginator
+        var paginator = new LazyPaginatorBuilder()
+            .AddUser(ctx.User)
+            .WithPageFactory(PageFactory)
+            .WithFooter(PaginatorFooter.PageNumber | PaginatorFooter.Users)
+            .WithMaxPageIndex(filteredImages.Count - 1)
+            .WithDefaultEmotes()
+            .WithActionOnCancellation(ActionOnStop.DeleteMessage)
+            .Build();
+
+        await serv.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60))
+            .ConfigureAwait(false);
+        return;
+
+        Task<PageBuilder> PageFactory(int page)
+        {
+            var result = filteredImages.ElementAt(page);
+
+            return Task.FromResult(new PageBuilder()
+                .WithOkColor()
+                .WithDescription(result.Title)
+                .WithImageUrl(result.Url)
+                .WithAuthor(
+                    GetText("image_result_source", sourceName), // e.g., "Image Result from Google"
+                    sourceIconUrl));
+        }
     }
 
-    [Cmd, Aliases]
+
+    /// <summary>
+    ///     Generates a Let Me Google That For You (LMGTFY) link for the provided query.
+    /// </summary>
+    /// <param name="ffs">The search query to be used in the LMGTFY link.</param>
+    /// <remarks>
+    ///     This command takes a search query as input and generates a LMGTFY link.
+    ///     The LMGTFY link is then shortened using the google.ShortenUrl method and sent to the channel.
+    ///     If the provided query is null or whitespace, the command will return without sending a message.
+    /// </remarks>
+    /// <example>
+    ///     <code>.lmgtfy query</code>
+    /// </example>
+    [Cmd]
+    [Aliases]
     public async Task Lmgtfy([Remainder] string? ffs = null)
     {
         if (!await ValidateQuery(ctx.Channel, ffs).ConfigureAwait(false))
@@ -427,7 +627,20 @@ public partial class Searches : MewdekoModuleBase<SearchesService>
             .ConfigureAwait(false);
     }
 
-    [Cmd, Aliases]
+    /// <summary>
+    ///     Shortens a provided URL using the goolnk.com API.
+    /// </summary>
+    /// <param name="query">The URL to be shortened.</param>
+    /// <remarks>
+    ///     This command submits the specified URL to the goolnk.com API to generate a shortened version.
+    ///     The shortened URL is then returned and displayed in the channel. This is useful for sharing long URLs in a more
+    ///     concise format.
+    /// </remarks>
+    /// <example>
+    ///     <code>.shorten https://example.com/very/long/url</code>
+    /// </example>
+    [Cmd]
+    [Aliases]
     public async Task Shorten([Remainder] string query)
     {
         if (!await ValidateQuery(ctx.Channel, query).ConfigureAwait(false))
@@ -438,7 +651,7 @@ public partial class Searches : MewdekoModuleBase<SearchesService>
         {
             try
             {
-                using var http = httpFactory.CreateClient();
+                using var http = factory.CreateClient();
                 using var req = new HttpRequestMessage(HttpMethod.Post, "https://goolnk.com/api/v1/shorten");
                 req.Content = new MultipartFormDataContent
                 {
@@ -474,8 +687,20 @@ public partial class Searches : MewdekoModuleBase<SearchesService>
             .ConfigureAwait(false);
     }
 
-    // done in 3.0
-    [Cmd, Aliases]
+    /// <summary>
+    ///     Performs a general search using the Google or DuckDuckGo search engines and displays the results.
+    /// </summary>
+    /// <param name="query">The search query.</param>
+    /// <remarks>
+    ///     This command conducts a web search using the specified query. If Google does not return results, DuckDuckGo is used
+    ///     as a fallback.
+    ///     Results are displayed in an embed format, providing users with a title, snippet, and link for each result.
+    /// </remarks>
+    /// <example>
+    ///     <code>.google search_terms</code>
+    /// </example>
+    [Cmd]
+    [Aliases]
     public async Task Google([Remainder] string? query = null)
     {
         query = query?.Trim();
@@ -491,7 +716,8 @@ public partial class Searches : MewdekoModuleBase<SearchesService>
             if (data is null)
             {
                 await ctx.Channel.SendErrorAsync(
-                    "Neither google nor duckduckgo returned a result! Please search something else!").ConfigureAwait(false);
+                        "Neither google nor duckduckgo returned a result! Please search something else!", Config)
+                    .ConfigureAwait(false);
                 return;
             }
         }
@@ -514,8 +740,20 @@ public partial class Searches : MewdekoModuleBase<SearchesService>
         await ctx.Channel.EmbedAsync(embed).ConfigureAwait(false);
     }
 
-    // done in 3.0
-    [Cmd, Aliases]
+    /// <summary>
+    ///     Fetches and displays information about a Magic: The Gathering card.
+    /// </summary>
+    /// <param name="search">The name or identifier of the Magic: The Gathering card to search for.</param>
+    /// <remarks>
+    ///     Utilizing an external API, this command retrieves details about a specified Magic: The Gathering card,
+    ///     including its name, description, mana cost, types, and an image if available.
+    ///     The information is presented in an embed format.
+    /// </remarks>
+    /// <example>
+    ///     <code>.magicthegathering "Black Lotus"</code>
+    /// </example>
+    [Cmd]
+    [Aliases]
     public async Task MagicTheGathering([Remainder] string search)
     {
         if (!await ValidateQuery(ctx.Channel, search).ConfigureAwait(false))
@@ -541,8 +779,19 @@ public partial class Searches : MewdekoModuleBase<SearchesService>
         await ctx.Channel.EmbedAsync(embed).ConfigureAwait(false);
     }
 
-    // done in 3.0
-    [Cmd, Aliases]
+    /// <summary>
+    ///     Searches for and displays information about a Hearthstone card.
+    /// </summary>
+    /// <param name="name">The name of the Hearthstone card to search for.</param>
+    /// <remarks>
+    ///     This command searches for a Hearthstone card by name and displays its image and flavor text, if available.
+    ///     It requires a valid Mashape API key set in the bot's configuration to access the Hearthstone API.
+    /// </remarks>
+    /// <example>
+    ///     <code>.hearthstone "Leeroy Jenkins"</code>
+    /// </example>
+    [Cmd]
+    [Aliases]
     public async Task Hearthstone([Remainder] string name)
     {
         if (!await ValidateQuery(ctx.Channel, name).ConfigureAwait(false))
@@ -572,15 +821,26 @@ public partial class Searches : MewdekoModuleBase<SearchesService>
         await ctx.Channel.EmbedAsync(embed).ConfigureAwait(false);
     }
 
-    // done in 3.0
-    [Cmd, Aliases]
+    /// <summary>
+    ///     Searches the Urban Dictionary and displays definitions for a given term.
+    /// </summary>
+    /// <param name="query">The term to search for on Urban Dictionary.</param>
+    /// <remarks>
+    ///     This command fetches definitions from Urban Dictionary for the specified term.
+    ///     Results are presented in a paginated embed format, allowing users to browse through multiple definitions.
+    /// </remarks>
+    /// <example>
+    ///     <code>.urbandict "vaporeon copypasta"</code>
+    /// </example>
+    [Cmd]
+    [Aliases]
     public async Task UrbanDict([Remainder] string? query = null)
     {
         if (!await ValidateQuery(ctx.Channel, query).ConfigureAwait(false))
             return;
 
         await ctx.Channel.TriggerTypingAsync().ConfigureAwait(false);
-        using var http = httpFactory.CreateClient();
+        using var http = factory.CreateClient();
         var res = await http
             .GetStringAsync($"https://api.urbandictionary.com/v0/define?term={Uri.EscapeDataString(query)}")
             .ConfigureAwait(false);
@@ -598,7 +858,8 @@ public partial class Searches : MewdekoModuleBase<SearchesService>
                     .WithActionOnCancellation(ActionOnStop.DeleteMessage)
                     .Build();
 
-                await interactivity.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
+                await serv.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60))
+                    .ConfigureAwait(false);
 
                 async Task<PageBuilder> PageFactory(int page)
                 {
@@ -622,14 +883,26 @@ public partial class Searches : MewdekoModuleBase<SearchesService>
         }
     }
 
-    // done in 3.0
-    [Cmd, Aliases]
+    /// <summary>
+    ///     Retrieves and displays a definition from the Pearson dictionary.
+    /// </summary>
+    /// <param name="word">The word to define.</param>
+    /// <remarks>
+    ///     This command looks up a given word in the Pearson dictionary and displays its definition, part of speech,
+    ///     and an example sentence if available. Results are presented in a paginated format to navigate through multiple
+    ///     definitions.
+    /// </remarks>
+    /// <example>
+    ///     <code>.define "ubiquitous"</code>
+    /// </example>
+    [Cmd]
+    [Aliases]
     public async Task Define([Remainder] string word)
     {
         if (!await ValidateQuery(ctx.Channel, word).ConfigureAwait(false))
             return;
 
-        using var http = httpFactory.CreateClient();
+        using var http = factory.CreateClient();
         try
         {
             var res = await cache.GetOrCreateAsync($"define_{word}", e =>
@@ -673,7 +946,7 @@ public partial class Searches : MewdekoModuleBase<SearchesService>
                 .WithActionOnCancellation(ActionOnStop.DeleteMessage)
                 .Build();
 
-            await interactivity.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
+            await serv.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
 
             async Task<PageBuilder> PageFactory(int page)
             {
@@ -698,11 +971,22 @@ public partial class Searches : MewdekoModuleBase<SearchesService>
         }
     }
 
-    // done in 3.0
-    [Cmd, Aliases]
+
+    /// <summary>
+    ///     Fetches and shares a random cat fact.
+    /// </summary>
+    /// <remarks>
+    ///     This command accesses a cat fact API to retrieve a random fact about cats.
+    ///     It's designed to provide fun and interesting information to cat enthusiasts.
+    /// </remarks>
+    /// <example>
+    ///     <code>.catfact</code>
+    /// </example>
+    [Cmd]
+    [Aliases]
     public async Task Catfact()
     {
-        using var http = httpFactory.CreateClient();
+        using var http = factory.CreateClient();
         var response = await http.GetStringAsync("https://catfact.ninja/fact").ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(response))
             return;
@@ -711,36 +995,118 @@ public partial class Searches : MewdekoModuleBase<SearchesService>
         await ctx.Channel.SendConfirmAsync($"🐈{GetText("catfact")}", fact).ConfigureAwait(false);
     }
 
-    //done in 3.0
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
-    public async Task Revav([Remainder] IGuildUser? usr = null)
+    /// <summary>
+    ///     Performs a reverse image search using an avatar link.
+    /// </summary>
+    /// <param name="usr">The user whos avatar to reverse search</param>
+    /// <remarks>
+    ///     This command utilizes Google, TinEye, and Yandex reverse image search engines to find similar images or the source
+    ///     of the given image.
+    ///     It provides links to the search results on each platform, offering users multiple avenues to explore related or
+    ///     source images.
+    /// </remarks>
+    /// <example>
+    ///     <code>.revav @user</code>
+    /// </example>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    public Task Revav([Remainder] IGuildUser? usr = null)
     {
         usr ??= (IGuildUser)ctx.User;
 
         var av = usr.RealAvatarUrl();
         // ReSharper disable once ConditionIsAlwaysTrueOrFalseAccordingToNullableAPIContract
 
-        await ctx.Channel.SendConfirmAsync($"https://images.google.com/searchbyimage?image_url={av}")
-            .ConfigureAwait(false);
+        return Revimg(av.ToString());
     }
 
-    //done in 3.0
-    [Cmd, Aliases]
+    /// <summary>
+    ///     Performs a reverse image search using the provided image link.
+    /// </summary>
+    /// <param name="imageLink">The direct URL of the image to search for.</param>
+    /// <remarks>
+    ///     This command utilizes Google, TinEye, and Yandex reverse image search engines to find similar images or the source
+    ///     of the given image.
+    ///     It provides links to the search results on each platform, offering users multiple avenues to explore related or
+    ///     source images.
+    /// </remarks>
+    /// <example>
+    ///     <code>.revimg "http://example.com/image.jpg"</code>
+    /// </example>
+    [Cmd]
+    [Aliases]
     public async Task Revimg([Remainder] string? imageLink = null)
     {
         imageLink = imageLink?.Trim() ?? "";
 
         if (string.IsNullOrWhiteSpace(imageLink))
             return;
-        await ctx.Channel.SendConfirmAsync($"https://images.google.com/searchbyimage?image_url={imageLink}")
-            .ConfigureAwait(false);
+
+        // Google reverse image search link
+        var googleLink = $"https://images.google.com/searchbyimage?image_url={imageLink}";
+
+        // TinEye reverse image search link
+        var tineyeLink = $"https://www.tineye.com/search?url={imageLink}";
+
+        // Yandex reverse image search link
+        var yandexLink = $"https://yandex.com/images/search?url={imageLink}&rpt=imageview";
+
+        var response = $"Google: [Link]({googleLink})\nTinEye: [Link]({tineyeLink})\nYandex: [Link]({yandexLink})";
+
+        await ctx.Channel.SendConfirmAsync(response).ConfigureAwait(false);
+    }
+    //
+    // [Cmd, Aliases]
+    // public async Task FakeTweet(string tweetText)
+    // {
+    //     // Gather user information
+    //     var username = ctx.User.Username;
+    //     var profileImageUrl = ctx.User.GetAvatarUrl();
+    //
+    //     // Download the user's profile image
+    //     var httpClient = new HttpClient();
+    //     var profileImageBytes = await httpClient.GetByteArrayAsync(profileImageUrl);
+    //
+    //     // Generate the fake tweet
+    //     var tweetImageBytes = GenerateFakeTweet(username, profileImageBytes, tweetText);
+    //
+    //     var stream = new MemoryStream(tweetImageBytes);
+    //     await ctx.Channel.SendFileAsync(stream, "fake_tweet.jpg");
+    // }
+
+    /// <summary>
+    ///     Searches for and displays an image based on the provided tag from Safebooru.
+    /// </summary>
+    /// <param name="tag">The tag to search for on Safebooru.</param>
+    /// <remarks>
+    ///     This command uses the Safebooru API to fetch an image related to the specified tag.
+    ///     It is designed to provide safe-for-work images from a variety of anime and manga sources.
+    ///     The resulting image is posted in the channel where the command was used.
+    /// </remarks>
+    /// <example>
+    ///     <code>.safebooru tag_name</code>
+    /// </example>
+    [Cmd]
+    [Aliases]
+    public Task Safebooru([Remainder] string? tag = null)
+    {
+        return InternalDapiCommand(ctx.Message, tag, DapiSearchType.Safebooru);
     }
 
-    [Cmd, Aliases]
-    public Task Safebooru([Remainder] string? tag = null) => InternalDapiCommand(ctx.Message, tag, DapiSearchType.Safebooru);
-
-    // done in 3.0
-    [Cmd, Aliases]
+    /// <summary>
+    ///     Searches for and displays Wikipedia information based on the provided query.
+    /// </summary>
+    /// <param name="query">The search term for Wikipedia.</param>
+    /// <remarks>
+    ///     This command searches Wikipedia for the specified query and returns the first matching page.
+    ///     If a page is found, it displays the page title and a link to the full article.
+    /// </remarks>
+    /// <example>
+    ///     <code>.wiki "Quantum mechanics" (nobody will ever actually search for this on discord)</code>
+    /// </example>
+    [Cmd]
+    [Aliases]
     public async Task Wiki([Remainder] string? query = null)
     {
         query = query?.Trim();
@@ -748,7 +1114,7 @@ public partial class Searches : MewdekoModuleBase<SearchesService>
         if (!await ValidateQuery(ctx.Channel, query).ConfigureAwait(false))
             return;
 
-        using var http = httpFactory.CreateClient();
+        using var http = factory.CreateClient();
         var result = await http
             .GetStringAsync(
                 $"https://en.wikipedia.org//w/api.php?action=query&format=json&prop=info&redirects=1&formatversion=2&inprop=url&titles={Uri.EscapeDataString(query)}")
@@ -760,8 +1126,20 @@ public partial class Searches : MewdekoModuleBase<SearchesService>
             await ctx.Channel.SendMessageAsync(data.Query.Pages[0].FullUrl).ConfigureAwait(false);
     }
 
-    [Cmd, Aliases]
-    public async Task Color(params Color[] colors)
+    /// <summary>
+    ///     Displays a color swatch based on the provided hexadecimal color codes.
+    /// </summary>
+    /// <param name="colors">An array of SKColor objects representing the colors to display.</param>
+    /// <remarks>
+    ///     This command creates an image consisting of color swatches for each provided color code.
+    ///     It's useful for visualizing colors or sharing color schemes with others.
+    /// </remarks>
+    /// <example>
+    ///     <code>.color #FFFFFF #FF0000 #0000FF</code>
+    /// </example>
+    [Cmd]
+    [Aliases]
+    public async Task Color(params SKColor[] colors)
     {
         if (colors.Length == 0)
             return;
@@ -769,21 +1147,41 @@ public partial class Searches : MewdekoModuleBase<SearchesService>
         var colorObjects = colors.Take(10)
             .ToArray();
 
-        using var img = new Image<Rgba32>(colorObjects.Length * 50, 50);
-        for (var i = 0; i < colorObjects.Length; i++)
+        using var img = new SKBitmap(colorObjects.Length * 50, 50, SKColorType.Rgba8888, SKAlphaType.Premul);
+
+        using (var canvas = new SKCanvas(img))
         {
-            var x = i * 50;
-            img.Mutate(m => m.FillPolygon(colorObjects[i], new PointF(x, 0), new PointF(x + 50, 0),
-                new PointF(x + 50, 50), new PointF(x, 50)));
+            for (var i = 0; i < colorObjects.Length; i++)
+            {
+                var x = i * 50;
+                var rect = new SKRect(x, 0, x + 50, 50);
+                using var paint = new SKPaint
+                {
+                    Color = colorObjects[i], IsAntialias = true, Style = SKPaintStyle.Fill
+                };
+                canvas.DrawRect(rect, paint);
+            }
         }
 
-        var ms = img.ToStream();
-        await using var _ = ms.ConfigureAwait(false);
-        await ctx.Channel.SendFileAsync(ms, "colors.png").ConfigureAwait(false);
+        var data = SKImage.FromBitmap(img).Encode(SKEncodedImageFormat.Png, 100);
+        var stream = data.AsStream();
+        await ctx.Channel.SendFileAsync(stream, "colors.png").ConfigureAwait(false);
     }
 
-    // done in 3.0
-    [Cmd, Aliases]
+    /// <summary>
+    ///     Fetches and displays detailed information about a specific topic from a wikia.
+    /// </summary>
+    /// <param name="target">The target wikia site.</param>
+    /// <param name="query">The search term for the wikia.</param>
+    /// <remarks>
+    ///     This command searches the specified wikia for information related to the query.
+    ///     It returns the first relevant result, including the title and a link to the detailed page.
+    /// </remarks>
+    /// <example>
+    ///     <code>.wikia "starwars" "Darth Vader"</code>
+    /// </example>
+    [Cmd]
+    [Aliases]
     public async Task Wikia(string target, [Remainder] string query)
     {
         if (string.IsNullOrWhiteSpace(target) || string.IsNullOrWhiteSpace(query))
@@ -793,7 +1191,7 @@ public partial class Searches : MewdekoModuleBase<SearchesService>
         }
 
         await ctx.Channel.TriggerTypingAsync().ConfigureAwait(false);
-        using var http = httpFactory.CreateClient();
+        using var http = factory.CreateClient();
         http.DefaultRequestHeaders.Clear();
         try
         {
@@ -820,14 +1218,27 @@ public partial class Searches : MewdekoModuleBase<SearchesService>
         }
     }
 
-    // done in 3.0
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
+    /// <summary>
+    ///     Searches for and displays Bible verses based on the book, chapter, and verse provided.
+    /// </summary>
+    /// <param name="book">The book of the Bible.</param>
+    /// <param name="chapterAndVerse">The chapter and verse in the format "Chapter:Verse".</param>
+    /// <remarks>
+    ///     This command retrieves and displays a specific Bible verse or set of verses.
+    ///     The response includes the text of the verses along with their book, chapter, and verse reference.
+    /// </remarks>
+    /// <example>
+    ///     <code>.bible "John" "3:16"</code>
+    /// </example>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
     public async Task Bible(string book, string chapterAndVerse)
     {
         var obj = new BibleVerses();
         try
         {
-            using var http = httpFactory.CreateClient();
+            using var http = factory.CreateClient();
             var res = await http
                 .GetStringAsync($"https://bible-api.com/{book} {chapterAndVerse}").ConfigureAwait(false);
 
@@ -840,7 +1251,7 @@ public partial class Searches : MewdekoModuleBase<SearchesService>
 
         if (obj.Error != null || !obj.Verses.Any())
         {
-            await ctx.Channel.SendErrorAsync(obj.Error ?? "No verse found.").ConfigureAwait(false);
+            await ctx.Channel.SendErrorAsync(obj.Error ?? "No verse found.", Config).ConfigureAwait(false);
         }
         else
         {
@@ -852,7 +1263,20 @@ public partial class Searches : MewdekoModuleBase<SearchesService>
         }
     }
 
-    [Cmd, Aliases]
+    /// <summary>
+    ///     Searches for a game on Steam by name and provides a link to its Steam Store page.
+    /// </summary>
+    /// <param name="query">The name of the game to search for on Steam.</param>
+    /// <remarks>
+    ///     This command searches for a game on Steam using the provided query. If the game is found, it returns a direct link
+    ///     to the game's page on the Steam Store.
+    ///     It's useful for quickly sharing Steam Store pages of games within the Discord channel.
+    /// </remarks>
+    /// <example>
+    ///     <code>.steam "Half-Life 3"</code>
+    /// </example>
+    [Cmd]
+    [Aliases]
     public async Task Steam([Remainder] string query)
     {
         if (string.IsNullOrWhiteSpace(query))
@@ -860,36 +1284,14 @@ public partial class Searches : MewdekoModuleBase<SearchesService>
 
         await Context.Channel.TriggerTypingAsync().ConfigureAwait(false);
 
-        // Send a placeholder message directly using the bot's client
-        //var placeholderMessage = await ctx.Channel.SendConfirmAsync($"{config.Data.LoadingEmote} Searching...");
-
         var appId = await Service.GetSteamAppIdByName(query).ConfigureAwait(false);
         if (appId == -1)
         {
             await ReplyErrorLocalizedAsync("not_found").ConfigureAwait(false);
             return;
         }
-        else
-        {
-            // this impl tells user a search is occuring incase it lags
-            // unfortunately it seems modifyasync wont parse url content properly like a replyasync will
-            // todo: bug with discord.net impl?
-            //await placeholderMessage.ModifyAsync(x =>
-            //{
-            //    x.Embed = new EmbedBuilder()
-            //        .WithOkColor()
-            //        .WithTitle(query)
-            //        .WithUrl($"https://store.steampowered.com/app/{appId}")
-            //        .WithImageUrl($"https://cdn.cloudflare.steamstatic.com/steam/apps/{appId}/header.jpg")
-            //        .WithDescription("Loading...")
-            //        .Build();
-            //    x.Content = $"https://store.steampowered.com/app/{appId}";
-            //    }).ConfigureAwait(false);
 
-            await ctx.Channel.SendMessageAsync($"https://store.steampowered.com/app/{appId}").ConfigureAwait(false);
-        }
-
-        //var embed = new embedbuilder()
+        //var embed = new EmbedBuilder()
         //    .WithOkColor()
         //    .WithDescription(gameData.ShortDescription)
         //    .WithTitle(gameData.Name)
@@ -899,16 +1301,30 @@ public partial class Searches : MewdekoModuleBase<SearchesService>
         //    .AddField(efb => efb.WithName(GetText("price")).WithValue(gameData.IsFree ? GetText("FREE") : game).WithIsInline(true))
         //    .AddField(efb => efb.WithName(GetText("links")).WithValue(gameData.GetGenresString()).WithIsInline(true))
         //    .WithFooter(efb => efb.WithText(GetText("recommendations", gameData.TotalRecommendations)));
+        await ctx.Channel.SendMessageAsync($"https://store.steampowered.com/app/{appId}").ConfigureAwait(false);
     }
 
-    [Cmd, Aliases]
+    /// <summary>
+    ///     Resolves tone tags in a message and provides explanations for each identified tag.
+    /// </summary>
+    /// <param name="tag">The message containing tone tags to be resolved.</param>
+    /// <remarks>
+    ///     Tone tags are short codes used to express the tone of a message. This command parses the message for known tone
+    ///     tags and returns their meanings to help clarify the intended tone of the message.
+    ///     This is particularly useful in text-based communication where conveying tone can be challenging.
+    /// </remarks>
+    /// <example>
+    ///     <code>.resolvetonetags "I'm happy to help! /s"</code>
+    /// </example>
+    [Cmd]
+    [Aliases]
     public async Task ResolveToneTags([Remainder] string tag)
     {
         var embed = toneTagService.GetEmbed(toneTagService.ParseTags(tag), ctx.Guild);
         await ctx.Channel.EmbedAsync(embed).ConfigureAwait(false);
     }
 
-    public async Task InternalDapiCommand(IUserMessage umsg, string? tag, DapiSearchType type)
+    private async Task InternalDapiCommand(IMessage umsg, string? tag, DapiSearchType type)
     {
         var channel = umsg.Channel;
 
@@ -918,7 +1334,8 @@ public partial class Searches : MewdekoModuleBase<SearchesService>
 
         if (imgObj == null)
         {
-            await channel.SendErrorAsync($"{umsg.Author.Mention} {GetText("no_results")}").ConfigureAwait(false);
+            await channel.SendErrorAsync($"{umsg.Author.Mention} {GetText("no_results")}", Config)
+                .ConfigureAwait(false);
         }
         else
         {
@@ -929,6 +1346,19 @@ public partial class Searches : MewdekoModuleBase<SearchesService>
         }
     }
 
+    /// <summary>
+    ///     Validates if the given query string is not null or whitespace.
+    /// </summary>
+    /// <param name="ch">The channel from which the command was invoked.</param>
+    /// <param name="query">The query string to validate.</param>
+    /// <returns>True if the query is valid, otherwise false.</returns>
+    /// <remarks>
+    ///     This utility method checks if a query string provided in a command is valid. It ensures that commands requiring
+    ///     input do not proceed with empty or whitespace-only queries.
+    /// </remarks>
+    /// <example>
+    ///     This method is called internally by commands requiring input validation and does not have a direct command example.
+    /// </example>
     public async Task<bool> ValidateQuery(IMessageChannel ch, string query)
     {
         if (!string.IsNullOrWhiteSpace(query))
@@ -938,15 +1368,21 @@ public partial class Searches : MewdekoModuleBase<SearchesService>
         return false;
     }
 
-    public class ShortenData
-    {
-        [JsonProperty("result_url")]
-        public string ResultUrl { get; set; }
-    }
-
-
-    [Cmd, Aliases]
-    [RequireDragon, HelpDisabled]
+    /// <summary>
+    ///     Demonstrates localized string responses in commands for testing purposes.
+    /// </summary>
+    /// <param name="input">The input string to localize, followed by optional arguments separated by "|".</param>
+    /// <remarks>
+    ///     This command is designed for developers to test and demonstrate the localization of strings within the bot.
+    ///     It accepts an input string and optional arguments to format the localized message.
+    /// </remarks>
+    /// <example>
+    ///     <code>.testlocalize "greeting|world"</code>
+    /// </example>
+    [Cmd]
+    [Aliases]
+    [RequireDragon]
+    [HelpDisabled]
     public async Task TestLocalize([Remainder] string input)
     {
         var sp = input.Split("|");
@@ -955,6 +1391,27 @@ public partial class Searches : MewdekoModuleBase<SearchesService>
             await ErrorLocalizedAsync("__loctest_invalid");
             return;
         }
+
         await ConfirmLocalizedAsync(sp[0], sp.Skip(1).ToArray());
+    }
+
+    /// <summary>
+    ///     Represents the response data from a URL shortening service.
+    /// </summary>
+    /// <remarks>
+    ///     This class is designed to capture the shortened URL result from a URL shortening service's API response.
+    ///     It is utilized in the process of shortening URLs to make them more manageable and shareable.
+    ///     The `result_url` property in the JSON response maps to the `ResultUrl` property in this class.
+    /// </remarks>
+    public class ShortenData
+    {
+        /// <summary>
+        ///     Gets or sets the shortened URL result from the URL shortening service.
+        /// </summary>
+        /// <value>
+        ///     The shortened URL as a string.
+        /// </value>
+        [JsonProperty("result_url")]
+        public string ResultUrl { get; set; }
     }
 }

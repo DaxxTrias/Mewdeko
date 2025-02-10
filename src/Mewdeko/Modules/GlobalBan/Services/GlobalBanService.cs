@@ -4,18 +4,18 @@
 //
 // public class GlobalBanService
 // {
-//     private readonly DbService db;
-//     public GlobalBanService(EventHandler handler, DbService db)
+//     private readonly DbContextProvider dbProvider;
+//     public GlobalBanService(EventHandler handler, DbContextProvider dbProvider)
 //     {
-//         this.db = db;
+//         this.dbProvider = dbProvider;
 //         handler.UserJoined += OnUserJoined;
 //     }
 //
 //     private async Task OnUserJoined(IGuildUser args)
 //     {
-//         await using var uow = db.GetDbContext();
-//         var banEntry = await uow.GlobalBans.FirstOrDefaultAsync(x => x.UserId == args.Id);
-//         var config = await uow.GlobalBanConfigs.FirstOrDefaultAsync(x => x.GuildId == args.GuildId);
+//
+//         var banEntry = await dbContext.GlobalBans.FirstOrDefaultAsync(x => x.UserId == args.Id);
+//         var config = await dbContext.GlobalBanConfigs.FirstOrDefaultAsync(x => x.GuildId == args.GuildId);
 //         if (banEntry is null || config is null) return;
 //
 //          if (banEntry != null && config != null)

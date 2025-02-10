@@ -1,4 +1,4 @@
-using System.Net.Http;
+﻿using System.Net.Http;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Mewdeko.Modules.Searches.Common.StreamNotifications.Models;
@@ -7,19 +7,14 @@ using TwitchLib.Api;
 
 namespace Mewdeko.Modules.Searches.Common.StreamNotifications.Providers;
 
+/// <inheritdoc />
 public class TwitchHelixProvider : Provider
 {
-    private readonly IHttpClientFactory httpClientFactory;
-
-    private static Regex Regex { get; } = new(@"twitch.tv/(?<name>[\w\d\-_]+)/?",
-        RegexOptions.Compiled | RegexOptions.IgnoreCase);
-
-    public override FollowedStream.FType Platform
-        => FollowedStream.FType.Twitch;
-
     private readonly Lazy<TwitchAPI> api;
     private readonly string clientId;
+    private readonly IHttpClientFactory httpClientFactory;
 
+    /// <inheritdoc />
     public TwitchHelixProvider(IHttpClientFactory httpClientFactory, IBotCredentials credsProvider)
     {
         this.httpClientFactory = httpClientFactory;
@@ -39,9 +34,24 @@ public class TwitchHelixProvider : Provider
         });
     }
 
-    private async Task<string?> EnsureTokenValidAsync()
-        => await api.Value.Auth.GetAccessTokenAsync().ConfigureAwait(false);
+    private static Regex Regex { get; } = new(@"twitch.tv/(?<name>[\w\d\-_]+)/?",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+    /// <inheritdoc />
+    public override FollowedStream.FType Platform
+    {
+        get
+        {
+            return FollowedStream.FType.Twitch;
+        }
+    }
+
+    private async Task<string?> EnsureTokenValidAsync()
+    {
+        return await api.Value.Auth.GetAccessTokenAsync().ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
     public override Task<bool> IsValidUrl(string url)
     {
         var match = Regex.Match(url);
@@ -53,6 +63,7 @@ public class TwitchHelixProvider : Provider
         return Task.FromResult(true);
     }
 
+    /// <inheritdoc />
     public override Task<StreamData?> GetStreamDataByUrlAsync(string url)
     {
         var match = Regex.Match(url);
@@ -61,16 +72,15 @@ public class TwitchHelixProvider : Provider
         return GetStreamDataAsync(name);
     }
 
+    /// <inheritdoc />
     public override async Task<StreamData?> GetStreamDataAsync(string login)
     {
-        var data = await GetStreamDataAsync(new List<string>
-        {
-            login
-        }).ConfigureAwait(false);
+        var data = await GetStreamDataAsync([login]).ConfigureAwait(false);
 
         return data.FirstOrDefault();
     }
 
+    /// <inheritdoc />
     public override async Task<IReadOnlyCollection<StreamData>> GetStreamDataAsync(List<string> logins)
     {
         if (logins.Count == 0)
@@ -82,7 +92,8 @@ public class TwitchHelixProvider : Provider
 
         if (token is null)
         {
-            Log.Warning("Twitch client ID and Secret are incorrect! Please go to https://dev.twitch.tv and create an application!");
+            Log.Warning(
+                "Twitch client ID and Secret are incorrect! Please go to https://dev.twitch.tv and create an application!");
             return Array.Empty<StreamData>();
         }
 
@@ -102,7 +113,8 @@ public class TwitchHelixProvider : Provider
             try
             {
                 var str = await http.GetStringAsync(
-                    $"https://api.twitch.tv/helix/users?{chunk.Select(x => $"login={x}").Join('&')}&first=100").ConfigureAwait(false);
+                        $"https://api.twitch.tv/helix/users?{chunk.Select(x => $"login={x}").Join('&')}&first=100")
+                    .ConfigureAwait(false);
 
                 var resObj = JsonSerializer.Deserialize<HelixUsersResponse>(str);
 
@@ -137,7 +149,8 @@ public class TwitchHelixProvider : Provider
             try
             {
                 var str = await http.GetStringAsync(
-                    $"https://api.twitch.tv/helix/streams?{chunk.Select(x => $"user_login={x}").Join('&')}&first=100").ConfigureAwait(false);
+                        $"https://api.twitch.tv/helix/streams?{chunk.Select(x => $"user_login={x}").Join('&')}&first=100")
+                    .ConfigureAwait(false);
 
                 var res = JsonSerializer.Deserialize<HelixStreamsResponse>(str);
 
@@ -166,7 +179,8 @@ public class TwitchHelixProvider : Provider
     }
 
     private static StreamData UserToStreamData(HelixUsersResponse.User user)
-        => new()
+    {
+        return new StreamData
         {
             UniqueName = user.Login,
             Name = user.DisplayName,
@@ -174,11 +188,14 @@ public class TwitchHelixProvider : Provider
             IsLive = false,
             StreamUrl = $"https://twitch.tv/{user.Login}",
             StreamType = FollowedStream.FType.Twitch,
-            Preview = user.OfflineImageUrl
+            Preview = user.OfflineImageUrl,
+            ChannelId = user.Id
         };
+    }
 
     private static StreamData FillStreamData(StreamData partial, HelixStreamsResponse.StreamData apiData)
-        => partial with
+    {
+        return partial with
         {
             StreamType = FollowedStream.FType.Twitch,
             Viewers = apiData.ViewerCount,
@@ -189,4 +206,5 @@ public class TwitchHelixProvider : Provider
                 .Replace("{height}", "480"),
             Game = apiData.GameName
         };
+    }
 }

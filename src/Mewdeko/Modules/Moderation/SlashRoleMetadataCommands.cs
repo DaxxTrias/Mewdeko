@@ -4,22 +4,49 @@ using Discord.Interactions;
 using Discord.Rest;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Common.Modals;
+using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.Moderation.Services;
 using Mewdeko.Services.Settings;
 
 namespace Mewdeko.Modules.Moderation;
 
+/// <summary>
+///     Module for managing role metadata.
+/// </summary>
 public class SlashRoleMetadataCommands : MewdekoSlashSubmodule
 {
-    private static HttpClient _httpClient = new();
+    private static readonly HttpClient HttpClient = new();
+
+    /// <summary>
+    ///     The bot credentials.
+    /// </summary>
     public IBotCredentials Credentials { get; set; }
+
+    /// <summary>
+    ///     The config service for yml bot config.
+    /// </summary>
     public BotConfigService ConfigService { get; set; }
-    public DbService DbService { get; set; }
 
-    [ComponentInteraction("auth_code.enter", true), RequireDragon]
-    public async Task HandleAuthStepTwo()
-        => await RespondWithModalAsync<AuthHandshakeStepTwoModal>("auth_code.handshake");
+    /// <summary>
+    ///     The database service.
+    /// </summary>
+    public DbContextProvider dbProvider { get; set; }
 
+    /// <summary>
+    ///     Component interaction for entering an auth code.
+    /// </summary>
+    /// <returns></returns>
+    [ComponentInteraction("auth_code.enter", true)]
+    [RequireDragon]
+    public Task HandleAuthStepTwo()
+    {
+        return RespondWithModalAsync<AuthHandshakeStepTwoModal>("auth_code.handshake");
+    }
+
+    /// <summary>
+    ///     Modal for entering an auth code.
+    /// </summary>
+    /// <param name="modal"></param>
     [ModalInteraction("auth_code.handshake", true)]
     public async Task HandleAuthHandshake(AuthHandshakeStepTwoModal modal)
     {
@@ -45,13 +72,14 @@ public class SlashRoleMetadataCommands : MewdekoSlashSubmodule
                 "redirect_uri", ConfigService.Data.RedirectUrl
             }
         });
-        var req = await _httpClient.PostAsync(url, content);
+        var req = await HttpClient.PostAsync(url, content);
         var response = JsonSerializer.Deserialize<AuthResponce>(await req.Content.ReadAsStringAsync());
 
         if (response.access_token.IsNullOrWhiteSpace())
         {
             await ctx.Interaction.SendErrorFollowupAsync(
-                "This auth code is probably invalid or expired. Please retry with a different code. If this problem persists, please contact the bot owner.");
+                "This auth code is probably invalid or expired. Please retry with a different code. If this problem persists, please contact the bot owner.",
+                Config);
             return;
         }
 
@@ -60,11 +88,13 @@ public class SlashRoleMetadataCommands : MewdekoSlashSubmodule
         await client.LoginAsync(TokenType.Bearer, response.access_token);
         if (client.CurrentUser.Id != Context.Interaction.User.Id)
         {
-            await ctx.Interaction.SendErrorFollowupAsync("This auth token was not issued to you. Attempting to impersonate another user may result in a permanent ban.");
+            await ctx.Interaction.SendErrorFollowupAsync(
+                "This auth token was not issued to you. Attempting to impersonate another user may result in a permanent ban.",
+                Config);
             return;
         }
 
-        var mod = new RoleConnectionAuthStorage()
+        var mod = new RoleConnectionAuthStorage
         {
             Scopes = response.scope,
             Token = response.access_token,
@@ -73,13 +103,16 @@ public class SlashRoleMetadataCommands : MewdekoSlashSubmodule
             UserId = Context.User.Id
         };
 
-        await using var uow = DbService.GetDbContext();
-        await uow.AuthCodes.AddAsync(mod);
-        await uow.SaveChangesAsync();
+        await using var dbContext = await dbProvider.GetContextAsync();
+
+
+        await dbContext.AuthCodes.AddAsync(mod);
+        await dbContext.SaveChangesAsync();
 
         await Task.Delay(1000);
-        await RoleMetadataService.UpdateRoleConnectionData(Context.User.Id, mod.Id, uow, Context.Client.CurrentUser.Id,
-            Credentials.ClientSecret, _httpClient);
+        await RoleMetadataService.UpdateRoleConnectionData(Context.User.Id, mod.Id, dbProvider,
+            Context.Client.CurrentUser.Id,
+            Credentials.ClientSecret, HttpClient);
 
         var eb = new EmbedBuilder()
             .WithTitle("Code Saved")
@@ -88,16 +121,39 @@ public class SlashRoleMetadataCommands : MewdekoSlashSubmodule
             .WithColor(Color.Green)
             .AddField("Dragon Notice",
                 "If you disable dragon mode on your account before this feature is complete your early-use of it, and related records may be removed.")
-            .WithImageUrl("https://media.discordapp.net/attachments/915770282579484693/1064141713385467935/Deactivate_Mewdeko.png?width=618&height=671");
+            .WithImageUrl(
+                "https://media.discordapp.net/attachments/915770282579484693/1064141713385467935/Deactivate_Mewdeko.png?width=618&height=671");
         await FollowupAsync(embed: eb.Build());
     }
 
+    /// <summary>
+    ///     The response discord gives us when we authorize.
+    /// </summary>
     public class AuthResponce
     {
+        /// <summary>
+        ///     The access token.
+        /// </summary>
         public string access_token { get; set; }
+
+        /// <summary>
+        ///     The token type.
+        /// </summary>
         public string token_type { get; set; }
+
+        /// <summary>
+        ///     When the access token expires.
+        /// </summary>
         public int expires_in { get; set; }
+
+        /// <summary>
+        ///     The refresh token.
+        /// </summary>
         public string refresh_token { get; set; }
+
+        /// <summary>
+        ///     The scope the access token has.
+        /// </summary>
         public string scope { get; set; }
     }
 }

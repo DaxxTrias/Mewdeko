@@ -1,95 +1,181 @@
 using System.Globalization;
 using Discord.Interactions;
-using LinqToDB.Tools;
+using Mewdeko.Common.Configs;
 using Mewdeko.Services.strings;
+
+// ReSharper disable NotNullOrRequiredMemberIsNotInitialized
 
 namespace Mewdeko.Common;
 
+/// <summary>
+///     Base class for slash command modules in Mewdeko.
+/// </summary>
 public abstract class MewdekoSlashCommandModule : InteractionModuleBase
 {
+    /// <summary>
+    ///     The culture information used for localization.
+    /// </summary>
     protected CultureInfo? CultureInfo { get; set; }
-    public IBotStrings Strings { get; set; }
-    public CommandHandler CmdHandler { get; set; }
-    public ILocalization Localization { get; set; }
+
+    /// <summary>
+    ///     The bot strings service for localization.
+    /// </summary>
+    public IBotStrings? Strings { get; set; }
+
+    /// <summary>
+    ///     The command handler service.
+    /// </summary>
+    public CommandHandler? CmdHandler { get; set; }
+
+    /// <summary>
+    ///     The localization service.
+    /// </summary>
+    public ILocalization? Localization { get; set; }
+
+    /// <summary>
+    ///     The bot configuration.
+    /// </summary>
+    public BotConfig Config { get; set; }
 
     // ReSharper disable once InconsistentNaming
-    protected IInteractionContext ctx => Context;
-
-    public override void BeforeExecute(ICommandInfo cmd) => CultureInfo = Localization.GetCultureInfo(ctx.Guild);
-
-    protected string? GetText(string? key) => Strings.GetText(key, CultureInfo);
-
-    protected string? GetText(string? key, params object?[] args) => Strings.GetText(key, CultureInfo, args);
-
-    public async Task ErrorLocalizedAsync(string? textKey, params object?[] args)
+    /// <summary>
+    ///     Gets the interaction context.
+    /// </summary>
+    protected IInteractionContext ctx
     {
-        var text = GetText(textKey, args);
-        await ctx.Interaction.SendErrorAsync(text).ConfigureAwait(false);
+        get
+        {
+            return Context;
+        }
     }
 
-    public async Task ReplyErrorLocalizedAsync(string? textKey, params object?[] args)
+    /// <summary>
+    ///     Executed before the command is executed.
+    ///     Sets the culture information based on the guild's localization settings.
+    /// </summary>
+    public override void BeforeExecute(ICommandInfo cmd)
     {
-        var text = GetText(textKey, args);
-        await ctx.Interaction.SendErrorAsync($"{Format.Bold(ctx.User.ToString())} {text}").ConfigureAwait(false);
+        CultureInfo = Localization.GetCultureInfo(ctx.Guild);
     }
 
-    public async Task EphemeralReplyErrorLocalizedAsync(string? textKey, params object?[] args)
+    /// <summary>
+    ///     Retrieves a localized text message for the given key.
+    /// </summary>
+    protected string? GetText(string? key)
     {
-        var text = GetText(textKey, args);
-        if (ctx.Interaction.HasResponded)
-            await ctx.Interaction.SendEphemeralFollowupErrorAsync($"{Format.Bold(ctx.User.ToString())} {text}").ConfigureAwait(false);
-        else
-            await ctx.Interaction.SendEphemeralErrorAsync($"{Format.Bold(ctx.User.ToString())} {text}").ConfigureAwait(false);
+        return Strings.GetText(key, CultureInfo);
     }
 
-    public async Task ConfirmLocalizedAsync(string? textKey, params object?[] args)
+    /// <summary>
+    ///     Retrieves a localized text message for the given key with optional arguments.
+    /// </summary>
+    protected string? GetText(string? key, params object?[] args)
     {
-        var text = GetText(textKey, args);
-        if (ctx.Interaction.HasResponded)
-            await ctx.Interaction.SendConfirmFollowupAsync(text).ConfigureAwait(false);
-        else
-            await ctx.Interaction.SendConfirmAsync(text).ConfigureAwait(false);
+        return Strings.GetText(key, CultureInfo, args);
     }
 
-    public async Task ReplyConfirmLocalizedAsync(string? textKey, params object?[] args)
+    /// <summary>
+    ///     Sends an error message based on the specified key with optional arguments.
+    /// </summary>
+    public Task ErrorLocalizedAsync(string? textKey, params object?[] args)
     {
         var text = GetText(textKey, args);
-        if (ctx.Interaction.HasResponded)
-            await ctx.Interaction.SendConfirmFollowupAsync($"{Format.Bold(ctx.User.ToString())} {text}");
-        else
-            await ctx.Interaction.SendConfirmAsync($"{Format.Bold(ctx.User.ToString())} {text}");
+        return !ctx.Interaction.HasResponded
+            ? ctx.Interaction.SendErrorAsync(text, Config)
+            : ctx.Interaction.SendErrorFollowupAsync(text, Config);
     }
 
+    /// <summary>
+    ///     Sends an error message as a reply to the user with the specified key and optional arguments.
+    /// </summary>
+    public Task ReplyErrorLocalizedAsync(string? textKey, params object?[] args)
+    {
+        var text = GetText(textKey, args);
+        return !ctx.Interaction.HasResponded
+            ? ctx.Interaction.SendErrorAsync($"{Format.Bold(ctx.User.ToString())} {text}", Config)
+            : ctx.Interaction.SendErrorFollowupAsync($"{Format.Bold(ctx.User.ToString())} {text}", Config);
+    }
+
+    /// <summary>
+    ///     Sends an ephemeral error message as a reply to the user with the specified key and optional arguments.
+    /// </summary>
+    public Task EphemeralReplyErrorLocalizedAsync(string? textKey, params object?[] args)
+    {
+        var text = GetText(textKey, args);
+        return !ctx.Interaction.HasResponded
+            ? ctx.Interaction.SendEphemeralFollowupErrorAsync($"{Format.Bold(ctx.User.ToString())} {text}", Config)
+            : ctx.Interaction.SendEphemeralErrorAsync($"{Format.Bold(ctx.User.ToString())} {text}", Config);
+    }
+
+    /// <summary>
+    ///     Sends a confirmation message based on the specified key with optional arguments.
+    /// </summary>
+    public Task ConfirmLocalizedAsync(string? textKey, params object?[] args)
+    {
+        var text = GetText(textKey, args);
+        return !ctx.Interaction.HasResponded
+            ? ctx.Interaction.SendConfirmAsync(text)
+            : ctx.Interaction.SendConfirmFollowupAsync(text);
+    }
+
+    /// <summary>
+    ///     Sends a confirmation message as a reply to the user with the specified key and optional arguments.
+    /// </summary>
+    public Task ReplyConfirmLocalizedAsync(string? textKey, params object?[] args)
+    {
+        var text = GetText(textKey, args);
+        return ctx.Interaction.HasResponded
+            ? ctx.Interaction.SendConfirmFollowupAsync($"{Format.Bold(ctx.User.ToString())} {text}")
+            : ctx.Interaction.SendConfirmAsync($"{Format.Bold(ctx.User.ToString())} {text}");
+    }
+
+    /// <summary>
+    ///     Sends an ephemeral confirmation message as a reply to the user with the specified key and optional arguments.
+    /// </summary>
     public Task EphemeralReplyConfirmLocalizedAsync(string? textKey, params object?[] args)
     {
         var text = GetText(textKey, args);
-        return ctx.Interaction.SendEphemeralConfirmAsync($"{Format.Bold(ctx.User.ToString())} {text}");
+        return !ctx.Interaction.HasResponded
+            ? ctx.Interaction.SendEphemeralConfirmAsync($"{Format.Bold(ctx.User.ToString())} {text}")
+            : ctx.Interaction.SendEphemeralFollowupConfirmAsync($"{Format.Bold(ctx.User.ToString())} {text}");
     }
 
-    public async Task<bool> PromptUserConfirmAsync(string text, ulong uid, bool ephemeral = false, bool delete = true) =>
-        await PromptUserConfirmAsync(new EmbedBuilder().WithOkColor().WithDescription(text), uid, ephemeral, delete).ConfigureAwait(false);
+    /// <summary>
+    ///     Prompts the user to confirm an action with the specified text and user ID.
+    /// </summary>
+    public Task<bool> PromptUserConfirmAsync(string text, ulong uid, bool ephemeral = false, bool delete = true)
+    {
+        return PromptUserConfirmAsync(new EmbedBuilder().WithOkColor().WithDescription(text), uid, ephemeral, delete);
+    }
 
-    public async Task<bool> PromptUserConfirmAsync(EmbedBuilder embed, ulong userid, bool ephemeral = false, bool delete = true)
+    /// <summary>
+    ///     Prompts the user to confirm an action with the specified embed, user ID, ephemeral status, and delete option.
+    /// </summary>
+    public async Task<bool> PromptUserConfirmAsync(EmbedBuilder embed, ulong userid, bool ephemeral = false,
+        bool delete = true)
     {
         embed.WithOkColor();
         var buttons = new ComponentBuilder().WithButton("Yes", "yes", ButtonStyle.Success)
             .WithButton("No", "no", ButtonStyle.Danger);
         if (!ctx.Interaction.HasResponded) await ctx.Interaction.DeferAsync(ephemeral).ConfigureAwait(false);
-        var msg = await ctx.Interaction.FollowupAsync(embed: embed.Build(), components: buttons.Build(), ephemeral: ephemeral)
+        var msg = await ctx.Interaction
+            .FollowupAsync(embed: embed.Build(), components: buttons.Build(), ephemeral: ephemeral)
             .ConfigureAwait(false);
         try
         {
             var input = await GetButtonInputAsync(msg.Channel.Id, msg.Id, userid).ConfigureAwait(false);
-
             return input == "Yes";
         }
         finally
         {
             if (delete)
-                _ = Task.Run(async () => await msg.DeleteAsync().ConfigureAwait(false));
+                _ = Task.Run(() => msg.DeleteAsync());
         }
     }
 
+    /// <summary>
+    ///     Checks the hierarchy of roles between the current user and the target user.
+    /// </summary>
     public async Task<bool> CheckRoleHierarchy(IGuildUser target, bool displayError = true)
     {
         var curUser = await ctx.Guild.GetCurrentUserAsync().ConfigureAwait(false);
@@ -98,7 +184,9 @@ public abstract class MewdekoSlashCommandModule : InteractionModuleBase
         var targetMaxRole = target.GetRoles().Max(r => r.Position);
         var modMaxRole = ((IGuildUser)ctx.User).GetRoles().Max(r => r.Position);
 
-        var hierarchyCheck = ctx.User.Id == ownerId ? botMaxRole > targetMaxRole : botMaxRole >= targetMaxRole && modMaxRole > targetMaxRole;
+        var hierarchyCheck = ctx.User.Id == ownerId
+            ? botMaxRole > targetMaxRole
+            : botMaxRole >= targetMaxRole && modMaxRole > targetMaxRole;
 
         if (!hierarchyCheck && displayError)
             await ReplyErrorLocalizedAsync("hierarchy").ConfigureAwait(false);
@@ -107,10 +195,19 @@ public abstract class MewdekoSlashCommandModule : InteractionModuleBase
     }
 
 
-    public async Task<string>? GetButtonInputAsync(ulong channelId, ulong msgId, ulong userId, bool alreadyDeferred = false)
+    /// <summary>
+    ///     Gets the user's input from a button interaction.
+    /// </summary>
+    /// <param name="channelId">The channel ID to bind to</param>
+    /// <param name="msgId">The message ID to bind to</param>
+    /// <param name="userId">The user ID to bind to</param>
+    /// <param name="alreadyDeferred">Whether the interaction was already responded to.</param>
+    /// <returns></returns>
+    public async Task<string>? GetButtonInputAsync(ulong channelId, ulong msgId, ulong userId,
+        bool alreadyDeferred = false)
     {
         var userInputTask = new TaskCompletionSource<string>();
-        var dsc = (DiscordSocketClient)ctx.Client;
+        var dsc = (DiscordShardedClient)ctx.Client;
         try
         {
             dsc.InteractionCreated += Interaction;
@@ -156,10 +253,16 @@ public abstract class MewdekoSlashCommandModule : InteractionModuleBase
         }
     }
 
+    /// <summary>
+    ///     Gets the user's input from a message.
+    /// </summary>
+    /// <param name="channelId">The channel ID to bind to.</param>
+    /// <param name="userId">The user ID to bind to.</param>
+    /// <returns></returns>
     public async Task<string>? NextMessageAsync(ulong channelId, ulong userId)
     {
         var userInputTask = new TaskCompletionSource<string>();
-        var dsc = (DiscordSocketClient)ctx.Client;
+        var dsc = (DiscordShardedClient)ctx.Client;
         try
         {
             dsc.MessageReceived += Interaction;
@@ -198,15 +301,27 @@ public abstract class MewdekoSlashCommandModule : InteractionModuleBase
     }
 }
 
+/// <summary>
+///     Base class for generic slash command modules in Mewdeko.
+/// </summary>
 public abstract class MewdekoSlashModuleBase<TService> : MewdekoSlashCommandModule
 {
+    /// <summary>
+    ///     The service associated with the module.
+    /// </summary>
     public TService Service { get; set; }
 }
 
+/// <summary>
+///     Base class for generic slash submodule in Mewdeko.
+/// </summary>
 public abstract class MewdekoSlashSubmodule : MewdekoSlashCommandModule
 {
 }
 
+/// <summary>
+///     Base class for generic slash submodule with a service in Mewdeko.
+/// </summary>
 public abstract class MewdekoSlashSubmodule<TService> : MewdekoSlashModuleBase<TService>
 {
 }

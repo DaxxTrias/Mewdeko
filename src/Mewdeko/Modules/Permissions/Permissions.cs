@@ -4,47 +4,63 @@ using Fergun.Interactive.Pagination;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Common.TypeReaders;
 using Mewdeko.Common.TypeReaders.Models;
+using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.Permissions.Common;
 using Mewdeko.Modules.Permissions.Services;
 
 namespace Mewdeko.Modules.Permissions;
 
-public partial class Permissions : MewdekoModuleBase<PermissionService>
+/// <summary>
+///     A module for managing permissions for commands.
+/// </summary>
+/// <param name="db">The database service.</param>
+/// <param name="inter">The interactive service.</param>
+/// <param name="guildSettings">The guild settings service.</param>
+public partial class Permissions(
+    DbContextProvider dbProvider,
+    InteractiveService inter,
+    GuildSettingsService guildSettings)
+    : MewdekoModuleBase<PermissionService>
 {
+    /// <summary>
+    ///     Used with the permrole command to reset the permission role.
+    /// </summary>
     public enum Reset
     {
+        /// <summary>
+        ///     Resets the permission role.
+        /// </summary>
         Reset
     }
 
-    private readonly DbService db;
-    private readonly InteractiveService interactivity;
-    private readonly GuildSettingsService guildSettings;
-
-    public Permissions(DbService db, InteractiveService inter, GuildSettingsService guildSettings)
-    {
-        interactivity = inter;
-        this.guildSettings = guildSettings;
-        this.db = db;
-    }
-
-    [Cmd, Aliases, RequireContext(ContextType.Guild),
-     UserPerm(GuildPermission.Administrator)]
+    /// <summary>
+    ///     Resets the permissions for the guild.
+    /// </summary>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    [UserPerm(GuildPermission.Administrator)]
     public async Task ResetPerms()
     {
         await Service.Reset(ctx.Guild.Id).ConfigureAwait(false);
         await ReplyConfirmLocalizedAsync("perms_reset").ConfigureAwait(false);
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
+    /// <summary>
+    ///     Sets whether commands should throw an error based on what the issue is when using a command.
+    /// </summary>
+    /// <param name="action">Just a true or false thing. Kinda useless since its a toggle anyway.</param>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
     public async Task Verbose(PermissionAction? action = null)
     {
-        var uow = db.GetDbContext();
-        await using (uow.ConfigureAwait(false))
+        await using var dbContext = await dbProvider.GetContextAsync();
         {
-            var config = await uow.GcWithPermissionsv2For(ctx.Guild.Id);
-            action ??= new PermissionAction(!config.VerbosePermissions);
+            var config = await dbContext.GcWithPermissionsv2For(ctx.Guild.Id);
+            action ??= new PermissionAction(config.VerbosePermissions);
             config.VerbosePermissions = action.Value;
-            await uow.SaveChangesAsync().ConfigureAwait(false);
+            await dbContext.SaveChangesAsync().ConfigureAwait(false);
             Service.UpdateCache(config);
         }
 
@@ -54,8 +70,15 @@ public partial class Permissions : MewdekoModuleBase<PermissionService>
             await ReplyConfirmLocalizedAsync("verbose_false").ConfigureAwait(false);
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild),
-     UserPerm(GuildPermission.Administrator), Priority(0)]
+    /// <summary>
+    ///     Sets the role that will be used for permissions. If no role is provided, it will show the current permission role.
+    /// </summary>
+    /// <param name="role">The role, if any, to set as the permissions role</param>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    [UserPerm(GuildPermission.Administrator)]
+    [Priority(0)]
     public async Task PermRole([Remainder] IRole? role = null)
     {
         if (role != null && role == role.Guild.EveryoneRole)
@@ -78,38 +101,51 @@ public partial class Permissions : MewdekoModuleBase<PermissionService>
             return;
         }
 
-        var uow = db.GetDbContext();
-        await using (uow.ConfigureAwait(false))
+
+        await using var dbContext = await dbProvider.GetContextAsync();
         {
-            var config = await uow.GcWithPermissionsv2For(ctx.Guild.Id);
+            var config = await dbContext.GcWithPermissionsv2For(ctx.Guild.Id);
             config.PermissionRole = role.Id.ToString();
-            await uow.SaveChangesAsync().ConfigureAwait(false);
+            await dbContext.SaveChangesAsync().ConfigureAwait(false);
             Service.UpdateCache(config);
         }
 
         await ReplyConfirmLocalizedAsync("permrole_changed", Format.Bold(role.Name)).ConfigureAwait(false);
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild),
-     UserPerm(GuildPermission.Administrator), Priority(1)]
+    /// <summary>
+    ///     Resets the permission role.
+    /// </summary>
+    /// <param name="_"></param>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    [UserPerm(GuildPermission.Administrator)]
+    [Priority(1)]
     public async Task PermRole(Reset _)
     {
-        var uow = db.GetDbContext();
-        await using (uow.ConfigureAwait(false))
+        await using var dbContext = await dbProvider.GetContextAsync();
         {
-            var config = await uow.GcWithPermissionsv2For(ctx.Guild.Id);
+            var config = await dbContext.GcWithPermissionsv2For(ctx.Guild.Id);
             config.PermissionRole = null;
-            await uow.SaveChangesAsync().ConfigureAwait(false);
+            await dbContext.SaveChangesAsync().ConfigureAwait(false);
             Service.UpdateCache(config);
         }
 
         await ReplyConfirmLocalizedAsync("permrole_reset").ConfigureAwait(false);
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
+    /// <summary>
+    ///     Lists the permissions for the guild.
+    /// </summary>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
     public async Task ListPerms()
     {
-        IList<Permissionv2> perms = Service.Cache.TryGetValue(ctx.Guild.Id, out var permCache) ? permCache.Permissions.Source.ToList() : Permissionv2.GetDefaultPermlist;
+        IList<Permissionv2> perms = Service.Cache.TryGetValue(ctx.Guild.Id, out var permCache)
+            ? permCache.Permissions.Source.ToList()
+            : Permissionv2.GetDefaultPermlist;
         var paginator = new LazyPaginatorBuilder()
             .AddUser(ctx.User)
             .WithPageFactory(PageFactory)
@@ -118,7 +154,7 @@ public partial class Permissions : MewdekoModuleBase<PermissionService>
             .WithDefaultEmotes()
             .WithActionOnCancellation(ActionOnStop.DeleteMessage)
             .Build();
-        await interactivity.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
+        await inter.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
 
         async Task<PageBuilder> PageFactory(int page)
         {
@@ -126,7 +162,8 @@ public partial class Permissions : MewdekoModuleBase<PermissionService>
             return new PageBuilder().WithDescription(string.Join("\n",
                 perms.Skip(page * 10).Take(10).Select(p =>
                 {
-                    var str = $"`{p.Index + 1}.` {Format.Bold(p.GetCommand(guildSettings.GetPrefix(ctx.Guild).GetAwaiter().GetResult(), (SocketGuild)ctx.Guild))}";
+                    var str =
+                        $"`{p.Index + 1}.` {Format.Bold(p.GetCommand(guildSettings.GetPrefix(ctx.Guild).GetAwaiter().GetResult(), (SocketGuild)ctx.Guild))}";
                     if (p.Index == 0)
                         str += $" [{GetText("uneditable")}]";
                     return str;
@@ -134,7 +171,13 @@ public partial class Permissions : MewdekoModuleBase<PermissionService>
         }
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
+    /// <summary>
+    ///     Removes a permission from the list based on its index.
+    /// </summary>
+    /// <param name="index">The perm to remove</param>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
     public async Task RemovePerm(int index)
     {
         index--;
@@ -142,22 +185,19 @@ public partial class Permissions : MewdekoModuleBase<PermissionService>
             return;
         try
         {
-            Permissionv2 p;
-            var uow = db.GetDbContext();
-            await using (uow.ConfigureAwait(false))
-            {
-                var config = await uow.GcWithPermissionsv2For(ctx.Guild.Id);
-                var permsCol = new PermissionsCollection<Permissionv2>(config.Permissions);
-                p = permsCol[index];
-                permsCol.RemoveAt(index);
-                uow.Remove(p);
-                await uow.SaveChangesAsync().ConfigureAwait(false);
-                Service.UpdateCache(config);
-            }
+            await using var dbContext = await dbProvider.GetContextAsync();
+            var config = await dbContext.GcWithPermissionsv2For(ctx.Guild.Id);
+            var permsCol = new PermissionsCollection<Permissionv2>(config.Permissions);
+            var p = permsCol[index];
+            permsCol.RemoveAt(index);
+            dbContext.Remove(p);
+            await dbContext.SaveChangesAsync().ConfigureAwait(false);
+            Service.UpdateCache(config);
 
             await ReplyConfirmLocalizedAsync("removed",
-                index + 1,
-                Format.Code(p.GetCommand(await guildSettings.GetPrefix(ctx.Guild), (SocketGuild)ctx.Guild))).ConfigureAwait(false);
+                    index + 1,
+                    Format.Code(p.GetCommand(await guildSettings.GetPrefix(ctx.Guild), (SocketGuild)ctx.Guild)))
+                .ConfigureAwait(false);
         }
         catch (IndexOutOfRangeException)
         {
@@ -165,7 +205,14 @@ public partial class Permissions : MewdekoModuleBase<PermissionService>
         }
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
+    /// <summary>
+    ///     Moves a permission higher in the heirarchy.
+    /// </summary>
+    /// <param name="from">Initial Index</param>
+    /// <param name="to">Replacement index</param>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
     public async Task MovePerm(int from, int to)
     {
         from--;
@@ -174,38 +221,35 @@ public partial class Permissions : MewdekoModuleBase<PermissionService>
         {
             try
             {
-                Permissionv2 fromPerm;
-                var uow = db.GetDbContext();
-                await using (uow.ConfigureAwait(false))
+                await using var dbContext = await dbProvider.GetContextAsync();
+                var config = await dbContext.GcWithPermissionsv2For(ctx.Guild.Id);
+                var permsCol = new PermissionsCollection<Permissionv2>(config.Permissions);
+
+                var fromFound = from < permsCol.Count;
+                var toFound = to < permsCol.Count;
+
+                if (!fromFound)
                 {
-                    var config = await uow.GcWithPermissionsv2For(ctx.Guild.Id);
-                    var permsCol = new PermissionsCollection<Permissionv2>(config.Permissions);
-
-                    var fromFound = from < permsCol.Count;
-                    var toFound = to < permsCol.Count;
-
-                    if (!fromFound)
-                    {
-                        await ReplyErrorLocalizedAsync("not_found", ++from).ConfigureAwait(false);
-                        return;
-                    }
-
-                    if (!toFound)
-                    {
-                        await ReplyErrorLocalizedAsync("not_found", ++to).ConfigureAwait(false);
-                        return;
-                    }
-
-                    fromPerm = permsCol[from];
-
-                    permsCol.RemoveAt(from);
-                    permsCol.Insert(to, fromPerm);
-                    await uow.SaveChangesAsync().ConfigureAwait(false);
-                    Service.UpdateCache(config);
+                    await ReplyErrorLocalizedAsync("not_found", ++from).ConfigureAwait(false);
+                    return;
                 }
 
+                if (!toFound)
+                {
+                    await ReplyErrorLocalizedAsync("not_found", ++to).ConfigureAwait(false);
+                    return;
+                }
+
+                var fromPerm = permsCol[from];
+
+                permsCol.RemoveAt(from);
+                permsCol.Insert(to, fromPerm);
+                await dbContext.SaveChangesAsync().ConfigureAwait(false);
+                Service.UpdateCache(config);
+
                 await ReplyConfirmLocalizedAsync("moved_permission",
-                        Format.Code(fromPerm.GetCommand(await guildSettings.GetPrefix(ctx.Guild), (SocketGuild)ctx.Guild)),
+                        Format.Code(fromPerm.GetCommand(await guildSettings.GetPrefix(ctx.Guild),
+                            (SocketGuild)ctx.Guild)),
                         ++from,
                         ++to)
                     .ConfigureAwait(false);
@@ -219,7 +263,14 @@ public partial class Permissions : MewdekoModuleBase<PermissionService>
         await ReplyErrorLocalizedAsync("perm_out_of_range").ConfigureAwait(false);
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
+    /// <summary>
+    ///     Enables or disables a command in the server.
+    /// </summary>
+    /// <param name="command">The command to run an action on</param>
+    /// <param name="action">Whether to disable or enable the command</param>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
     public async Task SrvrCmd(CommandOrCrInfo command, PermissionAction action)
     {
         await Service.AddPermissions(ctx.Guild.Id, new Permissionv2
@@ -246,7 +297,17 @@ public partial class Permissions : MewdekoModuleBase<PermissionService>
         }
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
+    /// <summary>
+    ///     Adds or removes server-level permissions for a specific module.
+    /// </summary>
+    /// <param name="module">The module to set permissions for.</param>
+    /// <param name="action">The action to perform (enable/disable).</param>
+    /// <remarks>
+    ///     This method allows setting permissions for a particular module at the server level.
+    /// </remarks>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
     public async Task SrvrMdl(ModuleOrCrInfo module, PermissionAction action)
     {
         await Service.AddPermissions(ctx.Guild.Id, new Permissionv2
@@ -272,7 +333,18 @@ public partial class Permissions : MewdekoModuleBase<PermissionService>
         }
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
+    /// <summary>
+    ///     Adds or removes user-specific permissions for a specific command.
+    /// </summary>
+    /// <param name="command">The command to set permissions for.</param>
+    /// <param name="action">The action to perform (enable/disable).</param>
+    /// <param name="user">The user to set permissions for.</param>
+    /// <remarks>
+    ///     This method allows setting permissions for a particular command for a specific user.
+    /// </remarks>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
     public async Task UsrCmd(CommandOrCrInfo command, PermissionAction action, [Remainder] IGuildUser user)
     {
         await Service.AddPermissions(ctx.Guild.Id, new Permissionv2
@@ -301,7 +373,18 @@ public partial class Permissions : MewdekoModuleBase<PermissionService>
         }
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
+    /// <summary>
+    ///     Adds or removes user-specific permissions for a specific module.
+    /// </summary>
+    /// <param name="module">The module to set permissions for.</param>
+    /// <param name="action">The action to perform (enable/disable).</param>
+    /// <param name="user">The user to set permissions for.</param>
+    /// <remarks>
+    ///     This method allows setting permissions for a particular module for a specific user.
+    /// </remarks>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
     public async Task UsrMdl(ModuleOrCrInfo module, PermissionAction action, [Remainder] IGuildUser user)
     {
         await Service.AddPermissions(ctx.Guild.Id, new Permissionv2
@@ -329,7 +412,18 @@ public partial class Permissions : MewdekoModuleBase<PermissionService>
         }
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
+    /// <summary>
+    ///     Adds or removes role-specific permissions for a specific command.
+    /// </summary>
+    /// <param name="command">The command to set permissions for.</param>
+    /// <param name="action">The action to perform (enable/disable).</param>
+    /// <param name="role">The role to set permissions for.</param>
+    /// <remarks>
+    ///     This method allows setting permissions for a particular command for a specific role.
+    /// </remarks>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
     public async Task RoleCmd(CommandOrCrInfo command, PermissionAction action, [Remainder] IRole role)
     {
         if (role == role.Guild.EveryoneRole)
@@ -361,7 +455,18 @@ public partial class Permissions : MewdekoModuleBase<PermissionService>
         }
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
+    /// <summary>
+    ///     Adds or removes role-specific permissions for a specific module.
+    /// </summary>
+    /// <param name="module">The module to set permissions for.</param>
+    /// <param name="action">The action to perform (enable/disable).</param>
+    /// <param name="role">The role to set permissions for.</param>
+    /// <remarks>
+    ///     This method allows setting permissions for a particular module for a specific role.
+    /// </remarks>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
     public async Task RoleMdl(ModuleOrCrInfo module, PermissionAction action, [Remainder] IRole role)
     {
         if (role == role.Guild.EveryoneRole)
@@ -392,7 +497,18 @@ public partial class Permissions : MewdekoModuleBase<PermissionService>
         }
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
+    /// <summary>
+    ///     Adds or removes channel-specific permissions for a specific command.
+    /// </summary>
+    /// <param name="command">The command to set permissions for.</param>
+    /// <param name="action">The action to perform (enable/disable).</param>
+    /// <param name="chnl">The channel to set permissions for.</param>
+    /// <remarks>
+    ///     This method allows setting permissions for a particular command for a specific channel.
+    /// </remarks>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
     public async Task ChnlCmd(CommandOrCrInfo command, PermissionAction action, [Remainder] ITextChannel chnl)
     {
         await Service.AddPermissions(ctx.Guild.Id, new Permissionv2
@@ -421,7 +537,18 @@ public partial class Permissions : MewdekoModuleBase<PermissionService>
         }
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
+    /// <summary>
+    ///     Adds or removes channel-specific permissions for a specific module.
+    /// </summary>
+    /// <param name="module">The module to set permissions for.</param>
+    /// <param name="action">The action to perform (enable/disable).</param>
+    /// <param name="chnl">The channel to set permissions for.</param>
+    /// <remarks>
+    ///     This method allows setting permissions for a particular module for a specific channel.
+    /// </remarks>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
     public async Task ChnlMdl(ModuleOrCrInfo module, PermissionAction action, [Remainder] ITextChannel chnl)
     {
         await Service.AddPermissions(ctx.Guild.Id, new Permissionv2
@@ -449,7 +576,17 @@ public partial class Permissions : MewdekoModuleBase<PermissionService>
         }
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
+    /// <summary>
+    ///     Adds or removes permissions for all modules in a specific channel.
+    /// </summary>
+    /// <param name="action">The action to perform (enable/disable).</param>
+    /// <param name="chnl">The channel to set permissions for.</param>
+    /// <remarks>
+    ///     This method allows setting permissions for all modules in a specific channel.
+    /// </remarks>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
     public async Task AllChnlMdls(PermissionAction action, [Remainder] ITextChannel chnl)
     {
         await Service.AddPermissions(ctx.Guild.Id, new Permissionv2
@@ -473,7 +610,18 @@ public partial class Permissions : MewdekoModuleBase<PermissionService>
         }
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
+    /// <summary>
+    ///     Adds or removes command-specific permissions for a specific category.
+    /// </summary>
+    /// <param name="command">The command to set permissions for.</param>
+    /// <param name="action">The action to perform (enable/disable).</param>
+    /// <param name="chnl">The category to set permissions for.</param>
+    /// <remarks>
+    ///     This method allows setting permissions for a particular command for a specific category.
+    /// </remarks>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
     public async Task CatCmd(CommandOrCrInfo command, PermissionAction action, [Remainder] ICategoryChannel chnl)
     {
         await Service.AddPermissions(ctx.Guild.Id, new Permissionv2
@@ -502,7 +650,18 @@ public partial class Permissions : MewdekoModuleBase<PermissionService>
         }
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
+    /// <summary>
+    ///     Adds or removes module-specific permissions for a specific category.
+    /// </summary>
+    /// <param name="module">The module to set permissions for.</param>
+    /// <param name="action">The action to perform (enable/disable).</param>
+    /// <param name="chnl">The category to set permissions for.</param>
+    /// <remarks>
+    ///     This method allows setting permissions for a particular module for a specific category.
+    /// </remarks>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
     public async Task CatMdl(ModuleOrCrInfo module, PermissionAction action, [Remainder] ICategoryChannel chnl)
     {
         await Service.AddPermissions(ctx.Guild.Id, new Permissionv2
@@ -530,7 +689,17 @@ public partial class Permissions : MewdekoModuleBase<PermissionService>
         }
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
+    /// <summary>
+    ///     Adds or removes permissions for all modules in a specific category.
+    /// </summary>
+    /// <param name="action">The action to perform (enable/disable).</param>
+    /// <param name="chnl">The category to set permissions for.</param>
+    /// <remarks>
+    ///     This method allows setting permissions for all modules in a specific category.
+    /// </remarks>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
     public async Task AllCatMdls(PermissionAction action, [Remainder] ICategoryChannel chnl)
     {
         await Service.AddPermissions(ctx.Guild.Id, new Permissionv2
@@ -554,7 +723,17 @@ public partial class Permissions : MewdekoModuleBase<PermissionService>
         }
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
+    /// <summary>
+    ///     Adds or removes permissions for all modules for a specific role.
+    /// </summary>
+    /// <param name="action">The action to perform (enable/disable).</param>
+    /// <param name="role">The role to set permissions for.</param>
+    /// <remarks>
+    ///     This method allows setting permissions for all modules for a specific role.
+    /// </remarks>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
     public async Task AllRoleMdls(PermissionAction action, [Remainder] IRole role)
     {
         if (role == role.Guild.EveryoneRole)
@@ -581,7 +760,17 @@ public partial class Permissions : MewdekoModuleBase<PermissionService>
         }
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
+    /// <summary>
+    ///     Adds or removes permissions for all modules for a specific user.
+    /// </summary>
+    /// <param name="action">The action to perform (enable/disable).</param>
+    /// <param name="user">The user to set permissions for.</param>
+    /// <remarks>
+    ///     This method allows setting permissions for all modules for a specific user.
+    /// </remarks>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
     public async Task AllUsrMdls(PermissionAction action, [Remainder] IUser user)
     {
         await Service.AddPermissions(ctx.Guild.Id, new Permissionv2
@@ -605,7 +794,16 @@ public partial class Permissions : MewdekoModuleBase<PermissionService>
         }
     }
 
-    [Cmd, Aliases, RequireContext(ContextType.Guild)]
+    /// <summary>
+    ///     Adds or removes permissions for all modules for the entire server.
+    /// </summary>
+    /// <param name="action">The action to perform (enable/disable).</param>
+    /// <remarks>
+    ///     This method allows setting permissions for all modules for all users in the server.
+    /// </remarks>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
     public async Task AllSrvrMdls(PermissionAction action)
     {
         var newPerm = new Permissionv2

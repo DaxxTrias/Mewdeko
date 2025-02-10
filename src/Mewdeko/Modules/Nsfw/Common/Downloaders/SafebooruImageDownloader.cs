@@ -4,13 +4,18 @@ using System.Threading;
 
 namespace Mewdeko.Modules.Nsfw.Common.Downloaders;
 
+/// <summary>
+///     Downloader for images from Safebooru.
+/// </summary>
 public class SafebooruImageDownloader : ImageDownloader<SafebooruElement>
 {
-    public SafebooruImageDownloader(IHttpClientFactory http)
-        : base(Booru.Safebooru, http)
-    {
-    }
+    /// <summary>
+    ///     Initializes a new instance of the <see cref="SafebooruImageDownloader" /> class.
+    /// </summary>
+    /// <param name="http">The HTTP client factory.</param>
+    public SafebooruImageDownloader(IHttpClientFactory http) : base(Booru.Safebooru, http) { }
 
+    /// <inheritdoc />
     public override async Task<List<SafebooruElement>> DownloadImagesAsync(
         string[] tags,
         int page,
@@ -21,10 +26,10 @@ public class SafebooruImageDownloader : ImageDownloader<SafebooruElement>
         var uri =
             $"https://safebooru.org/index.php?page=dapi&s=post&q=index&limit=200&tags={tagString}&json=1&pid={page}";
 
-        using var http = _http.CreateClient();
-        var images = await http.GetFromJsonAsync<List<SafebooruElement>>(uri, _serializerOptions, cancel);
+        using var http = Http.CreateClient();
+        var images = await http.GetFromJsonAsync<List<SafebooruElement>>(uri, SerializerOptions, cancel);
         if (images is null)
-            return new();
+            return [];
 
         return images;
     }

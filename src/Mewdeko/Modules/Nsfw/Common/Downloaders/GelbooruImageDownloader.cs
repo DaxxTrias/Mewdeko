@@ -5,13 +5,20 @@ using System.Threading;
 
 namespace Mewdeko.Modules.Nsfw.Common.Downloaders;
 
+/// <summary>
+///     Represents an image downloader for Gelbooru.
+/// </summary>
 public class GelbooruImageDownloader : ImageDownloader<DapiImageObject>
 {
-    public GelbooruImageDownloader(IHttpClientFactory http)
-        : base(Booru.Gelbooru, http)
+    /// <summary>
+    ///     Initializes a new instance of the <see cref="GelbooruImageDownloader" /> class.
+    /// </summary>
+    /// <param name="http">The <see cref="IHttpClientFactory" /> instance for HTTP requests.</param>
+    public GelbooruImageDownloader(IHttpClientFactory http) : base(Booru.Gelbooru, http)
     {
     }
 
+    /// <inheritdoc />
     public override async Task<List<DapiImageObject>> DownloadImagesAsync(
         string[] tags,
         int page,
@@ -26,24 +33,32 @@ public class GelbooruImageDownloader : ImageDownloader<DapiImageObject>
                   + $"&limit=100"
                   + $"&tags={tagString}"
                   + $"&pid={page}";
+
         using var req = new HttpRequestMessage(HttpMethod.Get, uri);
-        using var http = _http.CreateClient();
+        using var http = Http.CreateClient();
         using var res = await http.SendAsync(req, cancel);
         res.EnsureSuccessStatusCode();
+
         var resString = await res.Content.ReadAsStringAsync(cancel);
         if (string.IsNullOrWhiteSpace(resString))
-            return new();
+            return [];
 
-        var images = JsonSerializer.Deserialize<GelbooruResponse>(resString, _serializerOptions);
-        if (images is null or { Post: null })
-            return new();
+        var images = JsonSerializer.Deserialize<GelbooruResponse>(resString, SerializerOptions);
+        if (images is null || images.Post is null)
+            return [];
 
         return images.Post.Where(x => x.FileUrl is not null).ToList();
     }
 }
 
+/// <summary>
+///     Represents the response object from the Gelbooru API.
+/// </summary>
 public class GelbooruResponse
 {
+    /// <summary>
+    ///     Gets or sets the list of Gelbooru posts.
+    /// </summary>
     [JsonPropertyName("post")]
     public List<DapiImageObject> Post { get; set; }
 }

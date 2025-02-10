@@ -6,13 +6,21 @@ using StackExchange.Redis;
 
 namespace Mewdeko.Services.Common;
 
+/// <summary>
+///     Loads images from URIs into Redis.
+/// </summary>
 public class ImageLoader
 {
     private readonly ConnectionMultiplexer con;
     private readonly HttpClient http;
+    private readonly List<Task<KeyValuePair<RedisKey, RedisValue>>> uriTasks = [];
 
-    private readonly List<Task<KeyValuePair<RedisKey, RedisValue>>> uriTasks = new();
-
+    /// <summary>
+    ///     Initializes a new instance of the <see cref="ImageLoader" /> class.
+    /// </summary>
+    /// <param name="http">The HTTP client.</param>
+    /// <param name="con">The Redis connection multiplexer.</param>
+    /// <param name="getKey">The function to get the Redis key.</param>
     public ImageLoader(HttpClient http, ConnectionMultiplexer con, Func<string, RedisKey> getKey)
     {
         this.http = http;
@@ -20,9 +28,18 @@ public class ImageLoader
         GetKey = getKey;
     }
 
+    /// <summary>
+    ///     Gets the function to get the Redis key.
+    /// </summary>
     public Func<string, RedisKey> GetKey { get; }
 
-    private IDatabase Db => con.GetDatabase();
+    private IDatabase Db
+    {
+        get
+        {
+            return con.GetDatabase();
+        }
+    }
 
     private async Task<byte[]>? GetImageData(Uri uri)
     {
@@ -49,7 +66,7 @@ public class ImageLoader
                 }
                 catch
                 {
-                    Log.Error("Error retreiving image for key {Key}: {Data}", key, x);
+                    Log.Error("Error retrieving image for key {Key}: {Data}", key, x);
                     return null;
                 }
             });
@@ -59,10 +76,8 @@ public class ImageLoader
             vals = vals.Where(x => x != null).ToArray();
 
         await Db.KeyDeleteAsync(GetKey(key)).ConfigureAwait(false);
-        await Db.ListRightPushAsync(GetKey(key),
-            vals.Where(x => x != null)
-                .Select(x => (RedisValue)x)
-                .ToArray()).ConfigureAwait(false);
+        await Db.ListRightPushAsync(GetKey(key), vals.Where(x => x != null).Select(x => (RedisValue)x).ToArray())
+            .ConfigureAwait(false);
 
         if (arr.Count != vals.Length)
         {
@@ -101,7 +116,7 @@ public class ImageLoader
             Task t;
             switch (kvp.Value.Type)
             {
-                // if it's a JArray, resole it using jarray method which will
+                // if it's a JArray, resolve it using the JArray method which will
                 // return task<byte[][]> aka an array of all images' bytes
                 case JTokenType.Array:
                     t = HandleJArray((JArray)kvp.Value, GetParentString() + kvp.Key);
@@ -123,10 +138,15 @@ public class ImageLoader
         return Task.WhenAll(tasks);
     }
 
+    /// <summary>
+    ///     Loads images asynchronously.
+    /// </summary>
+    /// <param name="obj">The JSON object containing the image URIs.</param>
     public async Task LoadAsync(JObject obj)
     {
         await HandleJObject(obj).ConfigureAwait(false);
         var results = await Task.WhenAll(uriTasks).ConfigureAwait(false);
-        await Db.StringSetAsync(results.Where(x => !string.IsNullOrEmpty(x.Key)).ToArray(), flags: CommandFlags.FireAndForget).ConfigureAwait(false);
+        await Db.StringSetAsync(results.Where(x => !string.IsNullOrEmpty(x.Key)).ToArray(),
+            flags: CommandFlags.FireAndForget).ConfigureAwait(false);
     }
 }

@@ -1,0 +1,72 @@
+{
+  "metadata": [
+    {
+      "src": [
+        {
+          "files": ["**.csproj"],
+          "src": "src"
+        }
+      ],
+      "dest": "./api"
+    }
+  ],
+  "build": {
+    "content": [
+      {
+        "files": [
+          "api/**.yml",
+          "api/index.md",
+          "docs/CONTRIBUTING.md",
+          "docs/About-Mewdeko.md",
+          "docs/CODE_OF_CONDUCT.md",
+          "docs/Selfhost-Linux.md",
+          "docs/Selfhost-Windows.md",
+          "docs/toc.yml",
+          "toc.yml",
+          "**.md",
+          "LICENSE.md"
+        ]
+      }
+    ],
+    "resource": [
+      {
+        "files": [
+          "images/**"
+        ]
+      }
+    ],
+    "overwrite": [
+      {
+        "files": [
+          "apidoc/**.md"
+        ],
+        "exclude": [
+          "obj/**",
+          "_site/**"
+        ]
+      }
+    ],
+    "maxParallelism": 32,
+    "dest": "_site",
+    "globalMetadataFiles": [],
+    "fileMetadataFiles": [],
+    "template": ["default", "templates/singulinkfx"],
+    "postProcessors": [],
+    "markdownEngineName": "markdig",
+    "noLangKeyword": false,
+    "keepFileLink": false,
+    "cleanupCacheHistory": false,
+    "disableGitFeatures": false,
+    "globalMetadata": {
+      "_appTitle": "Mewdeko",
+      "_appVersion": "8",
+      "_appDescription": "Mewdeko is a discord bot that is free and is designed to be incredibly modular.",
+      "_appKeywords": "mewdeko, discord, bot, free, modular",
+      "_appUrl": "https://mewdeko.tech",
+      "_appLogoPath": "images/mewdeko.gif",
+      "_appLogoAlt": "Mewdeko Logo",
+      "_appFaviconPath": "images/favicon.png",
+      "_appFooter": "Mewdeko Docs"
+    }
+  }
+}

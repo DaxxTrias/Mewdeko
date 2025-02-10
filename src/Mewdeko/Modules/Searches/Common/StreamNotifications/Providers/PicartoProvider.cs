@@ -8,19 +8,30 @@ using Serilog;
 
 namespace Mewdeko.Modules.Searches.Common.StreamNotifications.Providers;
 
+/// <inheritdoc />
 public class PicartoProvider : Provider
 {
-    private static Regex Regex { get; } = new(@"picarto.tv/(?<name>.+[^/])/?",
-        RegexOptions.Compiled | RegexOptions.IgnoreCase);
-
-    public override FollowedStream.FType Platform
-        => FollowedStream.FType.Picarto;
-
     private readonly IHttpClientFactory httpClientFactory;
 
+    /// <inheritdoc />
     public PicartoProvider(IHttpClientFactory httpClientFactory)
-        => this.httpClientFactory = httpClientFactory;
+    {
+        this.httpClientFactory = httpClientFactory;
+    }
 
+    private static Regex Regex { get; } = new("picarto.tv/(?<name>.+[^/])/?",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    /// <inheritdoc />
+    public override FollowedStream.FType Platform
+    {
+        get
+        {
+            return FollowedStream.FType.Picarto;
+        }
+    }
+
+    /// <inheritdoc />
     public override Task<bool> IsValidUrl(string url)
     {
         var match = Regex.Match(url);
@@ -29,6 +40,7 @@ public class PicartoProvider : Provider
         // var username = match.Groups["name"].Value;
     }
 
+    /// <inheritdoc />
     public override Task<StreamData?> GetStreamDataByUrlAsync(string url)
     {
         var match = Regex.Match(url);
@@ -37,18 +49,17 @@ public class PicartoProvider : Provider
         return GetStreamDataAsync(name);
     }
 
+    /// <inheritdoc />
 #pragma warning disable CS8609
     public override async Task<StreamData?> GetStreamDataAsync(string login)
 #pragma warning restore CS8609
     {
-        var data = await GetStreamDataAsync(new List<string>
-        {
-            login
-        }).ConfigureAwait(false);
+        var data = await GetStreamDataAsync([login]).ConfigureAwait(false);
 
         return data.FirstOrDefault();
     }
 
+    /// <inheritdoc />
     public override async Task<IReadOnlyCollection<StreamData>> GetStreamDataAsync(List<string> logins)
     {
         if (logins.Count == 0)
@@ -68,7 +79,8 @@ public class PicartoProvider : Provider
                     continue;
 
                 var userData =
-                    JsonConvert.DeserializeObject<PicartoChannelResponse>(await res.Content.ReadAsStringAsync().ConfigureAwait(false))!;
+                    JsonConvert.DeserializeObject<PicartoChannelResponse>(await res.Content.ReadAsStringAsync()
+                        .ConfigureAwait(false))!;
 
                 toReturn.Add(ToStreamData(userData));
                 FailingStreams.TryRemove(login, out _);
@@ -87,7 +99,8 @@ public class PicartoProvider : Provider
     }
 
     private static StreamData ToStreamData(PicartoChannelResponse stream)
-        => new()
+    {
+        return new StreamData
         {
             StreamType = FollowedStream.FType.Picarto,
             Name = stream.Name,
@@ -100,4 +113,5 @@ public class PicartoProvider : Provider
             StreamUrl = $"https://picarto.tv/{stream.Name}",
             AvatarUrl = stream.Avatar
         };
+    }
 }

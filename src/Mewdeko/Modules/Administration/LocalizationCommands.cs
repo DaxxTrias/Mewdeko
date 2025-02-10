@@ -6,6 +6,9 @@ namespace Mewdeko.Modules.Administration;
 
 public partial class Administration
 {
+    /// <summary>
+    ///     Module for managing the bot's language settings.
+    /// </summary>
     [Group]
     public class LocalizationCommands : MewdekoSubmodule
     {
@@ -98,8 +101,20 @@ public partial class Administration
                 }
             };
 
-        [Cmd, Aliases, RequireContext(ContextType.Guild),
-         UserPerm(GuildPermission.Administrator), Priority(1)]
+        /// <summary>
+        ///     Sets the language for the current guild.
+        /// </summary>
+        /// <remarks>
+        ///     This command requires the caller to have GuildPermission.Administrator.
+        /// </remarks>
+        /// <param name="name">The name of the language or "default" to reset to the default language.</param>
+        /// <example>.languageset english</example>
+        /// <example>.languageset default</example>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.Administrator)]
+        [Priority(1)]
         public async Task LanguageSet(string name)
         {
             try
@@ -125,14 +140,31 @@ public partial class Administration
             }
         }
 
-        [Cmd, Aliases]
+
+        /// <summary>
+        ///     Displays the default language for the bot.
+        /// </summary>
+        /// <example>.languagesetdefault</example>
+        [Cmd]
+        [Aliases]
         public async Task LanguageSetDefault()
         {
             var cul = Localization.DefaultCultureInfo;
             await ReplyConfirmLocalizedAsync("lang_set_bot_show", cul, cul.NativeName).ConfigureAwait(false);
         }
 
-        [Cmd, Aliases, OwnerOnly]
+        /// <summary>
+        ///     Sets the default language for the bot.
+        /// </summary>
+        /// <remarks>
+        ///     This command is restricted to the owner of the bot.
+        /// </remarks>
+        /// <param name="name">The name of the language or "default" to reset to the default language.</param>
+        /// <example>.languagesetdefault english</example>
+        /// <example>.languagesetdefault default</example>
+        [Cmd]
+        [Aliases]
+        [OwnerOnly]
         public async Task LanguageSetDefault(string name)
         {
             try
@@ -158,12 +190,20 @@ public partial class Administration
             }
         }
 
-        [Cmd, Aliases]
-        public async Task LanguagesList() =>
+
+        /// <summary>
+        ///     Lists all supported languages along with their codes.
+        /// </summary>
+        /// <example>.languageslist</example>
+        [Cmd]
+        [Aliases]
+        public async Task LanguagesList()
+        {
             await ctx.Channel.EmbedAsync(new EmbedBuilder().WithOkColor()
                 .WithTitle(GetText("lang_list"))
                 .WithDescription(string.Join("\n",
                     SupportedLocales.Select(x => $"{Format.Code(x.Key),-10} => {x.Value}")))).ConfigureAwait(false);
+        }
     }
 }
 /* list of language codes for reference.

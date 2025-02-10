@@ -6,18 +6,26 @@ using StackExchange.Redis;
 
 namespace Mewdeko.Services.Impl;
 
+/// <summary>
+///     Represents a Redis-based cache for local data.
+/// </summary>
 public class RedisLocalDataCache : ILocalDataCache
 {
     private const string QuestionsFile = "data/trivia_questions.json";
     private readonly ConnectionMultiplexer con;
     private readonly IBotCredentials creds;
 
-    public RedisLocalDataCache(ConnectionMultiplexer con, IBotCredentials creds, int shardId)
+    /// <summary>
+    ///     Initializes a new instance of the <see cref="RedisLocalDataCache" /> class.
+    /// </summary>
+    /// <param name="con">The connection multiplexer for Redis.</param>
+    /// <param name="creds">The bot credentials.</param>
+    /// <param name="shardId">The shard ID.</param>
+    public RedisLocalDataCache(ConnectionMultiplexer con, IBotCredentials creds)
     {
         this.con = con;
         this.creds = creds;
 
-        if (shardId != 0) return;
         try
         {
             TriviaQuestions = JsonConvert.DeserializeObject<TriviaQuestion[]>(File.ReadAllText(QuestionsFile));
@@ -29,15 +37,36 @@ public class RedisLocalDataCache : ILocalDataCache
         }
     }
 
-    private IDatabase Db => con.GetDatabase();
-
-    public TriviaQuestion[] TriviaQuestions
+    private IDatabase Db
     {
-        get => Get<TriviaQuestion[]>("trivia_questions");
-        private set => Set("trivia_questions", value);
+        get
+        {
+            return con.GetDatabase();
+        }
     }
 
-    private T Get<T>(string key) where T : class => JsonConvert.DeserializeObject<T>(Db.StringGet($"{creds.RedisKey()}_localdata_{key}"));
+    /// <summary>
+    ///     Gets or sets the trivia questions stored in the cache.
+    /// </summary>
+    public TriviaQuestion[] TriviaQuestions
+    {
+        get
+        {
+            return Get<TriviaQuestion[]>("trivia_questions");
+        }
+        private set
+        {
+            Set("trivia_questions", value);
+        }
+    }
 
-    private void Set(string key, object obj) => Db.StringSet($"{creds.RedisKey()}_localdata_{key}", JsonConvert.SerializeObject(obj));
+    private T Get<T>(string key) where T : class
+    {
+        return JsonConvert.DeserializeObject<T>(Db.StringGet($"{creds.RedisKey()}_localdata_{key}"));
+    }
+
+    private void Set(string key, object obj)
+    {
+        Db.StringSet($"{creds.RedisKey()}_localdata_{key}", JsonConvert.SerializeObject(obj));
+    }
 }

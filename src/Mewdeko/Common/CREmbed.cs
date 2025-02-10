@@ -13,7 +13,7 @@ public class CrEmbed
     public string? Thumbnail { get; set; }
     public string? Image { get; set; }
     public CrEmbedField[]? Fields { get; set; }
-    public uint Color { get; set; } = 7458112;
+    private uint Color { get; set; } = 7458112;
     public CrEmbedComponent[]? Components { get; set; }
 
     public bool IsValid =>
@@ -25,7 +25,8 @@ public class CrEmbed
         !string.IsNullOrWhiteSpace(Url) ||
         !string.IsNullOrWhiteSpace(Thumbnail) ||
         !string.IsNullOrWhiteSpace(Image) ||
-        (Footer is not null && (!string.IsNullOrWhiteSpace(Footer.Text) || !string.IsNullOrWhiteSpace(Footer.IconUrl))) ||
+        (Footer is not null &&
+         (!string.IsNullOrWhiteSpace(Footer.Text) || !string.IsNullOrWhiteSpace(Footer.IconUrl))) ||
         Fields is { Length: > 0 };
 
     public EmbedBuilder ToEmbed()
@@ -95,7 +96,7 @@ public class CrEmbed
                 rowLength = 0;
             }
 
-            if (comp.IsSelect is true)
+            if (comp.IsSelect)
             {
                 if (rowLength != 0)
                     ++activeRowId;
@@ -114,19 +115,25 @@ public class CrEmbed
         return cb;
     }
 
-    public static ButtonBuilder GetButton(CrEmbedComponent btn, int pos, ulong guildId)
+    private static ButtonBuilder GetButton(CrEmbedComponent btn, int pos, ulong guildId)
     {
         var bb = new ButtonBuilder();
         if (btn.Url.IsNullOrWhiteSpace() && btn.Id is not null)
-            bb.WithDisabled(true).WithLabel("Buttons must have a url or id").WithStyle(ButtonStyle.Danger).WithCustomId(pos.ToString());
+            bb.WithDisabled(true).WithLabel("Buttons must have a url or id").WithStyle(ButtonStyle.Danger)
+                .WithCustomId(pos.ToString());
         else if (!btn.Url.IsNullOrWhiteSpace() && btn.Id is not null)
-            bb.WithDisabled(true).WithLabel("Buttons cannot have both a url and id").WithStyle(ButtonStyle.Danger).WithCustomId(pos.ToString());
+            bb.WithDisabled(true).WithLabel("Buttons cannot have both a url and id").WithStyle(ButtonStyle.Danger)
+                .WithCustomId(pos.ToString());
         else if (btn.Url.IsNullOrWhiteSpace() && btn.Style == ButtonStyle.Link)
-            bb.WithDisabled(true).WithLabel("Button styles must be 1, 2, 3, or 4").WithStyle(ButtonStyle.Danger).WithCustomId(pos.ToString());
+            bb.WithDisabled(true).WithLabel("Button styles must be 1, 2, 3, or 4").WithStyle(ButtonStyle.Danger)
+                .WithCustomId(pos.ToString());
         else if (btn.DisplayName.IsNullOrWhiteSpace())
-            bb.WithDisabled(true).WithLabel("Buttons must have a display name").WithStyle(ButtonStyle.Danger).WithCustomId(pos.ToString());
-        else if (!btn.Url.IsNullOrWhiteSpace() && !btn.Url.StartsWith("https://") && !btn.Url.StartsWith("http://") && !btn.Url.StartsWith("discord://"))
-            bb.WithDisabled(true).WithLabel("Buttons with a url must have a https://, https://, or discord:// link").WithStyle(ButtonStyle.Danger).WithCustomId(pos.ToString());
+            bb.WithDisabled(true).WithLabel("Buttons must have a display name").WithStyle(ButtonStyle.Danger)
+                .WithCustomId(pos.ToString());
+        else if (!btn.Url.IsNullOrWhiteSpace() && !btn.Url.StartsWith("https://") && !btn.Url.StartsWith("http://") &&
+                 !btn.Url.StartsWith("discord://"))
+            bb.WithDisabled(true).WithLabel("Buttons with a url must have a https://, https://, or discord:// link")
+                .WithStyle(ButtonStyle.Danger).WithCustomId(pos.ToString());
         else if (!btn.Url.IsNullOrWhiteSpace())
         {
             bb.WithLabel(btn.DisplayName).WithStyle(ButtonStyle.Link).WithUrl(btn.Url);
@@ -147,16 +154,13 @@ public class CrEmbed
         return bb;
     }
 
-    public static SelectMenuBuilder GetSelectMenu(CrEmbedComponent sel, int pos, ulong guildId)
+    private static SelectMenuBuilder GetSelectMenu(CrEmbedComponent sel, int pos, ulong guildId)
     {
         var sb = new SelectMenuBuilder();
 
         var error = new SelectMenuBuilder()
             .WithDisabled(true)
-            .WithOptions(new()
-            {
-                new("a", "a")
-            });
+            .WithOptions([new("a", "a")]);
 
         if ((sel.MaxOptions, sel.MinOptions) is ((> 25) or (< 0), (> 25) or (< 0)))
             sb = error.WithPlaceholder("MinOptions and MaxOptions must be less than 25 and more than 0");
@@ -181,14 +185,15 @@ public class CrEmbed
                 .WithMaxValues(sel.MaxOptions)
                 .WithMinValues(sel.MinOptions)
                 .WithOptions(sel.Options
-                    .Select(x => new SelectMenuOptionBuilder(x.Name, x.Id.ToString(), x.Description, x.Emoji?.ToIEmote()))
+                    .Select(x =>
+                        new SelectMenuOptionBuilder(x.Name, x.Id.ToString(), x.Description, x.Emoji?.ToIEmote()))
                     .ToList());
 
         return sb;
     }
 }
 
-public class CrEmbedField
+public abstract class CrEmbedField
 {
     public string? Name { get; set; }
     public string? Value { get; set; }
@@ -221,7 +226,7 @@ public class CrEmbedAuthor
     public string? Url { get; set; }
 }
 
-public class CrEmbedComponent
+public abstract class CrEmbedComponent
 {
     public string? DisplayName { get; set; }
 
@@ -236,7 +241,7 @@ public class CrEmbedComponent
     public List<CrEmbedSelectOption>? Options { get; set; }
 }
 
-public class CrEmbedSelectOption
+public abstract class CrEmbedSelectOption
 {
     public string Id { get; set; }
     public string Name { get; set; }

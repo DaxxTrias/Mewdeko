@@ -4,33 +4,45 @@ using System.Threading;
 
 namespace Mewdeko.Modules.Nsfw.Common.Downloaders;
 
+/// <summary>
+///     Represents an image downloader for Danbooru.
+/// </summary>
 public sealed class DanbooruImageDownloader : DapiImageDownloader
 {
-    // using them as concurrent hashsets, value doesn't matter
-    private static readonly ConcurrentDictionary<string, bool> _existentTags = new();
-    private static readonly ConcurrentDictionary<string, bool> _nonexistentTags = new();
+    private static readonly ConcurrentDictionary<string, bool> ExistentTags = new();
+    private static readonly ConcurrentDictionary<string, bool> NonexistentTags = new();
 
-    public DanbooruImageDownloader(IHttpClientFactory http)
-        : base(Booru.Danbooru, http, "http://danbooru.donmai.us")
+    /// <summary>
+    ///     Initializes a new instance of the <see cref="DanbooruImageDownloader" /> class.
+    /// </summary>
+    /// <param name="http">The <see cref="IHttpClientFactory" /> instance for HTTP requests.</param>
+    public DanbooruImageDownloader(IHttpClientFactory http) : base(Booru.Danbooru, http,
+        "http://danbooru.donmai.us")
     {
     }
 
+    /// <summary>
+    ///     Checks if a given tag is valid.
+    /// </summary>
+    /// <param name="tag">The tag to check.</param>
+    /// <param name="cancel">A cancellation token to cancel the operation.</param>
+    /// <returns><c>true</c> if the tag is valid; otherwise, <c>false</c>.</returns>
     protected override async Task<bool> IsTagValid(string tag, CancellationToken cancel = default)
     {
-        if (_existentTags.ContainsKey(tag))
+        if (ExistentTags.ContainsKey(tag))
             return true;
 
-        if (_nonexistentTags.ContainsKey(tag))
+        if (NonexistentTags.ContainsKey(tag))
             return false;
 
-        using var http = _http.CreateClient();
+        using var http = Http.CreateClient();
         var tags = await http.GetFromJsonAsync<DapiTag[]>(
             BaseUrl + "/tags.json" + $"?search[name_or_alias_matches]={tag}",
-            _serializerOptions,
+            SerializerOptions,
             cancel);
         if (tags is { Length: > 0 })
-            return _existentTags[tag] = true;
+            return ExistentTags[tag] = true;
 
-        return _nonexistentTags[tag] = false;
+        return NonexistentTags[tag] = false;
     }
 }

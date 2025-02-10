@@ -1,0 +1,17 @@
+- name: Bot Docs
+  href: api/
+- name: Other Docs (Wip)
+  href: docs/
+  items:
+    - name: About Mewdeko
+      href: About-Mewdeko.md
+    - name: Contributing
+      href: CONTRIBUTING.md
+    - name: Code of Conduct
+      href: CODE_OF_CONDUCT.md
+    - name: Selfhosting On Windows
+      href: Selfhost-Windows.md
+    - name: Selfhosting On Linux
+      href: Selfhost-Linux.md
+- name: License
+  href: LICENSE.md

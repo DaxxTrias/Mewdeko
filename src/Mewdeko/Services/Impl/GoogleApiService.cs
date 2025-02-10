@@ -1,20 +1,30 @@
+﻿using System.IO;
 using System.Net;
 using System.Net.Http;
 using Google;
+using Google.Apis.Auth.OAuth2;
 using Google.Apis.Services;
 using Google.Apis.Urlshortener.v1;
 using Google.Apis.Urlshortener.v1.Data;
 using Google.Apis.YouTube.v3;
 using Google.Apis.YouTube.v3.Data;
+using Google.Cloud.Vision.V1;
+using Grpc.Auth;
+using Grpc.Core;
 using Newtonsoft.Json.Linq;
 using Serilog;
+using Image = Google.Cloud.Vision.V1.Image;
 
 namespace Mewdeko.Services.Impl;
 
+/// <summary>
+///     Google API service.
+/// </summary>
 public class GoogleApiService : IGoogleApiService
 {
     private readonly IBotCredentials creds;
     private readonly IHttpClientFactory httpFactory;
+
 
     private readonly Dictionary<string?, string> languageDictionary = new()
     {
@@ -409,8 +419,15 @@ public class GoogleApiService : IGoogleApiService
 
     private readonly UrlshortenerService sh;
 
+    private readonly ImageAnnotatorClient? visionClient;
+
     private readonly YouTubeService yt;
 
+    /// <summary>
+    ///     Initializes a new instance of the <see cref="GoogleApiService" /> class.
+    /// </summary>
+    /// <param name="creds">Bot credentials.</param>
+    /// <param name="factory">HTTP client factory.</param>
     public GoogleApiService(IBotCredentials creds, IHttpClientFactory factory)
     {
         this.creds = creds;
@@ -421,10 +438,71 @@ public class GoogleApiService : IGoogleApiService
             ApplicationName = "Mewdeko Bot", ApiKey = this.creds.GoogleApiKey
         };
 
+        try
+        {
+            var credential = GoogleCredential.FromFile(Path.Combine(Directory.GetCurrentDirectory(), "gcreds.json"))
+                .CreateScoped(ImageAnnotatorClient.DefaultScopes);
+
+            visionClient = new ImageAnnotatorClientBuilder
+            {
+                ChannelCredentials = credential.ToChannelCredentials()
+            }.Build();
+        }
+        catch (Exception e)
+        {
+            Log.Error("Google Cloud Credentials not found. Image command will be unfiltered.");
+            visionClient = null;
+        }
+
         yt = new YouTubeService(bcs);
         sh = new UrlshortenerService(bcs);
     }
 
+
+    /// <inheritdoc />
+    public bool IsImageSafe(SafeSearchAnnotation annotation)
+    {
+        // Adjust thresholds as needed based on your application's requirements
+        return annotation.Adult != Likelihood.Likely && annotation.Adult != Likelihood.VeryLikely &&
+               annotation.Violence != Likelihood.Likely && annotation.Violence != Likelihood.VeryLikely &&
+               annotation.Racy != Likelihood.Likely && annotation.Racy != Likelihood.VeryLikely;
+    }
+
+
+    /// <summary>
+    ///     Performs Safe Search detection on the specified image URL using the Google Cloud Vision API.
+    /// </summary>
+    /// <param name="imageUrl">The URL of the image to analyze.</param>
+    /// <returns>
+    ///     A task representing the asynchronous operation. The task result contains a <see cref="SafeSearchAnnotation" />
+    ///     object
+    ///     with the likelihoods of various types of inappropriate content.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">Thrown if <paramref name="imageUrl" /> is null or empty.</exception>
+    /// <exception cref="RpcException">Thrown when there is an error in the Vision API call.</exception>
+    public async Task<SafeSearchAnnotation> DetectSafeSearchAsync(string imageUrl)
+    {
+        if (visionClient is null)
+            return new SafeSearchAnnotation();
+        if (string.IsNullOrWhiteSpace(imageUrl))
+            throw new ArgumentNullException(nameof(imageUrl), "Image URL cannot be null or empty.");
+
+        // Create an Image object with the image URL
+        var image = Image.FromUri(imageUrl);
+
+        // Perform Safe Search detection
+        var response = await visionClient.DetectSafeSearchAsync(image);
+
+        return response;
+    }
+
+
+    /// <summary>
+    ///     Gets video links by keyword.
+    /// </summary>
+    /// <param name="keywords">The keywords.</param>
+    /// <returns>Array of search results.</returns>
+    /// <exception cref="ArgumentNullException">keywords</exception>
     public async Task<SearchResult[]> GetVideoLinksByKeywordAsync(string keywords)
     {
         await Task.Yield();
@@ -440,22 +518,13 @@ public class GoogleApiService : IGoogleApiService
         return (await query.ExecuteAsync().ConfigureAwait(false)).Items.ToArray();
     }
 
-    public async Task<SearchResult[]> GetVideoLinksByVideoId(string keywords, int max)
-    {
-        await Task.Yield();
-        if (string.IsNullOrWhiteSpace(keywords))
-            throw new ArgumentNullException(nameof(keywords));
 
-        var query = yt.Search.List("snippet");
-        query.MaxResults = max;
-        query.Type = "video";
-        query.RelatedToVideoId = keywords;
-        query.SafeSearch = SearchResource.ListRequest.SafeSearchEnum.Strict;
-
-        return (await query.ExecuteAsync().ConfigureAwait(false)).Items.ToArray();
-    }
-
-
+    /// <summary>
+    ///     Shortens a given url.
+    /// </summary>
+    /// <param name="url">The URL to shorten.</param>
+    /// <returns>The shortened URL.</returns>
+    /// <exception cref="ArgumentNullException"></exception>
     public async Task<string> ShortenUrl(string url)
     {
         await Task.Yield();
@@ -484,8 +553,25 @@ public class GoogleApiService : IGoogleApiService
         }
     }
 
-    public IEnumerable<string?> Languages => languageDictionary.Keys.OrderBy(x => x);
+    /// <summary>
+    ///     Gets the list of supported languages.
+    /// </summary>
+    public IEnumerable<string?> Languages
+    {
+        get
+        {
+            return languageDictionary.Keys.OrderBy(x => x);
+        }
+    }
 
+    /// <summary>
+    ///     Translates the given text.
+    /// </summary>
+    /// <param name="sourceText">The source text.</param>
+    /// <param name="sourceLanguage">The source language.</param>
+    /// <param name="targetLanguage">The target language.</param>
+    /// <returns>The translated text.</returns>
+    /// <exception cref="ArgumentException"></exception>
     public async Task<string> Translate(string sourceText, string? sourceLanguage, string? targetLanguage)
     {
         await Task.Yield();
@@ -513,19 +599,5 @@ public class GoogleApiService : IGoogleApiService
     {
         languageDictionary.TryGetValue(language, out var mode);
         return mode;
-    }
-
-    public class LiveVideo
-    {
-        public string Title { get; }
-        public string VideoId { get; }
-        public string ChannelTitle { get; }
-
-        public LiveVideo(string title, string videoId, string channelTitle)
-        {
-            Title = title;
-            VideoId = videoId;
-            ChannelTitle = channelTitle;
-        }
     }
 }

@@ -5,11 +5,25 @@ using Serilog;
 
 namespace Mewdeko.Common;
 
+/// <summary>
+///     Provides methods to handle errors that occur during the login process.
+/// </summary>
 public static class LoginErrorHandler
 {
+    /// <summary>
+    ///     Handles a fatal error that occurred while attempting to connect to Discord.
+    /// </summary>
+    /// <param name="ex">The exception that occurred.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static void Handle(Exception ex) => Log.Fatal(ex, "A fatal error has occurred while attempting to connect to Discord");
+    public static void Handle(Exception ex)
+    {
+        Log.Fatal(ex, "A fatal error has occurred while attempting to connect to Discord");
+    }
 
+    /// <summary>
+    ///     Handles HTTP-specific errors that occurred while attempting to connect to Discord.
+    /// </summary>
+    /// <param name="ex">The HTTP exception that occurred.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void Handle(HttpException ex)
     {
@@ -23,7 +37,7 @@ public static class LoginErrorHandler
 
             case HttpStatusCode.BadRequest:
                 Log.Error("Something has been incorrectly formatted in your credentials file.\n" +
-                          "Use the JSON Guide as reference to fix it and restart the bot.");
+                          "Use the JSON Guide as reference to fix it and restart the bot");
                 Log.Error("If you are on Linux, make sure Redis is installed and running");
                 break;
 
@@ -47,6 +61,7 @@ public static class LoginErrorHandler
                 break;
         }
 
-        Log.Fatal(ex.ToString());
+        // Log the exception details
+        Log.Fatal(ex, "Another exception occured");
     }
 }

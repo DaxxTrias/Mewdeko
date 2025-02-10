@@ -8,23 +8,39 @@ using Mewdeko.Modules.Afk.Services;
 
 namespace Mewdeko.Modules.Afk;
 
+/// <summary>
+///     Slash commands for setting and managing AFK messages.
+/// </summary>
 [Group("afk", "Set or Manage AFK")]
 public class SlashAfk : MewdekoSlashModuleBase<AfkService>
 {
+    private readonly DiscordShardedClient client;
     private readonly InteractiveService interactivity;
-    private readonly DiscordSocketClient client;
 
-    public SlashAfk(InteractiveService serv, DiscordSocketClient client)
+    /// <summary>
+    ///     Initializes a new instance of <see cref="SlashAfk" />.
+    /// </summary>
+    /// <param name="serv">The interactivity service used for embed pagination.</param>
+    /// <param name="client">The discord client.</param>
+    public SlashAfk(InteractiveService serv, DiscordShardedClient client)
     {
         interactivity = serv;
         this.client = client;
     }
 
-    [SlashCommand("set", "Set your afk with an optional message"), RequireContext(ContextType.Guild), CheckPermissions,
-     SlashUserPerm(GuildPermission.SendMessages)]
+    /// <summary>
+    ///     Sets the user's AFK status with an optional message.
+    /// </summary>
+    /// <param name="message">The AFK message. If not provided, the user's AFK status will be toggled.</param>
+    /// <example>.afk</example>
+    /// <example>.afk I'm AFK</example>
+    [SlashCommand("set", "Set your afk with an optional message")]
+    [RequireContext(ContextType.Guild)]
+    [CheckPermissions]
+    [SlashUserPerm(GuildPermission.SendMessages)]
     public async Task Afk(string? message = null)
     {
-        if (Environment.GetEnvironmentVariable($"AFK_CACHED_{client.ShardId}") != "1")
+        if (Environment.GetEnvironmentVariable("AFK_CACHED") != "1")
         {
             await ErrorLocalizedAsync("afk_still_starting");
             return;
@@ -32,10 +48,10 @@ public class SlashAfk : MewdekoSlashModuleBase<AfkService>
 
         if (message == null)
         {
-            var afkmsg = Service.GetAfkMessage(ctx.Guild.Id, ctx.User.Id).Select(x => x.Message);
-            if (!afkmsg.Any() || afkmsg.Last()?.Length == 0)
+            var afkmsg = (await Service.GetAfk(ctx.Guild.Id, ctx.User.Id))?.Message;
+            if (string.IsNullOrEmpty(afkmsg))
             {
-                await Service.AfkSet(ctx.Guild, (IGuildUser)ctx.User, "_ _", 0).ConfigureAwait(false);
+                await Service.AfkSet(ctx.Guild.Id, ctx.User.Id, "_ _").ConfigureAwait(false);
                 await EphemeralReplyErrorLocalizedAsync("afk_msg_enabled").ConfigureAwait(false);
                 try
                 {
@@ -54,7 +70,7 @@ public class SlashAfk : MewdekoSlashModuleBase<AfkService>
                 return;
             }
 
-            await Service.AfkSet(ctx.Guild, (IGuildUser)ctx.User, "", 0).ConfigureAwait(false);
+            await Service.AfkSet(ctx.Guild.Id, ctx.User.Id, "").ConfigureAwait(false);
             await EphemeralReplyConfirmLocalizedAsync("afk_msg_disabled");
             try
             {
@@ -72,22 +88,29 @@ public class SlashAfk : MewdekoSlashModuleBase<AfkService>
 
         if (message.Length != 0 && message.Length > await Service.GetAfkLength(ctx.Guild.Id))
         {
-            await ctx.Interaction.SendErrorAsync(
-                    $"That's too long! The length for afk on this server is set to {Service.GetAfkLength(ctx.Guild.Id)} characters.")
+            await ReplyErrorLocalizedAsync("afk_message_too_long", Service.GetAfkLength(ctx.Guild.Id))
                 .ConfigureAwait(false);
             return;
         }
 
-        await Service.AfkSet(ctx.Guild, (IGuildUser)ctx.User, message.EscapeWeirdStuff(), 0).ConfigureAwait(false);
-        await ctx.Interaction.SendConfirmAsync($"AFK Message set to:\n{message}").ConfigureAwait(false);
+        await Service.AfkSet(ctx.Guild.Id, ctx.User.Id, message.EscapeWeirdStuff()).ConfigureAwait(false);
+        await ReplyConfirmLocalizedAsync("afk_enabled", message).ConfigureAwait(false);
         await ctx.Guild.DownloadUsersAsync().ConfigureAwait(false);
     }
 
-    [SlashCommand("timed", "Sets a timed afk that auto removes itself and pings you when it."),
-     RequireContext(ContextType.Guild), CheckPermissions, SlashUserPerm(GuildPermission.SendMessages)]
+    /// <summary>
+    ///     Sets a timed AFK status with a custom message.
+    /// </summary>
+    /// <param name="time">The duration for the AFK status.</param>
+    /// <param name="message">The custom message for the AFK status.</param>
+    /// <example>.afk 1h I'm AFK</example>
+    [SlashCommand("timed", "Sets a timed afk that auto removes itself and pings you when it.")]
+    [RequireContext(ContextType.Guild)]
+    [CheckPermissions]
+    [SlashUserPerm(GuildPermission.SendMessages)]
     public async Task TimedAfk(string time, string message)
     {
-        if (Environment.GetEnvironmentVariable($"AFK_CACHED_{client.ShardId}") != "1")
+        if (Environment.GetEnvironmentVariable("AFK_CACHED") != "1")
         {
             await EphemeralReplyErrorLocalizedAsync("afk_still_starting").ConfigureAwait(false);
             return;
@@ -102,19 +125,31 @@ public class SlashAfk : MewdekoSlashModuleBase<AfkService>
 
         if (message.Length != 0 && message.Length > await Service.GetAfkLength(ctx.Guild.Id))
         {
-            await ReplyErrorLocalizedAsync("afk_message_too_long", Service.GetAfkLength(ctx.Guild.Id)).ConfigureAwait(false);
+            await ReplyErrorLocalizedAsync("afk_message_too_long", Service.GetAfkLength(ctx.Guild.Id))
+                .ConfigureAwait(false);
             return;
         }
 
-        await Service.AfkSet(ctx.Guild, (IGuildUser)ctx.User, message, 1, DateTime.UtcNow + parsedTime.Time);
-        await ConfirmLocalizedAsync("afk_time_set", TimestampTag.FromDateTimeOffset(DateTimeOffset.UtcNow + parsedTime.Time), TimestampTagStyles.Relative, message);
+        await Service.AfkSet(ctx.Guild.Id, ctx.User.Id, message, true, DateTime.UtcNow + parsedTime.Time);
+        await ConfirmLocalizedAsync("afk_time_set",
+            TimestampTag.FromDateTimeOffset(DateTimeOffset.UtcNow + parsedTime.Time), TimestampTagStyles.Relative,
+            message);
     }
 
-    [SlashCommand("message", "Allows you to set a custom embed for AFK messages."), RequireContext(ContextType.Guild),
-     SlashUserPerm(GuildPermission.Administrator), CheckPermissions]
+    /// <summary>
+    ///     Sets a custom AFK embed that will be displayed when a user is AFK. Use "-" to reset to the default embed. Check
+    ///     https://eb.mewdeko.tech for the embed builder and http://mewdeko.tech/placeholders for placeholders.
+    /// </summary>
+    /// <param name="embedCode">The custom message to set. Use "-" to reset to the default message.</param>
+    /// <example>/afk message -</example>
+    /// <example>/afk message embedcode</example>
+    [SlashCommand("message", "Allows you to set a custom embed for AFK messages.")]
+    [RequireContext(ContextType.Guild)]
+    [SlashUserPerm(GuildPermission.Administrator)]
+    [CheckPermissions]
     public async Task CustomAfkMessage(string embedCode)
     {
-        if (Environment.GetEnvironmentVariable($"AFK_CACHED_{client.ShardId}") != "1")
+        if (Environment.GetEnvironmentVariable("AFK_CACHED") != "1")
         {
             await ErrorLocalizedAsync("afk_still_starting").ConfigureAwait(false);
             return;
@@ -131,17 +166,22 @@ public class SlashAfk : MewdekoSlashModuleBase<AfkService>
         await ConfirmLocalizedAsync("Sucessfully updated afk message!").ConfigureAwait(false);
     }
 
-    [SlashCommand("listactive", "Sends a list of active afk users"), CheckPermissions]
+    /// <summary>
+    ///     Displays a list of active users who are currently AFK.
+    /// </summary>
+    /// <example>./afk listactive</example>
+    [SlashCommand("listactive", "Sends a list of active afk users")]
+    [CheckPermissions]
     public async Task GetActiveAfks()
     {
-        if (Environment.GetEnvironmentVariable($"AFK_CACHED_{client.ShardId}") != "1")
+        if (Environment.GetEnvironmentVariable("AFK_CACHED") != "1")
         {
             await ErrorLocalizedAsync("afk_still_starting").ConfigureAwait(false);
             return;
         }
 
         var afks = await Service.GetAfkUsers(ctx.Guild).ConfigureAwait(false);
-        if (afks.Length == 0)
+        if (afks.Count == 0)
         {
             await ErrorLocalizedAsync("afk_user_none").ConfigureAwait(false);
             return;
@@ -164,31 +204,42 @@ public class SlashAfk : MewdekoSlashModuleBase<AfkService>
         }
     }
 
-    [SlashCommand("view", "View another user's afk message"), SlashUserPerm(GuildPermission.ManageMessages),
-     CheckPermissions]
+    /// <summary>
+    ///     Displays the AFK status of a specific user.
+    /// </summary>
+    /// <param name="user">The user to check the AFK status for.</param>
+    /// <example>/afk view @user</example>
+    [SlashCommand("view", "View another user's afk message")]
+    [SlashUserPerm(GuildPermission.ManageMessages)]
+    [CheckPermissions]
     public async Task AfkView(IGuildUser user)
     {
-        if (Environment.GetEnvironmentVariable($"AFK_CACHED_{client.ShardId}") != "1")
+        if (Environment.GetEnvironmentVariable("AFK_CACHED") != "1")
         {
             await ErrorLocalizedAsync("afk_still_starting").ConfigureAwait(false);
             return;
         }
 
-        if (!Service.IsAfk(user.Guild, user))
+        if (!await Service.IsAfk(user.Guild.Id, user.Id))
         {
             await ErrorLocalizedAsync("afk_user_none").ConfigureAwait(false);
             return;
         }
 
-        var msg = Service.GetAfkMessage(user.Guild.Id, user.Id).Last();
+        var msg = await Service.GetAfk(user.Guild.Id, user.Id);
         await ctx.Interaction.SendConfirmAsync($"{user}'s Afk is:\n{msg.Message}").ConfigureAwait(false);
     }
 
-    [SlashCommand("disabledlist", "Shows a list of channels where afk messages are not allowed to display"),
-     SlashUserPerm(GuildPermission.ManageChannels), CheckPermissions]
+    /// <summary>
+    ///     Lists the text channels where the AFK message doesnt display.
+    /// </summary>
+    /// <example>/afk disabledlist</example>
+    [SlashCommand("disabledlist", "Shows a list of channels where afk messages are not allowed to display")]
+    [SlashUserPerm(GuildPermission.ManageChannels)]
+    [CheckPermissions]
     public async Task AfkDisabledList()
     {
-        if (Environment.GetEnvironmentVariable($"AFK_CACHED_{client.ShardId}") != "1")
+        if (Environment.GetEnvironmentVariable("AFK_CACHED") != "1")
         {
             await ErrorLocalizedAsync("afk_still_starting").ConfigureAwait(false);
             return;
@@ -226,11 +277,17 @@ public class SlashAfk : MewdekoSlashModuleBase<AfkService>
         }
     }
 
-    [SlashCommand("maxlength", "Sets the maximum length of afk messages."),
-     SlashUserPerm(GuildPermission.Administrator), CheckPermissions]
+    /// <summary>
+    ///     Sets the maximum length of all AFK messages.
+    /// </summary>
+    /// <param name="num">The maximum length you want to set.</param>
+    /// <example>/afk maxlength 100</example>
+    [SlashCommand("maxlength", "Sets the maximum length of afk messages.")]
+    [SlashUserPerm(GuildPermission.Administrator)]
+    [CheckPermissions]
     public async Task AfkLength(int num)
     {
-        if (Environment.GetEnvironmentVariable($"AFK_CACHED_{client.ShardId}") != "1")
+        if (Environment.GetEnvironmentVariable("AFK_CACHED") != "1")
         {
             await ErrorLocalizedAsync("afk_still_starting").ConfigureAwait(false);
             return;
@@ -247,44 +304,38 @@ public class SlashAfk : MewdekoSlashModuleBase<AfkService>
         }
     }
 
-    [SlashCommand("type", "Sets how afk messages are removed. Do @Mewdeko help afktype to see more."),
-     SlashUserPerm(GuildPermission.Administrator), CheckPermissions]
-    public async Task AfkType(string ehm)
+    /// <summary>
+    ///     Sets the type of AFK behavior for the guild.
+    /// </summary>
+    /// <param name="afkTypeEnum">The type of AFK behavior to set. <see cref="Afk.AfkTypeEnum" /></param>
+    /// <example>.afktype 1</example>
+    [SlashCommand("type", "Sets how afk messages are removed. Do @Mewdeko help afktype to see more.")]
+    [SlashUserPerm(GuildPermission.Administrator)]
+    [CheckPermissions]
+    public async Task AfkType(Afk.AfkTypeEnum afkTypeEnum)
     {
-        if (Environment.GetEnvironmentVariable($"AFK_CACHED_{client.ShardId}") != "1")
+        if (Environment.GetEnvironmentVariable("AFK_CACHED") != "1")
         {
-            await ErrorLocalizedAsync("afk_still_starting").ConfigureAwait(false);
+            await ReplyErrorLocalizedAsync("afk_still_starting").ConfigureAwait(false);
             return;
         }
 
-        switch (ehm.ToLower())
-        {
-            case "onmessage":
-                {
-                    await Service.AfkTypeSet(ctx.Guild, 3).ConfigureAwait(false);
-                    await ConfirmLocalizedAsync("afk_disable_message").ConfigureAwait(false);
-                }
-                break;
-            case "ontype":
-                {
-                    await Service.AfkTypeSet(ctx.Guild, 2).ConfigureAwait(false);
-                    await ConfirmLocalizedAsync("afk_disable_typing").ConfigureAwait(false);
-                }
-                break;
-            case "selfdisable":
-                {
-                    await Service.AfkTypeSet(ctx.Guild, 1).ConfigureAwait(false);
-                    await ConfirmLocalizedAsync("afk_disable_self").ConfigureAwait(false);
-                }
-                break;
-        }
+        await Service.AfkTypeSet(ctx.Guild, (int)afkTypeEnum).ConfigureAwait(false);
+        await ReplyConfirmLocalizedAsync("afk_type_set", afkTypeEnum).ConfigureAwait(false);
     }
 
-    [SlashCommand("timeout", "Sets after how long mewdeko no longer ignores a user's typing/messages."),
-     SlashUserPerm(GuildPermission.Administrator), CheckPermissions]
+    /// <summary>
+    ///     Sets the timeout duration before a user is no longer considered afk. Triggers when a user sends a message or types
+    ///     in a channel.
+    /// </summary>
+    /// <param name="input">The timeout duration for the AFK status.</param>
+    /// <example>/afk timeout 1h</example>
+    [SlashCommand("timeout", "Sets after how long mewdeko no longer ignores a user's typing/messages.")]
+    [SlashUserPerm(GuildPermission.Administrator)]
+    [CheckPermissions]
     public async Task AfkTimeout(string input)
     {
-        if (Environment.GetEnvironmentVariable($"AFK_CACHED_{client.ShardId}") != "1")
+        if (Environment.GetEnvironmentVariable("AFK_CACHED") != "1")
         {
             await ErrorLocalizedAsync("afk_still_starting").ConfigureAwait(false);
             return;
@@ -307,14 +358,20 @@ public class SlashAfk : MewdekoSlashModuleBase<AfkService>
         await ConfirmLocalizedAsync("afk_timeout_set", time.Time.Humanize()).ConfigureAwait(false);
     }
 
-    [SlashCommand("undisable", "Allows afk messages to be shown in a channel again."),
-     SlashUserPerm(GuildPermission.ManageChannels), CheckPermissions]
+    /// <summary>
+    ///     Removes the specified channel from the afk message blacklist.
+    /// </summary>
+    /// <param name="channel">The text channel for which to remove from the afk message blacklist.</param>
+    /// <example>/afk undisable #channel</example>
+    [SlashCommand("undisable", "Allows afk messages to be shown in a channel again.")]
+    [SlashUserPerm(GuildPermission.ManageChannels)]
+    [CheckPermissions]
     public async Task AfkUndisable(ITextChannel channel)
     {
-        if (Environment.GetEnvironmentVariable($"AFK_CACHED_{client.ShardId}") != "1")
+        if (Environment.GetEnvironmentVariable("AFK_CACHED") != "1")
         {
             await ctx.Interaction
-                .SendErrorAsync("afk_still_starting").ConfigureAwait(false);
+                .SendErrorAsync("afk_still_starting", Config).ConfigureAwait(false);
             return;
         }
 
@@ -359,14 +416,20 @@ public class SlashAfk : MewdekoSlashModuleBase<AfkService>
         await ConfirmLocalizedAsync("afk_disabled_channels_removed", string.Join(",", mentions));
     }
 
-    [SlashCommand("disable", "Disables afk messages to be shown in channels you specify."),
-     SlashUserPerm(GuildPermission.ManageChannels), CheckPermissions]
+    /// <summary>
+    ///     Sets the channel where the AFK message will not display.
+    /// </summary>
+    /// <param name="channel">Channel you want to add to the afk message blacklist.</param>
+    /// <example>/afk disable #channel</example>
+    [SlashCommand("disable", "Disables afk messages to be shown in channels you specify.")]
+    [SlashUserPerm(GuildPermission.ManageChannels)]
+    [CheckPermissions]
     public async Task AfkDisable(ITextChannel channel)
     {
-        if (Environment.GetEnvironmentVariable($"AFK_CACHED_{client.ShardId}") != "1")
+        if (Environment.GetEnvironmentVariable("AFK_CACHED") != "1")
         {
             await ctx.Interaction
-                .SendErrorAsync("afk_still_starting").ConfigureAwait(false);
+                .SendErrorAsync("afk_still_starting", Config).ConfigureAwait(false);
             return;
         }
 
@@ -419,12 +482,19 @@ public class SlashAfk : MewdekoSlashModuleBase<AfkService>
         }
     }
 
-    [SlashCommand("remove", "Removes afk from a user"), SlashUserPerm(GuildPermission.ManageMessages), CheckPermissions]
+    /// <summary>
+    ///     Removes the AFK status for a user.
+    /// </summary>
+    /// <param name="user">The user you want to remove afk from.</param>
+    /// <example>/afk remove @user</example>
+    [SlashCommand("remove", "Removes afk from a user")]
+    [SlashUserPerm(GuildPermission.ManageMessages)]
+    [CheckPermissions]
     public async Task AfkRemove(IGuildUser user)
     {
         if (!await CheckRoleHierarchy(user))
             return;
-        if (Environment.GetEnvironmentVariable($"AFK_CACHED_{client.ShardId}") != "1")
+        if (Environment.GetEnvironmentVariable("AFK_CACHED") != "1")
         {
             await ErrorLocalizedAsync("afk_still_starting").ConfigureAwait(false);
             return;
@@ -436,14 +506,14 @@ public class SlashAfk : MewdekoSlashModuleBase<AfkService>
             return;
         }
 
-        var msg = Service.GetAfkMessage(ctx.Guild.Id, user.Id).Select(x => x.Message).Last();
+        var msg = await Service.GetAfk(ctx.Guild.Id, user.Id);
         if (msg is null)
         {
             await EphemeralReplyErrorLocalizedAsync("afk_not_l_bozo").ConfigureAwait(false);
             return;
         }
 
-        await Service.AfkSet(ctx.Guild, user, "", 0).ConfigureAwait(false);
+        await Service.AfkSet(ctx.Guild.Id, user.Id, "").ConfigureAwait(false);
         await EphemeralReplyErrorLocalizedAsync("afk_noted", user.Mention);
     }
 }

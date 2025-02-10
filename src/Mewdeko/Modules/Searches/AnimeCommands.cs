@@ -19,27 +19,32 @@ namespace Mewdeko.Modules.Searches;
 
 public partial class Searches
 {
+    /// <summary>
+    ///     Group of commands related to anime.
+    /// </summary>
     [Group]
-    public class AnimeCommands : MewdekoSubmodule<SearchesService>
+    public class AnimeCommands(
+        InteractiveService service,
+        MartineApi martineApi,
+        NekosBestApi nekosBestApi,
+        HttpClient httpClient,
+        BotConfigService config)
+        : MewdekoSubmodule<SearchesService>
     {
-        public readonly NekosBestApi NekosBestApi;
-        private readonly MartineApi martineApi;
-        private readonly InteractiveService interactivity;
-        private readonly HttpClient httpClient;
-        private readonly BotConfigService config;
-
-        public AnimeCommands(InteractiveService service, MartineApi martineApi, NekosBestApi nekosBestApi,
-            HttpClient httpClient,
-            BotConfigService config)
-        {
-            interactivity = service;
-            this.martineApi = martineApi;
-            NekosBestApi = nekosBestApi;
-            this.httpClient = httpClient;
-            this.config = config;
-        }
-
-        [Cmd, Aliases]
+        /// <summary>
+        ///     Sends a ship image based on compatibility between two users.
+        /// </summary>
+        /// <param name="user">The first user to be compared.</param>
+        /// <param name="user2">The second user to be compared.</param>
+        /// <remarks>
+        ///     This command calculates the compatibility score between two users and sends a ship image
+        ///     with a message based on the score.
+        /// </remarks>
+        /// <example>
+        ///     <code>.ship @user1 @user2</code>
+        /// </example>
+        [Cmd]
+        [Aliases]
         public async Task Ship(IUser user, IUser user2)
         {
             var random = new Random().Next(0, 101);
@@ -48,7 +53,8 @@ public partial class Searches
                 random = getShip.Score;
             else
                 await Service.SetShip(user.Id, user2.Id, random);
-            var shipRequest = await martineApi.ImageGenerationApi.GenerateShipImage(random, user.RealAvatarUrl().AbsoluteUri, user2.RealAvatarUrl().AbsoluteUri)
+            var shipRequest = await martineApi.ImageGenerationApi.GenerateShipImage(random,
+                    user.RealAvatarUrl().AbsoluteUri, user2.RealAvatarUrl().AbsoluteUri)
                 .ConfigureAwait(false);
             var bytes = await shipRequest.ReadAsByteArrayAsync().ConfigureAwait(false);
             var ms = new MemoryStream(bytes);
@@ -81,48 +87,112 @@ public partial class Searches
             }
 
             await ctx.Channel.SendFileAsync(ms, "ship.png",
-                    embed: new EmbedBuilder().WithColor(color).WithDescription($"You are {random}% compatible. {response}").WithImageUrl("attachment://ship.png").Build())
+                    embed: new EmbedBuilder().WithColor(color)
+                        .WithDescription($"You are {random}% compatible. {response}")
+                        .WithImageUrl("attachment://ship.png").Build())
                 .ConfigureAwait(false);
         }
 
-        [Cmd, Aliases]
-        public async Task Ship(IUser user)
-            => await Ship(ctx.User, user);
+        /// <summary>
+        ///     Sends a ship image based on compatibility between the current user and another user.
+        /// </summary>
+        /// <param name="user">The user to be compared with the current user.</param>
+        /// <remarks>
+        ///     This command calculates the compatibility score between the current user and another user
+        ///     and sends a ship image with a message based on the score.
+        /// </remarks>
+        /// <example>
+        ///     <code>.ship @user</code>
+        /// </example>
+        [Cmd]
+        [Aliases]
+        public Task Ship(IUser user)
+        {
+            return Ship(ctx.User, user);
+        }
 
-        [Cmd, Aliases]
+        /// <summary>
+        ///     Sends a random neko image.
+        /// </summary>
+        /// <remarks>
+        ///     This command retrieves a random neko image from the API and sends it in the channel.
+        /// </remarks>
+        /// <example>
+        ///     <code>.randomneko</code>
+        /// </example>
+        [Cmd]
+        [Aliases]
         public async Task RandomNeko()
         {
-            var req = await NekosBestApi.CategoryApi.Neko().ConfigureAwait(false);
+            var req = await nekosBestApi.CategoryApi.Neko().ConfigureAwait(false);
             var em = new EmbedBuilder
             {
-                Description = $"nya~ [Source]({req.Results.FirstOrDefault().SourceUrl})", ImageUrl = req.Results.FirstOrDefault().Url, Color = Mewdeko.OkColor
+                Description = $"nya~ [Source]({req.Results.FirstOrDefault().SourceUrl})",
+                ImageUrl = req.Results.FirstOrDefault().Url,
+                Color = Mewdeko.OkColor
             };
             await ctx.Channel.SendMessageAsync(embed: em.Build()).ConfigureAwait(false);
         }
 
-        [Cmd, Aliases]
+        /// <summary>
+        ///     Sends a random kitsune image.
+        /// </summary>
+        /// <remarks>
+        ///     This command retrieves a random kitsune image from the API and sends it in the channel.
+        /// </remarks>
+        /// <example>
+        ///     <code>.randomkitsune</code>
+        /// </example>
+        [Cmd]
+        [Aliases]
         public async Task RandomKitsune()
         {
-            var req = await NekosBestApi.CategoryApi.Kitsune().ConfigureAwait(false);
+            var req = await nekosBestApi.CategoryApi.Kitsune().ConfigureAwait(false);
             var em = new EmbedBuilder
             {
-                Description = $"What does the fox say? [Source]({req.Results.FirstOrDefault().SourceUrl})", ImageUrl = req.Results.FirstOrDefault().Url, Color = Mewdeko.OkColor
+                Description = $"What does the fox say? [Source]({req.Results.FirstOrDefault().SourceUrl})",
+                ImageUrl = req.Results.FirstOrDefault().Url,
+                Color = Mewdeko.OkColor
             };
             await ctx.Channel.SendMessageAsync(embed: em.Build()).ConfigureAwait(false);
         }
 
-        [Cmd, Aliases]
+        /// <summary>
+        ///     Sends a random waifu image.
+        /// </summary>
+        /// <remarks>
+        ///     This command retrieves a random waifu image from the API and sends it in the channel.
+        /// </remarks>
+        /// <example>
+        ///     <code>.randomwaifu</code>
+        /// </example>
+        [Cmd]
+        [Aliases]
         public async Task RandomWaifu()
         {
-            var req = await NekosBestApi.CategoryApi.Waifu().ConfigureAwait(false);
+            var req = await nekosBestApi.CategoryApi.Waifu().ConfigureAwait(false);
             var em = new EmbedBuilder
             {
-                Description = $"Ara Ara~ [Source]({req.Results.FirstOrDefault().SourceUrl})", ImageUrl = req.Results.FirstOrDefault().Url, Color = Mewdeko.OkColor
+                Description = $"Ara Ara~ [Source]({req.Results.FirstOrDefault().SourceUrl})",
+                ImageUrl = req.Results.FirstOrDefault().Url,
+                Color = Mewdeko.OkColor
             };
             await ctx.Channel.SendMessageAsync(embed: em.Build()).ConfigureAwait(false);
         }
 
-        [Cmd, Aliases]
+        /// <summary>
+        ///     Retrieves and displays information about a MyAnimeList profile.
+        /// </summary>
+        /// <param name="name">The username of the MyAnimeList profile.</param>
+        /// <remarks>
+        ///     This command fetches and displays various statistics and information about a MyAnimeList profile,
+        ///     including watching, completed, on hold, dropped, and plan to watch anime lists, as well as other details.
+        /// </remarks>
+        /// <example>
+        ///     <code>.mal username</code>
+        /// </example>
+        [Cmd]
+        [Aliases]
         [Priority(0)]
         public async Task Mal([Remainder] string? name)
         {
@@ -135,7 +205,8 @@ public partial class Searches
             using var document = await BrowsingContext.New(malConfig).OpenAsync(fullQueryLink).ConfigureAwait(false);
             var imageElem = document.QuerySelector(
                 "body > div#myanimelist > div.wrapper > div#contentWrapper > div#content > div.content-container > div.container-left > div.user-profile > div.user-image > img");
-            var imageUrl = ((IHtmlImageElement)imageElem).Source ?? "https://icecream.me/uploads/870b03f36b59cc16ebfe314ef2dde781.png";
+            var imageUrl = ((IHtmlImageElement)imageElem).Source ??
+                           "https://icecream.me/uploads/870b03f36b59cc16ebfe314ef2dde781.png";
 
             var stats = document
                 .QuerySelectorAll(
@@ -175,12 +246,20 @@ public partial class Searches
             embed
                 .AddField(efb => efb.WithName("💔 " + GetText("dropped")).WithValue(stats[3]).WithIsInline(true))
                 .AddField(efb => efb.WithName("⚪ " + GetText("plan_to_watch")).WithValue(stats[4]).WithIsInline(true))
-                .AddField(efb => efb.WithName("🕐 " + daysAndMean[0][0]).WithValue(daysAndMean[0][1]).WithIsInline(true))
-                .AddField(efb => efb.WithName("📊 " + daysAndMean[1][0]).WithValue(daysAndMean[1][1]).WithIsInline(true))
-                .AddField(efb => efb.WithName(MalInfoToEmoji(info[0].Item1) + " " + info[0].Item1).WithValue(info[0].Item2.TrimTo(20)).WithIsInline(true))
-                .AddField(efb => efb.WithName(MalInfoToEmoji(info[1].Item1) + " " + info[1].Item1).WithValue(info[1].Item2.TrimTo(20)).WithIsInline(true));
+                .AddField(
+                    efb => efb.WithName("🕐 " + daysAndMean[0][0]).WithValue(daysAndMean[0][1]).WithIsInline(true))
+                .AddField(
+                    efb => efb.WithName("📊 " + daysAndMean[1][0]).WithValue(daysAndMean[1][1]).WithIsInline(true))
+                .AddField(efb =>
+                    efb.WithName(MalInfoToEmoji(info[0].Item1) + " " + info[0].Item1)
+                        .WithValue(info[0].Item2.TrimTo(20)).WithIsInline(true))
+                .AddField(efb =>
+                    efb.WithName(MalInfoToEmoji(info[1].Item1) + " " + info[1].Item1)
+                        .WithValue(info[1].Item2.TrimTo(20)).WithIsInline(true));
             if (info.Count > 2)
-                embed.AddField(efb => efb.WithName(MalInfoToEmoji(info[2].Item1) + " " + info[2].Item1).WithValue(info[2].Item2.TrimTo(20)).WithIsInline(true));
+                embed.AddField(efb =>
+                    efb.WithName(MalInfoToEmoji(info[2].Item1) + " " + info[2].Item1)
+                        .WithValue(info[2].Item2.TrimTo(20)).WithIsInline(true));
 
             embed
                 .WithDescription($@"
@@ -208,11 +287,40 @@ public partial class Searches
             };
         }
 
-        [Cmd, Aliases, RequireContext(ContextType.Guild), Priority(1)]
+        /// <summary>
+        ///     Retrieves and displays information about a MyAnimeList profile for a specified user in the current guild.
+        /// </summary>
+        /// <param name="usr">The user for whom to retrieve the MyAnimeList profile information.</param>
+        /// <remarks>
+        ///     This command fetches and displays various statistics and information about the MyAnimeList profile of a specified
+        ///     user
+        ///     within the current guild, including watching, completed, on hold, dropped, and plan to watch anime lists, as well
+        ///     as other details.
+        /// </remarks>
+        /// <example>
+        ///     <code>.mal @username</code>
+        /// </example>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [Priority(1)]
         public Task Mal(IGuildUser usr)
-            => Mal(usr.Username);
+        {
+            return Mal(usr.Username);
+        }
 
-        [Cmd, Aliases]
+        /// <summary>
+        ///     Finds anime information based on an image.
+        /// </summary>
+        /// <param name="e">The image URL or an attached image to use for searching.</param>
+        /// <remarks>
+        ///     This command finds anime information based on an image using the Trace.moe API and displays relevant details.
+        /// </remarks>
+        /// <example>
+        ///     <code>.findanime image_url</code>
+        /// </example>
+        [Cmd]
+        [Aliases]
         public async Task FindAnime(string? e = null)
         {
             var t = string.Empty;
@@ -225,7 +333,8 @@ public partial class Searches
                 }
                 catch
                 {
-                    await ctx.Channel.SendErrorAsync("You need to attach a file or use a url with this!").ConfigureAwait(false);
+                    await ctx.Channel.SendErrorAsync("You need to attach a file or use a url with this!", Config)
+                        .ConfigureAwait(false);
                     return;
                 }
             }
@@ -243,7 +352,9 @@ public partial class Searches
                 });
             if (!string.IsNullOrWhiteSpace(stuff.Error))
             {
-                await ctx.Channel.SendErrorAsync($"There was an issue with the findanime command:\n{stuff.Error}").ConfigureAwait(false);
+                await ctx.Channel.SendErrorAsync($"There was an issue with the findanime command:\n{stuff.Error}",
+                        Config)
+                    .ConfigureAwait(false);
                 return;
             }
 
@@ -251,7 +362,8 @@ public partial class Searches
             if (ert?.Filename is null)
             {
                 await ctx.Channel.SendErrorAsync(
-                    "No results found. Please try a different image, or avoid cropping the current one.").ConfigureAwait(false);
+                        "No results found. Please try a different image, or avoid cropping the current one.", Config)
+                    .ConfigureAwait(false);
             }
 
             var image = await c2.GetMediaById(ert.Anilist).ConfigureAwait(false);
@@ -259,7 +371,9 @@ public partial class Searches
             {
                 ImageUrl = image?.CoverImageLarge, Color = Mewdeko.OkColor
             };
-            var te = image?.SeasonInt.ToString()?[2..] is "" ? image.SeasonInt.ToString()?[1..] : image?.SeasonInt.ToString()?[2..];
+            var te = image?.SeasonInt.ToString()?[2..] is ""
+                ? image.SeasonInt.ToString()?[1..]
+                : image?.SeasonInt.ToString()?[2..];
             var entitle = image?.EnglishTitle;
             if (image?.EnglishTitle == null) entitle = "None";
             eb.AddField("English Title", entitle);
@@ -276,7 +390,19 @@ public partial class Searches
             _ = await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
         }
 
-        [Cmd, Aliases]
+        /// <summary>
+        ///     Retrieves and displays information about a character.
+        /// </summary>
+        /// <param name="chara">The name of the character to search for.</param>
+        /// <remarks>
+        ///     This command retrieves and displays information about a character, including their full name,
+        ///     alternative names, native name, description/backstory, and an image.
+        /// </remarks>
+        /// <example>
+        ///     <code>.charinfo character_name</code>
+        /// </example>
+        [Cmd]
+        [Aliases]
         public async Task CharInfo([Remainder] string chara)
         {
             var anilist = new Client();
@@ -285,7 +411,9 @@ public partial class Searches
             if (te.DescriptionMd is null) desc = "None";
             if (te.DescriptionMd != null) desc = te.DescriptionMd;
             if (te.DescriptionMd is { Length: > 1024 }) desc = te.DescriptionMd.TrimTo(1024);
-            var altnames = string.IsNullOrEmpty(te.AlternativeNames.FirstOrDefault()) ? "None" : string.Join(",", te.AlternativeNames);
+            var altnames = string.IsNullOrEmpty(te.AlternativeNames.FirstOrDefault())
+                ? "None"
+                : string.Join(",", te.AlternativeNames);
             var eb = new EmbedBuilder();
             eb.AddField(" Full Name", te.FullName);
             eb.AddField("Alternative Names", altnames);
@@ -296,7 +424,19 @@ public partial class Searches
             await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
         }
 
-        [Cmd, Aliases]
+        /// <summary>
+        ///     Searches for anime and displays information about the search results.
+        /// </summary>
+        /// <param name="query">The query to search for.</param>
+        /// <remarks>
+        ///     This command searches for anime based on the provided query and displays relevant information
+        ///     about the search results, including titles, genres, episodes, scores, and more.
+        /// </remarks>
+        /// <example>
+        ///     <code>.anime search_query</code>
+        /// </example>
+        [Cmd]
+        [Aliases]
         public async Task Anime([Remainder] string query)
         {
             var client = new Jikan();
@@ -304,7 +444,8 @@ public partial class Searches
             if (result is null)
             {
                 await ctx.Channel.SendErrorAsync(
-                    "The anime you searched for wasn't found! Please try a different query!").ConfigureAwait(false);
+                        "The anime you searched for wasn't found! Please try a different query!", Config)
+                    .ConfigureAwait(false);
                 return;
             }
 
@@ -315,7 +456,7 @@ public partial class Searches
 
             if (!newResult.Any())
             {
-                await ctx.Channel.SendErrorAsync("No results found!").ConfigureAwait(false);
+                await ctx.Channel.SendErrorAsync("No results found!", Config).ConfigureAwait(false);
                 return;
             }
 
@@ -328,7 +469,8 @@ public partial class Searches
                 .WithDefaultEmotes()
                 .WithActionOnCancellation(ActionOnStop.DeleteMessage)
                 .Build();
-            await interactivity.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
+            await service.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60))
+                .ConfigureAwait(false);
 
 
             async Task<PageBuilder> PageFactory(int page)
@@ -346,8 +488,11 @@ public partial class Searches
                         .AddField("Score", data.Score.HasValue ? data.Score : "Unknown", true)
                         .AddField("Status", data.Status, true)
                         .AddField("Type", data.Type, true)
-                        .AddField("Start Date", data.Aired.From.HasValue ? TimestampTag.FromDateTime(data.Aired.From.Value) : "Unknown", true)
-                        .AddField("End Date", data.Aired.To.HasValue ? TimestampTag.FromDateTime(data.Aired.To.Value) : "Unknown", true)
+                        .AddField("Start Date",
+                            data.Aired.From.HasValue ? TimestampTag.FromDateTime(data.Aired.From.Value) : "Unknown",
+                            true)
+                        .AddField("End Date",
+                            data.Aired.To.HasValue ? TimestampTag.FromDateTime(data.Aired.To.Value) : "Unknown", true)
                         .AddField("Rating", data.Rating, true)
                         .AddField("Rank", data.Rank.HasValue ? data.Rank : "Unknown", true)
                         .AddField("Popularity", data.Popularity.HasValue ? data.Popularity : "Unknown", true)
@@ -355,8 +500,11 @@ public partial class Searches
                         .AddField("Favorites", data.Favorites.HasValue ? data.Favorites : "Unknown", true)
                         .AddField("Source", data.Source, true)
                         .AddField("Duration", data.Duration, true)
-                        .AddField("Studios", data.Studios.Any() ? string.Join(", ", data.Studios.Select(x => x.Name)) : "Unknown", true)
-                        .AddField("Producers", data.Producers.Any() ? string.Join(", ", data.Producers.Select(x => x.Name)) : "Unknown", true)
+                        .AddField("Studios",
+                            data.Studios.Any() ? string.Join(", ", data.Studios.Select(x => x.Name)) : "Unknown", true)
+                        .AddField("Producers",
+                            data.Producers.Any() ? string.Join(", ", data.Producers.Select(x => x.Name)) : "Unknown",
+                            true)
                         .WithOkColor()
                         .WithImageUrl(data.Images.JPG.LargeImageUrl);
                 }
@@ -368,7 +516,20 @@ public partial class Searches
             }
         }
 
-        [Cmd, Aliases, RequireContext(ContextType.Guild)]
+        /// <summary>
+        ///     Searches for manga and displays information about the search results.
+        /// </summary>
+        /// <param name="query">The query to search for.</param>
+        /// <remarks>
+        ///     This command searches for manga based on the provided query and displays relevant information
+        ///     about the search results, including titles, publish dates, volumes, scores, and more.
+        /// </remarks>
+        /// <example>
+        ///     <code>.manga search_query</code>
+        /// </example>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
         public async Task Manga([Remainder] string query)
         {
             var msg = await ctx.Channel.SendConfirmAsync(
@@ -385,7 +546,8 @@ public partial class Searches
                 .WithActionOnCancellation(ActionOnStop.DeleteMessage)
                 .Build();
             await msg.DeleteAsync().ConfigureAwait(false);
-            await interactivity.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
+            await service.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60))
+                .ConfigureAwait(false);
 
             async Task<PageBuilder> PageFactory(int page)
             {
