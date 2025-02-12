@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Net;
 using System.Net.Http;
 using Discord.Commands;
@@ -287,6 +287,7 @@ public partial class Searches(
             var errorKey = err switch
             {
                 TimeErrors.ApiKeyMissing => "api_key_missing",
+                TimeErrors.ApiKey2Missing => "api_key_2_missing",
                 TimeErrors.InvalidInput => "invalid_input",
                 TimeErrors.NotFound => "not_found",
                 _ => "error_occured"
