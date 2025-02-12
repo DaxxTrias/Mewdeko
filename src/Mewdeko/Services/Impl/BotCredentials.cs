@@ -1,4 +1,4 @@
-﻿using System.Collections.Immutable;
+using System.Collections.Immutable;
 using System.IO;
 using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json;
@@ -397,6 +397,7 @@ public class BotCredentials : IBotCredentials
             CleverbotApiKey = data[nameof(CleverbotApiKey)];
             IsMasterInstance = Convert.ToBoolean(data[nameof(IsMasterInstance)]);
             LocationIqApiKey = data[nameof(LocationIqApiKey)];
+            TimezoneDbApiKey = data[nameof(TimezoneDbApiKey)];
             SpotifyClientId = data[nameof(SpotifyClientId)];
             SpotifyClientSecret = data[nameof(SpotifyClientSecret)];
             StatcordKey = data[nameof(StatcordKey)];
