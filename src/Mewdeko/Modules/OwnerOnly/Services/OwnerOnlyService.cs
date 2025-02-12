@@ -689,8 +689,8 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         var content = new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8,
             "application/json");
 
-        using var response = await httpClient.PostAsync("https://api.x.ai/v1/chat/completions", content);
-        //using var response = await httpClient.PostAsync("https://api.openai.com/v1/chat/completions", content);
+        //using var response = await httpClient.PostAsync("https://api.x.ai/v1/chat/completions", content);
+        using var response = await httpClient.PostAsync("https://api.openai.com/v1/chat/completions", content);
         // using var response = await httpClient.PostAsync("https://api.groq.com/openai/v1/chat/completions", content);
         response.EnsureSuccessStatusCode();
 
