@@ -421,11 +421,10 @@ public class SearchesService : INService, IUnloadableService
 
         if (string.IsNullOrEmpty(query)) return (default, TimeErrors.InvalidInput);
 
-        if (string.IsNullOrWhiteSpace(creds.LocationIqApiKey)
-            || string.IsNullOrWhiteSpace(creds.TimezoneDbApiKey))
-        {
+        if (string.IsNullOrWhiteSpace(creds.LocationIqApiKey))
             return (default, TimeErrors.ApiKeyMissing);
-        }
+        if (string.IsNullOrWhiteSpace(creds.TimezoneDbApiKey))
+            return (default, TimeErrors.ApiKey2Missing);
 
         try
         {
@@ -1069,6 +1068,11 @@ public enum TimeErrors
     ///     API key missing error.
     /// </summary>
     ApiKeyMissing,
+
+    /// <summary>
+    ///     API 2 key missing error.
+    /// </summary>
+    ApiKey2Missing,
 
     /// <summary>
     ///     Not found error.
