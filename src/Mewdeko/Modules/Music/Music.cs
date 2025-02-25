@@ -144,7 +144,6 @@ public partial class Music(
             return;
         }
 
-        var actualNumber = queueNumber - 1;
         if (queueNumber < 1 || queueNumber > queue.Count)
         {
             await ReplyErrorAsync(Strings.MusicQueueInvalidIndex(ctx.Guild.Id, queue.Count)).ConfigureAwait(false);
@@ -363,7 +362,7 @@ public partial class Music(
     [RequireContext(ContextType.Guild)]
     public async Task MoveSong(int from, int to)
     {
-        var (player, result) = await GetPlayerAsync(false);
+        var (_, result) = await GetPlayerAsync(false);
         if (result is not null)
         {
             var eb = new EmbedBuilder()
@@ -606,7 +605,7 @@ public partial class Music(
     [RequireContext(ContextType.Guild)]
     public async Task SavePlaylist([Remainder] string name)
     {
-        var (player, result) = await GetPlayerAsync(false);
+        var (_, result) = await GetPlayerAsync(false);
         if (result is not null)
         {
             var eb = new EmbedBuilder()
@@ -795,7 +794,7 @@ public partial class Music(
     [RequireContext(ContextType.Guild)]
     public async Task Shuffle()
     {
-        var (player, result) = await GetPlayerAsync(false);
+        var (_, result) = await GetPlayerAsync(false);
         if (result is not null)
         {
             var eb = new EmbedBuilder()
@@ -881,7 +880,7 @@ public partial class Music(
     [RequireContext(ContextType.Guild)]
     public async Task Queue()
     {
-        var (player, result) = await GetPlayerAsync(false);
+        var (_, result) = await GetPlayerAsync(false);
         if (result is not null)
         {
             var eb = new EmbedBuilder()
