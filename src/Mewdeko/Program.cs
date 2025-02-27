@@ -285,7 +285,7 @@ public class Program
             //.AddSingleton<ApiService>()
             .AddSingleton<FontProvider>()
             .AddSingleton<IBotCredentials>(credentials);
-        //services.AddDbContext<MewdekoPostgresContext>(); # used only for migrations
+        //services.AddDbContext<MewdekoPostgresContext>(); //# used only for migrations
         services.AddPooledDbContextFactory<MewdekoContext>(dbContextOptionsBuilder =>
             {
                 var connString = new NpgsqlConnectionStringBuilder(credentials.PsqlConnectionString)
