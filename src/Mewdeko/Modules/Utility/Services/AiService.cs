@@ -155,7 +155,7 @@ public class AiService : INService
     public async Task SetCustomEmbed(ulong guildId, string customEmbed)
     {
         var config = await GetOrCreateConfig(guildId);
-        config.CustomEmbed = customEmbed;
+        config.CustomEmbed = customEmbed == "-" ? "" : customEmbed;
         await UpdateConfig(config);
     }
 
@@ -355,16 +355,21 @@ public class AiService : INService
             initialTemplate = config.CustomEmbed;
         }
 
+        var timeout = DateTime.UtcNow.AddMinutes(1); // 5-minute timeout as a safety
         var stream = await aiClient.StreamResponseAsync(conversation.Messages, config.Model, config.ApiKey);
         await foreach (var rawJson in stream)
         {
             if (string.IsNullOrEmpty(rawJson)) continue;
+
+            // Log raw response for debugging
+            Log.Information($"Claude raw response: {rawJson}");
 
             // IMPORTANT: Parse the delta to extract just the content
             var contentDelta = streamParser.ParseDelta(rawJson, config.Provider);
             if (!string.IsNullOrEmpty(contentDelta))
             {
                 responseBuilder.Append(contentDelta);
+                Log.Information($"Added content delta: {contentDelta}");
             }
 
             // Check for usage information
@@ -372,18 +377,28 @@ public class AiService : INService
             if (usage.HasValue)
             {
                 tokenCount = usage.Value.TotalTokens;
+                Log.Information($"Updated token count: {tokenCount}");
             }
 
-            // Only update every 1 second to reduce API calls
-            if ((DateTime.UtcNow - lastUpdate).TotalSeconds >= 1)
+            // Update UI more frequently during stream
+            var now = DateTime.UtcNow;
+            if ((now - lastUpdate).TotalSeconds >= 1)
             {
-                lastUpdate = DateTime.UtcNow;
+                lastUpdate = now;
                 await UpdateMessageEmbed(false); // false = not final update
             }
 
             // Check if stream is finished
             if (streamParser.IsStreamFinished(rawJson, config.Provider))
             {
+                Log.Information("AI stream finished");
+                break;
+            }
+
+            // Safety timeout
+            if (DateTime.UtcNow > timeout)
+            {
+                Log.Warning("AI stream timed out");
                 break;
             }
         }

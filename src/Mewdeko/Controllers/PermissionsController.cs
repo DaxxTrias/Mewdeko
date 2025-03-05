@@ -1,8 +1,6 @@
 using System.Text.Json;
 using Discord.Commands;
-using Google.Api;
 using Mewdeko.Common.Attributes.TextCommands;
-using Mewdeko.Common.TypeReaders.Models;
 using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.Administration.Services;
 using Mewdeko.Modules.Help;
@@ -10,7 +8,6 @@ using Mewdeko.Modules.Permissions.Services;
 using Mewdeko.Services.Impl;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.VisualBasic;
 using Serilog;
 
 namespace Mewdeko.Controllers;

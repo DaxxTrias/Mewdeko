@@ -1,5 +1,4 @@
 using Discord.Interactions;
-using Mewdeko.Modules.Administration.Services;
 using Mewdeko.Modules.Starboard.Services;
 
 namespace Mewdeko.Common.Autocompleters;

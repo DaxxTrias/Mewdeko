@@ -4,7 +4,6 @@ using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.Administration.Services;
 using Mewdeko.Services.Strings;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.VisualBasic;
 using Serilog;
 using Swan;
 
