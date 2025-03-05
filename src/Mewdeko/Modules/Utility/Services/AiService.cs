@@ -299,7 +299,38 @@ public class AiService : INService
         });
         await db.SaveChangesAsync();
 
-        var (aiClient, _) = aiClientFactory.Create(config.Provider);
+        // Maintain history size for all providers
+        const int maxHistorySize = 5;
+
+        // Keep system message plus most recent messages
+        var systemMessage = conversation.Messages.FirstOrDefault(m => m.Role == "system");
+        var nonSystemMessages = conversation.Messages
+            .Where(m => m.Role != "system")
+            .OrderByDescending(m => m.Id)
+            .Take(maxHistorySize)
+            .ToList();
+
+        var messagesToKeep = new HashSet<int>(nonSystemMessages.Select(m => m.Id));
+        if (systemMessage != null)
+            messagesToKeep.Add(systemMessage.Id);
+
+        var toRemove = conversation.Messages
+            .Where(m => !messagesToKeep.Contains(m.Id))
+            .ToList();
+
+        if (toRemove.Any())
+        {
+            Log.Information($"Removing {toRemove.Count} older messages from conversation to manage payload size");
+            db.AiMessages.RemoveRange(toRemove);
+            await db.SaveChangesAsync();
+
+            // Make sure to refresh the conversation object after removing messages
+            conversation = await db.AiConversations
+                .Include(x => x.Messages)
+                .FirstOrDefaultAsync(x => x.GuildId == config.GuildId && x.UserId == userMsg.Author.Id);
+        }
+
+        var (aiClient, streamParser) = aiClientFactory.Create(config.Provider);
         var responseBuilder = new StringBuilder();
         var lastUpdate = DateTime.UtcNow;
         var tokenCount = 0;
@@ -325,16 +356,35 @@ public class AiService : INService
         }
 
         var stream = await aiClient.StreamResponseAsync(conversation.Messages, config.Model, config.ApiKey);
-        await foreach (var text in stream)
+        await foreach (var rawJson in stream)
         {
-            if (string.IsNullOrEmpty(text)) continue;
-            responseBuilder.Append(text);
+            if (string.IsNullOrEmpty(rawJson)) continue;
+
+            // IMPORTANT: Parse the delta to extract just the content
+            var contentDelta = streamParser.ParseDelta(rawJson, config.Provider);
+            if (!string.IsNullOrEmpty(contentDelta))
+            {
+                responseBuilder.Append(contentDelta);
+            }
+
+            // Check for usage information
+            var usage = streamParser.ParseUsage(rawJson, config.Provider);
+            if (usage.HasValue)
+            {
+                tokenCount = usage.Value.TotalTokens;
+            }
 
             // Only update every 1 second to reduce API calls
             if ((DateTime.UtcNow - lastUpdate).TotalSeconds >= 1)
             {
                 lastUpdate = DateTime.UtcNow;
                 await UpdateMessageEmbed(false); // false = not final update
+            }
+
+            // Check if stream is finished
+            if (streamParser.IsStreamFinished(rawJson, config.Provider))
+            {
+                break;
             }
         }
 
@@ -350,56 +400,54 @@ public class AiService : INService
         // Final update with completed response
         await UpdateMessageEmbed(true); // true = final update
 
-        // Manage conversation history size
-        if (conversation.Messages.Count > 10)
-        {
-            var toRemove = conversation.Messages.Take(conversation.Messages.Count - 10);
-            db.AiMessages.RemoveRange(toRemove);
-            await db.SaveChangesAsync();
-        }
-
         async Task UpdateMessageEmbed(bool isFinalUpdate)
         {
-            string processedContent;
+            string processedContent = null;
+            var aiResponse = responseBuilder.ToString();
+            const int maxEmbedSize = 4000;
 
+            // Check if we need to split the response into multiple embeds
+            var needsSplitting = aiResponse.Length > maxEmbedSize;
+            var responseChunks = needsSplitting
+                ? SplitLongText(aiResponse)
+                : new List<string>
+                {
+                    aiResponse
+                };
+
+            // Handle JSON templates
             if (initialTemplate != null)
             {
-                // Use the pre-processed template and replace %airesponse% with current content
-                processedContent = replacer.Replace(initialTemplate);
-
-                // If the template looks like JSON and contains embeds, we need to parse it differently
-                var isJsonEmbed = processedContent.TrimStart().StartsWith("{") &&
-                                  (processedContent.Contains("\"embeds\"") || processedContent.Contains("\"embed\""));
+                var isJsonEmbed = initialTemplate.TrimStart().StartsWith("{") &&
+                                  (initialTemplate.Contains("\"embeds\"") || initialTemplate.Contains("\"embed\""));
 
                 if (isJsonEmbed)
                 {
+                    // For JSON templates, try to create and send the embed(s)
                     try
                     {
-                        // For webhook case
-                        if (webhook != null && webhookMessageId.HasValue)
+                        if (needsSplitting)
                         {
-                            // Directly deserialize the JSON to a NewEmbed object
-                            var newEmbed = JsonSerializer.Deserialize<NewEmbed>(processedContent);
+                            // Handle multi-part response with JSON template
+                            await SendMultipartJsonEmbeds(responseChunks);
+                            return;
+                        }
 
-                            if (newEmbed != null && (newEmbed.Embeds?.Count > 0 || newEmbed.Embed != null))
+                        // Single embed with JSON template - similar to original logic
+                        var escapedContent = EscapeJsonString(aiResponse);
+                        processedContent = initialTemplate.Replace("%airesponse%", escapedContent);
+
+                        // Parse the JSON
+                        var newEmbed = JsonSerializer.Deserialize<NewEmbed>(processedContent);
+
+                        if (newEmbed != null && (newEmbed.Embeds?.Count > 0 || newEmbed.Embed != null))
+                        {
+                            var discordEmbeds = GetDiscordEmbeds(newEmbed);
+
+                            if (discordEmbeds.Count > 0)
                             {
-                                // Convert to Discord.NET embeds
-                                var discordEmbeds = new List<Embed>();
-
-                                if (newEmbed.Embeds?.Count > 0)
-                                {
-                                    discordEmbeds.AddRange(NewEmbed.ToEmbedArray(newEmbed.Embeds));
-                                }
-                                else if (newEmbed.Embed != null)
-                                {
-                                    discordEmbeds.AddRange(NewEmbed.ToEmbedArray(new List<global::Mewdeko.Common.Embed>
-                                    {
-                                        newEmbed.Embed
-                                    }));
-                                }
-
-                                // If we have embeds, use them directly
-                                if (discordEmbeds.Count > 0)
+                                // Send the embed based on whether we're using webhooks or regular messages
+                                if (webhook != null && webhookMessageId.HasValue)
                                 {
                                     await webhook.ModifyMessageAsync(webhookMessageId.Value, msg =>
                                     {
@@ -408,33 +456,8 @@ public class AiService : INService
                                     });
                                     return;
                                 }
-                            }
-                        }
-                        // For regular message case
-                        else if (regularMessage != null)
-                        {
-                            // Directly deserialize the JSON to a NewEmbed object
-                            var newEmbed = JsonSerializer.Deserialize<NewEmbed>(processedContent);
 
-                            if (newEmbed != null && (newEmbed.Embeds?.Count > 0 || newEmbed.Embed != null))
-                            {
-                                // Convert to Discord.NET embeds
-                                var discordEmbeds = new List<Embed>();
-
-                                if (newEmbed.Embeds?.Count > 0)
-                                {
-                                    discordEmbeds.AddRange(NewEmbed.ToEmbedArray(newEmbed.Embeds));
-                                }
-                                else if (newEmbed.Embed != null)
-                                {
-                                    discordEmbeds.AddRange(NewEmbed.ToEmbedArray(new List<global::Mewdeko.Common.Embed>
-                                    {
-                                        newEmbed.Embed
-                                    }));
-                                }
-
-                                // If we have embeds, use them directly
-                                if (discordEmbeds.Count > 0)
+                                if (regularMessage != null)
                                 {
                                     await regularMessage.ModifyAsync(msg =>
                                     {
@@ -443,111 +466,53 @@ public class AiService : INService
                                     });
                                     return;
                                 }
-                            }
-                        }
-                        else
-                        {
-                            // First message for non-webhook case
-                            var newEmbed = JsonSerializer.Deserialize<NewEmbed>(processedContent);
 
-                            if (newEmbed != null && (newEmbed.Embeds?.Count > 0 || newEmbed.Embed != null))
-                            {
-                                // Convert to Discord.NET embeds
-                                var discordEmbeds = new List<Embed>();
-
-                                if (newEmbed.Embeds?.Count > 0)
-                                {
-                                    discordEmbeds.AddRange(NewEmbed.ToEmbedArray(newEmbed.Embeds));
-                                }
-                                else if (newEmbed.Embed != null)
-                                {
-                                    discordEmbeds.AddRange(NewEmbed.ToEmbedArray(new List<global::Mewdeko.Common.Embed>
-                                    {
-                                        newEmbed.Embed
-                                    }));
-                                }
-
-                                // If we have embeds, create a new message with them
-                                if (discordEmbeds.Count > 0)
-                                {
-                                    regularMessage = await userMsg.Channel.SendMessageAsync(
-                                        newEmbed.Content,
-                                        embeds: discordEmbeds.ToArray(), allowedMentions: AllowedMentions.None);
-                                    return;
-                                }
+                                regularMessage = await userMsg.Channel.SendMessageAsync(
+                                    newEmbed.Content,
+                                    embeds: discordEmbeds.ToArray(),
+                                    allowedMentions: AllowedMentions.None);
+                                return;
                             }
                         }
                     }
                     catch (Exception ex)
                     {
                         Log.Warning($"Error parsing JSON embed: {ex.Message}");
-                        // If JSON parsing fails, fall back to normal handling
+                        Log.Warning("Failed to parse JSON, falling back to standard embeds");
+                        // Fall through to standard embed handling
                     }
+                }
+                else
+                {
+                    // For non-JSON templates
+                    processedContent = replacer.Replace(initialTemplate);
                 }
             }
             else
             {
                 // No template, just use the response directly
-                processedContent = responseBuilder.ToString();
+                processedContent = aiResponse;
             }
 
             // If we get here, either we don't have a JSON embed, or JSON parsing failed
-            // Fall back to the original handling
+            // Fall back to the original handling or use the multi-part approach for long content
             processedContent = processedContent.EscapeWeirdStuff();
 
-            if (webhook != null && webhookMessageId.HasValue)
+            if (needsSplitting)
             {
-                // WEBHOOK CASE - fallback
-                if (SmartEmbed.TryParse(processedContent, config.GuildId, out var embedData, out var plainText, out _))
-                {
-                    // Use the parsed embed data
-                    var modifiedEmbeds = embedData.Select(embed =>
-                    {
-                        var builder = embed.ToEmbedBuilder();
-                        if (builder.Footer is null || isFinalUpdate)
-                        {
-                            builder.WithFooter(strings.AiResponseFooter(config.GuildId, userMsg.Author.Username,
-                                tokenCount));
-                        }
-
-                        return builder.Build();
-                    }).ToList();
-
-                    await webhook.ModifyMessageAsync(webhookMessageId.Value, x =>
-                    {
-                        x.Content = plainText;
-                        x.Embeds = modifiedEmbeds;
-                    });
-                }
-                else
-                {
-                    // For non-embed content, create a simple embed
-                    var embed = new EmbedBuilder()
-                        .WithOkColor()
-                        .WithDescription(processedContent)
-                        .WithFooter(strings.AiResponseFooter(config.GuildId, userMsg.Author.Username, tokenCount))
-                        .Build();
-
-                    await webhook.ModifyMessageAsync(webhookMessageId.Value, x =>
-                    {
-                        x.Content = null;
-                        x.Embeds = new List<Embed>
-                        {
-                            embed
-                        };
-                    });
-                }
+                // Send multiple regular embeds
+                await SendMultipartRegularEmbeds(responseChunks);
             }
             else
             {
-                // REGULAR (NON-WEBHOOK) CASE - fallback
-                if (regularMessage == null)
+                // Standard single embed - same as your original logic
+                if (webhook != null && webhookMessageId.HasValue)
                 {
-                    // First update - create new message
+                    // WEBHOOK CASE - fallback
                     if (SmartEmbed.TryParse(processedContent, config.GuildId, out var embedData, out var plainText,
                             out _))
                     {
-                        // Use the parsed embed data for the initial message
+                        // Use the parsed embed data
                         var modifiedEmbeds = embedData.Select(embed =>
                         {
                             var builder = embed.ToEmbedBuilder();
@@ -560,61 +525,445 @@ public class AiService : INService
                             return builder.Build();
                         }).ToList();
 
-                        // Send the initial message and store the reference
-                        regularMessage = await userMsg.Channel.SendMessageAsync(
-                            plainText,
-                            embeds: modifiedEmbeds.ToArray(), allowedMentions: AllowedMentions.None);
-                    }
-                    else
-                    {
-                        // Create simple embed for first message
-                        regularMessage = await userMsg.Channel.SendConfirmAsync(processedContent);
-                    }
-                }
-                else
-                {
-                    // Subsequent updates - modify existing message
-                    if (SmartEmbed.TryParse(processedContent, config.GuildId, out var embedData, out var plainText,
-                            out _))
-                    {
-                        // Use the parsed embed data for updates
-                        var modifiedEmbeds = embedData.Select(embed =>
+                        await webhook.ModifyMessageAsync(webhookMessageId.Value, x =>
                         {
-                            var builder = embed.ToEmbedBuilder();
-                            if (builder.Footer is null || isFinalUpdate)
-                            {
-                                builder.WithFooter(strings.AiResponseFooter(config.GuildId, userMsg.Author.Username,
-                                    tokenCount));
-                            }
-
-                            return builder.Build();
-                        }).ToList();
-
-                        // Update the existing message
-                        await regularMessage.ModifyAsync(msg =>
-                        {
-                            msg.Content = plainText;
-                            msg.Embeds = modifiedEmbeds.ToArray();
+                            x.Content = plainText;
+                            x.Embeds = modifiedEmbeds;
                         });
                     }
                     else
                     {
-                        // Update with simple embed
+                        // For non-embed content, create a simple embed
                         var embed = new EmbedBuilder()
                             .WithOkColor()
                             .WithDescription(processedContent)
                             .WithFooter(strings.AiResponseFooter(config.GuildId, userMsg.Author.Username, tokenCount))
                             .Build();
 
-                        await regularMessage.ModifyAsync(msg =>
+                        await webhook.ModifyMessageAsync(webhookMessageId.Value, x =>
                         {
-                            msg.Content = null;
-                            msg.Embed = embed;
+                            x.Content = null;
+                            x.Embeds = new List<Embed>
+                            {
+                                embed
+                            };
                         });
                     }
                 }
+                else
+                {
+                    // REGULAR (NON-WEBHOOK) CASE - fallback
+                    if (regularMessage == null)
+                    {
+                        // First update - create new message
+                        if (SmartEmbed.TryParse(processedContent, config.GuildId, out var embedData, out var plainText,
+                                out _))
+                        {
+                            // Use the parsed embed data for the initial message
+                            var modifiedEmbeds = embedData.Select(embed =>
+                            {
+                                var builder = embed.ToEmbedBuilder();
+                                if (builder.Footer is null || isFinalUpdate)
+                                {
+                                    builder.WithFooter(strings.AiResponseFooter(config.GuildId, userMsg.Author.Username,
+                                        tokenCount));
+                                }
+
+                                return builder.Build();
+                            }).ToList();
+
+                            // Send the initial message and store the reference
+                            regularMessage = await userMsg.Channel.SendMessageAsync(
+                                plainText,
+                                embeds: modifiedEmbeds.ToArray(), allowedMentions: AllowedMentions.None);
+                        }
+                        else
+                        {
+                            // Create simple embed for first message
+                            regularMessage = await userMsg.Channel.SendConfirmAsync(processedContent);
+                        }
+                    }
+                    else
+                    {
+                        // Subsequent updates - modify existing message
+                        if (SmartEmbed.TryParse(processedContent, config.GuildId, out var embedData, out var plainText,
+                                out _))
+                        {
+                            // Use the parsed embed data for updates
+                            var modifiedEmbeds = embedData.Select(embed =>
+                            {
+                                var builder = embed.ToEmbedBuilder();
+                                if (builder.Footer is null || isFinalUpdate)
+                                {
+                                    builder.WithFooter(strings.AiResponseFooter(config.GuildId, userMsg.Author.Username,
+                                        tokenCount));
+                                }
+
+                                return builder.Build();
+                            }).ToList();
+
+                            // Update the existing message
+                            await regularMessage.ModifyAsync(msg =>
+                            {
+                                msg.Content = plainText;
+                                msg.Embeds = modifiedEmbeds.ToArray();
+                            });
+                        }
+                        else
+                        {
+                            // Update with simple embed
+                            var embed = new EmbedBuilder()
+                                .WithOkColor()
+                                .WithDescription(processedContent)
+                                .WithFooter(strings.AiResponseFooter(config.GuildId, userMsg.Author.Username,
+                                    tokenCount))
+                                .Build();
+
+                            await regularMessage.ModifyAsync(msg =>
+                            {
+                                msg.Content = null;
+                                msg.Embed = embed;
+                            });
+                        }
+                    }
+                }
+            }
+
+            // Helper method to extract Discord.NET embeds from a NewEmbed object
+            List<Embed> GetDiscordEmbeds(NewEmbed newEmbed)
+            {
+                var discordEmbeds = new List<Embed>();
+
+                if (newEmbed.Embeds?.Count > 0)
+                {
+                    discordEmbeds.AddRange(NewEmbed.ToEmbedArray(newEmbed.Embeds));
+                }
+                else if (newEmbed.Embed != null)
+                {
+                    discordEmbeds.AddRange(NewEmbed.ToEmbedArray(new List<global::Mewdeko.Common.Embed>
+                    {
+                        newEmbed.Embed
+                    }));
+                }
+
+                return discordEmbeds;
+            }
+
+            // Helper method to send multiple embeds when using JSON templates
+            async Task SendMultipartJsonEmbeds(List<string> chunks)
+            {
+                // For the initial message (or webhook update)
+                var allEmbeds = new List<Embed>();
+
+                for (var i = 0; i < chunks.Count; i++)
+                {
+                    try
+                    {
+                        // Create a new JSON embed for each chunk by using the template
+                        var escapedChunk = EscapeJsonString(chunks[i]);
+                        var jsonTemplate = initialTemplate.Replace("%airesponse%", escapedChunk);
+
+                        var newEmbed = JsonSerializer.Deserialize<NewEmbed>(jsonTemplate);
+
+                        if (newEmbed != null && (newEmbed.Embeds?.Count > 0 || newEmbed.Embed != null))
+                        {
+                            var discordEmbeds = new List<Embed>();
+
+                            if (newEmbed.Embeds?.Count > 0)
+                            {
+                                // Add part indicator to first embed title or description if missing
+                                if (i > 0 && newEmbed.Embeds[0] != null)
+                                {
+                                    // If there's a title, append to it, otherwise add to description
+                                    if (!string.IsNullOrEmpty(newEmbed.Embeds[0].Title))
+                                    {
+                                        newEmbed.Embeds[0].Title =
+                                            $"{newEmbed.Embeds[0].Title} (Part {i + 1}/{chunks.Count})";
+                                    }
+                                    else if (!string.IsNullOrEmpty(newEmbed.Embeds[0].Description))
+                                    {
+                                        // For the description, we'll prepend the part indicator
+                                        newEmbed.Embeds[0].Description =
+                                            $"**Part {i + 1}/{chunks.Count}**\n\n{newEmbed.Embeds[0].Description}";
+                                    }
+                                }
+
+                                discordEmbeds.AddRange(NewEmbed.ToEmbedArray(newEmbed.Embeds));
+                            }
+                            else if (newEmbed.Embed != null)
+                            {
+                                // Add part indicator to single embed
+                                if (i > 0)
+                                {
+                                    if (!string.IsNullOrEmpty(newEmbed.Embed.Title))
+                                    {
+                                        newEmbed.Embed.Title = $"{newEmbed.Embed.Title} (Part {i + 1}/{chunks.Count})";
+                                    }
+                                    else if (!string.IsNullOrEmpty(newEmbed.Embed.Description))
+                                    {
+                                        newEmbed.Embed.Description =
+                                            $"**Part {i + 1}/{chunks.Count}**\n\n{newEmbed.Embed.Description}";
+                                    }
+                                }
+
+                                discordEmbeds.AddRange(NewEmbed.ToEmbedArray(new List<global::Mewdeko.Common.Embed>
+                                {
+                                    newEmbed.Embed
+                                }));
+                            }
+
+                            // Add to our collection
+                            allEmbeds.AddRange(discordEmbeds);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Warning($"Error creating JSON embed for chunk {i + 1}: {ex.Message}");
+
+                        // Fallback for this chunk
+                        var fallbackEmbed = new EmbedBuilder()
+                            .WithOkColor()
+                            .WithTitle($"Response (Part {i + 1}/{chunks.Count})")
+                            .WithDescription(chunks[i])
+                            .WithFooter(i == chunks.Count - 1
+                                ? strings.AiResponseFooter(config.GuildId, userMsg.Author.Username, tokenCount)
+                                : null)
+                            .Build();
+
+                        allEmbeds.Add(fallbackEmbed);
+                    }
+                }
+
+                // Send or update the message with all embeds
+                if (webhook != null && webhookMessageId.HasValue)
+                {
+                    await webhook.ModifyMessageAsync(webhookMessageId.Value, msg =>
+                    {
+                        msg.Content = null;
+                        msg.Embeds = allEmbeds;
+                    });
+                }
+                else if (regularMessage != null)
+                {
+                    await regularMessage.ModifyAsync(msg =>
+                    {
+                        msg.Content = null;
+                        msg.Embeds = allEmbeds.ToArray();
+                    });
+                }
+                else
+                {
+                    // First message
+                    regularMessage = await userMsg.Channel.SendMessageAsync(
+                        embeds: allEmbeds.ToArray(),
+                        allowedMentions: AllowedMentions.None);
+                }
+            }
+
+            // Helper method to send multiple standard embeds (non-JSON template)
+            async Task SendMultipartRegularEmbeds(List<string> chunks)
+            {
+                // Create a collection of embeds
+                var allEmbeds = new List<Embed>();
+
+                for (var i = 0; i < chunks.Count; i++)
+                {
+                    var embedBuilder = new EmbedBuilder()
+                        .WithOkColor();
+
+                    // First part doesn't need a part indicator in the title
+                    if (i == 0)
+                    {
+                        embedBuilder.WithDescription(chunks[i]);
+                    }
+                    else
+                    {
+                        embedBuilder.WithTitle($"Continued (Part {i + 1}/{chunks.Count})")
+                            .WithDescription(chunks[i]);
+                    }
+
+                    // Add footer to last part only
+                    if (i == chunks.Count - 1 || isFinalUpdate)
+                    {
+                        embedBuilder.WithFooter(strings.AiResponseFooter(config.GuildId, userMsg.Author.Username,
+                            tokenCount));
+                    }
+
+                    allEmbeds.Add(embedBuilder.Build());
+                }
+
+                // Send or update with all embeds
+                if (webhook != null && webhookMessageId.HasValue)
+                {
+                    await webhook.ModifyMessageAsync(webhookMessageId.Value, msg =>
+                    {
+                        msg.Content = null;
+                        msg.Embeds = allEmbeds;
+                    });
+                }
+                else if (regularMessage != null)
+                {
+                    await regularMessage.ModifyAsync(msg =>
+                    {
+                        msg.Content = null;
+                        msg.Embeds = allEmbeds.ToArray();
+                    });
+                }
+                else
+                {
+                    // First message
+                    regularMessage = await userMsg.Channel.SendMessageAsync(
+                        embeds: allEmbeds.ToArray(),
+                        allowedMentions: AllowedMentions.None);
+                }
             }
         }
+    }
+
+    /// <summary>
+    ///     Properly escapes a string for use in JSON.
+    /// </summary>
+    /// <param name="input">The string to escape</param>
+    /// <returns>JSON-safe escaped string</returns>
+    private string EscapeJsonString(string input)
+    {
+        if (string.IsNullOrEmpty(input))
+            return input;
+
+        var escaped = new StringBuilder(input.Length);
+
+        foreach (var c in input)
+        {
+            switch (c)
+            {
+                case '\\': escaped.Append("\\\\"); break;
+                case '"': escaped.Append("\\\""); break;
+                case '\n': escaped.Append("\\n"); break;
+                case '\r': escaped.Append("\\r"); break;
+                case '\t': escaped.Append("\\t"); break;
+                case '\b': escaped.Append("\\b"); break;
+                case '\f': escaped.Append("\\f"); break;
+                default:
+                    // Check for control characters (0x00-0x1F)
+                    if (c < 32)
+                    {
+                        escaped.Append($"\\u{(int)c:X4}");
+                    }
+                    else
+                    {
+                        escaped.Append(c);
+                    }
+
+                    break;
+            }
+        }
+
+        return escaped.ToString();
+    }
+
+    /// <summary>
+    ///     Splits a long text into multiple chunks suitable for Discord embeds.
+    /// </summary>
+    /// <param name="text">Text to split</param>
+    /// <param name="maxChunkSize">Maximum size of each chunk</param>
+    /// <param name="maxChunks">Maximum number of chunks to create</param>
+    /// <returns>List of text chunks</returns>
+    private List<string> SplitLongText(string text, int maxChunkSize = 4000, int maxChunks = 10)
+    {
+        var results = new List<string>();
+        if (string.IsNullOrEmpty(text))
+            return results;
+
+        // If text is already within limits, return it as is
+        if (text.Length <= maxChunkSize)
+        {
+            results.Add(text);
+            return results;
+        }
+
+        var startIndex = 0;
+        int endIndex;
+
+        // Split text into chunks at natural boundaries
+        while (startIndex < text.Length && results.Count < maxChunks)
+        {
+            // Determine the potential end of this chunk
+            endIndex = Math.Min(startIndex + maxChunkSize, text.Length);
+
+            // If this is the last chunk we can create due to maxChunks limit,
+            // include as much as possible up to maxChunkSize
+            if (results.Count == maxChunks - 1)
+            {
+                results.Add(text.Substring(startIndex, endIndex - startIndex));
+                break;
+            }
+
+            // Try to find a natural breaking point - preferably at paragraph or sentence end
+            if (endIndex < text.Length)
+            {
+                // Look for paragraph break
+                var paragraphBreak = text.LastIndexOf("\n\n", endIndex - 1, endIndex - startIndex);
+                if (paragraphBreak > startIndex + 100) // Ensure we have a reasonable chunk size
+                {
+                    endIndex = paragraphBreak + 2; // Include the double newline
+                }
+                else
+                {
+                    // Look for newline
+                    var newLineBreak = text.LastIndexOf('\n', endIndex - 1, endIndex - startIndex);
+                    if (newLineBreak > startIndex + 100)
+                    {
+                        endIndex = newLineBreak + 1; // Include the newline
+                    }
+                    else
+                    {
+                        // Look for sentence end
+                        var sentenceBreak = -1;
+                        foreach (var c in new[]
+                                 {
+                                     '.', '!', '?'
+                                 })
+                        {
+                            var breakPoint = text.LastIndexOf(c, endIndex - 1, endIndex - startIndex);
+                            if (breakPoint > sentenceBreak) sentenceBreak = breakPoint;
+                        }
+
+                        if (sentenceBreak > startIndex + 100)
+                        {
+                            endIndex = Math.Min(sentenceBreak + 1, text.Length);
+                        }
+                        else
+                        {
+                            // Look for space
+                            var spaceBreak = text.LastIndexOf(' ', endIndex - 1, endIndex - startIndex);
+                            if (spaceBreak > startIndex + 100)
+                            {
+                                endIndex = spaceBreak + 1;
+                            }
+                            // else we'll just cut at maxChunkSize
+                        }
+                    }
+                }
+            }
+
+            // Add chunk to results
+            results.Add(text.Substring(startIndex, endIndex - startIndex));
+            startIndex = endIndex;
+        }
+
+        // If there's still text left but we hit the maxChunks limit, add an indicator
+        if (startIndex < text.Length && results.Count >= maxChunks)
+        {
+            var lastChunk = results[results.Count - 1];
+            if (lastChunk.Length > maxChunkSize - 100)
+            {
+                lastChunk = lastChunk.Substring(0, maxChunkSize - 100);
+            }
+
+            results[results.Count - 1] = lastChunk + "\n\n... (Response truncated due to length)";
+        }
+
+        return results;
     }
 
     /// <summary>
@@ -670,7 +1019,7 @@ public class AiService : INService
     private async Task<List<AiModel>> FetchGroqModels(HttpClient http, string apiKey)
     {
         http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
-        var response = await http.GetFromJsonAsync<GroqModelsResponse>("https://api.groq.com/v1/models");
+        var response = await http.GetFromJsonAsync<GroqModelsResponse>("https://api.groq.com/openai/v1/models");
 
         return response?.Data
             .Select(m => new AiModel

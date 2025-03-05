@@ -13,19 +13,32 @@ public class GroqStreamParser : IAiStreamParser
     {
         try
         {
+            // Log the raw JSON for debugging
+            // Log.Information($"Raw Groq JSON: {json}");
+
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
 
             // Extract the content delta from the JSON
             // Format is {"id":"chatcmpl-...","object":"chat.completion.chunk","created":1234,"model":"llama-..","choices":[{"index":0,"delta":{"content":"..."},"logprobs":null,"finish_reason":null}]}
             if (root.TryGetProperty("choices", out var choices) &&
-                choices.GetArrayLength() > 0 &&
-                choices[0].TryGetProperty("delta", out var delta) &&
-                delta.TryGetProperty("content", out var content))
+                choices.GetArrayLength() > 0)
             {
-                return content.GetString() ?? "";
+                // Extract from choices array
+                var firstChoice = choices[0];
+
+                // Check if this chunk has content
+                if (firstChoice.TryGetProperty("delta", out var delta))
+                {
+                    // Some delta objects may not have content (like the initial role assignment)
+                    if (delta.TryGetProperty("content", out var content))
+                    {
+                        return content.GetString() ?? "";
+                    }
+                }
             }
 
+            // If we couldn't find content, return empty string
             return "";
         }
         catch (Exception ex)
@@ -43,8 +56,9 @@ public class GroqStreamParser : IAiStreamParser
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
 
-            // Extract usage information if present
-            if (root.TryGetProperty("usage", out var usage))
+            // Check if this is a final message with usage info
+            if (root.TryGetProperty("x_groq", out var groqInfo) &&
+                groqInfo.TryGetProperty("usage", out var usage))
             {
                 var promptTokens = 0;
                 var completionTokens = 0;
@@ -53,11 +67,31 @@ public class GroqStreamParser : IAiStreamParser
                 if (usage.TryGetProperty("prompt_tokens", out var prompt))
                     promptTokens = prompt.GetInt32();
 
-                // Groq uses completion_tokens, not completion_token
                 if (usage.TryGetProperty("completion_tokens", out var completion))
                     completionTokens = completion.GetInt32();
 
                 if (usage.TryGetProperty("total_tokens", out var total))
+                    totalTokens = total.GetInt32();
+                else
+                    totalTokens = promptTokens + completionTokens;
+
+                return (promptTokens, completionTokens, totalTokens);
+            }
+
+            // Try the original format as well
+            if (root.TryGetProperty("usage", out var directUsage))
+            {
+                var promptTokens = 0;
+                var completionTokens = 0;
+                var totalTokens = 0;
+
+                if (directUsage.TryGetProperty("prompt_tokens", out var prompt))
+                    promptTokens = prompt.GetInt32();
+
+                if (directUsage.TryGetProperty("completion_tokens", out var completion))
+                    completionTokens = completion.GetInt32();
+
+                if (directUsage.TryGetProperty("total_tokens", out var total))
                     totalTokens = total.GetInt32();
                 else
                     totalTokens = promptTokens + completionTokens;

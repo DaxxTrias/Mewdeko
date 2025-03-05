@@ -18,6 +18,17 @@ public class GroqClient : IAiClient
     /// </summary>
     public AiService.AiProvider Provider => AiService.AiProvider.Groq;
 
+    // Define Groq model context windows from the documentation
+    private static readonly Dictionary<string, int> ModelContextLimits = new()
+    {
+        { "mixtral-8x7b-32768", 32768 },
+        { "llama3-70b-8192", 8192 },
+        { "llama3-8b-8192", 8192 },
+        { "llama-3.1-70b-versatile", 32768 },
+        { "llama-3.1-8b-instant", 131072 },
+        { "default", 4096 } // Default fallback limit
+    };
+
     /// <summary>
     ///     Streams a response from the Groq AI model.
     /// </summary>
@@ -35,6 +46,9 @@ public class GroqClient : IAiClient
             httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
             httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
 
+            // Set a lower max_tokens value for Groq to ensure responses aren't too large
+            int maxTokens = 512; // This will help prevent Discord embed limit issues
+
             // Prepare the request body
             var requestBody = new
             {
@@ -44,12 +58,14 @@ public class GroqClient : IAiClient
                     role = m.Role,
                     content = m.Content
                 }).ToArray(),
-                stream = true,
-                max_tokens = 1024  // Similar to Claude's MaxTokens
+                stream = true
             };
 
+            var jsonRequest = JsonSerializer.Serialize(requestBody);
+            Log.Information($"Groq request using model: {model}, message count: {messages.Count()}, request size: {Encoding.UTF8.GetByteCount(jsonRequest)} bytes");
+
             var content = new StringContent(
-                JsonSerializer.Serialize(requestBody),
+                jsonRequest,
                 Encoding.UTF8,
                 "application/json");
 
@@ -64,7 +80,12 @@ public class GroqClient : IAiClient
                 HttpCompletionOption.ResponseHeadersRead,
                 cancellationToken);
 
-            response.EnsureSuccessStatusCode();
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorResponse = await response.Content.ReadAsStringAsync(cancellationToken);
+                Log.Error($"Groq API error: {response.StatusCode} - {errorResponse}");
+                throw new HttpRequestException($"Groq API error: {response.StatusCode} - {errorResponse}");
+            }
 
             var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
 
