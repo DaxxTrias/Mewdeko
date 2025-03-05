@@ -1371,14 +1371,15 @@ public class CustomVoiceService : INService
             if (oldState.VoiceChannel != null && activeChannels.TryGetValue(guild.Id, out var oldChannels) &&
                 oldChannels.Contains(oldState.VoiceChannel.Id))
             {
+                var vc = guild.GetVoiceChannel(oldState.VoiceChannel.Id);
                 // Check if the channel is now empty
-                if (oldState.VoiceChannel.Users.Count == 0)
+                if (vc.ConnectedUsers.Count == 0)
                 {
                     // Get the channel to check if it should be kept
                     await using var db = await this.db.GetContextAsync();
                     var customChannel = await db.CustomVoiceChannels.FirstOrDefaultAsync(c => c.ChannelId == oldState.VoiceChannel.Id);
 
-                    if (customChannel != null && !customChannel.KeepAlive && config.DeleteWhenEmpty)
+                    if (customChannel is { KeepAlive: false } && config.DeleteWhenEmpty)
                     {
                         // Mark the channel as empty
                         emptyChannels.TryAdd(oldState.VoiceChannel.Id, DateTime.UtcNow);
@@ -1386,9 +1387,14 @@ public class CustomVoiceService : INService
                         // Schedule deletion after timeout
                         if (config.EmptyChannelTimeout > 0)
                         {
-                            var timer = new Timer(async _ =>
-                            {
-                                await DeleteEmptyChannelAsync(guild.Id, oldState.VoiceChannel.Id);
+                            var timer = new Timer(_ => {
+                                Task.Run(async () => {
+                                    try {
+                                        await DeleteEmptyChannelAsync(guild.Id, oldState.VoiceChannel.Id);
+                                    } catch (Exception ex) {
+                                        Log.Error(ex, "Timer callback failed for channel {ChannelId}", oldState.VoiceChannel.Id);
+                                    }
+                                });
                             }, null, TimeSpan.FromMinutes(config.EmptyChannelTimeout), Timeout.InfiniteTimeSpan);
 
                             emptyChannelTimers.TryAdd(oldState.VoiceChannel.Id, timer);
