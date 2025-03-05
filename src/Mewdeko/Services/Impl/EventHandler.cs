@@ -1,5 +1,4 @@
-﻿using Discord.Interactions;
-using Serilog;
+﻿using Serilog;
 
 namespace Mewdeko.Services.Impl;
 

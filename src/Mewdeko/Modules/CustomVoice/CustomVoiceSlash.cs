@@ -1,15 +1,7 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Text.Json;
-using System.Threading.Tasks;
-using Discord;
+﻿using System.Text.Json;
 using Discord.Interactions;
-using Discord.WebSocket;
 using Mewdeko.Common.Attributes.InteractionCommands;
 using Mewdeko.Database.DbContextStuff;
-using Mewdeko.Database.Models;
 using Mewdeko.Modules.CustomVoice.Services;
 using Serilog;
 

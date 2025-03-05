@@ -1,11 +1,9 @@
 using Discord.Interactions;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Common.Modals;
-using Mewdeko.Modules.Administration.Services;
 using Mewdeko.Modules.Utility.Services;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
-using Swan;
 
 namespace Mewdeko.Modules.Utility;
 

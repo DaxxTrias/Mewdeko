@@ -1,10 +1,7 @@
 ﻿using Mewdeko.Common.ModuleBehaviors;
-using Mewdeko.Database.Models;
 using Mewdeko.Database.DbContextStuff;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
-using Discord;
-using Discord.WebSocket;
 
 namespace Mewdeko.Modules.Starboard.Services;
 

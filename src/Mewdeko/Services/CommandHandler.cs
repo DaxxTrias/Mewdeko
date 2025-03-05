@@ -13,7 +13,6 @@ using Mewdeko.Modules.Help.Services;
 using Mewdeko.Modules.Permissions.Common;
 using Mewdeko.Modules.Permissions.Services;
 using Mewdeko.Services.Settings;
-using Mewdeko.Services.strings;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 using ExecuteResult = Discord.Commands.ExecuteResult;

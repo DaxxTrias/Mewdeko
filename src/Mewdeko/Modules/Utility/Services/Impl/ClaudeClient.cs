@@ -1,25 +1,22 @@
-﻿using System.Threading;
-using Claudia;
+﻿using System.IO;
+using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Text;
+using System.Text.Json;
+using System.Threading;
 using Serilog;
-using RequestOptions = Claudia.RequestOptions;
 
 namespace Mewdeko.Modules.Utility.Services.Impl;
 
 /// <summary>
-///     Implements Claude AI functionality using the Claudia library.
+///     Implements Claude AI functionality using direct API calls to Anthropic's API.
 /// </summary>
 public class ClaudeClient : IAiClient
 {
     /// <summary>
     ///     Gets the AI provider type for this client.
     /// </summary>
-    public AiService.AiProvider Provider
-    {
-        get
-        {
-            return AiService.AiProvider.Claude;
-        }
-    }
+    public AiService.AiProvider Provider => AiService.AiProvider.Claude;
 
     /// <summary>
     ///     Streams a response from the Claude AI model.
@@ -28,35 +25,123 @@ public class ClaudeClient : IAiClient
     /// <param name="model">The model identifier to use.</param>
     /// <param name="apiKey">The API key for authentication.</param>
     /// <param name="cancellationToken">Optional token to cancel the operation.</param>
-    /// <returns>A stream containing the AI response.</returns>
+    /// <returns>A stream containing the raw JSON responses from the Claude API.</returns>
     public async Task<IAsyncEnumerable<string>> StreamResponseAsync(IEnumerable<AiMessage> messages, string model,
         string apiKey, CancellationToken cancellationToken = default)
     {
         try
         {
-            var client = new Anthropic
+            var httpClient = new HttpClient();
+            httpClient.DefaultRequestHeaders.Add("x-api-key", apiKey);
+            httpClient.DefaultRequestHeaders.Add("anthropic-version", "2023-06-01");
+            httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
+
+            // Extract system message and prepare for API
+            var systemMessage = messages.FirstOrDefault(m => m.Role == "system")?.Content;
+            var filteredMessages = messages.Where(m => m.Role != "system").ToList();
+
+            // Prepare the request body
+            var requestBody = new
             {
-                ApiKey = apiKey
+                model,
+                max_tokens = 1024,
+                messages = filteredMessages.Select(m => new
+                {
+                    role = m.Role,
+                    content = m.Content
+                }).ToArray(),
+                system = systemMessage,
+                stream = true
             };
 
-            var systemMessage = messages.FirstOrDefault(m => m.Role == "system")?.Content;
-            var filteredMessages = messages.Where(m => m.Role != "system");
+            var jsonRequest = JsonSerializer.Serialize(requestBody);
+            Log.Information($"Claude request using model: {model}, message count: {filteredMessages.Count}, request size: {Encoding.UTF8.GetByteCount(jsonRequest)} bytes");
 
-            var stream = client.Messages.CreateStreamAsync(new MessageRequest
+            var content = new StringContent(
+                jsonRequest,
+                Encoding.UTF8,
+                "application/json");
+
+            // Create and send the request
+            var request = new HttpRequestMessage(HttpMethod.Post, "https://api.anthropic.com/v1/messages")
             {
-                Model = model,
-                MaxTokens = 1024,
-                System = systemMessage,
-                Messages = filteredMessages.Select(m => new Message { Role = m.Role, Content = m.Content }).ToArray()
-            }, cancellationToken: cancellationToken);
+                Content = content
+            };
 
-            return stream.Where(e => e is ContentBlockDelta)
-                .Cast<ContentBlockDelta>()
-                .Select(c => c.Delta.Text);
+            var response = await httpClient.SendAsync(
+                request,
+                HttpCompletionOption.ResponseHeadersRead,
+                cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorResponse = await response.Content.ReadAsStringAsync(cancellationToken);
+                Log.Error($"Claude API error: {response.StatusCode} - {errorResponse}");
+                throw new HttpRequestException($"Claude API error: {response.StatusCode} - {errorResponse}");
+            }
+
+            var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+
+            // Create a channel to stream the responses
+            var channel = Channel.CreateUnbounded<string>();
+
+            // Process the stream in a separate task
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    using var reader = new StreamReader(stream);
+                    string eventType = null;
+                    string data = null;
+
+                    while (!reader.EndOfStream && !cancellationToken.IsCancellationRequested)
+                    {
+                        var line = await reader.ReadLineAsync(cancellationToken);
+                        if (string.IsNullOrEmpty(line))
+                        {
+                            // Empty line marks the end of an event
+                            if (!string.IsNullOrEmpty(data))
+                            {
+                                // Send complete event data to channel
+                                await channel.Writer.WriteAsync(data, cancellationToken);
+
+                                // Log event for debugging
+                                Log.Information($"Claude event: {eventType} with data length: {data?.Length ?? 0}");
+
+                                // Reset for next event
+                                eventType = null;
+                                data = null;
+                            }
+                            continue;
+                        }
+
+                        if (line.StartsWith("event: "))
+                        {
+                            eventType = line.Substring("event: ".Length);
+                        }
+                        else if (line.StartsWith("data: "))
+                        {
+                            data = line.Substring("data: ".Length);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Log.Error(ex, "Error processing Claude stream");
+                }
+                finally
+                {
+                    channel.Writer.Complete();
+                    httpClient.Dispose();
+                }
+            }, cancellationToken);
+
+            // Return the channel reader as an IAsyncEnumerable
+            return channel.Reader.ReadAllAsync(cancellationToken);
         }
-        catch (Exception e)
+        catch (Exception ex)
         {
-            Log.Error(e, "An error occured while streaming messages.");
+            Log.Error(ex, "An error occurred while streaming messages from Claude.");
             throw;
         }
     }

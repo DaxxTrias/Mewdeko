@@ -2,10 +2,7 @@
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
 using Mewdeko.Common.Attributes.TextCommands;
-using Mewdeko.Database.DbContextStuff;
-using Mewdeko.Modules.Administration.Services;
 using Mewdeko.Modules.Utility.Services;
-using Swan;
 
 namespace Mewdeko.Modules.Utility;
 
