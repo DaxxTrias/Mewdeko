@@ -10,7 +10,8 @@ namespace Mewdeko.Modules.RoleStates;
 /// </summary>
 /// <param name="bss">The BotConfigService instance.</param>
 /// <param name="interactivity">The InteractiveService instance.</param>
-public class RoleStates(BotConfigService bss, InteractiveService interactivity) : MewdekoModuleBase<RoleStatesService>
+public class RoleStates(BotConfigService bss, InteractiveService interactivity, DiscordShardedClient client)
+    : MewdekoModuleBase<RoleStatesService>
 {
     /// <summary>
     ///     Toggles the role states feature on or off.
@@ -24,6 +25,72 @@ public class RoleStates(BotConfigService bss, InteractiveService interactivity) 
             await ctx.Channel.SendConfirmAsync($"{bss.Data.SuccessEmote} Role States are now enabled!");
         else
             await ctx.Channel.SendConfirmAsync($"{bss.Data.SuccessEmote} Role States are now disabled!");
+    }
+
+    /// <summary>
+    ///     Saves role states for all users in the server.
+    /// </summary>
+    [Cmd]
+    [Aliases]
+    [UserPerm(GuildPermission.Administrator)]
+    public async Task SaveAllRoleStates()
+    {
+        var roleStateSettings = await Service.GetRoleStateSettings(ctx.Guild.Id);
+        if (roleStateSettings is null || !roleStateSettings.Enabled)
+        {
+            await ctx.Channel.SendErrorAsync(
+                $"{bss.Data.ErrorEmote} {Strings.RoleStatesNotEnabled(ctx.Guild.Id)}", Config);
+            return;
+        }
+
+        await ctx.Channel.SendConfirmAsync(
+            $"{bss.Data.LoadingEmote} {Strings.SavingAllRoleStates(ctx.Guild.Id)}");
+
+        var result = await Service.SaveAllUserRoleStates(ctx.Guild);
+
+        if (result.SavedCount > 0)
+            await ctx.Channel.SendConfirmAsync(
+                $"{bss.Data.SuccessEmote} {Strings.RoleStatesSaved(ctx.Guild.Id, result.SavedCount)}");
+        else
+            await ctx.Channel.SendErrorAsync(
+                $"{bss.Data.ErrorEmote} {Strings.NoRoleStatesSaved(ctx.Guild.Id)}", Config);
+    }
+
+    /// <summary>
+    ///     Transfers role states from the current server to another server.
+    /// </summary>
+    /// <param name="serverId">The ID of the target server.</param>
+    [Cmd]
+    [Aliases]
+    [UserPerm(GuildPermission.Administrator)]
+    public async Task TransferRoleStates(ulong serverId)
+    {
+        var targetGuild = client.GetGuild(serverId);
+        if (targetGuild == null)
+        {
+            await ReplyErrorAsync(Strings.NotInServer(serverId));
+            return;
+        }
+
+        var roleStateSettings = await Service.GetRoleStateSettings(ctx.Guild.Id);
+        if (roleStateSettings is null || !roleStateSettings.Enabled)
+        {
+            await ctx.Channel.SendErrorAsync(
+                $"{bss.Data.ErrorEmote} {Strings.RoleStatesNotEnabled(ctx.Guild.Id)}", Config);
+            return;
+        }
+
+        await ctx.Channel.SendConfirmAsync(
+            $"{bss.Data.LoadingEmote} {Strings.TransferringRoleStates(ctx.Guild.Id, targetGuild.Name)}");
+
+        var result = await Service.TransferRoleStates(ctx.Guild, targetGuild);
+
+        if (result.TransferCount > 0)
+            await ctx.Channel.SendConfirmAsync(
+                $"{bss.Data.SuccessEmote} {Strings.RoleStatesTransferred(ctx.Guild.Id, result.TransferCount, targetGuild.Name)}");
+        else
+            await ctx.Channel.SendErrorAsync(
+                $"{bss.Data.ErrorEmote} {Strings.RoleStatesTransferFailed(ctx.Guild.Id)}\n{result.ErrorMessage}", Config);
     }
 
     /// <summary>

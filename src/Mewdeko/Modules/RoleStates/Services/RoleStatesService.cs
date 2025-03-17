@@ -15,7 +15,7 @@ public class RoleStatesService : INService
     /// <summary>
     ///     Initializes a new instance of the <see cref="RoleStatesService" /> class.
     /// </summary>
-    /// <param name="dbContext">The database service to interact with stored data.</param>
+    /// <param name="dbProvider">The database service to interact with stored data.</param>
     /// <param name="eventHandler">The event handler to subscribe to guild member events.</param>
     public RoleStatesService(DbContextProvider dbProvider, EventHandler eventHandler)
     {
@@ -421,5 +421,248 @@ public class RoleStatesService : INService
             dbContext.UserRoleStates.Update(userRoleState);
             await dbContext.SaveChangesAsync();
         }
+    }
+
+    /// <summary>
+    ///     Transfers role states from one guild to another, automatically mapping roles by name.
+    /// </summary>
+    /// <param name="sourceGuild">The source guild to transfer role states from.</param>
+    /// <param name="targetGuild">The target guild to transfer role states to.</param>
+    /// <returns>
+    ///     A task that represents the asynchronous operation, containing a tuple with the count of transferred role states
+    ///     and any error message.
+    /// </returns>
+    public async Task<(int TransferCount, string ErrorMessage)> TransferRoleStates(
+        IGuild sourceGuild,
+        IGuild targetGuild)
+    {
+        if (sourceGuild.Id == targetGuild.Id)
+            return (0, "Source and target guilds cannot be the same.");
+
+        await using var dbContext = await dbProvider.GetContextAsync();
+
+        // Check if role states are enabled for the source guild
+        var sourceSettings = await dbContext.RoleStateSettings.FirstOrDefaultAsync(x => x.GuildId == sourceGuild.Id);
+        var targetSettings = await dbContext.RoleStateSettings.FirstOrDefaultAsync(x => x.GuildId == targetGuild.Id);
+
+        if (sourceSettings is null || !sourceSettings.Enabled)
+            return (0, "Role states are not enabled for the source guild.");
+
+        if (targetSettings is null)
+        {
+            // Create settings for target guild if they don't exist
+            targetSettings = new RoleStateSettings
+            {
+                GuildId = targetGuild.Id,
+                Enabled = true,
+                IgnoreBots = sourceSettings.IgnoreBots,
+                ClearOnBan = sourceSettings.ClearOnBan,
+                DeniedRoles = "",
+                DeniedUsers = ""
+            };
+            await dbContext.RoleStateSettings.AddAsync(targetSettings);
+            await dbContext.SaveChangesAsync();
+        }
+        else if (!targetSettings.Enabled)
+        {
+            // Enable role states for target guild
+            targetSettings.Enabled = true;
+            dbContext.RoleStateSettings.Update(targetSettings);
+            await dbContext.SaveChangesAsync();
+        }
+
+        // Get all user role states from the source guild
+        var sourceRoleStates = await dbContext.UserRoleStates
+            .Where(x => x.GuildId == sourceGuild.Id)
+            .ToListAsync();
+
+        if (!sourceRoleStates.Any())
+            return (0, "No role states found in the source guild.");
+
+        // Get all roles from both guilds to create a name-based mapping
+        var sourceRoles = sourceGuild.Roles.ToDictionary(r => r.Id, r => r);
+        var targetRoles = targetGuild.Roles;
+
+        // Create role mapping based on role names
+        var roleMapping = new Dictionary<ulong, ulong>();
+        foreach (var sourceRole in sourceRoles.Values)
+        {
+            var matchingTargetRole = targetRoles.FirstOrDefault(r =>
+                r.Name.Equals(sourceRole.Name, StringComparison.OrdinalIgnoreCase) &&
+                !r.IsManaged &&
+                r.Id != targetGuild.Id);
+
+            if (matchingTargetRole != null)
+            {
+                roleMapping[sourceRole.Id] = matchingTargetRole.Id;
+            }
+        }
+
+        // Log the role mapping results
+        Log.Information("Found {MappedRoles} matching roles between guilds by name", roleMapping.Count);
+
+        var transferCount = 0;
+        var skippedCount = 0;
+
+        foreach (var sourceState in sourceRoleStates)
+        {
+            // Check if a role state already exists for this user in the target guild
+            var existingTargetState = await dbContext.UserRoleStates
+                .FirstOrDefaultAsync(x => x.GuildId == targetGuild.Id && x.UserId == sourceState.UserId);
+
+            // Skip if no roles to transfer
+            if (string.IsNullOrWhiteSpace(sourceState.SavedRoles))
+            {
+                skippedCount++;
+                continue;
+            }
+
+            // Parse saved roles
+            var sourceRoleIds = sourceState.SavedRoles.Split(',').Select(ulong.Parse).ToList();
+
+            // Map roles based on name mapping
+            var targetRoleIds = new List<ulong>();
+            foreach (var roleId in sourceRoleIds)
+            {
+                // Check if this role exists in the source guild
+                if (!sourceRoles.TryGetValue(roleId, out var sourceRole))
+                    continue;
+
+                // Check if we have a mapping for this role
+                if (roleMapping.TryGetValue(roleId, out var mappedRoleId))
+                {
+                    targetRoleIds.Add(mappedRoleId);
+                }
+            }
+
+            if (!targetRoleIds.Any())
+            {
+                skippedCount++;
+                continue;
+            }
+
+            // Create or update the role state in the target guild
+            if (existingTargetState is null)
+            {
+                var newTargetState = new UserRoleStates
+                {
+                    UserName = sourceState.UserName,
+                    GuildId = targetGuild.Id,
+                    UserId = sourceState.UserId,
+                    SavedRoles = string.Join(",", targetRoleIds)
+                };
+                await dbContext.UserRoleStates.AddAsync(newTargetState);
+            }
+            else
+            {
+                existingTargetState.SavedRoles = string.Join(",", targetRoleIds);
+                dbContext.UserRoleStates.Update(existingTargetState);
+            }
+
+            transferCount++;
+        }
+
+        await dbContext.SaveChangesAsync();
+
+        var resultMessage = transferCount > 0
+            ? $"Successfully transferred {transferCount} role states to the target guild."
+            : "No role states were transferred.";
+
+        if (skippedCount > 0)
+        {
+            resultMessage += $" Skipped {skippedCount} users with no valid role mappings.";
+        }
+
+        return (transferCount, resultMessage);
+    }
+
+    /// <summary>
+    ///     Saves the current role states of all users in a guild.
+    /// </summary>
+    /// <param name="guild">The guild to save role states for.</param>
+    /// <returns>
+    ///     A task that represents the asynchronous operation, containing a tuple with the count of saved role states
+    ///     and any error message.
+    /// </returns>
+    public async Task<(int SavedCount, string ErrorMessage)> SaveAllUserRoleStates(IGuild guild)
+    {
+        await using var dbContext = await dbProvider.GetContextAsync();
+
+        // Check if role states are enabled for this guild
+        var roleStateSettings = await dbContext.RoleStateSettings.FirstOrDefaultAsync(x => x.GuildId == guild.Id);
+        if (roleStateSettings is null || !roleStateSettings.Enabled)
+            return (0, "Role states are not enabled for this guild.");
+
+        // Get denied roles and users
+        var deniedRoles = string.IsNullOrWhiteSpace(roleStateSettings.DeniedRoles)
+            ? []
+            : roleStateSettings.DeniedRoles.Split(',').Select(ulong.Parse).ToList();
+
+        var deniedUsers = string.IsNullOrWhiteSpace(roleStateSettings.DeniedUsers)
+            ? []
+            : roleStateSettings.DeniedUsers.Split(',').Select(ulong.Parse).ToList();
+
+        // Get all users from the guild
+        var allUsers = await guild.GetUsersAsync();
+
+        var savedCount = 0;
+
+        foreach (var user in allUsers)
+        {
+            // Skip if user is denied
+            if (deniedUsers.Contains(user.Id))
+                continue;
+
+            // Skip bots if configured to ignore them
+            if (roleStateSettings.IgnoreBots && user.IsBot)
+                continue;
+
+            // Get user's current roles
+            var roles = user.RoleIds.Where(r =>
+            {
+                var role = guild.GetRole(r);
+                return role is { IsManaged: false } && role.Id != guild.Id;
+            });
+
+            // Filter out denied roles
+            if (deniedRoles.Any())
+            {
+                roles = roles.Except(deniedRoles);
+            }
+
+            // Skip if no roles to save
+            if (!roles.Any())
+                continue;
+
+            // Check if a role state already exists for this user
+            var existingRoleState = await dbContext.UserRoleStates
+                .FirstOrDefaultAsync(x => x.GuildId == guild.Id && x.UserId == user.Id);
+
+            // Create or update the role state
+            if (existingRoleState is null)
+            {
+                var newRoleState = new UserRoleStates
+                {
+                    UserName = user.ToString(),
+                    GuildId = guild.Id,
+                    UserId = user.Id,
+                    SavedRoles = string.Join(",", roles)
+                };
+                await dbContext.UserRoleStates.AddAsync(newRoleState);
+            }
+            else
+            {
+                existingRoleState.SavedRoles = string.Join(",", roles);
+                dbContext.UserRoleStates.Update(existingRoleState);
+            }
+
+            savedCount++;
+        }
+
+        await dbContext.SaveChangesAsync();
+
+        return (savedCount, savedCount > 0
+            ? $"Successfully saved role states for {savedCount} users in the guild."
+            : "No role states were saved.");
     }
 }
