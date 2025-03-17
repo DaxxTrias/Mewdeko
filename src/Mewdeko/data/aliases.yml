@@ -8,6 +8,14 @@ autobanroleadd:
 autobanroleremove:
   - autobanroleremove
   - abrr
+saveallrolestates:
+  - saveallrolestates
+  - saveserverstates
+  - backuprolestates
+transferrolestates:
+  - transferrolestates
+  - copyrolestates
+  - moverolestates
 baninrole:
   - baninrole
 banbyhash:
