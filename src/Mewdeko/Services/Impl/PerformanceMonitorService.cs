@@ -1,396 +1,313 @@
 ﻿using System.Diagnostics;
+using System.Reflection;
+using System.Runtime.CompilerServices;
+using System.Text;
 using System.Threading;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using Prometheus;
 using Serilog;
 
 namespace Mewdeko.Services.Impl
 {
     /// <summary>
-    /// Service for monitoring and reporting CPU-intensive operations in the bot to Prometheus/Grafana.
-    /// Can be enabled/disabled via BotCredentials.
+    /// Service that automatically monitors performance across entire namespaces and assemblies.
     /// </summary>
-    public class PerformanceMonitorService : BackgroundService, INService
+    public class PerformanceMonitorService : INService
     {
-        private readonly IServiceProvider services;
-        private readonly BotCredentials credentials;
-        private readonly NonBlocking.ConcurrentDictionary<string, PerformanceEntry> performanceEntries = new();
-        private readonly NonBlocking.ConcurrentDictionary<string, Stopwatch> activeOperations = new();
-        private readonly TimeSpan reportingInterval = TimeSpan.FromSeconds(15);
-        private readonly TimeSpan operationThreshold = TimeSpan.FromMilliseconds(100);
-        private readonly KestrelMetricServer metricsServer;
-
-        // Prometheus metrics
-        private readonly Counter operationCounter;
-        private readonly Histogram operationDuration;
-        private readonly Gauge cpuUsage;
-        private readonly Gauge memoryUsage;
-        private readonly Gauge guildCount;
-        private readonly Gauge userCount;
-        private readonly Gauge shardCount;
-        private readonly Gauge uptime;
-        private readonly Gauge commandsProcessed;
-        private readonly Gauge messagesReceived;
+        private readonly ConcurrentDictionary<string, MethodPerformanceData> methodPerformanceData = new();
+        private bool initialized;
 
         /// <summary>
-        /// Initializes a new instance of the PerformanceMonitorService class.
+        /// Initializes a new instance of the <see cref="PerformanceMonitorService"/> class.
         /// </summary>
-        public PerformanceMonitorService(
-            IServiceProvider services,
-            BotCredentials credentials)
+        public PerformanceMonitorService()
         {
-            this.services = services;
-            this.credentials = credentials;
-            var metricPort1 = credentials.MetricsPort > 0 ? credentials.MetricsPort : 9090;
+            Process.GetCurrentProcess();
 
-            if (!credentials.EnableMetrics)
-            {
-                Log.Information("Performance metrics are disabled. Enable them in credentials to use Prometheus/Grafana monitoring.");
+            // Log performance data every 5 minutes
+            new Timer(LogPerformanceData, null, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5));
+        }
+
+        /// <summary>
+        /// Initializes performance monitoring for the specified namespace in the given assembly.
+        /// </summary>
+        /// <param name="assembly">The assembly to monitor.</param>
+        /// <param name="namespaceToMonitor">The namespace to monitor (can be a parent namespace).</param>
+        public void Initialize(Assembly assembly, string namespaceToMonitor)
+        {
+            if (initialized)
                 return;
-            }
 
-            // Initialize Prometheus metrics
-            operationCounter = Metrics.CreateCounter(
-                "mewdeko_operations_total",
-                "Total number of operations executed",
-                new CounterConfiguration
-                {
-                    LabelNames = new[] { "category", "operation" }
-                });
+            Log.Information($"Initializing performance monitoring for namespace {namespaceToMonitor} in assembly {assembly.GetName().Name}");
 
-            operationDuration = Metrics.CreateHistogram(
-                "mewdeko_operation_duration_milliseconds",
-                "Duration of operations in milliseconds",
-                new HistogramConfiguration
-                {
-                    LabelNames = ["category", "operation"],
-                    Buckets = [1, 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000]
-                });
-
-            cpuUsage = Metrics.CreateGauge(
-                "mewdeko_cpu_usage_percent",
-                "CPU usage of the Mewdeko process");
-
-            memoryUsage = Metrics.CreateGauge(
-                "mewdeko_memory_usage_megabytes",
-                "Memory usage of the Mewdeko process in MB");
-
-            guildCount = Metrics.CreateGauge(
-                "mewdeko_guild_count",
-                "Number of guilds the bot is connected to");
-
-            userCount = Metrics.CreateGauge(
-                "mewdeko_user_count",
-                "Number of users the bot can see");
-
-            shardCount = Metrics.CreateGauge(
-                "mewdeko_shard_count",
-                "Number of shards the bot is using");
-
-            uptime = Metrics.CreateGauge(
-                "mewdeko_uptime_seconds",
-                "Bot uptime in seconds");
-
-            commandsProcessed = Metrics.CreateGauge(
-                "mewdeko_commands_processed_total",
-                "Total number of commands processed");
-
-            messagesReceived = Metrics.CreateGauge(
-                "mewdeko_messages_received_total",
-                "Total number of messages received");
-
-            // Start the Prometheus metrics server
             try
             {
-                metricsServer = new KestrelMetricServer(port: metricPort1);
-                metricsServer.Start();
-                Log.Information("Prometheus metrics server started on port {MetricPort}", metricPort1);
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "Failed to start metrics server on port {MetricPort}. Metrics will not be available.", metricPort1);
-            }
-        }
+                // Find all types in the specified namespace
+                var types = assembly.GetTypes()
+                    .Where(type => type.Namespace != null &&
+                                  type.Namespace.StartsWith(namespaceToMonitor) &&
+                                  !type.IsAbstract &&
+                                  !type.IsInterface &&
+                                  type.IsClass)
+                    .ToList();
 
-        /// <summary>
-        /// Begins tracking an operation's performance.
-        /// </summary>
-        public IDisposable TrackOperation(string operationName, string category = "General")
-        {
-            if (!credentials.EnableMetrics)
-                return new NullTracker();
+                Log.Information($"Found {types.Count} types to monitor in namespace {namespaceToMonitor}");
 
-            var stopwatch = new Stopwatch();
-            stopwatch.Start();
-
-            var fullOperationKey = $"{category}:{operationName}";
-            activeOperations[fullOperationKey] = stopwatch;
-
-            return new OperationTracker(this, fullOperationKey, category, operationName);
-        }
-
-        /// <summary>
-        /// Increments the command processed counter.
-        /// </summary>
-        public void IncrementCommandsProcessed()
-        {
-            if (!credentials.EnableMetrics)
-                return;
-
-            commandsProcessed.Inc();
-        }
-
-        /// <summary>
-        /// Increments the messages received counter.
-        /// </summary>
-        public void IncrementMessagesReceived()
-        {
-            if (!credentials.EnableMetrics)
-                return;
-
-            messagesReceived.Inc();
-        }
-
-        /// <summary>
-        /// Gets the current top CPU intensive operations.
-        /// </summary>
-        public List<PerformanceEntry> GetTopOperations(int count = 10)
-        {
-            return performanceEntries.Values
-                .OrderByDescending(x => x.AverageExecutionTimeMs)
-                .Take(count)
-                .ToList();
-        }
-
-        /// <summary>
-        /// Calculates CPU usage for the current process.
-        /// </summary>
-        public float GetCurrentCpuUsage()
-        {
-            try
-            {
-                var process = Process.GetCurrentProcess();
-                var startTime = DateTime.UtcNow;
-                var startCpuUsage = process.TotalProcessorTime;
-
-                Thread.Sleep(100);
-
-                var endTime = DateTime.UtcNow;
-                var endCpuUsage = process.TotalProcessorTime;
-
-                var cpuUsedMs = (endCpuUsage - startCpuUsage).TotalMilliseconds;
-                var totalMsPassed = (endTime - startTime).TotalMilliseconds;
-                var cpuUsageTotal = cpuUsedMs / (Environment.ProcessorCount * totalMsPassed);
-
-                return (float)(cpuUsageTotal * 100);
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "Error calculating CPU usage");
-                return 0;
-            }
-        }
-
-        /// <summary>
-        /// Implements the background service execution logic.
-        /// </summary>
-        protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-        {
-            if (!credentials.EnableMetrics)
-            {
-                // If metrics are disabled, keep the service alive but don't do anything
-                while (!stoppingToken.IsCancellationRequested)
+                // Register for dynamic proxy creation
+                foreach (var type in types)
                 {
-                    await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
+                    InstrumentTypeWithReflection(type);
                 }
-                return;
-            }
 
-            try
-            {
-                // Wait for the client to be ready
-                var mewdeko = services.GetRequiredService<Mewdeko>();
-                await mewdeko.Ready.Task;
-
-                var client = services.GetRequiredService<DiscordShardedClient>();
-                var startTime = Process.GetCurrentProcess().StartTime;
-
-                // Setup message received counter
-                client.MessageReceived += _ => {
-                    IncrementMessagesReceived();
-                    return Task.CompletedTask;
-                };
-
-                // Main monitoring loop
-                while (!stoppingToken.IsCancellationRequested)
-                {
-                    try
-                    {
-                        // Update general system metrics
-                        var cpuUsage = GetCurrentCpuUsage();
-                        this.cpuUsage.Set(cpuUsage);
-
-                        var memoryUsageMb = Process.GetCurrentProcess().WorkingSet64 / (1024 * 1024);
-                        memoryUsage.Set(memoryUsageMb);
-
-                        guildCount.Set(client.Guilds.Count);
-                        userCount.Set(client.Guilds.Sum(g => g.MemberCount));
-                        shardCount.Set(client.Shards.Count);
-
-                        var uptimeSeconds = (DateTime.UtcNow - startTime.ToUniversalTime()).TotalSeconds;
-                        uptime.Set(uptimeSeconds);
-
-                        // Log stats at longer intervals
-                        Log.Debug("Performance Stats: CPU {CpuUsage:F1}%, Memory {MemoryMb}MB, Guilds {GuildCount}, Shards {ShardCount}",
-                            cpuUsage, memoryUsageMb, client.Guilds.Count, client.Shards.Count);
-                    }
-                    catch (Exception ex)
-                    {
-                        Log.Error(ex, "Error in performance monitoring loop");
-                    }
-
-                    await Task.Delay(reportingInterval, stoppingToken);
-                }
+                initialized = true;
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Fatal error in PerformanceMonitorService");
+                Log.Error(ex, $"Error initializing performance monitoring for namespace {namespaceToMonitor}");
             }
         }
 
         /// <summary>
-        /// Ends tracking an operation and records its execution time.
+        /// Uses reflection to hook into methods for performance monitoring.
+        /// Note: This is a basic implementation. For production use, consider
+        /// using library-based interception like Castle DynamicProxy.
         /// </summary>
-        internal void EndOperation(string operationKey, string category, string operationName)
+        /// <param name="type">The type to instrument.</param>
+        private void InstrumentTypeWithReflection(Type type)
         {
-            if (!credentials.EnableMetrics)
-                return;
+            var methods = type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic |
+                                        BindingFlags.Instance | BindingFlags.Static |
+                                        BindingFlags.DeclaredOnly)
+                            .Where(m => !m.IsSpecialName && // Skip property accessors
+                                       !m.IsConstructor &&
+                                       !m.GetCustomAttributes(typeof(CompilerGeneratedAttribute), true).Any())
+                            .ToList();
 
-            if (!activeOperations.TryRemove(operationKey, out var stopwatch)) return;
-            stopwatch.Stop();
-            var elapsedMs = stopwatch.ElapsedMilliseconds;
+            Log.Debug($"Instrumenting {methods.Count} methods in type {type.FullName}");
 
-            // Record in Prometheus
-            operationCounter.WithLabels(category, operationName).Inc();
-            operationDuration.WithLabels(category, operationName).Observe(elapsedMs);
-
-            // Only track operations that exceed the threshold in memory
-            if (elapsedMs >= operationThreshold.TotalMilliseconds)
+            // Record the type and its methods for monitoring
+            foreach (var method in methods)
             {
-                RecordOperationTime(operationKey, elapsedMs);
+                var methodKey = $"{type.FullName}.{method.Name}";
+                methodPerformanceData.TryAdd(methodKey, new MethodPerformanceData(methodKey));
             }
         }
 
         /// <summary>
-        /// Records the execution time of an operation for statistical purposes.
+        /// Manually tracks method execution for methods that can't be auto-instrumented.
         /// </summary>
-        private void RecordOperationTime(string operationKey, long elapsedMs)
+        /// <param name="methodName">The name of the method.</param>
+        /// <param name="executionTime">The execution time.</param>
+        public void RecordMethodExecution(string methodName, TimeSpan executionTime)
         {
-            performanceEntries.AddOrUpdate(
-                operationKey,
-                key => new PerformanceEntry
+            methodPerformanceData.AddOrUpdate(
+                methodName,
+                _ => new MethodPerformanceData(methodName, executionTime),
+                (_, existing) =>
                 {
-                    OperationKey = key,
-                    CallCount = 1,
-                    TotalExecutionTimeMs = elapsedMs,
-                    MaxExecutionTimeMs = elapsedMs,
-                    MinExecutionTimeMs = elapsedMs,
-                    LastExecutionTimeMs = elapsedMs,
-                    LastExecutionTime = DateTime.UtcNow
-                },
-                (key, existing) =>
-                {
-                    existing.CallCount++;
-                    existing.TotalExecutionTimeMs += elapsedMs;
-                    existing.MaxExecutionTimeMs = Math.Max(existing.MaxExecutionTimeMs, elapsedMs);
-                    existing.MinExecutionTimeMs = Math.Min(existing.MinExecutionTimeMs, elapsedMs);
-                    existing.LastExecutionTimeMs = elapsedMs;
-                    existing.LastExecutionTime = DateTime.UtcNow;
+                    existing.AddExecution(executionTime);
                     return existing;
                 });
         }
 
-        /// <inheritdoc />
-        public override async Task StopAsync(CancellationToken cancellationToken)
+        /// <summary>
+        /// Creates a performance measurement tracker for manually instrumenting methods.
+        /// </summary>
+        /// <param name="methodName">The name of the method to track.</param>
+        /// <returns>An IDisposable that will record the execution time when disposed.</returns>
+        public IDisposable Measure(string methodName)
         {
-            if (metricsServer != null)
-            {
-                await metricsServer.StopAsync();
-                Log.Information("Prometheus metrics server stopped");
-            }
-
-            await base.StopAsync(cancellationToken);
+            return new MethodPerformanceTracker(this, methodName);
         }
 
         /// <summary>
-        /// Class for tracking active operation performance.
+        /// Gets the top CPU-intensive methods based on execution time.
         /// </summary>
-        private class OperationTracker(
-            PerformanceMonitorService service,
-            string operationKey,
-            string category,
-            string operationName)
-            : IDisposable
+        /// <param name="count">The number of methods to return.</param>
+        /// <returns>An array of method performance data ordered by execution time.</returns>
+        public MethodPerformanceData[] GetTopCpuMethods(int count = 20)
         {
+            return methodPerformanceData.Values
+                .Where(x => x.CallCount > 0)
+                .OrderByDescending(x => x.TotalExecutionTime.TotalMilliseconds / x.CallCount)
+                .Take(count)
+                .ToArray();
+        }
+
+        /// <summary>
+        /// Gets the most frequently called methods.
+        /// </summary>
+        /// <param name="count">The number of methods to return.</param>
+        /// <returns>An array of method performance data ordered by call count.</returns>
+        public MethodPerformanceData[] GetMostCalledMethods(int count = 20)
+        {
+            return methodPerformanceData.Values
+                .OrderByDescending(x => x.CallCount)
+                .Take(count)
+                .ToArray();
+        }
+
+        /// <summary>
+        /// Clears all collected performance data.
+        /// </summary>
+        public void ClearPerformanceData()
+        {
+            foreach (var entry in methodPerformanceData)
+            {
+                entry.Value.Reset();
+            }
+        }
+
+        /// <summary>
+        /// Logs the current performance data to the configured logger.
+        /// </summary>
+        /// <param name="state">The state object passed to the timer callback.</param>
+        private void LogPerformanceData(object state)
+        {
+            var activeMethods = methodPerformanceData.Values.Where(x => x.CallCount > 0).ToList();
+            if (activeMethods.Count == 0)
+                return;
+
+            var sb = new StringBuilder("Performance monitoring - Top CPU intensive methods:\n");
+
+            var topMethods = activeMethods
+                .OrderByDescending(x => x.TotalExecutionTime.TotalMilliseconds / x.CallCount)
+                .Take(10);
+
+            foreach (var method in topMethods)
+            {
+                sb.AppendLine($"{method.MethodName}: {method.TotalExecutionTime.TotalMilliseconds:N2}ms total, " +
+                             $"{method.TotalExecutionTime.TotalMilliseconds / method.CallCount:N2}ms avg, " +
+                             $"called {method.CallCount} times");
+            }
+
+            Log.Information(sb.ToString());
+        }
+
+        /// <summary>
+        /// Represents performance data for a single method.
+        /// </summary>
+        public class MethodPerformanceData
+        {
+            /// <summary>
+            /// Gets the name of the method being tracked.
+            /// </summary>
+            public string MethodName { get; }
+
+            /// <summary>
+            /// Gets the number of times this method has been called.
+            /// </summary>
+            public int CallCount { get; private set; }
+
+            /// <summary>
+            /// Gets the total execution time across all calls to this method.
+            /// </summary>
+            public TimeSpan TotalExecutionTime { get; private set; }
+
+            /// <summary>
+            /// Gets the timestamp of the last execution of this method.
+            /// </summary>
+            public DateTime LastExecuted { get; private set; }
+
+            /// <summary>
+            /// Gets the maximum execution time observed for this method.
+            /// </summary>
+            public TimeSpan MaxExecutionTime { get; private set; }
+
+            /// <summary>
+            /// Gets the minimum execution time observed for this method.
+            /// </summary>
+            public TimeSpan MinExecutionTime { get; private set; }
+
+            /// <summary>
+            /// Gets the average execution time per call in milliseconds.
+            /// </summary>
+            public double AvgExecutionTime => CallCount > 0 ?
+                TotalExecutionTime.TotalMilliseconds / CallCount : 0;
+
+            /// <summary>
+            /// Initializes a new instance of the <see cref="MethodPerformanceData"/> class.
+            /// </summary>
+            /// <param name="methodName">The name of the method.</param>
+            public MethodPerformanceData(string methodName)
+            {
+                MethodName = methodName;
+                CallCount = 0;
+                TotalExecutionTime = TimeSpan.Zero;
+                MaxExecutionTime = TimeSpan.Zero;
+                MinExecutionTime = TimeSpan.MaxValue;
+                LastExecuted = DateTime.MinValue;
+            }
+
+            /// <summary>
+            /// Initializes a new instance of the <see cref="MethodPerformanceData"/> class with an initial execution.
+            /// </summary>
+            /// <param name="methodName">The name of the method.</param>
+            /// <param name="initialExecutionTime">The execution time of the first call.</param>
+            public MethodPerformanceData(string methodName, TimeSpan initialExecutionTime) : this(methodName)
+            {
+                AddExecution(initialExecutionTime);
+            }
+
+            /// <summary>
+            /// Records an additional execution of this method.
+            /// </summary>
+            /// <param name="executionTime">The execution time of the additional call.</param>
+            public void AddExecution(TimeSpan executionTime)
+            {
+                var callCount = CallCount;
+                Interlocked.Increment(ref callCount);
+                TotalExecutionTime += executionTime;
+                LastExecuted = DateTime.UtcNow;
+
+                // Update min/max stats
+                if (executionTime > MaxExecutionTime)
+                    MaxExecutionTime = executionTime;
+
+                if (executionTime < MinExecutionTime)
+                    MinExecutionTime = executionTime;
+            }
+
+            /// <summary>
+            /// Resets the performance data.
+            /// </summary>
+            public void Reset()
+            {
+                CallCount = 0;
+                TotalExecutionTime = TimeSpan.Zero;
+                MaxExecutionTime = TimeSpan.Zero;
+                MinExecutionTime = TimeSpan.MaxValue;
+                LastExecuted = DateTime.MinValue;
+            }
+        }
+
+        /// <summary>
+        /// Tracks the execution time of a method and reports it when disposed.
+        /// </summary>
+        private class MethodPerformanceTracker : IDisposable
+        {
+            private readonly PerformanceMonitorService service;
+            private readonly string methodName;
+            private readonly Stopwatch stopwatch;
+
+            /// <summary>
+            /// Initializes a new instance of the <see cref="MethodPerformanceTracker"/> class.
+            /// </summary>
+            /// <param name="service">The performance monitor service.</param>
+            /// <param name="methodName">The name of the method being tracked.</param>
+            public MethodPerformanceTracker(PerformanceMonitorService service, string methodName)
+            {
+                this.service = service;
+                this.methodName = methodName;
+                stopwatch = Stopwatch.StartNew();
+            }
+
+            /// <summary>
+            /// Records the method execution time when disposed.
+            /// </summary>
             public void Dispose()
             {
-                service.EndOperation(operationKey, category, operationName);
+                stopwatch.Stop();
+                service.RecordMethodExecution(methodName, stopwatch.Elapsed);
             }
         }
-
-        /// <summary>
-        /// A no-op tracker used when metrics are disabled
-        /// </summary>
-        private class NullTracker : IDisposable
-        {
-            public void Dispose() { }
-        }
-    }
-
-    /// <summary>
-    /// Class representing performance data for a tracked operation.
-    /// </summary>
-    public class PerformanceEntry
-    {
-        /// <summary>
-        /// Gets or sets the unique key identifying the operation.
-        /// </summary>
-        public string OperationKey { get; set; }
-
-        /// <summary>
-        /// Gets or sets the number of times this operation has been called.
-        /// </summary>
-        public long CallCount { get; set; }
-
-        /// <summary>
-        /// Gets or sets the total execution time in milliseconds across all calls.
-        /// </summary>
-        public long TotalExecutionTimeMs { get; set; }
-
-        /// <summary>
-        /// Gets or sets the maximum execution time in milliseconds observed.
-        /// </summary>
-        public long MaxExecutionTimeMs { get; set; }
-
-        /// <summary>
-        /// Gets or sets the minimum execution time in milliseconds observed.
-        /// </summary>
-        public long MinExecutionTimeMs { get; set; }
-
-        /// <summary>
-        /// Gets or sets the execution time of the most recent call in milliseconds.
-        /// </summary>
-        public long LastExecutionTimeMs { get; set; }
-
-        /// <summary>
-        /// Gets or sets the timestamp of the most recent call.
-        /// </summary>
-        public DateTime LastExecutionTime { get; set; }
-
-        /// <summary>
-        /// Gets the average execution time in milliseconds.
-        /// </summary>
-        public double AverageExecutionTimeMs => CallCount > 0 ? (double)TotalExecutionTimeMs / CallCount : 0;
     }
 }

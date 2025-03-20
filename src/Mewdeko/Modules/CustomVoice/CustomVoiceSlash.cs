@@ -712,7 +712,7 @@ public class CustomVoiceSlash(DiscordShardedClient client, DbContextProvider dbC
                 {
                     try
                     {
-                        allowedUsers = JsonSerializer.Deserialize<List<ulong>>(customChannel.AllowedUsersJson) ?? new List<ulong>();
+                        allowedUsers = JsonSerializer.Deserialize<List<ulong>>(customChannel.AllowedUsersJson) ?? [];
                     }
                     catch { }
                 }
@@ -756,7 +756,7 @@ public class CustomVoiceSlash(DiscordShardedClient client, DbContextProvider dbC
                 {
                     try
                     {
-                        deniedUsers = JsonSerializer.Deserialize<List<ulong>>(customChannel.DeniedUsersJson) ?? new List<ulong>();
+                        deniedUsers = JsonSerializer.Deserialize<List<ulong>>(customChannel.DeniedUsersJson) ?? [];
                     }
                     catch { }
                 }

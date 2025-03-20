@@ -120,9 +120,8 @@ public class Program
                                 Type = ReferenceType.SecurityScheme, Id = "ApiKeyHeader"
                             }
                         },
-                        new string[]
-                        {
-                        }
+                        [
+                        ]
                     }
                 });
             });

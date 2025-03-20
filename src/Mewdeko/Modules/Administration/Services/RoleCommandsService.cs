@@ -73,7 +73,7 @@ public class RoleCommandsService : INService
 
             var toAdd = gusr.Guild.GetRole(reactionRole.RoleId);
             if (toAdd != null && !gusr.Roles.Contains(toAdd))
-                await gusr.AddRolesAsync(new[] { toAdd });
+                await gusr.AddRolesAsync([toAdd]);
         }
         catch (Exception ex)
         {
@@ -158,7 +158,7 @@ public class RoleCommandsService : INService
 
             var toRemove = gusr.Guild.GetRole(reactionRole.RoleId);
             if (toRemove != null && gusr.Roles.Contains(toRemove))
-                await gusr.RemoveRolesAsync(new[] { toRemove });
+                await gusr.RemoveRolesAsync([toRemove]);
         }
         catch (Exception ex)
         {

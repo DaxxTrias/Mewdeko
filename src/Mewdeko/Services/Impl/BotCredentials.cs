@@ -314,6 +314,16 @@ public class BotCredentials : IBotCredentials
         return OwnerIds.Contains(u.Id);
     }
 
+    /// <summary>
+    ///     Checks if the specified user is an owner.
+    /// </summary>
+    /// <param name="userId">The user to check.</param>
+    /// <returns><c>true</c> if the user is an owner; otherwise, <c>false</c>.</returns>
+    public bool IsOwner(ulong userId)
+    {
+        return OwnerIds.Contains(userId);
+    }
+
     private void CreateCredentialsFileInteractively()
     {
         Log.Information(
@@ -598,6 +608,11 @@ public class BotCredentials : IBotCredentials
         public bool IsOwner(IUser u)
         {
             return OwnerIds.Contains(u.Id);
+        }
+
+        public bool IsOwner(ulong userId)
+        {
+            return OwnerIds.Contains(userId);
         }
     }
 }

@@ -83,7 +83,7 @@ public class SlashMusic(
             return;
         }
 
-        await cache.SetMusicQueue(Context.Guild.Id, new List<MewdekoTrack>()).ConfigureAwait(false);
+        await cache.SetMusicQueue(Context.Guild.Id, []).ConfigureAwait(false);
         await cache.SetCurrentTrack(Context.Guild.Id, null);
 
         await player.DisconnectAsync().ConfigureAwait(false);
@@ -111,7 +111,7 @@ public class SlashMusic(
             return;
         }
 
-        await cache.SetMusicQueue(Context.Guild.Id, new List<MewdekoTrack>()).ConfigureAwait(false);
+        await cache.SetMusicQueue(Context.Guild.Id, []).ConfigureAwait(false);
         await ReplyConfirmAsync(Strings.MusicQueueCleared(ctx.Guild.Id)).ConfigureAwait(false);
         await player.StopAsync();
         await cache.SetCurrentTrack(Context.Guild.Id, null);

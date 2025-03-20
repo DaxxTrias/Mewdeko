@@ -297,6 +297,7 @@ public class Mewdeko
             Helpers.ReadErrorAndExit(9);
         }
 
+
         sw.Stop();
         Log.Information("Connected in {Elapsed:F2}s", sw.Elapsed.TotalSeconds);
         var commandService = Services.GetService<CommandService>();
@@ -322,6 +323,8 @@ public class Mewdeko
 
         _ = Task.Run(HandleStatusChanges);
         _ = Task.Run(async () => await ExecuteReadySubscriptions());
+        var performanceMonitor = Services.GetRequiredService<PerformanceMonitorService>();
+        performanceMonitor.Initialize(typeof(Mewdeko).Assembly, "Mewdeko");
         Ready.TrySetResult(true);
         Log.Information("Ready.");
     }
