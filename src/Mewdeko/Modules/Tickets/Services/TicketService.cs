@@ -90,8 +90,8 @@ public class TicketService : INService
             ChannelId = channel.Id,
             MessageId = message.Id,
             EmbedJson = finalJson,
-            Buttons = new List<PanelButton>(),
-            SelectMenus = new List<PanelSelectMenu>()
+            Buttons = [],
+            SelectMenus = []
         };
 
         await using var ctx = await _db.GetContextAsync();
@@ -234,12 +234,12 @@ public class TicketService : INService
             ChannelNameFormat = channelFormat,
             CategoryId = categoryId,
             ArchiveCategoryId = archiveCategoryId,
-            SupportRoles = supportRoles ?? new List<ulong>(),
-            ViewerRoles = viewerRoles ?? new List<ulong>(),
+            SupportRoles = supportRoles ?? [],
+            ViewerRoles = viewerRoles ?? [],
             AutoCloseTime = autoCloseTime,
             RequiredResponseTime = requiredResponseTime,
             MaxActiveTickets = maxActiveTickets,
-            AllowedPriorities = allowedPriorities ?? new List<string>(),
+            AllowedPriorities = allowedPriorities ?? [],
             DefaultPriority = defaultPriority
         };
 
@@ -917,8 +917,8 @@ public class TicketService : INService
             var channel = await guild.GetTextChannelAsync(ticket.ChannelId);
             if (channel == null) return;
 
-            var supportRoles = ticket.Button?.SupportRoles ?? ticket.SelectOption?.SupportRoles ?? new List<ulong>();
-            var notificationRoles = settings?.NotificationRoles ?? new List<ulong>();
+            var supportRoles = ticket.Button?.SupportRoles ?? ticket.SelectOption?.SupportRoles ?? [];
+            var notificationRoles = settings?.NotificationRoles ?? [];
             var allRoles = supportRoles.Concat(notificationRoles).Distinct();
 
             if (settings?.EnableStaffPings == true)
@@ -1152,8 +1152,8 @@ public class TicketService : INService
     private async Task SetTicketPermissionsAsync(ITextChannel channel, IUser creator, PanelButton button = null,
         SelectMenuOption option = null)
     {
-        var supportRoles = button?.SupportRoles ?? option?.SupportRoles ?? new List<ulong>();
-        var viewerRoles = button?.ViewerRoles ?? option?.ViewerRoles ?? new List<ulong>();
+        var supportRoles = button?.SupportRoles ?? option?.SupportRoles ?? [];
+        var viewerRoles = button?.ViewerRoles ?? option?.ViewerRoles ?? [];
 
         // Deny everyone
         await channel.AddPermissionOverwriteAsync(channel.Guild.EveryoneRole,
@@ -1428,7 +1428,7 @@ public class TicketService : INService
         await using var ctx = await _db.GetContextAsync();
 
         var allowedPriorities = ticket.Button?.AllowedPriorities ??
-                                ticket.SelectOption?.AllowedPriorities ?? new List<string>();
+                                ticket.SelectOption?.AllowedPriorities ?? [];
         if (allowedPriorities.Any() && !allowedPriorities.Contains(priority))
             throw new InvalidOperationException("Invalid priority level");
 
@@ -1459,7 +1459,7 @@ public class TicketService : INService
         await using var ctx = await _db.GetContextAsync();
 
         ctx.Attach(ticket);
-        ticket.Tags ??= new List<string>();
+        ticket.Tags ??= [];
         ticket.Tags.AddRange(tags);
         ticket.LastActivityAt = DateTime.UtcNow;
 
@@ -1561,7 +1561,7 @@ public async Task<List<ButtonInfo>> GetPanelButtonsAsync(ulong panelId)
         .FirstOrDefaultAsync(p => p.MessageId == panelId);
 
     if (panel == null)
-        return new List<ButtonInfo>();
+        return [];
 
     return panel.Buttons.Select(b => new ButtonInfo
     {
@@ -1593,7 +1593,7 @@ public async Task<List<SelectMenuInfo>> GetPanelSelectMenusAsync(ulong panelId)
         .FirstOrDefaultAsync(p => p.MessageId == panelId);
 
     if (panel == null)
-        return new List<SelectMenuInfo>();
+        return [];
 
     return panel.SelectMenus.Select(m => new SelectMenuInfo
     {
@@ -1820,8 +1820,8 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
             PanelId = panel.Id,
             CustomId = $"ticket_select_{Guid.NewGuid():N}",
             Placeholder = placeholder,
-            Options = new List<SelectMenuOption>
-            {
+            Options =
+            [
                 new()
                 {
                     Label = firstOptionLabel,
@@ -1831,7 +1831,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
                     ChannelNameFormat = "ticket-{username}-{id}", // Default format
                     SaveTranscript = true // Default value
                 }
-            }
+            ]
         };
 
         ctx.Attach(panel);
@@ -1911,12 +1911,12 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
             ChannelNameFormat = channelFormat,
             CategoryId = categoryId,
             ArchiveCategoryId = archiveCategoryId,
-            SupportRoles = supportRoles ?? new List<ulong>(),
-            ViewerRoles = viewerRoles ?? new List<ulong>(),
+            SupportRoles = supportRoles ?? [],
+            ViewerRoles = viewerRoles ?? [],
             AutoCloseTime = autoCloseTime,
             RequiredResponseTime = requiredResponseTime,
             MaxActiveTickets = maxActiveTickets,
-            AllowedPriorities = allowedPriorities ?? new List<string>(),
+            AllowedPriorities = allowedPriorities ?? [],
             DefaultPriority = defaultPriority
         };
 
@@ -2142,7 +2142,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
 
         // Verify staff member has permission to claim
         var hasPermission = false;
-        var supportRoles = ticket.Button?.SupportRoles ?? ticket.SelectOption?.SupportRoles ?? new List<ulong>();
+        var supportRoles = ticket.Button?.SupportRoles ?? ticket.SelectOption?.SupportRoles ?? [];
 
         foreach (var roleId in supportRoles)
         {
@@ -2756,7 +2756,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
             OpenTickets = tickets.Count(t => !t.ClosedAt.HasValue),
             ClosedTickets = tickets.Count(t => t.ClosedAt.HasValue),
             TicketsByType = new Dictionary<string, int>(),
-            RecentTickets = new List<UserTicketInfo>()
+            RecentTickets = []
         };
 
         // Group by type
@@ -2996,7 +2996,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
                 if (priority.PingStaff)
                 {
                     var supportRoles = ticket.Button?.SupportRoles ??
-                                       ticket.SelectOption?.SupportRoles ?? new List<ulong>();
+                                       ticket.SelectOption?.SupportRoles ?? [];
                     if (supportRoles.Any())
                     {
                         var mentions = string.Join(" ", supportRoles.Select(r => $"<@&{r}>"));
@@ -3265,7 +3265,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
         {
             settings = new GuildTicketSettings
             {
-                GuildId = guild.Id, BlacklistedUsers = new List<ulong>()
+                GuildId = guild.Id, BlacklistedUsers = []
             };
             ctx.GuildTicketSettings.Add(settings);
         }
@@ -3334,7 +3334,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
             // Initialize user's blacklisted types if not exists
             if (!settings.BlacklistedTypes.ContainsKey(userId))
             {
-                settings.BlacklistedTypes[userId] = new List<string>();
+                settings.BlacklistedTypes[userId] = [];
             }
 
             // Check if already blacklisted from this type
@@ -3508,7 +3508,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
         // Add globally blacklisted users
         foreach (var userId in settings.BlacklistedUsers)
         {
-            result[userId] = new List<string>();
+            result[userId] = [];
         }
 
         // Add type-specific blacklists
@@ -3924,8 +3924,8 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
                 ChannelId = newChannelId,
                 MessageId = message.Id,
                 EmbedJson = sourcePanel.EmbedJson,
-                Buttons = new List<PanelButton>(),
-                SelectMenus = new List<PanelSelectMenu>()
+                Buttons = [],
+                SelectMenus = []
             };
 
             // Duplicate buttons
@@ -3944,12 +3944,12 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
                         ChannelNameFormat = sourceButton.ChannelNameFormat,
                         CategoryId = sourceButton.CategoryId,
                         ArchiveCategoryId = sourceButton.ArchiveCategoryId,
-                        SupportRoles = new List<ulong>(sourceButton.SupportRoles),
-                        ViewerRoles = new List<ulong>(sourceButton.ViewerRoles),
+                        SupportRoles = [..sourceButton.SupportRoles],
+                        ViewerRoles = [..sourceButton.ViewerRoles],
                         AutoCloseTime = sourceButton.AutoCloseTime,
                         RequiredResponseTime = sourceButton.RequiredResponseTime,
                         MaxActiveTickets = sourceButton.MaxActiveTickets,
-                        AllowedPriorities = new List<string>(sourceButton.AllowedPriorities ?? new List<string>()),
+                        AllowedPriorities = [..sourceButton.AllowedPriorities ?? []],
                         DefaultPriority = sourceButton.DefaultPriority,
                         SaveTranscript = sourceButton.SaveTranscript
                     };
@@ -3966,7 +3966,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
                     {
                         CustomId = $"ticket_select_{Guid.NewGuid():N}",
                         Placeholder = sourceMenu.Placeholder,
-                        Options = new List<SelectMenuOption>()
+                        Options = []
                     };
 
                     // Duplicate menu options
@@ -3985,13 +3985,13 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
                                 ChannelNameFormat = sourceOption.ChannelNameFormat,
                                 CategoryId = sourceOption.CategoryId,
                                 ArchiveCategoryId = sourceOption.ArchiveCategoryId,
-                                SupportRoles = new List<ulong>(sourceOption.SupportRoles ?? new List<ulong>()),
-                                ViewerRoles = new List<ulong>(sourceOption.ViewerRoles ?? new List<ulong>()),
+                                SupportRoles = [..sourceOption.SupportRoles ?? []],
+                                ViewerRoles = [..sourceOption.ViewerRoles ?? []],
                                 AutoCloseTime = sourceOption.AutoCloseTime,
                                 RequiredResponseTime = sourceOption.RequiredResponseTime,
                                 MaxActiveTickets = sourceOption.MaxActiveTickets,
                                 AllowedPriorities =
-                                    new List<string>(sourceOption.AllowedPriorities ?? new List<string>()),
+                                    [..sourceOption.AllowedPriorities ?? []],
                                 DefaultPriority = sourceOption.DefaultPriority
                             };
                             newMenu.Options.Add(newOption);

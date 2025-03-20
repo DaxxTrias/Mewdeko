@@ -58,6 +58,9 @@ public class GuildSettingsService
         cache = memoryCache ?? throw new ArgumentNullException(nameof(memoryCache));
         this.perfService = perfService;
         updateLocks = new ConcurrentDictionary<ulong, SemaphoreSlim>();
+        perfService.Measure("GetPrefix");
+        perfService.Measure("GetGuildConfig");
+        perfService.Measure("UpdateGuildConfig");
     }
 
     /// <summary>
@@ -79,8 +82,6 @@ public class GuildSettingsService
         if (cache.TryGetValue(cacheKey, out string cachedPrefix))
             return cachedPrefix;
 
-        // Cache miss - go to database
-        using var perfTracker = perfService.TrackOperation("GetPrefix", "Database");
 
         await using var db = await dbProvider.GetContextAsync();
         var config = await db.GuildConfigs
@@ -120,8 +121,6 @@ public class GuildSettingsService
         try
         {
             await updateLock.WaitAsync();
-
-            using var perfTracker = perfService.TrackOperation("SetPrefix", "Database");
 
             await using var db = await dbProvider.GetContextAsync();
             var config = await db.ForGuildId(guild.Id);
@@ -170,7 +169,6 @@ public class GuildSettingsService
                 return cachedConfig;
             }
 
-            using var perfTracker = perfService.TrackOperation("GetGuildConfig", "Database");
 
             await using var db = await dbProvider.GetContextAsync();
             var config = await db.ForGuildId(guildId, includes);
@@ -205,14 +203,13 @@ public class GuildSettingsService
     {
         try
         {
+
             // Get update lock for this guild
             var updateLock = updateLocks.GetOrAdd(guildId, _ => new SemaphoreSlim(1, 1));
 
             try
             {
                 await updateLock.WaitAsync();
-
-                using var perfTracker = perfService.TrackOperation("UpdateGuildConfig", "Database");
 
                 await using var db = await dbProvider.GetContextAsync();
                 db.GuildConfigs.Update(toUpdate);
@@ -268,7 +265,6 @@ public class GuildSettingsService
                 return cachedRoles;
             }
 
-            using var perfTracker = perfService.TrackOperation("GetReactionRoles", "Database");
 
             await using var db = await dbProvider.GetContextAsync();
             var roles = await db.GetReactionRoles(guildId);

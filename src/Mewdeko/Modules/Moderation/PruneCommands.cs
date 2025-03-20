@@ -81,10 +81,9 @@ public partial class Moderation
 
             var options = new List<Func<IMessage, bool>>();
 
-            var parts = parameters.Split(new[]
-            {
+            var parts = parameters.Split([
                 ' ', ','
-            }, StringSplitOptions.RemoveEmptyEntries);
+            ], StringSplitOptions.RemoveEmptyEntries);
             string input = null;
 
             for (var i = 0; i < parts.Length; i++)

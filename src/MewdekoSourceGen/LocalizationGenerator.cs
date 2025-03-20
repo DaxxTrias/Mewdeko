@@ -312,7 +312,7 @@ foreach (var key in allKeys)
 
         // Remove invalid characters and split into words
         var words = MyRegex().Replace(result, "_")
-            .Split(new[] { '_', '-' }, StringSplitOptions.RemoveEmptyEntries);
+            .Split(['_', '-'], StringSplitOptions.RemoveEmptyEntries);
 
         // Convert to PascalCase
         var identifier = string.Join("", words.Select(word =>

@@ -202,7 +202,7 @@ public class PermissionsController(
                             BotVersion = StatsService.BotVersion,
                             CommandName = cmd.Aliases.Any() ? cmd.Aliases[0] : cmd.Name,
                             Description = cmd.Summary ?? "No description available",
-                            Example = cmd.Remarks?.Split('\n').ToList() ?? new List<string>(),
+                            Example = cmd.Remarks?.Split('\n').ToList() ?? [],
                             GuildUserPermissions = userPerm?.UserPermissionAttribute.GuildPermission?.ToString() ?? "",
                             ChannelUserPermissions =
                                 userPerm?.UserPermissionAttribute.ChannelPermission?.ToString() ?? "",

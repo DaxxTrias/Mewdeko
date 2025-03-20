@@ -72,33 +72,38 @@ public class AiService : INService
         public AiProvider Provider { get; set; }
     }
 
-    private static readonly List<AiModel> SupportedModels = new()
-    {
+    private static readonly List<AiModel> SupportedModels =
+    [
         new AiModel
         {
             Id = "gpt-4-turbo", Name = "GPT-4 Turbo", Provider = AiProvider.OpenAi
         },
+
         new AiModel
         {
             Id = "gpt-3.5-turbo", Name = "GPT-3.5 Turbo", Provider = AiProvider.OpenAi
         },
+
         new AiModel
         {
             Id = "claude-3-opus-20240229", Name = "Claude 3 Opus", Provider = AiProvider.Claude
         },
+
         new AiModel
         {
             Id = "claude-3-sonnet-20240229", Name = "Claude 3 Sonnet", Provider = AiProvider.Claude
         },
+
         new AiModel
         {
             Id = "mixtral-8x7b", Name = "Mixtral 8x7B", Provider = AiProvider.Groq
         },
+
         new AiModel
         {
             Id = "llama2-70b", Name = "Llama 2 70B", Provider = AiProvider.Groq
         }
-    };
+    ];
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="AiService" /> class.
@@ -425,10 +430,7 @@ public class AiService : INService
             var needsSplitting = aiResponse.Length > maxEmbedSize;
             var responseChunks = needsSplitting
                 ? SplitLongText(aiResponse)
-                : new List<string>
-                {
-                    aiResponse
-                };
+                : [aiResponse];
 
             // Handle JSON templates
             if (initialTemplate != null)
@@ -1028,7 +1030,7 @@ public class AiService : INService
             {
                 Id = m.Id, Name = FormatModelName(m.Id), Provider = AiProvider.OpenAi
             })
-            .ToList() ?? new List<AiModel>();
+            .ToList() ?? [];
     }
 
     private async Task<List<AiModel>> FetchGroqModels(HttpClient http, string apiKey)
@@ -1041,7 +1043,7 @@ public class AiService : INService
             {
                 Id = m.Id, Name = FormatModelName(m.Id), Provider = AiProvider.Groq
             })
-            .ToList() ?? new List<AiModel>();
+            .ToList() ?? [];
     }
 
     private async Task<List<AiModel>> FetchClaudeModels(HttpClient http, string apiKey)

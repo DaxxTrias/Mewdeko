@@ -158,7 +158,7 @@ public class MusicController : Controller
     [HttpDelete("queue")]
     public async Task<IActionResult> ClearQueue(ulong guildId)
     {
-        await cache.SetMusicQueue(guildId, new List<MewdekoTrack>());
+        await cache.SetMusicQueue(guildId, []);
         return Ok();
     }
 

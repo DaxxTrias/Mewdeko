@@ -1387,15 +1387,14 @@ public class TicketCommands : MewdekoSlashModuleBase<TicketService>
         finally
         {
             // Cleanup
-            await cache.Redis.GetDatabase().KeyDeleteAsync(new RedisKey[]
-            {
+            await cache.Redis.GetDatabase().KeyDeleteAsync([
                 $"btn_creation:{ctx.User.Id}:style", $"btn_creation:{ctx.User.Id}:label",
                 $"btn_creation:{ctx.User.Id}:emoji", $"btn_creation:{ctx.User.Id}:category",
                 $"btn_creation:{ctx.User.Id}:archive_category", $"btn_creation:{ctx.User.Id}:roles",
                 $"btn_creation:{ctx.User.Id}:viewer_roles", $"btn_creation:{ctx.User.Id}:open_message",
                 $"btn_creation:{ctx.User.Id}:modal_json", $"btn_creation:{ctx.User.Id}:priorities",
                 $"btn_creation:{ctx.User.Id}:default_priority", $"btn_creation:{ctx.User.Id}:autoclose"
-            });
+            ]);
         }
     }
 

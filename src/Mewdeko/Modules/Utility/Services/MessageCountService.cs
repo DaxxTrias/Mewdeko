@@ -359,7 +359,7 @@ public class MessageCountService : INService
         ulong guildId)
     {
         if (!countGuilds.Contains(guildId))
-            return (Array.Empty<MessageCount>(), false);
+            return ([], false);
 
         await using var db = await dbContext.GetContextAsync();
 

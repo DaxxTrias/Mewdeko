@@ -5,14 +5,14 @@ namespace Mewdeko.Tests
     [TestFixture]
     public class StringUsageTests
     {
-        private readonly string[] discordSendMethods = new[]
-        {
+        private readonly string[] discordSendMethods =
+        [
             "SendMessageAsync", "SendFileAsync", "SendFilesAsync", "ReplyAsync",
             "RespondAsync", "SendErrorAsync", "SendConfirmAsync", "FollowupAsync",
             "ModifyOriginalResponseAsync", "DeferAsync", "ReplyErrorLocalizedAsync",
             "ReplyConfirmLocalizedAsync", "ErrorLocalizedAsync", "ConfirmLocalizedAsync",
             "WithTitle", "WithDescription", "WithFooter", "WithAuthor", "WithFields"
-        };
+        ];
 
 
         private readonly Regex methodCallRegex;

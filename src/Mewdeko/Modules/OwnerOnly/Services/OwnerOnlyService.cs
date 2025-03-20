@@ -1075,7 +1075,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
 
     private class Conversation
     {
-        public List<Message> Messages { get; set; } = new();
+        public List<Message> Messages { get; set; } = [];
     }
 
     private class Message

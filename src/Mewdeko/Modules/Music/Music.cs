@@ -507,7 +507,7 @@ public partial class Music(
             return;
         }
 
-        var votes = await cache.GetVoteSkip(ctx.Guild.Id) ?? new HashSet<ulong>();
+        var votes = await cache.GetVoteSkip(ctx.Guild.Id) ?? [];
         if (votes.Add(ctx.User.Id))
             await cache.SetVoteSkip(ctx.Guild.Id, votes);
 
@@ -642,7 +642,7 @@ public partial class Music(
             return;
         }
 
-        var queue = clear ? new List<MewdekoTrack>() : await cache.GetMusicQueue(ctx.Guild.Id);
+        var queue = clear ? [] : await cache.GetMusicQueue(ctx.Guild.Id);
         var startIndex = queue.Count + 1;
 
         foreach (var savedTrack in playlist.Tracks)

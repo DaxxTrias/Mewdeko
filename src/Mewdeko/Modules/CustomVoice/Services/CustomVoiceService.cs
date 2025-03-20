@@ -72,7 +72,7 @@ public class CustomVoiceService : INService
 
                 // Add to active channels
                 activeChannels.AddOrUpdate(channel.GuildId,
-                    new HashSet<ulong> { channel.ChannelId },
+                    [channel.ChannelId],
                     (_, set) =>
                     {
                         set.Add(channel.ChannelId);
@@ -463,13 +463,13 @@ public class CustomVoiceService : INService
         {
             try
             {
-                customChannel.AllowedUsers = JsonSerializer.Deserialize<List<ulong>>(prefs.WhitelistJson) ?? new List<ulong>();
+                customChannel.AllowedUsers = JsonSerializer.Deserialize<List<ulong>>(prefs.WhitelistJson) ?? [];
                 customChannel.AllowedUsersJson = prefs.WhitelistJson;
             }
             catch (Exception ex)
             {
                 Log.Error(ex, "Error deserializing whitelist JSON for user {UserId}", user.Id);
-                customChannel.AllowedUsers = new List<ulong>();
+                customChannel.AllowedUsers = [];
             }
         }
 
@@ -477,13 +477,13 @@ public class CustomVoiceService : INService
         {
             try
             {
-                customChannel.DeniedUsers = JsonSerializer.Deserialize<List<ulong>>(prefs.BlacklistJson) ?? new List<ulong>();
+                customChannel.DeniedUsers = JsonSerializer.Deserialize<List<ulong>>(prefs.BlacklistJson) ?? [];
                 customChannel.DeniedUsersJson = prefs.BlacklistJson;
             }
             catch (Exception ex)
             {
                 Log.Error(ex, "Error deserializing blacklist JSON for user {UserId}", user.Id);
-                customChannel.DeniedUsers = new List<ulong>();
+                customChannel.DeniedUsers = [];
             }
         }
 
@@ -656,7 +656,7 @@ public class CustomVoiceService : INService
 
         // Keep track of the channel
         activeChannels.AddOrUpdate(guild.Id,
-            new HashSet<ulong> { voiceChannel.Id },
+            [voiceChannel.Id],
             (_, set) =>
             {
                 set.Add(voiceChannel.Id);
@@ -823,17 +823,18 @@ public class CustomVoiceService : INService
                     var allowedUsers = customChannel.AllowedUsers;
                     if (string.IsNullOrEmpty(customChannel.AllowedUsersJson))
                     {
-                        allowedUsers = new List<ulong>();
+                        allowedUsers = [];
                     }
                     else
                     {
                         try
                         {
-                            allowedUsers = JsonSerializer.Deserialize<List<ulong>>(customChannel.AllowedUsersJson) ?? new List<ulong>();
+                            allowedUsers = JsonSerializer.Deserialize<List<ulong>>(customChannel.AllowedUsersJson) ??
+                                           [];
                         }
                         catch (Exception)
                         {
-                            allowedUsers = new List<ulong>();
+                            allowedUsers = [];
                         }
                     }
 
@@ -969,11 +970,11 @@ public class CustomVoiceService : INService
         {
             try
             {
-                allowedUsers = JsonSerializer.Deserialize<List<ulong>>(customChannel.AllowedUsersJson) ?? new List<ulong>();
+                allowedUsers = JsonSerializer.Deserialize<List<ulong>>(customChannel.AllowedUsersJson) ?? [];
             }
             catch (Exception)
             {
-                allowedUsers = new List<ulong>();
+                allowedUsers = [];
             }
         }
 
@@ -1024,11 +1025,11 @@ public class CustomVoiceService : INService
         {
             try
             {
-                deniedUsers = JsonSerializer.Deserialize<List<ulong>>(customChannel.DeniedUsersJson) ?? new List<ulong>();
+                deniedUsers = JsonSerializer.Deserialize<List<ulong>>(customChannel.DeniedUsersJson) ?? [];
             }
             catch (Exception)
             {
-                deniedUsers = new List<ulong>();
+                deniedUsers = [];
             }
         }
 
@@ -1089,11 +1090,11 @@ public class CustomVoiceService : INService
         {
             try
             {
-                deniedUsers = JsonSerializer.Deserialize<List<ulong>>(customChannel.DeniedUsersJson) ?? new List<ulong>();
+                deniedUsers = JsonSerializer.Deserialize<List<ulong>>(customChannel.DeniedUsersJson) ?? [];
             }
             catch (Exception)
             {
-                deniedUsers = new List<ulong>();
+                deniedUsers = [];
             }
         }
 
@@ -1152,11 +1153,11 @@ public class CustomVoiceService : INService
         {
             try
             {
-                allowedUsers = JsonSerializer.Deserialize<List<ulong>>(customChannel.AllowedUsersJson) ?? new List<ulong>();
+                allowedUsers = JsonSerializer.Deserialize<List<ulong>>(customChannel.AllowedUsersJson) ?? [];
             }
             catch (Exception)
             {
-                allowedUsers = new List<ulong>();
+                allowedUsers = [];
             }
         }
 
