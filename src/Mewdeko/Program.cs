@@ -145,7 +145,7 @@ public class Program
                 options.AddPolicy("BotInstancePolicy", policy =>
                 {
                     policy
-                        .WithOrigins($"http://localhost:{credentials.ApiPort}")
+                        .WithOrigins($"http://localhost:{credentials.ApiPort}", $"https://localhost:{credentials.ApiPort}", "https://mewdeko.tech")
                         .AllowAnyMethod() // Allow GET, POST, etc.
                         .AllowAnyHeader() // Allow any headers including custom auth headers
                         .AllowCredentials();
