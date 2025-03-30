@@ -253,6 +253,7 @@ public class MusicEventManager : INService, IDisposable
                 return;
 
             var currentTrack = await cache.GetCurrentTrack(guildId);
+            var settings = await cache.GetMusicPlayerSettings(guildId);
             var botVoiceChannel = player.VoiceChannelId;
             var guild = client.GetGuild(guildId);
 
@@ -274,11 +275,25 @@ public class MusicEventManager : INService, IDisposable
                             // Create a user-specific update
                             var positionUpdate = new
                             {
-                                Position = player.Position,
-                                State = player.State,
                                 CurrentTrack = currentTrack,
-                                IsInVoiceChannel = isInVoiceChannel,
-                                Queue = queue
+                                Queue = queue,
+                                State = player.State,
+                                Volume = player.Volume,
+                                Position = player.Position,
+                                RepeatMode = settings.PlayerRepeat,
+                                Filters = new
+                                {
+                                    BassBoost = player.Filters.Equalizer != null,
+                                    Nightcore = player.Filters.Timescale?.Speed > 1.0f,
+                                    Vaporwave = player.Filters.Timescale?.Speed < 1.0f,
+                                    Karaoke = player.Filters.Karaoke != null,
+                                    Tremolo = player.Filters.Tremolo != null,
+                                    Vibrato = player.Filters.Vibrato != null,
+                                    Rotation = player.Filters.Rotation != null,
+                                    Distortion = player.Filters.Distortion != null,
+                                    ChannelMix = player.Filters.ChannelMix != null
+                                },
+                                IsInVoiceChannel = isInVoiceChannel
                             };
 
                             var jsonString = JsonSerializer.Serialize(positionUpdate);
@@ -336,9 +351,24 @@ public class MusicEventManager : INService, IDisposable
                         // Create a user-specific update
                         var positionUpdate = new
                         {
-                            Position = player.Position,
-                            State = player.State,
                             CurrentTrack = currentTrack,
+                            Queue = queue,
+                            State = player.State,
+                            Volume = player.Volume,
+                            Position = player.Position,
+                            RepeatMode = settings.PlayerRepeat,
+                            Filters = new
+                            {
+                                BassBoost = player.Filters.Equalizer != null,
+                                Nightcore = player.Filters.Timescale?.Speed > 1.0f,
+                                Vaporwave = player.Filters.Timescale?.Speed < 1.0f,
+                                Karaoke = player.Filters.Karaoke != null,
+                                Tremolo = player.Filters.Tremolo != null,
+                                Vibrato = player.Filters.Vibrato != null,
+                                Rotation = player.Filters.Rotation != null,
+                                Distortion = player.Filters.Distortion != null,
+                                ChannelMix = player.Filters.ChannelMix != null
+                            },
                             IsInVoiceChannel = isInVoiceChannel
                         };
 
