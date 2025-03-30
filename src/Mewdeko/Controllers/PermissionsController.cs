@@ -15,6 +15,10 @@ namespace Mewdeko.Controllers;
 /// <summary>
 ///     Controller for setting permissions for commands and triggers
 /// </summary>
+/// <param name="permissionService">Service for managing command permissions</param>
+/// <param name="dpoService">Service for managing Discord permission overrides</param>
+/// <param name="cmdServ">Discord command service for command execution and information</param>
+/// <param name="dbContextProvider">Provider for database contexts</param>
 [ApiController]
 [Route("botapi/[controller]")]
 [Authorize("ApiKeyPolicy")]
@@ -36,12 +40,11 @@ public class PermissionsController(
     }
 
     /// <summary>
-    ///     Add a discord permission override
+    ///     Adds a Discord permission override for a command
     /// </summary>
-    /// <param name="guildId"></param>
-    /// <param name="commandName"></param>
-    /// <param name="permissions"></param>
-    /// <returns></returns>
+    /// <param name="guildId">The ID of the guild to add the permission override for</param>
+    /// <param name="request">The request containing command name and permissions</param>
+    /// <returns>OK with the created override if successful, or BadRequest if command doesn't exist</returns>
     [HttpPost("dpo/{guildId}")]
     public async Task<IActionResult> AddDpo(ulong guildId, [FromBody] DpoRequest request)
     {
@@ -136,7 +139,7 @@ public class PermissionsController(
     /// Sets the verbose mode for permission feedback
     /// </summary>
     /// <param name="guildId">The ID of the guild</param>
-    /// <param name="verbose">Whether to enable verbose mode</param>
+    /// <param name="request">Whether to enable verbose mode</param>
     /// <returns>Success response when updated</returns>
     [HttpPost("regular/{guildId}/verbose")]
     public async Task<IActionResult> SetVerbose(ulong guildId, [FromBody] JsonElement request)
@@ -178,24 +181,18 @@ public class PermissionsController(
     [HttpGet("commands")]
     public async Task<IActionResult> GetCommandsAndModules()
     {
+        await Task.CompletedTask;
         try
         {
             var modules = cmdServ.Modules;
-            var moduleList = new List<Module>();
-
-            foreach (var module in modules)
-            {
-                var moduleName = module.IsSubmodule ? module.Parent!.Name : module.Name;
-
-                var commands = module.Commands.OrderByDescending(x => x.Name)
+            var moduleList = (from module in modules
+                let moduleName = module.IsSubmodule ? module.Parent!.Name : module.Name
+                let commands = module.Commands.OrderByDescending(x => x.Name)
                     .Select(cmd =>
                     {
-                        var userPerm = cmd.Preconditions
-                            .FirstOrDefault(ca => ca is UserPermAttribute) as UserPermAttribute;
-                        var botPerm = cmd.Preconditions
-                            .FirstOrDefault(ca => ca is BotPermAttribute) as BotPermAttribute;
-                        var isDragon = cmd.Preconditions
-                            .FirstOrDefault(ca => ca is RequireDragonAttribute) as RequireDragonAttribute;
+                        var userPerm = cmd.Preconditions.FirstOrDefault(ca => ca is UserPermAttribute) as UserPermAttribute;
+                        var botPerm = cmd.Preconditions.FirstOrDefault(ca => ca is BotPermAttribute) as BotPermAttribute;
+                        var isDragon = cmd.Preconditions.FirstOrDefault(ca => ca is RequireDragonAttribute) as RequireDragonAttribute;
 
                         return new Command
                         {
@@ -204,17 +201,14 @@ public class PermissionsController(
                             Description = cmd.Summary ?? "No description available",
                             Example = cmd.Remarks?.Split('\n').ToList() ?? [],
                             GuildUserPermissions = userPerm?.UserPermissionAttribute.GuildPermission?.ToString() ?? "",
-                            ChannelUserPermissions =
-                                userPerm?.UserPermissionAttribute.ChannelPermission?.ToString() ?? "",
+                            ChannelUserPermissions = userPerm?.UserPermissionAttribute.ChannelPermission?.ToString() ?? "",
                             GuildBotPermissions = botPerm?.GuildPermission?.ToString() ?? "",
                             ChannelBotPermissions = botPerm?.ChannelPermission?.ToString() ?? "",
                             IsDragon = isDragon != null
                         };
                     })
-                    .ToList();
-
-                moduleList.Add(new Module(commands, moduleName));
-            }
+                    .ToList()
+                select new Module(commands, moduleName)).ToList();
 
             return Ok(moduleList);
         }
@@ -226,17 +220,17 @@ public class PermissionsController(
     }
 
     /// <summary>
-    ///     E
+    ///     Request model for Discord permission overrides
     /// </summary>
     public class DpoRequest
     {
         /// <summary>
-        ///     e
+        ///     The command name to apply permissions to
         /// </summary>
         public string Command { get; set; }
 
         /// <summary>
-        ///     e
+        ///     The Discord permissions value as a ulong
         /// </summary>
         public ulong Permissions { get; set; }
     }

@@ -231,7 +231,7 @@ public class NewEmbed
     /// </summary>
     /// <param name="guildId">The ID of the guild.</param>
     /// <returns>A <see cref="ComponentBuilder" /> containing the components.</returns>
-    public ComponentBuilder GetComponents(ulong? guildId)
+    public ComponentBuilder? GetComponents(ulong? guildId)
     {
         var cb = new ComponentBuilder();
 
@@ -288,9 +288,8 @@ public class NewEmbed
             bb.WithDisabled(true).WithLabel("Buttons must have a display name").WithStyle(ButtonStyle.Danger)
                 .WithCustomId(pos.ToString());
         else if (!btn.Url.IsNullOrWhiteSpace() && !btn.Url.StartsWith("https://") &&
-                 !btn.Url.StartsWith("http://") &&
                  !btn.Url.StartsWith("discord://"))
-            bb.WithDisabled(true).WithLabel("Buttons with a url must have a https://, https://, or discord:// link")
+            bb.WithDisabled(true).WithLabel("Buttons with a url must have a https:// or discord:// link")
                 .WithStyle(ButtonStyle.Danger).WithCustomId(pos.ToString());
         else if (!btn.Url.IsNullOrWhiteSpace())
         {

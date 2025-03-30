@@ -1,15 +1,8 @@
-using System;
 using System.Diagnostics;
-using System.IO;
-using System.Linq;
-using System.Text;
 using System.Threading;
-using System.Threading.Tasks;
-using Discord;
 using Mewdeko.Services.Impl;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Logging;
 using Serilog;
 
 namespace Mewdeko.Controllers
@@ -65,9 +58,9 @@ namespace Mewdeko.Controllers
 
                 var result = new
                 {
-                    cpuUsage = cpuUsage,
+                    cpuUsage,
                     memoryUsageMb = memoryInfo.usedMemoryMb,
-                    totalMemoryMb = memoryInfo.totalMemoryMb,
+                    memoryInfo.totalMemoryMb,
                     uptime = uptime.ToString(@"dd\.hh\:mm\:ss"),
                     processStartTime = currentProcess.StartTime,
                     threadCount = currentProcess.Threads.Count,

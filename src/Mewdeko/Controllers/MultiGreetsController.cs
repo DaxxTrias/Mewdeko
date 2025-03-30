@@ -17,19 +17,16 @@ public class MultiGreetController : Controller
 {
     private readonly MultiGreetService multiGreetService;
     private readonly DiscordShardedClient client;
-    private readonly HttpClient httpClient;
 
     /// <summary>
     /// Initializes a new instance of the MultiGreetController
     /// </summary>
     /// <param name="multiGreetService">Service for managing MultiGreet operations</param>
     /// <param name="client">Discord client instance</param>
-    /// <param name="httpClient">HTTP client for web requests</param>
-    public MultiGreetController(MultiGreetService multiGreetService, DiscordShardedClient client, HttpClient httpClient)
+    public MultiGreetController(MultiGreetService multiGreetService, DiscordShardedClient client)
     {
         this.multiGreetService = multiGreetService;
         this.client = client;
-        this.httpClient = httpClient;
     }
 
     /// <summary>
@@ -94,6 +91,8 @@ public class MultiGreetController : Controller
     public async Task<IActionResult> RemoveGreet(ulong guildId, int greetId)
     {
         var greets = await multiGreetService.GetGreets(guildId);
+        if (greets is null)
+            return NotFound("Somehow multigreets are null.");
         var greet = greets.ElementAtOrDefault(greetId - 1);
 
         if (greet == null)
@@ -114,6 +113,8 @@ public class MultiGreetController : Controller
     public async Task<IActionResult> UpdateMessage(ulong guildId, int greetId, [FromBody] string message)
     {
         var greets = await multiGreetService.GetGreets(guildId);
+        if (greets is null)
+            return NotFound("Somehow multigreets are null.");
         var greet = greets.ElementAtOrDefault(greetId - 1);
 
         if (greet == null)
@@ -134,6 +135,8 @@ public class MultiGreetController : Controller
     public async Task<IActionResult> UpdateDeleteTime(ulong guildId, int greetId, [FromBody] string time)
     {
         var greets = await multiGreetService.GetGreets(guildId);
+        if (greets is null)
+            return NotFound("Somehow multigreets are null.");
         var greet = greets.ElementAtOrDefault(greetId - 1);
 
         if (greet == null)
@@ -155,6 +158,8 @@ public class MultiGreetController : Controller
     public async Task<IActionResult> UpdateGreetBots(ulong guildId, int greetId, [FromBody] bool enabled)
     {
         var greets = await multiGreetService.GetGreets(guildId);
+        if (greets is null)
+            return NotFound("Somehow multigreets are null.");
         var greet = greets.ElementAtOrDefault(greetId - 1);
 
         if (greet == null)
@@ -175,6 +180,8 @@ public class MultiGreetController : Controller
     public async Task<IActionResult> UpdateWebhook(ulong guildId, int greetId, [FromBody] WebhookUpdateRequest request)
     {
         var greets = await multiGreetService.GetGreets(guildId);
+        if (greets is null)
+            return NotFound("Somehow multigreets are null.");
         var greet = greets.ElementAtOrDefault(greetId - 1);
 
         if (greet == null)
@@ -188,7 +195,7 @@ public class MultiGreetController : Controller
 
         if (request.Name == null)
         {
-            await multiGreetService.ChangeMgWebhook(greet, null);
+            await multiGreetService.ChangeMgWebhook(greet, "");
             return Ok();
         }
 
@@ -213,6 +220,8 @@ public class MultiGreetController : Controller
     public async Task<IActionResult> UpdateDisabled(ulong guildId, int greetId, [FromBody] bool disabled)
     {
         var greets = await multiGreetService.GetGreets(guildId);
+        if (greets is null)
+            return NotFound("Somehow multigreets are null.");
         var greet = greets.ElementAtOrDefault(greetId - 1);
 
         if (greet == null)
@@ -252,7 +261,7 @@ public class MultiGreetController : Controller
         return Ok(type);
     }
 
-    private async Task<Stream> GetAvatarStream(string url)
+    private static async Task<Stream> GetAvatarStream(string url)
     {
         using var http = new HttpClient();
         var response = await http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);

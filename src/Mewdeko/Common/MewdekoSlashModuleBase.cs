@@ -43,7 +43,7 @@ public abstract class MewdekoSlashCommandModule : InteractionModuleBase
     /// <summary>
     ///     Sends an error message based on the specified key with optional arguments.
     /// </summary>
-    public Task ErrorAsync(string? text)
+    public Task ErrorAsync(string text)
     {
         return !ctx.Interaction.HasResponded
             ? ctx.Interaction.SendErrorAsync(text, Config)
@@ -53,7 +53,7 @@ public abstract class MewdekoSlashCommandModule : InteractionModuleBase
     /// <summary>
     ///     Sends an error message as a reply to the user with the specified key and optional arguments.
     /// </summary>
-    public Task ReplyErrorAsync(string? text)
+    public Task ReplyErrorAsync(string text)
     {
         return !ctx.Interaction.HasResponded
             ? ctx.Interaction.SendErrorAsync($"{Format.Bold(ctx.User.ToString())} {text}", Config)
@@ -89,7 +89,7 @@ public abstract class MewdekoSlashCommandModule : InteractionModuleBase
     /// <summary>
     ///     Sends a confirmation message based on the specified key with optional arguments.
     /// </summary>
-    public Task ConfirmAsync(string? text)
+    public Task ConfirmAsync(string text)
     {
         return !ctx.Interaction.HasResponded
             ? ctx.Interaction.SendConfirmAsync(text)
@@ -179,12 +179,11 @@ public abstract class MewdekoSlashCommandModule : InteractionModuleBase
     /// <param name="userId">The user ID to bind to</param>
     /// <param name="alreadyDeferred">Whether the interaction was already responded to.</param>
     /// <returns></returns>
-    public async Task<string>? GetButtonInputAsync(ulong channelId, ulong msgId, ulong userId,
+    public async Task<string?> GetButtonInputAsync(ulong channelId, ulong msgId, ulong userId,
         bool alreadyDeferred = false)
     {
         var userInputTask = new TaskCompletionSource<string>();
-        var dsc = CmdHandler.Services.GetRequiredService<DiscordShardedClient>();
-        var handler = new EventHandler(dsc);
+        var handler = CmdHandler.Services.GetRequiredService<EventHandler>();
         try
         {
             handler.InteractionCreated += Interaction;
@@ -228,11 +227,11 @@ public abstract class MewdekoSlashCommandModule : InteractionModuleBase
     /// <param name="channelId">The channel ID to bind to.</param>
     /// <param name="userId">The user ID to bind to.</param>
     /// <returns></returns>
-    public async Task<string>? NextMessageAsync(ulong channelId, ulong userId)
+    public async Task<string?> NextMessageAsync(ulong channelId, ulong userId)
     {
         var userInputTask = new TaskCompletionSource<string>();
         var dsc = CmdHandler.Services.GetRequiredService<DiscordShardedClient>();
-        var handler = new EventHandler(dsc);
+        var handler = CmdHandler.Services.GetRequiredService<EventHandler>();
         try
         {
             handler.MessageReceived += Interaction;

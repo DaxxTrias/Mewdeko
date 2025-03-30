@@ -133,9 +133,9 @@ public class InviteTrackingController : Controller
         var leaderboard = await inviteService.GetInviteLeaderboardAsync(guild, page, pageSize);
         return Ok(leaderboard.Select(entry => new
         {
-            UserId = entry.UserId,
-            Username = entry.Username,
-            InviteCount = entry.InviteCount
+            entry.UserId,
+            entry.Username,
+            entry.InviteCount
         }));
     }
 }

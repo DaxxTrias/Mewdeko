@@ -19,7 +19,7 @@ public partial class ReplacementBuilder
     /// <summary>
     ///     The Discord client.
     /// </summary>
-    private readonly DiscordShardedClient client;
+    private readonly DiscordShardedClient? client;
 
     /// <summary>
     ///     The NekosBest API client.

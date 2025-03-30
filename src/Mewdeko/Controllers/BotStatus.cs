@@ -20,7 +20,7 @@ public class BotStatus(DiscordShardedClient client, StatsService statsService, C
     : Controller
 {
 
-    private static readonly JsonSerializerOptions options = new()
+    private static readonly JsonSerializerOptions Options = new()
     {
         ReferenceHandler = ReferenceHandler.IgnoreCycles
     };
@@ -64,7 +64,7 @@ public class BotStatus(DiscordShardedClient client, StatsService statsService, C
     public async Task<IActionResult> GetGuilds()
     {
         await Task.CompletedTask;
-        return Ok(JsonSerializer.Serialize(client.Guilds.Select(x => x.Id), options));
+        return Ok(JsonSerializer.Serialize(client.Guilds.Select(x => x.Id), Options));
     }
 
     private string GetCommitHash()

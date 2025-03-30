@@ -260,15 +260,15 @@ public class Mewdeko
 
         if (circularDependencies.Count > 0)
         {
-            Console.WriteLine("Circular dependencies found:");
+            Log.Error("Circular dependencies found:");
             foreach (var dependency in circularDependencies)
             {
-                Console.WriteLine(dependency);
+                Log.Error(dependency);
             }
         }
         else
         {
-            Console.WriteLine("No circular dependencies found.");
+            Log.Information("No circular dependencies found.");
         }
 
         await LoginAsync(Credentials.Token).ConfigureAwait(false);

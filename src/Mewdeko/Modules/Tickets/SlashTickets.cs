@@ -7,7 +7,6 @@ using Mewdeko.Common.Attributes.InteractionCommands;
 using Mewdeko.Common.Modals;
 using Mewdeko.Modules.Tickets.Services;
 using Serilog;
-using StackExchange.Redis;
 
 namespace Mewdeko.Modules.Tickets;
 

@@ -315,7 +315,7 @@ public class SlashGiveaways(
     }
 
     await Service.GiveawaysInternal(chan, time, what, winners, host.Id, ctx.Guild.Id,
-        ctx.Channel as ITextChannel, ctx.Guild, banner: attachment?.Url, pingROle: pingRole, useButton: useButton,
+        ctx.Channel as ITextChannel, ctx.Guild, banner: attachment?.Url, pingRole: pingRole, useButton: useButton,
         useCaptcha: useCaptcha, reqroles: reqs, messageCount: requiredMessages).ConfigureAwait(false);
 }
 

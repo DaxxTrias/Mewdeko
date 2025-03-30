@@ -55,6 +55,11 @@ public class MewdekoContext : DbContext
     public DbSet<CaseNote> CaseNotes { get; set; }
 
     /// <summary>
+    /// Gets or sets the chat logs.
+    /// </summary>
+    public DbSet<ChatLog> ChatLogs { get; set; }
+
+    /// <summary>
     ///
     /// </summary>
     public DbSet<TicketCase> TicketCases { get; set; }

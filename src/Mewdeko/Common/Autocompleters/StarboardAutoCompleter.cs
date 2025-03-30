@@ -14,22 +14,15 @@ public class StarboardAutocompleter : AutocompleteHandler
     ///     Initializes a new instance of the StarboardAutocompleter class.
     /// </summary>
     /// <param name="starboard">The StarboardService.</param>
-    /// <param name="credentials">The bot credentials.</param>
-    public StarboardAutocompleter(StarboardService starboard, IBotCredentials credentials)
+    public StarboardAutocompleter(StarboardService starboard)
     {
         Starboard = starboard;
-        Credentials = credentials;
     }
 
     /// <summary>
     ///     Gets or sets the StarboardService.
     /// </summary>
     private StarboardService Starboard { get; }
-
-    /// <summary>
-    ///     Gets or sets the bot credentials.
-    /// </summary>
-    private IBotCredentials Credentials { get; }
 
     /// <summary>
     ///     Generates suggestions for autocomplete.
@@ -42,6 +35,7 @@ public class StarboardAutocompleter : AutocompleteHandler
     public override async Task<AutocompletionResult> GenerateSuggestionsAsync(IInteractionContext context,
         IAutocompleteInteraction autocompleteInteraction, IParameterInfo parameter, IServiceProvider services)
     {
+        await Task.CompletedTask;
         var input = (autocompleteInteraction.Data.Current.Value as string ?? "").ToLowerInvariant();
 
         var suggestions = Starboard.GetStarboards(context.Guild.Id)

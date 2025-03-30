@@ -508,7 +508,7 @@ public static partial class StringExtensions
     /// </summary>
     /// <param name="str">The string to check.</param>
     /// <returns>True if the string is null, empty, or contains only white-space characters; otherwise, false.</returns>
-    public static bool IsNullOrWhiteSpace(this string str)
+    public static bool IsNullOrWhiteSpace(this string? str)
     {
         return string.IsNullOrWhiteSpace(str);
     }
