@@ -91,7 +91,11 @@ public class Program
             ConfigureServices(services, credentials, Cache);
 
             // Configure web host settings
+#if DEBUG
             builder.WebHost.UseUrls($"http://localhost:{credentials.ApiPort}");
+#else
+            builder.WebHost.UseUrls($"https://localhost:{credentials.ApiPort}");
+#endif
             services.AddTransient<IApiKeyValidation, ApiKeyValidation>();
             services.AddAuthorization();
 
