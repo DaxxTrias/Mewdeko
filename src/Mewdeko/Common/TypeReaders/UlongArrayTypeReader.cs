@@ -27,7 +27,7 @@ public class UlongArrayTypeReader : MewdekoTypeReader<ulong[]>
 
         // Return a TypeReaderResult indicating success with the parsed ulong array,
         // or an error if parsing fails
-        return Task.FromResult(data != null
+        return Task.FromResult(data.Count!=0
             ? TypeReaderResult.FromSuccess(data)
             : TypeReaderResult.FromError(CommandError.ParseFailed,
                 "Failed to parse input as an array of ulong values."));

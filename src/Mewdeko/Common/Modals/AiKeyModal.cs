@@ -1,4 +1,5 @@
 ﻿using Discord.Interactions;
+// ReSharper disable NotNullOrRequiredMemberIsNotInitialized
 
 namespace Mewdeko.Common.Modals;
 
@@ -17,6 +18,6 @@ public class AiKeyModal : IModal
     /// </summary>
     [InputLabel("API Key")]
     [ModalTextInput("ai_key", TextInputStyle.Short, "Enter your API key here")]
-    [RequiredInput(true)]
+    [RequiredInput]
     public string ApiKey { get; set; }
 }

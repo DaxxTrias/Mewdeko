@@ -15,7 +15,7 @@ public sealed class CommentsObjectDescriptor : IObjectDescriptor
     /// </summary>
     /// <param name="innerDescriptor">The inner object descriptor.</param>
     /// <param name="comment">The comment associated with the object.</param>
-    public CommentsObjectDescriptor(IObjectDescriptor innerDescriptor, string comment)
+    public CommentsObjectDescriptor(IObjectDescriptor innerDescriptor, string? comment)
     {
         this.innerDescriptor = innerDescriptor;
         Comment = comment;
@@ -24,10 +24,10 @@ public sealed class CommentsObjectDescriptor : IObjectDescriptor
     /// <summary>
     ///     Gets the comment associated with the object.
     /// </summary>
-    public string Comment { get; }
+    public string? Comment { get; }
 
     /// <inheritdoc />
-    public object Value
+    public object? Value
     {
         get
         {

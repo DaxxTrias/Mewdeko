@@ -49,7 +49,7 @@ public class GuildDateTimeTypeReader : MewdekoTypeReader<GuildDateTime>
 
         var tz = gts?.GetTimeZoneOrUtc(guildId); // Retrieves the guild's timezone
 
-        return new GuildDateTime(tz, dt); // Constructs and returns a GuildDateTime object
+        return new GuildDateTime(tz ?? TimeZoneInfo.Local , dt); // Constructs and returns a GuildDateTime object
     }
 }
 

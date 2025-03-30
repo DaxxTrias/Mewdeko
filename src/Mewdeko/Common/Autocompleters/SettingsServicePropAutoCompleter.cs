@@ -55,12 +55,15 @@ public class SettingsServicePropAutoCompleter : AutocompleteHandler
     /// <returns>The properties and their values as strings.</returns>
     private static IEnumerable<string> GetPropsAndValuesString(IConfigService config, IEnumerable<string> names)
     {
+
         var propValues = names.Select(pr =>
         {
             var val = config.GetSetting(pr);
+            if (val is null)
+                return null;
             if (pr != "currency.sign")
                 val = val.TrimTo(40);
-            return val?.Replace("\n", "") ?? "-";
+            return val.Replace("\n", "") ?? "-";
         });
         return propValues;
     }

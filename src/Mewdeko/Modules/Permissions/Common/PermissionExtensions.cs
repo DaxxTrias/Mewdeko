@@ -185,7 +185,7 @@ public static class PermissionExtensions
     ///     role identifiers are resolved.
     /// </param>
     /// <returns>A string representing the constructed command based on the permission settings.</returns>
-    public static string GetCommand(this Permissionv2 perm, string? prefix, SocketGuild? guild = null)
+    public static string GetCommand(this Permissionv2? perm, string? prefix, SocketGuild? guild = null)
     {
         var com = "";
         switch (perm.PrimaryTarget)

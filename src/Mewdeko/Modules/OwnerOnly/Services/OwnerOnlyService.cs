@@ -27,7 +27,6 @@ namespace Mewdeko.Modules.OwnerOnly.Services;
 /// </summary>
 public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
 {
-    private static readonly Dictionary<ulong, Conversation> UserConversations = new();
     private readonly Mewdeko bot;
     private readonly BotConfigService bss;
 
@@ -39,7 +38,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
     private readonly GuildSettingsService guildSettings;
     private readonly IHttpClientFactory httpFactory;
     private readonly Replacer rep;
-    private readonly GeneratedBotStrings Strings;
+    private readonly GeneratedBotStrings strings;
 
 #pragma warning disable CS8714
     private ConcurrentDictionary<ulong?, ConcurrentDictionary<int, Timer>> autoCommands =
@@ -79,7 +78,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         var redis = cache.Redis;
         this.cmdHandler = cmdHandler;
         this.dbProvider = dbProvider;
-        this.Strings = strings;
+        this.strings = strings;
         this.client = client;
         this.creds = creds;
         this.cache = cache;
@@ -88,7 +87,6 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         var imgs = cache.LocalImages;
         httpFactory = factory;
         this.bss = bss;
-        handler.MessageReceived += OnMessageReceived;
         rep = new ReplacementBuilder()
             .WithClient(client)
             .WithProviders(phProviders)
@@ -137,21 +135,21 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
     ///     Forwards direct messages (DMs) received by the bot to the owners' DMs. This allows bot owners to monitor and
     ///     respond to user messages directly.
     /// </summary>
-    /// <param name="DiscordShardedClient">The Discord client through which the message was received.</param>
+    /// <param name="discordShardedClient">The Discord client through which the message was received.</param>
     /// <param name="guild">The guild associated with the message, if any.</param>
     /// <param name="msg">The message that was received and is to be forwarded.</param>
     /// <remarks>
     ///     The method checks if the message was sent in a DM channel and forwards it to all owners if the setting is enabled.
     ///     Attachments are also forwarded. Errors in sending messages to any owner are logged but not thrown.
     /// </remarks>
-    public async Task LateExecute(DiscordShardedClient DiscordShardedClient, IGuild guild, IUserMessage msg)
+    public async Task LateExecute(DiscordShardedClient discordShardedClient, IGuild guild, IUserMessage msg)
     {
         var bs = bss.Data;
         if (msg.Channel is IDMChannel && bss.Data.ForwardMessages && ownerChannels.Count > 0)
         {
-            var title = $"{Strings.DmFrom(guild.Id)} [{msg.Author}]({msg.Author.Id})";
+            var title = $"{strings.DmFrom(guild.Id)} [{msg.Author}]({msg.Author.Id})";
 
-            var attachamentsTxt = Strings.Attachments(guild.Id);
+            var attachamentsTxt = strings.Attachments(guild.Id);
 
             var toSend = msg.Content;
 
@@ -288,7 +286,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
                         var user = await client.Rest.GetUserAsync(i);
                         if (user is null) continue;
                         var channel = await user.CreateDMChannelAsync();
-                        await channel.SendMessageAsync(Strings.QuarantineNotification(args.Value.Guild.Id, arsg2.Guild.Name, value.Guild.Id));
+                        await channel.SendMessageAsync(strings.QuarantineNotification(args.Value.Guild.Id, arsg2.Guild.Name, value.Guild.Id));
 
                     }
                 }
@@ -298,7 +296,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
                     if (user is not null)
                     {
                         var channel = await user.CreateDMChannelAsync();
-                        await channel.SendMessageAsync(Strings.QuarantineNotification(args.Value.Guild.Id, arsg2.Guild.Name, value.Guild.Id));
+                        await channel.SendMessageAsync(strings.QuarantineNotification(args.Value.Guild.Id, arsg2.Guild.Name, value.Guild.Id));
                     }
                 }
             }
@@ -320,10 +318,10 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
                 case UpdateCheckType.Release:
                     var latestRelease = await github.Repository.Release.GetLatest("SylveonDeko", "Mewdeko");
                     var eb = new EmbedBuilder()
-                        .WithAuthor(Strings.NewReleaseTitle(null, latestRelease.TagName),
+                        .WithAuthor(strings.NewReleaseTitle(null, latestRelease.TagName),
                             "https://seeklogo.com/images/G/github-logo-5F384D0265-seeklogo.com.png",
                             latestRelease.HtmlUrl)
-                        .WithDescription(Strings.NewReleaseDesc(null,
+                        .WithDescription(strings.NewReleaseDesc(null,
                             latestRelease.Assets[0].BrowserDownloadUrl,
                             bss.Data.Prefix))
                         .WithOkColor();
@@ -421,213 +419,6 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
                     break;
             }
         } while (await timer.WaitForNextTickAsync());
-    }
-
-    private async Task OnMessageReceived(SocketMessage args)
-    {
-        if (args.Channel is not IGuildChannel guildChannel)
-            return;
-        var prefix = await guildSettings.GetPrefix(guildChannel.Guild);
-        if (args.Content.StartsWith(prefix))
-            return;
-        if (bss.Data.ChatGptKey is null or "" || bss.Data.ChatGptChannel is 0)
-            return;
-        if (args.Author.IsBot)
-            return;
-        if (args.Channel.Id != bss.Data.ChatGptChannel)
-            return;
-        if (args is not IUserMessage usrMsg)
-            return;
-        try
-        {
-            if (args.Content is "deletesession")
-            {
-                if (UserConversations.TryGetValue(args.Author.Id, out _))
-                {
-                    ClearConversation(args.Author.Id);
-                    await args.Channel.SendConfirmAsync(
-                        Strings.ConversationDeleted(guildChannel.Guild.Id)
-                    );
-                    return;
-                }
-
-                await args.Channel.SendErrorAsync(
-                    Strings.NoConversation(guildChannel.Guild.Id),
-                    bss.Data
-                );                return;
-            }
-
-            await using var dbContext = await dbProvider.GetContextAsync();
-
-            (Database.Models.OwnerOnly actualItem, bool added) toUpdate = dbContext.OwnerOnly.Any()
-                ? (await dbContext.OwnerOnly.FirstOrDefaultAsync(), false)
-                : (new Database.Models.OwnerOnly
-                {
-                    GptTokensUsed = 0
-                }, true);
-
-            var loadingMsg = await usrMsg.Channel.SendConfirmAsync($"{bss.Data.LoadingEmote} Awaiting response...");
-            await StreamResponseAndUpdateEmbedAsync(bss.Data.ChatGptKey, bss.Data.ChatGptModel,
-                bss.Data.ChatGptInitPrompt +
-                $"The users name is {args.Author}, you are in the discord server {guildChannel.Guild} and in the channel {guildChannel} and there are {(await guildChannel.GetUsersAsync().FlattenAsync()).Count()} users that can see this channel.",
-                loadingMsg, toUpdate, args.Author, args.Content);
-        }
-        catch (Exception e)
-        {
-            Log.Warning(e, "Error in ChatGPT");
-            await usrMsg.SendErrorReplyAsync("Something went wrong, please try again later.");
-        }
-    }
-
-    private static void ClearConversation(ulong userId)
-    {
-        UserConversations.Remove(userId);
-    }
-
-    private async Task StreamResponseAndUpdateEmbedAsync(string apiKey, string model, string systemPrompt,
-        IUserMessage loadingMsg,
-        (Database.Models.OwnerOnly actualItem, bool added) toUpdate, SocketUser author, string userPrompt)
-    {
-        using var httpClient = httpFactory.CreateClient();
-        httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
-
-        if (!UserConversations.TryGetValue(author.Id, out var conversation))
-        {
-            conversation = new Conversation();
-            conversation.Messages.Add(new Message
-            {
-                Role = "system", Content = systemPrompt
-            });
-            UserConversations[author.Id] = conversation;
-        }
-
-        conversation.Messages.Add(new Message
-        {
-            Role = "user", Content = userPrompt
-        });
-
-        var requestBody = new
-        {
-            model,
-            messages = conversation.Messages.Select(m => new
-            {
-                role = m.Role, content = m.Content
-            }).ToArray(),
-            stream = true,
-            user = author.Id.ToString(),
-            stream_options = new
-            {
-                include_usage = true
-            }
-        };
-
-        var content = new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8,
-            "application/json");
-
-        using var response = await httpClient.PostAsync("https://api.groq.com/openai/v1/chat/completions", content);
-        response.EnsureSuccessStatusCode();
-
-        await using var stream = await response.Content.ReadAsStreamAsync();
-        using var reader = new StreamReader(stream);
-
-        var responseBuilder = new StringBuilder();
-        var lastUpdate = DateTimeOffset.UtcNow;
-        var totalTokens = 0;
-        var lastResponse = new ChatCompletionChunkResponse();
-
-        while (!reader.EndOfStream)
-        {
-            var line = await reader.ReadLineAsync();
-            if (string.IsNullOrEmpty(line) || line == "data: [DONE]") continue;
-
-            if (!line.StartsWith("data: ")) continue;
-            var json = line[6..];
-            var chatResponse = JsonSerializer.Deserialize<ChatCompletionChunkResponse>(json);
-            lastResponse = chatResponse;
-            if (chatResponse?.Choices is not { Count: > 0 }) continue;
-            var conversationContent = chatResponse.Choices[0].Delta?.Content;
-            if (string.IsNullOrEmpty(conversationContent)) continue;
-            responseBuilder.Append(conversationContent);
-            if (!((DateTimeOffset.UtcNow - lastUpdate).TotalSeconds >= 1)) continue;
-            lastUpdate = DateTimeOffset.UtcNow;
-            var embeds = BuildEmbeds(responseBuilder.ToString(), author,
-                chatResponse.Usage is not null
-                    ? toUpdate.actualItem.GptTokensUsed + chatResponse.Usage.TotalTokens
-                    : toUpdate.actualItem.GptTokensUsed);
-            if (chatResponse.Usage is not null)
-                totalTokens += chatResponse.Usage.TotalTokens;
-            await loadingMsg.ModifyAsync(m => m.Embeds = embeds.ToArray());
-        }
-
-        // Add assistant's response to the conversation
-        conversation.Messages.Add(new Message
-        {
-            Role = "assistant", Content = responseBuilder.ToString()
-        });
-
-        // Trim conversation history if it gets too long
-        if (conversation.Messages.Count > 10)
-        {
-            conversation.Messages = conversation.Messages.Skip(conversation.Messages.Count - 10).ToList();
-        }
-
-        await using var dbContext = await dbProvider.GetContextAsync();
-        if (lastResponse.Usage is not null)
-        {
-            toUpdate.actualItem.GptTokensUsed += lastResponse.Usage.TotalTokens;
-        }
-
-        if (toUpdate.added)
-            dbContext.OwnerOnly.Add(toUpdate.actualItem);
-        else
-            dbContext.OwnerOnly.Update(toUpdate.actualItem);
-        await dbContext.SaveChangesAsync();
-
-        var finalEmbeds = BuildEmbeds(responseBuilder.ToString(), author, toUpdate.actualItem.GptTokensUsed);
-        await loadingMsg.ModifyAsync(m => m.Embeds = finalEmbeds.ToArray());
-    }
-
-    private static List<Embed> BuildEmbeds(string response, IUser requester, int totalTokensUsed)
-    {
-        var embeds = new List<Embed>();
-        var partIndex = 0;
-        while (partIndex < response.Length)
-        {
-            var length = Math.Min(4096, response.Length - partIndex);
-            var description = response.Substring(partIndex, length);
-            var embedBuilder = new EmbedBuilder()
-                .WithDescription(description)
-                .WithOkColor();
-
-            if (partIndex == 0)
-                embedBuilder.WithAuthor("ChatGPT",
-                    "https://seeklogo.com/images/C/chatgpt-logo-02AFA704B5-seeklogo.com.png");
-
-            if (partIndex + length == response.Length)
-                embedBuilder.WithFooter(
-                    $"Requested by {requester.Username} | Total Tokens Used: {totalTokensUsed}");
-
-            embeds.Add(embedBuilder.Build());
-            partIndex += length;
-        }
-
-        return embeds;
-    }
-
-
-    /// <summary>
-    ///     Resets the count of used GPT tokens to zero in the database. This is typically called to clear the token usage
-    ///     count at the start of a new billing period or when manually resetting the token count.
-    /// </summary>
-    public async Task ClearUsedTokens()
-    {
-        await using var dbContext = await dbProvider.GetContextAsync();
-        var val = await dbContext.OwnerOnly.FirstOrDefaultAsync();
-        if (val is null)
-            return;
-        val.GptTokensUsed = 0;
-        dbContext.OwnerOnly.Update(val);
-        await dbContext.SaveChangesAsync();
     }
 
     private async Task RotatingStatuses()
@@ -858,7 +649,6 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
     ///     Removes a startup command (a command with an interval of 0) at the specified index.
     /// </summary>
     /// <param name="index">The zero-based index of the startup command to remove.</param>
-    /// <param name="cmd">Out parameter that returns the removed auto command if the operation succeeds.</param>
     /// <returns>True if a command was found and removed; otherwise, false.</returns>
     public async Task<bool> RemoveStartupCommand(int index)
     {
@@ -880,7 +670,6 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
     ///     Removes an auto command based on its index in the collection of commands with an interval of 5 seconds or more.
     /// </summary>
     /// <param name="index">The zero-based index of the command to remove.</param>
-    /// <param name="cmd">Outputs the removed <see cref="AutoCommand" /> if the method returns true.</param>
     /// <returns>True if a command was successfully found and removed; otherwise, false.</returns>
     public async Task<bool> RemoveAutoCommand(int index)
     {
@@ -1014,73 +803,5 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         var isToAll = false;
         bss.ModifyConfig(config => isToAll = config.ForwardToAllOwners = !config.ForwardToAllOwners);
         return isToAll;
-    }
-
-    private class Choice
-    {
-        [JsonPropertyName("delta")]
-        public Delta Delta;
-
-        [JsonPropertyName("finish_reason")]
-        public object FinishReason;
-
-        [JsonPropertyName("index")]
-        public int? Index;
-
-        [JsonPropertyName("logprobs")]
-        public object Logprobs;
-    }
-
-    private class Delta
-    {
-        [JsonPropertyName("content")]
-        public string Content;
-    }
-
-    private class ChatCompletionChunkResponse
-    {
-        [JsonPropertyName("choices")]
-        public List<Choice> Choices;
-
-        [JsonPropertyName("created")]
-        public int? Created;
-
-        [JsonPropertyName("id")]
-        public string Id;
-
-        [JsonPropertyName("model")]
-        public string Model;
-
-        [JsonPropertyName("object")]
-        public string Object;
-
-        [JsonPropertyName("system_fingerprint")]
-        public string SystemFingerprint;
-
-        [JsonPropertyName("usage")]
-        public Usage? Usage;
-    }
-
-    private class Usage
-    {
-        [JsonPropertyName("completion_tokens")]
-        public int CompletionTokens;
-
-        [JsonPropertyName("prompt_tokens")]
-        public int PromptTokens;
-
-        [JsonPropertyName("total_tokens")]
-        public int TotalTokens;
-    }
-
-    private class Conversation
-    {
-        public List<Message> Messages { get; set; } = [];
-    }
-
-    private class Message
-    {
-        public string Role { get; set; }
-        public string Content { get; set; }
     }
 }

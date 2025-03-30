@@ -80,23 +80,6 @@ public class SlashOwnerOnly(
     }
 
     /// <summary>
-    ///     Clears the count of used GPT tokens after confirming with the user.
-    /// </summary>
-    /// <remarks>
-    ///     This command prompts the user for confirmation before proceeding to clear the used token count.
-    ///     If the user confirms, it clears the count and notifies the user of completion.
-    /// </remarks>
-    [SlashCommand("clearusedtokens", "Clears the used gpt tokens count")]
-    public async Task ClearUsedTokens()
-    {
-        if (await PromptUserConfirmAsync(Strings.ClearTokensConfirm(ctx.Guild.Id), ctx.User.Id))
-        {
-            await Service.ClearUsedTokens();
-            await ctx.Interaction.SendErrorAsync(Strings.TokensCleared(ctx.Guild.Id), Config);
-        }
-    }
-
-    /// <summary>
     ///     Executes a command as if it were sent by the specified guild user.
     /// </summary>
     /// <param name="user">The guild user to impersonate when executing the command.</param>

@@ -29,7 +29,7 @@ public class CommentGatheringTypeInspector : TypeInspectorSkeleton
     }
 
     /// <inheritdoc />
-    public override string GetEnumValue(object enumValue)
+    public override string? GetEnumValue(object enumValue)
     {
         return enumValue.ToString();
     }
@@ -42,18 +42,10 @@ public class CommentGatheringTypeInspector : TypeInspectorSkeleton
             .Select(d => new CommentsPropertyDescriptor(d));
     }
 
-    private sealed class CommentsPropertyDescriptor : IPropertyDescriptor
+    private sealed class CommentsPropertyDescriptor(IPropertyDescriptor baseDescriptor) : IPropertyDescriptor
     {
-        private readonly IPropertyDescriptor baseDescriptor;
-
-        public CommentsPropertyDescriptor(IPropertyDescriptor baseDescriptor)
-        {
-            this.baseDescriptor = baseDescriptor;
-            Name = baseDescriptor.Name;
-        }
-
         /// <inheritdoc />
-        public string Name { get; }
+        public string Name { get; } = baseDescriptor.Name;
 
         public bool AllowNulls { get; }
 
@@ -114,7 +106,7 @@ public class CommentGatheringTypeInspector : TypeInspectorSkeleton
         }
 
         /// <inheritdoc />
-        public T GetCustomAttribute<T>() where T : Attribute
+        public T? GetCustomAttribute<T>() where T : Attribute
         {
             return baseDescriptor.GetCustomAttribute<T>();
         }

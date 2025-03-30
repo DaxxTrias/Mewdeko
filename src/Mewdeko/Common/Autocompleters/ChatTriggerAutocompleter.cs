@@ -47,7 +47,8 @@ public class ChatTriggerAutocompleter : AutocompleteHandler
             return AutocompletionResult.FromError(InteractionCommandError.Unsuccessful,
                 "You don't have permission to view chat triggers!");
 
-        var input = autocompleteInteraction.Data.Current.Value as string;
+        if (autocompleteInteraction.Data.Current.Value is not string input)
+            return AutocompletionResult.FromSuccess();
 
         var suggestions = (await Triggers.GetChatTriggersFor(context.Guild?.Id))
             .Where(x => (x.Trigger + x.RealName + x.Response).Contains(input, StringComparison.OrdinalIgnoreCase))

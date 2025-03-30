@@ -1,4 +1,5 @@
 ﻿using Discord.Interactions;
+// ReSharper disable NotNullOrRequiredMemberIsNotInitialized
 
 namespace Mewdeko.Common.Modals;
 

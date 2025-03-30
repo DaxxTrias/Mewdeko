@@ -1,4 +1,5 @@
-﻿namespace Mewdeko.Common;
+﻿// ReSharper disable NotNullOrRequiredMemberIsNotInitialized
+namespace Mewdeko.Common;
 
 /// <summary>
 ///     The votemodal class

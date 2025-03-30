@@ -28,9 +28,9 @@ public class RedisCache : IDataCache
     /// </summary>
     /// <param name="creds">The bot credentials.</param>
     /// <param name="shardId">The shard ID.</param>
-    public RedisCache(IBotCredentials creds)
+    public RedisCache(IBotCredentials creds, int shardCount)
     {
-        RedisConnectionManager.Initialize(creds.RedisConnections);
+        RedisConnectionManager.Initialize(creds.RedisConnections, shardCount);
         LocalData = new RedisLocalDataCache(Redis, creds);
         redisKey = creds.RedisKey();
     }

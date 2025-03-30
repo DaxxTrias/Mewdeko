@@ -1,5 +1,3 @@
-using System;
-using System.Linq;
 using Mewdeko.Services.Impl;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -45,7 +43,7 @@ namespace Mewdeko.Controllers
                 return Forbid();
             }
 
-            var topMethods = performanceService.GetTopCpuMethods(20);
+            var topMethods = performanceService.GetTopCpuMethods();
 
             var result = topMethods.Select(m => new
             {

@@ -105,7 +105,8 @@ public class GiveawaysController(
         try
         {
             var gway = await service.GetGiveawayById(giveawayId);
-            // You'll need to implement this method in the GiveawayService
+            if (gway is null)
+                return NotFound("That giveaway doesnt exist.");
             await service.GiveawayTimerAction(gway);
             return Ok();
         }

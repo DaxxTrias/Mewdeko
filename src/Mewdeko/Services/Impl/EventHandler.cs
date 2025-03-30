@@ -4,20 +4,24 @@ namespace Mewdeko.Services.Impl;
 
 /// <summary>
 ///     Provides asynchronous event handling for Discord.NET events while preserving gateway thread safety
+///     with integrated performance monitoring
 /// </summary>
 public sealed class EventHandler : IDisposable
 {
     private readonly DiscordShardedClient _client;
+    private readonly PerformanceMonitorService _perfService;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="EventHandler" /> class.
     ///     Registers all Discord.NET event handlers and sets up asynchronous event handling.
     /// </summary>
     /// <param name="client">The Discord sharded client instance to handle events for.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="client" /> is null.</exception>
-    public EventHandler(DiscordShardedClient client)
+    /// <param name="perfService">The performance monitoring service to track event execution times.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="client" /> or <paramref name="perfService" /> is null.</exception>
+    public EventHandler(DiscordShardedClient client, PerformanceMonitorService perfService)
     {
         _client = client ?? throw new ArgumentNullException(nameof(client));
+        _perfService = perfService ?? throw new ArgumentNullException(nameof(perfService));
         RegisterEvents();
     }
 
@@ -322,6 +326,7 @@ public sealed class EventHandler : IDisposable
             _ = SafeExecuteHandler(() => ModalSubmitted(arg), nameof(ModalSubmitted));
         return Task.CompletedTask;
     }
+
     private Task ClientOnInviteDeleted(SocketGuildChannel arg1, string arg2)
     {
         if (InviteDeleted is not null)
@@ -587,19 +592,33 @@ public sealed class EventHandler : IDisposable
     #endregion
 
     /// <summary>
-    ///     Safely executes an event handler with error logging
+    ///     Safely executes an event handler with error logging and performance monitoring
     /// </summary>
-    private static Task SafeExecuteHandler(Func<Task> handlerAction, string eventName)
+    /// <param name="handlerAction">The event handler action to execute.</param>
+    /// <param name="eventName">The name of the event being handled.</param>
+    /// <returns>A task that completes when the handler execution is started.</returns>
+    private Task SafeExecuteHandler(Func<Task> handlerAction, string eventName)
     {
         _ = ExecuteHandlerAsync(handlerAction, eventName);
         return Task.CompletedTask;
     }
 
-    private static async Task ExecuteHandlerAsync(Func<Task> handlerAction, string eventName)
+    /// <summary>
+    ///     Asynchronously executes the handler with performance monitoring and error tracking
+    /// </summary>
+    /// <param name="handlerAction">The event handler action to execute.</param>
+    /// <param name="eventName">The name of the event being handled.</param>
+    /// <returns>A task that completes when the handler execution is completed.</returns>
+    private async Task ExecuteHandlerAsync(Func<Task> handlerAction, string eventName)
     {
         try
         {
-            await handlerAction().ConfigureAwait(false);
+            var methodName = $"Event_{eventName}";
+
+            using (_perfService.Measure(methodName))
+            {
+                await handlerAction().ConfigureAwait(false);
+            }
         }
         catch (Exception ex)
         {
@@ -665,6 +684,7 @@ public sealed class EventHandler : IDisposable
             _client.LeftGuild -= ClientOnLeftGuild;
             _client.InviteCreated -= ClientOnInviteCreated;
             _client.InviteDeleted -= ClientOnInviteDeleted;
+            _client.ModalSubmitted -= ClientOnModalSubmitted;
 
             Log.Information("Successfully unregistered all Discord event handlers");
         }

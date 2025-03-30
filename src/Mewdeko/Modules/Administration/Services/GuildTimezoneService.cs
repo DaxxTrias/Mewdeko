@@ -75,7 +75,7 @@ public class GuildTimezoneService : INService
     /// </summary>
     /// <param name="guildId">The ID of the guild.</param>
     /// <returns>The timezone for the guild, or UTC if no timezone is set.</returns>
-    public TimeZoneInfo GetTimeZoneOrUtc(ulong guildId)
+    public TimeZoneInfo? GetTimeZoneOrUtc(ulong guildId)
     {
         return GetTimeZoneOrDefault(guildId) ?? TimeZoneInfo.Utc;
     }

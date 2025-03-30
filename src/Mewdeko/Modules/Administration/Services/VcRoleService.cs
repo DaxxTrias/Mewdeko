@@ -20,7 +20,7 @@ public class VcRoleService : INService, IReadyExecutor
     /// </summary>
     /// <param name="client">The Discord client.</param>
     /// <param name="bot">The bot instance.</param>
-    /// <param name="db">The database service.</param>
+    /// <param name="dbProvider">The database service.</param>
     /// <param name="eventHandler">The event handler.</param>
     /// <param name="guildSettingsService">The guild settings service.</param>
     public VcRoleService(DiscordShardedClient client, Mewdeko bot, DbContextProvider dbProvider,

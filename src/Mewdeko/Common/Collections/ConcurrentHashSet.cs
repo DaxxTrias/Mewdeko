@@ -88,7 +88,7 @@ public sealed class ConcurrentHashSet<T> : IReadOnlyCollection<T>, ISet<T> where
     /// </summary>
     /// <param name="item">The item to add.</param>
     /// <returns>true if the item was added to the set; false if the item already exists.</returns>
-    public bool Add(T item)
+    public bool Add(T? item)
     {
         return backingStore.TryAdd(item, true);
     }
@@ -97,9 +97,9 @@ public sealed class ConcurrentHashSet<T> : IReadOnlyCollection<T>, ISet<T> where
     ///     Adds an item to the set.
     /// </summary>
     /// <param name="item">The item to add.</param>
-    void ICollection<T>.Add(T item)
+    void ICollection<T>.Add(T? item)
     {
-        Add(item);
+        if (item != null) Add(item);
     }
 
     /// <summary>

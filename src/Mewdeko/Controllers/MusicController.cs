@@ -24,10 +24,9 @@ public class MusicController : Controller
     /// <summary>
     ///     Controller for managing music playback and settings
     /// </summary>
-    /// <param name="audioService"></param>
-    /// <param name="cache"></param>
-    /// <param name="client"></param>
-    /// <param name="db"></param>
+    /// <param name="audioService">The audio service for managing music playback operations</param>
+    /// <param name="cache">The data cache for storing and retrieving music-related information</param>
+    /// <param name="client">The Discord client for accessing guild and user information</param>
     public MusicController(
         IAudioService audioService,
         IDataCache cache,
@@ -311,17 +310,6 @@ public class MusicController : Controller
         {
             MusicChannelId = channelId
         });
-    }
-
-    private PlayerRepeatType ConvertRepeatType(PlayerRepeatType type)
-    {
-        return type switch
-        {
-            PlayerRepeatType.None or PlayerRepeatType.Off => PlayerRepeatType.None,
-            PlayerRepeatType.Track or PlayerRepeatType.Song => PlayerRepeatType.Track,
-            PlayerRepeatType.Queue or PlayerRepeatType.All => PlayerRepeatType.Queue,
-            _ => PlayerRepeatType.None
-        };
     }
 
     /// <summary>

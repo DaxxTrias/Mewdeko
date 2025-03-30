@@ -7,7 +7,7 @@ namespace Mewdeko.Common.TypeReaders.Interactions;
 /// <summary>
 ///     Class that converts a string to an array of IEmote objects.
 /// </summary>
-public class EmoteArrayTypeConverter : MewdekoTypeReader<IEmote[]>
+public partial class EmoteArrayTypeConverter : MewdekoTypeReader<IEmote[]>
 {
     /// <summary>
     ///     Initializes a new instance of the EmoteArrayTypeConverter class.
@@ -46,12 +46,15 @@ public class EmoteArrayTypeConverter : MewdekoTypeReader<IEmote[]>
     public override Task<TypeConverterResult> ReadAsync(IInteractionContext context, string option,
         IServiceProvider services)
     {
-        var emotes = Regex.Split(option, "[.|, +]+")
+        var emotes = MyRegex().Split(option)
             .Select(x => x.TryToIEmote(out var value) ? value : null)
-            .Where(x => x is not null);
+            .Where(x => x is not null).ToHashSet();
         return Task.FromResult(!emotes.Any()
             ? TypeConverterResult.FromError(InteractionCommandError.ConvertFailed,
                 Strings.GetText("emote_reader_none_found", context.Guild?.Id))
             : TypeConverterResult.FromSuccess(emotes.ToArray()));
     }
+
+    [GeneratedRegex("[.|, +]+")]
+    private static partial Regex MyRegex();
 }

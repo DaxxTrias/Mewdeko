@@ -55,7 +55,11 @@ public class Program
         var log = LogSetup.SetupLogger("Api");
         var credentials = new BotCredentials();
         DependencyInstaller.CheckAndInstallDependencies(credentials.PsqlConnectionString);
-        Cache = new RedisCache(credentials);
+        var discordRestClient = new DiscordRestClient();
+        await discordRestClient.LoginAsync(TokenType.Bot, credentials.Token);
+        var botGatewayInfo = await discordRestClient.GetBotGatewayAsync();
+        await discordRestClient.LogoutAsync();
+        Cache = new RedisCache(credentials, botGatewayInfo.Shards);
 
         if (!Uri.TryCreate(credentials.LavalinkUrl, UriKind.Absolute, out _))
         {
@@ -71,9 +75,6 @@ public class Program
 
         await migrationService.ApplyMigrations(
             new MewdekoPostgresContext(new DbContextOptions<MewdekoPostgresContext>()));
-
-        Log.Information("Waiting 5 seconds for migrations, if any...");
-        await Task.Delay(5000);
 
         // Set up the Host or WebApplication based on IsApiEnabled
 
@@ -133,14 +134,11 @@ public class Program
 
             auth.AddScheme<AuthenticationSchemeOptions, ApiKeyAuthHandler>("ApiKey", null);
 
-            services.AddAuthorization(options =>
-            {
-                options.AddPolicy("ApiKeyPolicy", policy =>
-                    policy.RequireAuthenticatedUser().AddAuthenticationSchemes("ApiKey"));
-                options.AddPolicy("TopggPolicy",
-                    policy => policy.RequireClaim(AuthHandler.TopggClaim)
+            services.AddAuthorizationBuilder()
+                .AddPolicy("ApiKeyPolicy", policy =>
+                    policy.RequireAuthenticatedUser().AddAuthenticationSchemes("ApiKey"))
+                .AddPolicy("TopggPolicy", policy => policy.RequireClaim(AuthHandler.TopggClaim)
                         .AddAuthenticationSchemes(AuthHandler.SchemeName));
-            });
 
             builder.Services.AddCors(options =>
             {
@@ -282,7 +280,7 @@ public class Program
         services
             .AddSingleton<FontProvider>()
             .AddSingleton<IBotCredentials>(credentials);
-        //services.AddDbContext<MewdekoPostgresContext>(); //# used only for migrations
+        services.AddDbContext<MewdekoPostgresContext>(); //# used only for migrations
         services.AddPooledDbContextFactory<MewdekoContext>(dbContextOptionsBuilder =>
             {
                 var connString = new NpgsqlConnectionStringBuilder(credentials.PsqlConnectionString)

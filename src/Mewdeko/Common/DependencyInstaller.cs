@@ -24,10 +24,10 @@ public static class DependencyInstaller
         Ubuntu,
         Debian,
         Fedora,
-        RHEL,
-        CentOS,
+        Rhel,
+        CentOs,
         Arch,
-        OpenSUSE,
+        OpenSuse,
         Alpine,
         Unknown
     }
@@ -69,7 +69,7 @@ public static class DependencyInstaller
             ]
         },
         {
-            LinuxDistro.RHEL, [
+            LinuxDistro.Rhel, [
                 "sudo yum update -y",
                 "sudo yum install -y postgresql postgresql-server postgresql-contrib",
                 "sudo postgresql-setup --initdb",
@@ -81,7 +81,7 @@ public static class DependencyInstaller
             ]
         },
         {
-            LinuxDistro.CentOS, [
+            LinuxDistro.CentOs, [
                 "sudo yum update -y",
                 "sudo yum install -y postgresql postgresql-server postgresql-contrib",
                 "sudo postgresql-setup --initdb",
@@ -105,7 +105,7 @@ public static class DependencyInstaller
             ]
         },
         {
-            LinuxDistro.OpenSUSE, [
+            LinuxDistro.OpenSuse, [
                 "sudo zypper refresh",
                 "sudo zypper install -y postgresql postgresql-server",
                 "sudo systemctl start postgresql",
@@ -136,10 +136,10 @@ public static class DependencyInstaller
         { LinuxDistro.Ubuntu, ("dpkg -l | grep postgresql", "dpkg -l | grep redis-server") },
         { LinuxDistro.Debian, ("dpkg -l | grep postgresql", "dpkg -l | grep redis-server") },
         { LinuxDistro.Fedora, ("rpm -q postgresql-server", "rpm -q redis") },
-        { LinuxDistro.RHEL, ("rpm -q postgresql-server", "rpm -q redis") },
-        { LinuxDistro.CentOS, ("rpm -q postgresql-server", "rpm -q redis") },
+        { LinuxDistro.Rhel, ("rpm -q postgresql-server", "rpm -q redis") },
+        { LinuxDistro.CentOs, ("rpm -q postgresql-server", "rpm -q redis") },
         { LinuxDistro.Arch, ("pacman -Qi postgresql", "pacman -Qi redis") },
-        { LinuxDistro.OpenSUSE, ("rpm -q postgresql-server", "rpm -q redis") },
+        { LinuxDistro.OpenSuse, ("rpm -q postgresql-server", "rpm -q redis") },
         { LinuxDistro.Alpine, ("apk info postgresql", "apk info redis") }
     };
 
@@ -184,7 +184,7 @@ public static class DependencyInstaller
 
                         if (!PromptForDatabaseSetup()) return;
                         var (dbName, dbUser, dbPassword) = GetDatabaseDetails();
-                        SetupPostgresDb(distro, dbName, dbUser, dbPassword);
+                        SetupPostgresDb(dbName, dbUser, dbPassword);
                     }
                 }
                 else
@@ -237,10 +237,10 @@ public static class DependencyInstaller
             if (osRelease.Contains("ubuntu")) return LinuxDistro.Ubuntu;
             if (osRelease.Contains("debian")) return LinuxDistro.Debian;
             if (osRelease.Contains("fedora")) return LinuxDistro.Fedora;
-            if (osRelease.Contains("rhel")) return LinuxDistro.RHEL;
-            if (osRelease.Contains("centos")) return LinuxDistro.CentOS;
+            if (osRelease.Contains("rhel")) return LinuxDistro.Rhel;
+            if (osRelease.Contains("centos")) return LinuxDistro.CentOs;
             if (osRelease.Contains("arch")) return LinuxDistro.Arch;
-            if (osRelease.Contains("opensuse")) return LinuxDistro.OpenSUSE;
+            if (osRelease.Contains("opensuse")) return LinuxDistro.OpenSuse;
             return File.Exists("/etc/alpine-release") ? LinuxDistro.Alpine : LinuxDistro.Unknown;
         }
         catch (Exception ex)
@@ -409,7 +409,7 @@ public static class DependencyInstaller
         if (PromptForDatabaseSetup())
         {
             var (dbName, dbUser, dbPassword) = GetDatabaseDetails();
-            SetupPostgresDb(distro, dbName, dbUser, dbPassword);
+            SetupPostgresDb(dbName, dbUser, dbPassword);
         }
     }
 
@@ -444,7 +444,7 @@ public static class DependencyInstaller
         return (dbName, dbUser, dbPassword);
     }
 
-    private static void SetupPostgresDb(LinuxDistro distro, string dbName, string dbUser, string dbPassword)
+    private static void SetupPostgresDb(string dbName, string dbUser, string dbPassword)
     {
         var commands = new[]
         {
@@ -537,7 +537,7 @@ public static class DependencyInstaller
         }
     }
 
-    private static void ShowWindowsDatabaseSetup(string dbName = null, string dbUser = null, string dbPassword = null)
+    private static void ShowWindowsDatabaseSetup(string? dbName = null, string? dbUser = null, string? dbPassword = null)
     {
         if (dbName == null || dbUser == null || dbPassword == null)
         {

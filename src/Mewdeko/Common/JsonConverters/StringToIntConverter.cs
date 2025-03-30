@@ -18,7 +18,7 @@ public class StringToIntConverter : JsonConverter<string>
     /// <param name="typeToConvert">The type to convert.</param>
     /// <param name="options">Options for reading the JSON.</param>
     /// <returns>A string representation of the value.</returns>
-    public override string Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    public override string? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
         return reader.GetString();
     }
