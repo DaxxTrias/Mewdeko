@@ -145,9 +145,10 @@ public class Program
                 options.AddPolicy("BotInstancePolicy", policy =>
                 {
                     policy
-                        .AllowAnyOrigin() // Allow any origin since dashboard could be accessed from anywhere
+                        .WithOrigins($"http://localhost:{credentials.ApiPort}")
                         .AllowAnyMethod() // Allow GET, POST, etc.
-                        .AllowAnyHeader(); // Allow any headers including custom auth headers
+                        .AllowAnyHeader() // Allow any headers including custom auth headers
+                        .AllowCredentials();
                 });
             });
 
@@ -215,6 +216,10 @@ public class Program
                 app.UseSwaggerUI();
             }
 
+            app.UseWebSockets(new WebSocketOptions
+            {
+                KeepAliveInterval = TimeSpan.FromSeconds(120),
+            });
             app.UseAuthorization();
             app.MapControllers();
 

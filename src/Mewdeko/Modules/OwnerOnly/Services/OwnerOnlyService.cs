@@ -1,9 +1,6 @@
 ﻿using System.Collections.Immutable;
 using System.Diagnostics;
-using System.IO;
 using System.Net.Http;
-using System.Text;
-using System.Text.Json.Serialization;
 using System.Threading;
 using LinqToDB.EntityFrameworkCore;
 using Mewdeko.Common.Configs;
@@ -16,7 +13,6 @@ using Microsoft.EntityFrameworkCore;
 using Octokit;
 using Serilog;
 using StackExchange.Redis;
-using Embed = Discord.Embed;
 using Image = Discord.Image;
 using JsonSerializer = System.Text.Json.JsonSerializer;
 
