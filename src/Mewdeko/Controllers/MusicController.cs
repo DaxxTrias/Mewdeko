@@ -1,13 +1,13 @@
-﻿using Lavalink4NET;
+﻿using System.Text.Json;
+using Lavalink4NET;
 using Lavalink4NET.Filters;
 using Lavalink4NET.Players;
 using Lavalink4NET.Rest.Entities.Tracks;
 using Mewdeko.Modules.Music.Common;
 using Mewdeko.Modules.Music.CustomPlayer;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
-using System.Text.Json;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Serilog;
 
 namespace Mewdeko.Controllers;
@@ -93,7 +93,128 @@ public class MusicController : Controller
     }
 
     /// <summary>
-    /// WebSocket endpoint for real-time music updates
+    ///     Searches for tracks using the provided query and search mode
+    /// </summary>
+    /// <param name="query">The search query</param>
+    /// <param name="mode">The search mode (YouTube, Spotify, SoundCloud)</param>
+    /// <param name="limit">Maximum number of results to return</param>
+    /// <returns>A list of matching tracks</returns>
+    [HttpGet("search")]
+    [Authorize("ApiKeyPolicy")]
+    public async Task<IActionResult> SearchTracks([FromQuery] string query, [FromQuery] string mode = "YouTube",
+        [FromQuery] int limit = 10)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+            return BadRequest("Search query is required");
+
+        if (limit < 1 || limit > 25)
+            limit = 10;
+
+        try
+        {
+            // Parse the search mode
+            var searchMode = mode.ToLower() switch
+            {
+                "youtube" => TrackSearchMode.YouTube,
+                "spotify" => TrackSearchMode.Spotify,
+                "soundcloud" => TrackSearchMode.SoundCloud,
+                "youtubemusic" => TrackSearchMode.YouTubeMusic,
+                _ => TrackSearchMode.YouTube
+            };
+
+            // Perform the search
+            var trackResults = await audioService.Tracks.LoadTracksAsync(query, new TrackLoadOptions
+            {
+                SearchMode = searchMode
+            });
+
+            if (!trackResults.IsSuccess)
+                return Ok(new
+                {
+                    Tracks = Array.Empty<object>()
+                });
+
+            // Map the tracks to a response-friendly format
+            var tracks = trackResults.Tracks
+                .Take(limit)
+                .Select(track => new
+                {
+                    track.Title,
+                    track.Author,
+                    Duration = track.Duration.ToString(@"mm\:ss"),
+                    Uri = track.Uri?.ToString(),
+                    ArtworkUri = track.ArtworkUri?.ToString(),
+                    Provider = track.Provider.ToString()
+                })
+                .ToList();
+
+            return Ok(new
+            {
+                Tracks = tracks
+            });
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Error searching for tracks with query: {Query}", query);
+            return StatusCode(500, "Internal server error");
+        }
+    }
+
+    /// <summary>
+    ///     Extracts track information from a provided URL
+    /// </summary>
+    /// <param name="url">The URL to extract information from</param>
+    /// <returns>Track information if available</returns>
+    [HttpGet("extract")]
+    [Authorize("ApiKeyPolicy")]
+    public async Task<IActionResult> ExtractTrack([FromQuery] string url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+            return BadRequest("URL is required");
+
+        try
+        {
+            // Determine the appropriate search mode based on the URL
+            var searchMode = url.ToLower() switch
+            {
+                var u when u.Contains("spotify.com") => TrackSearchMode.Spotify,
+                var u when u.Contains("music.youtube") => TrackSearchMode.YouTubeMusic,
+                var u when u.Contains("youtube.com") || u.Contains("youtu.be") => TrackSearchMode.YouTube,
+                var u when u.Contains("soundcloud.com") => TrackSearchMode.SoundCloud,
+                _ => TrackSearchMode.None
+            };
+
+            // Load the track
+            var track = await audioService.Tracks.LoadTrackAsync(url, new TrackLoadOptions
+            {
+                SearchMode = searchMode
+            });
+
+            if (track == null)
+                return NotFound("Could not extract track information from URL");
+
+            // Map the track to a response-friendly format
+            var trackInfo = new
+            {
+                track.Title,
+                track.Author,
+                Duration = track.Duration.ToString(@"mm\:ss"),
+                Uri = track.Uri?.ToString(),
+                ArtworkUri = track.ArtworkUri?.ToString(),
+                Provider = track.Provider.ToString()
+            };
+
+            return Ok(trackInfo);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Error extracting track info from URL: {Url}", url);
+            return StatusCode(500, "Internal server error");
+        }
+    }
+
+    /// <summary>
+    ///     WebSocket endpoint for real-time music updates
     /// </summary>
     /// <param name="guildId">The Discord guild ID</param>
     /// <param name="userId">The Discord user ID making the request</param>
@@ -122,7 +243,7 @@ public class MusicController : Controller
     }
 
     /// <summary>
-    /// Fallback Server-Sent Events handler
+    ///     Fallback Server-Sent Events handler
     /// </summary>
     /// <param name="guildId">The Discord guild ID</param>
     /// <param name="userId">The Discord user ID making the request</param>
@@ -144,41 +265,51 @@ public class MusicController : Controller
         var completion = new TaskCompletionSource<bool>();
 
         // Register for player updates
-        eventManager.RegisterSseConnection(guildId, connectionId, async (status) => {
-            try {
+        eventManager.RegisterSseConnection(guildId, connectionId, async status =>
+        {
+            try
+            {
                 var json = JsonSerializer.Serialize(status);
                 await HttpContext.Response.WriteAsync($"event: status\ndata: {json}\n\n");
                 await HttpContext.Response.Body.FlushAsync();
             }
-            catch (Exception ex) {
+            catch (Exception ex)
+            {
                 Log.Error(ex, "Error sending SSE update");
                 completion.TrySetResult(false);
             }
         }, userId);
 
         // Handle disconnection
-        HttpContext.RequestAborted.Register(() => {
+        HttpContext.RequestAborted.Register(() =>
+        {
             eventManager.UnregisterSseConnection(guildId, connectionId);
             completion.TrySetResult(true);
         });
 
         // Keep the connection alive with heartbeats
-        _ = Task.Run(async () => {
-            try {
+        _ = Task.Run(async () =>
+        {
+            try
+            {
                 while (!completion.Task.IsCompleted)
                 {
                     await Task.Delay(30000); // 30 second heartbeat
-                    try {
-                        await HttpContext.Response.WriteAsync("event: heartbeat\ndata: {\"time\":" + DateTimeOffset.UtcNow.ToUnixTimeSeconds() + "}\n\n");
+                    try
+                    {
+                        await HttpContext.Response.WriteAsync("event: heartbeat\ndata: {\"time\":" +
+                                                              DateTimeOffset.UtcNow.ToUnixTimeSeconds() + "}\n\n");
                         await HttpContext.Response.Body.FlushAsync();
                     }
-                    catch {
+                    catch
+                    {
                         completion.TrySetResult(false);
                         break;
                     }
                 }
             }
-            catch (Exception ex) {
+            catch (Exception ex)
+            {
                 Log.Error(ex, "Error in SSE heartbeat");
             }
         });
@@ -217,14 +348,14 @@ public class MusicController : Controller
         // Notify clients of track change
         await eventManager.BroadcastPlayerUpdate(guildId);
 
-        return Ok(new {
-            Message = $"Now playing track {index}: {track.Track.Title}",
-            Track = track
+        return Ok(new
+        {
+            Message = $"Now playing track {index}: {track.Track.Title}", Track = track
         });
     }
 
     /// <summary>
-    /// Get initial player status for real-time connections
+    ///     Get initial player status for real-time connections
     /// </summary>
     /// <param name="guildId">The Discord guild ID</param>
     /// <param name="userId">The Discord user ID making the request</param>
@@ -233,7 +364,10 @@ public class MusicController : Controller
     {
         var player = await audioService.Players.GetPlayerAsync<MewdekoPlayer>(guildId);
         if (player == null)
-            return new { error = "No active player" };
+            return new
+            {
+                error = "No active player"
+            };
 
         var guild = client.GetGuild(guildId);
         var user = guild?.GetUser(userId);
@@ -517,7 +651,7 @@ public class MusicController : Controller
         var shuffled = queue.OrderBy(x => random.Next()).ToList();
 
         // Reset indices
-        for (int i = 0; i < shuffled.Count; i++)
+        for (var i = 0; i < shuffled.Count; i++)
         {
             shuffled[i].Index = i + 1;
         }
@@ -572,7 +706,10 @@ public class MusicController : Controller
         // Notify clients of settings change
         await eventManager.BroadcastPlayerUpdate(guildId);
 
-        return Ok(new { RepeatMode = settings.PlayerRepeat });
+        return Ok(new
+        {
+            RepeatMode = settings.PlayerRepeat
+        });
     }
 
     /// <summary>
@@ -684,7 +821,14 @@ public class MusicController : Controller
                 player.Filters.Distortion = enable
                     ? new DistortionFilterOptions
                     {
-                        SinOffset = 0.0f, SinScale = 1.0f, CosOffset = 0.0f, CosScale = 1.0f, TanOffset = 0.0f, TanScale = 1.0f, Offset = 0.0f, Scale = 5.0f
+                        SinOffset = 0.0f,
+                        SinScale = 1.0f,
+                        CosOffset = 0.0f,
+                        CosScale = 1.0f,
+                        TanOffset = 0.0f,
+                        TanScale = 1.0f,
+                        Offset = 0.0f,
+                        Scale = 5.0f
                     }
                     : null;
                 break;
@@ -712,28 +856,28 @@ public class MusicController : Controller
     }
 
     /// <summary>
-    /// A song request
+    ///     A song request
     /// </summary>
     public class PlayRequest
     {
         /// <summary>
-        /// The requested url
+        ///     The requested url
         /// </summary>
         public string Url { get; set; }
 
         /// <summary>
-        /// Who requested
+        ///     Who requested
         /// </summary>
         public PartialUser Requester { get; set; }
     }
 
     /// <summary>
-    /// Seek request
+    ///     Seek request
     /// </summary>
     public class SeekRequest
     {
         /// <summary>
-        /// Position in seconds
+        ///     Position in seconds
         /// </summary>
         public double Position { get; set; }
     }
