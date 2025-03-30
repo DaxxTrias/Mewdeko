@@ -224,7 +224,6 @@ public class Mewdeko
     {
         _ = Task.Run(async () =>
         {
-            await arg.DownloadUsersAsync().ConfigureAwait(false);
             Log.Information("Joined server: {0} [{1}]", arg.Name, arg.Id);
 
             var gc = await GuildSettingsService.GetGuildConfig(arg.Id).ConfigureAwait(false);
