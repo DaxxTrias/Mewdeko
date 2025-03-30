@@ -189,6 +189,41 @@ public class MusicController : Controller
     }
 
     /// <summary>
+    ///     Plays a specific track from the queue by its index
+    /// </summary>
+    /// <param name="guildId">The Discord guild ID</param>
+    /// <param name="index">The index of the track to play</param>
+    /// <returns>The result of the operation</returns>
+    [HttpPost("play-track/{index}")]
+    [Authorize("ApiKeyPolicy")]
+    public async Task<IActionResult> PlayTrackAt(ulong guildId, int index)
+    {
+        var player = await audioService.Players.GetPlayerAsync<MewdekoPlayer>(guildId);
+        if (player == null)
+            return NotFound("No active player found");
+
+        var queue = await cache.GetMusicQueue(guildId);
+        var track = queue.FirstOrDefault(t => t.Index == index);
+
+        if (track == null)
+            return NotFound("Track not found in queue");
+
+        // Play the requested track
+        await player.PlayAsync(track.Track);
+
+        // Update the current track in cache
+        await cache.SetCurrentTrack(guildId, track);
+
+        // Notify clients of track change
+        await eventManager.BroadcastPlayerUpdate(guildId);
+
+        return Ok(new {
+            Message = $"Now playing track {index}: {track.Track.Title}",
+            Track = track
+        });
+    }
+
+    /// <summary>
     /// Get initial player status for real-time connections
     /// </summary>
     /// <param name="guildId">The Discord guild ID</param>
