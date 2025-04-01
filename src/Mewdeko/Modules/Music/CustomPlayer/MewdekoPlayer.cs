@@ -13,7 +13,6 @@ using Mewdeko.Modules.Music.Common;
 using Mewdeko.Services.Strings;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-
 using SpotifyAPI.Web;
 using Embed = Discord.Embed;
 
@@ -33,6 +32,15 @@ public sealed class MewdekoPlayer : LavalinkPlayer
     private readonly DiscordShardedClient client;
     private readonly DbContextProvider dbProvider;
     private readonly GeneratedBotStrings Strings;
+    private readonly Random random = new();
+    private bool isAprilFoolsJokeRunning;
+
+    private readonly string[] soundIds = new[]
+    {
+        "1356473693294825603", "1356473638899159050", "1356473603775922256"
+    };
+
+    private const ulong SourceGuildId = 843489716674494475;
 
     /// <summary>
     ///     Initializes a new instance of <see cref="MewdekoPlayer" />.
@@ -145,10 +153,47 @@ public sealed class MewdekoPlayer : LavalinkPlayer
         var embed = await PrettyNowPlayingAsync(queue);
         var components = CreatePlayerControls();
 
-        // Send message with both embed and components
         var message = await musicChannel.SendMessageAsync(embed: embed, components: components);
 
-        // Continue with auto play logic
+        if (DateTime.Now.Month == 4 && DateTime.Now.Day == 1 && !isAprilFoolsJokeRunning)
+        {
+            if (random.Next(100) < 30)
+            {
+                isAprilFoolsJokeRunning = true;
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        var guild = client.GetGuild(GuildId);
+                        var chan = guild.GetVoiceChannel(VoiceChannelId);
+
+                        if (chan != null)
+                        {
+                            await Task.Delay(random.Next(30000, 120000), cancellationToken);
+
+                            await PlaySoundboardEffect(VoiceChannelId, soundIds[0]);
+
+                            await Task.Delay(random.Next(15000, 45000), cancellationToken);
+
+                            await PlaySoundboardEffect(VoiceChannelId, soundIds[1]);
+
+                            await Task.Delay(random.Next(20000, 60000), cancellationToken);
+
+                            await PlaySoundboardEffect(VoiceChannelId, soundIds[2]);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"April Fools prank error: {ex.Message}");
+                    }
+                    finally
+                    {
+                        isAprilFoolsJokeRunning = false;
+                    }
+                }, cancellationToken);
+            }
+        }
+
         if (currentTrack?.Index == queue.Count)
         {
             var success = await AutoPlay();
@@ -171,13 +216,16 @@ public sealed class MewdekoPlayer : LavalinkPlayer
         return new ComponentBuilder()
             // Row 1 - Main controls
             .WithButton(customId: $"music:prev:{GuildId}", emote: new Emoji("⏮️"), style: ButtonStyle.Secondary)
-            .WithButton(customId: $"music:playpause:{GuildId}", emote: new Emoji(isPaused ? "▶️" : "⏸️"), style: ButtonStyle.Primary)
+            .WithButton(customId: $"music:playpause:{GuildId}", emote: new Emoji(isPaused ? "▶️" : "⏸️"),
+                style: ButtonStyle.Primary)
             .WithButton(customId: $"music:next:{GuildId}", emote: new Emoji("⏭️"), style: ButtonStyle.Secondary)
             .WithButton(customId: $"music:stop:{GuildId}", emote: new Emoji("⏹️"), style: ButtonStyle.Danger)
             // Row 2 - Additional controls
             .WithButton(customId: $"music:loop:{GuildId}", emote: new Emoji("🔁"), style: ButtonStyle.Secondary, row: 1)
-            .WithButton(customId: $"music:volume_down:{GuildId}", emote: new Emoji("🔉"), style: ButtonStyle.Secondary, row: 1)
-            .WithButton(customId: $"music:volume_up:{GuildId}", emote: new Emoji("🔊"), style: ButtonStyle.Secondary, row: 1)
+            .WithButton(customId: $"music:volume_down:{GuildId}", emote: new Emoji("🔉"), style: ButtonStyle.Secondary,
+                row: 1)
+            .WithButton(customId: $"music:volume_up:{GuildId}", emote: new Emoji("🔊"), style: ButtonStyle.Secondary,
+                row: 1)
             .WithButton(customId: $"music:queue:{GuildId}", label: "Queue", style: ButtonStyle.Secondary, row: 1)
             .Build();
     }
@@ -455,108 +503,129 @@ public sealed class MewdekoPlayer : LavalinkPlayer
     }
 
     /// <summary>
-    ///     Contains logic for handling autoplay in a server. Requires either a last.fm API key.
+    ///     Contains logic for handling autoplay in a server using Spotify's recommendation system.
     /// </summary>
-    /// <returns>A bool depending on if the api key was correct.</returns>
+    /// <returns>A bool indicating if the operation was successful.</returns>
     public async Task<bool> AutoPlay()
     {
-        var autoPlay = await GetAutoPlay();
-        if (autoPlay == 0)
-            return true;
-        var queue = await cache.GetMusicQueue(GuildId);
-        var lastSong = queue.MaxBy(x => x.Index);
-        if (lastSong is null)
-            return true;
-
-        LastFmResponse response = null;
-        const int maxTries = 5;
-        var tries = 0;
-        var success = false;
-
-        while (!success)
+        try
         {
-            switch (tries)
+            var autoPlay = await GetAutoPlay();
+            if (autoPlay == 0)
+                return true;
+
+            var queue = await cache.GetMusicQueue(GuildId);
+            var lastSong = queue.MaxBy(x => x.Index);
+            if (lastSong is null)
+                return true;
+
+            // Extract track and artist information
+            var (artistName, trackTitle) = ExtractTrackInfo(lastSong.Track.Title, lastSong.Track.Author);
+
+            // Use existing Spotify client
+            var spotifyClient = await GetSpotifyClient();
+
+            // Search for the track on Spotify
+            var searchRequest = new SearchRequest(SearchRequest.Types.Track, $"{trackTitle} {artistName}");
+            var searchResults = await spotifyClient.Search.Item(searchRequest);
+
+            // If no results found, try with just the track title
+            if (searchResults.Tracks.Items.Count == 0)
             {
-                case >= maxTries:
+                searchRequest = new SearchRequest(SearchRequest.Types.Track, trackTitle);
+                searchResults = await spotifyClient.Search.Item(searchRequest);
+
+                // If still no results, return
+                if (searchResults.Tracks.Items.Count == 0)
                     return true;
-                case > 0:
-                    lastSong = queue.FirstOrDefault(x => x.Index == queue.Count - tries);
+            }
+
+            // Get recommendations based on seed track
+            var seedTrack = searchResults.Tracks.Items[0];
+
+            // Create recommendation request with enhanced parameters
+            var recommendationsRequest = new RecommendationsRequest();
+
+            // Add seed track
+            recommendationsRequest.SeedTracks.Add(seedTrack.Id);
+
+            // If we have space, add seed artists (up to 2, ensuring we don't exceed 5 total seeds)
+            foreach (var artist in seedTrack.Artists.Take(Math.Min(4, seedTrack.Artists.Count)))
+            {
+                recommendationsRequest.SeedArtists.Add(artist.Id);
+
+                // Break if we've reached max of 5 seed values
+                if (recommendationsRequest.SeedArtists.Count + recommendationsRequest.SeedTracks.Count >= 5)
                     break;
             }
 
-            // sorted info for attempting to fetch data from lastfm
-            var fullTitle = lastSong.Track.Title;
-            var trackTitle = fullTitle;
-            var artistName = lastSong.Track.Author;
-            var hyphenIndex = fullTitle.IndexOf(" - ", StringComparison.Ordinal);
+            // Set limit to number of tracks to autoplay
+            recommendationsRequest.Limit = autoPlay;
 
-            // if the title has a hyphen, split the title and artist, used in cases where the title is formatted as "Artist - Title"
-            if (hyphenIndex != -1)
+            // Get recommendations
+            var recommendations = await spotifyClient.Browse.GetRecommendations(recommendationsRequest);
+
+            // Filter out tracks that are already in the queue
+            var queuedTrackNames =
+                new HashSet<string>(queue.Select(q => q.Track.Title), StringComparer.OrdinalIgnoreCase);
+            var filteredTracks = recommendations.Tracks
+                .Where(t => !queuedTrackNames.Contains(t.Name))
+                .ToList();
+
+            var toTake = Math.Min(autoPlay, filteredTracks.Count);
+
+            foreach (var track in filteredTracks.Take(toTake))
             {
-                artistName = fullTitle.Substring(0, hyphenIndex).Trim();
-                trackTitle = fullTitle.Substring(hyphenIndex + 3).Trim();
+                // Create search query with track name and primary artist
+                var artistsString = string.Join(", ", track.Artists.Take(1).Select(a => a.Name));
+                var searchQuery = $"{track.Name} {artistsString}";
+
+                var trackToLoad = await audioService.Tracks.LoadTrackAsync(searchQuery, TrackSearchMode.YouTube);
+                if (trackToLoad is null)
+                    continue;
+
+                queue.Add(new MewdekoTrack(queue.Count + 1, trackToLoad, new PartialUser
+                {
+                    AvatarUrl = client.CurrentUser.GetAvatarUrl(), Username = "Mewdeko", Id = client.CurrentUser.Id
+                }));
             }
 
-            // remove any extra info from the title that might be in brackets or parentheses
-            trackTitle = Regex.Replace(trackTitle, @"\s*\[.*?\]\s*", "", RegexOptions.Compiled);
-            trackTitle = Regex.Replace(trackTitle, @"\s*\([^)]*\)\s*", "", RegexOptions.Compiled);
-            trackTitle = trackTitle.Trim();
-
-            // Query lastfm the first time with the formatted track title that doesnt contain the artist, with artist data from the track itself
-            var apiResponse = await httpClient.GetStringAsync(
-                $"http://ws.audioscrobbler.com/2.0/?method=track.getsimilar&artist={Uri.EscapeDataString(artistName)}&track={Uri.EscapeDataString(trackTitle)}&autocorrect=1&api_key={Uri.EscapeDataString(creds.LastFmApiKey)}&format=json");
-            response = JsonSerializer.Deserialize<LastFmResponse>(apiResponse);
-
-            // If the response is null, the api returned an error, try again
-            if (response.Similartracks is null)
-            {
-                tries++;
-                continue;
-            }
-
-            // If the first query returns no results, assume that the title had useful author info, use the split title and author info and try again
-            if (response.Similartracks.Track.Count == 0)
-            {
-                apiResponse = await httpClient.GetStringAsync(
-                    $"http://ws.audioscrobbler.com/2.0/?method=track.getsimilar&artist={Uri.EscapeDataString(lastSong.Track.Author)}&track={Uri.EscapeDataString(trackTitle)}&autocorrect=1&api_key={Uri.EscapeDataString(creds.LastFmApiKey)}&format=json");
-                response = JsonSerializer.Deserialize<LastFmResponse>(apiResponse);
-            }
-
-            if (response.Similartracks.Track.Count != 0)
-                success = true;
-
-            tries++;
-        }
-
-        // If the response is empty, return true
-        if (response.Similartracks.Track.Count == 0)
-            return true;
-
-        var queuedTrackNames = new HashSet<string>(queue.Select(q => q.Track.Title));
-
-        // Filter out tracks that are already in the queue
-        var filteredTracks = response.Similartracks.Track
-            .Where(t => !queuedTrackNames.Contains($"{t.Name}"))
-            .ToList();
-
-        // get the amount of tracks to take, either the amount of tracks in the response or the amount of tracks to autoplay
-        var toTake = Math.Min(autoPlay, filteredTracks.Count);
-
-        foreach (var rec in filteredTracks.Take(toTake))
-        {
-            var trackToLoad =
-                await audioService.Tracks.LoadTrackAsync($"{rec.Name} {rec.Artist.Name}", TrackSearchMode.YouTube);
-            if (trackToLoad is null)
-                continue;
-            queue.Add(new MewdekoTrack(queue.Count + 1, trackToLoad, new PartialUser
-            {
-                AvatarUrl = client.CurrentUser.GetAvatarUrl(), Username = "Mewdeko", Id = client.CurrentUser.Id
-            }));
             await cache.SetMusicQueue(GuildId, queue);
+            return true;
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine($"Spotify AutoPlay error: {e.Message}");
+            // Fall back to default behavior if Spotify fails
+            return true;
+        }
+    }
+
+    /// <summary>
+    ///     Extracts the artist name and track title from a song's metadata.
+    /// </summary>
+    /// <param name="fullTitle">The full track title</param>
+    /// <param name="authorFromTrack">The author information</param>
+    /// <returns>A tuple containing the artist name and track title</returns>
+    private (string artistName, string trackTitle) ExtractTrackInfo(string fullTitle, string authorFromTrack)
+    {
+        var trackTitle = fullTitle;
+        var artistName = authorFromTrack;
+        var hyphenIndex = fullTitle.IndexOf(" - ", StringComparison.Ordinal);
+
+        // If the title has a hyphen, split the title and artist
+        if (hyphenIndex != -1)
+        {
+            artistName = fullTitle.Substring(0, hyphenIndex).Trim();
+            trackTitle = fullTitle.Substring(hyphenIndex + 3).Trim();
         }
 
-        await cache.SetMusicQueue(GuildId, queue);
-        return true;
+        // Clean up the track title by removing extra information
+        trackTitle = Regex.Replace(trackTitle, @"\s*\[.*?\]\s*", "", RegexOptions.Compiled);
+        trackTitle = Regex.Replace(trackTitle, @"\s*\([^)]*\)\s*", "", RegexOptions.Compiled);
+        trackTitle = trackTitle.Trim();
+
+        return (artistName, trackTitle);
     }
 
     /// <summary>
@@ -586,7 +655,7 @@ public sealed class MewdekoPlayer : LavalinkPlayer
     }
 
     /// <summary>
-    /// Sets settings for music.
+    ///     Sets settings for music.
     /// </summary>
     /// <param name="guildId"></param>
     /// <param name="settings"></param>
@@ -647,7 +716,7 @@ public sealed class MewdekoPlayer : LavalinkPlayer
     }
 
     /// <summary>
-    /// Gets a spotify client for the bot if the spotify api key is valid.
+    ///     Gets a spotify client for the bot if the spotify api key is valid.
     /// </summary>
     /// <returns>A SpotifyClient</returns>
     public async Task<SpotifyClient> GetSpotifyClient()
@@ -657,5 +726,39 @@ public sealed class MewdekoPlayer : LavalinkPlayer
             new ClientCredentialsRequest(creds.SpotifyClientId, creds.SpotifyClientSecret);
         var response = await new OAuthClient(spotifyClientConfig).RequestToken(request).ConfigureAwait(false);
         return new SpotifyClient(spotifyClientConfig.WithToken(response.AccessToken));
+    }
+
+    private async Task PlaySoundboardEffect(ulong channelId, string soundId)
+    {
+        try
+        {
+            var playSoundUrl = $"https://discord.com/api/v10/channels/{channelId}/send-soundboard-sound";
+
+            var playSoundRequest = new HttpRequestMessage(HttpMethod.Post, playSoundUrl);
+            playSoundRequest.Headers.Add("Authorization", $"Bot {creds.Token}");
+
+            var payload = new
+            {
+                sound_id = soundId, source_guild_id = SourceGuildId.ToString()
+            };
+
+            var jsonContent = JsonSerializer.Serialize(payload);
+            playSoundRequest.Content = new StringContent(
+                jsonContent,
+                Encoding.UTF8,
+                "application/json");
+
+            var response = await httpClient.SendAsync(playSoundRequest);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorContent = await response.Content.ReadAsStringAsync();
+                Console.WriteLine($"Failed to play soundboard effect: {response.StatusCode}, Error: {errorContent}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error playing soundboard effect: {ex.Message}");
+        }
     }
 }
