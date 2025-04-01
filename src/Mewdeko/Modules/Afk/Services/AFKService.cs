@@ -79,6 +79,27 @@ public class AfkService : INService, IReadyExecutor, IDisposable
             return;
         Log.Information("Starting {Type} Cache", GetType());
         Environment.SetEnvironmentVariable("AFK_CACHED", "1");
+        await Task.Run(async () =>
+        {
+            try
+            {
+                var oneMonthAgo = DateTime.UtcNow.AddMonths(-1);
+                await using var dbContext = await dbProvider.GetContextAsync();
+
+                var deletedCount = await dbContext.Afk
+                    .Where(a => a.DateAdded < oneMonthAgo)
+                    .ExecuteDeleteAsync();
+
+                if (deletedCount > 0)
+                {
+                    Log.Information("Cleaned up {Count} old AFK entries during startup", deletedCount);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Error during startup AFK cleanup");
+            }
+        });
         isInitialized = true;
 
         Log.Information("AFK Service Ready");
@@ -411,7 +432,8 @@ public class AfkService : INService, IReadyExecutor, IDisposable
         // Group by user ID and take only the most recent AFK for each user
         var latestAfksPerUser = guildAfks
             .GroupBy(a => a.UserId)
-            .ToDictionary(g => g.Key, g => g.First());
+            .Select(g => g.MaxBy(a => a.DateAdded))
+            .ToDictionary(a => a.UserId);
 
         // Cache each user's AFK individually with appropriate expiry
         foreach (var afk in latestAfksPerUser.Values)
@@ -481,7 +503,7 @@ public class AfkService : INService, IReadyExecutor, IDisposable
             // Always clean up the timer
             if (afkTimers.TryRemove((state.GuildId, state.UserId), out var timer))
             {
-                timer.Dispose();
+                await timer.DisposeAsync();
             }
         }
     }
@@ -493,46 +515,86 @@ public class AfkService : INService, IReadyExecutor, IDisposable
     }
 
     private void CleanupTimers()
+{
+    try
     {
-        try
+        Log.Debug("Running AFK timer cleanup, current count: {TimerCount}", afkTimers.Count);
+
+        // Clean up expired guild config cache entries
+        var expiredConfigs = guildConfigCache
+            .Where(kv => kv.Value.Expiry < DateTime.UtcNow)
+            .Select(kv => kv.Key)
+            .ToList();
+
+        foreach (var guildId in expiredConfigs)
         {
-            Log.Debug("Running AFK timer cleanup, current count: {TimerCount}", afkTimers.Count);
+            guildConfigCache.TryRemove(guildId, out _);
+        }
 
-            // Clean up expired guild config cache entries
-            var expiredConfigs = guildConfigCache
-                .Where(kv => kv.Value.Expiry < DateTime.UtcNow)
-                .Select(kv => kv.Key)
-                .ToList();
+        // Check if any timers are for AFK entries that no longer exist or are past due
+        var timersToCheck = afkTimers.ToList();
+        foreach (var timerEntry in timersToCheck)
+        {
+            var (guildId, userId) = timerEntry.Key;
+            var afk = cache.GetOrDefaultAsync<Database.Models.Afk>($"{guildId}:{userId}").GetAwaiter().GetResult();
 
-            foreach (var guildId in expiredConfigs)
+            // If AFK no longer exists or is past due, remove the timer
+            if (afk == null || (afk.When.HasValue && afk.When.Value < DateTime.UtcNow))
             {
-                guildConfigCache.TryRemove(guildId, out _);
-            }
-
-            // Check if any timers are for AFK entries that no longer exist or are past due
-            var timersToCheck = afkTimers.ToList();
-            foreach (var timerEntry in timersToCheck)
-            {
-                var (guildId, userId) = timerEntry.Key;
-                var afk = cache.GetOrDefaultAsync<Database.Models.Afk>($"{guildId}:{userId}").GetAwaiter().GetResult();
-
-                // If AFK no longer exists or is past due, remove the timer
-                if (afk == null || (afk.When.HasValue && afk.When.Value < DateTime.UtcNow))
+                if (afkTimers.TryRemove(timerEntry.Key, out var timer))
                 {
-                    if (afkTimers.TryRemove(timerEntry.Key, out var timer))
+                    timer.Dispose();
+                }
+            }
+        }
+
+        Task.Run(async () =>
+        {
+            try
+            {
+                var oneMonthAgo = DateTime.UtcNow.AddMonths(-1);
+                await using var dbContext = await dbProvider.GetContextAsync();
+
+                // Find old AFK entries
+                var oldAfks = await dbContext.Afk
+                    .Where(a => a.DateAdded < oneMonthAgo)
+                    .ToListAsyncEF();
+
+                if (oldAfks.Count > 0)
+                {
+                    Log.Information("Deleting {Count} AFK entries older than one month", oldAfks.Count);
+
+                    // Delete from database
+                    await dbContext.Afk
+                        .Where(a => a.DateAdded < oneMonthAgo)
+                        .ExecuteDeleteAsync();
+
+                    // Remove from cache
+                    foreach (var afk in oldAfks)
                     {
-                        timer.Dispose();
+                        await cache.RemoveAsync($"{afk.GuildId}:{afk.UserId}");
+
+                        // Also remove any timers
+                        if (afkTimers.TryRemove((afk.GuildId, afk.UserId), out var timer))
+                        {
+                            await timer.DisposeAsync();
+                        }
                     }
                 }
             }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Error during old AFK entries cleanup");
+            }
+        });
 
-            Log.Debug("AFK timer cleanup complete, new count: {TimerCount}", afkTimers.Count);
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "Error during AFK timer cleanup");
-        }
+        Log.Debug("AFK timer cleanup complete, new count: {TimerCount}", afkTimers.Count);
     }
+    catch (Exception ex)
+    {
+        Log.Error(ex, "Error during AFK timer cleanup");
+    }
+}
 
     private async Task InitializeTimedAfksAsync()
     {
