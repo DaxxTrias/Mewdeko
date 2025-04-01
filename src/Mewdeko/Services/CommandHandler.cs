@@ -576,7 +576,7 @@ public class CommandHandler : INService
         var prefixLength = GetPrefixLength(messageContent, prefix);
         if (prefixLength == 0)
         {
-            await OnMessageNoTrigger(usrMsg).ConfigureAwait(false);
+            OnMessageNoTrigger?.Invoke(usrMsg).ConfigureAwait(false);
             return;
         }
 
