@@ -819,95 +819,103 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private async Task<CTModel?> MatchChatTriggers(string content, CTModel[] crs, SocketGuild guild)
     {
-        // Get the prefix for the guild and the global prefix
-        var guildPrefix = await guildSettings.GetPrefix(guild);
-        var globalPrefix = configService.Data.Prefix;
-
-        // Initialize a list to store matched chat triggers
-        var result = new List<CTModel>(1);
-
-        // Iterate through each chat trigger
-        foreach (var ct in crs)
+        try
         {
-            var trigger = ct.Trigger;
+            // Get the prefix for the guild and the global prefix
+            var guildPrefix = await guildSettings.GetPrefix(guild);
+            var globalPrefix = configService.Data.Prefix;
 
-            // Check the type of prefix required for the trigger
-            switch (ct.PrefixType)
-            {
-                case RequirePrefixType.Custom:
-                    if (!content.StartsWith(ct.CustomPrefix))
-                        continue;
-                    content = content[ct.CustomPrefix.Length..];
-                    break;
-                case RequirePrefixType.GuildOrNone:
-                    if (guildPrefix is null || !content.StartsWith(guildPrefix))
-                        continue;
-                    content = content[guildPrefix.Length..];
-                    break;
-                case RequirePrefixType.GuildOrGlobal:
-                    if (!content.StartsWith(guildPrefix ?? globalPrefix))
-                        continue;
-                    content = content[(guildPrefix ?? globalPrefix).Length..];
-                    break;
-                case RequirePrefixType.Global:
-                    if (!content.StartsWith(globalPrefix))
-                        continue;
-                    content = content[globalPrefix.Length..];
-                    break;
-                case RequirePrefixType.None:
-                default:
-                    break;
-            }
+            // Initialize a list to store matched chat triggers
+            var result = new List<CTModel>(1);
 
-            // Check if the trigger is a regex pattern
-            if (ct.IsRegex)
+            // Iterate through each chat trigger
+            foreach (var ct in crs)
             {
-                // Match the content against the trigger regex pattern
-                if (Regex.IsMatch(new string(content), trigger, RegexOptions.None, TimeSpan.FromMilliseconds(1)))
-                    result.Add(ct);
-                continue;
-            }
+                var trigger = ct.Trigger;
 
-            // If the trigger depends on user mentions to grant roles,
-            // remove user mentions from the content
-            if (ct.RoleGrantType is CtRoleGrantType.Mentioned or CtRoleGrantType.Both)
-            {
-                content = content.RemoveUserMentions().Trim();
-            }
-
-            // Check if the content length is greater than the trigger length
-            if (content.Length > trigger.Length)
-            {
-                // If the trigger has ContainsAnywhere enabled, check if it is contained as a word within the content
-                if (ct.ContainsAnywhere)
+                // Check the type of prefix required for the trigger
+                switch (ct.PrefixType)
                 {
-                    var wp = Extensions.Extensions.GetWordPosition(content, trigger);
-                    if (wp != WordPosition.None)
+                    case RequirePrefixType.Custom:
+                        if (!content.StartsWith(ct.CustomPrefix))
+                            continue;
+                        content = content[ct.CustomPrefix.Length..];
+                        break;
+                    case RequirePrefixType.GuildOrNone:
+                        if (guildPrefix is null || !content.StartsWith(guildPrefix))
+                            continue;
+                        content = content[guildPrefix.Length..];
+                        break;
+                    case RequirePrefixType.GuildOrGlobal:
+                        if (!content.StartsWith(guildPrefix ?? globalPrefix))
+                            continue;
+                        content = content[(guildPrefix ?? globalPrefix).Length..];
+                        break;
+                    case RequirePrefixType.Global:
+                        if (!content.StartsWith(globalPrefix))
+                            continue;
+                        content = content[globalPrefix.Length..];
+                        break;
+                    case RequirePrefixType.None:
+                    default:
+                        break;
+                }
+
+                // Check if the trigger is a regex pattern
+                if (ct.IsRegex)
+                {
+                    // Match the content against the trigger regex pattern
+                    if (Regex.IsMatch(new string(content), trigger, RegexOptions.None, TimeSpan.FromMilliseconds(1)))
                         result.Add(ct);
                     continue;
                 }
 
-                // If AllowTarget is enabled, the content has to start with the trigger followed by a space
-                if (ct.AllowTarget && content.StartsWith(trigger, StringComparison.OrdinalIgnoreCase)
-                                   && content[trigger.Length] == ' ')
+                // If the trigger depends on user mentions to grant roles,
+                // remove user mentions from the content
+                if (ct.RoleGrantType is CtRoleGrantType.Mentioned or CtRoleGrantType.Both)
                 {
-                    result.Add(ct);
+                    content = content.RemoveUserMentions().Trim();
+                }
+
+                // Check if the content length is greater than the trigger length
+                if (content.Length > trigger.Length)
+                {
+                    // If the trigger has ContainsAnywhere enabled, check if it is contained as a word within the content
+                    if (ct.ContainsAnywhere)
+                    {
+                        var wp = Extensions.Extensions.GetWordPosition(content, trigger);
+                        if (wp != WordPosition.None)
+                            result.Add(ct);
+                        continue;
+                    }
+
+                    // If AllowTarget is enabled, the content has to start with the trigger followed by a space
+                    if (ct.AllowTarget && content.StartsWith(trigger, StringComparison.OrdinalIgnoreCase)
+                                       && content[trigger.Length] == ' ')
+                    {
+                        result.Add(ct);
+                    }
+                }
+                else if (content.Length < ct.Trigger.Length)
+                {
+                    // If the content length is less than the trigger length, the trigger can never be triggered
+                }
+                else
+                {
+                    // If the content length is equal to the trigger length, the strings have to be equal for the trigger to be matched
+                    if (content.SequenceEqual(ct.Trigger))
+                        result.Add(ct);
                 }
             }
-            else if (content.Length < ct.Trigger.Length)
-            {
-                // If the content length is less than the trigger length, the trigger can never be triggered
-            }
-            else
-            {
-                // If the content length is equal to the trigger length, the strings have to be equal for the trigger to be matched
-                if (content.SequenceEqual(ct.Trigger))
-                    result.Add(ct);
-            }
-        }
 
-        // Return a randomly selected matched chat trigger, if any
-        return result.Count == 0 ? null : result[rng.Next(0, result.Count)];
+            // Return a randomly selected matched chat trigger, if any
+            return result.Count == 0 ? null : result[rng.Next(0, result.Count)];
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            // This is expected
+            return null;
+        }
     }
 
     /// <summary>
