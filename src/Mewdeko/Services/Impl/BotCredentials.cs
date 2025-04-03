@@ -517,10 +517,9 @@ public class BotCredentials : IBotCredentials
                     var connect = ConnectionMultiplexer.Connect(RedisConnections.Split(";")[0]);
                     connect.Close();
                 }
-                catch
+                catch (Exception ex)
                 {
-                    Log.Error("Redis is not running! Make sure it's installed and running, then restart the bot.");
-                    Helpers.ReadErrorAndExit(6);
+                    Log.Error("Redis is not running! Make sure it's installed and running, then restart the bot. {0}", ex);
                 }
             }
 
