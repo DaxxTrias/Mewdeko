@@ -1,3 +1,4 @@
+using DataModel;
 using Discord.Interactions;
 using Mewdeko.Modules.Suggestions.Services;
 
@@ -37,8 +38,8 @@ public class SuggestionAutocompleter : AutocompleteHandler
         var suggestions = await suggest.Suggestions(context.Guild?.Id ?? 0);
 
         return AutocompletionResult.FromSuccess(suggestions
-            .Where(x => x.Suggestion.Contains(content) || x.SuggestionId.ToString().Contains(content))
-            .OrderByDescending(x => x.Suggestion.StartsWith(content))
+            .Where(x => x.Suggestion1.Contains(content) || x.SuggestionId.ToString().Contains(content))
+            .OrderByDescending(x => x.Suggestion1.StartsWith(content))
             .ThenByDescending(x => x.SuggestionId.ToString().StartsWith(content))
             .Select(CreateAutocompleteResult));
     }
@@ -48,9 +49,9 @@ public class SuggestionAutocompleter : AutocompleteHandler
     /// </summary>
     /// <param name="x">The suggestion model.</param>
     /// <returns>The autocomplete result.</returns>
-    private static AutocompleteResult CreateAutocompleteResult(SuggestionsModel x)
+    private static AutocompleteResult CreateAutocompleteResult(Suggestion x)
     {
-        var formattedResult = $"{x.SuggestionId} | {x.Suggestion}".TrimTo(100);
+        var formattedResult = $"{x.SuggestionId} | {x.Suggestion1}".TrimTo(100);
         return new AutocompleteResult(formattedResult, x.SuggestionId);
     }
 }

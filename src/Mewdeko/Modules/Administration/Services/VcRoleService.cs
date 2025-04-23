@@ -1,45 +1,38 @@
 ﻿using System.Collections.Concurrent;
+using System.Data;
+using LinqToDB;
 using Mewdeko.Common.ModuleBehaviors;
-using Mewdeko.Database.DbContextStuff;
-using Microsoft.EntityFrameworkCore;
 using Serilog;
+using DiscordShardedClient = Discord.WebSocket.DiscordShardedClient;
+using VcRole = DataModel.VcRole;
+
 
 namespace Mewdeko.Modules.Administration.Services;
 
 /// <summary>
-///     The voice channel role service. Pain.
+///     The service for managing voice channel roles.
 /// </summary>
 public class VcRoleService : INService, IReadyExecutor
 {
     private readonly DiscordShardedClient client;
-    private readonly DbContextProvider dbProvider;
-    private readonly GuildSettingsService guildSettingsService;
+    private readonly IDataConnectionFactory dbFactory;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="VcRoleService" /> class.
     /// </summary>
     /// <param name="client">The Discord client.</param>
-    /// <param name="bot">The bot instance.</param>
-    /// <param name="dbProvider">The database service.</param>
+    /// <param name="dbFactory">The database service.</param>
     /// <param name="eventHandler">The event handler.</param>
-    /// <param name="guildSettingsService">The guild settings service.</param>
-    public VcRoleService(DiscordShardedClient client, Mewdeko bot, DbContextProvider dbProvider,
-        EventHandler eventHandler,
-        GuildSettingsService guildSettingsService)
+    public VcRoleService(DiscordShardedClient client, IDataConnectionFactory dbFactory,
+        EventHandler eventHandler)
     {
-        // Assigning the database service and the Discord client
-        this.dbProvider = dbProvider;
-        this.guildSettingsService = guildSettingsService;
+        this.dbFactory = dbFactory;
         this.client = client;
 
-        // Subscribing to the UserVoiceStateUpdated event
         eventHandler.UserVoiceStateUpdated += ClientOnUserVoiceStateUpdated;
 
         ToAssign = new NonBlocking.ConcurrentDictionary<ulong, ConcurrentQueue<(bool, IGuildUser, IRole)>>();
 
-        // Getting all guild configurations and initializing VC roles for each guild
-
-        // Starting a new task that continuously assigns or removes roles from users
         Task.Run(async () =>
         {
             while (true)
@@ -49,44 +42,33 @@ public class VcRoleService : INService, IReadyExecutor
                     while (queue.TryDequeue(out var item))
                     {
                         var (add, user, role) = item;
-                        if (add)
+                        if (user?.Guild == null || role == null) continue; // Basic validation
+                        try
                         {
-                            if (!user.RoleIds.Contains(role.Id))
+                            if (add)
                             {
-                                try
-                                {
+                                if (!user.RoleIds.Contains(role.Id))
                                     await user.AddRoleAsync(role).ConfigureAwait(false);
-                                }
-                                catch
-                                {
-                                    // ignored
-                                }
                             }
-                        }
-                        else
-                        {
-                            if (user.RoleIds.Contains(role.Id))
+                            else
                             {
-                                try
-                                {
+                                if (user.RoleIds.Contains(role.Id))
                                     await user.RemoveRoleAsync(role).ConfigureAwait(false);
-                                }
-                                catch
-                                {
-                                    // ignored
-                                }
                             }
                         }
-
+                        catch (Exception ex)
+                        {
+                             // Log specifics? e.g., user ID, role ID, guild ID
+                             Log.Warning(ex, "Failed to modify role {RoleId} for user {UserId} in guild {GuildId}", role.Id, user.Id, user.GuildId);
+                        }
                         await Task.Delay(250).ConfigureAwait(false);
                     }
                 }));
-
+                // Wait for all current queue processing tasks + 1 second delay
                 await Task.WhenAll(tasks.Append(Task.Delay(1000))).ConfigureAwait(false);
             }
         });
 
-        // Subscribing to the LeftGuild and JoinedGuild events
         eventHandler.LeftGuild += _client_LeftGuild;
         eventHandler.JoinedGuild += Bot_JoinedGuild;
     }
@@ -94,8 +76,7 @@ public class VcRoleService : INService, IReadyExecutor
     /// <summary>
     ///     A dictionary that maps guild IDs to another dictionary, which maps voice channel IDs to roles.
     /// </summary>
-    public NonBlocking.ConcurrentDictionary<ulong, NonBlocking.ConcurrentDictionary<ulong, IRole>> VcRoles { get; } =
-        new();
+    public NonBlocking.ConcurrentDictionary<ulong, NonBlocking.ConcurrentDictionary<ulong, IRole>> VcRoles { get; } = new();
 
     /// <summary>
     ///     A dictionary that maps guild IDs to a queue of tuples, each containing a boolean indicating whether to add or
@@ -106,14 +87,14 @@ public class VcRoleService : INService, IReadyExecutor
     /// <summary>
     ///     Event handler for when the bot joins a guild. Initializes voice channel roles for the guild.
     /// </summary>
-    /// <param name="arg">The guild configuration.</param>
+    /// <param name="guild">The guild.</param>
     private async Task Bot_JoinedGuild(IGuild guild)
     {
-        await using var db = await dbProvider.GetContextAsync();
-        var conf = await db.VcRoles.Where(x => x.GuildId == guild.Id).ToArrayAsync();
-        if (conf.Length == 0)
+        await using var db = await dbFactory.CreateConnectionAsync();
+        var conf = await db.GetTable<VcRole>().Where(x => x.GuildId == guild.Id).ToListAsync().ConfigureAwait(false); // Use ToListAsync
+        if (!conf.Any())
             return;
-        await InitializeVcRole(conf);
+        await InitializeVcRole(conf); // Pass List<VcRole>
     }
 
     /// <summary>
@@ -130,36 +111,48 @@ public class VcRoleService : INService, IReadyExecutor
     /// <summary>
     ///     Initializes voice channel roles for a guild.
     /// </summary>
-    /// <param name="gconf">The guild configuration.</param>
-    private async Task InitializeVcRole(VcRole[] config)
+    /// <param name="config">The VcRole configuration list.</param>
+    private async Task InitializeVcRole(List<VcRole> config) // Accept List
     {
-        await Task.Yield();
-        var g = client.Guilds.FirstOrDefault(x => x.Id == config.FirstOrDefault().GuildId);
-        if (g == null )
+        await Task.Yield(); // Allow context switching if needed
+        var firstConf = config.FirstOrDefault();
+        if (firstConf == null) return;
+
+        var guildId = firstConf.GuildId;
+        var g = client.GetGuild(guildId);
+        if (g == null)
             return;
 
         var infos = new NonBlocking.ConcurrentDictionary<ulong, IRole>();
+        VcRoles.AddOrUpdate(guildId, infos, (_, _) => infos); // Use AddOrUpdate correctly
+
         var missingRoles = new List<VcRole>();
-        VcRoles.AddOrUpdate(config.FirstOrDefault().GuildId, infos, delegate { return infos; });
         foreach (var ri in config)
         {
-            var role = g.Roles.FirstOrDefault(x => x.Id == ri.RoleId);
+            var role = g.GetRole(ri.RoleId); // Use GetRole for efficiency
             if (role == null)
             {
                 missingRoles.Add(ri);
                 continue;
             }
-
             infos.TryAdd(ri.VoiceChannelId, role);
         }
 
-        if (missingRoles.Count > 0)
+        if (missingRoles.Any())
         {
-            await using var dbContext = await dbProvider.GetContextAsync();
-            Log.Warning("Removing {MissingRolesCount} missing roles from {VcRoleServiceName}", missingRoles.Count,
-                nameof(VcRoleService));
-            dbContext.RemoveRange(missingRoles);
-            await dbContext.SaveChangesAsync();
+            await using var db = await dbFactory.CreateConnectionAsync();
+            try
+            {
+                 var idsToRemove = missingRoles.Select(r => r.Id).ToList(); // Assuming Id is PK
+                 var deletedCount = await db.GetTable<VcRole>()
+                     .Where(x => idsToRemove.Contains(x.Id))
+                     .DeleteAsync().ConfigureAwait(false);
+                 Log.Warning("Removed {MissingRolesCount} missing VcRoles from DB for Guild {GuildId}", deletedCount, guildId);
+            }
+            catch (Exception ex)
+            {
+                 Log.Error(ex, "Error removing missing VcRoles from DB for Guild {GuildId}", guildId);
+            }
         }
     }
 
@@ -184,32 +177,44 @@ public class VcRoleService : INService, IReadyExecutor
         {
             try
             {
-                await using var dbContext = await dbProvider.GetContextAsync();
+                await using var db = await dbFactory.CreateConnectionAsync();
+                await using var tx = await db.BeginTransactionAsync(IsolationLevel.Serializable).ConfigureAwait(false); // Use transaction
 
-                var toDelete = await dbContext.VcRoles.FirstOrDefaultAsync(x => x.VoiceChannelId == vcId);
-                if (toDelete != null) dbContext.Remove(toDelete);
+                // Delete existing setting(s) for this VC ID and Guild ID first
+                await db.GetTable<VcRole>()
+                    .Where(x => x.VoiceChannelId == vcId && x.GuildId == guildId)
+                    .DeleteAsync().ConfigureAwait(false);
 
-                dbContext.VcRoles.Add(new VcRole
+                // Insert the new one
+                var newVcRole = new VcRole
                 {
-                    GuildId = guildId,
-                    VoiceChannelId = vcId,
-                    RoleId = role.Id
-                });
-                await dbContext.SaveChangesAsync();
-                return;
+                    GuildId = guildId, VoiceChannelId = vcId, RoleId = role.Id
+                };
+                await db.InsertAsync(newVcRole).ConfigureAwait(false);
+
+                await tx.CommitAsync().ConfigureAwait(false);
+                return; // Success
             }
-            catch (DbUpdateConcurrencyException)
+            // Catch specific exceptions if possible, otherwise generic Exception
+            catch (Exception ex) when (ex is LinqToDBException || ex.InnerException is Npgsql.PostgresException) // Example: Handle potential DB specific or concurrency exceptions
             {
-                attempt++;
-                if (attempt >= maxRetries)
-                {
-                    Log.Error("Failed to save VcRole after {Attempts} attempts due to concurrency", attempt);
-                    throw;
-                }
-                await Task.Delay(100 * attempt);
+                 attempt++;
+                 if (attempt >= maxRetries)
+                 {
+                     Log.Error(ex, "Failed to save VcRole after {Attempts} attempts due to concurrency or DB error for Guild {GuildId}, VC {VoiceChannelId}", attempt, guildId, vcId);
+                     // Rethrow or handle failure case
+                     throw;
+                 }
+                 await Task.Delay(100 * attempt).ConfigureAwait(false); // Backoff delay
+            }
+            catch(Exception ex) // Catch other unexpected errors
+            {
+                 Log.Error(ex, "Unexpected error saving VcRole for Guild {GuildId}, VC {VoiceChannelId}", guildId, vcId);
+                 throw; // Rethrow unexpected errors
             }
         }
     }
+
 
     /// <summary>
     ///     Removes a voice channel role from a guild.
@@ -225,17 +230,14 @@ public class VcRoleService : INService, IReadyExecutor
         if (!VcRoles.TryGetValue(guildId, out var guildVcRoles))
             return false;
 
-        if (!guildVcRoles.TryRemove(vcId, out _))
-            return false;
+        var removedFromCache = guildVcRoles.TryRemove(vcId, out _);
 
-        await using var dbContext = await dbProvider.GetContextAsync();
-        var toRemove = await dbContext.VcRoles.FirstOrDefaultAsync(x => x.VoiceChannelId == vcId);
-        if (toRemove is null)
-            return false;
-        dbContext.VcRoles.Remove(toRemove);
-        await dbContext.SaveChangesAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
+        var deletedCount = await db.GetTable<VcRole>()
+            .Where(x => x.VoiceChannelId == vcId && x.GuildId == guildId) // Ensure GuildId match
+            .DeleteAsync().ConfigureAwait(false);
 
-        return true;
+        return removedFromCache || deletedCount > 0; // Return true if removed from cache OR db
     }
 
     /// <summary>
@@ -246,31 +248,35 @@ public class VcRoleService : INService, IReadyExecutor
     /// <param name="oldState">The user's old voice state.</param>
     /// <param name="newState">The user's new voice state.</param>
     /// <returns>A task that represents the asynchronous operation.</returns>
-    private Task ClientOnUserVoiceStateUpdated(SocketUser usr, SocketVoiceState oldState,
-        SocketVoiceState newState)
+    private Task ClientOnUserVoiceStateUpdated(SocketUser usr, SocketVoiceState oldState, SocketVoiceState newState)
     {
         if (usr is not SocketGuildUser gusr)
             return Task.CompletedTask;
 
         var oldVc = oldState.VoiceChannel;
         var newVc = newState.VoiceChannel;
-        _ = Task.Run(() =>
+
+        _ = Task.Run(() => // Run role assignment logic in background
         {
             try
             {
-                if (oldVc == newVc) return;
-                var guildId = newVc?.Guild.Id ?? oldVc.Guild.Id;
+                if (oldVc?.Id == newVc?.Id) return; // No channel change
+                var guildId = newVc?.Guild.Id ?? oldVc?.Guild.Id; // Get GuildId safely
+                if(guildId == null) return; // Cannot proceed without GuildId
 
-                if (!VcRoles.TryGetValue(guildId, out var guildVcRoles)) return;
-                //remove old
-                if (oldVc != null && guildVcRoles.TryGetValue(oldVc.Id, out var role))
-                    Assign(false, gusr, role);
-                //add new
-                if (newVc != null && guildVcRoles.TryGetValue(newVc.Id, out role)) Assign(true, gusr, role);
+                if (!VcRoles.TryGetValue(guildId.Value, out var guildVcRoles)) return;
+
+                // Remove old role if applicable
+                if (oldVc != null && guildVcRoles.TryGetValue(oldVc.Id, out var roleToRemove))
+                    Assign(false, gusr, roleToRemove);
+
+                // Add new role if applicable
+                if (newVc != null && guildVcRoles.TryGetValue(newVc.Id, out var roleToAdd))
+                    Assign(true, gusr, roleToAdd);
             }
             catch (Exception ex)
             {
-                Log.Warning(ex, "Error in VcRoleService VoiceStateUpdate");
+                Log.Warning(ex, "Error in VcRoleService VoiceStateUpdate for user {UserId}", usr.Id);
             }
         });
         return Task.CompletedTask;
@@ -279,16 +285,13 @@ public class VcRoleService : INService, IReadyExecutor
     /// <summary>
     ///     Assigns a role to a user in a guild.
     /// </summary>
-    /// <param name="v">A boolean indicating whether to add or remove the role.</param>
+    /// <param name="addRole">A boolean indicating whether to add or remove the role.</param>
     /// <param name="gusr">The user in the guild.</param>
     /// <param name="role">The role to assign or remove.</param>
-    private void Assign(bool v, SocketGuildUser gusr, IRole role)
+    private void Assign(bool addRole, SocketGuildUser gusr, IRole role)
     {
-        // Get or create a queue for the guild
-        var queue = ToAssign.GetOrAdd(gusr.Guild.Id, new ConcurrentQueue<(bool, IGuildUser, IRole)>());
-
-        // Enqueue the operation (add or remove role)
-        queue.Enqueue((v, gusr, role));
+        var queue = ToAssign.GetOrAdd(gusr.Guild.Id, _ => new ConcurrentQueue<(bool, IGuildUser, IRole)>());
+        queue.Enqueue((addRole, gusr, role));
     }
 
     /// <inheritdoc />
@@ -299,15 +302,19 @@ public class VcRoleService : INService, IReadyExecutor
         {
             try
             {
-                await using var db = await dbProvider.GetContextAsync();
-                var conf = await db.VcRoles.Where(x => x.GuildId == guild.Id).ToArrayAsync();
-                if (conf.Length==0)
+                await using var db = await dbFactory.CreateConnectionAsync();
+                var conf = await db.GetTable<VcRole>()
+                    .Where(x => x.GuildId == guild.Id)
+                    .ToListAsync().ConfigureAwait(false);
+
+                if (!conf.Any())
                     continue;
+
                 await InitializeVcRole(conf);
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Error loading VC roles for guild {GuildId}", guild.Id);
+                Log.Error(ex, "Error loading VC roles on ready for guild {GuildId}", guild.Id);
             }
         }
     }

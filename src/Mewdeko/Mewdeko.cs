@@ -1,6 +1,7 @@
 ﻿using System.Diagnostics;
 using System.Reflection;
 using System.Text.Json;
+using DataModel;
 using Discord.Commands;
 using Discord.Interactions;
 using Discord.Net;
@@ -11,7 +12,6 @@ using Mewdeko.Common.Configs;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Common.TypeReaders;
 using Mewdeko.Common.TypeReaders.Interactions;
-using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Services.Impl;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -122,7 +122,7 @@ public class Mewdeko
         interactionService.AddTypeConverter<TimeSpan>(new TimeSpanConverter());
         interactionService.AddTypeConverter(typeof(IRole[]), new RoleArrayConverter());
         interactionService.AddTypeConverter(typeof(IUser[]), new UserArrayConverter());
-        interactionService.AddTypeConverter<StatusRolesTable>(new StatusRolesTypeConverter());
+        interactionService.AddTypeConverter<StatusRole>(new StatusRolesTypeConverter());
 
 
         sw.Stop();
@@ -286,13 +286,13 @@ public class Mewdeko
                 Log.Error("Unable to start audio service: {Message}", e.Message);
             }
 
-            var dbProvider = Services.GetRequiredService<DbContextProvider>();
-            await using var dbContext = await dbProvider.GetContextAsync();
+            var dbProvider = Services.GetRequiredService<IDataConnectionFactory>();
+            await using var dbContext = await dbProvider.CreateConnectionAsync();
             await dbContext.EnsureUserCreated(Client.CurrentUser.Id, Client.CurrentUser.Username, Client.CurrentUser.AvatarId);
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error adding services");
+            Log.Error($"Error adding services: {ex}");
             Helpers.ReadErrorAndExit(9);
         }
 
@@ -328,7 +328,7 @@ public class Mewdeko
         Log.Information("Ready.");
     }
 
-    private Task LogCommandsService(LogMessage arg)
+    private static Task LogCommandsService(LogMessage arg)
     {
         Log.Information(arg.ToString());
         return Task.CompletedTask;
@@ -372,7 +372,7 @@ public class Mewdeko
     {
         var sub = Services.GetService<IDataCache>().Redis.GetSubscriber();
 
-        sub.Subscribe($"{Client.CurrentUser.Id}_status.game_set", async (_, game) =>
+        sub.Subscribe(RedisChannel.Literal($"{Client.CurrentUser.Id}_status.game_set"), async (_, game) =>
         {
             try
             {
@@ -391,7 +391,7 @@ public class Mewdeko
             }
         }, CommandFlags.FireAndForget);
 
-        sub.Subscribe($"{Client.CurrentUser.Id}_status.stream_set", async (_, streamData) =>
+        sub.Subscribe(RedisChannel.Literal($"{Client.CurrentUser.Id}_status.stream_set"), async (_, streamData) =>
         {
             try
             {
@@ -424,7 +424,7 @@ public class Mewdeko
             Name = game, Activity = type
         };
         var sub = Services.GetService<IDataCache>().Redis.GetSubscriber();
-        await sub.PublishAsync($"{Client.CurrentUser.Id}_status.game_set", JsonSerializer.Serialize(obj))
+        await sub.PublishAsync(RedisChannel.Literal($"{Client.CurrentUser.Id}_status.game_set"), JsonSerializer.Serialize(obj))
             .ConfigureAwait(false);
     }
 

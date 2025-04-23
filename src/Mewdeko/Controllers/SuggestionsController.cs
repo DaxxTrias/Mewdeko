@@ -1,7 +1,7 @@
-﻿using Mewdeko.Database.DbContextStuff;
-using Mewdeko.Modules.Suggestions.Services;
+﻿using Mewdeko.Modules.Suggestions.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using LinqToDB;
 
 namespace Mewdeko.Controllers;
 
@@ -14,8 +14,8 @@ namespace Mewdeko.Controllers;
 [Authorize("ApiKeyPolicy")]
 public class SuggestionsController(
     SuggestionsService service,
-    DbContextProvider provider,
-    DiscordShardedClient client)
+    DiscordShardedClient client,
+    IDataConnectionFactory dbFactory)
     : Controller
 {
     /// <summary>
@@ -43,20 +43,24 @@ public class SuggestionsController(
     /// <summary>
     ///     Removes a suggestion by its ID
     /// </summary>
-    /// <param name="guildId"></param>
-    /// <param name="id"></param>
-    /// <returns></returns>
+    /// <param name="guildId">The ID of the guild where the suggestion exists</param>
+    /// <param name="id">The ID of the suggestion to delete</param>
+    /// <returns>OK if deleted successfully, NotFound if suggestion doesn't exist</returns>
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteSuggestion(ulong guildId, ulong id)
     {
-        var context = await provider.GetContextAsync();
+        // We still need the service to check if the suggestion exists
         var suggestion = await service.Suggestions(guildId, id);
 
         if (suggestion == null || suggestion.Length == 0)
             return NotFound();
 
-        context.Suggestions.Remove(suggestion.FirstOrDefault());
-        await context.SaveChangesAsync();
+        // Use linq2db to delete the suggestion
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        await db.Suggestions
+            .Where(s => s.GuildId == guildId && s.SuggestionId == id)
+            .DeleteAsync();
 
         return Ok();
     }
@@ -65,10 +69,8 @@ public class SuggestionsController(
     ///     Updates the status of a suggestion in a guild.
     /// </summary>
     /// <param name="guildId">The ID of the guild where the suggestion was made.</param>
-    /// <param name="userId">The ID of the user updating the suggestion status.</param>
     /// <param name="id">The ID of the suggestion to update.</param>
-    /// <param name="state">The new state of the suggestion.</param>
-    /// <param name="reason">The reason for the status update (optional).</param>
+    /// <param name="update">The new state of the suggestion.</param>
     /// <returns>An IActionResult indicating the result of the operation.</returns>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when the state is not a valid SuggestState value.</exception>
     [HttpPatch("{id}")]

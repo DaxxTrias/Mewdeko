@@ -1,4 +1,5 @@
 using System.Net;
+using DataModel;
 using Discord.Commands;
 using Discord.Net;
 using Fergun.Interactive;
@@ -266,7 +267,7 @@ public partial class Administration
                     var eb = new PageBuilder().WithOkColor();
                     return
                         eb.AddField("ID", rr.Index + 1)
-                            .AddField(Strings.ReroRolesCount(ctx.Guild.Id, rr.ReactionRoles.Count),
+                            .AddField(Strings.ReroRolesCount(ctx.Guild.Id, rr.ReactionRoles.Count()),
                                 string.Join(",",
                                     rr.ReactionRoles.Select(x => $"{x.EmoteName} {g.GetRole(x.RoleId).Mention}")))
                             .AddField(Strings.UsersCanSelectMorethanOne(ctx.Guild.Id), rr.Exclusive)

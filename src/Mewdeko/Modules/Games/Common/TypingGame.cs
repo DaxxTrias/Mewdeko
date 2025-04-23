@@ -33,6 +33,8 @@ public class TypingGame
     /// <param name="channel">The channel the game will start in</param>
     /// <param name="prefix">The bots prefix</param>
     /// <param name="options">Options along with starting the game</param>
+    /// <param name="handler">Asynchronous event handler because discord sucks</param>
+    /// <param name="strings">Localized bot strings</param>
     public TypingGame(GamesService games, DiscordShardedClient client, ITextChannel channel,
         string? prefix, Options options, EventHandler handler, GeneratedBotStrings strings)
     {

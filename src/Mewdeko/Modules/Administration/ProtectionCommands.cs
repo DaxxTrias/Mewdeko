@@ -550,7 +550,7 @@ public partial class Administration
         private string? GetAntiSpamString(AntiSpamStats stats)
         {
             var settings = stats.AntiSpamSettings;
-            var ignoredString = string.Join(", ", settings.IgnoredChannels.Select(c => $"<#{c.ChannelId}>"));
+            var ignoredString = string.Join(", ", settings.AntiSpamIgnores.Select(c => $"<#{c.ChannelId}>"));
 
             if (string.IsNullOrWhiteSpace(ignoredString))
                 ignoredString = "none";

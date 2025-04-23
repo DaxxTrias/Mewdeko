@@ -1,5 +1,5 @@
-﻿using Mewdeko.Database.DbContextStuff;
-using Microsoft.EntityFrameworkCore;
+﻿using LinqToDB;
+using DataModel;
 
 namespace Mewdeko.Modules.Administration.Services;
 
@@ -8,30 +8,40 @@ namespace Mewdeko.Modules.Administration.Services;
 /// </summary>
 public class AutoBanRoleService : INService
 {
-    private readonly DbContextProvider dbProvider;
+    private readonly IDataConnectionFactory dbFactory;
+    private readonly EventHandler eventHandler;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="AutoBanRoleService" /> class.
     /// </summary>
-    /// <param name="handler">The event handler</param>
-    /// <param name="db">The database handler</param>
-    public AutoBanRoleService(EventHandler handler, DbContextProvider dbProvider)
+    /// <param name="eventHandler">The event handler</param>
+    /// <param name="dbFactory">The database connection factory</param>
+    public AutoBanRoleService(EventHandler eventHandler, IDataConnectionFactory dbFactory)
     {
-        this.dbProvider = dbProvider;
-        handler.GuildMemberUpdated += OnGuildMemberUpdated;
+        this.dbFactory = dbFactory;
+        this.eventHandler = eventHandler;
+        this.eventHandler.GuildMemberUpdated += OnGuildMemberUpdated;
     }
 
 
     private async Task OnGuildMemberUpdated(Cacheable<SocketGuildUser, ulong> args, SocketGuildUser arsg2)
     {
-        var addedRoles = arsg2.Roles.Except(args.Value.Roles);
+        var before = args.HasValue ? args.Value : null;
+        if (before == null)
+            return;
+
+        var addedRoles = arsg2.Roles.Except(before.Roles);
         if (!addedRoles.Any()) return;
 
-        await using var dbContext = await dbProvider.GetContextAsync();
-        var autoBanRoles = await dbContext.AutoBanRoles.AsQueryable().Where(x => x.GuildId == arsg2.Guild.Id)
+        await using var db = await dbFactory.CreateConnectionAsync();
+        var autoBanRoleIds = await db.AutoBanRoles
+            .Where(x => x.GuildId == arsg2.Guild.Id)
+            .Select(x => x.RoleId)
             .ToListAsync();
-        var roles = autoBanRoles.Select(x => x.RoleId).ToHashSet();
-        if (!addedRoles.Any(x => roles.Contains(x.Id))) return;
+
+        var rolesSet = autoBanRoleIds.ToHashSet();
+
+        if (!addedRoles.Any(x => rolesSet.Contains(x.Id))) return;
 
         try
         {
@@ -39,7 +49,7 @@ public class AutoBanRoleService : INService
         }
         catch
         {
-            //ignored
+            // ignored
         }
     }
 
@@ -48,19 +58,19 @@ public class AutoBanRoleService : INService
     /// </summary>
     /// <param name="guildId">The guild id</param>
     /// <param name="roleId">The role to add to autoban</param>
-    /// <returns>A bool depending on whether the role was removed</returns>
+    /// <returns>A bool depending on whether the role was added</returns>
     public async Task<bool> AddAutoBanRole(ulong guildId, ulong roleId)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
-        var autoBanRole = await dbContext.AutoBanRoles.AsQueryable()
-            .FirstOrDefaultAsync(x => x.GuildId == guildId && x.RoleId == roleId);
-        if (autoBanRole != null) return false;
+        await using var db = await dbFactory.CreateConnectionAsync();
+        var exists = await db.AutoBanRoles
+            .AnyAsync(x => x.GuildId == guildId && x.RoleId == roleId);
 
-        await dbContext.AutoBanRoles.AddAsync(new AutoBanRoles
+        if (exists) return false;
+
+        await db.InsertAsync(new AutoBanRole
         {
             GuildId = guildId, RoleId = roleId
         });
-        await dbContext.SaveChangesAsync();
         return true;
     }
 
@@ -72,13 +82,10 @@ public class AutoBanRoleService : INService
     /// <returns>A bool depending on whether the role was removed</returns>
     public async Task<bool> RemoveAutoBanRole(ulong guildId, ulong roleId)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
-        var autoBanRole = await dbContext.AutoBanRoles.AsQueryable()
-            .FirstOrDefaultAsync(x => x.GuildId == guildId && x.RoleId == roleId);
-        if (autoBanRole == null) return false;
-
-        dbContext.AutoBanRoles.Remove(autoBanRole);
-        await dbContext.SaveChangesAsync();
-        return true;
+        await using var db = await dbFactory.CreateConnectionAsync();
+        var deletedRows = await db.AutoBanRoles
+            .Where(x => x.GuildId == guildId && x.RoleId == roleId)
+            .DeleteAsync();
+        return deletedRows > 0;
     }
 }

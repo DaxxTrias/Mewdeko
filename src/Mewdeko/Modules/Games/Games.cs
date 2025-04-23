@@ -1,7 +1,7 @@
 ﻿using Discord.Commands;
+using LinqToDB;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Common.Configs;
-using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.Games.Services;
 
 namespace Mewdeko.Modules.Games;
@@ -9,19 +9,19 @@ namespace Mewdeko.Modules.Games;
 public partial class Games : MewdekoModuleBase<GamesService>
 {
     private readonly BotConfig config;
-    private readonly DbContextProvider dbContextProvider;
+    private readonly IDataConnectionFactory dbFactory;
     private readonly MewdekoRandom rng = new();
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="Games" /> class.
     /// </summary>
     /// <param name="data">The data cache service.</param>
-    /// <param name="db">The database service.</param>
+    /// <param name="dbFactory">The database service.</param>
     /// <param name="config">Bot config service.</param>
-    public Games(IDataCache data, DbContextProvider dbProvider, BotConfig config)
+    public Games(IDataCache data, IDataConnectionFactory dbFactory, BotConfig config)
     {
         this.config = config;
-        (_, dbContextProvider) = (data.LocalImages, dbProvider);
+        (_, this.dbFactory) = (data.LocalImages, dbFactory);
     }
 
     /// <summary>
@@ -102,11 +102,11 @@ There really is a {loonix}, and these people are using it, but it is just a part
     [HelpDisabled]
     public async Task Dragon()
     {
-        await using var dbContext = await dbContextProvider.GetContextAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
         var user = await dbContext.GetOrCreateUser(ctx.User);
         user.IsDragon = !user.IsDragon;
-        await dbContext.SaveChangesAsync();
+        await dbContext.UpdateAsync(user);
         await ReplyConfirmAsync(user.IsDragon ? Strings.DragonSet(ctx.Guild.Id) : Strings.DragonUnset(ctx.Guild.Id))
             .ConfigureAwait(false);
     }

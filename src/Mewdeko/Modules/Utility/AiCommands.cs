@@ -62,7 +62,7 @@ public partial class Utility
                 return;
             }
 
-            config.Provider = provider;
+            config.Provider = (int)provider;
             config.Model = model;
             await Service.UpdateConfig(config);
 

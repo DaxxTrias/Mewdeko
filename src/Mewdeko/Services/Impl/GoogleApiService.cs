@@ -448,7 +448,7 @@ public class GoogleApiService : IGoogleApiService
                 ChannelCredentials = credential.ToChannelCredentials()
             }.Build();
         }
-        catch (Exception e)
+        catch (Exception)
         {
             Log.Error("Google Cloud Credentials not found. Image command will be unfiltered.");
             visionClient = null;
@@ -572,7 +572,7 @@ public class GoogleApiService : IGoogleApiService
     /// <param name="targetLanguage">The target language.</param>
     /// <returns>The translated text.</returns>
     /// <exception cref="ArgumentException"></exception>
-    public async Task<string> Translate(string sourceText, string? sourceLanguage, string? targetLanguage)
+    public async Task<string> Translate(string sourceText, string sourceLanguage, string targetLanguage)
     {
         await Task.Yield();
         string text;
@@ -595,7 +595,7 @@ public class GoogleApiService : IGoogleApiService
         return string.Concat(JArray.Parse(text)[0].Select(x => x[0]));
     }
 
-    private string ConvertToLanguageCode(string? language)
+    private string? ConvertToLanguageCode(string language)
     {
         languageDictionary.TryGetValue(language, out var mode);
         return mode;

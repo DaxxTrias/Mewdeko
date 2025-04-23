@@ -48,6 +48,7 @@ public class HelpService : INService
     /// <param name="interactionService">The discord interaction service</param>
     /// <param name="guildSettings">Service to get guild configs</param>
     /// <param name="eventHandler">The event handler Sylveon made because the events in dnet were single threaded.</param>
+    /// <param name="genStrings">The class that holds generated locale strings.</param>
     public HelpService(
         IBotStrings strings,
         DiscordPermOverrideService dpos,

@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+﻿using DataModel;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Serilog;
@@ -25,7 +25,7 @@ public class GuildConfigController(GuildSettingsService service) : Controller
         try
         {
             var config = await service.GetGuildConfig(guildId);
-            return Ok(JsonSerializer.Serialize(config));
+            return Ok(config);
         }
         catch (Exception e)
         {
@@ -45,6 +45,7 @@ public class GuildConfigController(GuildSettingsService service) : Controller
     {
         try
         {
+            Log.Information(guildId.ToString());
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
             await service.UpdateGuildConfig(guildId, model);

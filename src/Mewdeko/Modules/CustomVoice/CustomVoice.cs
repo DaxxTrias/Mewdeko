@@ -1,17 +1,17 @@
 ﻿using System.Text;
 using System.Text.Json;
+using DataModel;
 using Discord.Commands;
+using LinqToDB;
 using Mewdeko.Common.Attributes.TextCommands;
-using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.CustomVoice.Services;
-using Microsoft.EntityFrameworkCore;
 
 namespace Mewdeko.Modules.CustomVoice;
 
 /// <summary>
 ///     Commands for managing custom voice channels.
 /// </summary>
-public class CustomVoice(DbContextProvider dbContextProvider, GuildSettingsService settingsService) : MewdekoModuleBase<CustomVoiceService>
+public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService settingsService) : MewdekoModuleBase<CustomVoiceService>
 {
      /// <summary>
     ///     Shows interactive controls for managing your custom voice channel.
@@ -1153,11 +1153,9 @@ public class CustomVoice(DbContextProvider dbContextProvider, GuildSettingsServi
         }
 
         // Update the keep-alive status
-        await using var db = await dbContextProvider.GetContextAsync();
+         await using var dbContext = await dbFactory.CreateConnectionAsync();
         customChannel.KeepAlive = keepAlive;
-        db.CustomVoiceChannels.Update(customChannel);
-        await db.SaveChangesAsync();
-
+        await dbContext.UpdateAsync(customChannel);
         var actionText = keepAlive
             ? Strings.CustomVoiceKeptAlive(Context.Guild.Id)
             : Strings.CustomVoiceNotKeptAlive(Context.Guild.Id);
@@ -1492,14 +1490,13 @@ public class CustomVoice(DbContextProvider dbContextProvider, GuildSettingsServi
     public async Task VoicePrefsReset()
     {
         // Delete preferences from database
-        await using var db = await dbContextProvider.GetContextAsync();
-        var prefs = await db.UserVoicePreferences
+         await using var dbContext = await dbFactory.CreateConnectionAsync();
+        var prefs = await dbContext.UserVoicePreferences
             .FirstOrDefaultAsync(p => p.GuildId == Context.Guild.Id && p.UserId == Context.User.Id);
 
         if (prefs != null)
         {
-            db.UserVoicePreferences.Remove(prefs);
-            await db.SaveChangesAsync();
+            await dbContext.UserVoicePreferences.Select(x => prefs).DeleteAsync();
             await ReplyConfirmAsync(Strings.CustomVoicePrefsAllReset(Context.Guild.Id));
         }
         else

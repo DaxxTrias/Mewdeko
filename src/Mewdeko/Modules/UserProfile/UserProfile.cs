@@ -1,8 +1,10 @@
-﻿using Discord.Commands;
+﻿using DataModel;
+using Discord.Commands;
+using LinqToDB;
 using Mewdeko.Common.Attributes.TextCommands;
-using Mewdeko.Database.DbContextStuff;
+using Mewdeko.Modules.UserProfile.Common;
 using Mewdeko.Modules.UserProfile.Services;
-using Microsoft.EntityFrameworkCore;
+
 using SkiaSharp;
 
 namespace Mewdeko.Modules.UserProfile;
@@ -10,7 +12,7 @@ namespace Mewdeko.Modules.UserProfile;
 /// <summary>
 ///     Handles text commands for user profiles, providing functionalities to view and manage user profile details.
 /// </summary>
-public class UserProfile(DbContextProvider dbProvider) : MewdekoModuleBase<UserProfileService>
+public class UserProfile(IDataConnectionFactory dbFactory) : MewdekoModuleBase<UserProfileService>
 {
     /// <summary>
     ///     Shows the user's profile or another user's profile if specified.
@@ -18,7 +20,7 @@ public class UserProfile(DbContextProvider dbProvider) : MewdekoModuleBase<UserP
     /// <param name="user">The user whose profile is to be shown. If null, shows the caller's profile.</param>
     [Cmd]
     [Aliases]
-    public async Task Profile(IUser user = null)
+    public async Task Profile(IUser? user = null)
     {
         user ??= ctx.User;
         var embed = await Service.GetProfileEmbed(user, ctx.User);
@@ -140,7 +142,7 @@ public class UserProfile(DbContextProvider dbProvider) : MewdekoModuleBase<UserP
     /// <param name="birthdayDisplayModeEnum">The birthday display mode to set.</param>
     [Cmd]
     [Aliases]
-    public async Task SetBirthdayPrivacy(DiscordUser.BirthdayDisplayModeEnum birthdayDisplayModeEnum)
+    public async Task SetBirthdayPrivacy(BirthdayDisplayModeEnum birthdayDisplayModeEnum)
     {
         await Service.SetBirthdayDisplayMode(ctx.User, birthdayDisplayModeEnum);
         await ctx.Channel.SendConfirmAsync(
@@ -175,7 +177,7 @@ public class UserProfile(DbContextProvider dbProvider) : MewdekoModuleBase<UserP
     /// <param name="privacyEnum">The privacy setting to apply.</param>
     [Cmd]
     [Aliases]
-    public async Task SetPrivacy(DiscordUser.ProfilePrivacyEnum privacyEnum)
+    public async Task SetPrivacy(ProfilePrivacyEnum privacyEnum)
     {
         await Service.SetPrivacy(ctx.User, privacyEnum);
         await ctx.Channel.SendConfirmAsync($"Privacy succesfully set to `{privacyEnum.ToString()}`");
@@ -213,7 +215,7 @@ public class UserProfile(DbContextProvider dbProvider) : MewdekoModuleBase<UserP
     public async Task Pronouns(IUser? user = null)
     {
         user ??= ctx.User;
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
         await using var _ = dbContext.ConfigureAwait(false);
         var dbUser = await dbContext.GetOrCreateUser(user).ConfigureAwait(false);
@@ -239,7 +241,7 @@ public class UserProfile(DbContextProvider dbProvider) : MewdekoModuleBase<UserP
     [Aliases]
     public async Task SetPronouns([Remainder] string? pronouns = null)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
         await using var _ = dbContext.ConfigureAwait(false);
         var user = await dbContext.GetOrCreateUser(ctx.User).ConfigureAwait(false);
@@ -260,7 +262,7 @@ public class UserProfile(DbContextProvider dbProvider) : MewdekoModuleBase<UserP
         }
 
         user.Pronouns = pronouns;
-        await dbContext.SaveChangesAsync().ConfigureAwait(false);
+        await dbContext.UpdateAsync(user);
         await ConfirmAsync(Strings.PronounsInternalUpdate(ctx.Guild.Id, user.Pronouns)).ConfigureAwait(false);
     }
 
@@ -282,13 +284,13 @@ public class UserProfile(DbContextProvider dbProvider) : MewdekoModuleBase<UserP
     [OwnerOnly]
     public async Task PronounsForceClear(IUser? user, bool pronounsDisabledAbuse, [Remainder] string reason)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
         await using var _ = dbContext.ConfigureAwait(false);
         var dbUser = await dbContext.GetOrCreateUser(user).ConfigureAwait(false);
         dbUser.PronounsDisabled = pronounsDisabledAbuse;
         dbUser.PronounsClearedReason = reason;
-        await dbContext.SaveChangesAsync().ConfigureAwait(false);
+        await dbContext.UpdateAsync(dbUser);
         await ctx.Channel.SendConfirmAsync(
             pronounsDisabledAbuse
                 ? Strings.PronounsDisabledUser(ctx.Guild.Id, reason)
@@ -307,13 +309,13 @@ public class UserProfile(DbContextProvider dbProvider) : MewdekoModuleBase<UserP
     [OwnerOnly]
     public async Task PronounsForceClear(ulong user, bool pronounsDisabledAbuse, [Remainder] string reason)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
         await using var _ = dbContext.ConfigureAwait(false);
-        var dbUser = await dbContext.DiscordUser.AsQueryable().FirstAsync(x => x.UserId == user).ConfigureAwait(false);
+        var dbUser = await dbContext.DiscordUsers.AsQueryable().FirstAsync(x => x.UserId == user).ConfigureAwait(false);
         dbUser.PronounsDisabled = pronounsDisabledAbuse;
         dbUser.PronounsClearedReason = reason;
-        await dbContext.SaveChangesAsync().ConfigureAwait(false);
+        await dbContext.UpdateAsync(dbUser);
         await ctx.Channel.SendConfirmAsync(
             pronounsDisabledAbuse
                 ? Strings.PronounsDisabledUser(ctx.Guild.Id, reason)

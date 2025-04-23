@@ -1,4 +1,5 @@
-﻿using StackExchange.Redis;
+﻿using Serilog;
+using StackExchange.Redis;
 
 namespace Mewdeko.Services.Impl;
 
@@ -7,34 +8,31 @@ namespace Mewdeko.Services.Impl;
 /// </summary>
 public static class RedisConnectionManager
 {
-    private static ConnectionMultiplexer? _connection;
-
     /// <summary>
-    ///     The actual connection used for redis
+    /// Ze redis
     /// </summary>
-    /// <exception cref="InvalidOperationException">Oops!</exception>
-    public static ConnectionMultiplexer Connection
-    {
-        get
-        {
-            return _connection ?? throw new InvalidOperationException("RedisConnectionManager is not initialized.");
-        }
-    }
+    public static ConnectionMultiplexer? Connection;
+
+    private static readonly object ConnectionLock = new();
 
     /// <summary>
     ///     Initializes the connections used for redis
     /// </summary>
     /// <param name="redisConnections">; Seperated connection IPs</param>
+    /// <param name="shardCount">Shard Count</param>
     public static void Initialize(string redisConnections, int shardCount)
     {
-        if (_connection != null) return;
+        if (Connection != null) return;
+
         var configurationOptions = new ConfigurationOptions
         {
             AbortOnConnectFail = false,
             SocketManager = new SocketManager("", true),
-            AsyncTimeout = 15000,        // Increase from 5000 to 15000
-            SyncTimeout = 15000,         // Increase from 5000 to 15000
-            ConnectTimeout = 15000,      // Add this
+            AsyncTimeout = 30000,        // Increase timeout
+            SyncTimeout = 30000,         // Increase timeout
+            ConnectTimeout = 30000,      // Increase timeout
+            ConnectRetry = 5,            // Add retry count
+            ReconnectRetryPolicy = new ExponentialRetry(5000), // Add retry policy
             DefaultDatabase = shardCount > 1 ? 8 : 0
         };
 
@@ -44,6 +42,21 @@ public static class RedisConnectionManager
             configurationOptions.EndPoints.Add(connection);
         }
 
-        _connection = ConnectionMultiplexer.Connect(configurationOptions);
+        try
+        {
+            Connection = ConnectionMultiplexer.Connect(configurationOptions);
+
+            Connection.ConnectionFailed += (sender, args) => {
+                Log.Warning("Redis connection failed: {0}", args.Exception.Message);
+            };
+
+            Connection.ConnectionRestored += (sender, args) => {
+                Log.Information("Redis connection restored");
+            };
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Failed to initialize Redis: {0}", ex.Message);
+        }
     }
 }

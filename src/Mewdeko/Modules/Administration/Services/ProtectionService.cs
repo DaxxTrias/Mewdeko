@@ -1,8 +1,9 @@
-﻿using Mewdeko.Common.ModuleBehaviors;
-using Mewdeko.Database.DbContextStuff;
+﻿using System.Threading;
+using DataModel;
+using LinqToDB;
+using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Modules.Administration.Common;
 using Mewdeko.Modules.Moderation.Services;
-using Microsoft.EntityFrameworkCore;
 using Serilog;
 
 namespace Mewdeko.Modules.Administration.Services;
@@ -12,27 +13,17 @@ namespace Mewdeko.Modules.Administration.Services;
 /// </summary>
 public class ProtectionService : INService, IReadyExecutor
 {
-    private readonly ConcurrentDictionary<ulong, AntiAltStats> antiAltGuilds
-        = new();
-
+    private readonly ConcurrentDictionary<ulong, AntiAltStats> antiAltGuilds = new();
     private readonly ConcurrentDictionary<ulong, AntiMassMentionStats> antiMassMentionGuilds = new();
-
-    private readonly ConcurrentDictionary<ulong, AntiRaidStats> antiRaidGuilds
-        = new();
-
-    private readonly ConcurrentDictionary<ulong, AntiSpamStats> antiSpamGuilds
-        = new();
-
+    private readonly ConcurrentDictionary<ulong, AntiRaidStats> antiRaidGuilds = new();
+    private readonly ConcurrentDictionary<ulong, AntiSpamStats> antiSpamGuilds = new();
 
     private readonly DiscordShardedClient client;
-    private readonly DbContextProvider dbProvider;
+    private readonly IDataConnectionFactory dbFactory;
     private readonly GuildSettingsService gss;
     private readonly MuteService mute;
     private readonly UserPunishService punishService;
 
-    /// <summary>
-    ///     The punish user queue.
-    /// </summary>
     private readonly Channel<PunishQueueItem> punishUserQueue =
         Channel.CreateBounded<PunishQueueItem>(new BoundedChannelOptions(200)
         {
@@ -48,22 +39,23 @@ public class ProtectionService : INService, IReadyExecutor
     /// <param name="client">The Discord client.</param>
     /// <param name="bot">The Mewdeko bot.</param>
     /// <param name="mute">The mute service.</param>
-    /// <param name="db">The database service.</param>
+    /// <param name="dbFactory">The database service.</param>
     /// <param name="punishService">The user punish service.</param>
     /// <param name="eventHandler">The event handler.</param>
     /// <param name="gss">The guild settings service.</param>
     public ProtectionService(DiscordShardedClient client, Mewdeko bot,
-        MuteService mute, DbContextProvider dbProvider, UserPunishService punishService, EventHandler eventHandler,
+        MuteService mute, IDataConnectionFactory dbFactory, UserPunishService punishService, EventHandler eventHandler,
         GuildSettingsService gss)
     {
         this.client = client;
         this.mute = mute;
-        this.dbProvider = dbProvider;
+        this.dbFactory = dbFactory;
         this.punishService = punishService;
         this.gss = gss;
 
         eventHandler.MessageReceived += HandleAntiSpam;
         eventHandler.UserJoined += HandleUserJoined;
+        eventHandler.MessageReceived += HandleAntiMassMention;
 
         bot.JoinedGuild += _bot_JoinedGuild;
         this.client.LeftGuild += _client_LeftGuild;
@@ -74,16 +66,23 @@ public class ProtectionService : INService, IReadyExecutor
     /// <inheritdoc />
     public async Task OnReadyAsync()
     {
-        foreach (var i in client.Guilds)
-            await Initialize(i.Id);
+        foreach (var guild in client.Guilds)
+        {
+            try
+            {
+                 await Initialize(guild.Id);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Error initializing protections for Guild {GuildId}", guild.Id);
+            }
+        }
     }
-
 
     /// <summary>
     ///     An event that is triggered when the anti-protection is triggered.
     /// </summary>
-    public event Func<PunishmentAction, ProtectionType, IGuildUser[], Task> OnAntiProtectionTriggered
-        = delegate { return Task.CompletedTask; };
+    public event Func<PunishmentAction, ProtectionType, IGuildUser[], Task> OnAntiProtectionTriggered = delegate { return Task.CompletedTask; };
 
     /// <summary>
     ///     The task that runs the punish queue.
@@ -92,21 +91,29 @@ public class ProtectionService : INService, IReadyExecutor
     {
         while (true)
         {
-            var item = await punishUserQueue.Reader.ReadAsync().ConfigureAwait(false);
-            var muteTime = item.MuteTime;
-            var gu = item.User;
             try
             {
-                await punishService.ApplyPunishment(gu.Guild, gu, client.CurrentUser, item.Action, muteTime,
+                var item = await punishUserQueue.Reader.ReadAsync().ConfigureAwait(false);
+                var muteTime = item.MuteTime;
+                var gu = item.User;
+                if (gu == null) continue;
+
+                var currentUser = client.CurrentUser;
+                if (currentUser == null)
+                {
+                     Log.Warning("Cannot apply punishment; CurrentUser is null.");
+                     continue;
+                }
+
+                await punishService.ApplyPunishment(gu.Guild, gu, currentUser, (PunishmentAction)item.Action, muteTime,
                     item.RoleId, $"{item.Type} Protection").ConfigureAwait(false);
+
+                await Task.Delay(1000);
             }
             catch (Exception ex)
             {
                 Log.Warning(ex, "Error in punish queue: {Message}", ex.Message);
-            }
-            finally
-            {
-                await Task.Delay(1000);
+                await Task.Delay(5000);
             }
         }
     }
@@ -119,12 +126,10 @@ public class ProtectionService : INService, IReadyExecutor
     /// <returns>A task that represents the asynchronous operation.</returns>
     private Task _client_LeftGuild(SocketGuild guild)
     {
-        _ = Task.Run(async () =>
-        {
-            await TryStopAntiRaid(guild.Id).ConfigureAwait(false);
-            await TryStopAntiSpam(guild.Id).ConfigureAwait(false);
-            await TryStopAntiAlt(guild.Id).ConfigureAwait(false);
-        });
+        antiRaidGuilds.TryRemove(guild.Id, out _);
+        antiSpamGuilds.TryRemove(guild.Id, out _);
+        antiAltGuilds.TryRemove(guild.Id, out _);
+        antiMassMentionGuilds.TryRemove(guild.Id, out _);
         return Task.CompletedTask;
     }
 
@@ -144,27 +149,32 @@ public class ProtectionService : INService, IReadyExecutor
     /// <param name="guildId">The ID of the guild to initialize the settings for.</param>
     private async Task Initialize(ulong guildId)
     {
-        var gc = await gss.GetGuildConfig(guildId);
-        var raid = gc.AntiRaidSetting;
-        var spam = gc.AntiSpamSetting;
+        await using var db = await dbFactory.CreateConnectionAsync();
 
-        if (raid != null)
-        {
-            antiRaidGuilds[gc.GuildId] = new AntiRaidStats
-            {
-                AntiRaidSettings = raid
-            };
-        }
+        var raid = await db.GetTable<AntiRaidSetting>().FirstOrDefaultAsync(x => x.GuildId == guildId).ConfigureAwait(false);
+        var spam = await db.GetTable<AntiSpamSetting>().FirstOrDefaultAsync(x => x.GuildId == guildId).ConfigureAwait(false);
 
         if (spam != null)
-            antiSpamGuilds[gc.GuildId] = new AntiSpamStats
-            {
-                AntiSpamSettings = spam
-            };
+        {
+             spam.AntiSpamIgnores = (await db.GetTable<AntiSpamIgnore>()
+                 .Where(i => i.AntiSpamSettingId == spam.Id)
+                 .ToListAsync().ConfigureAwait(false)).ToHashSet();
+        }
 
-        var alt = gc.AntiAltSetting;
-        if (alt is not null)
-            antiAltGuilds[gc.GuildId] = new AntiAltStats(alt);
+        var alt = await db.GetTable<AntiAltSetting>().FirstOrDefaultAsync(x => x.GuildId == guildId).ConfigureAwait(false);
+        var mention = await db.GetTable<AntiMassMentionSetting>().FirstOrDefaultAsync(x => x.GuildId == guildId).ConfigureAwait(false);
+
+        if (raid != null) antiRaidGuilds[guildId] = new AntiRaidStats { AntiRaidSettings = raid };
+        else antiRaidGuilds.TryRemove(guildId, out _);
+
+        if (spam != null) antiSpamGuilds[guildId] = new AntiSpamStats { AntiSpamSettings = spam };
+        else antiSpamGuilds.TryRemove(guildId, out _);
+
+        if (alt != null) antiAltGuilds[guildId] = new AntiAltStats(alt);
+        else antiAltGuilds.TryRemove(guildId, out _);
+
+        if (mention != null) antiMassMentionGuilds[guildId] = new AntiMassMentionStats { AntiMassMentionSettings = mention };
+        else antiMassMentionGuilds.TryRemove(guildId, out _);
     }
 
     /// <summary>
@@ -174,79 +184,66 @@ public class ProtectionService : INService, IReadyExecutor
     /// <returns>A task that represents the asynchronous operation.</returns>
     private async Task HandleUserJoined(IGuildUser user)
     {
-        // If the user is a bot, do nothing
-        if (user.IsBot)
-            return;
+        if (user.IsBot) return;
 
-        // Try to get the anti-raid and anti-alt settings for the guild
-        antiRaidGuilds.TryGetValue(user.Guild.Id, out var maybeStats);
-        antiAltGuilds.TryGetValue(user.Guild.Id, out var maybeAlts);
+        antiRaidGuilds.TryGetValue(user.Guild.Id, out var raidStats);
+        antiAltGuilds.TryGetValue(user.Guild.Id, out var altStats);
 
-        // If no settings are found, do nothing
-        if (maybeStats is null && maybeAlts is null)
-            return;
-            // If anti-alt settings are found
-            if (maybeAlts is { } alts)
+        if (raidStats is null && altStats is null) return;
+
+        if (altStats is { } alts && altStats.Action != (int)PunishmentAction.Warn)
+        {
+            if (user.CreatedAt != default)
             {
-                // If the user's account is not new
-                if (user.CreatedAt != default)
+                var diff = DateTime.UtcNow - user.CreatedAt.UtcDateTime;
+                if (double.TryParse(alts.MinAge, out var minAgeMinutes))
                 {
-                    var diff = DateTime.UtcNow - user.CreatedAt.UtcDateTime;
-
-                    var minAgeMinutes = double.Parse(alts.MinAge);
-                    var minAgeSpan = TimeSpan.FromMinutes(minAgeMinutes);
-
-                    if (diff < minAgeSpan)
-                    {
-                        alts.Increment();
-
-                        await PunishUsers(
-                            alts.Action,
-                            ProtectionType.Alting,
-                            alts.ActionDurationMinutes,
-                            alts.RoleId,
-                            user).ConfigureAwait(false);
-
-                        return;
-                    }
+                     var minAgeSpan = TimeSpan.FromMinutes(minAgeMinutes);
+                     if (diff < minAgeSpan)
+                     {
+                          await PunishUsers(alts.Action, ProtectionType.Alting, alts.ActionDurationMinutes, alts.RoleId, user).ConfigureAwait(false);
+                          return;
+                     }
                 }
             }
+        }
 
+        if (raidStats is { } stats && stats.AntiRaidSettings.Action != (int)PunishmentAction.Warn)
+        {
             try
             {
-                // If anti-raid settings are found
-                if (maybeStats is not { } stats || !stats.RaidUsers.Add(user))
-                    return;
+                stats.RaidUsers.Add(user); // Add user to the collection
 
-                // Increment the counter of users
-                ++stats.UsersCount;
+                var statsUsersCount = stats.UsersCount;
+                var currentCount = Interlocked.Increment(ref statsUsersCount);
 
-                // If the number of users exceeds the threshold
-                if (stats.UsersCount >= stats.AntiRaidSettings.UserThreshold)
+                if (currentCount >= stats.AntiRaidSettings.UserThreshold)
                 {
-                    // Get the users that triggered the anti-raid
-                    var users = stats.RaidUsers.ToArray();
-                    // Clear the users
+                    var usersToPunish = stats.RaidUsers.ToList();
                     stats.RaidUsers.Clear();
-                    var settings = stats.AntiRaidSettings;
+                    Interlocked.Add(ref statsUsersCount, -usersToPunish.Count);
 
-                    // Punish the users
-                    await PunishUsers(settings.Action, ProtectionType.Raiding,
-                        settings.PunishDuration, null, users).ConfigureAwait(false);
+                    if(usersToPunish.Any())
+                    {
+                        var settings = stats.AntiRaidSettings;
+                        await PunishUsers(settings.Action, ProtectionType.Raiding, settings.PunishDuration, null, usersToPunish.Where(u => u!= null).ToArray()).ConfigureAwait(false);
+                    }
                 }
-
-                // Wait for a period of time
-                await Task.Delay(1000 * stats.AntiRaidSettings.Seconds).ConfigureAwait(false);
-
-                // Remove the user from the list
-                stats.RaidUsers.TryRemove(user);
-                // Decrement the counter of users
-                --stats.UsersCount;
+                else
+                {
+                    // Schedule count decrement after delay
+                    _ = Task.Delay(TimeSpan.FromSeconds(stats.AntiRaidSettings.Seconds)).ContinueWith(t =>
+                    {
+                        // Just decrement the count after the delay
+                        Interlocked.Decrement(ref statsUsersCount);
+                    });
+                }
             }
-            catch
+            catch (Exception ex)
             {
-                // ignored
+                Log.Warning(ex, "Error processing anti-raid for user {UserId}", user.Id);
             }
+        }
     }
 
     /// <summary>
@@ -256,59 +253,41 @@ public class ProtectionService : INService, IReadyExecutor
     /// <returns>A task that represents the asynchronous operation.</returns>
     private Task HandleAntiSpam(IMessage arg)
     {
-        // If the message is not from a user, or the author is a bot, or the author is an administrator, do nothing
-        if (arg is not SocketUserMessage msg
-            || msg.Author.IsBot
-            || msg.Author is IGuildUser { GuildPermissions.Administrator: true })
+        if (arg is not SocketUserMessage msg || msg.Author.IsBot || msg.Author is IGuildUser { GuildPermissions.Administrator: true })
             return Task.CompletedTask;
 
-        // If the message was not sent in a text channel, do nothing
         if (msg.Channel is not ITextChannel channel)
             return Task.CompletedTask;
 
-        // Run the anti-spam check in a separate task
+        if (!antiSpamGuilds.TryGetValue(channel.Guild.Id, out var spamStats))
+            return Task.CompletedTask;
+
+        if (spamStats.AntiSpamSettings.AntiSpamIgnores.Any(i => i.ChannelId == channel.Id))
+            return Task.CompletedTask;
+
         _ = Task.Run(async () =>
         {
             try
             {
-                // If no anti-spam settings are found for the guild, or the channel is ignored, do nothing
-                if (!antiSpamGuilds.TryGetValue(channel.Guild.Id, out var spamSettings) ||
-                    spamSettings.AntiSpamSettings.IgnoredChannels.Contains(new AntiSpamIgnore
-                    {
-                        ChannelId = channel.Id
-                    }))
+                var stats = spamStats.UserStats.AddOrUpdate(msg.Author.Id, _ => new UserSpamStats(msg), (_, old) =>
                 {
-                    return;
-                }
+                    old.ApplyNextMessage(msg);
+                    return old;
+                });
 
-                // Update the user's message stats
-                var stats = spamSettings.UserStats.AddOrUpdate(msg.Author.Id, _ => new UserSpamStats(msg),
-                    (_, old) =>
-                    {
-                        old.ApplyNextMessage(msg);
-                        return old;
-                    });
-
-                // If the number of messages sent by the user exceeds the threshold
-                if (stats.Count >= spamSettings.AntiSpamSettings.MessageThreshold)
+                if (stats.Count >= spamStats.AntiSpamSettings.MessageThreshold)
                 {
-                    // If the user's stats are successfully removed
-                    if (spamSettings.UserStats.TryRemove(msg.Author.Id, out stats))
+                    if (spamStats.UserStats.TryRemove(msg.Author.Id, out var removedStats))
                     {
-                        // Dispose the user's stats
-                        stats.Dispose();
-                        var settings = spamSettings.AntiSpamSettings;
-
-                        // Punish the user
-                        await PunishUsers(settings.Action, ProtectionType.Spamming, settings.MuteTime,
-                                settings.RoleId, (IGuildUser)msg.Author)
-                            .ConfigureAwait(false);
+                        removedStats.Dispose();
+                        var settings = spamStats.AntiSpamSettings;
+                        await PunishUsers(settings.Action, ProtectionType.Spamming, settings.MuteTime, settings.RoleId, (IGuildUser)msg.Author).ConfigureAwait(false);
                     }
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // ignored
+                 Log.Warning(ex, "Error processing anti-spam for user {UserId}", msg.Author.Id);
             }
         });
         return Task.CompletedTask;
@@ -323,29 +302,21 @@ public class ProtectionService : INService, IReadyExecutor
     /// <param name="roleId">The ID of the role to be added, if applicable.</param>
     /// <param name="gus">The users to be punished.</param>
     /// <returns>A task that represents the asynchronous operation.</returns>
-    private async Task PunishUsers(PunishmentAction action, ProtectionType pt, int muteTime, ulong? roleId,
-        params IGuildUser[] gus)
+    private async Task PunishUsers(int action, ProtectionType pt, int muteTime, ulong? roleId, params IGuildUser[] gus)
     {
-        Log.Information(
-            "[{PunishType}] - Punishing [{Count}] users with [{PunishAction}] in {GuildName} guild",
-            pt,
-            gus.Length,
-            action,
-            gus[0].Guild.Name);
+        if (gus == null || gus.Length == 0 || gus[0] == null) return;
+
+        Log.Information("[{PunishType}] - Punishing [{Count}] users with [{PunishAction}] in {GuildName} guild", pt, gus.Length, action, gus[0].Guild.Name);
 
         foreach (var gu in gus)
         {
+            if (gu == null) continue;
             await punishUserQueue.Writer.WriteAsync(new PunishQueueItem
             {
-                Action = action,
-                Type = pt,
-                User = gu,
-                MuteTime = muteTime,
-                RoleId = roleId
+                Action = action, Type = pt, User = gu, MuteTime = muteTime, RoleId = roleId
             }).ConfigureAwait(false);
         }
-
-        _ = OnAntiProtectionTriggered(action, pt, gus);
+        _ = OnAntiProtectionTriggered((PunishmentAction)action, pt, gus);
     }
 
     /// <summary>
@@ -360,35 +331,33 @@ public class ProtectionService : INService, IReadyExecutor
     ///     A task that represents the asynchronous operation and contains the anti-raid stats if the protection was
     ///     successfully started.
     /// </returns>
-    public async Task<AntiRaidStats?> StartAntiRaidAsync(ulong guildId, int userThreshold, int seconds,
-        PunishmentAction action, int minutesDuration)
+    public async Task<AntiRaidStats?> StartAntiRaidAsync(ulong guildId, int userThreshold, int seconds, PunishmentAction action, int minutesDuration)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
         var g = client.GetGuild(guildId);
+        if (g == null) return null;
         await mute.GetMuteRole(g).ConfigureAwait(false);
 
-        if (action == PunishmentAction.AddRole)
-            return null;
+        if (action == PunishmentAction.AddRole) return null;
 
-        if (!IsDurationAllowed(action))
-            minutesDuration = 0;
+        if (!IsDurationAllowed(action)) minutesDuration = 0;
 
-        var stats = new AntiRaidStats
-        {
-            AntiRaidSettings = new AntiRaidSetting
-            {
-                Action = action, Seconds = seconds, UserThreshold = userThreshold, PunishDuration = minutesDuration
-            }
-        };
+        await using var db = await dbFactory.CreateConnectionAsync();
+        var settings = await db.GetTable<AntiRaidSetting>().FirstOrDefaultAsync(x => x.GuildId == guildId).ConfigureAwait(false);
+        var isNew = settings == null;
+        settings ??= new AntiRaidSetting { GuildId = guildId };
 
+        settings.Action = (int)action;
+        settings.Seconds = seconds;
+        settings.UserThreshold = userThreshold;
+        settings.PunishDuration = minutesDuration;
+
+        if (isNew)
+            await db.InsertAsync(settings).ConfigureAwait(false);
+        else
+            await db.UpdateAsync(settings).ConfigureAwait(false);
+
+        var stats = new AntiRaidStats { AntiRaidSettings = settings };
         antiRaidGuilds.AddOrUpdate(guildId, stats, (_, _) => stats);
-
-
-        await using var db = await dbProvider.GetContextAsync();
-        var gc = await db.ForGuildId(guildId, set => set.Include(x => x.AntiRaidSetting));
-
-        gc.AntiRaidSetting = stats.AntiRaidSettings;
-        await dbContext.SaveChangesAsync().ConfigureAwait(false);
 
         return stats;
     }
@@ -398,64 +367,50 @@ public class ProtectionService : INService, IReadyExecutor
     /// </summary>
     /// <param name="arg">The message that was received.</param>
     /// <returns>A task that represents the asynchronous operation.</returns>
-    private async Task HandleAntiMassMention(IMessage arg)
+    private Task HandleAntiMassMention(IMessage arg)
     {
-        // If the message is not from a user, or the author is a bot, or the author is an administrator, do nothing
         if (arg is not SocketUserMessage msg || msg.Author is IGuildUser { GuildPermissions.Administrator: true })
-            return;
+            return Task.CompletedTask;
 
-        // If the message was not sent in a text channel, do nothing
         if (msg.Channel is not ITextChannel channel)
-            return;
+            return Task.CompletedTask;
 
-        // Count the mentions in the message
+        if (!antiMassMentionGuilds.TryGetValue(channel.Guild.Id, out var massMentionStats))
+            return Task.CompletedTask;
+
+        var settings = massMentionStats.AntiMassMentionSettings;
+        if (settings.IgnoreBots && msg.Author.IsBot)
+            return Task.CompletedTask;
+
         var mentionCount = msg.MentionedUsers.Count + msg.MentionedRoles.Count;
+        if (mentionCount == 0) return Task.CompletedTask;
 
-        // If there are no mentions, do nothing
-        if (mentionCount == 0)
-            return;
 
-        try
+        _ = Task.Run(async () =>
         {
-            // Check if anti-mass mention settings exist for this guild
-            if (!antiMassMentionGuilds.TryGetValue(channel.Guild.Id, out var massMentionStats))
-                return;
+             try
+             {
+                if (mentionCount >= settings.MentionThreshold)
+                {
+                    await PunishUsers(settings.Action, ProtectionType.MassMention, settings.MuteTime, settings.RoleId, (IGuildUser)msg.Author).ConfigureAwait(false);
+                    if (massMentionStats.UserStats.TryRemove(msg.Author.Id, out var removedStats)) removedStats.Dispose();
+                    return;
+                }
 
-            var settings = massMentionStats.AntiMassMentionSettings;
+                var userStats = massMentionStats.UserStats.AddOrUpdate(msg.Author.Id, _ => new UserMentionStats(settings.TimeWindowSeconds), (_, old) => old);
 
-            if (settings.IgnoreBots && arg.Author.IsBot)
-                return;
-
-            // Check for single message mass mention threshold
-            if (mentionCount >= settings.MentionThreshold)
-            {
-                await PunishUsers(settings.Action, ProtectionType.MassMention, settings.MuteTime, settings.RoleId,
-                        (IGuildUser)msg.Author)
-                    .ConfigureAwait(false);
-                return;
-            }
-
-            // Check for time-based mention threshold
-            var userStats = massMentionStats.UserStats.AddOrUpdate(
-                msg.Author.Id,
-                _ => new UserMentionStats(settings.TimeWindowSeconds),
-                (_, old) => old);
-
-            if (userStats.AddMentions(mentionCount, settings.MaxMentionsInTimeWindow))
-            {
-                await PunishUsers(settings.Action, ProtectionType.MassMention, settings.MuteTime, settings.RoleId,
-                        (IGuildUser)msg.Author)
-                    .ConfigureAwait(false);
-
-                // Dispose the stats after the punishment is applied
-                userStats.Dispose();
-                massMentionStats.UserStats.TryRemove(msg.Author.Id, out _);
-            }
-        }
-        catch
-        {
-            // ignored
-        }
+                if (userStats.AddMentions(mentionCount, settings.MaxMentionsInTimeWindow))
+                {
+                     await PunishUsers(settings.Action, ProtectionType.MassMention, settings.MuteTime, settings.RoleId, (IGuildUser)msg.Author).ConfigureAwait(false);
+                     if (massMentionStats.UserStats.TryRemove(msg.Author.Id, out var removedStats)) removedStats.Dispose();
+                }
+             }
+             catch(Exception ex)
+             {
+                 Log.Warning(ex, "Error processing anti-mass-mention for user {UserId}", msg.Author.Id);
+             }
+        });
+        return Task.CompletedTask;
     }
 
 
@@ -469,26 +424,12 @@ public class ProtectionService : INService, IReadyExecutor
     /// </returns>
     public async Task<bool> TryStopAntiRaid(ulong guildId)
     {
-        // If the anti-raid settings for the guild are successfully removed
-        if (antiRaidGuilds.TryRemove(guildId, out _))
-        {
-            // Get the database context
-            await using var dbContext = await dbProvider.GetContextAsync();
-            // Get the guild configuration
-            await using var db = await dbProvider.GetContextAsync();
-            var gc = await db.ForGuildId(guildId, set => set.Include(x => x.AntiRaidSetting));
-
-            // Remove the anti-raid settings
-            gc.AntiRaidSetting = null;
-            // Save the changes to the database
-            await dbContext.SaveChangesAsync().ConfigureAwait(false);
-
-            // Return true to indicate success
-            return true;
-        }
-
-        // Return false to indicate failure
-        return false;
+        var removed = antiRaidGuilds.TryRemove(guildId, out _);
+        await using var db = await dbFactory.CreateConnectionAsync();
+        var deletedCount = await db.GetTable<AntiRaidSetting>()
+            .Where(x => x.GuildId == guildId)
+            .DeleteAsync().ConfigureAwait(false);
+        return removed || deletedCount > 0;
     }
 
     /// <summary>
@@ -501,29 +442,19 @@ public class ProtectionService : INService, IReadyExecutor
     /// </returns>
     public async Task<bool> TryStopAntiSpam(ulong guildId)
     {
-        // If the anti-spam settings for the guild are successfully removed
-        if (antiSpamGuilds.TryRemove(guildId, out var removed))
+        var removed = antiSpamGuilds.TryRemove(guildId, out var removedStats);
+        if(removed) removedStats.UserStats.ForEach(x => x.Value.Dispose());
+
+        await using var db = await dbFactory.CreateConnectionAsync();
+        var setting = await db.GetTable<AntiSpamSetting>().FirstOrDefaultAsync(x => x.GuildId == guildId).ConfigureAwait(false);
+        var deletedCount = 0;
+        if (setting != null)
         {
-            // Dispose the user stats
-            removed.UserStats.ForEach(x => x.Value.Dispose());
-            // Get the database context
-            await using var dbContext = await dbProvider.GetContextAsync();
-            // Get the guild configuration
-            await using var db = await dbProvider.GetContextAsync();
-            var gc = await db.ForGuildId(guildId, set => set.Include(x => x.AntiSpamSetting)
-                .ThenInclude(x => x.IgnoredChannels));
-
-            // Remove the anti-spam settings
-            gc.AntiSpamSetting = null;
-            // Save the changes to the database
-            await dbContext.SaveChangesAsync().ConfigureAwait(false);
-
-            // Return true to indicate success
-            return true;
+             await db.GetTable<AntiSpamIgnore>().Where(i => i.AntiSpamSettingId == setting.Id).DeleteAsync().ConfigureAwait(false);
+             // Use DeleteAsync with the fetched entity for single deletion
+             deletedCount = await db.DeleteAsync(setting).ConfigureAwait(false);
         }
-
-        // Return false to indicate failure
-        return false;
+        return removed || deletedCount > 0;
     }
 
     /// <summary>
@@ -538,47 +469,36 @@ public class ProtectionService : INService, IReadyExecutor
     ///     A task that represents the asynchronous operation and contains the anti-spam stats if the protection was
     ///     successfully started.
     /// </returns>
-    public async Task<AntiSpamStats> StartAntiSpamAsync(ulong guildId, int messageCount, PunishmentAction action,
-        int punishDurationMinutes, ulong? roleId)
+    public async Task<AntiSpamStats?> StartAntiSpamAsync(ulong guildId, int messageCount, PunishmentAction action, int punishDurationMinutes, ulong? roleId)
     {
         var g = client.GetGuild(guildId);
+        if (g == null) return null;
         await mute.GetMuteRole(g).ConfigureAwait(false);
 
-        if (!IsDurationAllowed(action))
-            punishDurationMinutes = 0;
+        if (!IsDurationAllowed(action)) punishDurationMinutes = 0;
 
-        var stats = new AntiSpamStats
-        {
-            AntiSpamSettings = new AntiSpamSetting
-            {
-                Action = action, MessageThreshold = messageCount, MuteTime = punishDurationMinutes, RoleId = roleId
-            }
-        };
+        await using var db = await dbFactory.CreateConnectionAsync();
+        var settings = await db.GetTable<AntiSpamSetting>().FirstOrDefaultAsync(x => x.GuildId == guildId).ConfigureAwait(false);
+        var isNew = settings == null;
+        settings ??= new AntiSpamSetting { GuildId = guildId };
 
-        var stats1 = stats;
-        stats = antiSpamGuilds.AddOrUpdate(guildId, stats, (_, old) =>
-        {
-            stats1.AntiSpamSettings.IgnoredChannels = old.AntiSpamSettings.IgnoredChannels;
-            return stats1;
-        });
+        settings.Action = (int)action;
+        settings.MessageThreshold = messageCount;
+        settings.MuteTime = punishDurationMinutes;
+        settings.RoleId = roleId;
 
-
-        await using var dbContext = await dbProvider.GetContextAsync();
-        var gc = await dbContext.ForGuildId(guildId, set => set.Include(x => x.AntiSpamSetting));
-
-        if (gc.AntiSpamSetting != null)
-        {
-            gc.AntiSpamSetting.Action = stats.AntiSpamSettings.Action;
-            gc.AntiSpamSetting.MessageThreshold = stats.AntiSpamSettings.MessageThreshold;
-            gc.AntiSpamSetting.MuteTime = stats.AntiSpamSettings.MuteTime;
-            gc.AntiSpamSetting.RoleId = stats.AntiSpamSettings.RoleId;
-        }
+        if (isNew)
+            await db.InsertAsync(settings).ConfigureAwait(false);
         else
-        {
-            gc.AntiSpamSetting = stats.AntiSpamSettings;
-        }
+            await db.UpdateAsync(settings).ConfigureAwait(false);
 
-        await dbContext.SaveChangesAsync().ConfigureAwait(false);
+        // Reload ignored channels after insert/update for consistency
+        settings.AntiSpamIgnores = (await db.GetTable<AntiSpamIgnore>()
+            .Where(i => i.AntiSpamSettingId == settings.Id)
+            .ToListAsync().ConfigureAwait(false)).ToHashSet();
+
+        var stats = new AntiSpamStats { AntiSpamSettings = settings };
+        antiSpamGuilds.AddOrUpdate(guildId, stats, (_, _) => stats);
 
         return stats;
     }
@@ -589,43 +509,35 @@ public class ProtectionService : INService, IReadyExecutor
     /// <param name="guildId">The ID of the guild to start the protection for.</param>
     /// <param name="mentionThreshold">The number of mentions allowed in a single message before triggering protection.</param>
     /// <param name="timeWindowSeconds">The time window in seconds during which mentions are tracked.</param>
-    /// <param name="maxMentionsInTimeWindow">
-    ///     The maximum number of mentions allowed within the specified time window before
-    ///     triggering protection.
-    /// </param>
+    /// <param name="maxMentionsInTimeWindow">The maximum number of mentions allowed within the specified time window before triggering protection.</param>
     /// <param name="ignoreBots">Whether to ignore bots.</param>
     /// <param name="action">The punishment action to be applied when the protection is triggered.</param>
     /// <param name="muteTime">The duration of the mute punishment in minutes, if applicable.</param>
     /// <param name="roleId">The ID of the role to be assigned as punishment, if applicable.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    public async Task StartAntiMassMentionAsync(ulong guildId, int mentionThreshold, int timeWindowSeconds,
-        int maxMentionsInTimeWindow, bool ignoreBots, PunishmentAction action, int muteTime, ulong? roleId)
+    public async Task StartAntiMassMentionAsync(ulong guildId, int mentionThreshold, int timeWindowSeconds, int maxMentionsInTimeWindow, bool ignoreBots, PunishmentAction action, int muteTime, ulong? roleId)
     {
-        var settings = new AntiMassMentionSetting
-        {
-            MentionThreshold = mentionThreshold,
-            TimeWindowSeconds = timeWindowSeconds,
-            MaxMentionsInTimeWindow = maxMentionsInTimeWindow,
-            IgnoreBots = ignoreBots,
-            Action = action,
-            MuteTime = muteTime,
-            RoleId = roleId
-        };
+        await using var db = await dbFactory.CreateConnectionAsync();
+        var settings = await db.GetTable<AntiMassMentionSetting>().FirstOrDefaultAsync(x => x.GuildId == guildId).ConfigureAwait(false);
+        var isNew = settings == null;
+        settings ??= new AntiMassMentionSetting { GuildId = guildId };
 
-        var stats = new AntiMassMentionStats
-        {
-            AntiMassMentionSettings = settings
-        };
+        settings.MentionThreshold = mentionThreshold;
+        settings.TimeWindowSeconds = timeWindowSeconds;
+        settings.MaxMentionsInTimeWindow = maxMentionsInTimeWindow;
+        settings.IgnoreBots = ignoreBots;
+        settings.Action = (int)action;
+        settings.MuteTime = muteTime;
+        settings.RoleId = roleId;
 
+        if (isNew)
+             await db.InsertAsync(settings).ConfigureAwait(false);
+        else
+             await db.UpdateAsync(settings).ConfigureAwait(false);
+
+        var stats = new AntiMassMentionStats { AntiMassMentionSettings = settings };
         antiMassMentionGuilds.AddOrUpdate(guildId, stats, (_, _) => stats);
-
-        await using var dbContext = await dbProvider.GetContextAsync();
-        var gc = await dbContext.ForGuildId(guildId, set => set.Include(x => x.AntiMassMentionSetting));
-
-        gc.AntiMassMentionSetting = settings;
-        await dbContext.SaveChangesAsync().ConfigureAwait(false);
     }
-
 
     /// <summary>
     ///     Attempts to stop the anti-mass mention protection for a guild.
@@ -637,64 +549,76 @@ public class ProtectionService : INService, IReadyExecutor
     /// </returns>
     public async Task<bool> TryStopAntiMassMention(ulong guildId)
     {
-        if (!antiMassMentionGuilds.TryRemove(guildId, out var removed)) return false;
-        removed.UserStats.ForEach(x => x.Value.Dispose());
+        var removed = antiMassMentionGuilds.TryRemove(guildId, out var removedStats);
+        if (removed) removedStats.UserStats.ForEach(x => x.Value.Dispose());
 
-        await using var dbContext = await dbProvider.GetContextAsync();
-        var gc = await dbContext.ForGuildId(guildId, set => set.Include(x => x.AntiMassMentionSetting));
+        await using var db = await dbFactory.CreateConnectionAsync();
+        var deletedCount = await db.GetTable<AntiMassMentionSetting>()
+            .Where(x => x.GuildId == guildId)
+            .DeleteAsync().ConfigureAwait(false);
 
-        gc.AntiMassMentionSetting = null;
-        await dbContext.SaveChangesAsync().ConfigureAwait(false);
-
-        return true;
+        return removed || deletedCount > 0;
     }
 
-
-    /// <summary>
+/// <summary>
     ///     Ignores a channel for the anti-spam protection in a guild.
     /// </summary>
     /// <param name="guildId">The ID of the guild to ignore the channel for.</param>
     /// <param name="channelId">The ID of the channel to ignore.</param>
     /// <returns>
     ///     A task that represents the asynchronous operation and contains a boolean indicating whether the operation was
-    ///     successful.
+    ///     successful (true if added, false if removed). Returns null if spam settings don't exist.
     /// </returns>
     public async Task<bool?> AntiSpamIgnoreAsync(ulong guildId, ulong channelId)
     {
-        var obj = new AntiSpamIgnore
-        {
-            ChannelId = channelId
-        };
-        bool added;
+        await using var db = await dbFactory.CreateConnectionAsync();
 
-        await using var dbContext = await dbProvider.GetContextAsync();
-        var gc = await dbContext.ForGuildId(guildId,
-            set => set.Include(x => x.AntiSpamSetting).ThenInclude(x => x.IgnoredChannels));
-        var spam = gc.AntiSpamSetting;
-        if (spam is null)
+        var spamSettingId = await db.GetTable<AntiSpamSetting>()
+            .Where(x => x.GuildId == guildId)
+            .Select(x => (int?)x.Id)
+            .FirstOrDefaultAsync().ConfigureAwait(false);
+
+        if (spamSettingId is null)
         {
+            Log.Warning("Attempted to modify AntiSpamIgnore for non-existent AntiSpamSetting GuildId: {GuildId}", guildId);
             return null;
         }
 
-        if (spam.IgnoredChannels.Add(obj)) // if adding to db is successful
+        var deletedCount = await db.GetTable<AntiSpamIgnore>()
+           .Where(i => i.AntiSpamSettingId == spamSettingId.Value && i.ChannelId == channelId)
+           .DeleteAsync().ConfigureAwait(false);
+
+        bool added;
+        if (deletedCount > 0)
         {
-            if (antiSpamGuilds.TryGetValue(guildId, out var temp))
-                temp.AntiSpamSettings.IgnoredChannels.Add(obj); // add to local cache
-            added = true;
+            added = false;
         }
         else
         {
-            var toRemove = spam.IgnoredChannels.First(x => x.ChannelId == channelId);
-            dbContext.Set<AntiSpamIgnore>().Remove(toRemove); // remove from db
-            if (antiSpamGuilds.TryGetValue(guildId, out var temp))
-            {
-                temp.AntiSpamSettings.IgnoredChannels.Remove(toRemove); // remove from local cache
-            }
-
-            added = false;
+            var newIgnore = new AntiSpamIgnore { AntiSpamSettingId = spamSettingId.Value, ChannelId = channelId };
+            await db.InsertAsync(newIgnore).ConfigureAwait(false);
+            added = true;
         }
 
-        await dbContext.SaveChangesAsync().ConfigureAwait(false);
+        var updatedSpamSetting = await db.GetTable<AntiSpamSetting>()
+                                     .FirstOrDefaultAsync(x => x.Id == spamSettingId.Value)
+                                     .ConfigureAwait(false);
+
+        if (updatedSpamSetting != null)
+        {
+            updatedSpamSetting.AntiSpamIgnores = (await db.GetTable<AntiSpamIgnore>()
+                .Where(i => i.AntiSpamSettingId == updatedSpamSetting.Id)
+                .ToListAsync().ConfigureAwait(false)).ToHashSet();
+
+            var newStats = new AntiSpamStats { AntiSpamSettings = updatedSpamSetting };
+            antiSpamGuilds.AddOrUpdate(guildId, newStats, (_, _) => newStats);
+        }
+        else
+        {
+            // Setting was somehow deleted between steps, remove from cache
+            antiSpamGuilds.TryRemove(guildId, out _);
+        }
+
         return added;
     }
 
@@ -702,14 +626,13 @@ public class ProtectionService : INService, IReadyExecutor
     ///     Retrieves the anti-spam, anti-raid, and anti-alt statistics for a guild.
     /// </summary>
     /// <param name="guildId">The ID of the guild to retrieve the statistics for.</param>
-    /// <returns>A tuple containing the anti-spam, anti-raid, and anti-alt statistics for the guild.</returns>
-    public (AntiSpamStats?, AntiRaidStats?, AntiAltStats?, AntiMassMentionStats) GetAntiStats(ulong guildId)
+    /// <returns>A tuple containing the anti-spam, anti-raid, anti-alt, and anti-mass-mention statistics for the guild.</returns>
+    public (AntiSpamStats?, AntiRaidStats?, AntiAltStats?, AntiMassMentionStats?) GetAntiStats(ulong guildId)
     {
-        antiRaidGuilds.TryGetValue(guildId, out var antiRaidStats);
         antiSpamGuilds.TryGetValue(guildId, out var antiSpamStats);
+        antiRaidGuilds.TryGetValue(guildId, out var antiRaidStats);
         antiAltGuilds.TryGetValue(guildId, out var antiAltStats);
         antiMassMentionGuilds.TryGetValue(guildId, out var antiMassMentionStats);
-
         return (antiSpamStats, antiRaidStats, antiAltStats, antiMassMentionStats);
     }
 
@@ -722,13 +645,8 @@ public class ProtectionService : INService, IReadyExecutor
     {
         return action switch
         {
-            PunishmentAction.Ban => true,
-            PunishmentAction.Mute => true,
-            PunishmentAction.ChatMute => true,
-            PunishmentAction.VoiceMute => true,
-            PunishmentAction.AddRole => true,
-            PunishmentAction.Timeout => true,
-            _ => false
+            PunishmentAction.Ban => true, PunishmentAction.Mute => true, PunishmentAction.ChatMute => true,
+            PunishmentAction.VoiceMute => true, PunishmentAction.AddRole => true, PunishmentAction.Timeout => true, _ => false
         };
     }
 
@@ -741,21 +659,26 @@ public class ProtectionService : INService, IReadyExecutor
     /// <param name="actionDurationMinutes">The duration of the punishment, if applicable.</param>
     /// <param name="roleId">The ID of the role to be added, if applicable.</param>
     /// <returns>A task that represents the asynchronous operation.</returns>
-    public async Task StartAntiAltAsync(ulong guildId, int minAgeMinutes, PunishmentAction action,
-        int actionDurationMinutes = 0, ulong? roleId = null)
+    public async Task StartAntiAltAsync(ulong guildId, int minAgeMinutes, PunishmentAction action, int actionDurationMinutes = 0, ulong? roleId = null)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
-        var gc = await dbContext.ForGuildId(guildId, set => set.Include(x => x.AntiAltSetting));
-        gc.AntiAltSetting = new AntiAltSetting
-        {
-            Action = action,
-            ActionDurationMinutes = actionDurationMinutes,
-            MinAge = minAgeMinutes.ToString(),
-            RoleId = roleId
-        };
+        if (!IsDurationAllowed(action)) actionDurationMinutes = 0;
 
-        await dbContext.SaveChangesAsync().ConfigureAwait(false);
-        antiAltGuilds[guildId] = new AntiAltStats(gc.AntiAltSetting);
+        await using var db = await dbFactory.CreateConnectionAsync();
+        var settings = await db.GetTable<AntiAltSetting>().FirstOrDefaultAsync(x => x.GuildId == guildId).ConfigureAwait(false);
+        var isNew = settings == null;
+        settings ??= new AntiAltSetting { GuildId = guildId };
+
+        settings.Action = (int)action;
+        settings.ActionDurationMinutes = actionDurationMinutes;
+        settings.MinAge = minAgeMinutes.ToString();
+        settings.RoleId = roleId;
+
+        if (isNew)
+            await db.InsertAsync(settings).ConfigureAwait(false);
+        else
+            await db.UpdateAsync(settings).ConfigureAwait(false);
+
+        antiAltGuilds[guildId] = new AntiAltStats(settings);
     }
 
     /// <summary>
@@ -768,14 +691,11 @@ public class ProtectionService : INService, IReadyExecutor
     /// </returns>
     public async Task<bool> TryStopAntiAlt(ulong guildId)
     {
-        if (!antiAltGuilds.TryRemove(guildId, out _))
-            return false;
-
-
-        await using var dbContext = await dbProvider.GetContextAsync();
-        var gc = await dbContext.ForGuildId(guildId, set => set.Include(x => x.AntiAltSetting));
-        gc.AntiAltSetting = null;
-        await dbContext.SaveChangesAsync().ConfigureAwait(false);
-        return true;
+        var removed = antiAltGuilds.TryRemove(guildId, out _);
+        await using var db = await dbFactory.CreateConnectionAsync();
+        var deletedCount = await db.GetTable<AntiAltSetting>()
+            .Where(x => x.GuildId == guildId)
+            .DeleteAsync().ConfigureAwait(false);
+        return removed || deletedCount > 0;
     }
 }

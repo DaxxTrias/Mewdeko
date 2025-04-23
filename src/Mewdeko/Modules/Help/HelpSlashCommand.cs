@@ -16,7 +16,6 @@ namespace Mewdeko.Modules.Help;
 /// <summary>
 ///     Slash command module for help commands.
 /// </summary>
-/// <param name="permissionService">The server permission service</param>
 /// <param name="interactivity">The service for embed pagination</param>
 /// <param name="serviceProvider">Service provider</param>
 /// <param name="cmds">The command service</param>
@@ -25,7 +24,6 @@ namespace Mewdeko.Modules.Help;
 /// <param name="config">Service to retrieve yml based configs</param>
 [Discord.Interactions.Group("help", "Help Commands, what else is there to say?")]
 public class HelpSlashCommand(
-    GlobalPermissionService permissionService,
     InteractiveService interactivity,
     IServiceProvider serviceProvider,
     CommandService cmds,
@@ -162,7 +160,9 @@ public class HelpSlashCommand(
                         }
 
                         var cmdString =
+#pragma warning disable CS0184 // 'is' expression's given expression is never of the provided type
                             $"{(succ.Contains(cmd) ? cmd.Preconditions.Any(p => p is RequireDragonAttribute) ? "🐉" : "✅" : "❌")}" +
+#pragma warning restore CS0184 // 'is' expression's given expression is never of the provided type
                             $"{prefix}{cmd.Aliases[0]}" +
                             $"{(cmd.Aliases.Skip(1).FirstOrDefault() is not null ? $"/{prefix}{cmd.Aliases[1]}" : "")}";
                         commandsOnPage.Add(cmdString);

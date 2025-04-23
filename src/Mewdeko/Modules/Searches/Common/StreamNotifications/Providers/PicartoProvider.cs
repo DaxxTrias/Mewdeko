@@ -3,6 +3,7 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+
 using Mewdeko.Modules.Searches.Common.StreamNotifications.Models;
 
 using Serilog;
@@ -24,11 +25,11 @@ public class PicartoProvider : Provider
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     /// <inheritdoc />
-    public override FollowedStream.FType Platform
+    public override FType Platform
     {
         get
         {
-            return FollowedStream.FType.Picarto;
+            return FType.Picarto;
         }
     }
 
@@ -103,7 +104,7 @@ public class PicartoProvider : Provider
     {
         return new StreamData
         {
-            StreamType = FollowedStream.FType.Picarto,
+            StreamType = FType.Picarto,
             Name = stream.Name,
             UniqueName = stream.Name,
             Viewers = stream.Viewers,

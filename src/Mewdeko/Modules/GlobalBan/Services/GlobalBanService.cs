@@ -1,13 +1,13 @@
-﻿// using Microsoft.EntityFrameworkCore;
+﻿//
 //
 // namespace Mewdeko.Modules.GlobalBan.Services;
 //
 // public class GlobalBanService
 // {
-//     private readonly DbContextProvider dbProvider;
-//     public GlobalBanService(EventHandler handler, DbContextProvider dbProvider)
+//     private readonly IDataConnectionFactory dbFactory;
+//     public GlobalBanService(EventHandler handler, IDataConnectionFactory dbFactory)
 //     {
-//         this.dbProvider = dbProvider;
+//         this.dbFactory = dbFactory;
 //         handler.UserJoined += OnUserJoined;
 //     }
 //

@@ -1,13 +1,13 @@
-﻿using Mewdeko.Database.DbContextStuff;
-using Mewdeko.Modules.Xp.Common;
-using Microsoft.EntityFrameworkCore;
+﻿using DataModel;
+using LinqToDB;
+using Serilog;
 
 namespace Mewdeko.Modules.Administration.Services;
 
 /// <summary>
 ///     The service for managing self-assigned roles.
 /// </summary>
-public class SelfAssignedRolesService(DbContextProvider dbProvider) : INService
+public class SelfAssignedRolesService(IDataConnectionFactory dbFactory, GuildSettingsService gss) : INService
 {
     /// <summary>
     ///     Enum representing the possible results of an assign operation.
@@ -66,7 +66,7 @@ public class SelfAssignedRolesService(DbContextProvider dbProvider) : INService
         ErrNotPerms // bot doesn't have perms (error)
     }
 
-    /// <summary>
+   /// <summary>
     ///     Adds a new self-assignable role to a guild.
     /// </summary>
     /// <param name="guildId">The ID of the guild to add the role to.</param>
@@ -78,16 +78,18 @@ public class SelfAssignedRolesService(DbContextProvider dbProvider) : INService
     /// </returns>
     public async Task<bool> AddNew(ulong guildId, IRole role, int group)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
 
-        var roles = await dbContext.SelfAssignableRoles.GetFromGuild(guildId);
-        if (roles.Any(s => s.RoleId == role.Id && s.GuildId == role.Guild.Id)) return false;
+        var exists = await db.GetTable<SelfAssignableRole>()
+            .AnyAsync(s => s.RoleId == role.Id && s.GuildId == guildId).ConfigureAwait(false);
 
-        dbContext.SelfAssignableRoles.Add(new SelfAssignedRole
+        if (exists) return false;
+
+        var newSar = new SelfAssignableRole()
         {
-            Group = group, RoleId = role.Id, GuildId = role.Guild.Id
-        });
-        await dbContext.SaveChangesAsync().ConfigureAwait(false);
+            Group = group, RoleId = role.Id, GuildId = guildId
+        };
+        await db.InsertAsync(newSar).ConfigureAwait(false);
 
         return true;
     }
@@ -102,12 +104,11 @@ public class SelfAssignedRolesService(DbContextProvider dbProvider) : INService
     /// </returns>
     public async Task<bool> ToggleAdSarm(ulong guildId)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
-        var config = await dbContext.ForGuildId(guildId, set => set);
+        var config = await gss.GetGuildConfig(guildId);
+        if (config == null) return false; // Or default, or throw
 
         config.AutoDeleteSelfAssignedRoleMessages = !config.AutoDeleteSelfAssignedRoleMessages;
-
-        await dbContext.SaveChangesAsync().ConfigureAwait(false);
+        await gss.UpdateGuildConfig(guildId, config);
 
         return config.AutoDeleteSelfAssignedRoleMessages;
     }
@@ -122,43 +123,50 @@ public class SelfAssignedRolesService(DbContextProvider dbProvider) : INService
     ///     indicating whether auto-deletion is enabled, and an extra object containing additional information about the
     ///     operation.
     /// </returns>
-    public async Task<(AssignResult Result, bool AutoDelete, object extra)> Assign(IGuildUser guildUser, IRole role)
+    public async Task<(AssignResult Result, bool AutoDelete, object? extra)> Assign(IGuildUser guildUser, IRole role)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
-        var stats = await dbContext.UserXpStats.GetOrCreateUser(guildUser.Guild.Id, guildUser.Id);
-        var userLevelData = new LevelStats(stats.Xp + stats.AwardedXp);
-
+        object? extra = null;
         var (autoDelete, exclusive, roles) = await GetAdAndRoles(guildUser.Guild.Id);
 
-        var selfAssignedRoles = roles as SelfAssignedRole[] ?? roles.ToArray();
-        var theRoleYouWant = Array.Find(selfAssignedRoles, r => r.RoleId == role.Id);
+        if (roles == null)
+        {
+             Log.Warning("SelfAssignableRoles collection is null for Guild {GuildId}", guildUser.GuildId);
+             return (AssignResult.ErrNotAssignable, autoDelete, null);
+        }
+
+        var selfAssignedRoles = roles as SelfAssignableRole[] ?? roles.ToArray();
+        var theRoleYouWant = Array.Find<SelfAssignableRole>(selfAssignedRoles, r => r.RoleId == role.Id);
+
         if (theRoleYouWant == null)
             return (AssignResult.ErrNotAssignable, autoDelete, null);
-        if (theRoleYouWant.LevelRequirement > userLevelData.Level)
-            return (AssignResult.ErrLvlReq, autoDelete, theRoleYouWant.LevelRequirement);
-        if (guildUser.RoleIds.Contains(role.Id)) return (AssignResult.ErrAlreadyHave, autoDelete, null);
 
-        var roleIds = selfAssignedRoles
-            .Where(x => x.Group == theRoleYouWant.Group)
-            .Select(x => x.RoleId).ToArray();
+        if (guildUser.RoleIds.Contains(role.Id))
+            return (AssignResult.ErrAlreadyHave, autoDelete, null);
+
         if (exclusive)
         {
-            var sameRoles = guildUser.RoleIds
-                .Where(r => roleIds.Contains(r));
+            var roleIdsInGroup = selfAssignedRoles
+                .Where<SelfAssignableRole>(x => x.Group == theRoleYouWant.Group && x.RoleId != role.Id)
+                .Select(x => x.RoleId)
+                .ToHashSet();
 
-            foreach (var roleId in sameRoles)
+            var rolesToRemove = guildUser.RoleIds
+                .Where(userRoleId => roleIdsInGroup.Contains(userRoleId))
+                .Select(id => guildUser.Guild.GetRole(id))
+                .Where(r => r != null)
+                .ToList();
+
+            if (rolesToRemove.Any())
             {
-                var sameRole = guildUser.Guild.GetRole(roleId);
-                if (sameRole == null) continue;
-                try
-                {
-                    await guildUser.RemoveRoleAsync(sameRole).ConfigureAwait(false);
-                    await Task.Delay(300).ConfigureAwait(false);
-                }
-                catch
-                {
-                    // ignored
-                }
+                 try
+                 {
+                     await guildUser.RemoveRolesAsync(rolesToRemove).ConfigureAwait(false);
+                     await Task.Delay(300).ConfigureAwait(false);
+                 }
+                 catch (Exception ex)
+                 {
+                     Log.Warning(ex, "Error removing exclusive roles for SAR assignment for user {UserId}", guildUser.Id);
+                 }
             }
         }
 
@@ -168,7 +176,9 @@ public class SelfAssignedRolesService(DbContextProvider dbProvider) : INService
         }
         catch (Exception ex)
         {
-            return (AssignResult.ErrNotPerms, autoDelete, ex);
+            Log.Warning(ex, "Failed to add role {RoleId} to user {UserId}", role.Id, guildUser.Id);
+            extra = ex;
+            return (AssignResult.ErrNotPerms, autoDelete, extra);
         }
 
         return (AssignResult.Assigned, autoDelete, null);
@@ -187,32 +197,30 @@ public class SelfAssignedRolesService(DbContextProvider dbProvider) : INService
     public async Task<bool> SetNameAsync(ulong guildId, int group, string name)
     {
         var set = false;
+        await using var db = await dbFactory.CreateConnectionAsync();
 
-        await using var dbContext = await dbProvider.GetContextAsync();
-        var gc = await dbContext.ForGuildId(guildId, y => y.Include(x => x.SelfAssignableRoleGroupNames));
-        var toUpdate = gc.SelfAssignableRoleGroupNames.Find(x => x.Number == group);
+        var toUpdate = await db.GetTable<GroupName>()
+            .FirstOrDefaultAsync(x => x.GuildId == guildId && x.Number == group).ConfigureAwait(false);
 
         if (string.IsNullOrWhiteSpace(name))
         {
             if (toUpdate != null)
-                gc.SelfAssignableRoleGroupNames.Remove(toUpdate);
+                await db.DeleteAsync(toUpdate).ConfigureAwait(false);
         }
         else if (toUpdate == null)
         {
-            gc.SelfAssignableRoleGroupNames.Add(new GroupName
+            await db.InsertAsync(new GroupName
             {
-                Name = name, Number = group
-            });
+                GuildId = guildId, Name = name, Number = group
+            }).ConfigureAwait(false);
             set = true;
         }
         else
         {
             toUpdate.Name = name;
+            await db.UpdateAsync(toUpdate).ConfigureAwait(false);
             set = true;
         }
-
-        await dbContext.SaveChangesAsync().ConfigureAwait(false);
-
         return set;
     }
 
@@ -229,15 +237,19 @@ public class SelfAssignedRolesService(DbContextProvider dbProvider) : INService
     {
         var (autoDelete, _, roles) = await GetAdAndRoles(guildUser.Guild.Id);
 
-        if (roles.FirstOrDefault(r => r.RoleId == role.Id) == null)
+        if (roles == null || !roles.Any(r => r.RoleId == role.Id))
             return (RemoveResult.ErrNotAssignable, autoDelete);
-        if (!guildUser.RoleIds.Contains(role.Id)) return (RemoveResult.ErrNotHave, autoDelete);
+
+        if (!guildUser.RoleIds.Contains(role.Id))
+            return (RemoveResult.ErrNotHave, autoDelete);
+
         try
         {
             await guildUser.RemoveRoleAsync(role).ConfigureAwait(false);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            Log.Warning(ex, "Failed to remove role {RoleId} from user {UserId}", role.Id, guildUser.Id);
             return (RemoveResult.ErrNotPerms, autoDelete);
         }
 
@@ -255,11 +267,11 @@ public class SelfAssignedRolesService(DbContextProvider dbProvider) : INService
     /// </returns>
     public async Task<bool> RemoveSar(ulong guildId, ulong roleId)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
-        var success = await dbContext.SelfAssignableRoles.DeleteByGuildAndRoleId(guildId, roleId);
-        await dbContext.SaveChangesAsync().ConfigureAwait(false);
-
-        return success;
+        await using var db = await dbFactory.CreateConnectionAsync();
+        var deletedCount = await db.SelfAssignableRoles
+            .Where(x => x.GuildId == guildId && x.RoleId == roleId)
+            .DeleteAsync().ConfigureAwait(false);
+        return deletedCount > 0;
     }
 
     /// <summary>
@@ -269,15 +281,20 @@ public class SelfAssignedRolesService(DbContextProvider dbProvider) : INService
     /// <returns>
     ///     A task that represents the asynchronous operation and contains a tuple with a boolean indicating whether
     ///     auto-deletion is enabled, a boolean indicating whether exclusive self-assignable roles are enabled, and a
-    ///     collection of self-assignable roles.
+    ///     collection of self-assignable roles. Returns null for the roles collection if config not found.
     /// </returns>
-    public async Task<(bool AutoDelete, bool Exclusive, IEnumerable<SelfAssignedRole>)> GetAdAndRoles(ulong guildId)
+    public async Task<(bool AutoDelete, bool Exclusive, IEnumerable<SelfAssignableRole>? Roles)> GetAdAndRoles(ulong guildId)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
-        var gc = await dbContext.ForGuildId(guildId, set => set);
-        var roles = await dbContext.SelfAssignableRoles.GetFromGuild(guildId);
+        var config = await gss.GetGuildConfig(guildId);
+        if (config == null)
+            return (false, false, null); // Return default flags and null roles if config is missing
 
-        return (gc.AutoDeleteSelfAssignedRoleMessages, gc.ExclusiveSelfAssignedRoles, roles);
+        await using var db = await dbFactory.CreateConnectionAsync();
+        var roles = await db.SelfAssignableRoles
+            .Where(x => x.GuildId == guildId)
+            .ToListAsync().ConfigureAwait(false);
+
+        return (config.AutoDeleteSelfAssignedRoleMessages, config.ExclusiveSelfAssignedRoles, roles);
     }
 
     /// <summary>
@@ -292,20 +309,18 @@ public class SelfAssignedRolesService(DbContextProvider dbProvider) : INService
     /// </returns>
     public async Task<bool> SetLevelReq(ulong guildId, IRole role, int level)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
-        var roles = await dbContext.SelfAssignableRoles.GetFromGuild(guildId);
-        var sar = roles.FirstOrDefault(x => x.RoleId == role.Id);
+        await using var db = await dbFactory.CreateConnectionAsync();
+        var sar = await db.SelfAssignableRoles
+            .FirstOrDefaultAsync(x => x.GuildId == guildId && x.RoleId == role.Id).ConfigureAwait(false);
+
         if (sar != null)
         {
             sar.LevelRequirement = level;
-            await dbContext.SaveChangesAsync().ConfigureAwait(false);
-        }
-        else
-        {
-            return false;
+            await db.UpdateAsync(sar).ConfigureAwait(false);
+            return true;
         }
 
-        return true;
+        return false;
     }
 
     /// <summary>
@@ -318,10 +333,12 @@ public class SelfAssignedRolesService(DbContextProvider dbProvider) : INService
     /// </returns>
     public async Task<bool> ToggleEsar(ulong guildId)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
-        var config = await dbContext.ForGuildId(guildId, set => set);
+        var config = await gss.GetGuildConfig(guildId);
+        if (config == null) return false; // Or default, or throw
+
         config.ExclusiveSelfAssignedRoles = !config.ExclusiveSelfAssignedRoles;
-        await dbContext.SaveChangesAsync().ConfigureAwait(false);
+        await gss.UpdateGuildConfig(guildId, config);
+
         return config.ExclusiveSelfAssignedRoles;
     }
 
@@ -334,20 +351,48 @@ public class SelfAssignedRolesService(DbContextProvider dbProvider) : INService
     ///     exclusive self-assignable roles are enabled, a collection of tuples containing self-assignable role models and
     ///     their corresponding roles, and a dictionary mapping group numbers to their names.
     /// </returns>
-    public async
-        Task<(bool Exclusive, IEnumerable<(SelfAssignedRole Model, IRole Role)> Roles, IDictionary<int, string>
-            GroupNames)>
-        GetRoles(IGuild guild)
+    public async Task<(bool Exclusive, IEnumerable<(SelfAssignableRole Model, IRole Role)> Roles, IDictionary<int, string> GroupNames)> GetRoles(IGuild guild)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
-        var gc = await dbContext.ForGuildId(guild.Id, set => set.Include(x => x.SelfAssignableRoleGroupNames));
-        IDictionary<int, string> groupNames = gc.SelfAssignableRoleGroupNames.ToDictionary(x => x.Number, x => x.Name);
-        var roleModels = await dbContext.SelfAssignableRoles.GetFromGuild(guild.Id);
-        var roles = roleModels
-            .Select(x => (Model: x, Role: guild.GetRole(x.RoleId)));
-        dbContext.SelfAssignableRoles.RemoveRange(roles.Where(x => x.Role.Name == null).Select(x => x.Model).ToArray());
-        await dbContext.SaveChangesAsync().ConfigureAwait(false);
+        var config = await gss.GetGuildConfig(guild.Id);
+        var exclusive = config?.ExclusiveSelfAssignedRoles ?? false;
 
-        return (gc.ExclusiveSelfAssignedRoles, roles.Where(x => x.Role.Name != null), groupNames);
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        var groupNamesEntities = await db.GetTable<GroupName>()
+            .Where(x => x.GuildId == guild.Id)
+            .ToListAsync().ConfigureAwait(false);
+        var groupNames = groupNamesEntities.ToDictionary(x => x.Number, x => x.Name);
+
+        var roleModels = await db.SelfAssignableRoles
+            .Where(x => x.GuildId == guild.Id)
+            .ToListAsync().ConfigureAwait(false);
+
+        var rolesWithIRole = roleModels
+            .Select(x => (Model: x, Role: guild.GetRole(x.RoleId)))
+            .ToList(); // ToList to avoid multiple enumerations
+
+        var modelsToRemove = rolesWithIRole
+            .Where(x => x.Role == null) // Find models where the Discord role doesn't exist anymore
+            .Select(x => x.Model)
+            .ToList();
+
+        if (modelsToRemove.Any())
+        {
+            try
+            {
+                var idsToRemove = modelsToRemove.Select(m => m.Id).ToList();
+                await db.SelfAssignableRoles
+                    .Where(x => idsToRemove.Contains(x.Id))
+                    .DeleteAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                 Log.Error(ex, "Failed to remove non-existent roles from SelfAssignableRoles for Guild {GuildId}", guild.Id);
+            }
+        }
+
+        var validRoles = rolesWithIRole.Where(x => x.Role != null)!; // Filter out nulls after potential removal attempt
+
+        return (exclusive, validRoles, groupNames);
     }
 }

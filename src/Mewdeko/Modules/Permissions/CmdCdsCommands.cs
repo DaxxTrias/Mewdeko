@@ -1,12 +1,12 @@
 ﻿using Discord.Commands;
 using Humanizer;
+using LinqToDB;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Common.Collections;
 using Mewdeko.Common.TypeReaders;
 using Mewdeko.Common.TypeReaders.Models;
-using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.Permissions.Services;
-using Microsoft.EntityFrameworkCore;
+using DataModel;
 
 namespace Mewdeko.Modules.Permissions;
 
@@ -16,12 +16,11 @@ public partial class Permissions
     ///     Represents commands for managing command cooldowns.
     /// </summary>
     /// <param name="service">The command cooldown service</param>
-    /// <param name="db">The database service</param>
+    /// <param name="dbFactory">The database service</param>
     [Group]
     public class CmdCdsCommands(
         CmdCdService service,
-        DbContextProvider dbProvider,
-        GuildSettingsService settingsService)
+        IDataConnectionFactory dbFactory)
         : MewdekoSubmodule
     {
         private ConcurrentDictionary<ulong, ConcurrentHashSet<ActiveCooldown>> ActiveCooldowns
@@ -49,45 +48,52 @@ public partial class Permissions
         [Cmd]
         [Aliases]
         [RequireContext(ContextType.Guild)]
-        public async Task CmdCooldown(CommandOrCrInfo command, StoopidTime time = default)
+        public async Task CmdCooldown(CommandOrCrInfo command, StoopidTime? time = null)
         {
             time ??= StoopidTime.FromInput("0s");
             var channel = (ITextChannel)ctx.Channel;
+            var guildId = channel.Guild.Id;
+
             if (time.Time.TotalSeconds is < 0 or > 90000)
             {
-                await ReplyErrorAsync(Strings.InvalidSecondParamBetween(ctx.Guild.Id, 0, 90000)).ConfigureAwait(false);
+                await ReplyErrorAsync(Strings.InvalidSecondParamBetween(guildId, 0, 90000)).ConfigureAwait(false);
                 return;
             }
 
             var name = command.Name.ToLowerInvariant();
 
-            await using var dbContext = await dbProvider.GetContextAsync();
-            var gConfig = await settingsService.GetGuildConfig(channel.Guild.Id);
-            var config = await dbContext.ForGuildId(channel.Guild.Id, set => set.Include(gc => gc.CommandCooldowns));
+            await using var db = await dbFactory.CreateConnectionAsync();
 
-            var toDelete = config.CommandCooldowns.FirstOrDefault(cc => cc.CommandName == name);
-            if (toDelete != null)
-                dbContext.CommandCooldown.Remove(toDelete);
+            // Get existing cooldown with direct query
+            var existingCooldown = await db.CommandCooldowns
+                .FirstOrDefaultAsync(cc => cc.GuildId == guildId && cc.CommandName == name);
+
+            if (existingCooldown != null)
+                await db.CommandCooldowns
+                    .Where(cc => cc.Id == existingCooldown.Id)
+                    .DeleteAsync();
+
             if (time.Time.TotalSeconds != 0)
             {
-                var cc = new CommandCooldown
+                // Add new cooldown
+                await db.InsertAsync(new CommandCooldown
                 {
-                    CommandName = name, Seconds = Convert.ToInt32(time.Time.TotalSeconds)
-                };
-                config.CommandCooldowns.Add(cc);
-                await settingsService.UpdateGuildConfig(ctx.Guild.Id, gConfig).ConfigureAwait(false);
+                    GuildId = guildId,
+                    CommandName = name,
+                    Seconds = Convert.ToInt32(time.Time.TotalSeconds)
+                });
             }
 
             if (time.Time.TotalSeconds == 0)
             {
-                var activeCds = ActiveCooldowns.GetOrAdd(channel.Guild.Id, []);
+                var activeCds = ActiveCooldowns.GetOrAdd(guildId, []);
                 activeCds.RemoveWhere(ac => ac.Command == name);
-                await ReplyConfirmAsync(Strings.CmdcdCleared(ctx.Guild.Id,
+                await ReplyConfirmAsync(Strings.CmdcdCleared(guildId,
                     Format.Bold(name))).ConfigureAwait(false);
             }
             else
             {
-                await ReplyConfirmAsync(Strings.CmdcdAdd(ctx.Guild.Id,
+                await ReplyConfirmAsync(Strings.CmdcdAdd(guildId,
                     Format.Bold(name),
                     Format.Bold(time.Time.Humanize()))).ConfigureAwait(false);
             }
@@ -110,16 +116,23 @@ public partial class Permissions
         public async Task AllCmdCooldowns()
         {
             var channel = (ITextChannel)ctx.Channel;
-            var config = await settingsService.GetGuildConfig(channel.Guild.Id);
+            var guildId = channel.Guild.Id;
 
-            if (config.CommandCooldowns.Count == 0)
+            await using var db = await dbFactory.CreateConnectionAsync();
+
+            // Get cooldowns for this guild
+            var commandCooldowns = await db.CommandCooldowns
+                .Where(cc => cc.GuildId == guildId)
+                .ToListAsync();
+
+            if (commandCooldowns.Count == 0)
             {
-                await ReplyConfirmAsync(Strings.CmdcdNone(ctx.Guild.Id)).ConfigureAwait(false);
+                await ReplyConfirmAsync(Strings.CmdcdNone(guildId)).ConfigureAwait(false);
             }
             else
             {
                 await channel.SendTableAsync("",
-                        config.CommandCooldowns.Select(c => $"{c.CommandName}: {c.Seconds}{Strings.Sec(ctx.Guild.Id)}"),
+                        commandCooldowns.Select(c => $"{c.CommandName}: {c.Seconds}{Strings.Sec(guildId)}"),
                         s => $"{s,-30}", 2)
                     .ConfigureAwait(false);
             }

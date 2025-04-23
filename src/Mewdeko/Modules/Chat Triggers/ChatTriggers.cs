@@ -3,6 +3,7 @@ using Discord.Commands;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
 using Mewdeko.Common.Attributes.TextCommands;
+using Mewdeko.Modules.Chat_Triggers.Common;
 using Mewdeko.Modules.Chat_Triggers.Services;
 
 namespace Mewdeko.Modules.Chat_Triggers;

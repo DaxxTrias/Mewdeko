@@ -1,8 +1,8 @@
 using System.Net.Http;
 using System.Threading;
-using Mewdeko.Database.DbContextStuff;
+using LinqToDB;
+using DataModel;
 using Mewdeko.Modules.Nsfw.Common;
-using Microsoft.EntityFrameworkCore;
 using Serilog;
 
 namespace Mewdeko.Modules.Nsfw;
@@ -44,29 +44,26 @@ public record UrlReply
 public class SearchImagesService : ISearchImagesService, INService
 {
     private readonly SearchImageCacher cache;
-    private readonly DbContextProvider dbProvider;
-    private readonly HttpClient http;
+    private readonly IDataConnectionFactory dbFactory;
     private readonly GuildSettingsService service;
-
-    private readonly object taglock = new();
 
     /// <summary>
     ///     Initializes a new instance of the SearchImagesService class.
     /// </summary>
     /// <param name="http">The HTTP client factory for creating HttpClient instances.</param>
     /// <param name="cacher">The search image cacher.</param>
-    /// <param name="db">The database service.</param>
+    /// <param name="dbFactory">The database service.</param>
     /// <param name="service">The guild settings service.</param>
     public SearchImagesService(
         IHttpClientFactory http,
         SearchImageCacher cacher,
-        DbContextProvider dbProvider,
+        IDataConnectionFactory dbFactory,
         GuildSettingsService service)
     {
-        this.http = http.CreateClient();
-        this.http.AddFakeHeaders();
+        var http1 = http.CreateClient();
+        http1.AddFakeHeaders();
         cache = cacher;
-        this.dbProvider = dbProvider;
+        this.dbFactory = dbFactory;
         this.service = service;
     }
 
@@ -261,31 +258,36 @@ public class SearchImagesService : ISearchImagesService, INService
     /// </returns>
     public async ValueTask<bool> ToggleBlacklistTag(ulong guildId, string tag)
     {
-        var tagObj = new NsfwBlacklitedTag
+        var tagObj = new NsfwBlacklistedTag
         {
+            GuildId = guildId,
             Tag = tag
         };
 
         bool added;
 
-        await using var db = await dbProvider.GetContextAsync();
-        var gc = await db.ForGuildId(guildId, set => set.Include(y => y.NsfwBlacklistedTags));
-        if (gc.NsfwBlacklistedTags.Add(tagObj))
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        // Check if the tag already exists for this guild
+        var existing = await db.NsfwBlacklistedTags
+            .FirstOrDefaultAsync(x => x.GuildId == guildId && x.Tag == tag);
+
+        if (existing == null)
         {
+            // Tag doesn't exist, add it
+            await db.InsertAsync(tagObj);
             added = true;
         }
         else
         {
-            gc.NsfwBlacklistedTags.Remove(tagObj);
-            var toRemove = gc.NsfwBlacklistedTags.FirstOrDefault(x => x.Equals(tagObj));
-            if (toRemove != null)
-                db.Remove(toRemove);
+            // Tag exists, remove it
+            await db.NsfwBlacklistedTags
+                .Where(x => x.GuildId == guildId && x.Tag == tag)
+                .DeleteAsync();
             added = false;
         }
 
-        await service.UpdateGuildConfig(guildId, gc).ConfigureAwait(false);
-
-        return await new ValueTask<bool>(added);
+        return added;
     }
 
     /// <summary>
@@ -295,10 +297,14 @@ public class SearchImagesService : ISearchImagesService, INService
     /// <returns>A task representing the asynchronous operation, containing an array of blacklisted tags.</returns>
     public async ValueTask<string[]?> GetBlacklistedTags(ulong guildId)
     {
-        var config = await service.GetGuildConfig(guildId);
-        return config.NsfwBlacklistedTags.Count != 0
-            ? config.NsfwBlacklistedTags.Select(x => x.Tag).ToArray()
-            : [];
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        var tags = await db.NsfwBlacklistedTags
+            .Where(x => x.GuildId == guildId)
+            .Select(x => x.Tag)
+            .ToArrayAsync();
+
+        return tags.Length != 0 ? tags : [];
     }
 
     private Task<UrlReply?> GetNsfwImageAsync(ulong? guildId, bool forceExplicit, string[]? tags, Booru dapi,

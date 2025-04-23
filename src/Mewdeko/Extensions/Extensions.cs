@@ -9,6 +9,7 @@ using Fergun.Interactive;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Common.Configs;
 using Mewdeko.Common.TypeReaders;
+using Mewdeko.Database.EF.EFCore.GuildConfigs;
 using Mewdeko.Services.strings;
 using Microsoft.Extensions.DependencyInjection;
 using SkiaSharp;
@@ -381,6 +382,8 @@ public static partial class Extensions
     {
         var sb = new StringBuilder();
         var lastIndex = 0;
+        if (input is null)
+            return null;
 
         foreach (Match match in regex.Matches(input))
         {
@@ -464,7 +467,7 @@ public static partial class Extensions
     /// <returns>Full usage of the command.</returns>
     public static string GetFullUsage(string commandName, string args, string? prefix)
     {
-        return $"{prefix}{commandName} {(StringExtensions.TryFormat(args, [prefix], out var output) ? output : args)}";
+        return $"{prefix}{commandName} {(prefix != null && StringExtensions.TryFormat(args, [prefix], out var output) ? output : args)}";
     }
 
     /// <summary>
@@ -635,11 +638,16 @@ public static partial class Extensions
     /// <param name="bytes">Collection of bytes to convert.</param>
     /// <param name="canWrite">Boolean indicating if the stream can be written to (default is false).</param>
     /// <returns>Stream containing the bytes.</returns>
-    public static Stream ToStream(this IEnumerable<byte> bytes, bool canWrite = false)
+    public static Stream? ToStream(this IEnumerable<byte>? bytes, bool canWrite = false)
     {
-        var ms = new MemoryStream(bytes as byte[] ?? bytes.ToArray(), canWrite);
-        ms.Seek(0, SeekOrigin.Begin);
-        return ms;
+        if (bytes != null)
+        {
+            var ms = new MemoryStream(bytes as byte[] ?? bytes.ToArray(), canWrite);
+            ms.Seek(0, SeekOrigin.Begin);
+            return ms;
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -647,9 +655,9 @@ public static partial class Extensions
     /// </summary>
     /// <param name="user">User to get the roles for.</param>
     /// <returns>Enumerable collection of roles associated with the user.</returns>
-    public static IEnumerable<IRole> GetRoles(this IGuildUser user)
+    public static IEnumerable<IRole> GetRoles(this IGuildUser? user)
     {
-        return user.RoleIds.Select(r => user.Guild.GetRole(r)).Where(r => r != null);
+        return user?.RoleIds.Select(r => user.Guild.GetRole(r)).Where(r => r != null);
     }
 
     /// <summary>
@@ -671,7 +679,7 @@ public static partial class Extensions
     public static bool IsImage(this HttpResponseMessage msg, out string? mimeType)
     {
         if (msg.Content.Headers.ContentType != null) _ = msg.Content.Headers.ContentType.MediaType;
-        mimeType = msg.Content.Headers.ContentType.MediaType;
+        mimeType = msg.Content.Headers.ContentType?.MediaType;
         return mimeType is "image/png" or "image/jpeg" or "image/gif";
     }
 
@@ -707,14 +715,15 @@ public static partial class Extensions
         var sgs = command.Options.Where(x =>
             x.Type is ApplicationCommandOptionType.SubCommand or ApplicationCommandOptionType.SubCommandGroup);
 
-        if (!sgs.Any())
+        var applicationCommandOptions = sgs as IApplicationCommandOption[] ?? sgs.ToArray();
+        if (!applicationCommandOptions.Any())
             return
             [
                 baseName
             ];
 
         var ctNames = new List<string>();
-        foreach (var sg in sgs)
+        foreach (var sg in applicationCommandOptions)
             if (sg.Type == ApplicationCommandOptionType.SubCommand)
                 ctNames.Add(baseName + " " + sg.Name);
             else
@@ -751,8 +760,7 @@ public static partial class Extensions
                         + (sCmd.Data.Options?.FirstOrDefault()?.Options?.FirstOrDefault()?.Type
                            == ApplicationCommandOptionType.SubCommand
                             ? sCmd.Data.Options?.FirstOrDefault()?.Options?.FirstOrDefault()?.Name
-                            : "")
-                        ?? "").Trim();
+                            : "")).Trim();
             }
         }
     }

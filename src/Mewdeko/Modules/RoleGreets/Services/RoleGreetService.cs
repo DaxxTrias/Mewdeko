@@ -1,6 +1,6 @@
-﻿using Discord.Net;
+﻿using DataModel;
+using Discord.Net;
 using LinqToDB;
-using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.Utility.Services;
 using Serilog;
 
@@ -12,21 +12,21 @@ namespace Mewdeko.Modules.RoleGreets.Services;
 public class RoleGreetService : INService
 {
     private readonly DiscordShardedClient client;
-    private readonly DbContextProvider dbProvider;
+    private readonly IDataConnectionFactory dbFactory;
     private readonly InviteCountService inviteCountService;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="RoleGreetService"/> class.
     /// </summary>
-    /// <param name="dbProvider">The database context provider.</param>
+    /// <param name="dbFactory">The database context provider.</param>
     /// <param name="client">The Discord client.</param>
     /// <param name="eventHandler">The event handler for guild member update events.</param>
     /// <param name="inviteCountService">The invite count service</param>
-    public RoleGreetService(DbContextProvider dbProvider, DiscordShardedClient client, EventHandler eventHandler, InviteCountService inviteCountService)
+    public RoleGreetService(IDataConnectionFactory dbFactory, DiscordShardedClient client, EventHandler eventHandler, InviteCountService inviteCountService)
     {
         this.client = client;
         this.inviteCountService = inviteCountService;
-        this.dbProvider = dbProvider;
+        this.dbFactory = dbFactory;
         eventHandler.GuildMemberUpdated += DoRoleGreet;
     }
 
@@ -35,16 +35,22 @@ public class RoleGreetService : INService
     /// </summary>
     /// <param name="roleId">The unique identifier of the role.</param>
     /// <returns>An array of <see cref="RoleGreet"/> objects.</returns>
-    public async Task<RoleGreet[]> GetGreets(ulong roleId) =>
-        await WithMewdekoContext(db => db.RoleGreets.ForRoleId(roleId));
+    public async Task<RoleGreet[]> GetGreets(ulong roleId)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+        return await db.GetTable<RoleGreet>().Where(x => x.RoleId == roleId).ToArrayAsync();
+    }
 
     /// <summary>
     /// Retrieves a list of <see cref="RoleGreet"/> configurations for a specific guild.
     /// </summary>
     /// <param name="guildId">The unique identifier of the guild.</param>
     /// <returns>An array of <see cref="RoleGreet"/> objects if any are found; otherwise, an empty array.</returns>
-    public async Task<RoleGreet[]> GetListGreets(ulong guildId) =>
-        await WithMewdekoContext(db => db.RoleGreets.Where(x => x.GuildId == guildId).ToArrayAsync());
+    public async Task<RoleGreet[]> GetListGreets(ulong guildId)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+        return await db.GetTable<RoleGreet>().Where(x => x.GuildId == guildId).ToArrayAsync();
+    }
 
     /// <summary>
     /// Adds a new role greet configuration.
@@ -58,16 +64,16 @@ public class RoleGreetService : INService
         if ((await GetGreets(roleId)).Length == 10)
             return false;
 
-        return await WithMewdekoContextNoReturn(db =>
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        await db.InsertAsync(new RoleGreet
         {
-            db.RoleGreets.Add(new RoleGreet
-            {
-                ChannelId = channelId,
-                GuildId = guildId,
-                RoleId = roleId
-            });
-            return db.SaveChangesAsync();
+            ChannelId = channelId,
+            GuildId = guildId,
+            RoleId = roleId
         });
+
+        return true;
     }
 
     /// <summary>
@@ -75,62 +81,90 @@ public class RoleGreetService : INService
     /// </summary>
     /// <param name="greet">The role greet configuration to update.</param>
     /// <param name="code">The new message content.</param>
-    public async Task ChangeMgMessage(RoleGreet greet, string code) =>
-        await UpdateRoleGreet(greet, rg => rg.Message = code);
+    public async Task ChangeMgMessage(RoleGreet greet, string code)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        greet.Message = code;
+        await db.UpdateAsync(greet);
+    }
 
     /// <summary>
     /// Enables or disables a role greet configuration.
     /// </summary>
     /// <param name="greet">The role greet configuration to update.</param>
     /// <param name="disabled">Specifies whether the greet should be disabled.</param>
-    public async Task RoleGreetDisable(RoleGreet greet, bool disabled) =>
-        await UpdateRoleGreet(greet, rg => rg.Disabled = disabled);
+    public async Task RoleGreetDisable(RoleGreet greet, bool disabled)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        greet.Disabled = disabled;
+        await db.UpdateAsync(greet);
+    }
 
     /// <summary>
     /// Updates the deletion time for messages sent by a role greet configuration.
     /// </summary>
     /// <param name="greet">The role greet configuration to update.</param>
     /// <param name="howlong">The time in seconds after which the greet message should be deleted.</param>
-    public async Task ChangeRgDelete(RoleGreet greet, int howlong) =>
-        await UpdateRoleGreet(greet, rg => rg.DeleteTime = howlong);
+    public async Task ChangeRgDelete(RoleGreet greet, int howlong)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        greet.DeleteTime = howlong;
+        await db.UpdateAsync(greet);
+    }
 
     /// <summary>
     /// Updates the webhook URL of a role greet configuration.
     /// </summary>
     /// <param name="greet">The role greet configuration to update.</param>
     /// <param name="webhookurl">The new webhook URL.</param>
-    public async Task ChangeMgWebhook(RoleGreet greet, string webhookurl) =>
-        await UpdateRoleGreet(greet, rg => rg.WebhookUrl = webhookurl);
+    public async Task ChangeMgWebhook(RoleGreet greet, string webhookurl)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        greet.WebhookUrl = webhookurl;
+        await db.UpdateAsync(greet);
+    }
 
     /// <summary>
     /// Enables or disables greeting bots for a role greet configuration.
     /// </summary>
     /// <param name="greet">The role greet configuration to update.</param>
     /// <param name="enabled">Specifies whether bots should be greeted.</param>
-    public async Task ChangeRgGb(RoleGreet greet, bool enabled) =>
-        await UpdateRoleGreet(greet, rg => rg.GreetBots = enabled);
+    public async Task ChangeRgGb(RoleGreet greet, bool enabled)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        greet.GreetBots = enabled;
+        await db.UpdateAsync(greet);
+    }
 
     /// <summary>
     /// Removes a specific role greet configuration.
     /// </summary>
     /// <param name="greet">The role greet configuration to remove.</param>
-    public async Task RemoveRoleGreetInternal(RoleGreet greet) =>
-        await WithMewdekoContextNoReturn(db =>
-        {
-            db.RoleGreets.Remove(greet);
-            return db.SaveChangesAsync();
-        });
+    public async Task RemoveRoleGreetInternal(RoleGreet greet)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        await db.DeleteAsync(greet);
+    }
 
     /// <summary>
     /// Removes multiple role greet configurations.
     /// </summary>
     /// <param name="greets">An array of role greet configurations to remove.</param>
-    public async Task MultiRemoveRoleGreetInternal(RoleGreet[] greets) =>
-        await WithMewdekoContextNoReturn(db =>
+    public async Task MultiRemoveRoleGreetInternal(RoleGreet[] greets)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        foreach (var greet in greets)
         {
-            db.RoleGreets.RemoveRange(greets);
-            return db.SaveChangesAsync();
-        });
+            await db.DeleteAsync(greet);
+        }
+    }
 
     private async Task DoRoleGreet(Cacheable<SocketGuildUser, ulong> cacheable, SocketGuildUser socketGuildUser)
     {
@@ -251,25 +285,4 @@ public class RoleGreetService : INService
             return await webhook.SendMessageAsync(content);
         }
     }
-
-    private async Task<T> WithMewdekoContext<T>(Func<MewdekoContext, Task<T>> action)
-    {
-        await using var mewdekoContext = await dbProvider.GetContextAsync();
-        return await action(mewdekoContext);
-    }
-
-    private async Task<bool> WithMewdekoContextNoReturn(Func<MewdekoContext, Task> action)
-    {
-        await using var mewdekoContext = await dbProvider.GetContextAsync();
-        await action(mewdekoContext);
-        return true;
-    }
-
-    private async Task UpdateRoleGreet(RoleGreet greet, Action<RoleGreet> updateAction) =>
-        await WithMewdekoContextNoReturn(db =>
-        {
-            updateAction(greet);
-            db.RoleGreets.Update(greet);
-            return db.SaveChangesAsync();
-        });
 }

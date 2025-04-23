@@ -145,7 +145,7 @@ public abstract class MewdekoModule : ModuleBase
     ///     A task representing the asynchronous operation, containing a boolean indicating the result of the hierarchy
     ///     check.
     /// </returns>
-    public async Task<bool> CheckRoleHierarchy(IGuildUser target, bool displayError = true)
+    public async Task<bool> CheckRoleHierarchy(IGuildUser? target, bool displayError = true)
     {
         var curUser = await ctx.Guild.GetCurrentUserAsync().ConfigureAwait(false);
         var ownerId = Context.Guild.OwnerId;

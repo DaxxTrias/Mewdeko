@@ -24,6 +24,7 @@ public partial class Games
         /// <param name="client">The discord client</param>
         /// <param name="games">The games service for fetching configs</param>
         /// <param name="guildSettings">The guild settings service</param>
+        /// <param name="handler">Async Event handler because again, discord sucks.</param>
         public SpeedTypingCommands(DiscordShardedClient client, GamesService games,
             GuildSettingsService guildSettings, EventHandler handler)
         {

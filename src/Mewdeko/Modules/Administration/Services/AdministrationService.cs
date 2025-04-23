@@ -1,6 +1,6 @@
-﻿using Discord.Commands;
-using Mewdeko.Database.DbContextStuff;
-using Microsoft.EntityFrameworkCore;
+﻿using DataModel;
+using Discord.Commands;
+using LinqToDB;
 
 namespace Mewdeko.Modules.Administration.Services;
 
@@ -9,28 +9,22 @@ namespace Mewdeko.Modules.Administration.Services;
 /// </summary>
 public class AdministrationService : INService
 {
-    private readonly DbContextProvider dbProvider;
+    private readonly IDataConnectionFactory dbFactory;
     private readonly GuildSettingsService guildSettings;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="AdministrationService" /> class with the specified dependencies.
     /// </summary>
     /// <param name="cmdHandler">The command handler.</param>
-    /// <param name="db">The database service.</param>
+    /// <param name="dbFactory">The database service.</param>
     /// <param name="guildSettings">The guild settings service.</param>
     /// <param name="bot">The bot instance.</param>
-    public AdministrationService(CommandHandler cmdHandler, DbContextProvider dbProvider,
-        GuildSettingsService guildSettings, Mewdeko bot)
+    public AdministrationService(CommandHandler cmdHandler,
+        GuildSettingsService guildSettings, Mewdeko bot, IDataConnectionFactory dbFactory)
     {
-        // Get all guild configurations from the bot
-
-
-        // Create a new database context
-
-
         // Assign the database service and guild settings service
-        this.dbProvider = dbProvider;
         this.guildSettings = guildSettings;
+        this.dbFactory = dbFactory;
 
         // Subscribe to the CommandExecuted event of the command handler
         cmdHandler.CommandExecuted += DelMsgOnCmd_Handler;
@@ -45,9 +39,9 @@ public class AdministrationService : INService
     public async Task StaffRoleSet(IGuild guild, ulong role)
     {
         // Create a new database context
-        await using var db = await dbProvider.GetContextAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
         // Get the guild configuration for the given guild ID
-        var gc = await db.ForGuildId(guild.Id, set => set);
+        var gc = await guildSettings.GetGuildConfig(guild.Id);
 
         // Set the staff role
         gc.StaffRole = role;
@@ -64,11 +58,7 @@ public class AdministrationService : INService
     public async Task<bool> ToggleOptOut(IGuild guild)
     {
         // Create a new database context
-
-
-        // Get the guild configuration for the given guild ID
-        await using var db = await dbProvider.GetContextAsync();
-        var gc = await db.ForGuildId(guild.Id, set => set);
+        var gc = await guildSettings.GetGuildConfig(guild.Id);
 
         // Toggle the opt-out status
         gc.StatsOptOut = !gc.StatsOptOut;
@@ -88,12 +78,11 @@ public class AdministrationService : INService
     /// <returns>A boolean indicating whether any data was deleted.</returns>
     public async Task<bool> DeleteStatsData(IGuild guild)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
-        var toRemove = dbContext.CommandStats.Where(x => x.GuildId == guild.Id).AsEnumerable();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
+        var toRemove = dbContext.CommandStats.Where(x => x.GuildId == guild.Id);
         if (!toRemove.Any())
             return false;
-        dbContext.CommandStats.RemoveRange(toRemove);
-        await dbContext.SaveChangesAsync();
+        await toRemove.DeleteAsync();
         return true;
     }
 
@@ -104,8 +93,7 @@ public class AdministrationService : INService
     /// <param name="role">The role to set as the member role.</param>
     public async Task MemberRoleSet(IGuild guild, ulong role)
     {
-        await using var db = await dbProvider.GetContextAsync();
-        var gc = await db.ForGuildId(guild.Id, set => set);
+        var gc = await guildSettings.GetGuildConfig(guild.Id);
         gc.MemberRole = role;
         await guildSettings.UpdateGuildConfig(guild.Id, gc);
     }
@@ -137,11 +125,11 @@ public class AdministrationService : INService
     /// <returns>A tuple containing a boolean indicating the DeleteMessageOnCommand status and a collection of channels.</returns>
     public async Task<(bool DelMsgOnCmd, IEnumerable<DelMsgOnCmdChannel> channels)> GetDelMsgOnCmdData(ulong guildId)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
-        var conf = await dbContext.ForGuildId(guildId,
-            set => set.Include(x => x.DelMsgOnCmdChannels));
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
+        var conf = await guildSettings.GetGuildConfig(guildId);
+        var dconf = dbContext.DelMsgOnCmdChannels.Where(x => x.GuildId == guildId);
 
-        return (conf.DeleteMessageOnCommand, conf.DelMsgOnCmdChannels);
+        return (conf.DeleteMessageOnCommand, dconf);
     }
 
     /// <summary>
@@ -154,9 +142,10 @@ public class AdministrationService : INService
     {
         if (msg.Channel is not ITextChannel channel)
             return;
-        var config = await guildSettings.GetGuildConfig(channel.Guild.Id);
+        await using var db = await dbFactory.CreateConnectionAsync();
+        var conf = await guildSettings.GetGuildConfig(channel.GuildId);
 
-        var exists = config.DelMsgOnCmdChannels.FirstOrDefault(x => x.ChannelId == channel.Id);
+        var exists = await db.DelMsgOnCmdChannels.FirstOrDefaultAsync(x => x.ChannelId == channel.Id);
         if (exists is not null)
         {
             // If the state is true and the command is not 'Purge' or 'pick', delete the message
@@ -172,8 +161,7 @@ public class AdministrationService : INService
                 }
             }
         }
-        else if (config.DeleteMessageOnCommand && cmd.Name != "Purge" &&
-                 cmd.Name != "pick")
+        else if (conf.DeleteMessageOnCommand && cmd.Name != "Purge")
         {
             try
             {
@@ -193,8 +181,7 @@ public class AdministrationService : INService
     /// <returns>A boolean indicating the new state of the DeleteMessageOnCommand setting.</returns>
     public async Task<bool> ToggleDeleteMessageOnCommand(ulong guildId)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
-        var conf = await dbContext.ForGuildId(guildId, set => set);
+        var conf = await guildSettings.GetGuildConfig(guildId);
 
         // Toggle the value using a ternary operator
         conf.DeleteMessageOnCommand = !conf.DeleteMessageOnCommand;
@@ -214,42 +201,34 @@ public class AdministrationService : INService
     /// <returns>A task that represents the asynchronous operation.</returns>
     public async Task SetDelMsgOnCmdState(ulong guildId, ulong chId, Administration.State newState)
     {
-        // Create a new database context
+        await using var db = await dbFactory.CreateConnectionAsync();
+        var settingsTable = db.DelMsgOnCmdChannels;
 
-        await using var dbContext = await dbProvider.GetContextAsync();
-        // Get the guild configuration for the given guild ID, including the DeleteMessageOnCommand channels
-        var conf = await dbContext.ForGuildId(guildId,
-            set => set.Include(x => x.DelMsgOnCmdChannels));
-
-        // Get the existing state for the channel, if any
-        var old = conf.DelMsgOnCmdChannels.FirstOrDefault(x => x.ChannelId == chId);
-
-        // If the new state is 'Inherit', remove the existing state if it exists
         if (newState == Administration.State.Inherit)
         {
-            if (old != null)
-            {
-                conf.DelMsgOnCmdChannels.Remove(old);
-                dbContext.Remove(old);
-            }
+            await settingsTable
+                .Where(x => x.GuildId == guildId && x.ChannelId == chId)
+                .DeleteAsync();
         }
         else
         {
-            // If there is no existing state, create a new one
-            if (old == null)
+            var targetState = newState == Administration.State.Enable;
+
+            var updatedRows = await settingsTable
+                .Where(x => x.GuildId == guildId && x.ChannelId == chId)
+                .Set(x => x.State, targetState)
+                .UpdateAsync();
+
+            if (updatedRows == 0)
             {
-                old = new DelMsgOnCmdChannel
+                await db.InsertAsync(new DelMsgOnCmdChannel
                 {
-                    ChannelId = chId
-                };
-                conf.DelMsgOnCmdChannels.Add(old);
+                    GuildId = guildId,
+                    ChannelId = chId,
+                    State = targetState
+                });
             }
-
-            // Set the new state
-            old.State = newState == Administration.State.Enable;
         }
-
-        await guildSettings.UpdateGuildConfig(guildId, conf);
     }
 
 

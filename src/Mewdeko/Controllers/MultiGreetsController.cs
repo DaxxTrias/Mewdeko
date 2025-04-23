@@ -261,7 +261,7 @@ public class MultiGreetController : Controller
         return Ok(type);
     }
 
-    private static async Task<Stream> GetAvatarStream(string url)
+    private static async Task<Stream?> GetAvatarStream(string url)
     {
         using var http = new HttpClient();
         var response = await http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);

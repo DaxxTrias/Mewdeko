@@ -1,4 +1,4 @@
-﻿using Discord.Commands;
+﻿/*using Discord.Commands;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Modules.Tickets.Services;
 using System.Text.Json;
@@ -689,4 +689,4 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
     }
 
 
-}
+}*/

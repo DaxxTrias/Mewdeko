@@ -1,652 +1,741 @@
-﻿using System.Reflection;
 using System.Text;
 using Discord.Commands;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
+using Humanizer;
 using Mewdeko.Common.Attributes.TextCommands;
-using Mewdeko.Database.DbContextStuff;
-using Mewdeko.Modules.Xp.Common;
+using Mewdeko.Common.TypeReaders.Models;
+using Mewdeko.Database.EF.EFCore.Enums;
+using Mewdeko.Modules.Xp.Models;
 using Mewdeko.Modules.Xp.Services;
-using Mewdeko.Services.Settings;
+using Mewdeko.Modules.Currency.Services;
+using Serilog;
+using XpCurveType = Mewdeko.Database.EF.EFCore.Enums.XpCurveType;
 
 namespace Mewdeko.Modules.Xp;
 
 /// <summary>
-///     Represents the XP module of the bot, handling various XP-related commands and configurations.
+///     Module for managing XP system functionality.
 /// </summary>
-/// <param name="tracker">A service for tracking downloads.</param>
-/// <param name="xpconfig">A service for managing XP configuration settings.</param>
-/// <param name="serv">An interactive service for creating interactive prompts and pagination.</param>
-/// <param name="bss">A service for accessing and managing bot configurations.</param>
-/// <param name="db">A service for interacting with the database.</param>
-/// <remarks>
-///     The XP module includes commands for setting up XP earning rates, managing XP roles and rewards,
-///     adjusting notification settings, excluding users/roles/channels from earning XP, and more.
-/// </remarks>
-public partial class Xp(
-    DownloadTracker tracker,
-    XpConfigService xpconfig,
-    InteractiveService serv,
-    BotConfigService bss,
-    DbContextProvider dbProvider)
-    : MewdekoModuleBase<XpService>
+public class Xp(InteractiveService serv, ICurrencyService currencyService) : MewdekoModuleBase<XpService>
 {
     /// <summary>
-    ///     Enumerates the possible channels within the context of the XP module.
+    ///     Shows a user's XP card with their rank, level, and progress.
     /// </summary>
-    public enum Channel
+    /// <param name="user">The user to show the XP card for. If not specified, shows the caller's card.</param>
+    /// <example>.rank</example>
+    /// <example>.rank @user</example>
+    [Cmd, Aliases]
+    public async Task Rank([Remainder] IGuildUser? user = null)
     {
-        /// <summary>
-        ///     Represents a channel.
-        /// </summary>
-        Channel
-    }
+        user ??= (IGuildUser)ctx.User;
 
-    /// <summary>
-    ///     Enumerates the places where notifications can be set within the XP module.
-    /// </summary>
-    public enum NotifyPlace
-    {
-        /// <summary>
-        ///     Represents the server context for notifications.
-        /// </summary>
-        Server = 0,
-
-        /// <summary>
-        ///     Represents the guild context for notifications.
-        /// </summary>
-        Guild = 0,
-
-        /// <summary>
-        ///     Represents the global context for notifications.
-        /// </summary>
-        Global = 1
-    }
-
-    /// <summary>
-    ///     Enumerates the possible roles within the XP module.
-    /// </summary>
-    public enum Role
-    {
-        /// <summary>
-        ///     Represents a role.
-        /// </summary>
-        Role
-    }
-
-    /// <summary>
-    ///     Enumerates the possible servers within the XP module.
-    /// </summary>
-    public enum Server
-    {
-        /// <summary>
-        ///     Represents a server.
-        /// </summary>
-        Server
-    }
-
-    private async Task SendXpSettings(ITextChannel chan)
-    {
-        var list = new List<XpStuffs>
+        // Prevent showing ranks for bots
+        if (user.IsBot)
         {
-            CreateXpStuffs("xptextrate", await Service.GetTxtXpRate(ctx.Guild.Id), xpconfig.Data.XpPerMessage),
-            CreateXpStuffs("voicexprate", await Service.GetVoiceXpRate(ctx.Guild.Id), xpconfig.Data.VoiceXpPerMinute),
-            CreateXpStuffs("txtxptimeout", await Service.GetXpTimeout(ctx.Guild.Id), xpconfig.Data.MessageXpCooldown),
-            CreateXpStuffs("voiceminutestimeout", await Service.GetVoiceXpTimeout(ctx.Guild.Id),
-                xpconfig.Data.VoiceMaxMinutes)
-        };
-
-        var strings = list.Select(i => $"{i.Setting,-25} = {i.Value}\n").ToList();
-        await chan.SendConfirmAsync(Format.Code(string.Concat(strings), "hs")).ConfigureAwait(false);
-    }
-
-    private static XpStuffs CreateXpStuffs(string settingName, double xpRate, double defaultValue)
-    {
-        var settingValue = xpRate == 0
-            ? $"{defaultValue} (Global Default)"
-            : $"{xpRate} (Server Set)";
-
-        return new XpStuffs
-        {
-            Setting = settingName, Value = settingValue
-        };
-    }
-
-    /// <summary>
-    ///     Sets the XP image for the server.
-    /// </summary>
-    /// <param name="url">
-    ///     The URL of the image to set as the XP image. If null, the method attempts to use an attachment from
-    ///     the message.
-    /// </param>
-    /// <returns>A task that represents the asynchronous operation of setting the XP image.</returns>
-    /// <remarks>
-    ///     This command allows server administrators to set a custom image that is displayed in XP-related messages.
-    ///     If a URL is not provided, the command looks for an image attachment in the message.
-    /// </remarks>
-    [Cmd]
-    [Aliases]
-    [RequireContext(ContextType.Guild)]
-    [UserPerm(GuildPermission.ManageGuild)]
-    public async Task SetXpImage(string url = null)
-    {
-        if (url is null)
-        {
-            var attachments = Context.Message.Attachments;
-            if (attachments.Count != 0)
-            {
-                var attachment = attachments.FirstOrDefault();
-                if (attachment != null)
-                {
-                    url = attachment.Url;
-                }
-            }
-            else
-            {
-                await ctx.Channel.SendErrorAsync(Strings.ProvideValidUrl(ctx.Guild.Id), Config);
-                return;
-            }
-        }
-
-        var (reason, success) = await XpService.ValidateImageUrl(url);
-
-        if (!success)
-        {
-            await ctx.Channel.SendErrorAsync(reason, Config).ConfigureAwait(false);
+            await ReplyErrorAsync(Strings.XpBotsNoRank(ctx.Guild.Id)).ConfigureAwait(false);
             return;
         }
 
-        await Service.SetImageUrl(Context.Guild.Id, url);
-        await ctx.Channel.SendConfirmAsync(Strings.XpImageSet(ctx.Guild.Id));
-    }
-
-    /// <summary>
-    ///     Synchronizes the role rewards for the user based on their current XP level.
-    /// </summary>
-    /// <returns>A task that represents the asynchronous operation of syncing XP role rewards.</returns>
-    /// <remarks>
-    ///     This command checks the user's current XP level and applies any role rewards they should have based on that level.
-    ///     It's useful for ensuring users have all the roles they are entitled to according to their XP level.
-    /// </remarks>
-    [Cmd]
-    [Aliases]
-    [RequireContext(ContextType.Guild)]
-    [Ratelimit(60)]
-    public async Task SyncRewards()
-    {
-        var user = ctx.User as IGuildUser;
-        var userStats = await Service.GetUserStatsAsync(user);
-        var perks = await Service.GetRoleRewards(ctx.Guild.Id);
-        if (!perks.Any(x => x.Level <= userStats.Guild.Level))
-        {
-            await ctx.Channel.SendErrorAsync(
-                $"{bss.Data.ErrorEmote} There are no rewards configured in this guild, or you do not meet the requirements for them!",
-                Config);
-            return;
-        }
-
-        perks = perks.Where(x => x.Level <= userStats.Guild.Level);
-        var msg = await ctx.Channel.SendConfirmAsync(
-            $"{bss.Data.LoadingEmote} Attempting to sync {perks.Count()} xp perks...");
-        var successCouunt = 0;
-        var failedCount = 0;
-        var existingCount = 0;
-        foreach (var i in perks.Where(x => x.Level <= userStats.Guild.Level))
-        {
-            if (user.RoleIds.Contains(i.RoleId))
-            {
-                existingCount++;
-                continue;
-            }
-
-            try
-            {
-                await user.AddRoleAsync(i.RoleId);
-                successCouunt++;
-            }
-            catch
-            {
-                failedCount++;
-            }
-        }
-
-        if (existingCount == perks.Count())
-            await msg.ModifyAsync(x =>
-            {
-                x.Embed = new EmbedBuilder()
-                    .WithErrorColor()
-                    .WithDescription(
-                        $"{bss.Data.ErrorEmote} Failed to sync {perks.Count()} because they are all already applied.")
-                    .Build();
-            });
-        if (failedCount > 0)
-            await msg.ModifyAsync(x =>
-            {
-                x.Embed = new EmbedBuilder()
-                    .WithErrorColor()
-                    .WithDescription(
-                        $"{bss.Data.ErrorEmote} Synced {successCouunt} role perks and failed to sync {failedCount} role perks. Please make sure the bot is above the roles to sync.")
-                    .Build();
-            });
-        else
-            await msg.ModifyAsync(x =>
-            {
-                x.Embed = new EmbedBuilder()
-                    .WithOkColor()
-                    .WithDescription(
-                        $"{bss.Data.SuccessEmote} Succesfully synced {successCouunt} role perks and skipped {existingCount} already applied role perks!!")
-                    .Build();
-            });
-    }
-
-    /// <summary>
-    ///     Updates XP settings for the server or displays the current settings if no parameters are specified.
-    /// </summary>
-    /// <param name="setting">The setting to update. Can be null to display current settings.</param>
-    /// <param name="value">The new value for the setting. Use 999999999 as a default placeholder to indicate no change.</param>
-    /// <returns>A task that represents the asynchronous operation of updating or displaying XP settings.</returns>
-    /// <remarks>
-    ///     This command allows for the adjustment of various XP-related settings, such as the rate at which XP is earned.
-    ///     If no parameters are specified, it displays the current XP settings for the server.
-    /// </remarks>
-    [Cmd]
-    [Aliases]
-    [RequireContext(ContextType.Guild)]
-    [UserPerm(GuildPermission.ManageGuild)]
-    public async Task XpSetting(string? setting = null, int value = 999999999)
-    {
-        if (value < 0) return;
-        if (setting is null)
-        {
-            await SendXpSettings(ctx.Channel as ITextChannel).ConfigureAwait(false);
-            return;
-        }
-
-        if (setting != null && setting.ToLower() == "xptextrate")
-        {
-            if (value is not 999999999 and not 0)
-            {
-                await Service.XpTxtRateSet(ctx.Guild, value).ConfigureAwait(false);
-                await ctx.Channel.SendConfirmAsync($"Users will now recieve {value} xp per message.")
-                    .ConfigureAwait(false);
-            }
-
-            if (value is 999999999 or 0)
-            {
-                await Service.XpTxtRateSet(ctx.Guild, 0).ConfigureAwait(false);
-                await ctx.Channel.SendConfirmAsync(Strings.XpPerMessageDefault(ctx.Guild.Id));
-            }
-
-            return;
-        }
-
-        if (setting != null && setting.ToLower() == "txtxptimeout")
-        {
-            if (value is not 999999999 and not 0)
-            {
-                await Service.XpTxtTimeoutSet(ctx.Guild, value).ConfigureAwait(false);
-                await ctx.Channel.SendConfirmAsync($"Message XP will be given every {value} minutes.")
-                    .ConfigureAwait(false);
-            }
-
-            if (value is 999999999 or 0)
-            {
-                await Service.XpTxtTimeoutSet(ctx.Guild, 0).ConfigureAwait(false);
-                await ctx.Channel.SendConfirmAsync(Strings.XpTimeoutDefault(ctx.Guild.Id));
-
-            }
-
-            return;
-        }
-
-        if (setting != null && setting.ToLower() == "xpvoicerate")
-        {
-            if (value is not 999999999 and not 0)
-            {
-                await Service.XpVoiceRateSet(ctx.Guild, value).ConfigureAwait(false);
-                await ctx.Channel.SendConfirmAsync(
-                        $"Users will now recieve {value} every minute they are in voice. Make sure to set voiceminutestimeout or this is usless.")
-                    .ConfigureAwait(false);
-            }
-
-            if (value is 999999999 or 0)
-            {
-                await Service.XpVoiceRateSet(ctx.Guild, 0).ConfigureAwait(false);
-                await Service.XpVoiceTimeoutSet(ctx.Guild, 0).ConfigureAwait(false);
-                await ctx.Channel.SendConfirmAsync(Strings.VoiceXpDisabled(ctx.Guild.Id));
-            }
-
-            return;
-        }
-
-        if (setting != null && setting.ToLower() == "voiceminutestimeout")
-        {
-            if (value is not 999999999 and not 0)
-            {
-                await Service.XpVoiceTimeoutSet(ctx.Guild, value).ConfigureAwait(false);
-                await ctx.Channel.SendConfirmAsync(
-                        $"XP will now stop being given in vc after {value} minutes. Make sure to set voicexprate or this is useless.")
-                    .ConfigureAwait(false);
-            }
-
-            if (value is 999999999 or 0)
-            {
-                await Service.XpVoiceRateSet(ctx.Guild, 0).ConfigureAwait(false);
-                await Service.XpVoiceTimeoutSet(ctx.Guild, 0).ConfigureAwait(false);
-                await ctx.Channel.SendConfirmAsync(Strings.VoiceXpDisabled(ctx.Guild.Id));
-            }
-        }
-        else
-        {
-            await ctx.Channel.SendErrorAsync(
-                    "The setting name you provided does not exist! The available settings and their descriptions:\n\n" +
-                    "`xptextrate`: Alows you to set the xp per message rate.\n" +
-                    "`txtxptimeout`: Allows you to set after how many minutes xp is given so users cant spam for xp.\n" +
-                    "`xpvoicerate`: Allows you to set how much xp a person gets in vc per minute.\n" +
-                    "`voiceminutestimeout`: Allows you to set the maximum time a user can remain in vc while gaining xp.",
-                    Config)
-                .ConfigureAwait(false);
-        }
-    }
-
-    /// <summary>
-    ///     Generates and sends an XP image for a specified user.
-    /// </summary>
-    /// <param name="user">
-    ///     The user for whom to generate the XP image. If null, the XP image is generated for the command
-    ///     invoker.
-    /// </param>
-    /// <returns>A task that represents the asynchronous operation of generating and sending the XP image.</returns>
-    /// <remarks>
-    ///     This command creates an image displaying the user's current XP level and other related information,
-    ///     then sends this image to the channel where the command was invoked.
-    /// </remarks>
-    [Cmd]
-    [Aliases]
-    [RequireContext(ContextType.Guild)]
-    public async Task Experience([Remainder] IGuildUser? user = null)
-    {
         try
         {
-            user ??= ctx.User as IGuildUser;
-            await ctx.Channel.TriggerTypingAsync().ConfigureAwait(false);
-            var output = await Service.GenerateXpImageAsync(user).ConfigureAwait(false);
-            await using var disposable = output.ConfigureAwait(false);
-            await ctx.Channel.SendFileAsync(output,
-                    $"{ctx.Guild.Id}_{user.Id}_xp.png")
-                .ConfigureAwait(false);
-            await output.DisposeAsync().ConfigureAwait(false);
+            var stats = await Service.GetUserXpStatsAsync(ctx.Guild.Id, user.Id);
+
+            // Check if user has any XP
+            if (stats.TotalXp == 0 && user.Id == ctx.User.Id)
+            {
+                await ReplyErrorAsync(Strings.XpYouNoXp(ctx.Guild.Id)).ConfigureAwait(false);
+                return;
+            }
+            else if (stats.TotalXp == 0)
+            {
+                await ReplyErrorAsync(Strings.XpUserNoXp(ctx.Guild.Id, user.ToString())).ConfigureAwait(false);
+                return;
+            }
+
+            // Generate XP card
+            var cardPath = await Service.GenerateXpCardAsync(ctx.Guild.Id, user.Id);
+            await ctx.Channel.SendFileAsync(cardPath, "xp.png", Strings.XpCardFor(ctx.Guild.Id, user.ToString()));
         }
-        catch (Exception e)
+        catch (Exception ex)
         {
-            Console.WriteLine(e);
-            throw;
+            Log.Error(ex, "Error getting XP card for {UserId} in {GuildId}", user.Id, ctx.Guild.Id);
+            await ReplyErrorAsync(Strings.XpErrorGettingCard(ctx.Guild.Id));
         }
     }
 
     /// <summary>
-    ///     Displays the XP level-up rewards for the server.
-    /// </summary>
-    /// <returns>A task that represents the asynchronous operation of displaying XP level-up rewards.</returns>
-    /// <remarks>
-    ///     This command lists all the roles that users can receive as rewards for reaching certain XP levels within the
-    ///     server.
-    /// </remarks>
-    [Cmd]
-    [Aliases]
-    [RequireContext(ContextType.Guild)]
-    public async Task XpLevelUpRewards()
+///     Shows a user's XP information in a text format that's accessible for screen readers.
+/// </summary>
+/// <param name="user">The user to show XP information for. If not specified, shows the caller's stats.</param>
+/// <example>.textrank</example>
+/// <example>.textrank @user</example>
+[Cmd, Aliases]
+public async Task TextRank([Remainder] IGuildUser? user = null)
+{
+    user ??= (IGuildUser)ctx.User;
+
+    // Prevent showing ranks for bots
+    if (user.IsBot)
     {
-        var allRewards = (await Service.GetRoleRewards(ctx.Guild.Id))
-            .OrderBy(x => x.Level)
-            .Select(x =>
-            {
-                var str = ctx.Guild.GetRole(x.RoleId)?.ToString();
-                if (str != null)
-                    str = Strings.RoleReward(ctx.Guild.Id, Format.Bold(str));
-                return (x.Level, RoleStr: str);
-            })
-            .Where(x => x.RoleStr != null)
-            .GroupBy(x => x.Level)
-            .OrderBy(x => x.Key)
-            .ToList();
+        await ReplyErrorAsync(Strings.XpBotsNoRank(ctx.Guild.Id)).ConfigureAwait(false);
+        return;
+    }
+
+    try
+    {
+        var stats = await Service.GetUserXpStatsAsync(ctx.Guild.Id, user.Id);
+
+        // Check if user has any XP
+        if (stats.TotalXp == 0 && user.Id == ctx.User.Id)
+        {
+            await ReplyErrorAsync(Strings.XpYouNoXp(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+        else if (stats.TotalXp == 0)
+        {
+            await ReplyErrorAsync(Strings.XpUserNoXp(ctx.Guild.Id, user.ToString())).ConfigureAwait(false);
+            return;
+        }
+
+        // Calculate progress percentage
+        var progressPercent = (int)((double)stats.LevelXp / stats.RequiredXp * 100);
+
+        // Format the text response in an accessible way
+        var response = new StringBuilder();
+        response.AppendLine(Strings.TextRankHeader(ctx.Guild.Id, user.ToString()));
+        response.AppendLine(Strings.TextRankLevel(ctx.Guild.Id, stats.Level));
+        response.AppendLine(Strings.TextRankXp(ctx.Guild.Id, stats.TotalXp));
+        response.AppendLine(Strings.TextRankProgress(ctx.Guild.Id, stats.LevelXp, stats.RequiredXp, progressPercent));
+        response.AppendLine(Strings.TextRankServerPosition(ctx.Guild.Id, stats.Rank));
+
+        // Check if user has bonus XP
+        if (stats.BonusXp > 0)
+        {
+            response.AppendLine(Strings.TextRankBonusXp(ctx.Guild.Id, stats.BonusXp));
+        }
+
+        await ReplyAsync(response.ToString()).ConfigureAwait(false);
+    }
+    catch (Exception ex)
+    {
+        Log.Error(ex, "Error getting text XP stats for {UserId} in {GuildId}", user.Id, ctx.Guild.Id);
+        await ReplyErrorAsync(Strings.XpErrorGettingStats(ctx.Guild.Id));
+    }
+}
+
+    /// <summary>
+    ///     Shows the XP leaderboard for the server.
+    /// </summary>
+    /// <param name="page">Page number to display (starts at 1).</param>
+    /// <example>.leaderboard</example>
+    /// <example>.leaderboard 2</example>
+    [Cmd, Aliases]
+    public async Task Leaderboard(int page = 1)
+    {
+        if (page < 1)
+            page = 1;
+
+        var serverLb = await Service.GetLeaderboardAsync(ctx.Guild.Id, page);
+
+        if (serverLb.Count == 0)
+        {
+            await ReplyErrorAsync(Strings.XpLeaderboardEmpty(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
 
         var paginator = new LazyPaginatorBuilder()
             .AddUser(ctx.User)
             .WithPageFactory(PageFactory)
             .WithFooter(PaginatorFooter.PageNumber | PaginatorFooter.Users)
-            .WithMaxPageIndex(allRewards.Count / 9)
+            .WithMaxPageIndex((await Service.GetLeaderboardAsync(ctx.Guild.Id, 1, int.MaxValue)).Count / 10)
             .WithDefaultEmotes()
             .WithActionOnCancellation(ActionOnStop.DeleteMessage)
             .Build();
 
         await serv.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
 
-        async Task<PageBuilder> PageFactory(int page)
+        async Task<PageBuilder> PageFactory(int pageNum)
         {
-            await Task.CompletedTask.ConfigureAwait(false);
+            var users = await Service.GetLeaderboardAsync(ctx.Guild.Id, pageNum + 1);
+
             var embed = new PageBuilder()
-                .WithTitle(Strings.LevelUpRewards(ctx.Guild.Id))
-                .WithOkColor();
+                .WithOkColor()
+                .WithTitle(Strings.XpLeaderboardTitle(ctx.Guild.Id));
 
-            var localRewards = allRewards
-                .Skip(page * 9)
-                .Take(9)
-                .ToList();
+            var lb = new List<string>();
 
-            if (localRewards.Count == 0)
-                return embed.WithDescription(Strings.NoLevelUpRewards(ctx.Guild.Id));
-
-            foreach (var reward in localRewards)
+            foreach (var user in users)
             {
-                embed.AddField(Strings.LevelX(ctx.Guild.Id, reward.Key),
-                    string.Join("\n", reward.Select(y => y.Item2)));
+                var userObj = await ctx.Guild.GetUserAsync(user.UserId);
+                var username = userObj?.ToString() ?? user.UserId.ToString();
+
+                lb.Add(Strings.XpLeaderboardLine(
+                    ctx.Guild.Id,
+                    user.Rank,
+                    username,
+                    user.Level,
+                    user.TotalXp));
             }
 
+            embed.WithDescription(string.Join("\n", lb));
             return embed;
         }
     }
 
     /// <summary>
-    ///     Sets or clears an XP role reward for reaching a specified level.
+    ///     Adds XP to a user.
     /// </summary>
-    /// <param name="level">The XP level for which to set or clear the reward.</param>
-    /// <param name="role">
-    ///     The role to set as a reward for reaching the specified level. If null, the reward for the level is
-    ///     cleared.
-    /// </param>
-    /// <returns>A task that represents the asynchronous operation of setting or clearing an XP role reward.</returns>
-    /// <remarks>
-    ///     This command allows server administrators to configure roles as rewards for users reaching specific XP levels.
-    /// </remarks>
-    [Cmd]
-    [Aliases]
-    [UserPerm(GuildPermission.Administrator)]
-    [RequireContext(ContextType.Guild)]
-    public async Task XpRoleReward(int level, [Remainder] IRole? role = null)
+    /// <param name="user">The user to add XP to.</param>
+    /// <param name="amount">The amount of XP to add.</param>
+    /// <example>.addxp @user 100</example>
+    [Cmd, Aliases]
+    [UserPerm(GuildPermission.ManageGuild)]
+    public async Task AddXp(IGuildUser user, int amount)
     {
-        if (level < 1)
+        if (amount <= 0)
+        {
+            await ReplyErrorAsync(Strings.XpAmountPositive(ctx.Guild.Id)).ConfigureAwait(false);
             return;
-
-        Service.SetRoleReward(ctx.Guild.Id, level, role?.Id);
-
-        if (role == null)
-        {
-            await ReplyConfirmAsync(Strings.RoleRewardCleared(ctx.Guild.Id, level)).ConfigureAwait(false);
         }
-        else
-        {
-            await ReplyConfirmAsync(Strings.RoleRewardAdded(ctx.Guild.Id, level, Format.Bold(role.ToString())))
-                .ConfigureAwait(false);
-        }
-    }
 
-    private string? GetNotifLocationString(XpNotificationLocation loc)
-    {
-        return loc switch
+        if (user.IsBot)
         {
-            XpNotificationLocation.Channel => Strings.XpnNotifChannel(ctx.Guild.Id),
-            XpNotificationLocation.Dm => Strings.XpnNotifDm(ctx.Guild.Id),
-            _ => Strings.XpnNotifDisabled(ctx.Guild.Id)
-        };
+            await ReplyErrorAsync(Strings.XpCantAddToBot(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
+        await Service.AddXpAsync(ctx.Guild.Id, user.Id, amount);
+        await ReplyConfirmAsync(Strings.XpAdded(ctx.Guild.Id, amount, user.ToString())).ConfigureAwait(false);
     }
 
     /// <summary>
-    ///     Sets or gets the notification setting for XP level-ups.
+    ///     Sets a user's XP to a specific amount.
     /// </summary>
-    /// <returns>A task that represents the asynchronous operation of setting or getting the XP notification setting.</returns>
-    /// <remarks>
-    ///     Without parameters, this command displays the current notification setting for XP level-ups.
-    ///     With parameters, it updates the notification setting to either notify in a server channel, via DM, or disable
-    ///     notifications altogether.
-    /// </remarks>
-    [Cmd]
-    [Aliases]
-    [RequireContext(ContextType.Guild)]
-    public async Task XpNotify()
+    /// <param name="user">The user to set XP for.</param>
+    /// <param name="amount">The amount of XP to set.</param>
+    /// <example>.setxp @user 1000</example>
+    [Cmd, Aliases]
+    [UserPerm(GuildPermission.ManageGuild)]
+    public async Task SetXp(IGuildUser user, long amount)
     {
-        var serverSetting = await Service.GetNotificationType(ctx.User.Id, ctx.Guild.Id);
+        if (amount < 0)
+        {
+            await ReplyErrorAsync(Strings.XpAmountNotNegative(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
+        if (user.IsBot)
+        {
+            await ReplyErrorAsync(Strings.XpCantAddToBot(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
+        await Service.SetUserXpAsync(ctx.Guild.Id, user.Id, amount);
+        await ReplyConfirmAsync(Strings.XpSet(ctx.Guild.Id, user.ToString(), amount)).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Resets a user's XP to zero.
+    /// </summary>
+    /// <param name="user">The user to reset XP for.</param>
+    /// <param name="resetBonus">Whether to also reset bonus XP. Defaults to false.</param>
+    /// <example>.resetxp @user</example>
+    /// <example>.resetxp @user true</example>
+    [Cmd, Aliases]
+    [UserPerm(GuildPermission.ManageGuild)]
+    public async Task ResetXp(IGuildUser user, bool resetBonus = false)
+    {
+        await Service.ResetUserXpAsync(ctx.Guild.Id, user.Id, resetBonus);
+
+        if (resetBonus)
+            await ReplyConfirmAsync(Strings.XpResetWithBonus(ctx.Guild.Id, user.ToString())).ConfigureAwait(false);
+        else
+            await ReplyConfirmAsync(Strings.XpReset(ctx.Guild.Id, user.ToString())).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Sets how users are notified when they level up.
+    /// </summary>
+    /// <param name="type">The notification type: None, Channel, or DM.</param>
+    /// <example>.levelnotif Channel</example>
+    [Cmd, Aliases]
+    public async Task LevelNotif(XpNotificationType type)
+    {
+        await Service.SetUserNotificationPreferenceAsync(ctx.Guild.Id, ctx.User.Id, type);
+        await ReplyConfirmAsync(Strings.XpNotificationSet(ctx.Guild.Id, type)).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Shows the server's XP leaderboard settings.
+    /// </summary>
+    /// <example>.xpsettings</example>
+    [Cmd, Aliases]
+    [UserPerm(GuildPermission.ManageGuild)]
+    public async Task XpSettings()
+    {
+        var settings = await Service.GetGuildXpSettingsAsync(ctx.Guild.Id);
+        var exclusions = new List<string>();
+
+        // Get exclusion information
+        var excludedUsers = await Service.GetExcludedItemsAsync(ctx.Guild.Id, ExcludedItemType.User);
+        if (excludedUsers.Count > 0)
+            exclusions.Add(Strings.XpExcludedUsers(ctx.Guild.Id, excludedUsers.Count));
+
+        var excludedRoles = await Service.GetExcludedItemsAsync(ctx.Guild.Id, ExcludedItemType.Role);
+        if (excludedRoles.Count > 0)
+            exclusions.Add(Strings.XpExcludedRoles(ctx.Guild.Id, excludedRoles.Count));
+
+        var excludedChannels = await Service.GetExcludedItemsAsync(ctx.Guild.Id, ExcludedItemType.Channel);
+        if (excludedChannels.Count > 0)
+            exclusions.Add(Strings.XpExcludedChannels(ctx.Guild.Id, excludedChannels.Count));
+
+        // Get boost events
+        var boostEvents = await Service.GetActiveBoostEventsAsync(ctx.Guild.Id);
+        var boostInfo = boostEvents.Count > 0
+            ? Strings.XpActiveBoostEvents(ctx.Guild.Id, boostEvents.Count)
+            : Strings.XpNoActiveBoostEvents(ctx.Guild.Id);
 
         var embed = new EmbedBuilder()
             .WithOkColor()
-            .AddField(Strings.XpnSettingServer(ctx.Guild.Id), GetNotifLocationString(serverSetting));
+            .WithTitle(Strings.XpSettingsTitle(ctx.Guild.Id))
+            .AddField(Strings.XpBasicSettings(ctx.Guild.Id), Strings.XpSettingsBasicInfo(
+                ctx.Guild.Id,
+                settings.XpPerMessage,
+                settings.MessageXpCooldown,
+                settings.VoiceXpPerMinute,
+                settings.VoiceXpTimeout,
+                settings.XpMultiplier,
+                settings.XpCurveType
+            ))
+            .AddField(Strings.XpExclusions(ctx.Guild.Id),
+                exclusions.Count > 0 ? string.Join("\n", exclusions) : Strings.XpNoExclusions(ctx.Guild.Id))
+            .AddField(Strings.XpBoosts(ctx.Guild.Id), boostInfo);
 
-        await Context.Channel.EmbedAsync(embed).ConfigureAwait(false);
+        await ctx.Channel.EmbedAsync(embed);
     }
 
     /// <summary>
-    ///     Sets the notification setting for XP level-ups.
+    ///     Sets the amount of XP gained per message.
     /// </summary>
-    /// <param name="place">The place to set the notification setting for. Can be Server (Guild) or Global.</param>
-    /// <param name="type">The type of notification to set. Can be Server (Guild) or Global.</param>
-    /// <returns>A task that represents the asynchronous operation of setting the XP notification.</returns>
-    /// <remarks>
-    ///     This command allows users to set the notification preferences for XP level-ups,
-    ///     either for the current server or globally across all servers where the bot is present.
-    /// </remarks>
-    [Cmd]
-    [Aliases]
-    [RequireContext(ContextType.Guild)]
-    public async Task XpNotify(NotifyPlace place, XpNotificationLocation type)
+    /// <param name="amount">The amount of XP to award per message.</param>
+    /// <example>.setmsgxp 5</example>
+    [Cmd, Aliases]
+    [UserPerm(GuildPermission.ManageGuild)]
+    public async Task SetMessageXp(int amount)
     {
-        if (place == NotifyPlace.Guild)
-            await Service.ChangeNotificationType(ctx.User.Id, ctx.Guild.Id, type).ConfigureAwait(false);
+        if (amount <= 0)
+        {
+            await ReplyErrorAsync(Strings.XpAmountPositive(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
+        if (amount > XpService.MaxXpPerMessage)
+        {
+            await ReplyErrorAsync(Strings.XpMessageTooHigh(ctx.Guild.Id, XpService.MaxXpPerMessage)).ConfigureAwait(false);
+            return;
+        }
+
+        await Service.UpdateGuildXpSettingsAsync(ctx.Guild.Id, settings => settings.XpPerMessage = amount);
+        await ReplyConfirmAsync(Strings.XpMessageSet(ctx.Guild.Id, amount)).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Sets the cooldown between message XP gains.
+    /// </summary>
+    /// <param name="seconds">The cooldown in seconds.</param>
+    /// <example>.setxpcooldown 60</example>
+    [Cmd, Aliases]
+    [UserPerm(GuildPermission.ManageGuild)]
+    public async Task SetXpCooldown(int seconds)
+    {
+        if (seconds < 0)
+        {
+            await ReplyErrorAsync(Strings.XpCooldownNotNegative(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
+        await Service.UpdateGuildXpSettingsAsync(ctx.Guild.Id, settings => settings.MessageXpCooldown = seconds);
+
+        if (seconds == 0)
+            await ReplyConfirmAsync(Strings.XpCooldownDisabled(ctx.Guild.Id)).ConfigureAwait(false);
         else
-            await Service.ChangeNotificationType(ctx.User, type).ConfigureAwait(false);
-
-        await ctx.OkAsync().ConfigureAwait(false);
+            await ReplyConfirmAsync(Strings.XpCooldownSet(ctx.Guild.Id, seconds)).ConfigureAwait(false);
     }
 
     /// <summary>
-    ///     Toggles whether the server is excluded from earning XP.
+    ///     Sets the amount of XP gained per minute in voice channels.
     /// </summary>
-    /// <returns>A task that represents the asynchronous operation of toggling server XP exclusion.</returns>
-    /// <remarks>
-    ///     This command allows server administrators to toggle whether the server is excluded from earning XP.
-    /// </remarks>
-    [Cmd]
-    [Aliases]
-    [RequireContext(ContextType.Guild)]
-    [UserPerm(GuildPermission.Administrator)]
-    public async Task XpExclude(Server _)
+    /// <param name="amount">The amount of XP to award per minute in voice.</param>
+    /// <example>.setvoicexp 2</example>
+    [Cmd, Aliases]
+    [UserPerm(GuildPermission.ManageGuild)]
+    public async Task SetVoiceXp(int amount)
     {
-        var ex = await Service.ToggleExcludeServer(ctx.Guild.Id);
+        if (amount < 0)
+        {
+            await ReplyErrorAsync(Strings.XpAmountNotNegative(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
 
-        await ReplyConfirmAsync(ex
-            ? Strings.Excluded(ctx.Guild.Id, Format.Bold(ctx.Guild.ToString()))
-            : Strings.NotExcluded(ctx.Guild.Id, Format.Bold(ctx.Guild.ToString()))).ConfigureAwait(false);
+        if (amount > XpService.MaxVoiceXpPerMinute)
+        {
+            await ReplyErrorAsync(Strings.XpVoiceTooHigh(ctx.Guild.Id, XpService.MaxVoiceXpPerMinute)).ConfigureAwait(false);
+            return;
+        }
+
+        await Service.UpdateGuildXpSettingsAsync(ctx.Guild.Id, settings => settings.VoiceXpPerMinute = amount);
+
+        if (amount == 0)
+            await ReplyConfirmAsync(Strings.XpVoiceDisabled(ctx.Guild.Id)).ConfigureAwait(false);
+        else
+            await ReplyConfirmAsync(Strings.XpVoiceSet(ctx.Guild.Id, amount)).ConfigureAwait(false);
     }
 
     /// <summary>
-    ///     Toggles whether a role is excluded from earning XP.
+    ///     Sets the voice XP timeout (how long a user must be in voice to gain XP).
     /// </summary>
-    /// <param name="_">Idiot check.</param>
-    /// <param name="role">The role to toggle exclusion for.</param>
-    /// <returns>A task that represents the asynchronous operation of toggling role XP exclusion.</returns>
-    /// <remarks>
-    ///     This command allows server administrators to toggle whether a specific role is excluded from earning XP.
-    /// </remarks>
-    [Cmd]
-    [Aliases]
-    [UserPerm(GuildPermission.ManageRoles)]
-    [RequireContext(ContextType.Guild)]
-    public async Task XpExclude(Role _, [Remainder] IRole role)
+    /// <param name="minutes">The timeout in minutes.</param>
+    /// <example>.setvoicetimeout 5</example>
+    [Cmd, Aliases]
+    [UserPerm(GuildPermission.ManageGuild)]
+    public async Task SetVoiceTimeout(int minutes)
     {
-        var ex = await Service.ToggleExcludeRole(ctx.Guild.Id, role.Id);
+        if (minutes <= 0)
+        {
+            await ReplyErrorAsync(Strings.XpTimeoutPositive(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
 
-        await ReplyConfirmAsync(ex
-            ? Strings.Excluded(ctx.Guild.Id, Format.Bold(role.ToString()))
-            : Strings.NotExcluded(ctx.Guild.Id, Format.Bold(role.ToString()))).ConfigureAwait(false);
+        await Service.UpdateGuildXpSettingsAsync(ctx.Guild.Id, settings => settings.VoiceXpTimeout = minutes);
+        await ReplyConfirmAsync(Strings.XpVoiceTimeoutSet(ctx.Guild.Id, minutes)).ConfigureAwait(false);
     }
 
     /// <summary>
-    ///     Toggles whether a channel is excluded from earning XP.
+    ///     Sets the server-wide XP multiplier.
     /// </summary>
-    /// <param name="_">Idiot check.</param>
-    /// <param name="channel">The channel to toggle exclusion for. If null, the current channel is used.</param>
-    /// <returns>A task that represents the asynchronous operation of toggling channel XP exclusion.</returns>
-    /// <remarks>
-    ///     This command allows server administrators to toggle whether a specific channel is excluded from earning XP.
-    ///     If no channel is specified, the command applies to the current channel where it was invoked.
-    /// </remarks>
-    [Cmd]
-    [Aliases]
-    [UserPerm(GuildPermission.ManageChannels)]
-    [RequireContext(ContextType.Guild)]
-    public async Task XpExclude(Channel _, [Remainder] IChannel? channel = null)
+    /// <param name="multiplier">The XP multiplier value.</param>
+    /// <example>.setxpmultiplier 1.5</example>
+    [Cmd, Aliases]
+    [UserPerm(GuildPermission.ManageGuild)]
+    public async Task SetXpMultiplier(double multiplier)
     {
-        if (channel == null)
-            channel = ctx.Channel;
+        if (multiplier <= 0)
+        {
+            await ReplyErrorAsync(Strings.XpMultiplierPositive(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
 
-        var ex = await Service.ToggleExcludeChannel(ctx.Guild.Id, channel.Id);
-
-        await ReplyConfirmAsync(ex
-            ? Strings.Excluded(ctx.Guild.Id, Format.Bold(channel.ToString()))
-            : Strings.NotExcluded(ctx.Guild.Id, Format.Bold(channel.ToString()))).ConfigureAwait(false);
+        await Service.UpdateGuildXpSettingsAsync(ctx.Guild.Id, settings => settings.XpMultiplier = multiplier);
+        await ReplyConfirmAsync(Strings.XpMultiplierSet(ctx.Guild.Id, multiplier)).ConfigureAwait(false);
     }
 
     /// <summary>
-    ///     Displays a list of excluded users, roles, and channels from earning XP.
+    ///     Sets the XP curve type used for level calculations.
     /// </summary>
-    /// <returns>A task that represents the asynchronous operation of displaying the XP exclusion list.</returns>
-    /// <remarks>
-    ///     This command lists all users, roles, and channels that are currently excluded from earning XP in the server.
-    /// </remarks>
-    [Cmd]
-    [Aliases]
-    [RequireContext(ContextType.Guild)]
-    public async Task XpExclusionList()
+    /// <param name="type">The XP curve type: Default, Flat, or Steep.</param>
+    /// <example>.setxpcurve Flat</example>
+    [Cmd, Aliases]
+    [UserPerm(GuildPermission.ManageGuild)]
+    public async Task SetXpCurve(XpCurveType type)
     {
-        var serverExcluded = await Service.IsServerExcluded(ctx.Guild.Id);
-        var roles = (await Service.GetExcludedRoles(ctx.Guild.Id))
-            .Select(x => ctx.Guild.GetRole(x))
-            .Where(x => x != null)
-            .Select(x => $"`role`   {x.Mention}")
-            .ToList();
+        await Service.UpdateGuildXpSettingsAsync(ctx.Guild.Id, settings => settings.XpCurveType = (int)type);
+        await ReplyConfirmAsync(Strings.XpCurveSet(ctx.Guild.Id, type)).ConfigureAwait(false);
+    }
 
-        var excludedChannels = await Service.GetExcludedChannels(ctx.Guild.Id);
+    /// <summary>
+    ///     Sets an XP multiplier for a channel.
+    /// </summary>
+    /// <param name="channel">The channel to set the multiplier for.</param>
+    /// <param name="multiplier">The multiplier value.</param>
+    /// <example>.setchannelxp #general 2.0</example>
+    [Cmd, Aliases]
+    [UserPerm(GuildPermission.ManageGuild)]
+    public async Task SetChannelXp(ITextChannel channel, double multiplier)
+    {
+        if (multiplier <= 0)
+        {
+            await ReplyErrorAsync(Strings.XpMultiplierPositive(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
 
-        var chans = (await Task.WhenAll(excludedChannels
-                    .Select(x => ctx.Guild.GetChannelAsync(x)))
-                .ConfigureAwait(false))
-            .Where(x => x != null)
-            .Select(x => $"`channel` {x.Name}")
-            .ToList();
+        await Service.SetChannelMultiplierAsync(ctx.Guild.Id, channel.Id, multiplier);
 
-        var rolesStr = roles.Count > 0 ? $"{string.Join("\n", roles)}\n" : string.Empty;
-        var chansStr = chans.Count > 0 ? $"{string.Join("\n", chans)}\n" : string.Empty;
-        var desc = Format.Code(serverExcluded
-            ? Strings.ServerIsExcluded(ctx.Guild.Id)
-            : Strings.ServerIsNotExcluded(ctx.Guild.Id));
+        if (multiplier == 1.0)
+            await ReplyConfirmAsync(Strings.XpChannelMultiplierReset(ctx.Guild.Id, channel.Mention)).ConfigureAwait(false);
+        else
+            await ReplyConfirmAsync(Strings.XpChannelMultiplierSet(ctx.Guild.Id, channel.Mention, multiplier)).ConfigureAwait(false);
+    }
 
-        desc += $"\n\n{rolesStr}{chansStr}";
+    /// <summary>
+    ///     Sets an XP multiplier for a role.
+    /// </summary>
+    /// <param name="role">The role to set the multiplier for.</param>
+    /// <param name="multiplier">The multiplier value.</param>
+    /// <example>.setrolexp "VIP Members" 1.5</example>
+    [Cmd, Aliases]
+    [UserPerm(GuildPermission.ManageGuild)]
+    public async Task SetRoleXp(IRole role, double multiplier)
+    {
+        if (multiplier <= 0)
+        {
+            await ReplyErrorAsync(Strings.XpMultiplierPositive(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
 
-        var lines = desc.Split('\n');
+        await Service.SetRoleMultiplierAsync(ctx.Guild.Id, role.Id, multiplier);
+
+        if (multiplier == 1.0)
+            await ReplyConfirmAsync(Strings.XpRoleMultiplierReset(ctx.Guild.Id, role.Mention)).ConfigureAwait(false);
+        else
+            await ReplyConfirmAsync(Strings.XpRoleMultiplierSet(ctx.Guild.Id, role.Mention, multiplier)).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Creates a temporary XP boost event.
+    /// </summary>
+    /// <param name="time">How long the boost should last.</param>
+    /// <param name="multiplier">The XP multiplier for the boost.</param>
+    /// <param name="name">The name of the boost event.</param>
+    /// <example>.xpboost 2h 2.0 Weekend XP Event</example>
+    [Cmd, Aliases]
+    [UserPerm(GuildPermission.ManageGuild)]
+    public async Task XpBoost(StoopidTime time, double multiplier, [Remainder] string name)
+    {
+        if (time.Time.TotalMinutes < 5)
+        {
+            await ReplyErrorAsync(Strings.XpBoostTooShort(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
+        if (multiplier <= 1.0)
+        {
+            await ReplyErrorAsync(Strings.XpBoostMultiplierTooLow(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            await ReplyErrorAsync(Strings.XpBoostNeedsName(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
+        var startTime = DateTime.UtcNow;
+        var endTime = startTime + time.Time;
+
+        var boostEvent = await Service.CreateXpBoostEventAsync(
+            ctx.Guild.Id,
+            name,
+            multiplier,
+            startTime,
+            endTime
+        );
+
+        await ReplyConfirmAsync(Strings.XpBoostCreated(
+            ctx.Guild.Id,
+            boostEvent.Name,
+            boostEvent.Multiplier,
+            time.Time.Humanize()
+        )).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Lists active XP boost events.
+    /// </summary>
+    /// <example>.xpboosts</example>
+    [Cmd, Aliases]
+    public async Task XpBoosts()
+    {
+        var boosts = await Service.GetActiveBoostEventsAsync(ctx.Guild.Id);
+
+        if (boosts.Count == 0)
+        {
+            await ReplyErrorAsync(Strings.XpNoActiveBoosts(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
+        var embed = new EmbedBuilder()
+            .WithOkColor()
+            .WithTitle(Strings.XpActiveBoostsTitle(ctx.Guild.Id));
+
+        foreach (var boost in boosts)
+        {
+            var timeLeft = boost.EndTime - DateTime.UtcNow;
+            embed.AddField(
+                $"{boost.Name} ({boost.Multiplier}x)",
+                Strings.XpBoostTimeLeft(ctx.Guild.Id, timeLeft.Humanize())
+            );
+        }
+
+        await ctx.Channel.EmbedAsync(embed);
+    }
+
+    /// <summary>
+    ///     Cancels an XP boost event.
+    /// </summary>
+    /// <param name="eventId">ID of the event to cancel.</param>
+    /// <example>.cancelboost 3</example>
+    [Cmd, Aliases]
+    [UserPerm(GuildPermission.ManageGuild)]
+    public async Task CancelBoost(int eventId)
+    {
+        var success = await Service.CancelXpBoostEventAsync(eventId);
+
+        if (success)
+            await ReplyConfirmAsync(Strings.XpBoostCancelled(ctx.Guild.Id, eventId)).ConfigureAwait(false);
+        else
+            await ReplyErrorAsync(Strings.XpBoostNotFound(ctx.Guild.Id, eventId)).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Excludes a user from gaining XP.
+    /// </summary>
+    /// <param name="user">The user to exclude.</param>
+    /// <example>.xpexclude @user</example>
+    [Cmd, Aliases]
+    [UserPerm(GuildPermission.ManageGuild)]
+    public async Task XpExclude(IGuildUser user)
+    {
+        await Service.ExcludeItemAsync(ctx.Guild.Id, user.Id, ExcludedItemType.User);
+        await ReplyConfirmAsync(Strings.XpUserExcluded(ctx.Guild.Id, user.ToString())).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Excludes a role from gaining XP.
+    /// </summary>
+    /// <param name="role">The role to exclude.</param>
+    /// <example>.xpexclude @role</example>
+    [Cmd, Aliases]
+    [UserPerm(GuildPermission.ManageGuild)]
+    public async Task XpExclude(IRole role)
+    {
+        await Service.ExcludeItemAsync(ctx.Guild.Id, role.Id, ExcludedItemType.Role);
+        await ReplyConfirmAsync(Strings.XpRoleExcluded(ctx.Guild.Id, role.Name)).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Excludes a channel from gaining XP.
+    /// </summary>
+    /// <param name="channel">The channel to exclude.</param>
+    /// <example>.xpexclude #channel</example>
+    [Cmd, Aliases]
+    [UserPerm(GuildPermission.ManageGuild)]
+    public async Task XpExclude(ITextChannel channel)
+    {
+        await Service.ExcludeItemAsync(ctx.Guild.Id, channel.Id, ExcludedItemType.Channel);
+        await ReplyConfirmAsync(Strings.XpChannelExcluded(ctx.Guild.Id, channel.Mention)).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Includes a previously excluded user for XP gain.
+    /// </summary>
+    /// <param name="user">The user to include.</param>
+    /// <example>.xpinclude @user</example>
+    [Cmd, Aliases]
+    [UserPerm(GuildPermission.ManageGuild)]
+    public async Task XpInclude(IGuildUser user)
+    {
+        await Service.IncludeItemAsync(ctx.Guild.Id, user.Id, ExcludedItemType.User);
+        await ReplyConfirmAsync(Strings.XpUserIncluded(ctx.Guild.Id, user.ToString())).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Includes a previously excluded role for XP gain.
+    /// </summary>
+    /// <param name="role">The role to include.</param>
+    /// <example>.xpinclude @role</example>
+    [Cmd, Aliases]
+    [UserPerm(GuildPermission.ManageGuild)]
+    public async Task XpInclude(IRole role)
+    {
+        await Service.IncludeItemAsync(ctx.Guild.Id, role.Id, ExcludedItemType.Role);
+        await ReplyConfirmAsync(Strings.XpRoleIncluded(ctx.Guild.Id, role.Name)).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Includes a previously excluded channel for XP gain.
+    /// </summary>
+    /// <param name="channel">The channel to include.</param>
+    /// <example>.xpinclude #channel</example>
+    [Cmd, Aliases]
+    [UserPerm(GuildPermission.ManageGuild)]
+    public async Task XpInclude(ITextChannel channel)
+    {
+        await Service.IncludeItemAsync(ctx.Guild.Id, channel.Id, ExcludedItemType.Channel);
+        await ReplyConfirmAsync(Strings.XpChannelIncluded(ctx.Guild.Id, channel.Mention)).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Lists excluded users, roles, or channels.
+    /// </summary>
+    /// <param name="type">The type of exclusions to list: users, roles, or channels.</param>
+    /// <example>.xpexcludelist users</example>
+    [Cmd, Aliases]
+    public async Task XpExcludeList(string type = null)
+    {
+        type = type?.ToLower();
+
+        if (string.IsNullOrWhiteSpace(type) || (type != "users" && type != "roles" && type != "channels"))
+        {
+            await ReplyErrorAsync(Strings.XpExcludeListInvalid(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
+        ExcludedItemType itemType;
+        string title;
+
+        switch (type)
+        {
+            case "users":
+                itemType = ExcludedItemType.User;
+                title = Strings.XpExcludedUsersTitle(ctx.Guild.Id);
+                break;
+            case "roles":
+                itemType = ExcludedItemType.Role;
+                title = Strings.XpExcludedRolesTitle(ctx.Guild.Id);
+                break;
+            case "channels":
+                itemType = ExcludedItemType.Channel;
+                title = Strings.XpExcludedChannelsTitle(ctx.Guild.Id);
+                break;
+            default:
+                return;
+        }
+
+        var items = await Service.GetExcludedItemsAsync(ctx.Guild.Id, itemType);
+
+        if (items.Count == 0)
+        {
+            await ReplyErrorAsync(Strings.XpNoExcludedItems(ctx.Guild.Id, type)).ConfigureAwait(false);
+            return;
+        }
+
+        var names = new List<string>();
+
+        foreach (var id in items)
+        {
+            switch (itemType)
+            {
+                case ExcludedItemType.User:
+                    var user = await ctx.Guild.GetUserAsync(id);
+                    names.Add(user != null ? user.ToString() : id.ToString());
+                    break;
+                case ExcludedItemType.Role:
+                    var role = ctx.Guild.GetRole(id);
+                    names.Add(role != null ? role.Name : id.ToString());
+                    break;
+                case ExcludedItemType.Channel:
+                    var channel = await ctx.Guild.GetTextChannelAsync(id);
+                    names.Add(channel != null ? channel.Mention : id.ToString());
+                    break;
+            }
+        }
+
         var paginator = new LazyPaginatorBuilder()
             .AddUser(ctx.User)
             .WithPageFactory(PageFactory)
             .WithFooter(PaginatorFooter.PageNumber | PaginatorFooter.Users)
-            .WithMaxPageIndex(lines.Length / 15)
+            .WithMaxPageIndex(names.Count / 20)
             .WithDefaultEmotes()
             .WithActionOnCancellation(ActionOnStop.DeleteMessage)
             .Build();
@@ -657,340 +746,476 @@ public partial class Xp(
         {
             await Task.CompletedTask.ConfigureAwait(false);
             return new PageBuilder()
-                .WithTitle(Strings.ExclusionList(ctx.Guild.Id))
-                .WithDescription(string.Join('\n', lines.Skip(15 * page).Take(15)))
-                .WithOkColor();
+                .WithOkColor()
+                .WithTitle($"{title} ({names.Count})")
+                .WithDescription(string.Join("\n", names.Skip(page * 20).Take(20)));
         }
     }
 
     /// <summary>
-    ///     Displays the server leaderboard based on XP levels.
+    ///     Sets a role reward for a specific level.
     /// </summary>
-    /// <param name="args">Arguments for customizing the leaderboard display.</param>
-    /// <returns>A task that represents the asynchronous operation of displaying the server XP leaderboard.</returns>
-    /// <remarks>
-    ///     This command shows a leaderboard of users in the server ranked by their XP levels.
-    ///     It allows for customization of the leaderboard display using various arguments.
-    /// </remarks>
-    [Cmd]
-    [Aliases]
-    [MewdekoOptions(typeof(LbOpts))]
-    [Priority(1)]
-    [RequireContext(ContextType.Guild)]
-    public async Task XpLeaderboard(params string[] args)
+    /// <param name="level">The level that triggers the reward.</param>
+    /// <param name="role">The role to award.</param>
+    /// <example>.rolereward 10 @VIP</example>
+    [Cmd, Aliases]
+    [UserPerm(GuildPermission.ManageRoles)]
+    public async Task RoleReward(int level, IRole role)
     {
-        var (opts, _) = OptionsParser.ParseFrom(new LbOpts(), args);
-
-        await Context.Channel.TriggerTypingAsync().ConfigureAwait(false);
-
-        var socketGuild = (SocketGuild)ctx.Guild;
-        List<UserXpStats> allUsers;
-        if (opts.Clean)
+        if (level <= 0)
         {
-            await Context.Channel.TriggerTypingAsync().ConfigureAwait(false);
-            await tracker.EnsureUsersDownloadedAsync(ctx.Guild).ConfigureAwait(false);
-
-            allUsers = (await Service.GetTopUserXps(ctx.Guild.Id))
-                .Where(user => socketGuild.GetUser(user.UserId) is not null)
-                .ToList();
-        }
-        else
-        {
-            await Context.Channel.TriggerTypingAsync().ConfigureAwait(false);
-            await tracker.EnsureUsersDownloadedAsync(ctx.Guild).ConfigureAwait(false);
-            allUsers = (await Service.GetTopUserXps(ctx.Guild.Id)).ToList();
-        }
-
-        var paginator = new LazyPaginatorBuilder()
-            .AddUser(ctx.User)
-            .WithPageFactory(PageFactory)
-            .WithFooter(PaginatorFooter.PageNumber | PaginatorFooter.Users)
-            .WithMaxPageIndex(allUsers.Count / 9)
-            .WithDefaultEmotes()
-            .WithActionOnCancellation(ActionOnStop.DeleteMessage)
-            .Build();
-
-        await serv.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
-
-        async Task<PageBuilder> PageFactory(int page)
-        {
-            await Task.CompletedTask.ConfigureAwait(false);
-            var embed = new PageBuilder()
-                .WithTitle(Strings.ServerLeaderboard(ctx.Guild.Id))
-                .WithOkColor();
-
-            List<UserXpStats> users;
-            if (opts.Clean)
-                users = allUsers.Skip(page * 9).Take(9).ToList();
-            else
-                users = await Service.GetUserXps(ctx.Guild.Id, page);
-
-            if (users.Count == 0) return embed.WithDescription("-");
-
-            for (var i = 0; i < users.Count; i++)
-            {
-                var levelStats = new LevelStats(users[i].Xp + users[i].AwardedXp);
-                var user = ((SocketGuild)ctx.Guild).GetUser(users[i].UserId);
-
-                var userXpData = users[i];
-
-                var awardStr = "";
-                if (userXpData.AwardedXp > 0)
-                    awardStr = $"(+{userXpData.AwardedXp})";
-                else if (userXpData.AwardedXp < 0)
-                    awardStr = $"({userXpData.AwardedXp})";
-
-                embed.AddField(
-                    $"#{i + 1 + page * 9} {user?.ToString() ?? users[i].UserId.ToString()}",
-                    $"{Strings.LevelX(ctx.Guild.Id, levelStats.Level)} - {levelStats.TotalXp}xp {awardStr}");
-            }
-
-            return embed;
-        }
-    }
-
-    /// <summary>
-    ///     Adds a specified amount of XP to a user.
-    /// </summary>
-    /// <param name="amount">The amount of XP to add to the user.</param>
-    /// <param name="userId">The ID of the user to add XP to.</param>
-    /// <returns>A task that represents the asynchronous operation of adding XP to the user.</returns>
-    /// <remarks>
-    ///     This command allows server administrators to manually add XP to a user's account.
-    /// </remarks>
-    [Cmd]
-    [Aliases]
-    [RequireContext(ContextType.Guild)]
-    [UserPerm(GuildPermission.Administrator)]
-    public async Task XpAdd(int amount, ulong userId)
-    {
-        if (amount == 0)
+            await ReplyErrorAsync(Strings.XpLevelPositive(ctx.Guild.Id)).ConfigureAwait(false);
             return;
+        }
 
-        await Service.AddXp(userId, ctx.Guild.Id, amount);
-        var usr = ((SocketGuild)ctx.Guild).GetUser(userId)?.ToString()
-                  ?? userId.ToString();
-        await ReplyConfirmAsync(Strings.Modified(ctx.Guild.Id, Format.Bold(usr), Format.Bold(amount.ToString())))
-            .ConfigureAwait(false);
+        // Check if the bot can assign this role
+        if (role.Position >= ((IGuildUser)ctx.User).GetRoles().Max(r => r.Position))
+        {
+            await ReplyErrorAsync(Strings.XpRoleHierarchy(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
+        await Service.SetRoleRewardAsync(ctx.Guild.Id, level, role.Id);
+        await ReplyConfirmAsync(Strings.XpRoleRewardSet(ctx.Guild.Id, level, role.Mention)).ConfigureAwait(false);
     }
 
     /// <summary>
-    ///     Adds a specified amount of XP to a user.
+    ///     Removes a role reward for a specific level.
     /// </summary>
-    /// <param name="amount">The amount of XP to add to the user.</param>
-    /// <param name="user">The user to add XP to.</param>
-    /// <returns>A task that represents the asynchronous operation of adding XP to the user.</returns>
-    /// <remarks>
-    ///     This command allows server administrators to manually add XP to a user's account.
-    /// </remarks>
-    [Cmd]
-    [Aliases]
-    [RequireContext(ContextType.Guild)]
-    [UserPerm(GuildPermission.Administrator)]
-    public Task XpAdd(int amount, [Remainder] IGuildUser user)
+    /// <param name="level">The level to remove the reward from.</param>
+    /// <example>.removerr 10</example>
+    [Cmd, Aliases]
+    [UserPerm(GuildPermission.ManageRoles)]
+    public async Task RemoveRoleReward(int level)
     {
-        return XpAdd(amount, user.Id);
+        if (level <= 0)
+        {
+            await ReplyErrorAsync(Strings.XpLevelPositive(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
+        await Service.SetRoleRewardAsync(ctx.Guild.Id, level, null);
+        await ReplyConfirmAsync(Strings.XpRoleRewardRemoved(ctx.Guild.Id, level)).ConfigureAwait(false);
     }
 
     /// <summary>
-    ///     Updates or displays the template configuration for the server.
+    ///     Lists all role rewards.
     /// </summary>
-    /// <param name="property">The property to update or display. Can be null to display all properties.</param>
-    /// <param name="subProperty">The subproperty to update within the specified property. Can be null.</param>
-    /// <param name="value">The value to set for the property or subproperty. Can be null if no value is provided.</param>
-    /// <returns>A task that represents the asynchronous operation of updating or displaying the template configuration.</returns>
-    /// <remarks>
-    ///     This command allows server administrators to view and modify various configuration settings related to templates.
-    /// </remarks>
-    [Cmd]
-    [Aliases]
-    [RequireContext(ContextType.Guild)]
-    [UserPerm(GuildPermission.Administrator)]
-    public async Task TemplateConfig(string property = null, string subProperty = null, string value = null)
+    /// <example>.rolerewards</example>
+    [Cmd, Aliases]
+    public async Task RoleRewards()
     {
-        var template = await Service.GetTemplate(ctx.Guild.Id);
+        var rewards = await Service.GetRoleRewardsAsync(ctx.Guild.Id);
 
-        var embedBuilder = new EmbedBuilder()
+        if (rewards.Count == 0)
+        {
+            await ReplyErrorAsync(Strings.XpNoRoleRewards(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
+        var embed = new EmbedBuilder()
             .WithOkColor()
-            .WithTitle("Template configuration");
+            .WithTitle(Strings.XpRoleRewardsTitle(ctx.Guild.Id));
 
-        if (string.IsNullOrEmpty(property))
+        var rewardLines = new List<string>();
+
+        foreach (var reward in rewards.OrderBy(r => r.Level))
         {
-            var propBuilder = new StringBuilder();
-            var nestedClassBuilder = new StringBuilder();
-            var properties = typeof(Template).GetProperties()
-                .Where(p => p.Name != "Id" && p.Name != "DateAdded" && p.Name != "GuildId");
-            foreach (var prop in properties)
-            {
-                var propValue = prop.GetValue(template);
-                if (prop.PropertyType.Namespace == "System") // simple properties
-                {
-                    propBuilder.AppendLine($"`{prop.Name}:` {propValue}");
-                }
-                else // nested classes (subproperties)
-                {
-                    nestedClassBuilder.AppendLine($"{prop.Name}");
-                }
-            }
+            var role = ctx.Guild.GetRole(reward.RoleId);
+            if (role != null)
+                rewardLines.Add(Strings.XpRoleRewardLine(ctx.Guild.Id, reward.Level, role.Mention));
+        }
 
-            embedBuilder.AddField("Fields", propBuilder.ToString());
-            embedBuilder.AddField("Properties", nestedClassBuilder.ToString());
+        embed.WithDescription(string.Join("\n", rewardLines));
+        await ctx.Channel.EmbedAsync(embed);
+    }
 
-            await ctx.Channel.SendMessageAsync(embed: embedBuilder.Build());
+    /// <summary>
+    ///     Sets a currency reward for a specific level.
+    /// </summary>
+    /// <param name="level">The level that triggers the reward.</param>
+    /// <param name="amount">The amount of currency to award.</param>
+    /// <example>.currencyreward 5 100</example>
+    [Cmd, Aliases]
+    [UserPerm(GuildPermission.ManageGuild)]
+    public async Task CurrencyReward(int level, long amount)
+    {
+        if (level <= 0)
+        {
+            await ReplyErrorAsync(Strings.XpLevelPositive(ctx.Guild.Id)).ConfigureAwait(false);
             return;
         }
 
-        var propertyInfo = typeof(Template).GetProperty(property,
-            BindingFlags.IgnoreCase | BindingFlags.Public | BindingFlags.Instance);
-        if (propertyInfo == null)
+        if (amount <= 0)
         {
-            await ctx.Channel.SendErrorAsync($"No property named {property} found.", Config);
+            await ReplyErrorAsync(Strings.XpAmountPositive(ctx.Guild.Id)).ConfigureAwait(false);
             return;
         }
 
-        if (value == null)
+        await Service.SetCurrencyRewardAsync(ctx.Guild.Id, level, amount);
+
+        await ReplyConfirmAsync(Strings.XpCurrencyRewardSet(
+            ctx.Guild.Id,
+            level,
+            amount,
+            await currencyService.GetCurrencyEmote(ctx.Guild.Id)
+        )).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Removes a currency reward for a specific level.
+    /// </summary>
+    /// <param name="level">The level to remove the reward from.</param>
+    /// <example>.removecr 5</example>
+    [Cmd, Aliases]
+    [UserPerm(GuildPermission.ManageGuild)]
+    public async Task RemoveCurrencyReward(int level)
+    {
+        if (level <= 0)
         {
-            // If no value is specified, we list the property/subproperty values
-            if (subProperty == null)
-            {
-                // No subproperty is specified, list all properties of the class
-                var properties = propertyInfo.PropertyType.GetProperties();
-                foreach (var prop in properties)
+            await ReplyErrorAsync(Strings.XpLevelPositive(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
+        await Service.SetCurrencyRewardAsync(ctx.Guild.Id, level, 0);
+        await ReplyConfirmAsync(Strings.XpCurrencyRewardRemoved(ctx.Guild.Id, level)).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Lists all currency rewards.
+    /// </summary>
+    /// <example>.currencyrewards</example>
+    [Cmd, Aliases]
+    public async Task CurrencyRewards()
+    {
+        var rewards = await Service.GetCurrencyRewardsAsync(ctx.Guild.Id);
+
+        if (rewards.Count == 0)
+        {
+            await ReplyErrorAsync(Strings.XpNoCurrencyRewards(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
+        var embed = new EmbedBuilder()
+            .WithOkColor()
+            .WithTitle(Strings.XpCurrencyRewardsTitle(ctx.Guild.Id));
+
+        var rewardLines = new List<string>();
+        var currencyName = await currencyService.GetCurrencyEmote(ctx.Guild.Id);
+
+        foreach (var reward in rewards.OrderBy(r => r.Level))
+        {
+            rewardLines.Add(Strings.XpCurrencyRewardLine(ctx.Guild.Id, reward.Level, reward.Amount, currencyName));
+        }
+
+        embed.WithDescription(string.Join("\n", rewardLines));
+        await ctx.Channel.EmbedAsync(embed);
+    }
+
+    /// <summary>
+    ///     Creates a new XP competition.
+    /// </summary>
+    /// <param name="time">How long the competition should last.</param>
+    /// <param name="type">The competition type: MostGained, ReachLevel, or HighestTotal.</param>
+    /// <param name="targetLevel">For ReachLevel competitions, the target level.</param>
+    /// <param name="name">The name of the competition.</param>
+    /// <example>.xpcompetition 1d MostGained Weekly XP Race</example>
+    /// <example>.xpcompetition 3d ReachLevel 20 First to Level 20</example>
+    [Cmd, Aliases]
+    [UserPerm(GuildPermission.ManageGuild)]
+    public async Task XpCompetition(StoopidTime time, XpCompetitionType type, int targetLevel = 0, [Remainder] string name = null)
+    {
+        if (time.Time.TotalMinutes < 60)
+        {
+            await ReplyErrorAsync(Strings.XpCompetitionTooShort(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            await ReplyErrorAsync(Strings.XpCompetitionNeedsName(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
+        if (type == XpCompetitionType.ReachLevel && targetLevel <= 0)
+        {
+            await ReplyErrorAsync(Strings.XpCompetitionNeedsLevel(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
+        var startTime = DateTime.UtcNow;
+        var endTime = startTime + time.Time;
+
+        var competition = await Service.CreateCompetitionAsync(
+            ctx.Guild.Id,
+            name,
+            type,
+            startTime,
+            endTime,
+            targetLevel,
+            ctx.Channel.Id // Use current channel for announcements
+        );
+
+        // Start the competition
+        await Service.StartCompetitionAsync(competition.Id);
+
+        await ReplyConfirmAsync(Strings.XpCompetitionCreated(
+            ctx.Guild.Id,
+            competition.Name,
+            competition.Type.ToString(),
+            time.Time.Humanize(),
+            competition.Type == (int)XpCompetitionType.ReachLevel ? competition.TargetLevel.ToString() : ""
+        )).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Adds a reward for a competition placement.
+    /// </summary>
+    /// <param name="competitionId">The ID of the competition.</param>
+    /// <param name="position">The position to reward (1 for first place, etc.).</param>
+    /// <param name="type">The type of reward: Role, XP, or Currency.</param>
+    /// <param name="amount">For XP or Currency rewards, the amount to award.</param>
+    /// <param name="role">For Role rewards, the role to award.</param>
+    /// <example>.addcompetitionreward 1 1 Role @Winner</example>
+    /// <example>.addcompetitionreward 1 2 XP 1000</example>
+    /// <example>.addcompetitionreward 1 3 Currency 500</example>
+    [Cmd, Aliases]
+    [UserPerm(GuildPermission.ManageGuild)]
+    public async Task AddCompetitionReward(int competitionId, int position, string type, [Remainder] string reward)
+    {
+        if (position <= 0)
+        {
+            await ReplyErrorAsync(Strings.XpCompetitionPositionInvalid(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
+        type = type.ToLower();
+
+        if (type != "role" && type != "xp" && type != "currency")
+        {
+            await ReplyErrorAsync(Strings.XpCompetitionRewardInvalid(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
+        switch (type)
+        {
+            case "role":
+                var roleMatch = await ctx.Guild.GetRoleAsync(MentionUtils.ParseRole(reward));
+                if (roleMatch == null)
                 {
-                    var propValue = prop.GetValue(propertyInfo.GetValue(template));
-                    if (prop.Name != "Id" && prop.Name != "DateAdded" &&
-                        prop.Name != "GuildId") // Exclude Id, DateAdded and GuildId
-                    {
-                        embedBuilder.AddField(prop.Name, propValue.ToString(), true);
-                    }
+                    await ReplyErrorAsync(Strings.XpCompetitionRoleNotFound(ctx.Guild.Id)).ConfigureAwait(false);
+                    return;
                 }
 
-                await ctx.Channel.SendMessageAsync(embed: embedBuilder.Build());
-            }
-            else
-            {
-                // Subproperty is specified, set its value
-                if (TryParseValue(propertyInfo.PropertyType, subProperty, out var propertyValue))
-                {
-                    await using var dbContext = await dbProvider.GetContextAsync();
+                await Service.AddCompetitionRewardAsync(competitionId, position, roleMatch.Id);
+                await ReplyConfirmAsync(Strings.XpCompetitionRoleRewardAdded(
+                    ctx.Guild.Id,
+                    position,
+                    roleMatch.Mention,
+                    competitionId
+                )).ConfigureAwait(false);
+                break;
 
-                    propertyInfo.SetValue(template, propertyValue);
-                    dbContext.Templates.Update(template);
-                    await dbContext.SaveChangesAsync();
-                    await ctx.Channel.SendConfirmAsync($"Set {propertyInfo.Name} to {subProperty}.");
-                }
-                else
+            case "xp":
+                if (!int.TryParse(reward, out var xpAmount) || xpAmount <= 0)
                 {
-                    await ctx.Channel.SendErrorAsync(
-                        $"Failed to set value. The type of {property} is {propertyInfo.PropertyType}, but received {subProperty}.",
-                        Config);
+                    await ReplyErrorAsync(Strings.XpCompetitionAmountInvalid(ctx.Guild.Id)).ConfigureAwait(false);
+                    return;
                 }
-            }
+
+                await Service.AddCompetitionRewardAsync(competitionId, position, 0, xpAmount);
+                await ReplyConfirmAsync(Strings.XpCompetitionXpRewardAdded(
+                    ctx.Guild.Id,
+                    position,
+                    xpAmount,
+                    competitionId
+                )).ConfigureAwait(false);
+                break;
+
+            case "currency":
+                if (!long.TryParse(reward, out var currencyAmount) || currencyAmount <= 0)
+                {
+                    await ReplyErrorAsync(Strings.XpCompetitionAmountInvalid(ctx.Guild.Id)).ConfigureAwait(false);
+                    return;
+                }
+
+                await Service.AddCompetitionRewardAsync(competitionId, position, 0, 0, currencyAmount);
+                await ReplyConfirmAsync(Strings.XpCompetitionCurrencyRewardAdded(
+                    ctx.Guild.Id,
+                    position,
+                    currencyAmount,
+                    await currencyService.GetCurrencyEmote(ctx.Guild.Id),
+                    competitionId
+                )).ConfigureAwait(false);
+                break;
+        }
+    }
+
+    /// <summary>
+    ///     Lists active XP competitions.
+    /// </summary>
+    /// <example>.xpcompetitions</example>
+    [Cmd, Aliases]
+    public async Task XpCompetitions()
+    {
+        var competitions = await Service.GetActiveCompetitionsAsync(ctx.Guild.Id);
+
+        if (competitions.Count == 0)
+        {
+            await ReplyErrorAsync(Strings.XpNoActiveCompetitions(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
+        var embed = new EmbedBuilder()
+            .WithOkColor()
+            .WithTitle(Strings.XpActiveCompetitionsTitle(ctx.Guild.Id));
+
+        foreach (var comp in competitions)
+        {
+            var timeLeft = comp.EndTime - DateTime.UtcNow;
+            var description = Strings.XpCompetitionInfo(
+                ctx.Guild.Id,
+                comp.Type.ToString(),
+                timeLeft.Humanize(),
+                comp.Type == (int)XpCompetitionType.ReachLevel ? comp.TargetLevel.ToString() : ""
+            );
+
+            embed.AddField(comp.Name, description);
+        }
+
+        await ctx.Channel.EmbedAsync(embed);
+    }
+
+    /// <summary>
+    ///     Shows the leaderboard for an active competition.
+    /// </summary>
+    /// <param name="competitionId">ID of the competition.</param>
+    /// <example>.competitionlb 1</example>
+    [Cmd, Aliases]
+    public async Task CompetitionLeaderboard(int competitionId)
+    {
+        var competition = await Service.GetCompetitionAsync(competitionId);
+
+        if (competition == null || competition.GuildId != ctx.Guild.Id)
+        {
+            await ReplyErrorAsync(Strings.XpCompetitionNotFound(ctx.Guild.Id, competitionId)).ConfigureAwait(false);
+            return;
+        }
+
+        var entries = await Service.GetCompetitionEntriesAsync(competitionId);
+
+        if (entries.Count == 0)
+        {
+            await ReplyErrorAsync(Strings.XpCompetitionNoEntries(ctx.Guild.Id, competition.Name)).ConfigureAwait(false);
+            return;
+        }
+
+        var embed = new EmbedBuilder()
+            .WithOkColor()
+            .WithTitle(Strings.XpCompetitionLeaderboardTitle(ctx.Guild.Id, competition.Name));
+
+        // Sort entries based on competition type
+        List<(string Username, string Value, int Position)> leaderboard = new();
+
+        switch ((XpCompetitionType)competition.Type)
+        {
+            case XpCompetitionType.MostGained:
+                var gainedSorted = entries.OrderByDescending(e => e.CurrentXp - e.StartingXp).ToList();
+                for (var i = 0; i < Math.Min(10, gainedSorted.Count); i++)
+                {
+                    var entry = gainedSorted[i];
+                    var user = await ctx.Guild.GetUserAsync(entry.UserId);
+                    var username = user?.ToString() ?? entry.UserId.ToString();
+                    var gained = entry.CurrentXp - entry.StartingXp;
+                    leaderboard.Add((username, gained.ToString("N0"), i + 1));
+                }
+                break;
+
+            case XpCompetitionType.ReachLevel:
+                var levelSorted = entries
+                    .Where(e => e.AchievedTargetAt != null)
+                    .OrderBy(e => e.AchievedTargetAt)
+                    .ToList();
+
+                for (var i = 0; i < Math.Min(10, levelSorted.Count); i++)
+                {
+                    var entry = levelSorted[i];
+                    var user = await ctx.Guild.GetUserAsync(entry.UserId);
+                    var username = user?.ToString() ?? entry.UserId.ToString();
+                    var achievedAt = (entry.AchievedTargetAt ?? DateTime.UtcNow).ToString("yyyy-MM-dd HH:mm:ss");
+                    leaderboard.Add((username, achievedAt, i + 1));
+                }
+                break;
+
+            case XpCompetitionType.HighestTotal:
+                var totalSorted = entries.OrderByDescending(e => e.CurrentXp).ToList();
+                for (var i = 0; i < Math.Min(10, totalSorted.Count); i++)
+                {
+                    var entry = totalSorted[i];
+                    var user = await ctx.Guild.GetUserAsync(entry.UserId);
+                    var username = user?.ToString() ?? entry.UserId.ToString();
+                    leaderboard.Add((username, entry.CurrentXp.ToString("N0"), i + 1));
+                }
+                break;
+        }
+
+        // Build description from leaderboard entries
+        var description = new List<string>();
+        foreach (var entry in leaderboard)
+        {
+            description.Add(Strings.XpCompetitionLeaderboardLine(
+                ctx.Guild.Id,
+                entry.Position,
+                entry.Username,
+                entry.Value
+            ));
+        }
+
+        if (description.Count == 0)
+        {
+            description.Add(Strings.XpCompetitionNoQualifiedEntries(ctx.Guild.Id));
+        }
+
+        embed.WithDescription(string.Join("\n", description));
+
+        // Add time information
+        var timeLeft = competition.EndTime - DateTime.UtcNow;
+        if (timeLeft.TotalSeconds > 0)
+        {
+            embed.WithFooter(Strings.XpCompetitionTimeLeft(ctx.Guild.Id, timeLeft.Humanize()));
         }
         else
         {
-            // Value is specified, user wants to set a property
-            if (subProperty != null)
-            {
-                // Subproperty is specified, user wants to set a property of a nested class within Template
-                var subPropertyInfo = propertyInfo.PropertyType.GetProperty(subProperty,
-                    BindingFlags.IgnoreCase | BindingFlags.Public | BindingFlags.Instance);
-                if (subPropertyInfo == null)
-                {
-                    await ctx.Channel.SendErrorAsync($"No subproperty named {subProperty} found in {property}.",
-                        Config);
-                    return;
-                }
-
-                if (subPropertyInfo.Name is "Id" or "DateAdded" or "GuildId")
-                {
-                    await ctx.Channel.SendErrorAsync(Strings.No(ctx.Guild.Id), Config);
-                    return;
-                }
-
-                if (TryParseValue(subPropertyInfo.PropertyType, value, out var subPropertyValue))
-                {
-                    // Set the value of the subproperty
-                    subPropertyInfo.SetValue(propertyInfo.GetValue(template), subPropertyValue);
-                }
-                else
-                {
-                    await ctx.Channel.SendErrorAsync(
-                        $"Failed to set value. The type of {subProperty} is {subPropertyInfo.PropertyType}, but received {value}.",
-                        Config);
-                    return;
-                }
-            }
-            else
-            {
-                // No subproperty is specified, user wants to set a property of Template directly
-                if (propertyInfo.Name is "Id" or "DateAdded" or "GuildId")
-                {
-                    await ctx.Channel.SendErrorAsync(Strings.No(ctx.Guild.Id), Config);
-                    return;
-                }
-
-                if (TryParseValue(propertyInfo.PropertyType, value, out var propertyValue))
-                {
-                    // Set the value of the property
-                    propertyInfo.SetValue(template, propertyValue);
-                }
-                else
-                {
-                    await ctx.Channel.SendErrorAsync(
-                        $"Failed to set value. The type of {property} is {propertyInfo.PropertyType}, but received {value}.",
-                        Config);
-                    return;
-                }
-            }
-
-            await using var dbContext = await dbProvider.GetContextAsync();
-
-            // Save changes to the database
-            dbContext.Templates.Update(template);
-            await dbContext.SaveChangesAsync();
-            await ctx.Channel.SendConfirmAsync(Strings.ConfigUpdated(ctx.Guild.Id));
+            embed.WithFooter(Strings.XpCompetitionEnded(ctx.Guild.Id));
         }
+
+        await ctx.Channel.EmbedAsync(embed);
     }
 
-    private static bool TryParseValue(Type type, string value, out object result)
+    /// <summary>
+    ///     Ends a competition early and distributes rewards.
+    /// </summary>
+    /// <param name="competitionId">ID of the competition to end.</param>
+    /// <example>.endcompetition 1</example>
+    [Cmd, Aliases]
+    [UserPerm(GuildPermission.ManageGuild)]
+    public async Task EndCompetition(int competitionId)
     {
-        result = null;
-        if (type == typeof(int))
+        var competition = await Service.GetCompetitionAsync(competitionId);
+
+        if (competition == null || competition.GuildId != ctx.Guild.Id)
         {
-            if (!int.TryParse(value, out var intValue)) return false;
-            result = intValue;
-            return true;
+            await ReplyErrorAsync(Strings.XpCompetitionNotFound(ctx.Guild.Id, competitionId)).ConfigureAwait(false);
+            return;
         }
 
-        if (type == typeof(byte))
+        if (competition.EndTime < DateTime.UtcNow)
         {
-            if (!byte.TryParse(value, out var doubleValue)) return false;
-            result = doubleValue;
-            return true;
+            await ReplyErrorAsync(Strings.XpCompetitionAlreadyEnded(ctx.Guild.Id, competition.Name)).ConfigureAwait(false);
+            return;
         }
 
-        if (type == typeof(string))
-        {
-            result = value;
-            return true;
-        }
-
-        if (type == typeof(bool))
-        {
-            if (!bool.TryParse(value, out var boolValue)) return false;
-            result = boolValue;
-            return true;
-        }
-        // Add more else if clauses here for other types you want to support
-
-        return false;
-    }
-
-
-    private class XpStuffs
-    {
-        public string Setting { get; set; }
-        public string Value { get; set; }
+        await Service.FinalizeCompetitionAsync(competitionId);
+        await ReplyConfirmAsync(Strings.XpCompetitionManuallyEnded(ctx.Guild.Id, competition.Name)).ConfigureAwait(false);
     }
 }

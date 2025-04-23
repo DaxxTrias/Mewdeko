@@ -1,8 +1,7 @@
 ﻿using Discord.Commands;
-using LinqToDB.EntityFrameworkCore;
+using LinqToDB;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Controllers;
-using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.OwnerOnly.Services;
 
 namespace Mewdeko.Modules.OwnerOnly;
@@ -12,17 +11,8 @@ namespace Mewdeko.Modules.OwnerOnly;
 /// These commands are only available to the bot owner.
 /// </summary>
 [OwnerOnly]
-public class InstanceManagement : MewdekoModuleBase<InstanceManagementService>
+public class InstanceManagement(IDataConnectionFactory dbFactory) : MewdekoModuleBase<InstanceManagementService>
 {
-    private readonly DbContextProvider provider;
-
-    /// <summary>
-    /// Initializes a new instance of the InstanceManagement module.
-    /// </summary>
-    public InstanceManagement(DbContextProvider provider)
-    {
-        this.provider = provider;
-    }
 
     /// <summary>
     /// Adds a bot instance to be managed from the dashboard.
@@ -70,8 +60,8 @@ public class InstanceManagement : MewdekoModuleBase<InstanceManagementService>
     [Summary("Lists all registered bot instances")]
     public async Task ListInstances()
     {
-        await using var db = await provider.GetContextAsync();
-        var instances = await db.BotInstances.ToListAsyncLinqToDB();
+        await using var db = await dbFactory.CreateConnectionAsync();
+        var instances = await db.BotInstances.ToListAsync();
 
         if (instances.Count == 0)
         {

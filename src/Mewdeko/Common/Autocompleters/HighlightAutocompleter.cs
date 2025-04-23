@@ -1,4 +1,5 @@
 using Discord.Interactions;
+using Mewdeko.Database.EF.EFCore;
 using ZiggyCreatures.Caching.Fusion;
 
 namespace Mewdeko.Common.Autocompleters;

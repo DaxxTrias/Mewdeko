@@ -1,4 +1,6 @@
 ﻿using System.Threading;
+using DataModel;
+
 
 namespace Mewdeko.Modules.Utility.Services;
 
@@ -20,6 +22,7 @@ public interface IAiClient
     /// <param name="apiKey">The API key for authentication.</param>
     /// <param name="cancellationToken">Optional token to cancel the operation.</param>
     /// <returns>A stream containing the AI response.</returns>
-    Task<IAsyncEnumerable<string>> StreamResponseAsync(IEnumerable<AiMessage> messages, string model, string apiKey, CancellationToken cancellationToken = default);
+    Task<IAsyncEnumerable<string>> StreamResponseAsync(IEnumerable<AiMessage> messages, string model, string apiKey,
+        CancellationToken cancellationToken = default);
 
 }

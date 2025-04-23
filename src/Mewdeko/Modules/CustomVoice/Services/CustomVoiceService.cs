@@ -1,7 +1,7 @@
 ﻿using System.Text.Json;
 using System.Threading;
-using Microsoft.EntityFrameworkCore;
-using Mewdeko.Database.DbContextStuff;
+using DataModel;
+using LinqToDB;
 using Serilog;
 
 namespace Mewdeko.Modules.CustomVoice.Services;
@@ -11,28 +11,25 @@ namespace Mewdeko.Modules.CustomVoice.Services;
 /// </summary>
 public class CustomVoiceService : INService
 {
-    private readonly DbContextProvider db;
+    private readonly IDataConnectionFactory dbFactory;
     private readonly DiscordShardedClient client;
     private readonly EventHandler eventHandler;
-    private readonly GuildSettingsService guildSettings;
     private readonly ConcurrentDictionary<ulong, HashSet<ulong>> activeChannels = new();
     private readonly ConcurrentDictionary<ulong, DateTime> emptyChannels = new();
     private readonly ConcurrentDictionary<ulong, Timer> emptyChannelTimers = new();
     private readonly SemaphoreSlim @lock = new(1, 1);
 
     /// <summary>
-    ///     Initializes a new instance of the <see cref="CustomVoiceService"/> class.
+    ///     Initializes a new instance of the <see cref="CustomVoiceService" /> class.
     /// </summary>
     public CustomVoiceService(
-        DbContextProvider db,
+        IDataConnectionFactory dbFactory,
         DiscordShardedClient client,
-        EventHandler eventHandler,
-        GuildSettingsService guildSettings)
+        EventHandler eventHandler)
     {
-        this.db = db;
+        this.dbFactory = dbFactory;
         this.client = client;
         this.eventHandler = eventHandler;
-        this.guildSettings = guildSettings;
 
         this.eventHandler.UserVoiceStateUpdated += OnUserVoiceStateUpdated;
         this.eventHandler.ChannelDestroyed += OnChannelDestroyed;
@@ -53,8 +50,8 @@ public class CustomVoiceService : INService
     {
         try
         {
-            await using var db = await this.db.GetContextAsync();
-            var allChannels = await db.CustomVoiceChannels.ToListAsync();
+            await using var dbContext = await dbFactory.CreateConnectionAsync();
+            var allChannels = await dbContext.CustomVoiceChannels.ToListAsync();
 
             foreach (var channel in allChannels)
             {
@@ -66,7 +63,7 @@ public class CustomVoiceService : INService
                 if (voiceChannel == null)
                 {
                     // Channel no longer exists, remove from database
-                    db.CustomVoiceChannels.Remove(channel);
+                    await dbContext.CustomVoiceChannels.Select(x => channel).DeleteAsync();
                     continue;
                 }
 
@@ -100,9 +97,6 @@ public class CustomVoiceService : INService
                     }
                 }
             }
-
-            // Save any changes (removed non-existent channels)
-            await db.SaveChangesAsync();
         }
         catch (Exception ex)
         {
@@ -120,8 +114,8 @@ public class CustomVoiceService : INService
         if (guildId == 0)
             throw new ArgumentException("Guild ID cannot be 0", nameof(guildId));
 
-        await using var db = await this.db.GetContextAsync();
-        var config = await db.CustomVoiceConfigs.FirstOrDefaultAsync(c => c.GuildId == guildId);
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
+        var config = await dbContext.CustomVoiceConfigs.FirstOrDefaultAsync(c => c.GuildId == guildId);
 
         if (config == null)
         {
@@ -145,8 +139,7 @@ public class CustomVoiceService : INService
                 AutoPermission = true
             };
 
-            db.CustomVoiceConfigs.Add(config);
-            await db.SaveChangesAsync();
+            await dbContext.InsertAsync(config);
         }
 
         return config;
@@ -165,9 +158,8 @@ public class CustomVoiceService : INService
         if (config.GuildId == 0)
             throw new ArgumentException("Guild ID cannot be 0", nameof(config));
 
-        await using var db = await this.db.GetContextAsync();
-        db.CustomVoiceConfigs.Update(config);
-        await db.SaveChangesAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
+        await dbContext.UpdateAsync(config);
     }
 
     /// <summary>
@@ -202,8 +194,8 @@ public class CustomVoiceService : INService
                 throw new ArgumentException($"Category with ID {categoryId} not found", nameof(categoryId));
         }
 
-        await using var db = await this.db.GetContextAsync();
-        var config = await db.CustomVoiceConfigs.FirstOrDefaultAsync(c => c.GuildId == guildId);
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
+        var config = await dbContext.CustomVoiceConfigs.FirstOrDefaultAsync(c => c.GuildId == guildId);
 
         if (config == null)
         {
@@ -229,7 +221,7 @@ public class CustomVoiceService : INService
                 AutoPermission = true
             };
 
-            db.CustomVoiceConfigs.Add(config);
+            await dbContext.InsertAsync(config);
         }
         else
         {
@@ -237,10 +229,8 @@ public class CustomVoiceService : INService
             if (categoryId.HasValue)
                 config.ChannelCategoryId = categoryId;
 
-            db.CustomVoiceConfigs.Update(config);
+            await dbContext.UpdateAsync(config);
         }
-
-        await db.SaveChangesAsync();
     }
 
     /// <summary>
@@ -253,8 +243,8 @@ public class CustomVoiceService : INService
         if (guildId == 0)
             throw new ArgumentException("Guild ID cannot be 0", nameof(guildId));
 
-        await using var db = await this.db.GetContextAsync();
-        return await db.CustomVoiceChannels.Where(c => c.GuildId == guildId).ToListAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
+        return await dbContext.CustomVoiceChannels.Where(c => c.GuildId == guildId).ToListAsync();
     }
 
     /// <summary>
@@ -263,7 +253,7 @@ public class CustomVoiceService : INService
     /// <param name="guildId">The guild ID.</param>
     /// <param name="channelId">The channel ID.</param>
     /// <returns>The custom voice channel if found, null otherwise.</returns>
-    public async Task<CustomVoiceChannel> GetChannelAsync(ulong guildId, ulong channelId)
+    public async Task<CustomVoiceChannel?> GetChannelAsync(ulong guildId, ulong channelId)
     {
         if (guildId == 0)
             throw new ArgumentException("Guild ID cannot be 0", nameof(guildId));
@@ -271,8 +261,9 @@ public class CustomVoiceService : INService
         if (channelId == 0)
             throw new ArgumentException("Channel ID cannot be 0", nameof(channelId));
 
-        await using var db = await this.db.GetContextAsync();
-        return await db.CustomVoiceChannels.FirstOrDefaultAsync(c => c.GuildId == guildId && c.ChannelId == channelId);
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
+        return await dbContext.CustomVoiceChannels.FirstOrDefaultAsync(c =>
+            c.GuildId == guildId && c.ChannelId == channelId);
     }
 
     /// <summary>
@@ -289,8 +280,9 @@ public class CustomVoiceService : INService
         if (userId == 0)
             throw new ArgumentException("User ID cannot be 0", nameof(userId));
 
-        await using var db = await this.db.GetContextAsync();
-        return await db.CustomVoiceChannels.Where(c => c.GuildId == guildId && c.OwnerId == userId).ToListAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
+        return await dbContext.CustomVoiceChannels.Where(c => c.GuildId == guildId && c.OwnerId == userId)
+            .ToListAsync();
     }
 
     /// <summary>
@@ -307,8 +299,9 @@ public class CustomVoiceService : INService
         if (userId == 0)
             throw new ArgumentException("User ID cannot be 0", nameof(userId));
 
-        await using var db = await this.db.GetContextAsync();
-        return await db.UserVoicePreferences.FirstOrDefaultAsync(p => p.GuildId == guildId && p.UserId == userId);
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
+        return await dbContext.UserVoicePreferences.FirstOrDefaultAsync(p =>
+            p.GuildId == guildId && p.UserId == userId);
     }
 
     /// <summary>
@@ -327,13 +320,13 @@ public class CustomVoiceService : INService
         if (prefs.UserId == 0)
             throw new ArgumentException("User ID cannot be 0", nameof(prefs));
 
-        await using var db = await this.db.GetContextAsync();
-        var existingPrefs = await db.UserVoicePreferences.FirstOrDefaultAsync(p =>
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
+        var existingPrefs = await dbContext.UserVoicePreferences.FirstOrDefaultAsync(p =>
             p.GuildId == prefs.GuildId && p.UserId == prefs.UserId);
 
         if (existingPrefs == null)
         {
-            db.UserVoicePreferences.Add(prefs);
+            await dbContext.InsertAsync(prefs);
         }
         else
         {
@@ -344,10 +337,8 @@ public class CustomVoiceService : INService
             existingPrefs.KeepAlive = prefs.KeepAlive;
             existingPrefs.WhitelistJson = prefs.WhitelistJson;
             existingPrefs.BlacklistJson = prefs.BlacklistJson;
-            db.UserVoicePreferences.Update(existingPrefs);
+            await dbContext.UpdateAsync(existingPrefs);
         }
-
-        await db.SaveChangesAsync();
     }
 
     /// <summary>
@@ -366,11 +357,12 @@ public class CustomVoiceService : INService
 
         var config = await GetOrCreateConfigAsync(guild.Id);
 
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
+
         // Check if the user already has a channel and multiple channels are not allowed
         if (!config.AllowMultipleChannels)
         {
-            await using var db = await this.db.GetContextAsync();
-            var existingChannel = await db.CustomVoiceChannels
+            var existingChannel = await dbContext.CustomVoiceChannels
                 .FirstOrDefaultAsync(c => c.GuildId == guild.Id && c.OwnerId == user.Id);
 
             if (existingChannel != null)
@@ -383,8 +375,7 @@ public class CustomVoiceService : INService
                 }
 
                 // If the channel doesn't exist anymore, remove it from the database
-                db.CustomVoiceChannels.Remove(existingChannel);
-                await db.SaveChangesAsync();
+                await dbContext.CustomVoiceChannels.Select(x => existingChannel).DeleteAsync();
             }
         }
 
@@ -457,19 +448,20 @@ public class CustomVoiceService : INService
             IsLocked = prefs?.PreferLocked == true && config.AllowLocking,
             KeepAlive = prefs?.KeepAlive == true
         };
+        var allowedUsers = new List<ulong>();
+        var deniedUsers = new List<ulong>();
 
         // Add allowed/denied users if they exist in preferences
         if (prefs?.WhitelistJson != null)
         {
             try
             {
-                customChannel.AllowedUsers = JsonSerializer.Deserialize<List<ulong>>(prefs.WhitelistJson) ?? [];
+                allowedUsers = JsonSerializer.Deserialize<List<ulong>>(prefs.WhitelistJson) ?? [];
                 customChannel.AllowedUsersJson = prefs.WhitelistJson;
             }
             catch (Exception ex)
             {
                 Log.Error(ex, "Error deserializing whitelist JSON for user {UserId}", user.Id);
-                customChannel.AllowedUsers = [];
             }
         }
 
@@ -477,21 +469,16 @@ public class CustomVoiceService : INService
         {
             try
             {
-                customChannel.DeniedUsers = JsonSerializer.Deserialize<List<ulong>>(prefs.BlacklistJson) ?? [];
+                deniedUsers = JsonSerializer.Deserialize<List<ulong>>(prefs.BlacklistJson) ?? [];
                 customChannel.DeniedUsersJson = prefs.BlacklistJson;
             }
             catch (Exception ex)
             {
                 Log.Error(ex, "Error deserializing blacklist JSON for user {UserId}", user.Id);
-                customChannel.DeniedUsers = [];
             }
         }
 
-        await using (var db = await this.db.GetContextAsync())
-        {
-            db.CustomVoiceChannels.Add(customChannel);
-            await db.SaveChangesAsync();
-        }
+        await dbContext.InsertAsync(customChannel);
 
         // Set permissions for the channel
         if (config.AutoPermission)
@@ -518,7 +505,7 @@ public class CustomVoiceService : INService
                     ));
 
                     // Add allowed users if any
-                    foreach (var allowedUserId in customChannel.AllowedUsers)
+                    foreach (var allowedUserId in allowedUsers)
                     {
                         try
                         {
@@ -532,13 +519,14 @@ public class CustomVoiceService : INService
                         }
                         catch (Exception ex)
                         {
-                            Log.Error(ex, "Error setting permissions for allowed user {UserId} in custom voice channel {ChannelId}",
+                            Log.Error(ex,
+                                "Error setting permissions for allowed user {UserId} in custom voice channel {ChannelId}",
                                 allowedUserId, voiceChannel.Id);
                         }
                     }
 
                     // Deny specific users if any
-                    foreach (var deniedUserId in customChannel.DeniedUsers)
+                    foreach (var deniedUserId in deniedUsers)
                     {
                         try
                         {
@@ -552,7 +540,8 @@ public class CustomVoiceService : INService
                         }
                         catch (Exception ex)
                         {
-                            Log.Error(ex, "Error setting permissions for denied user {UserId} in custom voice channel {ChannelId}",
+                            Log.Error(ex,
+                                "Error setting permissions for denied user {UserId} in custom voice channel {ChannelId}",
                                 deniedUserId, voiceChannel.Id);
                         }
                     }
@@ -606,7 +595,7 @@ public class CustomVoiceService : INService
                     ));
 
                     // Add allowed users if any
-                    foreach (var allowedUserId in customChannel.AllowedUsers)
+                    foreach (var allowedUserId in allowedUsers)
                     {
                         try
                         {
@@ -622,7 +611,8 @@ public class CustomVoiceService : INService
                         }
                         catch (Exception ex)
                         {
-                            Log.Error(ex, "Error setting text channel permissions for allowed user {UserId} in custom voice channel {ChannelId}",
+                            Log.Error(ex,
+                                "Error setting text channel permissions for allowed user {UserId} in custom voice channel {ChannelId}",
                                 allowedUserId, voiceChannel.Id);
                         }
                     }
@@ -646,7 +636,7 @@ public class CustomVoiceService : INService
 
                 // Send a welcome message to the text channel
                 await textChannel.SendMessageAsync(
-                    $"This is the text chat for your voice channel. Only users who can access the voice channel can see this chat.");
+                    "This is the text chat for your voice channel. Only users who can access the voice channel can see this chat.");
             }
         }
         catch (Exception ex)
@@ -700,12 +690,11 @@ public class CustomVoiceService : INService
             if (channel == null)
                 return false;
 
-            await using var db = await this.db.GetContextAsync();
-            var customChannel = await db.CustomVoiceChannels.FirstOrDefaultAsync(c => c.ChannelId == channelId);
+            await using var dbContext = await dbFactory.CreateConnectionAsync();
+            var customChannel = await dbContext.CustomVoiceChannels.FirstOrDefaultAsync(c => c.ChannelId == channelId);
             if (customChannel != null)
             {
-                db.CustomVoiceChannels.Remove(customChannel);
-                await db.SaveChangesAsync();
+                await dbContext.CustomVoiceChannels.Select(x => customChannel).DeleteAsync();
             }
 
             await channel.DeleteAsync();
@@ -741,7 +730,8 @@ public class CustomVoiceService : INService
     /// <param name="bitrate">The new bitrate (optional).</param>
     /// <param name="isLocked">The new locked status (optional).</param>
     /// <returns>True if updated successfully, false otherwise.</returns>
-    public async Task<bool> UpdateVoiceChannelAsync(ulong guildId, ulong channelId, string name = null, int? userLimit = null,
+    public async Task<bool> UpdateVoiceChannelAsync(ulong guildId, ulong channelId, string name = null,
+        int? userLimit = null,
         int? bitrate = null, bool? isLocked = null)
     {
         if (guildId == 0)
@@ -763,10 +753,13 @@ public class CustomVoiceService : INService
             var config = await GetOrCreateConfigAsync(guildId);
 
             // Get the channel from database
-            await using var db = await this.db.GetContextAsync();
-            var customChannel = await db.CustomVoiceChannels.FirstOrDefaultAsync(c => c.ChannelId == channelId);
+            await using var dbContext = await dbFactory.CreateConnectionAsync();
+            var customChannel = await dbContext.CustomVoiceChannels.FirstOrDefaultAsync(c => c.ChannelId == channelId);
             if (customChannel == null)
                 return false;
+
+            var allowedUsers = new List<ulong>();
+            var deniedUsers = new List<ulong>();
 
             // Update channel settings
             if (!string.IsNullOrEmpty(name) && config.AllowNameCustomization)
@@ -796,7 +789,6 @@ public class CustomVoiceService : INService
                 if (isLocked.Value)
                 {
                     // Lock both voice and text channel
-                    var everyoneRole = guild.EveryoneRole;
 
                     // Voice channel
                     await channel.AddPermissionOverwriteAsync(guild.EveryoneRole, new OverwritePermissions(
@@ -819,8 +811,6 @@ public class CustomVoiceService : INService
                         Log.Error(ex, "Error updating text channel permissions for channel {ChannelId}", channelId);
                     }
 
-                    // Add allowed users
-                    var allowedUsers = customChannel.AllowedUsers;
                     if (string.IsNullOrEmpty(customChannel.AllowedUsersJson))
                     {
                         allowedUsers = [];
@@ -863,7 +853,8 @@ public class CustomVoiceService : INService
                             }
                             catch (Exception ex)
                             {
-                                Log.Error(ex, "Error updating text channel permissions for user {UserId} in channel {ChannelId}",
+                                Log.Error(ex,
+                                    "Error updating text channel permissions for user {UserId} in channel {ChannelId}",
                                     allowedUserId, channelId);
                             }
                         }
@@ -872,7 +863,6 @@ public class CustomVoiceService : INService
                 else
                 {
                     // Unlock both voice and text channel
-                    var everyoneRole = guild.EveryoneRole;
 
                     // Voice channel
                     var overwrites = channel.PermissionOverwrites;
@@ -895,15 +885,17 @@ public class CustomVoiceService : INService
                         if (textChannel != null)
                         {
                             var textOverwrites = textChannel.PermissionOverwrites;
-                            var textEveryoneOverwrite = textOverwrites.FirstOrDefault(o => o.TargetId == guild.EveryoneRole.Id);
+                            var textEveryoneOverwrite =
+                                textOverwrites.FirstOrDefault(o => o.TargetId == guild.EveryoneRole.Id);
                             if (textEveryoneOverwrite.ToString() != null)
                             {
                                 var permissions = textEveryoneOverwrite.Permissions;
                                 if (permissions.ViewChannel == PermValue.Deny)
                                 {
-                                    await textChannel.AddPermissionOverwriteAsync(guild.EveryoneRole, new OverwritePermissions(
-                                        viewChannel: PermValue.Inherit
-                                    ));
+                                    await textChannel.AddPermissionOverwriteAsync(guild.EveryoneRole,
+                                        new OverwritePermissions(
+                                            viewChannel: PermValue.Inherit
+                                        ));
                                 }
                             }
                         }
@@ -915,8 +907,7 @@ public class CustomVoiceService : INService
                 }
 
                 // Update the database
-                db.CustomVoiceChannels.Update(customChannel);
-                await db.SaveChangesAsync();
+                await dbContext.UpdateAsync(customChannel);
             }
 
             return true;
@@ -959,8 +950,8 @@ public class CustomVoiceService : INService
             return false;
 
         // Get the channel from database
-        await using var db = await this.db.GetContextAsync();
-        var customChannel = await db.CustomVoiceChannels.FirstOrDefaultAsync(c => c.ChannelId == channelId);
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
+        var customChannel = await dbContext.CustomVoiceChannels.FirstOrDefaultAsync(c => c.ChannelId == channelId);
         if (customChannel == null)
             return false;
 
@@ -983,8 +974,7 @@ public class CustomVoiceService : INService
         {
             allowedUsers.Add(userId);
             customChannel.AllowedUsersJson = JsonSerializer.Serialize(allowedUsers);
-            db.CustomVoiceChannels.Update(customChannel);
-            await db.SaveChangesAsync();
+            await dbContext.UpdateAsync(customChannel);
         }
 
         // Update channel permissions
@@ -1037,8 +1027,7 @@ public class CustomVoiceService : INService
         {
             deniedUsers.Remove(userId);
             customChannel.DeniedUsersJson = JsonSerializer.Serialize(deniedUsers);
-            db.CustomVoiceChannels.Update(customChannel);
-            await db.SaveChangesAsync();
+            await dbContext.UpdateAsync(customChannel);
         }
 
         return true;
@@ -1075,8 +1064,8 @@ public class CustomVoiceService : INService
             return false;
 
         // Get the channel from database
-        await using var db = await this.db.GetContextAsync();
-        var customChannel = await db.CustomVoiceChannels.FirstOrDefaultAsync(c => c.ChannelId == channelId);
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
+        var customChannel = await dbContext.CustomVoiceChannels.FirstOrDefaultAsync(c => c.ChannelId == channelId);
         if (customChannel == null)
             return false;
 
@@ -1103,8 +1092,7 @@ public class CustomVoiceService : INService
         {
             deniedUsers.Add(userId);
             customChannel.DeniedUsersJson = JsonSerializer.Serialize(deniedUsers);
-            db.CustomVoiceChannels.Update(customChannel);
-            await db.SaveChangesAsync();
+            await dbContext.UpdateAsync(customChannel);
         }
 
         // Update channel permissions
@@ -1142,7 +1130,8 @@ public class CustomVoiceService : INService
                 }
                 catch (Exception ex)
                 {
-                    Log.Error(ex, "Error disconnecting denied user {UserId} from voice channel {ChannelId}", userId, channelId);
+                    Log.Error(ex, "Error disconnecting denied user {UserId} from voice channel {ChannelId}", userId,
+                        channelId);
                 }
             }
         }
@@ -1165,8 +1154,7 @@ public class CustomVoiceService : INService
         {
             allowedUsers.Remove(userId);
             customChannel.AllowedUsersJson = JsonSerializer.Serialize(allowedUsers);
-            db.CustomVoiceChannels.Update(customChannel);
-            await db.SaveChangesAsync();
+            await dbContext.UpdateAsync(customChannel);
         }
 
         return true;
@@ -1202,8 +1190,8 @@ public class CustomVoiceService : INService
             return false;
 
         // Get the channel from database
-        await using var db = await this.db.GetContextAsync();
-        var customChannel = await db.CustomVoiceChannels.FirstOrDefaultAsync(c => c.ChannelId == channelId);
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
+        var customChannel = await dbContext.CustomVoiceChannels.FirstOrDefaultAsync(c => c.ChannelId == channelId);
         if (customChannel == null)
             return false;
 
@@ -1240,7 +1228,8 @@ public class CustomVoiceService : INService
                 }
                 catch (Exception ex)
                 {
-                    Log.Error(ex, "Error updating text channel permissions for old owner {UserId} in channel {ChannelId}",
+                    Log.Error(ex,
+                        "Error updating text channel permissions for old owner {UserId} in channel {ChannelId}",
                         oldOwnerId, channelId);
                 }
             }
@@ -1284,8 +1273,7 @@ public class CustomVoiceService : INService
         }
 
         // Save changes
-        db.CustomVoiceChannels.Update(customChannel);
-        await db.SaveChangesAsync();
+        await dbContext.UpdateAsync(customChannel);
 
         return true;
     }
@@ -1307,7 +1295,8 @@ public class CustomVoiceService : INService
     private string SanitizeChannelName(string name)
     {
         // Remove illegal characters
-        name = string.Join("", name.Where(c => char.IsLetterOrDigit(c) || char.IsWhiteSpace(c) || c == '-' || c == '_'));
+        name = string.Join("",
+            name.Where(c => char.IsLetterOrDigit(c) || char.IsWhiteSpace(c) || c == '-' || c == '_'));
 
         // Ensure it's not empty
         if (string.IsNullOrWhiteSpace(name))
@@ -1351,13 +1340,14 @@ public class CustomVoiceService : INService
                 channels.Contains(newState.VoiceChannel.Id))
             {
                 // Update last active time
-                await using var db = await this.db.GetContextAsync();
-                var customChannel = await db.CustomVoiceChannels.FirstOrDefaultAsync(c => c.ChannelId == newState.VoiceChannel.Id);
+                await using var dbContext = await dbFactory.CreateConnectionAsync();
+                var customChannel =
+                    await dbContext.CustomVoiceChannels.FirstOrDefaultAsync(
+                        c => c.ChannelId == newState.VoiceChannel.Id);
                 if (customChannel != null)
                 {
                     customChannel.LastActive = DateTime.UtcNow;
-                    db.CustomVoiceChannels.Update(customChannel);
-                    await db.SaveChangesAsync();
+                    await dbContext.UpdateAsync(customChannel);
                 }
 
                 // Remove from empty channels if it was there
@@ -1377,8 +1367,10 @@ public class CustomVoiceService : INService
                 if (vc.ConnectedUsers.Count == 0)
                 {
                     // Get the channel to check if it should be kept
-                    await using var db = await this.db.GetContextAsync();
-                    var customChannel = await db.CustomVoiceChannels.FirstOrDefaultAsync(c => c.ChannelId == oldState.VoiceChannel.Id);
+                    await using var dbContext = await dbFactory.CreateConnectionAsync();
+                    var customChannel =
+                        await dbContext.CustomVoiceChannels.FirstOrDefaultAsync(c =>
+                            c.ChannelId == oldState.VoiceChannel.Id);
 
                     if (customChannel is { KeepAlive: false } && config.DeleteWhenEmpty)
                     {
@@ -1388,12 +1380,18 @@ public class CustomVoiceService : INService
                         // Schedule deletion after timeout
                         if (config.EmptyChannelTimeout > 0)
                         {
-                            var timer = new Timer(_ => {
-                                Task.Run(async () => {
-                                    try {
+                            var timer = new Timer(_ =>
+                            {
+                                Task.Run(async () =>
+                                {
+                                    try
+                                    {
                                         await DeleteEmptyChannelAsync(guild.Id, oldState.VoiceChannel.Id);
-                                    } catch (Exception ex) {
-                                        Log.Error(ex, "Timer callback failed for channel {ChannelId}", oldState.VoiceChannel.Id);
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        Log.Error(ex, "Timer callback failed for channel {ChannelId}",
+                                            oldState.VoiceChannel.Id);
                                     }
                                 });
                             }, null, TimeSpan.FromMinutes(config.EmptyChannelTimeout), Timeout.InfiniteTimeSpan);
@@ -1430,13 +1428,14 @@ public class CustomVoiceService : INService
         try
         {
             // Check if this was a custom voice channel
-            await using var db = await this.db.GetContextAsync();
-            var customChannel = await db.CustomVoiceChannels.FirstOrDefaultAsync(c => c.ChannelId == voiceChannel.Id);
+            await using var dbContext = await dbFactory.CreateConnectionAsync();
+            var customChannel =
+                await dbContext.CustomVoiceChannels.FirstOrDefaultAsync(c => c.ChannelId == voiceChannel.Id);
             if (customChannel != null)
             {
                 // Delete the channel from the database
-                db.CustomVoiceChannels.Remove(customChannel);
-                await db.SaveChangesAsync();
+                await dbContext.CustomVoiceChannels.Select(x => customChannel).DeleteAsync();
+
 
                 // Remove from tracking collections
                 if (activeChannels.TryGetValue(guild.Id, out var channels))
@@ -1453,7 +1452,8 @@ public class CustomVoiceService : INService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error handling channel deletion for channel {ChannelId} in guild {GuildId}", channel.Id, guild.Id);
+            Log.Error(ex, "Error handling channel deletion for channel {ChannelId} in guild {GuildId}", channel.Id,
+                guild.Id);
         }
     }
 
@@ -1465,8 +1465,8 @@ public class CustomVoiceService : INService
         try
         {
             // Load active channels for this guild
-            await using var db = await this.db.GetContextAsync();
-            var channels = await db.CustomVoiceChannels.Where(c => c.GuildId == guild.Id).ToListAsync();
+            await using var dbContext = await dbFactory.CreateConnectionAsync();
+            var channels = await dbContext.CustomVoiceChannels.Where(c => c.GuildId == guild.Id).ToListAsync();
 
             if (channels.Any())
             {
@@ -1547,8 +1547,9 @@ public class CustomVoiceService : INService
                         try
                         {
                             // Find the guild for this channel
-                            await using var db = await this.db.GetContextAsync();
-                            var customChannel = await db.CustomVoiceChannels.FirstOrDefaultAsync(c => c.ChannelId == channelId);
+                            await using var dbContext = await dbFactory.CreateConnectionAsync();
+                            var customChannel =
+                                await dbContext.CustomVoiceChannels.FirstOrDefaultAsync(c => c.ChannelId == channelId);
                             if (customChannel == null)
                             {
                                 this.emptyChannels.TryRemove(channelId, out _);

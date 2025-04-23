@@ -2,7 +2,6 @@
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
 using Mewdeko.Common.Attributes.InteractionCommands;
-using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.Giveaways.Services;
 using SkiaSharp;
 
@@ -11,12 +10,12 @@ namespace Mewdeko.Modules.Giveaways;
 /// <summary>
 ///     Slash commands for giveaways.
 /// </summary>
-/// <param name="db">The database service</param>
+/// <param name="dbFactory">The database service</param>
 /// <param name="interactiveService">The service used to make paginated embeds</param>
 /// <param name="guildSettings">Service for getting guild configs</param>
 [Group("giveaways", "Create or manage giveaways!")]
 public class SlashGiveaways(
-    DbContextProvider dbProvider,
+    IDataConnectionFactory dbFactory,
     InteractiveService interactiveService,
     GuildSettingsService guildSettings)
     : MewdekoSlashModuleBase<GiveawayService>
@@ -184,10 +183,10 @@ public class SlashGiveaways(
     [CheckPermissions]
     public async Task GReroll(ulong messageid)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
         var gway = dbContext.Giveaways
-            .GiveawaysForGuild(ctx.Guild.Id).ToList().Find(x => x.MessageId == messageid);
+            .Where(x =>x.ServerId == ctx.Guild.Id).ToList().Find(x => x.MessageId == messageid);
         if (gway is null)
         {
             await ctx.Interaction.SendErrorAsync(Strings.GiveawayNotFound(ctx.Guild.Id), Config).ConfigureAwait(false);
@@ -211,11 +210,11 @@ public class SlashGiveaways(
     [CheckPermissions]
     public async Task GStats()
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
         var eb = new EmbedBuilder().WithOkColor();
-        var gways = dbContext.Giveaways.GiveawaysForGuild(ctx.Guild.Id);
-        if (gways.Count == 0)
+        var gways = dbContext.Giveaways.Where(x => x.ServerId == ctx.Guild.Id);
+        if (!gways.Any())
         {
             await ctx.Interaction.SendErrorAsync(Strings.GiveawayNoStatsAvailable(ctx.Guild.Id), Config).ConfigureAwait(false);
         }
@@ -232,7 +231,7 @@ public class SlashGiveaways(
             var amount = gways.Distinct(x => x.UserId).Count();
             eb.WithTitle(Strings.GiveawayStatsTitle(ctx.Guild.Id));
             eb.AddField(Strings.GiveawayStatsUsers(ctx.Guild.Id), amount, true);
-            eb.AddField(Strings.GiveawayStatsTotal(ctx.Guild.Id), gways.Count, true);
+            eb.AddField(Strings.GiveawayStatsTotal(ctx.Guild.Id), gways.Count(), true);
             eb.AddField(Strings.GiveawayStatsActive(ctx.Guild.Id), gways.Count(x => x.Ended == 0), true);
             eb.AddField(Strings.GiveawayStatsEnded(ctx.Guild.Id), gways.Count(x => x.Ended == 1), true);
             eb.AddField(Strings.GiveawayStatsChannels(ctx.Guild.Id),
@@ -327,9 +326,9 @@ public class SlashGiveaways(
     [CheckPermissions]
     public async Task GList()
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
-        var gways = dbContext.Giveaways.GiveawaysForGuild(ctx.Guild.Id).Where(x => x.Ended == 0);
+        var gways = dbContext.Giveaways.Where(x => x.ServerId == ctx.Guild.Id).Where(x => x.Ended == 0);
         if (!gways.Any())
         {
             await ctx.Interaction.SendErrorAsync(Strings.GiveawayNoActive(ctx.Guild.Id), Config).ConfigureAwait(false);
@@ -353,7 +352,7 @@ public class SlashGiveaways(
             return new PageBuilder().WithOkColor()
                 .WithTitle(Strings.GiveawayListTitle(ctx.Guild.Id, gways.Count()))
                 .WithDescription(string.Join("\n\n",
-                    await gways.Skip(page * 5).Take(5).Select(async x =>
+                    await gways.Skip(page * 5).Take(5).AsEnumerable().Select(async x =>
                             Strings.GiveawayListEntry(ctx.Guild.Id, x.MessageId, x.Item, x.Winners,
                                 await GetJumpUrl(x.ChannelId, x.MessageId).ConfigureAwait(false)))
                         .GetResults()
@@ -378,10 +377,10 @@ public class SlashGiveaways(
     [CheckPermissions]
     public async Task GEnd(ulong messageid)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
         var gway = dbContext.Giveaways
-            .GiveawaysForGuild(ctx.Guild.Id).ToList().Find(x => x.MessageId == messageid);
+            .Where(x => x.ServerId == ctx.Guild.Id).ToList().Find(x => x.MessageId == messageid);
         if (gway is null)
         {
             await ctx.Interaction.SendErrorAsync(Strings.GiveawayNotFound(ctx.Guild.Id), Config).ConfigureAwait(false);

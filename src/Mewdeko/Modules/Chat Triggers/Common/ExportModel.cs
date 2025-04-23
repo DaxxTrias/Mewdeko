@@ -1,3 +1,5 @@
+using DataModel;
+
 namespace Mewdeko.Modules.Chat_Triggers.Common;
 
 /// <summary>
@@ -98,11 +100,11 @@ public class ExportedTriggers
     public bool Eph { get; set; }
 
     /// <summary>
-    ///     Converts a <see cref="Database.Models.ChatTriggers" /> object to an <see cref="ExportedTriggers" /> object.
+    ///     Converts a <see cref="Database.EF.EFCore.ChatTriggers" /> object to an <see cref="ExportedTriggers" /> object.
     /// </summary>
-    /// <param name="ct">The <see cref="Database.Models.ChatTriggers" /> object.</param>
+    /// <param name="ct">The <see cref="Database.EF.EFCore.ChatTriggers" /> object.</param>
     /// <returns>The converted <see cref="ExportedTriggers" /> object.</returns>
-    public static ExportedTriggers FromModel(Database.Models.ChatTriggers ct)
+    public static ExportedTriggers FromModel(ChatTrigger ct)
     {
         return new ExportedTriggers
         {
@@ -115,16 +117,16 @@ public class ExportedTriggers
             Rgx = ct.IsRegex,
             React = string.IsNullOrWhiteSpace(ct.Reactions)
                 ? null
-                : ct.GetReactions(),
+                : ct.Reactions.Split("@@@"),
             Rtt = ct.ReactToTrigger,
             Nr = ct.NoRespond,
             RRole = ct.GetRemovedRoles(),
             ARole = ct.GetGrantedRoles(),
-            Rgt = ct.RoleGrantType,
-            VTypes = ct.ValidTriggerTypes,
+            Rgt = (CtRoleGrantType)ct.RoleGrantType,
+            VTypes = (ChatTriggerType)ct.ValidTriggerTypes,
             AcName = ct.ApplicationCommandName,
             AcDesc = ct.ApplicationCommandDescription,
-            Act = ct.ApplicationCommandType,
+            Act = (CtApplicationCommandType)ct.ApplicationCommandType,
             Eph = ct.EphemeralResponse
         };
     }

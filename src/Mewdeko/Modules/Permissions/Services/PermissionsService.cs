@@ -1,11 +1,13 @@
-﻿using Discord.Commands;
+﻿using System.Diagnostics;
+using Discord.Commands;
 using Discord.Interactions;
+using LinqToDB;
 using Mewdeko.Common.Configs;
 using Mewdeko.Common.ModuleBehaviors;
-using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.Permissions.Common;
 using Mewdeko.Services.Strings;
-using Microsoft.EntityFrameworkCore;
+using DataModel;
+using CommandInfo = Discord.Commands.CommandInfo;
 
 namespace Mewdeko.Modules.Permissions.Services;
 
@@ -16,7 +18,7 @@ public class PermissionService : ILateBlocker, INService, IReadyExecutor
 {
     private readonly DiscordShardedClient client;
     private readonly BotConfig config;
-    private readonly DbContextProvider dbProvider;
+    private readonly IDataConnectionFactory dbFactory;
 
     private readonly GuildSettingsService guildSettings;
 
@@ -28,17 +30,17 @@ public class PermissionService : ILateBlocker, INService, IReadyExecutor
     /// <summary>
     ///     Initializes a new instance of the <see cref="PermissionService" /> class.
     /// </summary>
-    /// <param name="db">The database service for accessing permission settings.</param>
+    /// <param name="dbFactory">The database service for accessing permission settings.</param>
     /// <param name="strings">The service for localized bot strings.</param>
     /// <param name="guildSettings">The service for managing guild-specific settings.</param>
     /// <param name="client">The discord socket client</param>
     /// <param name="configService">The service for bot-wide configurations.</param>
-    public PermissionService(DbContextProvider dbProvider,
+    public PermissionService(IDataConnectionFactory dbFactory,
         GeneratedBotStrings strings,
         GuildSettingsService guildSettings, DiscordShardedClient client, BotConfig configService)
     {
         config = configService;
-        this.dbProvider = dbProvider;
+        this.dbFactory = dbFactory;
         Strings = strings;
         this.guildSettings = guildSettings;
         this.client = client;
@@ -197,22 +199,45 @@ public class PermissionService : ILateBlocker, INService, IReadyExecutor
     /// <inheritdoc />
     public async Task OnReadyAsync()
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
 
-        foreach (var x in await dbContext.GuildConfigs.Permissionsv2ForAll())
+        // Get all permissions, grouped by GuildId
+        var permissionsByGuild = await db.Permissions1
+            .Where(x => x.GuildId != null)
+            .ToListAsync();
+
+        var groupedPerms = permissionsByGuild
+            .GroupBy(p => p.GuildId)
+            .ToList();
+
+        foreach (var guildPerms in groupedPerms)
         {
-            if (x.Permissions is null)
+            Debug.Assert(guildPerms.Key != null, "guildPerms.Key != null");
+            var guildId = guildPerms.Key.Value;
+            var permissions = guildPerms.ToList();
+
+            if (permissions.Count == 0)
             {
-                x.Permissions = Permissionv2.GetDefaultPermlist;
-                await dbContext.SaveChangesAsync();
+                // Add default permissions for this guild
+                var defaultPerms = PermissionExtensions.GetDefaultPermlist;
+                foreach (var perm in defaultPerms)
+                {
+                    perm.GuildId = guildId;
+                    await db.InsertAsync(perm);
+                }
+                permissions = defaultPerms.ToList();
             }
 
-            Cache.TryAdd(x.GuildId,
+            // Get verbose and permission role settings
+            var guildConfig = await db.GuildConfigs
+                .FirstOrDefaultAsync(gc => gc.GuildId == guildId);
+
+            Cache.TryAdd(guildId,
                 new PermissionCache
                 {
-                    Verbose = x.VerbosePermissions,
-                    PermRole = x.PermissionRole,
-                    Permissions = new PermissionsCollection<Permissionv2>(x.Permissions)
+                    Verbose = guildConfig?.VerbosePermissions ?? false,
+                    PermRole = guildConfig?.PermissionRole ?? null,
+                    Permissions = permissions // Directly use the list
                 });
         }
     }
@@ -224,16 +249,41 @@ public class PermissionService : ILateBlocker, INService, IReadyExecutor
     /// <returns>The permission cache for the guild.</returns>
     public async Task<PermissionCache?> GetCacheFor(ulong guildId)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
-
         if (Cache.TryGetValue(guildId, out var pc))
             return pc;
-        var config = await dbContext.ForGuildId(guildId,
-            set => set.Include(x => x.Permissions));
-        UpdateCache(config);
 
-        Cache.TryGetValue(guildId, out pc);
-        return pc ?? null;
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        // Get permissions directly by GuildId
+        var permissions = await db.Permissions1
+            .Where(p => p.GuildId == guildId)
+            .ToListAsync();
+
+        // Get guild config for other settings
+        var guildConfig = await db.GuildConfigs
+            .FirstOrDefaultAsync(gc => gc.GuildId == guildId);
+
+        if (permissions.Count == 0)
+        {
+            // Add default permissions for this guild
+            var defaultPerms = PermissionExtensions.GetDefaultPermlist;
+            foreach (var perm in defaultPerms)
+            {
+                perm.GuildId = guildId;
+                await db.InsertAsync(perm);
+            }
+            permissions = defaultPerms.ToList();
+        }
+
+        var permCache = new PermissionCache
+        {
+            Verbose = guildConfig?.VerbosePermissions ?? false,
+            PermRole = guildConfig?.PermissionRole ?? null,
+            Permissions = permissions // Directly use the list
+        };
+
+        Cache.TryAdd(guildId, permCache);
+        return permCache;
     }
 
     /// <summary>
@@ -242,39 +292,65 @@ public class PermissionService : ILateBlocker, INService, IReadyExecutor
     /// <param name="guildId">The ID of the guild.</param>
     /// <param name="perms">The permissions to add.</param>
     /// <remarks>Updates both the database and the in-memory cache.</remarks>
-    public async Task AddPermissions(ulong guildId, params Permissionv2[] perms)
+    public async Task AddPermissions(ulong guildId, params Permission1[] perms)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
 
-        var config = await dbContext.GcWithPermissionsv2For(guildId);
-        //var orderedPerms = new PermissionsCollection<Permissionv2>(config.Permissions);
-        var max = config.Permissions.Max(x => x.Index); //have to set its index to be the highest
-        foreach (var perm in perms)
+        // Get existing permissions directly
+        var permissions = await db.Permissions1
+            .Where(p => p.GuildId == guildId)
+            .ToListAsync();
+
+        if (permissions.Count == 0)
         {
-            perm.Index = ++max;
-            config.Permissions.Add(perm);
+            // Add default permissions first
+            var defaultPerms = PermissionExtensions.GetDefaultPermlist;
+            foreach (var perm in defaultPerms)
+            {
+                perm.GuildId = guildId;
+                await db.InsertAsync(perm);
+            }
+            permissions = defaultPerms.ToList();
         }
 
-        await dbContext.SaveChangesAsync().ConfigureAwait(false);
-        UpdateCache(config);
+        // Add new permissions with GuildId
+        var max = permissions.Count > 0 ? permissions.Max(x => x.Index) : -1;
+        foreach (var perm in perms)
+        {
+            perm.GuildId = guildId;
+            perm.Index = ++max;
+            await db.InsertAsync(perm);
+        }
+
+        // Update cache
+        permissions = await db.Permissions1
+            .Where(p => p.GuildId == guildId)
+            .ToListAsync();
+
+        var guildConfig = await db.GuildConfigs
+            .FirstOrDefaultAsync(gc => gc.GuildId == guildId);
+
+        UpdateCache(guildId, permissions, guildConfig);
     }
 
     /// <summary>
     ///     Updates the in-memory cache with the latest permissions from the database for a guild.
     /// </summary>
-    /// <param name="config">The guild configuration containing the permissions.</param>
-    public void UpdateCache(GuildConfig config)
+    /// <param name="guildId">The ID of the guild.</param>
+    /// <param name="permissions">The list of permissions for the guild.</param>
+    /// <param name="config">The guild configuration containing permission settings.</param>
+    public void UpdateCache(ulong guildId, List<Permission1> permissions, GuildConfig? config)
     {
-        Cache.AddOrUpdate(config.GuildId, new PermissionCache
+        Cache.AddOrUpdate(guildId, new PermissionCache
         {
-            Permissions = new PermissionsCollection<Permissionv2>(config.Permissions),
-            PermRole = config.PermissionRole,
-            Verbose = config.VerbosePermissions
+            Permissions = permissions, // Directly use the list
+            PermRole = config?.PermissionRole,
+            Verbose = config?.VerbosePermissions ?? false
         }, (_, old) =>
         {
-            old.Permissions = new PermissionsCollection<Permissionv2>(config.Permissions);
-            old.PermRole = config.PermissionRole;
-            old.Verbose = config.VerbosePermissions;
+            old.Permissions = permissions; // Directly use the list
+            old.PermRole = config?.PermissionRole;
+            old.Verbose = config?.VerbosePermissions ?? false;
             return old;
         });
     }
@@ -286,12 +362,26 @@ public class PermissionService : ILateBlocker, INService, IReadyExecutor
     /// <remarks>Updates both the database and the in-memory cache.</remarks>
     public async Task Reset(ulong guildId)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
 
-        var config = await dbContext.GcWithPermissionsv2For(guildId);
-        config.Permissions = Permissionv2.GetDefaultPermlist;
-        await dbContext.SaveChangesAsync().ConfigureAwait(false);
-        UpdateCache(config);
+        // Remove all existing permissions for this guild
+        await db.Permissions1
+            .Where(p => p.GuildId == guildId)
+            .DeleteAsync();
+
+        // Add default permissions with GuildId
+        var defaultPerms = PermissionExtensions.GetDefaultPermlist;
+        foreach (var perm in defaultPerms)
+        {
+            perm.GuildId = guildId;
+            await db.InsertAsync(perm);
+        }
+
+        // Get guild config for other settings
+        var guildConfig = await db.GuildConfigs
+            .FirstOrDefaultAsync(gc => gc.GuildId == guildId);
+
+        UpdateCache(guildId, defaultPerms.ToList(), guildConfig);
     }
 
     /// <summary>
@@ -322,17 +412,32 @@ public class PermissionService : ILateBlocker, INService, IReadyExecutor
     /// <remarks>Updates both the database and the in-memory cache.</remarks>
     public async Task RemovePerm(ulong guildId, int index)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
 
+        // Get permissions directly
+        var permissions = await db.Permissions1
+            .Where(p => p.GuildId == guildId)
+            .OrderBy(p => p.Index)
+            .ToListAsync();
 
-        var config = await dbContext.GcWithPermissionsv2For(guildId);
-        var permsCol = new PermissionsCollection<Permissionv2>(config.Permissions);
+        if (permissions.Count <= index)
+            return;
 
-        var p = permsCol[index];
-        permsCol.RemoveAt(index);
-        dbContext.Remove(p);
-        await dbContext.SaveChangesAsync().ConfigureAwait(false);
-        UpdateCache(config);
+        if (index >= 0 && index < permissions.Count)
+        {
+            var p = permissions[index];
+            permissions.RemoveAt(index);
+
+            await db.Permissions
+                .Where(perm => perm.Id == p.Id)
+                .DeleteAsync();
+
+            // Get guild config for other settings
+            var guildConfig = await db.GuildConfigs
+                .FirstOrDefaultAsync(gc => gc.GuildId == guildId);
+
+            UpdateCache(guildId, permissions, guildConfig);
+        }
     }
 
     /// <summary>
@@ -344,16 +449,30 @@ public class PermissionService : ILateBlocker, INService, IReadyExecutor
     /// <remarks>Updates both the database and the in-memory cache.</remarks>
     public async Task UpdatePerm(ulong guildId, int index, bool state)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
 
-        var config = await dbContext.GcWithPermissionsv2For(guildId);
-        var permsCol = new PermissionsCollection<Permissionv2>(config.Permissions);
+        // Get permissions directly
+        var permissions = await db.Permissions1
+            .Where(p => p.GuildId == guildId)
+            .OrderBy(p => p.Index)
+            .ToListAsync();
 
-        var p = permsCol[index];
-        p.State = state;
-        dbContext.Update(p);
-        await dbContext.SaveChangesAsync().ConfigureAwait(false);
-        UpdateCache(config);
+        if (permissions.Count <= index)
+            return;
+
+        if (index >= 0 && index < permissions.Count)
+        {
+            var p = permissions[index];
+            p.State = state;
+
+            await db.UpdateAsync(p);
+
+            // Get guild config for other settings
+            var guildConfig = await db.GuildConfigs
+                .FirstOrDefaultAsync(gc => gc.GuildId == guildId);
+
+            UpdateCache(guildId, permissions, guildConfig);
+        }
     }
 
     /// <summary>
@@ -365,26 +484,36 @@ public class PermissionService : ILateBlocker, INService, IReadyExecutor
     /// <remarks>Updates both the database and the in-memory cache.</remarks>
     public async Task UnsafeMovePerm(ulong guildId, int from, int to)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
 
-        var config = await dbContext.GcWithPermissionsv2For(guildId);
-        var permsCol = new PermissionsCollection<Permissionv2>(config.Permissions);
+        // Get permissions directly
+        var permissions = await db.Permissions1
+            .Where(p => p.GuildId == guildId)
+            .OrderBy(p => p.Index)
+            .ToListAsync();
 
-        var fromFound = from < permsCol.Count;
-        var toFound = to < permsCol.Count;
+        var fromFound = from < permissions.Count;
+        var toFound = to < permissions.Count;
 
         if (!fromFound || !toFound)
-        {
             return;
+
+        var fromPerm = permissions[from];
+
+        permissions.RemoveAt(from);
+        permissions.Insert(to, fromPerm);
+
+        // Update indices
+        for (var i = 0; i < permissions.Count; i++)
+        {
+            permissions[i].Index = i;
+            await db.UpdateAsync(permissions[i]);
         }
 
-        var fromPerm = permsCol[from];
+        // Get guild config for other settings
+        var guildConfig = await db.GuildConfigs
+            .FirstOrDefaultAsync(gc => gc.GuildId == guildId);
 
-        permsCol.RemoveAt(from);
-        permsCol.Insert(to, fromPerm);
-        await dbContext.SaveChangesAsync().ConfigureAwait(false);
-        UpdateCache(config);
+        UpdateCache(guildId, permissions, guildConfig);
     }
-
-
 }

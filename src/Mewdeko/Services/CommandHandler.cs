@@ -5,9 +5,11 @@ using Discord.Commands;
 using Discord.Interactions;
 using Discord.Net;
 using Discord.Rest;
+using LinqToDB;
 using Mewdeko.Common.Collections;
 using Mewdeko.Common.ModuleBehaviors;
-using Mewdeko.Database.DbContextStuff;
+using Mewdeko.Database.EF.EFCore;
+using Mewdeko.Database.EF.EFCore.Protections;
 using Mewdeko.Modules.Chat_Triggers.Services;
 using Mewdeko.Modules.Help.Services;
 using Mewdeko.Modules.Permissions.Common;
@@ -37,7 +39,7 @@ public class CommandHandler : INService
     private readonly Timer clearUsersOnShortCooldown;
     private readonly DiscordShardedClient client;
     private readonly CommandService commandService;
-    private readonly DbContextProvider dbProvider;
+    private readonly IDataConnectionFactory dbFactory;
     private readonly GuildSettingsService gss;
     private readonly InteractionService interactionService;
     /// <summary>
@@ -58,7 +60,7 @@ public class CommandHandler : INService
     /// <param name="gss">The guild settings service.</param>
     /// <param name="eventHandler">The event handler for discord events.</param>
     /// <param name="cache">The data cache service.</param>
-    public CommandHandler(DiscordShardedClient client, DbContextProvider dbProvider, CommandService commandService,
+    public CommandHandler(DiscordShardedClient client, IDataConnectionFactory dbFactory, CommandService commandService,
         BotConfigService bss, Mewdeko bot, IServiceProvider services,
         InteractionService interactionService,
         GuildSettingsService gss, EventHandler eventHandler, IDataCache cache)
@@ -70,7 +72,7 @@ public class CommandHandler : INService
         this.commandService = commandService;
         this.bss = bss;
         this.bot = bot;
-        this.dbProvider = dbProvider;
+        this.dbFactory = dbFactory;
         this.Services = services;
         eventHandler.InteractionCreated += TryRunInteraction;
         this.interactionService.SlashCommandExecuted += HandleCommands;
@@ -114,7 +116,7 @@ public class CommandHandler : INService
     {
         _ = Task.Run(async () =>
         {
-            await using var dbContext = await dbProvider.GetContextAsync();
+            await using var dbContext = await dbFactory.CreateConnectionAsync();
 
             if (ctx.Guild is not null)
             {
@@ -133,8 +135,7 @@ public class CommandHandler : INService
                             UserId = ctx.User.Id,
                             Module = info.Module.Name
                         };
-                        await dbContext.CommandStats.AddAsync(comStats);
-                        await dbContext.SaveChangesAsync();
+                        await dbContext.InsertAsync(comStats);
                     }
                 }
             }
@@ -248,7 +249,7 @@ public class CommandHandler : INService
     {
         _ = Task.Run(async () =>
         {
-            await using var dbContext = await dbProvider.GetContextAsync();
+            await using var dbContext = await dbFactory.CreateConnectionAsync();
 
             if (ctx.Guild is not null)
             {
@@ -267,8 +268,8 @@ public class CommandHandler : INService
                             UserId = ctx.User.Id,
                             Module = slashInfo.Module.Name
                         };
-                        await dbContext.CommandStats.AddAsync(comStats);
-                        await dbContext.SaveChangesAsync();
+                        await dbContext.InsertAsync(comStats);
+
                     }
                 }
             }
@@ -388,7 +389,7 @@ public class CommandHandler : INService
                 url: "https://discord.gg/mewdeko").Build();
             foreach (var bl in blacklistService.BlacklistEntries)
             {
-                if ((interaction.Channel as IGuildChannel)?.Guild != null && bl.Type == BlacklistType.Server &&
+                if ((interaction.Channel as IGuildChannel)?.Guild != null && bl.Type == (int)BlacklistType.Server &&
                     bl.ItemId == (interaction.Channel as IGuildChannel)?.Guild?.Id)
                 {
                     await interaction.RespondAsync(
@@ -397,20 +398,18 @@ public class CommandHandler : INService
                     return;
                 }
 
-                if (bl.Type == BlacklistType.User && bl.ItemId == interaction.User.Id)
-                {
-                    await interaction.RespondAsync(
-                        $"*You are blacklisted from Mewdeko for **{bl.Reason}**! You can visit the support server below to try and resolve this.*",
-                        ephemeral: true, components: cb).ConfigureAwait(false);
-                    return;
-                }
+                if (bl.Type != (int)BlacklistType.User || bl.ItemId != interaction.User.Id) continue;
+                await interaction.RespondAsync(
+                    $"*You are blacklisted from Mewdeko for **{bl.Reason}**! You can visit the support server below to try and resolve this.*",
+                    ephemeral: true, components: cb).ConfigureAwait(false);
+                return;
             }
 
             if (interaction.Type == InteractionType.ApplicationCommand)
             {
                 var ctS = Services.GetService<ChatTriggersService>();
                 var triggers = await ctS.GetChatTriggersFor((interaction.Channel as IGuildChannel)?.Guild?.Id);
-                var trigger = triggers.FirstOrDefault(x => x.RealName == interaction.GetRealName());
+                var trigger = triggers.FirstOrDefault(x => x.RealName() == interaction.GetRealName());
                 if (trigger is not null)
                 {
                     await ctS.RunInteractionTrigger(interaction, trigger).ConfigureAwait(false);
@@ -769,7 +768,7 @@ public class CommandHandler : INService
         var guildConfig = await gss.GetGuildConfig(guild.Id).ConfigureAwait(false);
         if (guildConfig.StatsOptOut) return;
 
-        await using var dbContext = await dbProvider.GetContextAsync().ConfigureAwait(false);
+        await using var dbContext = await dbFactory.CreateConnectionAsync().ConfigureAwait(false);
         var user = await dbContext.GetOrCreateUser(usrMsg.Author).ConfigureAwait(false);
         if (user.StatsOptOut) return;
 
@@ -782,7 +781,6 @@ public class CommandHandler : INService
             UserId = usrMsg.Author.Id,
             Module = info.Module.Name
         };
-        await dbContext.CommandStats.AddAsync(commandStats).ConfigureAwait(false);
-        await dbContext.SaveChangesAsync().ConfigureAwait(false);
+        await dbContext.InsertAsync(commandStats).ConfigureAwait(false);
     }
 }

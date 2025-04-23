@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿/*using Mewdeko.Database.EF.EFCore;
+using Microsoft.EntityFrameworkCore;
 
 namespace Mewdeko.Database.DbContextStuff;
 
@@ -42,4 +43,4 @@ public class DbContextProvider : INService
     {
         return await contextFactory.CreateDbContextAsync();
     }
-}
+}*/

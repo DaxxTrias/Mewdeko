@@ -1,6 +1,7 @@
 ﻿using Discord.Commands;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Common.TypeReaders;
+using Mewdeko.Database.EF.EFCore.Protections;
 using Mewdeko.Modules.Permissions.Services;
 
 namespace Mewdeko.Modules.Permissions;

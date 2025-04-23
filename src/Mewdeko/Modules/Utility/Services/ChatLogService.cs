@@ -1,136 +1,132 @@
-using Mewdeko.Database.DbContextStuff;
-using Microsoft.EntityFrameworkCore;
+using DataModel;
+using LinqToDB;
 using Newtonsoft.Json;
 using Serilog;
 
-namespace Mewdeko.Modules.Utility.Services
+namespace Mewdeko.Modules.Utility.Services;
+
+/// <summary>
+///     Service for managing chat logs
+/// </summary>
+public class ChatLogService(IDataConnectionFactory dbFactory) : INService
 {
     /// <summary>
-    /// Service for managing chat logs
+    ///     Saves a chat log
     /// </summary>
-    public class ChatLogService(DbContextProvider db) : INService
+    public async Task<string> SaveChatLogAsync(
+        ulong guildId,
+        ulong channelId,
+        string channelName,
+        string name,
+        ulong createdBy,
+        IEnumerable<object> messages)
     {
-        /// <summary>
-        /// Saves a chat log
-        /// </summary>
-        public async Task<string> SaveChatLogAsync(
-            ulong guildId,
-            ulong channelId,
-            string channelName,
-            string name,
-            ulong createdBy,
-            IEnumerable<object> messages)
+        try
         {
-            try
+            var messagesArray = messages.ToArray();
+            var chatLog = new ChatLog
             {
-                var messagesArray = messages.ToArray();
-                var chatLog = new ChatLog
-                {
-                    GuildId = guildId,
-                    ChannelId = channelId,
-                    ChannelName = channelName,
-                    Name = name,
-                    CreatedBy = createdBy,
-                    Messages = JsonConvert.SerializeObject(messagesArray),
-                    MessageCount = messagesArray.Length,
-                    DateAdded = DateTime.UtcNow
-                };
+                GuildId = guildId,
+                ChannelId = channelId,
+                ChannelName = channelName,
+                Name = name,
+                CreatedBy = createdBy,
+                Messages = JsonConvert.SerializeObject(messagesArray),
+                MessageCount = messagesArray.Length,
+                DateAdded = DateTime.UtcNow
+            };
 
-                await using var context = await db.GetContextAsync();
-                await context.ChatLogs.AddAsync(chatLog);
-                await context.SaveChangesAsync();
+            await using var context = await dbFactory.CreateConnectionAsync();
+            await context.InsertAsync(chatLog);
 
-                return chatLog.Id.ToString();
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "Error saving chat log");
-                throw;
-            }
+            return chatLog.Id.ToString();
         }
-
-        /// <summary>
-        /// Gets a chat log by id
-        /// </summary>
-        public async Task<ChatLog?> GetChatLogAsync(int logId)
+        catch (Exception ex)
         {
-            try
-            {
-                await using var context = await db.GetContextAsync();
-                return await context.ChatLogs.FindAsync(logId);
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "Error getting chat log");
-                throw;
-            }
+            Log.Error(ex, "Error saving chat log");
+            throw;
         }
+    }
 
-        /// <summary>
-        /// Gets all chat logs for a guild
-        /// </summary>
-        public async Task<IEnumerable<ChatLog>> GetChatLogsForGuildAsync(ulong guildId)
+    /// <summary>
+    ///     Gets a chat log by id
+    /// </summary>
+    public async Task<ChatLog?> GetChatLogAsync(int logId)
+    {
+        try
         {
-            try
-            {
-                await using var context = await db.GetContextAsync();
-                return await context.ChatLogs
-                    .Where(l => l.GuildId == guildId)
-                    .OrderByDescending(l => l.DateAdded)
-                    .ToListAsync();
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "Error getting chat logs for guild");
-                throw;
-            }
+            await using var context = await dbFactory.CreateConnectionAsync();
+            return await context.ChatLogs.FindAsync(logId);
         }
-
-        /// <summary>
-        /// Updates a chat log's name
-        /// </summary>
-        public async Task UpdateChatLogNameAsync(int logId, string newName)
+        catch (Exception ex)
         {
-            try
-            {
-                await using var context = await db.GetContextAsync();
-                var log = await context.ChatLogs.FindAsync(logId);
-
-                if (log == null)
-                    throw new Exception("Chat log not found");
-
-                log.Name = newName;
-                context.ChatLogs.Update(log);
-                await context.SaveChangesAsync();
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "Error updating chat log name");
-                throw;
-            }
+            Log.Error(ex, "Error getting chat log");
+            throw;
         }
+    }
 
-        /// <summary>
-        /// Deletes a chat log
-        /// </summary>
-        public async Task DeleteChatLogAsync(int logId)
+    /// <summary>
+    ///     Gets all chat logs for a guild
+    /// </summary>
+    public async Task<IEnumerable<ChatLog>> GetChatLogsForGuildAsync(ulong guildId)
+    {
+        try
         {
-            try
-            {
-                await using var context = await db.GetContextAsync();
-                var log = await context.ChatLogs.FindAsync(logId);
+            await using var context = await dbFactory.CreateConnectionAsync();
+            return await context.ChatLogs
+                .Where(l => l.GuildId == guildId)
+                .OrderByDescending(l => l.DateAdded)
+                .ToListAsync();
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Error getting chat logs for guild");
+            throw;
+        }
+    }
 
-                if (log == null)
-                    return;
+    /// <summary>
+    ///     Updates a chat log's name
+    /// </summary>
+    public async Task UpdateChatLogNameAsync(int logId, string newName)
+    {
+        try
+        {
+            await using var context = await dbFactory.CreateConnectionAsync();
+            var log = await context.ChatLogs.FindAsync(logId);
 
-                context.ChatLogs.Remove(log);
-                await context.SaveChangesAsync();
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "Error deleting chat log");
-                throw;
-            }
+            if (log == null)
+                throw new Exception("Chat log not found");
+
+            log.Name = newName;
+            await context.UpdateAsync(log);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Error updating chat log name");
+            throw;
+        }
+    }
+
+    /// <summary>
+    ///     Deletes a chat log
+    /// </summary>
+    public async Task DeleteChatLogAsync(int logId)
+    {
+        try
+        {
+            await using var context = await dbFactory.CreateConnectionAsync();
+            var log = await context.ChatLogs.FindAsync(logId);
+
+            if (log == null)
+                return;
+
+            await context.DeleteAsync(log);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Error deleting chat log");
+            throw;
         }
     }
 }

@@ -4,6 +4,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
+using DataModel;
 using Serilog;
 
 namespace Mewdeko.Modules.Utility.Services.Impl;
@@ -47,7 +48,7 @@ public class GroqClient : IAiClient
             httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
 
             // Set a lower max_tokens value for Groq to ensure responses aren't too large
-            int maxTokens = 512; // This will help prevent Discord embed limit issues
+            var maxTokens = 512; // This will help prevent Discord embed limit issues
 
             // Prepare the request body
             var requestBody = new

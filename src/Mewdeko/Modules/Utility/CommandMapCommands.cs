@@ -1,10 +1,11 @@
-﻿using Discord.Commands;
+﻿using DataModel;
+using Discord.Commands;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
+using LinqToDB;
 using Mewdeko.Common.Attributes.TextCommands;
-using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.Utility.Services;
-using Microsoft.EntityFrameworkCore;
+
 
 namespace Mewdeko.Modules.Utility;
 
@@ -16,7 +17,7 @@ public partial class Utility
     /// <param name="db">The database service.</param>
     /// <param name="serv">The interactive service.</param>
     [Group]
-    public class CommandMapCommands(DbContextProvider dbProvider, InteractiveService serv, GuildSettingsService service)
+    public class CommandMapCommands(IDataConnectionFactory dbFactory, InteractiveService serv, GuildSettingsService service)
         : MewdekoSubmodule<CommandMapService>
     {
         /// <summary>
@@ -49,45 +50,42 @@ public partial class Utility
                 return;
 
             trigger = trigger.Trim().ToLowerInvariant();
+            var guildId = ctx.Guild.Id;
 
-            await using var dbContext = await dbProvider.GetContextAsync();
+            await using var dbContext = await dbFactory.CreateConnectionAsync();
 
             if (string.IsNullOrWhiteSpace(mapping))
             {
-                var gottenMaps = await Service.GetCommandMap(ctx.Guild.Id);
+                var gottenMaps = await Service.GetCommandMap(guildId);
                 if (gottenMaps != null && (gottenMaps.Count != 0 ||
                                            !gottenMaps.Remove(trigger, out _)))
                 {
-                    await ReplyErrorAsync(Strings.AliasRemoveFail(ctx.Guild.Id, Format.Code(trigger))).ConfigureAwait(false);
+                    await ReplyErrorAsync(Strings.AliasRemoveFail(guildId, Format.Code(trigger))).ConfigureAwait(false);
                     return;
                 }
 
-                {
-                    var config = await dbContext.ForGuildId(ctx.Guild.Id, set => set.Include(x => x.CommandAliases));
-                    var tr = config.CommandAliases.FirstOrDefault(x => x.Trigger == trigger);
-                    if (tr != null)
-                        dbContext.Set<CommandAlias>().Remove(tr);
-                    await dbContext.SaveChangesAsync().ConfigureAwait(false);
-                    await service.UpdateGuildConfig(ctx.Guild.Id, config).ConfigureAwait(false);
-                }
+                // Direct query with GuildId and trigger filter
+                var tr = await dbContext.CommandAliases
+                    .FirstOrDefaultAsync(x => x.GuildId == guildId && x.Trigger == trigger);
 
-                await ReplyConfirmAsync(Strings.AliasRemoved(ctx.Guild.Id, Format.Code(trigger))).ConfigureAwait(false);
+                if (tr != null)
+                    await dbContext.DeleteAsync(tr);
+
+                await ReplyConfirmAsync(Strings.AliasRemoved(guildId, Format.Code(trigger))).ConfigureAwait(false);
                 return;
             }
 
-
+            // Add new command alias with GuildId
+            await dbContext.InsertAsync(new CommandAlias
             {
-                var config = await dbContext.ForGuildId(ctx.Guild.Id, set => set.Include(x => x.CommandAliases));
-                config.CommandAliases.Add(new CommandAlias
-                {
-                    Mapping = mapping, Trigger = trigger
-                });
-                await dbContext.SaveChangesAsync();
-                await service.UpdateGuildConfig(ctx.Guild.Id, config);
+                GuildId = guildId,
+                Mapping = mapping,
+                Trigger = trigger
+            });
 
-                await ReplyConfirmAsync(Strings.AliasAdded(ctx.Guild.Id, Format.Code(trigger), Format.Code(mapping)))
-                    .ConfigureAwait(false);
-            }
+
+            await ReplyConfirmAsync(Strings.AliasAdded(guildId, Format.Code(trigger), Format.Code(mapping)))
+                .ConfigureAwait(false);
         }
 
         /// <summary>

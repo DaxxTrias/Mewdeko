@@ -1,4 +1,8 @@
-﻿namespace Mewdeko.Modules.Permissions.Common;
+﻿
+
+using DataModel;
+
+namespace Mewdeko.Modules.Permissions.Common;
 
 /// <summary>
 ///     Represents the old permission cache structure for storing role-based permissions and settings.
@@ -43,5 +47,5 @@ public class PermissionCache
     ///     This property introduces a new permissions system, allowing for more granular control and organization of
     ///     permissions.
     /// </remarks>
-    public PermissionsCollection<Permissionv2>? Permissions { get; set; }
+    public IList<Permission1>? Permissions { get; set; }
 }

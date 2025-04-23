@@ -1,12 +1,13 @@
 ﻿#undef FORCE_ADD_DUMMY_PERMS
 
+using DataModel;
 using Discord.Commands;
 using Discord.Interactions;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
+using LinqToDB;
 using Mewdeko.Common.Attributes.InteractionCommands;
 using Mewdeko.Common.Autocompleters;
-using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.Administration.Services;
 using Mewdeko.Modules.Permissions.Common;
 using Mewdeko.Modules.Permissions.Services;
@@ -52,7 +53,7 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
     private readonly CommandService cmdServe;
 
 
-    private readonly DbContextProvider dbProvider;
+    private readonly IDataConnectionFactory dbFactory;
     private readonly DiscordPermOverrideService dpoS;
     private readonly GuildSettingsService guildSettings;
     private readonly InteractiveService interactivity;
@@ -60,7 +61,7 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
     /// <summary>
     ///     Initializes a new instance of the SlashPermissions class.
     /// </summary>
-    /// <param name="db">Database service instance for database operations.</param>
+    /// <param name="dbFactory">Database service instance for database operations.</param>
     /// <param name="inter">Interactive service for managing interactive commands.</param>
     /// <param name="guildSettings">Service for accessing and modifying guild settings.</param>
     /// <param name="dpoS">Discord permissions override service for custom permission handling.</param>
@@ -71,12 +72,12 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
     ///     Each service parameter provided plays a crucial role in the operation and customization
     ///     of the bot's functionality, especially in the context of permissions and settings management.
     /// </remarks>
-    public SlashPermissions(DbContextProvider dbProvider, InteractiveService inter, GuildSettingsService guildSettings,
+    public SlashPermissions(IDataConnectionFactory dbFactory, InteractiveService inter, GuildSettingsService guildSettings,
         DiscordPermOverrideService dpoS, CommandService cmdServe)
     {
         interactivity = inter;
         this.guildSettings = guildSettings;
-        this.dbProvider = dbProvider;
+        this.dbFactory = dbFactory;
         this.dpoS = dpoS;
         this.cmdServe = cmdServe;
     }
@@ -112,13 +113,20 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
     [PermRoleCheck]
     public async Task Verbose(PermissionSlash? action = null)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
-        {
-            var config = await dbContext.GcWithPermissionsv2For(ctx.Guild.Id);
-            config.VerbosePermissions = action.Value.ToBoolean();
-            await dbContext.SaveChangesAsync().ConfigureAwait(false);
-            Service.UpdateCache(config);
-        }
+         await using var dbContext = await dbFactory.CreateConnectionAsync();
+
+        // Get GuildConfig directly
+        var config = await guildSettings.GetGuildConfig(ctx.Guild.Id);
+
+        config.VerbosePermissions = action.Value.ToBoolean();
+        await guildSettings.UpdateGuildConfig(ctx.Guild.Id, config);
+
+        // Get permissions for cache update
+        var permissions = await dbContext.Permissions1
+            .Where(p => p.GuildId == ctx.Guild.Id)
+            .ToListAsync();
+
+        Service.UpdateCache(ctx.Guild.Id, permissions, config);
 
         if (action == PermissionSlash.Allow)
             await ReplyConfirmAsync(Strings.VerboseTrue(ctx.Guild.Id)).ConfigureAwait(false);
@@ -146,23 +154,37 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
         if (role != null && role == role.Guild.EveryoneRole)
             return;
 
+         await using var dbContext = await dbFactory.CreateConnectionAsync();
 
-        await using var dbContext = await dbProvider.GetContextAsync();
+        // Get GuildConfig directly
+        var config = await dbContext.GuildConfigs
+            .FirstOrDefaultAsync(gc => gc.GuildId == ctx.Guild.Id);
 
         if (role == null)
         {
-            var config = await dbContext.GcWithPermissionsv2For(ctx.Guild.Id);
             config.PermissionRole = 0.ToString();
-            await dbContext.SaveChangesAsync().ConfigureAwait(false);
-            Service.UpdateCache(config);
+
+
+            // Get permissions for cache update
+            var permissions = await dbContext.Permissions1
+                .Where(p => p.GuildId == ctx.Guild.Id)
+                .ToListAsync();
+
+            Service.UpdateCache(ctx.Guild.Id, permissions, config);
+
             await ReplyConfirmAsync(Strings.PermroleReset(ctx.Guild.Id)).ConfigureAwait(false);
         }
         else
         {
-            var config = await dbContext.GcWithPermissionsv2For(ctx.Guild.Id);
             config.PermissionRole = role.Id.ToString();
-            await dbContext.SaveChangesAsync().ConfigureAwait(false);
-            Service.UpdateCache(config);
+
+
+            // Get permissions for cache update
+            var permissions = await dbContext.Permissions1
+                .Where(p => p.GuildId == ctx.Guild.Id)
+                .ToListAsync();
+
+            Service.UpdateCache(ctx.Guild.Id, permissions, config);
 
             await ReplyConfirmAsync(Strings.PermroleChanged(ctx.Guild.Id, Format.Bold(role.Name))).ConfigureAwait(false);
         }
@@ -182,12 +204,12 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
     [PermRoleCheck]
     public async Task ListPerms()
     {
-        IList<Permissionv2> perms;
+        IList<Permission1> perms;
 
         if (Service.Cache.TryGetValue(ctx.Guild.Id, out var permCache))
-            perms = permCache.Permissions.Source.ToList();
+            perms = permCache.Permissions.ToList();
         else
-            perms = Permissionv2.GetDefaultPermlist;
+            perms = PermissionExtensions.GetDefaultPermlist;
         var paginator = new LazyPaginatorBuilder()
             .AddUser(ctx.User)
             .WithPageFactory(PageFactory)
@@ -242,14 +264,25 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
 
         try
         {
-            await using var dbContext = await dbProvider.GetContextAsync();
-            var config = await dbContext.GcWithPermissionsv2For(ctx.Guild.Id);
-            var permsCol = new PermissionsCollection<Permissionv2>(config.Permissions);
+             await using var dbContext = await dbFactory.CreateConnectionAsync();
+
+            // Get permissions directly
+            var permissions = await dbContext.Permissions1
+                .Where(p => p.GuildId == ctx.Guild.Id)
+                .OrderBy(p => p.Index)
+                .ToListAsync();
+
+            // Get GuildConfig for cache update
+            var config = await dbContext.GuildConfigs
+                .FirstOrDefaultAsync(gc => gc.GuildId == ctx.Guild.Id);
+
+            var permsCol = new List<Permission1>(permissions);
             var p = permsCol[index];
             permsCol.RemoveAt(index);
-            dbContext.Remove(p);
-            await dbContext.SaveChangesAsync().ConfigureAwait(false);
-            Service.UpdateCache(config);
+            await dbContext.DeleteAsync(p);
+
+
+            Service.UpdateCache(ctx.Guild.Id, permsCol.ToList(), config);
 
             await ReplyConfirmAsync(Strings.Removed(ctx.Guild.Id,
                     index + 1,
@@ -282,11 +315,11 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
         string command,
         PermissionSlash action)
     {
-        await Service.AddPermissions(ctx.Guild.Id, new Permissionv2
+        await Service.AddPermissions(ctx.Guild.Id, new Permission1
         {
-            PrimaryTarget = PrimaryPermissionType.Server,
+            PrimaryTarget = (int)PrimaryPermissionType.Server,
             PrimaryTargetId = 0,
-            SecondaryTarget = SecondaryPermissionType.Command,
+            SecondaryTarget = (int)SecondaryPermissionType.Command,
             SecondaryTargetName = command.ToLowerInvariant(),
             State = action.ToBoolean(),
             IsCustomCommand = false
@@ -327,11 +360,11 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
         string module,
         PermissionSlash action)
     {
-        await Service.AddPermissions(ctx.Guild.Id, new Permissionv2
+        await Service.AddPermissions(ctx.Guild.Id, new Permission1
         {
-            PrimaryTarget = PrimaryPermissionType.Server,
+            PrimaryTarget = (int)PrimaryPermissionType.Server,
             PrimaryTargetId = 0,
-            SecondaryTarget = SecondaryPermissionType.Module,
+            SecondaryTarget = (int)SecondaryPermissionType.Module,
             SecondaryTargetName = module.ToLowerInvariant(),
             State = action.ToBoolean()
         }).ConfigureAwait(false);
@@ -370,11 +403,11 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
         string command,
         PermissionSlash action, IGuildUser user)
     {
-        await Service.AddPermissions(ctx.Guild.Id, new Permissionv2
+        await Service.AddPermissions(ctx.Guild.Id, new Permission1
         {
-            PrimaryTarget = PrimaryPermissionType.User,
+            PrimaryTarget = (int)PrimaryPermissionType.User,
             PrimaryTargetId = user.Id,
-            SecondaryTarget = SecondaryPermissionType.Command,
+            SecondaryTarget = (int)SecondaryPermissionType.Command,
             SecondaryTargetName = command.ToLowerInvariant(),
             State = action.ToBoolean(),
             IsCustomCommand = true
@@ -415,11 +448,11 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
         string module,
         PermissionSlash action, IGuildUser user)
     {
-        await Service.AddPermissions(ctx.Guild.Id, new Permissionv2
+        await Service.AddPermissions(ctx.Guild.Id, new Permission1
         {
-            PrimaryTarget = PrimaryPermissionType.User,
+            PrimaryTarget = (int)PrimaryPermissionType.User,
             PrimaryTargetId = user.Id,
-            SecondaryTarget = SecondaryPermissionType.Module,
+            SecondaryTarget = (int)SecondaryPermissionType.Module,
             SecondaryTargetName = module.ToLowerInvariant(),
             State = action.ToBoolean()
         }).ConfigureAwait(false);
@@ -463,11 +496,11 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
         if (role == role.Guild.EveryoneRole)
             return;
 
-        await Service.AddPermissions(ctx.Guild.Id, new Permissionv2
+        await Service.AddPermissions(ctx.Guild.Id, new Permission1
         {
-            PrimaryTarget = PrimaryPermissionType.Role,
+            PrimaryTarget = (int)PrimaryPermissionType.Role,
             PrimaryTargetId = role.Id,
-            SecondaryTarget = SecondaryPermissionType.Command,
+            SecondaryTarget = (int)SecondaryPermissionType.Command,
             SecondaryTargetName = command.ToLowerInvariant(),
             State = action.ToBoolean(),
             IsCustomCommand = true
@@ -516,11 +549,11 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
         if (role == role.Guild.EveryoneRole)
             return;
 
-        await Service.AddPermissions(ctx.Guild.Id, new Permissionv2
+        await Service.AddPermissions(ctx.Guild.Id, new Permission1
         {
-            PrimaryTarget = PrimaryPermissionType.Role,
+            PrimaryTarget = (int)PrimaryPermissionType.Role,
             PrimaryTargetId = role.Id,
-            SecondaryTarget = SecondaryPermissionType.Module,
+            SecondaryTarget = (int)SecondaryPermissionType.Module,
             SecondaryTargetName = module.ToLowerInvariant(),
             State = action.ToBoolean()
         }).ConfigureAwait(false);
@@ -562,11 +595,11 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
         string command,
         PermissionSlash action, ITextChannel chnl)
     {
-        await Service.AddPermissions(ctx.Guild.Id, new Permissionv2
+        await Service.AddPermissions(ctx.Guild.Id, new Permission1
         {
-            PrimaryTarget = PrimaryPermissionType.Channel,
+            PrimaryTarget = (int)PrimaryPermissionType.Channel,
             PrimaryTargetId = chnl.Id,
-            SecondaryTarget = SecondaryPermissionType.Command,
+            SecondaryTarget = (int)SecondaryPermissionType.Command,
             SecondaryTargetName = command.ToLowerInvariant(),
             State = action.ToBoolean(),
             IsCustomCommand = true
@@ -609,11 +642,11 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
         string module,
         PermissionSlash action, ITextChannel chnl)
     {
-        await Service.AddPermissions(ctx.Guild.Id, new Permissionv2
+        await Service.AddPermissions(ctx.Guild.Id, new Permission1
         {
-            PrimaryTarget = PrimaryPermissionType.Channel,
+            PrimaryTarget = (int)PrimaryPermissionType.Channel,
             PrimaryTargetId = chnl.Id,
-            SecondaryTarget = SecondaryPermissionType.Module,
+            SecondaryTarget = (int)SecondaryPermissionType.Module,
             SecondaryTargetName = module.ToLowerInvariant(),
             State = action.ToBoolean()
         }).ConfigureAwait(false);
@@ -649,11 +682,11 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
     [PermRoleCheck]
     public async Task AllChnlMdls(PermissionSlash action, ITextChannel chnl)
     {
-        await Service.AddPermissions(ctx.Guild.Id, new Permissionv2
+        await Service.AddPermissions(ctx.Guild.Id, new Permission1
         {
-            PrimaryTarget = PrimaryPermissionType.Channel,
+            PrimaryTarget = (int)PrimaryPermissionType.Channel,
             PrimaryTargetId = chnl.Id,
-            SecondaryTarget = SecondaryPermissionType.AllModules,
+            SecondaryTarget = (int)SecondaryPermissionType.AllModules,
             SecondaryTargetName = "*",
             State = action.ToBoolean()
         }).ConfigureAwait(false);
@@ -690,11 +723,11 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
         string command,
         PermissionSlash action, ICategoryChannel chnl)
     {
-        await Service.AddPermissions(ctx.Guild.Id, new Permissionv2
+        await Service.AddPermissions(ctx.Guild.Id, new Permission1
         {
-            PrimaryTarget = PrimaryPermissionType.Category,
+            PrimaryTarget = (int)PrimaryPermissionType.Category,
             PrimaryTargetId = chnl.Id,
-            SecondaryTarget = SecondaryPermissionType.Command,
+            SecondaryTarget = (int)SecondaryPermissionType.Command,
             SecondaryTargetName = command.ToLowerInvariant(),
             State = action.ToBoolean(),
             IsCustomCommand = true
@@ -735,11 +768,11 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
         string module,
         PermissionSlash action, ICategoryChannel chnl)
     {
-        await Service.AddPermissions(ctx.Guild.Id, new Permissionv2
+        await Service.AddPermissions(ctx.Guild.Id, new Permission1
         {
-            PrimaryTarget = PrimaryPermissionType.Category,
+            PrimaryTarget = (int)PrimaryPermissionType.Category,
             PrimaryTargetId = chnl.Id,
-            SecondaryTarget = SecondaryPermissionType.Module,
+            SecondaryTarget = (int)SecondaryPermissionType.Module,
             SecondaryTargetName = module.ToLowerInvariant(),
             State = action.ToBoolean()
         }).ConfigureAwait(false);
@@ -774,11 +807,11 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
     [PermRoleCheck]
     public async Task AllCatMdls(PermissionSlash action, ICategoryChannel chnl)
     {
-        await Service.AddPermissions(ctx.Guild.Id, new Permissionv2
+        await Service.AddPermissions(ctx.Guild.Id, new Permission1
         {
-            PrimaryTarget = PrimaryPermissionType.Category,
+            PrimaryTarget = (int)PrimaryPermissionType.Category,
             PrimaryTargetId = chnl.Id,
-            SecondaryTarget = SecondaryPermissionType.AllModules,
+            SecondaryTarget = (int)SecondaryPermissionType.AllModules,
             SecondaryTargetName = "*",
             State = action.ToBoolean()
         }).ConfigureAwait(false);
@@ -812,11 +845,11 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
         if (role == role.Guild.EveryoneRole)
             return;
 
-        await Service.AddPermissions(ctx.Guild.Id, new Permissionv2
+        await Service.AddPermissions(ctx.Guild.Id, new Permission1
         {
-            PrimaryTarget = PrimaryPermissionType.Role,
+            PrimaryTarget = (int)PrimaryPermissionType.Role,
             PrimaryTargetId = role.Id,
-            SecondaryTarget = SecondaryPermissionType.AllModules,
+            SecondaryTarget = (int)SecondaryPermissionType.AllModules,
             SecondaryTargetName = "*",
             State = action.ToBoolean()
         }).ConfigureAwait(false);
@@ -847,11 +880,11 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
     [PermRoleCheck]
     public async Task AllUsrMdls(PermissionSlash action, IUser user)
     {
-        await Service.AddPermissions(ctx.Guild.Id, new Permissionv2
+        await Service.AddPermissions(ctx.Guild.Id, new Permission1
         {
-            PrimaryTarget = PrimaryPermissionType.User,
+            PrimaryTarget = (int)PrimaryPermissionType.User,
             PrimaryTargetId = user.Id,
-            SecondaryTarget = SecondaryPermissionType.AllModules,
+            SecondaryTarget = (int)SecondaryPermissionType.AllModules,
             SecondaryTargetName = "*",
             State = action.ToBoolean()
         }).ConfigureAwait(false);
@@ -882,20 +915,20 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
     [PermRoleCheck]
     public async Task AllSrvrMdls(PermissionSlash action)
     {
-        var newPerm = new Permissionv2
+        var newPerm = new Permission1
         {
-            PrimaryTarget = PrimaryPermissionType.Server,
+            PrimaryTarget = (int)PrimaryPermissionType.Server,
             PrimaryTargetId = 0,
-            SecondaryTarget = SecondaryPermissionType.AllModules,
+            SecondaryTarget = (int)SecondaryPermissionType.AllModules,
             SecondaryTargetName = "*",
             State = action.ToBoolean()
         };
 
-        var allowUser = new Permissionv2
+        var allowUser = new Permission1
         {
-            PrimaryTarget = PrimaryPermissionType.User,
+            PrimaryTarget = (int)PrimaryPermissionType.User,
             PrimaryTargetId = ctx.User.Id,
-            SecondaryTarget = SecondaryPermissionType.AllModules,
+            SecondaryTarget = (int)SecondaryPermissionType.AllModules,
             SecondaryTargetName = "*",
             State = true
         };
@@ -923,9 +956,9 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
     [Discord.Interactions.RequireContext(ContextType.Guild)]
     public async Task UpdateMessageWithPermenu(string commandName)
     {
-        IList<Permissionv2> perms = Service.Cache.TryGetValue(ctx.Guild.Id, out var permCache)
-            ? permCache.Permissions.Source.ToList()
-            : Permissionv2.GetDefaultPermlist;
+        IList<Permission1> perms = Service.Cache.TryGetValue(ctx.Guild.Id, out var permCache)
+            ? permCache.Permissions.ToList()
+            : PermissionExtensions.GetDefaultPermlist;
 
         var effecting = perms.Where(x => x.SecondaryTargetName == commandName);
         var dpoUsed = dpoS.TryGetOverrides(ctx.Guild.Id, commandName, out _);
@@ -973,7 +1006,7 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
             return;
         }
 
-        if (effecting.Any(x => x.PrimaryTarget == PrimaryPermissionType.Server && !x.State))
+        if (effecting.Any(x => (PrimaryPermissionType)x.PrimaryTarget == PrimaryPermissionType.Server && !x.State))
             cb.WithButton(Strings.PermQuickOptionsDisableDisabled(ctx.Guild.Id), $"command_toggle_disable.{commandName}",
                 ButtonStyle.Success,
                 "<:perms_check:1290520193839140884>".ToIEmote());
@@ -1026,12 +1059,12 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
     [Discord.Interactions.RequireContext(ContextType.Guild)]
     public async Task ClearRedundantPerms(string commandName)
     {
-        IList<Permissionv2> perms;
+        IList<Permission1> perms;
 
         if (Service.Cache.TryGetValue(ctx.Guild.Id, out var permCache))
-            perms = permCache.Permissions.Source.ToList();
+            perms = permCache.Permissions.ToList();
         else
-            perms = Permissionv2.GetDefaultPermlist;
+            perms = PermissionExtensions.GetDefaultPermlist;
 
         var quickEmbeds = (Context.Interaction as SocketMessageComponent).Message.Embeds
             .Where(x => x.Footer.GetValueOrDefault().Text != "$$mdk_redperm$$").ToArray();
@@ -1077,7 +1110,7 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
             .WithDescription(Strings.PermQuickOptionsRedundantToolPriorityDisclaimer(ctx.Guild.Id))
             .AddField(Strings.PermQuickOptionsRedundantToolPtar(ctx.Guild.Id), perm.PrimaryTarget.ToString(), true)
             .AddField(Strings.PermQuickOptionsRedundantToolPtarid(ctx.Guild.Id),
-                $"{perm.PrimaryTargetId} ({PermissionService.MentionPerm(perm.PrimaryTarget, perm.PrimaryTargetId)})",
+                $"{perm.PrimaryTargetId} ({PermissionService.MentionPerm((PrimaryPermissionType)perm.PrimaryTarget, perm.PrimaryTargetId)})",
                 true)
             .AddField(Strings.PermQuickOptionsRedundantToolCustom(ctx.Guild.Id), perm.IsCustomCommand)
             .AddField(Strings.PermQuickOptionsRedundantToolStar(ctx.Guild.Id), perm.SecondaryTarget.ToString(), true)
@@ -1115,18 +1148,18 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
         var secondaryTarget = (SecondaryPermissionType)Convert.ToInt32(secondaryTargetType);
 
         // get all effected perms
-        IList<Permissionv2> perms;
+        IList<Permission1> perms;
 
         if (Service.Cache.TryGetValue(ctx.Guild.Id, out var permCache))
-            perms = permCache.Permissions.Source.ToList();
+            perms = permCache.Permissions.ToList();
         else
-            perms = Permissionv2.GetDefaultPermlist;
+            perms = PermissionExtensions.GetDefaultPermlist;
 
         // already ordered by index
         var effected = perms.Where(x =>
-            x.PrimaryTarget == primaryTarget &&
+            (PrimaryPermissionType)x.PrimaryTarget == primaryTarget &&
             x.PrimaryTargetId == primaryTargetId &&
-            x.SecondaryTarget == secondaryTarget &&
+            (SecondaryPermissionType)x.SecondaryTarget == secondaryTarget &&
             x.SecondaryTargetName == secondaryTargetId);
 
         var selected = (Context.Interaction as SocketMessageComponent).Data.Values.First();
@@ -1171,63 +1204,62 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
     [Discord.Interactions.RequireUserPermission(GuildPermission.Administrator)]
     [Discord.Interactions.RequireContext(ContextType.Guild)]
     public async Task ToggleCommanddisabled(string commandName)
-    {
-        IList<Permissionv2> perms;
+{
+    IList<Permission1> perms;
 
-        if (Service.Cache.TryGetValue(ctx.Guild.Id, out var permCache))
-            perms = permCache.Permissions.Source.ToList();
+    if (Service.Cache.TryGetValue(ctx.Guild.Id, out var permCache))
+        perms = permCache.Permissions.ToList();
+    else
+        perms = PermissionExtensions.GetDefaultPermlist;
+
+    perms = perms
+        .Where(x => x.SecondaryTargetName == commandName)
+        .ToList();
+
+    var sc = perms
+        .FirstOrDefault(x => (PrimaryPermissionType)x.PrimaryTarget == PrimaryPermissionType.Server, null);
+
+    if (sc is not null && sc.State)
+    {
+        await Service.RemovePerm(ctx.Guild.Id, sc.Index);
+        sc = null;
+    }
+
+    if (sc is null)
+    {
+         await using var dbContext = await dbFactory.CreateConnectionAsync();
+
+        await Service.AddPermissions(ctx.Guild.Id, new Permission1
+        {
+            GuildId = ctx.Guild.Id,
+            PrimaryTarget = (int)PrimaryPermissionType.Server,
+            PrimaryTargetId = 0,
+            SecondaryTarget = (int)SecondaryPermissionType.Command,
+            SecondaryTargetName = commandName,
+            State = false
+        });
+
+        // reset local cache
+        if (Service.Cache.TryGetValue(ctx.Guild.Id, out permCache))
+            perms = permCache.Permissions.ToList();
         else
-            perms = Permissionv2.GetDefaultPermlist;
+            perms = PermissionExtensions.GetDefaultPermlist;
 
         perms = perms
             .Where(x => x.SecondaryTargetName == commandName)
             .ToList();
 
-        var sc = perms
-            .FirstOrDefault(x => x.PrimaryTarget == PrimaryPermissionType.Server, null);
+        var index = perms.First(x => (PrimaryPermissionType)x.PrimaryTarget == PrimaryPermissionType.Server).Index;
 
-        if (sc is not null && sc.State)
-        {
-            await Service.RemovePerm(ctx.Guild.Id, sc.Index);
-            sc = null;
-        }
+        await Service.UnsafeMovePerm(ctx.Guild.Id, index, 1);
 
-        if (sc is null)
-        {
-            await using var dbContext = await dbProvider.GetContextAsync();
-
-            await Service.AddPermissions(ctx.Guild.Id, new Permissionv2
-            {
-                GuildConfigId = dbContext.ForGuildId(ctx.Guild.Id).Id,
-                IsCustomCommand = true,
-                PrimaryTarget = PrimaryPermissionType.Server,
-                PrimaryTargetId = 0,
-                SecondaryTarget = SecondaryPermissionType.Command,
-                SecondaryTargetName = commandName,
-                State = false
-            });
-
-            // reset local cache
-            if (Service.Cache.TryGetValue(ctx.Guild.Id, out permCache))
-                perms = permCache.Permissions.Source.ToList();
-            else
-                perms = Permissionv2.GetDefaultPermlist;
-
-            perms = perms
-                .Where(x => x.SecondaryTargetName == commandName)
-                .ToList();
-
-            var index = perms.First(x => x.PrimaryTarget == PrimaryPermissionType.Server).Index;
-
-            await Service.UnsafeMovePerm(ctx.Guild.Id, index, 1);
-
-            await UpdateMessageWithPermenu(commandName);
-            return;
-        }
-
-        await Service.RemovePerm(ctx.Guild.Id, sc.Index);
         await UpdateMessageWithPermenu(commandName);
+        return;
     }
+
+    await Service.RemovePerm(ctx.Guild.Id, sc.Index);
+    await UpdateMessageWithPermenu(commandName);
+}
 
     /// <summary>
     ///     Resets local permissions for a specific command within the guild.
@@ -1242,12 +1274,12 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
     [SlashUserPerm(GuildPermission.Administrator)]
     public Task LocalPermsReset(string commandName)
     {
-        IList<Permissionv2> perms;
+        IList<Permission1> perms;
 
         if (Service.Cache.TryGetValue(ctx.Guild.Id, out var permCache))
-            perms = permCache.Permissions.Source.ToList();
+            perms = permCache.Permissions.ToList();
         else
-            perms = Permissionv2.GetDefaultPermlist;
+            perms = PermissionExtensions.GetDefaultPermlist;
 
         var effecting = perms.Where(x => x.SecondaryTargetName == commandName);
 
@@ -1395,31 +1427,31 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
         // please do not remove or enable without dissabling before commiting
 
 #if FORCE_ADD_DUMMY_PERMS
-        var nperms = new List<Permissionv2>();
+        var nperms = new List<Permission1>();
         for (var ni = 0; ni < 50; ni++)
         {
             nperms.Add(new()
             {
                 IsCustomCommand = /*true*/false,
-                PrimaryTarget = PrimaryPermissionType.User,
+                PrimaryTarget = (int)PrimaryPermissionType.User,
                 PrimaryTargetId = (ulong)ni,
-                SecondaryTarget = SecondaryPermissionType.Command,
+                SecondaryTarget = (int)SecondaryPermissionType.Command,
                 SecondaryTargetName = commandName
             });
         }
         await Service.AddPermissions(Context.Guild.Id, nperms.ToArray());
 #endif
         // get perm overwrites targeting users
-        IList<Permissionv2> perms;
+        IList<Permission1> perms;
 
         if (Service.Cache.TryGetValue(ctx.Guild.Id, out var permCache))
-            perms = permCache.Permissions.Source.ToList();
+            perms = permCache.Permissions.ToList();
         else
-            perms = Permissionv2.GetDefaultPermlist;
+            perms = PermissionExtensions.GetDefaultPermlist;
 
         perms = perms
             .Where(x => x.SecondaryTargetName == commandName)
-            .Where(x => x.PrimaryTarget == PrimaryPermissionType.User)
+            .Where(x => (PrimaryPermissionType)x.PrimaryTarget == PrimaryPermissionType.User)
             .Where(x => x.State)
             .ToList();
         // chunk into groups of 25, take first three
@@ -1490,16 +1522,16 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
     [ComponentInteraction("perm_quick_options_user_remove.*.*.*$*", true)]
     public async Task RemoveUserOveride(string commandName, bool overwrite, bool allow, int index, string[] values)
     {
-        IList<Permissionv2> perms;
+        IList<Permission1> perms;
 
         if (Service.Cache.TryGetValue(ctx.Guild.Id, out var permCache))
-            perms = permCache.Permissions.Source.ToList();
+            perms = permCache.Permissions.ToList();
         else
-            perms = Permissionv2.GetDefaultPermlist;
+            perms = PermissionExtensions.GetDefaultPermlist;
 
         perms = perms
             .Where(x => x.SecondaryTargetName == commandName)
-            .Where(x => x.PrimaryTarget == PrimaryPermissionType.User)
+            .Where(x => (PrimaryPermissionType)x.PrimaryTarget == PrimaryPermissionType.User)
             .Where(x => x.State)
             .ToList();
         // chunk into groups of 25, take first three
@@ -1537,16 +1569,16 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
     [ComponentInteraction("perm_quick_options_user_add.*.*.*$*", true)]
     public async Task AddUserOveride(string commandName, bool overwrite, bool allow, string _, IUser[] values)
     {
-        IList<Permissionv2> perms;
+        IList<Permission1> perms;
 
         if (Service.Cache.TryGetValue(ctx.Guild.Id, out var permCache))
-            perms = permCache.Permissions.Source.ToList();
+            perms = permCache.Permissions.ToList();
         else
-            perms = Permissionv2.GetDefaultPermlist;
+            perms = PermissionExtensions.GetDefaultPermlist;
 
         var matchingPerms = perms
             .Where(x => x.SecondaryTargetName == commandName)
-            .Where(x => x.PrimaryTarget == PrimaryPermissionType.User)
+            .Where(x => (PrimaryPermissionType)x.PrimaryTarget == PrimaryPermissionType.User)
             .Where(x => x.State)
             .ToList();
 
@@ -1558,12 +1590,12 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
         foreach (var p in needRems)
             await Service.RemovePerm(ctx.Guild.Id, p.Index - ++i);
 
-        var trueAdd = needAdd.Select(x => new Permissionv2
+        var trueAdd = needAdd.Select(x => new Permission1
         {
             IsCustomCommand = true,
-            PrimaryTarget = PrimaryPermissionType.User,
+            PrimaryTarget = (int)PrimaryPermissionType.User,
             PrimaryTargetId = x.Id,
-            SecondaryTarget = SecondaryPermissionType.Command,
+            SecondaryTarget = (int)SecondaryPermissionType.Command,
             SecondaryTargetName = commandName,
             State = true
         });
@@ -1576,9 +1608,9 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
         }
 
         if (Service.Cache.TryGetValue(ctx.Guild.Id, out permCache))
-            perms = permCache.Permissions.Source.ToList();
+            perms = permCache.Permissions.ToList();
         else
-            perms = Permissionv2.GetDefaultPermlist;
+            perms = PermissionExtensions.GetDefaultPermlist;
 
         for (i = 0; i < needAdd.Count(); i++)
             await Service.UnsafeMovePerm(ctx.Guild.Id, perms.Last().Index, 1);
@@ -1622,31 +1654,31 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
         // please do not remove or enable without dissabling before commiting
 
 #if FORCE_ADD_DUMMY_PERMS
-        var nperms = new List<Permissionv2>();
+        var nperms = new List<Permission1>();
         for (var ni = 0; ni < 50; ni++)
         {
             nperms.Add(new()
             {
                 IsCustomCommand = /*true*/false,
-                PrimaryTarget = PrimaryPermissionType.Role,
+                PrimaryTarget = (int)PrimaryPermissionType.Role,
                 PrimaryTargetId = (ulong)ni,
-                SecondaryTarget = SecondaryPermissionType.Command,
+                SecondaryTarget = (int)SecondaryPermissionType.Command,
                 SecondaryTargetName = commandName
             });
         }
         await Service.AddPermissions(Context.Guild.Id, nperms.ToArray());
 #endif
         // get perm overwrites targeting roles
-        IList<Permissionv2> perms;
+        IList<Permission1> perms;
 
         if (Service.Cache.TryGetValue(ctx.Guild.Id, out var permCache))
-            perms = permCache.Permissions.Source.ToList();
+            perms = permCache.Permissions.ToList();
         else
-            perms = Permissionv2.GetDefaultPermlist;
+            perms = PermissionExtensions.GetDefaultPermlist;
 
         perms = perms
             .Where(x => x.SecondaryTargetName == commandName)
-            .Where(x => x.PrimaryTarget == PrimaryPermissionType.Role)
+            .Where(x => (PrimaryPermissionType)x.PrimaryTarget == PrimaryPermissionType.Role)
             .Where(x => x.State)
             .ToList();
         // chunk into groups of 25, take first three
@@ -1716,16 +1748,16 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
     [ComponentInteraction("perm_quick_options_role_remove.*.*.*$*", true)]
     public async Task RemoveRoleOveride(string commandName, bool overwrite, bool allow, int index, string[] values)
     {
-        IList<Permissionv2> perms;
+        IList<Permission1> perms;
 
         if (Service.Cache.TryGetValue(ctx.Guild.Id, out var permCache))
-            perms = permCache.Permissions.Source.ToList();
+            perms = permCache.Permissions.ToList();
         else
-            perms = Permissionv2.GetDefaultPermlist;
+            perms = PermissionExtensions.GetDefaultPermlist;
 
         perms = perms
             .Where(x => x.SecondaryTargetName == commandName)
-            .Where(x => x.PrimaryTarget == PrimaryPermissionType.Role)
+            .Where(x => (PrimaryPermissionType)x.PrimaryTarget == PrimaryPermissionType.Role)
             .Where(x => x.State)
             .ToList();
         // chunk into groups of 25, take first three
@@ -1763,13 +1795,13 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
     [ComponentInteraction("perm_quick_options_role_add.*.*.*$*", true)]
     public async Task AddRoleOveride(string commandName, bool overwrite, bool allow, string _, IRole[] values)
     {
-        IList<Permissionv2> perms = Service.Cache.TryGetValue(ctx.Guild.Id, out var permCache)
-            ? permCache.Permissions.Source.ToList()
-            : Permissionv2.GetDefaultPermlist;
+        IList<Permission1> perms = Service.Cache.TryGetValue(ctx.Guild.Id, out var permCache)
+            ? permCache.Permissions.ToList()
+            : PermissionExtensions.GetDefaultPermlist;
 
         var matchingPerms = perms
             .Where(x => x.SecondaryTargetName == commandName)
-            .Where(x => x.PrimaryTarget == PrimaryPermissionType.Role)
+            .Where(x => (PrimaryPermissionType)x.PrimaryTarget == PrimaryPermissionType.Role)
             .Where(x => x.State)
             .ToList();
 
@@ -1781,12 +1813,12 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
         foreach (var p in needRems)
             await Service.RemovePerm(ctx.Guild.Id, p.Index - ++i);
 
-        var trueAdd = needAdd.Select(x => new Permissionv2
+        var trueAdd = needAdd.Select(x => new Permission1
         {
             IsCustomCommand = true,
-            PrimaryTarget = PrimaryPermissionType.Role,
+            PrimaryTarget = (int)PrimaryPermissionType.Role,
             PrimaryTargetId = x.Id,
-            SecondaryTarget = SecondaryPermissionType.Command,
+            SecondaryTarget = (int)SecondaryPermissionType.Command,
             SecondaryTargetName = commandName,
             State = true
         });
@@ -1799,9 +1831,9 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
         }
 
         if (Service.Cache.TryGetValue(ctx.Guild.Id, out permCache))
-            perms = permCache.Permissions.Source.ToList();
+            perms = permCache.Permissions.ToList();
         else
-            perms = Permissionv2.GetDefaultPermlist;
+            perms = PermissionExtensions.GetDefaultPermlist;
 
         for (i = 0; i < needAdd.Count(); i++)
             await Service.UnsafeMovePerm(ctx.Guild.Id, perms.Last().Index, 1);
@@ -1827,15 +1859,15 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
         // please do not remove or enable without dissabling before commiting
 
 #if FORCE_ADD_DUMMY_PERMS
-        var nperms = new List<Permissionv2>();
+        var nperms = new List<Permission1>();
         for (var ni = 0; ni < 50; ni++)
         {
             nperms.Add(new()
             {
                 IsCustomCommand = /*true*/false,
-                PrimaryTarget = PrimaryPermissionType.Channel,
+                PrimaryTarget = (int)PrimaryPermissionType.Channel,
                 PrimaryTargetId = (ulong)ni,
-                SecondaryTarget = SecondaryPermissionType.Command,
+                SecondaryTarget = (int)SecondaryPermissionType.Command,
                 SecondaryTargetName = commandName
             });
         }
@@ -1843,13 +1875,13 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
 #endif
         // get perm overwrites targeting users
 
-        IList<Permissionv2> perms = Service.Cache.TryGetValue(ctx.Guild.Id, out var permCache)
-            ? permCache.Permissions.Source.ToList()
-            : Permissionv2.GetDefaultPermlist;
+        IList<Permission1> perms = Service.Cache.TryGetValue(ctx.Guild.Id, out var permCache)
+            ? permCache.Permissions.ToList()
+            : PermissionExtensions.GetDefaultPermlist;
 
         perms = perms
             .Where(x => x.SecondaryTargetName == commandName)
-            .Where(x => x.PrimaryTarget == PrimaryPermissionType.Channel)
+            .Where(x => (PrimaryPermissionType)x.PrimaryTarget == PrimaryPermissionType.Channel)
             .Where(x => x.State)
             .ToList();
         // chunk into groups of 25, take first three
@@ -1932,16 +1964,16 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
     [ComponentInteraction("perm_quick_options_channel_remove.*.*.*$*", true)]
     public async Task RemoveChannelOveride(string commandName, bool overwrite, bool allow, int index, string[] values)
     {
-        IList<Permissionv2> perms;
+        IList<Permission1> perms;
 
         if (Service.Cache.TryGetValue(ctx.Guild.Id, out var permCache))
-            perms = permCache.Permissions.Source.ToList();
+            perms = permCache.Permissions.ToList();
         else
-            perms = Permissionv2.GetDefaultPermlist;
+            perms = PermissionExtensions.GetDefaultPermlist;
 
         perms = perms
             .Where(x => x.SecondaryTargetName == commandName)
-            .Where(x => x.PrimaryTarget == PrimaryPermissionType.Channel)
+            .Where(x => (PrimaryPermissionType)x.PrimaryTarget == PrimaryPermissionType.Channel)
             .Where(x => x.State)
             .ToList();
         // chunk into groups of 25, take first three
@@ -1979,16 +2011,16 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
     [ComponentInteraction("perm_quick_options_channel_add.*.*.*$*", true)]
     public async Task AddChannelOveride(string commandName, bool overwrite, bool allow, string _, IChannel[] values)
     {
-        IList<Permissionv2> perms;
+        IList<Permission1> perms;
 
         if (Service.Cache.TryGetValue(ctx.Guild.Id, out var permCache))
-            perms = permCache.Permissions.Source.ToList();
+            perms = permCache.Permissions.ToList();
         else
-            perms = Permissionv2.GetDefaultPermlist;
+            perms = PermissionExtensions.GetDefaultPermlist;
 
         var matchingPerms = perms
             .Where(x => x.SecondaryTargetName == commandName)
-            .Where(x => x.PrimaryTarget == PrimaryPermissionType.Channel)
+            .Where(x => (PrimaryPermissionType)x.PrimaryTarget == PrimaryPermissionType.Channel)
             .Where(x => x.State)
             .ToList();
 
@@ -2000,12 +2032,12 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
         foreach (var p in needRems)
             await Service.RemovePerm(ctx.Guild.Id, p.Index - ++i);
 
-        var trueAdd = needAdd.Select(x => new Permissionv2
+        var trueAdd = needAdd.Select(x => new Permission1
         {
             IsCustomCommand = true,
-            PrimaryTarget = PrimaryPermissionType.Channel,
+            PrimaryTarget = (int)PrimaryPermissionType.Channel,
             PrimaryTargetId = x.Id,
-            SecondaryTarget = SecondaryPermissionType.Command,
+            SecondaryTarget = (int)SecondaryPermissionType.Command,
             SecondaryTargetName = commandName,
             State = true
         });
@@ -2018,9 +2050,9 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
         }
 
         if (Service.Cache.TryGetValue(ctx.Guild.Id, out permCache))
-            perms = permCache.Permissions.Source.ToList();
+            perms = permCache.Permissions.ToList();
         else
-            perms = Permissionv2.GetDefaultPermlist;
+            perms = PermissionExtensions.GetDefaultPermlist;
 
         for (i = 0; i < needAdd.Count(); i++)
             await Service.UnsafeMovePerm(ctx.Guild.Id, perms.Last().Index, 1);
@@ -2046,31 +2078,31 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
         // please do not remove or enable without dissabling before commiting
 
 #if FORCE_ADD_DUMMY_PERMS
-        var nperms = new List<Permissionv2>();
+        var nperms = new List<Permission1>();
         for (var ni = 0; ni < 50; ni++)
         {
             nperms.Add(new()
             {
                 IsCustomCommand = /*true*/false,
-                PrimaryTarget = PrimaryPermissionType.Category,
+                PrimaryTarget = (int)PrimaryPermissionType.Category,
                 PrimaryTargetId = (ulong)ni,
-                SecondaryTarget = SecondaryPermissionType.Command,
+                SecondaryTarget = (int)SecondaryPermissionType.Command,
                 SecondaryTargetName = commandName
             });
         }
         await Service.AddPermissions(Context.Guild.Id, nperms.ToArray());
 #endif
         // get perm overwrites targeting users
-        IList<Permissionv2> perms;
+        IList<Permission1> perms;
 
         if (Service.Cache.TryGetValue(ctx.Guild.Id, out var permCache))
-            perms = permCache.Permissions.Source.ToList();
+            perms = permCache.Permissions.ToList();
         else
-            perms = Permissionv2.GetDefaultPermlist;
+            perms = PermissionExtensions.GetDefaultPermlist;
 
         perms = perms
             .Where(x => x.SecondaryTargetName == commandName)
-            .Where(x => x.PrimaryTarget == PrimaryPermissionType.Category)
+            .Where(x => (PrimaryPermissionType)x.PrimaryTarget == PrimaryPermissionType.Category)
             .Where(x => x.State)
             .ToList();
         // chunk into groups of 25, take first three
@@ -2144,16 +2176,16 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
     [ComponentInteraction("perm_quick_options_category_remove.*.*.*$*", true)]
     public async Task RemoveCategoryOveride(string commandName, bool overwrite, bool allow, int index, string[] values)
     {
-        IList<Permissionv2> perms;
+        IList<Permission1> perms;
 
         if (Service.Cache.TryGetValue(ctx.Guild.Id, out var permCache))
-            perms = permCache.Permissions.Source.ToList();
+            perms = permCache.Permissions.ToList();
         else
-            perms = Permissionv2.GetDefaultPermlist;
+            perms = PermissionExtensions.GetDefaultPermlist;
 
         perms = perms
             .Where(x => x.SecondaryTargetName == commandName)
-            .Where(x => x.PrimaryTarget == PrimaryPermissionType.Category)
+            .Where(x => (PrimaryPermissionType)x.PrimaryTarget == PrimaryPermissionType.Category)
             .Where(x => x.State)
             .ToList();
         // chunk into groups of 25, take first three
@@ -2191,16 +2223,16 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
     [ComponentInteraction("perm_quick_options_category_add.*.*.*$*", true)]
     public async Task AddCategoryOveride(string commandName, bool overwrite, bool allow, string _, IChannel[] values)
     {
-        IList<Permissionv2> perms;
+        IList<Permission1> perms;
 
         if (Service.Cache.TryGetValue(ctx.Guild.Id, out var permCache))
-            perms = permCache.Permissions.Source.ToList();
+            perms = permCache.Permissions.ToList();
         else
-            perms = Permissionv2.GetDefaultPermlist;
+            perms = PermissionExtensions.GetDefaultPermlist;
 
         var matchingPerms = perms
             .Where(x => x.SecondaryTargetName == commandName)
-            .Where(x => x.PrimaryTarget == PrimaryPermissionType.Category)
+            .Where(x => (PrimaryPermissionType)x.PrimaryTarget == PrimaryPermissionType.Category)
             .Where(x => x.State)
             .ToList();
 
@@ -2212,12 +2244,12 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
         foreach (var p in needRems)
             await Service.RemovePerm(ctx.Guild.Id, p.Index - ++i);
 
-        var trueAdd = needAdd.Select(x => new Permissionv2
+        var trueAdd = needAdd.Select(x => new Permission1
         {
             IsCustomCommand = true,
-            PrimaryTarget = PrimaryPermissionType.Category,
+            PrimaryTarget = (int)PrimaryPermissionType.Category,
             PrimaryTargetId = x.Id,
-            SecondaryTarget = SecondaryPermissionType.Command,
+            SecondaryTarget = (int)SecondaryPermissionType.Command,
             SecondaryTargetName = commandName,
             State = true
         });
@@ -2230,8 +2262,8 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
         }
 
         perms = Service.Cache.TryGetValue(ctx.Guild.Id, out permCache)
-            ? permCache.Permissions.Source.ToList()
-            : Permissionv2.GetDefaultPermlist;
+            ? permCache.Permissions.ToList()
+            : PermissionExtensions.GetDefaultPermlist;
 
         for (i = 0; i < needAdd.Count(); i++)
             await Service.UnsafeMovePerm(ctx.Guild.Id, perms.Last().Index, 1);

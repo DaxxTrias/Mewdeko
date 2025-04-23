@@ -1,6 +1,8 @@
 using System.Text;
+using DataModel;
 using Discord.Interactions;
 using Mewdeko.Common.Attributes.InteractionCommands;
+
 using Mewdeko.Modules.Administration.Services;
 using Serilog;
 using LogType = Mewdeko.Modules.Administration.Services.LogCommandService.LogType;

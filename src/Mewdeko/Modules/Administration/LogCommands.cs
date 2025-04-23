@@ -1,4 +1,5 @@
-﻿using Discord.Commands;
+﻿using DataModel;
+using Discord.Commands;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Modules.Administration.Services;
 using LogType = Mewdeko.Modules.Administration.Services.LogCommandService.LogType;

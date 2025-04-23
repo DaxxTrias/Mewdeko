@@ -1,10 +1,11 @@
-﻿using Discord.Commands;
+﻿using DataModel;
+using Discord.Commands;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
+using LinqToDB;
 using Mewdeko.Common.Attributes.TextCommands;
-using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.Searches.Services;
-using Microsoft.EntityFrameworkCore;
+
 
 namespace Mewdeko.Modules.Searches;
 
@@ -14,7 +15,7 @@ public partial class Searches
     ///     Contains commands for managing stream notifications within a Discord guild.
     /// </summary>
     [Group]
-    public class StreamNotificationCommands(DbContextProvider dbProvider, InteractiveService serv)
+    public class StreamNotificationCommands(IDataConnectionFactory dbFactory, InteractiveService serv)
         : MewdekoSubmodule<StreamNotificationService>
     {
         /// <summary>
@@ -104,12 +105,13 @@ public partial class Searches
         {
             var streams = new List<FollowedStream>();
 
-            await using var dbContext = await dbProvider.GetContextAsync();
-            var all = (await dbContext
-                    .ForGuildId(ctx.Guild.Id, set => set.Include(gc => gc.FollowedStreams)))
-                .FollowedStreams
+            await using var dbContext = await dbFactory.CreateConnectionAsync();
+
+            // Direct query with GuildId filter
+            var all = await dbContext.FollowedStreams
+                .Where(fs => fs.GuildId == ctx.Guild.Id)
                 .OrderBy(x => x.Id)
-                .ToList();
+                .ToListAsync();
 
             for (var index = all.Count - 1; index >= 0; index--)
             {

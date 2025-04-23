@@ -1,4 +1,6 @@
-﻿using Mewdeko.Modules.Currency.Services.Impl;
+﻿
+using DataModel;
+using Mewdeko.Modules.Currency.Services.Impl;
 
 namespace Mewdeko.Modules.Currency.Services;
 

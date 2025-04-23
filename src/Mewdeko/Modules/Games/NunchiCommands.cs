@@ -10,7 +10,7 @@ public partial class Games
     /// <summary>
     ///     A module containing Nunchi commands.
     /// </summary>
-    /// <param name="client"></param>
+    /// <param name="handler">Event handler because discord sucks.</param>
     [Group]
     public class NunchiCommands(EventHandler handler) : MewdekoSubmodule<GamesService>
     {

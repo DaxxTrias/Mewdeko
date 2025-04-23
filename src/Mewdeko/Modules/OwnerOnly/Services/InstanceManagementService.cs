@@ -1,10 +1,10 @@
 ﻿using System.Net.Http;
 using System.Text.Json;
 using System.Threading;
+using DataModel;
 using LinqToDB;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Controllers;
-using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Services.Impl;
 using Serilog;
 
@@ -15,7 +15,7 @@ namespace Mewdeko.Modules.OwnerOnly.Services;
 /// </summary>
 public class InstanceManagementService : INService, IReadyExecutor
 {
-    private readonly DbContextProvider provider;
+    private readonly IDataConnectionFactory dbFactory;
     private readonly IHttpClientFactory factory;
     private readonly DiscordShardedClient client;
     private readonly string apiKey;
@@ -23,15 +23,16 @@ public class InstanceManagementService : INService, IReadyExecutor
     /// <summary>
     /// Initializes a new instance of the BotInstanceService.
     /// </summary>
-    /// <param name="provider">The database context provider.</param>
+    /// <param name="dbFactory">The database context provider.</param>
     /// <param name="factory">The HTTP client factory.</param>
+    /// <param name="client">The sharded discord client</param>
     public InstanceManagementService(
-        DbContextProvider provider,
+        IDataConnectionFactory dbFactory,
         IHttpClientFactory factory, DiscordShardedClient client)
     {
         var creds = new BotCredentials();
         apiKey = creds.ApiKey;
-        this.provider = provider;
+        this.dbFactory = dbFactory;
         this.factory = factory;
         this.client = client;
     }
@@ -55,14 +56,14 @@ public class InstanceManagementService : INService, IReadyExecutor
         {
             try
             {
-                await using var db = await provider.GetContextAsync();
+                await using var db = await dbFactory.CreateConnectionAsync();
                 var exists = await db.BotInstances.AnyAsync(x => x.Port == creds.ApiPort);
 
                 if (!exists)
                 {
                     Log.Information("Registering self as master instance on port {Port}", creds.ApiPort);
 
-                    db.BotInstances.Add(new BotInstance
+                    await db.InsertAsync(new BotInstance
                     {
                         Port = creds.ApiPort,
                         BotId = client.CurrentUser.Id,
@@ -71,8 +72,6 @@ public class InstanceManagementService : INService, IReadyExecutor
                         IsActive = true,
                         LastStatusUpdate = DateTime.UtcNow
                     });
-
-                    await db.SaveChangesAsync();
                 }
             }
             catch (Exception ex)
@@ -113,7 +112,7 @@ public class InstanceManagementService : INService, IReadyExecutor
         if (port is < 1024 or > 65535)
             throw new ArgumentOutOfRangeException(nameof(port), "Port must be between 1024 and 65535");
 
-        await using var db = await provider.GetContextAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
         if (await db.BotInstances.AnyAsync(x => x.Port == port))
             return (false, null, "instance_already_exists");
 
@@ -121,7 +120,7 @@ public class InstanceManagementService : INService, IReadyExecutor
         if (status == null)
             return (false, null, "instance_not_responding");
 
-        db.BotInstances.Add(new BotInstance
+        await db.InsertAsync(new BotInstance
         {
             Port = port,
             BotId = status.BotId,
@@ -131,7 +130,6 @@ public class InstanceManagementService : INService, IReadyExecutor
             LastStatusUpdate = DateTime.UtcNow
         });
 
-        await db.SaveChangesAsync();
         return (true, status, null);
     }
 
@@ -181,8 +179,8 @@ public class InstanceManagementService : INService, IReadyExecutor
         {
             try
             {
-                await using var db = await provider.GetContextAsync();
-                var instances = await db.BotInstances.ToListAsync();
+                await using var db = await dbFactory.CreateConnectionAsync();
+                var instances = db.BotInstances;
 
                 foreach (var instance in instances)
                 {
@@ -191,7 +189,7 @@ public class InstanceManagementService : INService, IReadyExecutor
                     instance.LastStatusUpdate = DateTime.UtcNow;
                 }
 
-                await db.SaveChangesAsync();
+                await db.UpdateAsync(instances);
             }
             catch (Exception ex)
             {
@@ -206,7 +204,7 @@ public class InstanceManagementService : INService, IReadyExecutor
     /// <returns>A list of active bot instances.</returns>
     public async Task<List<BotInstance>> GetActiveInstancesAsync()
     {
-        await using var db = await provider.GetContextAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
         return await db.BotInstances
             .Where(x => x.IsActive)
             .OrderBy(x => x.Port)
@@ -228,14 +226,13 @@ public class InstanceManagementService : INService, IReadyExecutor
         if (port is < 1024 or > 65535)
             throw new ArgumentOutOfRangeException(nameof(port), "Port must be between 1024 and 65535");
 
-        await using var db = await provider.GetContextAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
         var instance = await db.BotInstances.FirstOrDefaultAsync(x => x.Port == port);
 
         if (instance == null)
             return false;
 
-        db.BotInstances.Remove(instance);
-        await db.SaveChangesAsync();
+        await db.BotInstances.Select(x => instance).DeleteAsync();
         return true;
     }
 }

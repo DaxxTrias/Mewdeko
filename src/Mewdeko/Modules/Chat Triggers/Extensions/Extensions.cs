@@ -1,8 +1,9 @@
-using System.Runtime.CompilerServices;
-using System.Text.RegularExpressions;
 using AngleSharp;
 using AngleSharp.Html.Dom;
-using Mewdeko.Database.DbContextStuff;
+using LinqToDB;
+using System.Runtime.CompilerServices;
+using System.Text.RegularExpressions;
+using ChatTrigger = DataModel.ChatTrigger;
 
 namespace Mewdeko.Modules.Chat_Triggers.Extensions;
 
@@ -11,7 +12,8 @@ namespace Mewdeko.Modules.Chat_Triggers.Extensions;
 /// </summary>
 public static class Extensions
 {
-    private static readonly Regex ImgRegex = new("%(img|image):(?<tag>.*?)%", RegexOptions.Compiled);
+    private static readonly Regex ImgRegex = new("%(img|image):(?<tag>.*?)%", RegexOptions.Compiled | RegexOptions.IgnoreCase); // Added IgnoreCase
+    private static readonly Regex RandomRegex = new("%random:(?<min>\\d+),(?<max>\\d+)%", RegexOptions.Compiled); // Added for %random%
 
     /// <summary>
     ///     Dictionary containing regular expressions and corresponding functions to generate string replacements.
@@ -21,37 +23,26 @@ public static class Extensions
         {
             ImgRegex, async match =>
             {
-                // Extract the tag from the match
                 var tag = match.Groups["tag"].ToString();
-
-                // If the tag is empty or whitespace, return an empty string
                 if (string.IsNullOrWhiteSpace(tag))
                     return "";
 
-                // Construct the full query link for imgur search
-                var fullQueryLink = $"https://imgur.com/search?q={tag}";
-
-                // Configure the browsing context
+                var fullQueryLink = $"https://imgur.com/search?q={Uri.EscapeDataString(tag)}";
                 var config = Configuration.Default.WithDefaultLoader();
-
-                // Open the document asynchronously
-                using var document = await BrowsingContext.New(config).OpenAsync(fullQueryLink).ConfigureAwait(false);
-
-                // Query all elements matching the image-list-link selector
-                var elems = document.QuerySelectorAll("a.image-list-link").ToArray();
-
-                // If no elements found, return empty string
-                if (elems.Length == 0)
+                try
+                {
+                    using var document = await BrowsingContext.New(config).OpenAsync(fullQueryLink).ConfigureAwait(false);
+                    var elems = document.QuerySelectorAll("a.image-list-link").ToArray();
+                    if (elems.Length == 0) return "";
+                    var img = elems.ElementAtOrDefault(new Random().Next(0, elems.Length))?.Children
+                        ?.FirstOrDefault() as IHtmlImageElement;
+                    return img?.Source == null ? "" : $" {img.Source.Replace("b.", ".", StringComparison.InvariantCulture)} ";
+                }
+                catch (Exception ex)
+                {
+                    Serilog.Log.Warning(ex, "Error retrieving Imgur image for tag: {Tag}", tag);
                     return "";
-
-                // Get a random image element from the list
-                var img = elems.ElementAtOrDefault(new MewdekoRandom().Next(0, elems.Length))?.Children
-                    ?.FirstOrDefault() as IHtmlImageElement;
-
-                // If img source is null, return empty string; otherwise, return the source URL
-                return img?.Source == null
-                    ? ""
-                    : $" {img.Source.Replace("b.", ".", StringComparison.InvariantCulture)} ";
+                }
             }
         }
     };
@@ -65,9 +56,8 @@ public static class Extensions
     /// <returns>The trigger string with the placeholder replaced.</returns>
     private static string ResolveTriggerString(this string str, DiscordShardedClient client)
     {
-        return str.Replace("%bot.mention%", client.CurrentUser.Mention, StringComparison.Ordinal);
+        return str.Replace("%bot.mention%", client.CurrentUser?.Mention ?? "", StringComparison.Ordinal); // Handle potential null CurrentUser
     }
-
 
     /// <summary>
     ///     Resolves the response string asynchronously by replacing placeholders with dynamic values.
@@ -77,108 +67,92 @@ public static class Extensions
     /// <param name="client">The Discord socket client.</param>
     /// <param name="resolvedTrigger">The resolved trigger string.</param>
     /// <param name="containsAnywhere">Boolean value indicating whether the trigger is contained anywhere in the message.</param>
-    /// <param name="dbContext">Optional: The database context. Default is null.</param>
+    /// <param name="dbFactory">Optional: The LinqToDB database factory. Default is null.</param>
     /// <param name="triggerId">Optional: The ID of the trigger. Default is 0.</param>
     /// <returns>The resolved response string.</returns>
     private static async Task<string?> ResolveResponseStringAsync(this string? str, IUserMessage ctx,
-        DiscordShardedClient client, string resolvedTrigger, bool containsAnywhere, DbContextProvider dbProvider = null,
+        DiscordShardedClient client, string resolvedTrigger, bool containsAnywhere, IDataConnectionFactory? dbFactory = null,
         int triggerId = 0)
     {
-        // Calculate the index where the substring begins
+        if (string.IsNullOrWhiteSpace(str)) return str; // Return early if string is empty
+
         var substringIndex = resolvedTrigger.Length;
-        if (containsAnywhere)
+        if (containsAnywhere && !string.IsNullOrEmpty(ctx.Content)) // Ensure content exists
         {
-            switch (ctx.Content.AsSpan().GetWordPosition(resolvedTrigger))
+            var index = ctx.Content.IndexOf(resolvedTrigger, StringComparison.OrdinalIgnoreCase); // Use IgnoreCase
+            if (index != -1)
             {
-                case WordPosition.Start:
-                    substringIndex++;
-                    break;
-                case WordPosition.End:
-                    substringIndex = ctx.Content.Length;
-                    break;
-                case WordPosition.Middle:
-                    substringIndex += ctx.Content.IndexOf(resolvedTrigger, StringComparison.InvariantCulture);
-                    break;
+                 var pos = ctx.Content.AsSpan().GetWordPosition(resolvedTrigger.AsSpan()); // Use span overload
+                switch (pos)
+                {
+                    case WordPosition.Start: substringIndex = index + resolvedTrigger.Length + 1; break; // Adjust index based on actual position
+                    case WordPosition.End: substringIndex = index; break; // Take content before trigger
+                    case WordPosition.Middle: substringIndex = index + resolvedTrigger.Length + 1; break; // Adjust index based on actual position
+                    default: substringIndex = ctx.Content.Length; break; // If not a whole word match, take everything? Or just from end? Let's take from end.
+                }
+            }
+            else
+            {
+                substringIndex = 0; // Safer default for %target% if trigger isn't found with ContainsAnywhere
             }
         }
 
-        // Check if mentioning everyone is allowed
         var canMentionEveryone = (ctx.Author as IGuildUser)?.GuildPermissions.MentionEveryone ?? true;
-        await using var dbContext = await dbProvider.GetContextAsync();
+        var textChannel = ctx.Channel as ITextChannel;
+        var guild = textChannel?.Guild as SocketGuild;
 
-        // Build the replacement dictionary
+        var useCountStr = "0"; // Default use count
+        if(dbFactory != null && triggerId > 0)
+        {
+             try
+             {
+                  await using var db = await dbFactory.CreateConnectionAsync();
+                  var count = await db.CommandStats
+                                     .CountAsync(x => x.NameOrId == $"{triggerId}")
+                                     .ConfigureAwait(false);
+                  useCountStr = count.ToString();
+             }
+             catch (Exception ex)
+             {
+                 Serilog.Log.Warning(ex, "Failed to get use count for trigger {TriggerId}", triggerId);
+             }
+        }
+
         var rep = new ReplacementBuilder()
-            .WithDefault(ctx.Author, ctx.Channel, (ctx.Channel as ITextChannel)?.Guild as SocketGuild, client)
+            .WithDefault(ctx.Author, ctx.Channel, guild, client)
             .WithOverride("%target%", () =>
-                canMentionEveryone
-                    ? ctx.Content[substringIndex..].Trim()
-                    : ctx.Content[substringIndex..].Trim().SanitizeMentions(true))
-            .WithOverride("%usecount%",
-                () => dbContext.CommandStats.Count(x => x.NameOrId == $"{triggerId}").ToString())
-            .WithOverride("%targetuser%", () =>
             {
-                var mention = ctx.MentionedUserIds.FirstOrDefault();
-                return mention is 0 ? "" : mention.ToString();
+                 var content = ctx.Content ?? "";
+                 var targetText = substringIndex <= content.Length ? content[substringIndex..].Trim() : "";
+                 return canMentionEveryone ? targetText : targetText.SanitizeMentions(true);
             })
-            .WithOverride("%targetuser.id%", () =>
-            {
-                var mention = ctx.Content.GetUserMentions().FirstOrDefault();
-                if (mention is 0)
-                    return "";
-                var user = client.GetUser(mention);
-                return user is null ? "" : user.Id.ToString();
-            })
-            .WithOverride("%targetuser.avatar%", () =>
-            {
-                var mention = ctx.Content.GetUserMentions().FirstOrDefault();
-                if (mention is 0)
-                    return "";
-                var user = client.GetUser(mention);
-                return user is null ? "" : user.RealAvatarUrl().ToString();
-            })
-            .WithOverride("%targetusers%", () =>
-            {
-                var mention = ctx.Content.GetUserMentions();
-                return !mention.Any() ? "" : string.Join(", ", mention.Select(x => $"<@{x}>"));
-            })
-            .WithOverride("%targetusers.id%", () =>
-            {
-                var mention = ctx.Content.GetUserMentions();
-                if (mention.Any())
-                    return "";
-                return !mention.Any() ? "" : string.Join(", ", mention);
-            })
-            .WithOverride("%replied.content%", () =>
-            {
-                var reference = ctx.Reference;
-                if (reference == null)
-                    return "";
-
-                // Get the message being replied to
-                var repliedMsg = ctx.Channel.GetMessageAsync(reference.MessageId.Value).GetAwaiter().GetResult();
-                return repliedMsg?.Content ?? "";
-            })
-            .WithOverride("%replied.author%", () =>
-            {
-                var reference = ctx.Reference;
-                if (reference == null)
-                    return "";
-
-                var repliedMsg = ctx.Channel.GetMessageAsync(reference.MessageId.Value).GetAwaiter().GetResult();
-                return repliedMsg?.Author.Mention ?? "";
-            })
+            .WithOverride("%usecount%", () => useCountStr)
+            .WithOverride("%targetuser%", () => ctx.MentionedUserIds.FirstOrDefault() is var userId && userId != 0 ? $"<@{userId}>" : "")
+            .WithOverride("%targetuser.id%", () => ctx.MentionedUserIds.FirstOrDefault().ToString())
+            .WithOverride("%targetuser.name%", () => client.GetUser(ctx.MentionedUserIds.FirstOrDefault())?.Username ?? "")
+            .WithOverride("%targetuser.avatar%", () => client.GetUser(ctx.MentionedUserIds.FirstOrDefault())?.RealAvatarUrl().ToString() ?? "")
+            .WithOverride("%targetusers%", () => string.Join(", ", ctx.MentionedUserIds.Select(x => $"<@{x}>")))
+            .WithOverride("%targetusers.id%", () => string.Join(", ", ctx.MentionedUserIds))
+            .WithOverride("%replied.content%", () => ctx.Reference?.MessageId.IsSpecified == true ? (ctx.Channel.GetMessageAsync(ctx.Reference.MessageId.Value).GetAwaiter().GetResult()?.Content ?? "") : "") // Safer access
+            .WithOverride("%replied.author%", () => ctx.Reference?.MessageId.IsSpecified == true ? (ctx.Channel.GetMessageAsync(ctx.Reference.MessageId.Value).GetAwaiter().GetResult()?.Author?.Mention ?? "") : "") // Safer access
+            .WithOverride("%replied.author.id%", () => ctx.Reference?.MessageId.IsSpecified == true ? (ctx.Channel.GetMessageAsync(ctx.Reference.MessageId.Value).GetAwaiter().GetResult()?.Author?.Id.ToString() ?? "") : "")
             .Build();
 
-        // Replace placeholders with dynamic values
         str = rep.Replace(str);
         foreach (var ph in RegexPlaceholders)
         {
-            str = await ph.Key.ReplaceAsync(str, ph.Value).ConfigureAwait(false);
+            try
+            {
+                 str = await ph.Key.ReplaceAsync(str ?? "", ph.Value).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                 Serilog.Log.Warning(ex, "Error processing Regex Placeholder {Regex}", ph.Key);
+            }
         }
 
         return str;
     }
-
 
     /// <summary>
     ///     Generates a response string with context asynchronously based on the provided parameters.
@@ -187,13 +161,13 @@ public static class Extensions
     /// <param name="ctx">The message context.</param>
     /// <param name="client">The Discord socket client.</param>
     /// <param name="containsAnywhere">Boolean value indicating whether the trigger is contained anywhere in the message.</param>
-    /// <param name="context">Optional: The database context. Default is null.</param>
+    /// <param name="dbFactory">Optional: The LinqToDB database factory. Default is null.</param>
     /// <returns>The response string with context.</returns>
-    public static Task<string?> ResponseWithContextAsync(this Database.Models.ChatTriggers cr, IUserMessage ctx,
-        DiscordShardedClient client, bool containsAnywhere, DbContextProvider provider = null)
+    public static Task<string?> ResponseWithContextAsync(this ChatTrigger cr, IUserMessage ctx,
+        DiscordShardedClient client, bool containsAnywhere, IDataConnectionFactory? dbFactory = null)
     {
         return cr.Response.ResolveResponseStringAsync(ctx, client, cr.Trigger.ResolveTriggerString(client),
-            containsAnywhere, provider, cr.Id);
+            containsAnywhere, dbFactory, cr.Id);
     }
 
 
@@ -204,10 +178,10 @@ public static class Extensions
     /// <param name="ctx">The message context.</param>
     /// <param name="client">The Discord socket client.</param>
     /// <param name="sanitize">Boolean value indicating whether to sanitize mentions in the response.</param>
-    /// <param name="dbContext">Optional: The database context. Default is null.</param>
+    /// <param name="dbFactory">Optional: The database context. Default is null.</param>
     /// <returns>The sent user message or null if no response is required.</returns>
-    public static async Task<IUserMessage>? Send(this Database.Models.ChatTriggers ct, IUserMessage ctx,
-        DiscordShardedClient client, bool sanitize, DbContextProvider dbProvider = null)
+    public static async Task<IUserMessage>? Send(this ChatTrigger ct, IUserMessage ctx,
+        DiscordShardedClient client, bool sanitize, IDataConnectionFactory dbProvider = null)
     {
         var channel = ct.DmResponse
             ? await ctx.Author.CreateDMChannelAsync().ConfigureAwait(false)
@@ -229,7 +203,7 @@ public static class Extensions
             }
 
             var canMentionEveryone = (ctx.Author as IGuildUser)?.GuildPermissions.MentionEveryone ?? true;
-            await using var dbContext = await dbProvider.GetContextAsync();
+            await using var dbContext = await dbProvider.CreateConnectionAsync();
 
             var rep = new ReplacementBuilder()
                 .WithDefault(ctx.Author, ctx.Channel, (ctx.Channel as ITextChannel)?.Guild as SocketGuild, client)
@@ -343,15 +317,15 @@ public static class Extensions
     /// <param name="sanitize">Boolean value indicating whether to sanitize mentions in the response.</param>
     /// <param name="fakeMsg">The fake user message for context.</param>
     /// <param name="ephemeral">Boolean value indicating whether the response should be ephemeral. Default is false.</param>
-    /// <param name="dbContext">Optional: The database context. Default is null.</param>
+    /// <param name="dbFactory">Optional: The database context. Default is null.</param>
     /// <param name="followup">Boolean value indicating whether to send a follow-up response. Default is false.</param>
     /// <returns>The sent user message or null if no response is required.</returns>
-    public static async Task<IUserMessage>? SendInteraction(this Database.Models.ChatTriggers ct,
+    public static async Task<IUserMessage>? SendInteraction(this ChatTrigger ct,
         SocketInteraction inter,
         DiscordShardedClient client, bool sanitize, IUserMessage fakeMsg, bool ephemeral = false,
-        DbContextProvider dbProvider = null, bool followup = false)
+        IDataConnectionFactory dbProvider = null, bool followup = false)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var dbContext = await dbProvider.CreateConnectionAsync();
 
         var rep = new ReplacementBuilder()
             .WithDefault(inter.User, inter.Channel, (inter.Channel as ITextChannel)?.Guild as SocketGuild, client)
@@ -447,7 +421,6 @@ public static class Extensions
         return await inter.GetOriginalResponseAsync().ConfigureAwait(false);
     }
 
-
     /// <summary>
     ///     Gets the position of a word within a string.
     /// </summary>
@@ -457,36 +430,20 @@ public static class Extensions
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static WordPosition GetWordPosition(this ReadOnlySpan<char> str, in ReadOnlySpan<char> word)
     {
-        var wordIndex = str.IndexOf(word, StringComparison.OrdinalIgnoreCase);
+        var wordIndex = str.IndexOf(word, StringComparison.OrdinalIgnoreCase); // Use IgnoreCase for matching
         switch (wordIndex)
         {
-            case -1:
-                return WordPosition.None;
-            case 0:
-            {
-                if (word.Length < str.Length && str.IsValidWordDivider(word.Length))
-                    return WordPosition.Start;
-                break;
-            }
+            case -1: return WordPosition.None;
+            case 0: return word.Length == str.Length || (word.Length < str.Length && str.IsValidWordDivider(word.Length)) ? WordPosition.Start : WordPosition.None;
             default:
-            {
-                if (wordIndex + word.Length == str.Length)
                 {
-                    if (str.IsValidWordDivider(wordIndex - 1))
-                        return WordPosition.End;
+                    var endReached = wordIndex + word.Length == str.Length;
+                    var startValid = str.IsValidWordDivider(wordIndex - 1);
+                    if (endReached) return startValid ? WordPosition.End : WordPosition.None;
+                    return startValid && str.IsValidWordDivider(wordIndex + word.Length) ? WordPosition.Middle : WordPosition.None;
                 }
-                else if (str.IsValidWordDivider(wordIndex - 1) && str.IsValidWordDivider(wordIndex + word.Length))
-                {
-                    return WordPosition.Middle;
-                }
-
-                break;
-            }
         }
-
-        return WordPosition.None;
     }
-
 
     /// <summary>
     ///     Determines whether the character at the specified index is a valid word divider.
@@ -499,15 +456,11 @@ public static class Extensions
     /// </returns>
     private static bool IsValidWordDivider(this in ReadOnlySpan<char> str, int index)
     {
-        switch (str[index])
-        {
-            case >= 'a' and <= 'z':
-            case >= 'A' and <= 'Z':
-            case >= '1' and <= '9':
-                return false;
-            default:
-                return true;
-        }
+        if ((uint)index >= (uint)str.Length) return true; // Treat bounds as dividers
+
+        var ch = str[index];
+        // Check common punctuation, whitespace, or CJK characters as dividers
+        return !char.IsLetterOrDigit(ch);
     }
 }
 
@@ -516,23 +469,12 @@ public static class Extensions
 /// </summary>
 public enum WordPosition
 {
-    /// <summary>
-    ///     The word is not found or does not have a valid position within the string.
-    /// </summary>
+    /// <summary>The word is not found or not separated by word dividers.</summary>
     None,
-
-    /// <summary>
-    ///     The word is found at the start of the string.
-    /// </summary>
+    /// <summary>The word is found at the start of the string, followed by a divider.</summary>
     Start,
-
-    /// <summary>
-    ///     The word is found in the middle of the string.
-    /// </summary>
+    /// <summary>The word is found surrounded by dividers.</summary>
     Middle,
-
-    /// <summary>
-    ///     The word is found at the end of the string.
-    /// </summary>
+    /// <summary>The word is found at the end of the string, preceded by a divider.</summary>
     End
 }

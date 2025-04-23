@@ -1,13 +1,14 @@
-﻿using Mewdeko.Common.ModuleBehaviors;
-using Mewdeko.Database.DbContextStuff;
-using Microsoft.EntityFrameworkCore;
+﻿using DataModel;
+using LinqToDB;
+using Mewdeko.Common.ModuleBehaviors;
+
 
 namespace Mewdeko.Modules.Utility.Services;
 
 /// <summary>
 ///     Manages the transformation of input commands based on alias mappings, allowing customization of command triggers.
 /// </summary>
-public class CommandMapService(DbContextProvider dbProvider, GuildSettingsService gss) : IInputTransformer, INService
+public class CommandMapService(IDataConnectionFactory dbFactory, GuildSettingsService gss) : IInputTransformer, INService
 {
     /// <summary>
     ///     Transforms an input command based on alias mappings for the specific guild.
@@ -54,10 +55,17 @@ public class CommandMapService(DbContextProvider dbProvider, GuildSettingsServic
     /// <returns>A dictionary of command aliases and their mappings.</returns>
     public async Task<Dictionary<string, string>?> GetCommandMap(ulong guildId)
     {
-        var gc = await gss.GetGuildConfig(guildId);
-        return gc.CommandAliases?.Distinct(new CommandAliasEqualityComparer())
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
+
+        // Direct query with GuildId filter
+        var commandAliases = await dbContext.CommandAliases
+            .Where(ca => ca.GuildId == guildId)
+            .ToListAsync();
+
+        return commandAliases?.Distinct(new CommandAliasEqualityComparer())
             .ToDictionary(ca => ca.Trigger, ca => ca.Mapping);
     }
+
 
     /// <summary>
     ///     Clears all command aliases for a specified guild.
@@ -66,21 +74,20 @@ public class CommandMapService(DbContextProvider dbProvider, GuildSettingsServic
     /// <returns>The number of aliases cleared.</returns>
     public async Task<int> ClearAliases(ulong guildId)
     {
-        var config = await gss.GetGuildConfig(guildId);
-        if (config.CommandAliases is null || config.CommandAliases.Count == 0)
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
+
+        // Direct query with GuildId filter
+        var commandAliases = await dbContext.CommandAliases
+            .Where(ca => ca.GuildId == guildId)
+            .ToListAsync();
+
+        if (commandAliases.Count == 0)
             return 0;
 
-        config.CommandAliases.Clear();
+        // Remove all aliases
+        await dbContext.DeleteAsync(commandAliases);
 
-
-        await using var db = await dbProvider.GetContextAsync();
-        var gc = await db.ForGuildId(guildId, set => set.Include(x => x.CommandAliases));
-        var count = gc.CommandAliases.Count;
-        gc.CommandAliases.Clear();
-
-        await gss.UpdateGuildConfig(guildId, config);
-
-        return count;
+        return commandAliases.Count;
     }
 }
 
