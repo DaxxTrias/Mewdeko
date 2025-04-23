@@ -263,7 +263,6 @@ private async Task ProcessBatchAsync(List<(ulong GuildId, ulong ChannelId, ulong
                     };
 
                     record.Id = await db.InsertWithInt32IdentityAsync(record, token: cancellationToken);
-                    Log.Information("Created new message count record for {Key}", key);
                 }
 
                 // Cache the result
