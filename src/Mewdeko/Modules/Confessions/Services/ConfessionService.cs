@@ -1,16 +1,17 @@
-﻿using Mewdeko.Common.Configs;
-using Mewdeko.Database.DbContextStuff;
+﻿using DataModel;
+using LinqToDB;
+using Mewdeko.Common.Configs;
 
 namespace Mewdeko.Modules.Confessions.Services;
 
 /// <summary>
 ///     Service for managing confessions.
 /// </summary>
-/// <param name="db"></param>
+/// <param name="dbFactory"></param>
 /// <param name="client"></param>
 /// <param name="guildSettings"></param>
 public class ConfessionService(
-    DbContextProvider dbProvider,
+    IDataConnectionFactory dbFactory,
     DiscordShardedClient client,
     GuildSettingsService guildSettings,
     BotConfig config)
@@ -32,9 +33,9 @@ public class ConfessionService(
         string confession,
         IMessageChannel currentChannel, IInteractionContext? ctx = null, string? imageUrl = null)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
-        var confessions = dbContext.Confessions.ForGuild(serverId);
-        if (confessions.Count > 0)
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
+        var confessions = dbContext.Confessions.Where(x => x.GuildId == serverId);
+        if (confessions.Any())
         {
             var guild = client.GetGuild(serverId);
             var current = confessions.LastOrDefault();
@@ -99,17 +100,16 @@ public class ConfessionService(
                     .ConfigureAwait(false);
             }
 
-            var toadd = new Database.Models.Confessions
+            var toadd = new DataModel.Confession
             {
                 ChannelId = current.ChannelId,
-                Confession = confession,
+                Confession1 = confession,
                 ConfessNumber = current.ConfessNumber + 1,
                 GuildId = current.GuildId,
                 MessageId = msg.Id,
                 UserId = user.Id
             };
-            dbContext.Confessions.Add(toadd);
-            await dbContext.SaveChangesAsync().ConfigureAwait(false);
+            await dbContext.InsertAsync(toadd);
             if (await GetConfessionLogChannel(serverId) != 0)
             {
                 var logChannel = guild.GetTextChannel(await GetConfessionLogChannel(serverId));
@@ -186,17 +186,16 @@ public class ConfessionService(
                     .ConfigureAwait(false);
             }
 
-            var toadd = new Database.Models.Confessions
+            var toadd = new Confession
             {
                 ChannelId = confessionChannel.Id,
-                Confession = confession,
+                Confession1 = confession,
                 ConfessNumber = 1,
                 GuildId = guild.Id,
                 MessageId = msg.Id,
                 UserId = user.Id
             };
-            dbContext.Confessions.Add(toadd);
-            await dbContext.SaveChangesAsync().ConfigureAwait(false);
+            await dbContext.InsertAsync(toadd);
             if (await GetConfessionLogChannel(serverId) != 0)
             {
                 var logChannel = guild.GetTextChannel(await GetConfessionLogChannel(serverId));
@@ -220,8 +219,7 @@ public class ConfessionService(
     /// <returns>A task representing the asynchronous operation.</returns>
     public async Task SetConfessionChannel(IGuild guild, ulong channelId)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
-        var guildConfig = await dbContext.ForGuildId(guild.Id, set => set);
+        var guildConfig = await guildSettings.GetGuildConfig(guild.Id);
         guildConfig.ConfessionChannel = channelId;
         await guildSettings.UpdateGuildConfig(guild.Id, guildConfig);
     }
@@ -244,8 +242,7 @@ public class ConfessionService(
     /// <returns>A task representing the asynchronous operation.</returns>
     public async Task ToggleUserBlacklistAsync(ulong guildId, ulong roleId)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
-        var guildConfig = await dbContext.ForGuildId(guildId, set => set);
+        var guildConfig = await guildSettings.GetGuildConfig(guildId);
         var blacklists = guildConfig.GetConfessionBlacklists();
         if (!blacklists.Remove(roleId))
             blacklists.Add(roleId);
@@ -262,8 +259,7 @@ public class ConfessionService(
     /// <returns>A task representing the asynchronous operation.</returns>
     public async Task SetConfessionLogChannel(IGuild guild, ulong channelId)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
-        var guildConfig = await dbContext.ForGuildId(guild.Id, set => set);
+        var guildConfig = await guildSettings.GetGuildConfig(guild.Id);
         guildConfig.ConfessionLogChannel = channelId;
         await guildSettings.UpdateGuildConfig(guild.Id, guildConfig);
     }

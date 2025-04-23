@@ -1,4 +1,5 @@
 ﻿using System.Threading;
+using DataModel;
 using Mewdeko.Common.Collections;
 
 namespace Mewdeko.Modules.Administration.Common;
@@ -87,7 +88,7 @@ public class AntiAltStats
     /// <summary>
     ///     Gets the action to be taken against alting.
     /// </summary>
-    public PunishmentAction Action
+    public int Action
     {
         get
         {

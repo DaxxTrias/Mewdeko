@@ -1,8 +1,9 @@
 ﻿using System.IO;
 using System.Text.Json;
 using System.Threading;
-using Mewdeko.Database.DbContextStuff;
-using Microsoft.EntityFrameworkCore;
+using DataModel;
+using LinqToDB;
+using LinqToDB.Data;
 using Serilog;
 using SkiaSharp;
 using StackExchange.Redis;
@@ -19,28 +20,35 @@ public class JoinLeaveLoggerService : INService, IDisposable
     private readonly IDataCache cache;
     private readonly CancellationTokenSource cancellationTokenSource = new();
     private readonly IBotCredentials credentials;
-    private readonly DbContextProvider dbProvider;
+    private readonly IDataConnectionFactory dbFactory;
     private readonly Timer flushTimer;
+    private readonly GuildSettingsService guildSettingsService;
 
     /// <summary>
     ///     Constructor for the JoinLeaveLoggerService.
     /// </summary>
     /// <param name="eventHandler">Event handler for user join and leave events.</param>
     /// <param name="cache">Data cache for storing join and leave logs.</param>
-    /// <param name="dbProvider">Database service for storing join and leave logs.</param>
+    /// <param name="dbFactory">Database service for storing join and leave logs.</param>
     /// <param name="credentials">Bot credentials for accessing the Redis database.</param>
-    public JoinLeaveLoggerService(EventHandler eventHandler, IDataCache cache, DbContextProvider dbProvider,
-        IBotCredentials credentials)
+    /// <param name="guildSettingsService">Service for getting and updating GuildConfigs in the db.</param>
+    public JoinLeaveLoggerService(EventHandler eventHandler, IDataCache cache, IDataConnectionFactory dbFactory,
+        IBotCredentials credentials, GuildSettingsService guildSettingsService)
     {
         this.cache = cache;
         this.credentials = credentials;
-        this.dbProvider = dbProvider;
+        this.guildSettingsService = guildSettingsService;
+        this.dbFactory = dbFactory;
 
         _ = LoadDataFromSqliteToRedisAsync();
 
         // Create a timer to flush data from Redis to SQLite every 5 minutes
         var flushInterval = TimeSpan.FromMinutes(5);
-        flushTimer = new Timer(async _ => await FlushDataToSqliteAsync(), null, flushInterval, flushInterval);
+        // ReSharper disable once AsyncVoidMethod
+        flushTimer = new Timer(async void (_) =>
+        {
+            await FlushDataToSqliteAsync();
+        }, null, flushInterval, flushInterval);
 
         eventHandler.UserJoined += LogUserJoined;
         eventHandler.UserLeft += LogUserLeft;
@@ -51,7 +59,7 @@ public class JoinLeaveLoggerService : INService, IDisposable
     /// </summary>
     public void Dispose()
     {
-        flushTimer?.Dispose();
+        flushTimer.Dispose();
         cancellationTokenSource.Cancel();
         cancellationTokenSource.Dispose();
     }
@@ -65,7 +73,7 @@ public class JoinLeaveLoggerService : INService, IDisposable
         try
         {
             var redisDatabase = cache.Redis.GetDatabase();
-            var joinEvent = new JoinLeaveLogs
+            var joinEvent = new JoinLeaveLog
             {
                 GuildId = args.Guild.Id, UserId = args.Id, IsJoin = true, DateAdded = DateTime.UtcNow
             };
@@ -93,7 +101,7 @@ public class JoinLeaveLoggerService : INService, IDisposable
         try
         {
             var redisDatabase = cache.Redis.GetDatabase();
-            var leaveEvent = new JoinLeaveLogs
+            var leaveEvent = new JoinLeaveLog
             {
                 GuildId = guild.Id, UserId = user.Id, IsJoin = false, DateAdded = DateTime.UtcNow
             };
@@ -133,7 +141,7 @@ public class JoinLeaveLoggerService : INService, IDisposable
         var allEvents = await redisDatabase.ListRangeAsync(redisKey);
 
         var joinEventsCount = allEvents
-            .Select(log => JsonSerializer.Deserialize<JoinLeaveLogs>(log))
+            .Select(log => JsonSerializer.Deserialize<JoinLeaveLog>(log))
             .Count(log => log?.IsJoin == true);
 
         var totalEvents = allEvents.Length;
@@ -149,7 +157,7 @@ public class JoinLeaveLoggerService : INService, IDisposable
     public async Task<(Stream ImageStream, Embed Embed)> GenerateJoinGraphAsync(ulong guildId)
     {
         var joinData = await GetGroupedJoinLeaveDataAsync(guildId, true);
-        return await GenerateGraphAsync(guildId, joinData, "Join Stats Over the Last 10 Days", "Total Joins");
+        return await GenerateGraphAsync(joinData, "Join Stats Over the Last 10 Days", "Total Joins");
     }
 
     /// <summary>
@@ -160,7 +168,7 @@ public class JoinLeaveLoggerService : INService, IDisposable
     public async Task<(Stream ImageStream, Embed Embed)> GenerateLeaveGraphAsync(ulong guildId)
     {
         var leaveData = await GetGroupedJoinLeaveDataAsync(guildId, false);
-        return await GenerateGraphAsync(guildId, leaveData, "Leave Stats Over the Last 10 Days", "Total Leaves");
+        return await GenerateGraphAsync(leaveData, "Leave Stats Over the Last 10 Days", "Total Leaves");
     }
 
     /// <summary>
@@ -176,7 +184,7 @@ public class JoinLeaveLoggerService : INService, IDisposable
         var allEvents = await redisDatabase.ListRangeAsync(redisKey);
 
         var filteredLogs = allEvents
-            .Select(log => JsonSerializer.Deserialize<JoinLeaveLogs>(log))
+            .Select(log => JsonSerializer.Deserialize<JoinLeaveLog>(log))
             .Where(log => log?.IsJoin == isJoin && log.DateAdded.HasValue)
             .Select(log => log!.DateAdded!.Value.Date)
             .GroupBy(date => date)
@@ -206,15 +214,14 @@ public class JoinLeaveLoggerService : INService, IDisposable
     /// <summary>
     ///     Generates a graph image and embed based on the provided data.
     /// </summary>
-    /// <param name="guildId">The ID of the guild.</param>
     /// <param name="dailyLogs">The daily logs to plot.</param>
     /// <param name="title">The title of the embed.</param>
     /// <param name="totalLabel">The label for the total count in the embed.</param>
     /// <returns>A tuple containing the graph image stream and an embed for the graph.</returns>
-    private async Task<(Stream ImageStream, Embed Embed)> GenerateGraphAsync(ulong guildId, List<DailyLog> dailyLogs,
+    private async Task<(Stream ImageStream, Embed Embed)> GenerateGraphAsync(List<DailyLog> dailyLogs,
         string title, string totalLabel)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
         const int width = 1000;
         const int height = 500;
@@ -253,6 +260,15 @@ public class JoinLeaveLoggerService : INService, IDisposable
         var scaleX = widthWithPadding / (float)(dailyLogs.Count - 1);
         var scaleY = heightWithPadding / maxCount;
 
+        // Create font for labels
+        using var labelFont = new SKFont();
+        labelFont.Size = 14;
+
+        // Create text paint
+        using var textPaint = new SKPaint();
+        textPaint.Color = SKColors.White;
+        textPaint.IsAntialias = true;
+
         // Draw horizontal grid lines and y-axis labels
         var yStep = maxCount <= 30 ? 5 : 10;
         for (var i = 0; i <= maxCount; i += yStep)
@@ -264,13 +280,11 @@ public class JoinLeaveLoggerService : INService, IDisposable
             }
 
             var label = i.ToString();
-            var textPaint = new SKPaint
-            {
-                Color = SKColors.White, TextSize = 14, IsAntialias = true
-            };
-            var textBounds = new SKRect();
-            textPaint.MeasureText(label, ref textBounds);
-            canvas.DrawText(label, padding - textBounds.Width - 10, y + textBounds.Height / 2, textPaint);
+
+            var labelWidth = labelFont.MeasureText(label, textPaint);
+            var lineHeight = labelFont.Size;
+
+            canvas.DrawText(label, padding - labelWidth - 10, y + lineHeight / 2, labelFont, textPaint);
         }
 
         // Draw vertical grid lines and x-axis labels
@@ -281,13 +295,11 @@ public class JoinLeaveLoggerService : INService, IDisposable
             canvas.DrawLine(x, padding, x, height - padding, gridPaint);
 
             var label = dailyLogs[i].Date.ToString("dd MMM");
-            var textPaint = new SKPaint
-            {
-                Color = SKColors.White, TextSize = 14, IsAntialias = true
-            };
-            var textBounds = new SKRect();
-            textPaint.MeasureText(label, ref textBounds);
-            canvas.DrawText(label, x - textBounds.Width / 2, height - padding + textBounds.Height + 5, textPaint);
+
+            var labelWidth = labelFont.MeasureText(label, textPaint);
+            var lineHeight = labelFont.Size;
+
+            canvas.DrawText(label, x - labelWidth / 2, height - padding + lineHeight + 5, labelFont, textPaint);
         }
 
         // Draw border lines for grid (bottom and left lines)
@@ -337,7 +349,7 @@ public class JoinLeaveLoggerService : INService, IDisposable
         // Build the embed
         var embedBuilder = new EmbedBuilder()
             .WithTitle(title)
-            .WithColor(new Color(0, 204, 255)) // Assuming a nice blue color
+            .WithColor(new Color(0, 204, 255))
             .WithCurrentTimestamp()
             .WithImageUrl("attachment://graph.png");
 
@@ -364,7 +376,7 @@ public class JoinLeaveLoggerService : INService, IDisposable
         try
         {
             var redisDatabase = cache.Redis.GetDatabase();
-            await using var dbContext = await dbProvider.GetContextAsync();
+            await using var dbContext = await dbFactory.CreateConnectionAsync();
 
             var guildIds = await dbContext.JoinLeaveLogs
                 .Select(e => e.GuildId)
@@ -402,8 +414,11 @@ public class JoinLeaveLoggerService : INService, IDisposable
 
         try
         {
-            await using var dbContext = await dbProvider.GetContextAsync();
+            await using var dbContext = await dbFactory.CreateConnectionAsync();
             var redisDatabase = cache.Redis.GetDatabase();
+
+            var logsToInsert = new List<JoinLeaveLog>();
+
             var guildIds = await dbContext.JoinLeaveLogs
                 .Select(e => e.GuildId)
                 .Distinct()
@@ -420,16 +435,23 @@ public class JoinLeaveLoggerService : INService, IDisposable
                     if (serializedEvent.IsNullOrEmpty)
                         break;
 
-                    var log = JsonSerializer.Deserialize<JoinLeaveLogs>(serializedEvent!);
+                    var log = JsonSerializer.Deserialize<JoinLeaveLog>(serializedEvent!);
                     if (log != null)
                     {
-                        dbContext.JoinLeaveLogs.Add(log);
+                        logsToInsert.Add(log);
                     }
                 }
             }
 
-            await dbContext.SaveChangesAsync();
-            Log.Information("Flushing join/leave logs to DB completed.");
+            if (logsToInsert.Any())
+            {
+                await dbContext.BulkCopyAsync(logsToInsert);
+                Log.Information($"Flushed {logsToInsert.Count} join/leave logs to DB.");
+            }
+            else
+            {
+                Log.Information("No join/leave logs to flush.");
+            }
         }
         catch (Exception ex)
         {
@@ -467,8 +489,8 @@ public class JoinLeaveLoggerService : INService, IDisposable
     {
         try
         {
-            await using var dbContext = await dbProvider.GetContextAsync();
-            var config = await dbContext.ForGuildId(guildId);
+            await using var dbContext = await dbFactory.CreateConnectionAsync();
+            var config = await guildSettingsService.GetGuildConfig(guildId);
 
             if (isJoin)
             {
@@ -479,8 +501,7 @@ public class JoinLeaveLoggerService : INService, IDisposable
                 config.LeaveGraphColor = color;
             }
 
-            dbContext.Update(config);
-            await dbContext.SaveChangesAsync();
+            await guildSettingsService.UpdateGuildConfig(guildId, config);
         }
         catch (Exception ex)
         {
@@ -494,11 +515,12 @@ public class JoinLeaveLoggerService : INService, IDisposable
     public record DailyLog
     {
         /// <summary>
-        /// Date
+        ///     Date
         /// </summary>
         public DateTime Date { get; init; }
+
         /// <summary>
-        /// Count
+        ///     Count
         /// </summary>
         public int Count { get; init; }
     }

@@ -1,11 +1,10 @@
-using System.IO;
+/*using System.IO;
 using System.Text;
 using System.Text.Json;
-using Mewdeko.Database.DbContextStuff;
+using DataModel;
 using Mewdeko.Modules.Tickets.Common;
-using Microsoft.EntityFrameworkCore;
+using LinqToDB;
 using Serilog;
-using SelectMenuOption = Mewdeko.Database.Models.SelectMenuOption;
 
 namespace Mewdeko.Modules.Tickets.Services;
 
@@ -14,9 +13,9 @@ namespace Mewdeko.Modules.Tickets.Services;
 /// </summary>
 public class TicketService : INService
 {
-    private readonly DbContextProvider _db;
-    private readonly DiscordShardedClient _client;
-    private readonly IDataCache _cache;
+    private readonly IDataConnectionFactory dbFactory;
+    private readonly DiscordShardedClient client;
+    private readonly IDataCache cache;
     private const string ClaimButtonId = "ticket_claim";
     private const string CloseButtonId = "ticket_close";
 
@@ -24,15 +23,15 @@ public class TicketService : INService
     ///     Initializes a new instance of the <see cref="TicketService" /> class.
     /// </summary>
     public TicketService(
-        DbContextProvider db,
+        IDataConnectionFactory dbFactory,
         DiscordShardedClient client,
         GuildSettingsService guildSettings,
         IDataCache cache,
         EventHandler eventHandler)
     {
-        _db = db;
-        _client = client;
-        _cache = cache;
+        this.dbFactory = dbFactory;
+        this.client = client;
+        this.cache = cache;
 
         eventHandler.MessageDeleted += HandleMessageDeleted;
         eventHandler.ModalSubmitted += HandleModalSubmitted;
@@ -90,13 +89,13 @@ public class TicketService : INService
             ChannelId = channel.Id,
             MessageId = message.Id,
             EmbedJson = finalJson,
-            Buttons = [],
-            SelectMenus = []
+            PanelButtons1 = [],
+            PanelSelectMenus = []
         };
 
-        await using var ctx = await _db.GetContextAsync();
-        ctx.TicketPanels.Add(panel);
-        await ctx.SaveChangesAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
+        await ctx.InsertAsync(panel);
+
 
         return panel;
     }
@@ -109,7 +108,7 @@ public class TicketService : INService
         try
         {
             var replacer = new ReplacementBuilder()
-                .WithServer(_client, channel.Guild as SocketGuild)
+                .WithServer(client, channel.Guild as SocketGuild)
                 .Build();
 
             var content = replacer.Replace(embedJson);
@@ -136,10 +135,10 @@ public class TicketService : INService
     /// </summary>
     public async Task<List<TicketPanel>> GetPanelsInChannelAsync(ulong guildId, ulong channelId)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
         return await ctx.TicketPanels
-            .Include(p => p.Buttons)
-            .Include(p => p.SelectMenus)
+            .LoadWithAsTable(p => p.PanelButtons)
+            .LoadWithAsTable(p => p.PanelSelectMenus)
             .Where(p => p.GuildId == guildId && p.ChannelId == channelId)
             .ToListAsync();
     }
@@ -149,10 +148,10 @@ public class TicketService : INService
     /// </summary>
     public async Task<List<TicketPanel>> GetPanelsAsync(ulong guildId)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
         return await ctx.TicketPanels
-            .Include(p => p.Buttons)
-            .Include(p => p.SelectMenus)
+            .LoadWithAsTable(p => p.PanelButtons)
+            .LoadWithAsTable(p => p.PanelSelectMenus)
             .Where(p => p.GuildId == guildId)
             .OrderBy(p => p.ChannelId)
             .ThenBy(p => p.MessageId)
@@ -220,7 +219,7 @@ public class TicketService : INService
         List<string> allowedPriorities = null,
         string defaultPriority = null)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
 
         var button = new PanelButton
         {
@@ -228,24 +227,23 @@ public class TicketService : INService
             Label = label,
             Emoji = emoji,
             CustomId = $"ticket_btn_{Guid.NewGuid():N}",
-            Style = style,
+            Style = (int)style,
             OpenMessageJson = openMessageJson,
             ModalJson = modalJson,
             ChannelNameFormat = channelFormat,
             CategoryId = categoryId,
             ArchiveCategoryId = archiveCategoryId,
-            SupportRoles = supportRoles ?? [],
-            ViewerRoles = viewerRoles ?? [],
+            SupportRoles = supportRoles.ToArray() ?? [],
+            ViewerRoles = viewerRoles.ToArray() ?? [],
             AutoCloseTime = autoCloseTime,
             RequiredResponseTime = requiredResponseTime,
             MaxActiveTickets = maxActiveTickets,
-            AllowedPriorities = allowedPriorities ?? [],
+            AllowedPriorities = allowedPriorities.ToArray() ?? [],
             DefaultPriority = defaultPriority
         };
 
-        ctx.Attach(panel);
-        panel.Buttons.Add(button);
-        await ctx.SaveChangesAsync();
+        await ctx.InsertAsync(button);
+
         await UpdatePanelComponentsAsync(panel);
 
         return button;
@@ -256,13 +254,11 @@ public class TicketService : INService
     /// </summary>
     public async Task UpdateButtonAsync(PanelButton button, Action<PanelButton> updateAction)
     {
-        await using var ctx = await _db.GetContextAsync();
-
-        ctx.Attach(button);
+        await using var ctx = await dbFactory.CreateConnectionAsync();
         updateAction(button);
 
         await UpdatePanelComponentsAsync(button.Panel);
-        await ctx.SaveChangesAsync();
+
     }
 
     private ComponentBuilder GetDefaultTicketComponents()
@@ -291,7 +287,7 @@ public class TicketService : INService
     /// <returns>A task containing the case if found, null otherwise.</returns>
     public async Task<TicketCase> GetCaseAsync(int caseId)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
         return await ctx.TicketCases
             .Include(c => c.LinkedTickets)
             .Include(c => c.Notes)
@@ -306,7 +302,7 @@ public class TicketService : INService
     /// <returns>A task that represents the asynchronous operation.</returns>
     public async Task CloseCaseAsync(TicketCase ticketCase, bool archiveTickets = false)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
         ctx.Attach(ticketCase);
         ticketCase.ClosedAt = DateTime.UtcNow;
 
@@ -326,7 +322,7 @@ public class TicketService : INService
 
                     if (archiveCategoryId.HasValue)
                     {
-                        var guild = await _client.Rest.GetGuildAsync(ticket.GuildId);
+                        var guild = await client.Rest.GetGuildAsync(ticket.GuildId);
                         if (guild != null)
                         {
                             var channel = await guild.GetTextChannelAsync(ticket.ChannelId);
@@ -341,7 +337,7 @@ public class TicketService : INService
             }
         }
 
-        await ctx.SaveChangesAsync();
+
     }
 
     /// <summary>
@@ -352,7 +348,7 @@ public class TicketService : INService
     /// <returns>A task containing the list of cases.</returns>
     public async Task<List<TicketCase>> GetGuildCasesAsync(ulong guildId, bool includeDeleted = false)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
         var query = ctx.TicketCases
             .Include(c => c.LinkedTickets)
             .Include(c => c.Notes)
@@ -375,7 +371,7 @@ public class TicketService : INService
     /// <returns>A task containing the created note.</returns>
     public async Task<CaseNote?> AddCaseNoteAsync(int caseId, ulong authorId, string content)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
         var ticketCase = await ctx.TicketCases.FindAsync(caseId);
         if (ticketCase == null)
             return null;
@@ -386,7 +382,7 @@ public class TicketService : INService
         };
 
         ctx.CaseNotes.Add(note);
-        await ctx.SaveChangesAsync();
+
         return note;
     }
 
@@ -399,7 +395,7 @@ public class TicketService : INService
     /// <exception cref="InvalidOperationException">Thrown when the panel is not found.</exception>
     public async Task DeletePanelAsync(ulong panelId, IGuild guild)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
         await using var transaction = await ctx.Database.BeginTransactionAsync();
 
         try
@@ -446,7 +442,7 @@ public class TicketService : INService
                     ticket.Button = null;
                 }
 
-                await ctx.SaveChangesAsync();
+
             }
 
             // Handle select menu options that may be referenced by tickets
@@ -472,11 +468,11 @@ public class TicketService : INService
                         ticket.SelectOption = null;
                     }
 
-                    await ctx.SaveChangesAsync();
+
 
                     // Now safe to remove menus and options
                     ctx.PanelSelectMenus.RemoveRange(menus);
-                    await ctx.SaveChangesAsync();
+
                 }
             }
             catch (Exception ex)
@@ -487,7 +483,7 @@ public class TicketService : INService
 
             // Finally remove the panel itself
             ctx.TicketPanels.Remove(panel);
-            await ctx.SaveChangesAsync();
+
 
             await transaction.CommitAsync();
         }
@@ -511,7 +507,7 @@ public class TicketService : INService
         if (!ticket.ClaimedBy.HasValue)
             throw new InvalidOperationException("Ticket is not claimed");
 
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
         ctx.Attach(ticket);
 
         var previousClaimer = ticket.ClaimedBy.Value;
@@ -553,7 +549,7 @@ public class TicketService : INService
             }
         }
 
-        await ctx.SaveChangesAsync();
+
     }
 
     /// <summary>
@@ -611,7 +607,7 @@ public class TicketService : INService
     /// <returns>A task containing true if the edit was successful, false otherwise.</returns>
     public async Task<bool> EditCaseNoteAsync(int noteId, ulong editorId, string newContent)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
         var note = await ctx.CaseNotes.FindAsync(noteId);
         if (note == null)
             return false;
@@ -625,7 +621,7 @@ public class TicketService : INService
         };
 
         note.EditHistory.Add(edit);
-        await ctx.SaveChangesAsync();
+
         return true;
     }
 
@@ -636,13 +632,13 @@ public class TicketService : INService
     /// <returns>A task containing true if the deletion was successful, false otherwise.</returns>
     public async Task<bool> DeleteCaseNoteAsync(int noteId)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
         var note = await ctx.CaseNotes.FindAsync(noteId);
         if (note == null)
             return false;
 
         ctx.CaseNotes.Remove(note);
-        await ctx.SaveChangesAsync();
+
         return true;
     }
 
@@ -653,7 +649,7 @@ public class TicketService : INService
     /// <returns>A task that represents the asynchronous operation.</returns>
     public async Task UnlinkTicketsFromCase(IEnumerable<Ticket> tickets)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
         foreach (var ticket in tickets)
         {
             ctx.Attach(ticket);
@@ -661,7 +657,7 @@ public class TicketService : INService
             ticket.Case = null;
         }
 
-        await ctx.SaveChangesAsync();
+
     }
 
     /// <summary>
@@ -671,10 +667,10 @@ public class TicketService : INService
     /// <returns>A task that represents the asynchronous operation.</returns>
     public async Task ReopenCaseAsync(TicketCase ticketCase)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
         ctx.Attach(ticketCase);
         ticketCase.ClosedAt = null;
-        await ctx.SaveChangesAsync();
+
     }
 
     /// <summary>
@@ -686,7 +682,7 @@ public class TicketService : INService
     /// <returns>A task that represents the asynchronous operation.</returns>
     public async Task UpdateCaseAsync(int caseId, string title, string description)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
         var ticketCase = await ctx.TicketCases.FindAsync(caseId);
         if (ticketCase != null)
         {
@@ -694,7 +690,7 @@ public class TicketService : INService
                 ticketCase.Title = title;
             if (!string.IsNullOrEmpty(description))
                 ticketCase.Description = description;
-            await ctx.SaveChangesAsync();
+
         }
     }
 
@@ -715,7 +711,7 @@ public class TicketService : INService
         SelectMenuOption option = null,
         Dictionary<string, string> modalResponses = null)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
 
         // Check if user is blacklisted
         var settings = await ctx.GuildTicketSettings.FirstOrDefaultAsync(s => s.GuildId == guild.Id);
@@ -785,7 +781,7 @@ public class TicketService : INService
         };
 
         ctx.Tickets.Add(ticket);
-        await ctx.SaveChangesAsync();
+
 
         // Send messages in order
         try
@@ -895,7 +891,7 @@ public class TicketService : INService
             {
                 await channel.DeleteAsync();
                 ctx.Tickets.Remove(ticket);
-                await ctx.SaveChangesAsync();
+
             }
             catch (Exception cleanupEx)
             {
@@ -975,7 +971,7 @@ public class TicketService : INService
         if (ticket.ClaimedBy.HasValue)
             throw new InvalidOperationException("Ticket is already claimed");
 
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
 
         ctx.Attach(ticket);
         ticket.ClaimedBy = staff.Id;
@@ -993,7 +989,7 @@ public class TicketService : INService
             await channel.SendMessageAsync(embed: embed);
         }
 
-        await ctx.SaveChangesAsync();
+
     }
 
     /// <summary>
@@ -1001,7 +997,7 @@ public class TicketService : INService
     /// </summary>
     public async Task<TicketNote> AddNoteAsync(Ticket ticket, IGuildUser author, string content)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
 
         var note = new TicketNote
         {
@@ -1012,7 +1008,7 @@ public class TicketService : INService
         ticket.Notes.Add(note);
         ticket.LastActivityAt = DateTime.UtcNow;
 
-        await ctx.SaveChangesAsync();
+
 
         return note;
     }
@@ -1027,7 +1023,7 @@ public class TicketService : INService
         IGuildUser creator,
         IEnumerable<Ticket> ticketsToLink = null)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
 
         var ticketCase = new TicketCase
         {
@@ -1048,7 +1044,7 @@ public class TicketService : INService
         }
 
         ctx.TicketCases.Add(ticketCase);
-        await ctx.SaveChangesAsync();
+
 
         return ticketCase;
     }
@@ -1058,11 +1054,11 @@ public class TicketService : INService
     /// </summary>
     public async Task ArchiveTicketAsync(Ticket ticket)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
 
         ctx.Attach(ticket);
 
-        IGuild guild = _client.GetGuild(ticket.GuildId);
+        IGuild guild = client.GetGuild(ticket.GuildId);
 
         if (await guild.GetChannelAsync(ticket.ChannelId) is ITextChannel channel)
         {
@@ -1086,12 +1082,12 @@ public class TicketService : INService
         ticket.IsArchived = true;
         ticket.LastActivityAt = DateTime.UtcNow;
 
-        await ctx.SaveChangesAsync();
+
     }
 
     private async Task UpdatePanelComponentsAsync(TicketPanel panel)
     {
-        IGuild guild = _client.GetGuild(panel.GuildId);
+        IGuild guild = client.GetGuild(panel.GuildId);
         var channel = await guild.GetChannelAsync(panel.ChannelId) as ITextChannel;
         var message = await channel?.GetMessageAsync(panel.MessageId);
 
@@ -1201,7 +1197,7 @@ public class TicketService : INService
 
     private async Task HandleMessageComponent(SocketMessageComponent component)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
 
         // Handle button clicks
         if (component.Data.Type == ComponentType.Button && component.Data.CustomId.StartsWith("ticket_btn_"))
@@ -1291,7 +1287,7 @@ public class TicketService : INService
 
     private async Task HandleModalSubmitted(SocketModal modal)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
 
         try
         {
@@ -1350,7 +1346,7 @@ public class TicketService : INService
         if (!message.HasValue || !channel.HasValue)
             return;
 
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
 
         // Check if deleted message was a panel
         var panel = await ctx.TicketPanels
@@ -1360,7 +1356,7 @@ public class TicketService : INService
         {
             // Panel was deleted, clean up
             ctx.TicketPanels.Remove(panel);
-            await ctx.SaveChangesAsync();
+
         }
     }
 
@@ -1369,7 +1365,7 @@ public class TicketService : INService
     /// </summary>
     public async Task CheckAutoCloseTicketsAsync()
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
 
         var tickets = await ctx.Tickets
             .Include(t => t.Button)
@@ -1379,7 +1375,7 @@ public class TicketService : INService
 
         foreach (var ticket in tickets)
         {
-            IGuild guild = _client.GetGuild(ticket.GuildId);
+            IGuild guild = client.GetGuild(ticket.GuildId);
             var autoCloseTime = ticket.Button?.AutoCloseTime ?? ticket.SelectOption?.AutoCloseTime;
             if (!autoCloseTime.HasValue || !ticket.LastActivityAt.HasValue)
                 continue;
@@ -1402,7 +1398,7 @@ public class TicketService : INService
             }
         }
 
-        await ctx.SaveChangesAsync();
+
     }
 
     /// <summary>
@@ -1410,7 +1406,7 @@ public class TicketService : INService
     /// </summary>
     public async Task<List<Ticket>> GetActiveTicketsAsync(ulong guildId, ulong userId, int id)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
 
         return await ctx.Tickets
             .Where(t => t.GuildId == guildId &&
@@ -1425,7 +1421,7 @@ public class TicketService : INService
     /// </summary>
     public async Task SetTicketPriorityAsync(Ticket ticket, string priority, IGuildUser staff)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
 
         var allowedPriorities = ticket.Button?.AllowedPriorities ??
                                 ticket.SelectOption?.AllowedPriorities ?? [];
@@ -1435,7 +1431,7 @@ public class TicketService : INService
         ctx.Attach(ticket);
         ticket.Priority = priority;
         ticket.LastActivityAt = DateTime.UtcNow;
-        IGuild guild = _client.GetGuild(ticket.GuildId);
+        IGuild guild = client.GetGuild(ticket.GuildId);
 
         if (await guild.GetChannelAsync(ticket.ChannelId) is ITextChannel channel)
         {
@@ -1448,7 +1444,7 @@ public class TicketService : INService
             await channel.SendMessageAsync(embed: embed);
         }
 
-        await ctx.SaveChangesAsync();
+
     }
 
     /// <summary>
@@ -1456,14 +1452,14 @@ public class TicketService : INService
     /// </summary>
     public async Task AddTicketTagsAsync(Ticket ticket, IEnumerable<string> tags)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
 
         ctx.Attach(ticket);
         ticket.Tags ??= [];
         ticket.Tags.AddRange(tags);
         ticket.LastActivityAt = DateTime.UtcNow;
 
-        await ctx.SaveChangesAsync();
+
     }
 
     /// <summary>
@@ -1471,7 +1467,7 @@ public class TicketService : INService
     /// </summary>
     public async Task CheckResponseTimesAsync()
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
 
         var tickets = await ctx.Tickets
             .Include(t => t.Button)
@@ -1502,13 +1498,13 @@ public class TicketService : INService
     /// <param name="channelId">The ID of the channel to set as the transcript channel.</param>
     public async Task SetTranscriptChannelAsync(ulong guildId, ulong channelId)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
         var settings = await ctx.GuildTicketSettings.FirstOrDefaultAsync(x => x.GuildId == guildId) ??
                        new GuildTicketSettings();
 
         settings.TranscriptChannelId = channelId;
         ctx.GuildTicketSettings.Update(settings);
-        await ctx.SaveChangesAsync();
+
     }
 
     /// <summary>
@@ -1518,13 +1514,13 @@ public class TicketService : INService
     /// <param name="channelId">The ID of the channel to set as the log channel.</param>
     public async Task SetLogChannelAsync(ulong guildId, ulong channelId)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
         var settings = await ctx.GuildTicketSettings.FirstOrDefaultAsync(x => x.GuildId == guildId) ??
                        new GuildTicketSettings();
 
         settings.LogChannelId = channelId;
         ctx.GuildTicketSettings.Update(settings);
-        await ctx.SaveChangesAsync();
+
     }
 
 
@@ -1535,7 +1531,7 @@ public class TicketService : INService
     /// <param name="tickets">The tickets to link to the case.</param>
     public async Task LinkTicketsToCase(int caseId, IEnumerable<Ticket> tickets)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
         var ticketCase = await ctx.TicketCases.FindAsync(caseId);
         if (ticketCase == null) throw new InvalidOperationException("Case not found.");
 
@@ -1545,7 +1541,7 @@ public class TicketService : INService
             ticket.CaseId = caseId;
         }
 
-        await ctx.SaveChangesAsync();
+
     }
 
     /// <summary>
@@ -1555,7 +1551,7 @@ public class TicketService : INService
 /// <returns>A list of ButtonInfo objects containing button details</returns>
 public async Task<List<ButtonInfo>> GetPanelButtonsAsync(ulong panelId)
 {
-    await using var ctx = await _db.GetContextAsync();
+    await using var ctx = await dbFactory.CreateConnectionAsync();
     var panel = await ctx.TicketPanels
         .Include(p => p.Buttons)
         .FirstOrDefaultAsync(p => p.MessageId == panelId);
@@ -1586,7 +1582,7 @@ public async Task<List<ButtonInfo>> GetPanelButtonsAsync(ulong panelId)
 /// <returns>A list of SelectMenuInfo objects containing menu details</returns>
 public async Task<List<SelectMenuInfo>> GetPanelSelectMenusAsync(ulong panelId)
 {
-    await using var ctx = await _db.GetContextAsync();
+    await using var ctx = await dbFactory.CreateConnectionAsync();
     var panel = await ctx.TicketPanels
         .Include(p => p.SelectMenus)
         .ThenInclude(m => m.Options)
@@ -1622,7 +1618,7 @@ public async Task<List<SelectMenuInfo>> GetPanelSelectMenusAsync(ulong panelId)
 /// <returns>A list of PanelInfo objects containing complete panel details</returns>
 public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
 {
-    await using var ctx = await _db.GetContextAsync();
+    await using var ctx = await dbFactory.CreateConnectionAsync();
     var panels = await ctx.TicketPanels
         .Include(p => p.Buttons)
         .Include(p => p.SelectMenus)
@@ -1676,7 +1672,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     /// <returns>The ticket object, if found.</returns>
     public async Task<Ticket?> GetTicketAsync(int ticketId)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
         return await ctx.Tickets.FirstOrDefaultAsync(t => t.Id == ticketId);
     }
 
@@ -1687,7 +1683,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     /// <returns>The ticket object, if found.</returns>
     public async Task<Ticket?> GetTicketAsync(ulong channelId)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
         return await ctx.Tickets.FirstOrDefaultAsync(t => t.ChannelId == channelId);
     }
 
@@ -1699,7 +1695,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     /// <returns>A list of tickets matching the specified IDs.</returns>
     public async Task<List<Ticket>> GetTicketsAsync(IEnumerable<int> ticketIds)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
         return await ctx.Tickets.Where(t => ticketIds.Contains(t.Id)).ToListAsync();
     }
 
@@ -1710,7 +1706,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     /// <returns>The panel button matching the specified ID, if found.</returns>
     public async Task<PanelButton?> GetButtonAsync(int buttonId)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
         return await ctx.PanelButtons
             .Include(b => b.Panel) // Include the related panel if needed
             .FirstOrDefaultAsync(b => b.Id == buttonId);
@@ -1723,7 +1719,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     /// <returns>The panel button matching the specified ID, if found.</returns>
     public async Task<PanelButton?> GetButtonAsync(string buttonId)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
         return await ctx.PanelButtons
             .Include(b => b.Panel) // Include the related panel if needed
             .FirstOrDefaultAsync(b => b.CustomId == buttonId);
@@ -1790,7 +1786,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     /// <returns>The panel if found, null otherwise.</returns>
     public async Task<TicketPanel?> GetPanelAsync(ulong panelId)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
         return await ctx.TicketPanels.FirstOrDefaultAsync(x => x.MessageId == panelId);
     }
 
@@ -1813,7 +1809,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
         int minValues = 1,
         int maxValues = 1)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
 
         var menu = new PanelSelectMenu
         {
@@ -1836,7 +1832,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
 
         ctx.Attach(panel);
         panel.SelectMenus.Add(menu);
-        await ctx.SaveChangesAsync();
+
         await UpdatePanelComponentsAsync(panel);
 
         return menu;
@@ -1849,13 +1845,13 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     /// <param name="updateAction">Action containing the updates to apply.</param>
     public async Task UpdateSelectMenuAsync(PanelSelectMenu menu, Action<PanelSelectMenu> updateAction)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
 
         ctx.Attach(menu);
         updateAction(menu);
 
         await UpdatePanelComponentsAsync(menu.Panel);
-        await ctx.SaveChangesAsync();
+
     }
 
     /// <summary>
@@ -1897,7 +1893,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
         List<string> allowedPriorities = null,
         string defaultPriority = null)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
 
         var option = new SelectMenuOption
         {
@@ -1923,7 +1919,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
         ctx.Attach(menu);
         menu.Options.Add(option);
         await UpdatePanelComponentsAsync(menu.Panel);
-        await ctx.SaveChangesAsync();
+
 
         return option;
     }
@@ -1935,13 +1931,13 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     /// <param name="updateAction">Action containing the updates to apply.</param>
     public async Task UpdateSelectOptionAsync(SelectMenuOption option, Action<SelectMenuOption> updateAction)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
 
         ctx.Attach(option);
         updateAction(option);
 
         await UpdatePanelComponentsAsync(option.SelectMenu.Panel);
-        await ctx.SaveChangesAsync();
+
     }
 
     /// <summary>
@@ -1951,7 +1947,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     /// <returns>The select menu matching the specified ID, if found.</returns>
     public async Task<PanelSelectMenu> GetSelectMenuAsync(string menuId)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
         return await ctx.PanelSelectMenus
             .Include(m => m.Panel)
             .Include(m => m.Options)
@@ -1966,7 +1962,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     /// <returns>The select menu option matching the specified value, if found.</returns>
     public async Task<SelectMenuOption> GetSelectOptionAsync(int menuId, string value)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
         return await ctx.SelectMenuOptions
             .Include(o => o.SelectMenu)
             .FirstOrDefaultAsync(o => o.SelectMenuId == menuId && o.Value == value);
@@ -2031,7 +2027,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     /// <returns>True if the ticket was successfully closed, false otherwise.</returns>
     public async Task<bool> CloseTicket(IGuild guild, ulong channelId)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
         var ticket = await ctx.Tickets
             .Include(t => t.Button)
             .Include(t => t.SelectOption)
@@ -2112,7 +2108,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
                 }
             }
 
-            await ctx.SaveChangesAsync();
+
             return true;
         }
         catch (Exception ex)
@@ -2131,7 +2127,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     /// <returns>True if the ticket was successfully claimed, false otherwise.</returns>
     public async Task<bool> ClaimTicket(IGuild guild, ulong channelId, IGuildUser staff)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
         var ticket = await ctx.Tickets
             .Include(t => t.Button)
             .Include(t => t.SelectOption)
@@ -2201,7 +2197,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
                 }
             }
 
-            await ctx.SaveChangesAsync();
+
             return true;
         }
         catch (Exception ex)
@@ -2220,7 +2216,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     /// <returns>True if the ticket was successfully unclaimed, false otherwise.</returns>
     public async Task<bool> UnclaimTicket(IGuild guild, ulong channelId, IGuildUser staff)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
         var ticket = await ctx.Tickets
             .FirstOrDefaultAsync(t => t.ChannelId == channelId && t.GuildId == guild.Id);
 
@@ -2277,7 +2273,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
                 }
             }
 
-            await ctx.SaveChangesAsync();
+
             return true;
         }
         catch (Exception ex)
@@ -2296,7 +2292,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     /// <returns>True if the note was successfully added, false otherwise.</returns>
     public async Task<bool> AddNote(ulong channelId, IGuildUser author, string content)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
         var ticket = await ctx.Tickets
             .Include(t => t.Notes)
             .FirstOrDefaultAsync(t => t.ChannelId == channelId && t.GuildId == author.GuildId);
@@ -2328,7 +2324,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
                 await channel.SendMessageAsync(embed: embed);
             }
 
-            await ctx.SaveChangesAsync();
+
             return true;
         }
         catch (Exception ex)
@@ -2347,7 +2343,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     /// <returns>True if the note was successfully edited, false otherwise.</returns>
     public async Task<bool> EditNote(int noteId, IGuildUser author, string newContent)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
         var note = await ctx.TicketNotes
             .Include(n => n.Ticket)
             .Include(n => n.EditHistory)
@@ -2385,7 +2381,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
                 await channel.SendMessageAsync(embed: embed);
             }
 
-            await ctx.SaveChangesAsync();
+
             return true;
         }
         catch (Exception ex)
@@ -2403,7 +2399,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     /// <returns>True if the note was successfully deleted, false otherwise.</returns>
     public async Task<bool> DeleteNote(int noteId, IGuildUser author)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
         var note = await ctx.TicketNotes
             .Include(n => n.Ticket)
             .FirstOrDefaultAsync(n => n.Id == noteId);
@@ -2433,7 +2429,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
                 await channel.SendMessageAsync(embed: embed);
             }
 
-            await ctx.SaveChangesAsync();
+
             return true;
         }
         catch (Exception ex)
@@ -2453,7 +2449,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     /// <returns>The created case.</returns>
     public async Task<TicketCase> CreateCase(IGuild guild, IGuildUser creator, string name, string description)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
         var ticketCase = new TicketCase
         {
             GuildId = guild.Id,
@@ -2464,7 +2460,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
         };
 
         ctx.TicketCases.Add(ticketCase);
-        await ctx.SaveChangesAsync();
+
 
         // Log case creation if logging is enabled
         var settings = await ctx.GuildTicketSettings.FirstOrDefaultAsync(s => s.GuildId == guild.Id);
@@ -2498,7 +2494,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     /// <returns>True if the ticket was successfully linked, false otherwise.</returns>
     public async Task<bool> AddTicketToCase(ulong guildId, int caseId, int ticketId)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
         var ticketCase = await ctx.TicketCases
             .Include(c => c.LinkedTickets)
             .FirstOrDefaultAsync(c => c.Id == caseId && c.GuildId == guildId);
@@ -2514,7 +2510,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
         {
             ticket.CaseId = caseId;
             ticket.Case = ticketCase;
-            await ctx.SaveChangesAsync();
+
             return true;
         }
         catch (Exception ex)
@@ -2532,7 +2528,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     /// <returns>True if the ticket was successfully unlinked, false otherwise.</returns>
     public async Task<bool> RemoveTicketFromCase(ulong guildId, int ticketId)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
         var ticket = await ctx.Tickets
             .Include(t => t.Case)
             .FirstOrDefaultAsync(t => t.Id == ticketId && t.GuildId == guildId);
@@ -2544,7 +2540,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
         {
             ticket.CaseId = null;
             ticket.Case = null;
-            await ctx.SaveChangesAsync();
+
             return true;
         }
         catch (Exception ex)
@@ -2663,7 +2659,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     /// <returns>Statistics about the guild's tickets.</returns>
     public async Task<GuildStatistics> GetGuildStatistics(ulong guildId)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
         var tickets = await ctx.Tickets
             .Include(t => t.Button)
             .Include(t => t.SelectOption)
@@ -2743,7 +2739,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     /// <returns>Statistics about the user's tickets.</returns>
     public async Task<UserStatistics> GetUserStatistics(ulong guildId, ulong userId)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
         var tickets = await ctx.Tickets
             .Include(t => t.Button)
             .Include(t => t.SelectOption)
@@ -2799,7 +2795,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     /// <returns>Dictionary mapping dates to ticket counts.</returns>
     public async Task<Dictionary<DateTime, int>> GetTicketActivitySummary(ulong guildId, int days)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
         var startDate = DateTime.UtcNow.Date.AddDays(-days);
 
         var tickets = await ctx.Tickets
@@ -2822,7 +2818,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     /// <returns>Dictionary mapping staff IDs to their average response times in minutes.</returns>
     public async Task<Dictionary<ulong, double>> GetStaffResponseMetrics(ulong guildId)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
         var tickets = await ctx.Tickets
             .Include(t => t.Notes)
             .Where(t => t.GuildId == guildId && t.ClaimedBy.HasValue)
@@ -2874,7 +2870,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
         if (level < 1 || level > 5)
             throw new ArgumentException("Priority level must be between 1 and 5", nameof(level));
 
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
 
         // Check for existing priority
         if (await ctx.TicketPriorities.AnyAsync(p => p.GuildId == guildId && p.PriorityId == id))
@@ -2895,7 +2891,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
             };
 
             ctx.TicketPriorities.Add(priority);
-            await ctx.SaveChangesAsync();
+
 
             return true;
         }
@@ -2914,7 +2910,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     /// <returns>True if the priority was successfully deleted, false otherwise.</returns>
     public async Task<bool> DeletePriority(ulong guildId, string id)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
         var priority = await ctx.TicketPriorities
             .FirstOrDefaultAsync(p => p.GuildId == guildId && p.PriorityId == id);
 
@@ -2934,7 +2930,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
             }
 
             ctx.TicketPriorities.Remove(priority);
-            await ctx.SaveChangesAsync();
+
 
             return true;
         }
@@ -2955,7 +2951,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     /// <returns>True if the priority was successfully set, false otherwise.</returns>
     public async Task<bool> SetTicketPriority(IGuild guild, ulong channelId, string priorityId, IGuildUser staff)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
         var ticket = await ctx.Tickets
             .Include(t => t.Button)
             .Include(t => t.SelectOption)
@@ -3006,7 +3002,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
                 }
             }
 
-            await ctx.SaveChangesAsync();
+
             return true;
         }
         catch (Exception ex)
@@ -3027,7 +3023,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     /// <returns>True if the tag was successfully created, false otherwise.</returns>
     public async Task<bool> CreateTag(ulong guildId, string id, string name, string description, Color color)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
 
         if (await ctx.TicketTags.AnyAsync(t => t.GuildId == guildId && t.TagId == id))
             return false;
@@ -3044,7 +3040,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
             };
 
             ctx.TicketTags.Add(tag);
-            await ctx.SaveChangesAsync();
+
 
             return true;
         }
@@ -3063,7 +3059,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     /// <returns>True if the tag was successfully deleted, false otherwise.</returns>
     public async Task<bool> DeleteTag(ulong guildId, string id)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
         var tag = await ctx.TicketTags
             .FirstOrDefaultAsync(t => t.GuildId == guildId && t.TagId == id);
 
@@ -3083,7 +3079,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
             }
 
             ctx.TicketTags.Remove(tag);
-            await ctx.SaveChangesAsync();
+
 
             return true;
         }
@@ -3104,7 +3100,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     /// <returns>True if the tags were successfully added, false otherwise.</returns>
     public async Task<bool> AddTicketTags(IGuild guild, ulong channelId, IEnumerable<string> tagIds, IGuildUser staff)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
         var ticket = await ctx.Tickets
             .FirstOrDefaultAsync(t => t.ChannelId == channelId && t.GuildId == guild.Id);
 
@@ -3150,7 +3146,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
                 }
             }
 
-            await ctx.SaveChangesAsync();
+
             return true;
         }
         catch (Exception ex)
@@ -3167,7 +3163,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     /// <returns>A list of all priorities in the guild.</returns>
     public async Task<List<TicketPriority>> GetGuildPriorities(ulong guildId)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
         return await ctx.TicketPriorities
             .Where(p => p.GuildId == guildId)
             .OrderBy(p => p.Level)
@@ -3181,7 +3177,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     /// <returns>A list of all tags in the guild.</returns>
     public async Task<List<TicketTag>> GetGuildTags(ulong guildId)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
 
         return await ctx.TicketTags
             .Where(t => t.GuildId == guildId)
@@ -3200,7 +3196,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     public async Task<bool> RemoveTicketTags(IGuild guild, ulong channelId, IEnumerable<string> tagIds,
         IGuildUser staff)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
         var ticket = await ctx.Tickets
             .FirstOrDefaultAsync(t => t.ChannelId == channelId && t.GuildId == guild.Id);
 
@@ -3238,7 +3234,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
                 await channel.SendMessageAsync(embed: embed);
             }
 
-            await ctx.SaveChangesAsync();
+
             return true;
         }
         catch (Exception ex)
@@ -3257,7 +3253,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     /// <returns>True if the user was successfully blacklisted, false if they were already blacklisted.</returns>
     public async Task<bool> BlacklistUser(IGuild guild, ulong userId, string reason = null)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
         var settings = await ctx.GuildTicketSettings
             .FirstOrDefaultAsync(s => s.GuildId == guild.Id);
 
@@ -3276,7 +3272,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
         try
         {
             settings.BlacklistedUsers.Add(userId);
-            await ctx.SaveChangesAsync();
+
 
             // Log the blacklist if logging is enabled
             if (settings.LogChannelId.HasValue)
@@ -3316,7 +3312,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     public async Task<bool> BlacklistUserFromTicketType(IGuild guild, ulong userId, string ticketCreatorId,
         string reason = null)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
         var settings = await ctx.GuildTicketSettings
             .FirstOrDefaultAsync(s => s.GuildId == guild.Id);
 
@@ -3349,7 +3345,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
                 return false;
 
             settings.BlacklistedTypes[userId].Add(ticketCreatorId);
-            await ctx.SaveChangesAsync();
+
 
             // Log the type-specific blacklist if logging is enabled
             if (settings.LogChannelId.HasValue)
@@ -3390,7 +3386,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     /// <returns>True if the user was successfully unblacklisted, false if they weren't blacklisted.</returns>
     public async Task<bool> UnblacklistUser(IGuild guild, ulong userId)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
         var settings = await ctx.GuildTicketSettings
             .FirstOrDefaultAsync(s => s.GuildId == guild.Id);
 
@@ -3406,7 +3402,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
                 settings.BlacklistedTypes.Remove(userId);
             }
 
-            await ctx.SaveChangesAsync();
+
 
             // Log the unblacklist if logging is enabled
             if (settings.LogChannelId.HasValue)
@@ -3443,7 +3439,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     /// <returns>True if the user was successfully unblacklisted from the ticket type, false otherwise.</returns>
     public async Task<bool> UnblacklistUserFromTicketType(IGuild guild, ulong userId, string ticketCreatorId)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
         var settings = await ctx.GuildTicketSettings
             .FirstOrDefaultAsync(s => s.GuildId == guild.Id);
 
@@ -3462,7 +3458,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
                 settings.BlacklistedTypes.Remove(userId);
             }
 
-            await ctx.SaveChangesAsync();
+
 
             // Log the type-specific unblacklist if logging is enabled
             if (!settings.LogChannelId.HasValue) return true;
@@ -3496,7 +3492,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     /// <returns>A list of blacklisted user IDs and their blacklisted ticket types.</returns>
     public async Task<Dictionary<ulong, List<string>>> GetBlacklistedUsers(ulong guildId)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
         var settings = await ctx.GuildTicketSettings
             .FirstOrDefaultAsync(s => s.GuildId == guildId);
 
@@ -3536,7 +3532,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     public async Task<(int closed, int failed)> BatchCloseInactiveTickets(IGuild guild, TimeSpan inactiveTime)
     {
         int closed = 0, failed = 0;
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
 
         var cutoffTime = DateTime.UtcNow - inactiveTime;
         var inactiveTickets = await ctx.Tickets
@@ -3566,7 +3562,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
                 }
 
                 ticket.ClosedAt = DateTime.UtcNow;
-                await ctx.SaveChangesAsync();
+
                 closed++;
 
                 // Archive if configured
@@ -3596,7 +3592,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
         ulong targetCategoryId)
     {
         int moved = 0, failed = 0;
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
 
         var sourceChannels = await guild.GetTextChannelsAsync();
         sourceChannels = (IReadOnlyCollection<ITextChannel>)sourceChannels.Where(x => x.CategoryId == sourceCategoryId);
@@ -3638,7 +3634,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
 
         if (moved > 0)
         {
-            await ctx.SaveChangesAsync();
+
         }
 
         return (moved, failed);
@@ -3654,7 +3650,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     public async Task<(int updated, int failed)> BatchAddRole(IGuild guild, IRole role, bool viewOnly = false)
     {
         int updated = 0, failed = 0;
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
 
         var activeTickets = await ctx.Tickets
             .Where(t => t.GuildId == guild.Id && !t.ClosedAt.HasValue)
@@ -3699,7 +3695,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
         ulong toStaffId)
     {
         int transferred = 0, failed = 0;
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
 
         var claimedTickets = await ctx.Tickets
             .Where(t => t.GuildId == guild.Id &&
@@ -3738,7 +3734,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
             }
         }
 
-        await ctx.SaveChangesAsync();
+
         return (transferred, failed);
     }
 
@@ -3751,7 +3747,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     /// <returns>True if the panel was successfully updated, false otherwise.</returns>
     public async Task<bool> UpdatePanelEmbedAsync(IGuild guild, ulong panelId, string embedJson)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
         var panel = await ctx.TicketPanels.FindAsync(panelId);
 
         if (panel == null || panel.GuildId != guild.Id)
@@ -3775,7 +3771,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
             });
 
             panel.EmbedJson = embedJson;
-            await ctx.SaveChangesAsync();
+
             return true;
         }
         catch (Exception ex)
@@ -3794,7 +3790,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     /// <returns>True if the panel was successfully moved, false otherwise.</returns>
     public async Task<bool> MovePanelAsync(IGuild guild, ulong panelId, ulong newChannelId)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
         var panel = await ctx.TicketPanels
             .Include(p => p.Buttons)
             .Include(p => p.SelectMenus)
@@ -3879,7 +3875,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
 
             panel.ChannelId = newChannelId;
             panel.MessageId = message.Id;
-            await ctx.SaveChangesAsync();
+
 
             return true;
         }
@@ -3899,7 +3895,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     /// <returns>The newly created panel, or null if duplication failed.</returns>
     public async Task<TicketPanel?> DuplicatePanelAsync(IGuild guild, ulong panelId, ulong newChannelId)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
         var sourcePanel = await ctx.TicketPanels
             .Include(p => p.Buttons)
             .Include(p => p.SelectMenus)
@@ -4002,8 +3998,8 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
                 }
             }
 
-            ctx.TicketPanels.Add(newPanel);
-            await ctx.SaveChangesAsync();
+            await ctx.InsertAsync(newPanel);
+
 
             // Update message with components
             await UpdatePanelComponentsAsync(newPanel);
@@ -4026,7 +4022,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     /// <returns>True if the buttons were successfully reordered, false otherwise.</returns>
     public async Task<bool> ReorderPanelButtonsAsync(IGuild guild, ulong panelId, List<int> buttonOrder)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
         var panel = await ctx.TicketPanels
             .Include(p => p.Buttons)
             .FirstOrDefaultAsync(p => p.MessageId == panelId && p.GuildId == guild.Id);
@@ -4055,7 +4051,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
                 panel.Buttons.Add(button);
             }
 
-            await ctx.SaveChangesAsync();
+
             await UpdatePanelComponentsAsync(panel);
 
             return true;
@@ -4076,7 +4072,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     /// <returns>True if the response time was successfully updated, false otherwise.</returns>
     public async Task<bool> UpdateRequiredResponseTimeAsync(IGuild guild, int buttonId, TimeSpan? responseTime)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
         var button = await ctx.PanelButtons
             .Include(b => b.Panel)
             .FirstOrDefaultAsync(b => b.Id == buttonId && b.Panel.GuildId == guild.Id);
@@ -4087,7 +4083,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
         try
         {
             button.RequiredResponseTime = responseTime;
-            await ctx.SaveChangesAsync();
+
 
             // Notify support roles of the change
             if (button.SupportRoles?.Any() == true)
@@ -4128,7 +4124,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     /// <returns>True if all settings were successfully updated, false if any failed.</returns>
     public async Task<bool> UpdateButtonSettingsAsync(IGuild guild, int buttonId, Dictionary<string, object> settings)
     {
-        await using var ctx = await _db.GetContextAsync();
+        await using var ctx = await dbFactory.CreateConnectionAsync();
         var button = await ctx.PanelButtons
             .Include(b => b.Panel)
             .FirstOrDefaultAsync(b => b.Id == buttonId && b.Panel.GuildId == guild.Id);
@@ -4184,7 +4180,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
                 }
             }
 
-            await ctx.SaveChangesAsync();
+
             await UpdatePanelComponentsAsync(button.Panel);
 
             return true;
@@ -4211,4 +4207,4 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
 
         return option != null ? $"{option.Label} (Select Option)" : "Unknown";
     }
-}
+}*/

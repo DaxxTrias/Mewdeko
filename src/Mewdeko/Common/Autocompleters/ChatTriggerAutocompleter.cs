@@ -51,10 +51,10 @@ public class ChatTriggerAutocompleter : AutocompleteHandler
             return AutocompletionResult.FromSuccess();
 
         var suggestions = (await Triggers.GetChatTriggersFor(context.Guild?.Id))
-            .Where(x => (x.Trigger + x.RealName + x.Response).Contains(input, StringComparison.OrdinalIgnoreCase))
+            .Where(x => (x.Trigger + x.RealName() + x.Response).Contains(input, StringComparison.OrdinalIgnoreCase))
             .OrderByDescending(x => x.Trigger.StartsWith(input, StringComparison.OrdinalIgnoreCase))
             .Take(MaxSuggestions)
-            .Select(x => new AutocompleteResult($"{x.RealName} ({x.Trigger})".TrimTo(MaxDescriptionLength), x.Id));
+            .Select(x => new AutocompleteResult($"{x.RealName()} ({x.Trigger})".TrimTo(MaxDescriptionLength), x.Id));
 
         return AutocompletionResult.FromSuccess(suggestions);
     }

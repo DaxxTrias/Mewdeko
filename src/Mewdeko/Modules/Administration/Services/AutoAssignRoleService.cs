@@ -1,6 +1,7 @@
 ﻿using System.Net;
+using DataModel;
 using Discord.Net;
-using Mewdeko.Database.DbContextStuff;
+using LinqToDB;
 using Serilog;
 
 namespace Mewdeko.Modules.Administration.Services;
@@ -19,19 +20,19 @@ public sealed class AutoAssignRoleService : INService
             FullMode = BoundedChannelFullMode.DropOldest, SingleReader = true, SingleWriter = false
         });
 
-    private readonly DbContextProvider dbProvider;
+    private readonly IDataConnectionFactory dbFactory;
     private readonly GuildSettingsService guildSettings;
 
     /// <summary>
     ///     Constructs a new instance of the AutoAssignRoleService.
     /// </summary>
-    /// <param name="db">The database service.</param>
+    /// <param name="dbFactory">The database connection factory.</param>
     /// <param name="guildSettings">The guild settings service.</param>
     /// <param name="eventHandler">The event handler.</param>
-    public AutoAssignRoleService(DbContextProvider dbProvider,
+    public AutoAssignRoleService(IDataConnectionFactory dbFactory,
         GuildSettingsService guildSettings, EventHandler eventHandler)
     {
-        this.dbProvider = dbProvider;
+        this.dbFactory = dbFactory;
         this.guildSettings = guildSettings;
         _ = RunAutoLoop();
 
@@ -148,7 +149,7 @@ public sealed class AutoAssignRoleService : INService
             return;
 
         var old = args.HasValue ? args.Value : null;
-        if (old?.IsPending != null && old.IsPending.Value && (arsg2.IsPending.HasValue && !arsg2.IsPending.Value))
+        if (old?.IsPending != null && old.IsPending.Value && arsg2.IsPending.HasValue && !arsg2.IsPending.Value)
             await assignQueue.Writer.WriteAsync(arsg2).ConfigureAwait(false);
     }
 
@@ -211,13 +212,27 @@ public sealed class AutoAssignRoleService : INService
     /// <returns>A list of role IDs that are currently set to auto-assign in the guild.</returns>
     public async Task<IReadOnlyList<ulong>> ToggleAarAsync(ulong guildId, ulong roleId)
     {
-        await using var db = await dbProvider.GetContextAsync();
-        var gc = await db.ForGuildId(guildId, set => set);
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        // Get the guild config
+        var gc = await db.GuildConfigs
+            .FirstOrDefaultAsync(g => g.GuildId == guildId);
+
+        if (gc == null)
+            return [];
+
         var roles = gc.GetAutoAssignableRoles();
         if (!roles.Remove(roleId) && roles.Count < 10)
             roles.Add(roleId);
 
         gc.SetAutoAssignableRoles(roles);
+
+        // Update the guild config
+        await db.GuildConfigs
+            .Where(g => g.GuildId == guildId)
+            .Set(g => g.AutoAssignRoleId, gc.AutoAssignRoleId)
+            .UpdateAsync();
+
         await guildSettings.UpdateGuildConfig(guildId, gc);
 
         return roles;
@@ -230,10 +245,20 @@ public sealed class AutoAssignRoleService : INService
     /// <returns>A task that represents the asynchronous operation.</returns>
     private async Task DisableAarAsync(ulong guildId)
     {
-        await using var db = await dbProvider.GetContextAsync();
-        var gc = await db.ForGuildId(guildId, set => set);
-        gc.AutoAssignRoleId = "";
-        await guildSettings.UpdateGuildConfig(guildId, gc);
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        // Update the guild config directly
+        await db.GuildConfigs
+            .Where(g => g.GuildId == guildId)
+            .Set(g => g.AutoAssignRoleId, "")
+            .UpdateAsync();
+
+        // Get the updated guild config for cache update
+        var gc = await db.GuildConfigs
+            .FirstOrDefaultAsync(g => g.GuildId == guildId);
+
+        if (gc != null)
+            await guildSettings.UpdateGuildConfig(guildId, gc);
     }
 
     /// <summary>
@@ -244,9 +269,23 @@ public sealed class AutoAssignRoleService : INService
     /// <returns>A task that represents the asynchronous operation.</returns>
     public async Task SetAabrRolesAsync(ulong guildId, IEnumerable<ulong> newRoles)
     {
-        await using var db = await dbProvider.GetContextAsync();
-        var gc = await db.ForGuildId(guildId, set => set);
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        // Get the guild config
+        var gc = await db.GuildConfigs
+            .FirstOrDefaultAsync(g => g.GuildId == guildId);
+
+        if (gc == null)
+            return;
+
         gc.SetAutoAssignableBotRoles(newRoles);
+
+        // Update the guild config
+        await db.GuildConfigs
+            .Where(g => g.GuildId == guildId)
+            .Set(g => g.AutoBotRoleIds, gc.AutoBotRoleIds)
+            .UpdateAsync();
+
         await guildSettings.UpdateGuildConfig(guildId, gc);
     }
 
@@ -258,13 +297,27 @@ public sealed class AutoAssignRoleService : INService
     /// <returns>A list of role IDs that are currently set to auto-assign bot roles in the guild.</returns>
     public async Task<IReadOnlyList<ulong>> ToggleAabrAsync(ulong guildId, ulong roleId)
     {
-        await using var db = await dbProvider.GetContextAsync();
-        var gc = await db.ForGuildId(guildId, set => set);
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        // Get the guild config
+        var gc = await db.GuildConfigs
+            .FirstOrDefaultAsync(g => g.GuildId == guildId);
+
+        if (gc == null)
+            return [];
+
         var roles = gc.GetAutoAssignableBotRoles();
         if (!roles.Remove(roleId) && roles.Count < 10)
             roles.Add(roleId);
 
         gc.SetAutoAssignableBotRoles(roles);
+
+        // Update the guild config
+        await db.GuildConfigs
+            .Where(g => g.GuildId == guildId)
+            .Set(g => g.AutoBotRoleIds, gc.AutoBotRoleIds)
+            .UpdateAsync();
+
         await guildSettings.UpdateGuildConfig(guildId, gc);
 
         return roles;
@@ -277,10 +330,20 @@ public sealed class AutoAssignRoleService : INService
     /// <returns>A task that represents the asynchronous operation.</returns>
     public async Task DisableAabrAsync(ulong guildId)
     {
-        await using var db = await dbProvider.GetContextAsync();
-        var gc = await db.ForGuildId(guildId, set => set);
-        gc.AutoBotRoleIds = " ";
-        await guildSettings.UpdateGuildConfig(guildId, gc);
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        // Update the guild config directly
+        await db.GuildConfigs
+            .Where(g => g.GuildId == guildId)
+            .Set(g => g.AutoBotRoleIds, " ")
+            .UpdateAsync();
+
+        // Get the updated guild config for cache update
+        var gc = await db.GuildConfigs
+            .FirstOrDefaultAsync(g => g.GuildId == guildId);
+
+        if (gc != null)
+            await guildSettings.UpdateGuildConfig(guildId, gc);
     }
 
     /// <summary>
@@ -291,9 +354,23 @@ public sealed class AutoAssignRoleService : INService
     /// <returns>A task that represents the asynchronous operation.</returns>
     public async Task SetAarRolesAsync(ulong guildId, IEnumerable<ulong> newRoles)
     {
-        await using var db = await dbProvider.GetContextAsync();
-        var gc = await db.ForGuildId(guildId, set => set);
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        // Get the guild config
+        var gc = await db.GuildConfigs
+            .FirstOrDefaultAsync(g => g.GuildId == guildId);
+
+        if (gc == null)
+            return;
+
         gc.SetAutoAssignableRoles(newRoles);
+
+        // Update the guild config
+        await db.GuildConfigs
+            .Where(g => g.GuildId == guildId)
+            .Set(g => g.AutoAssignRoleId, gc.AutoAssignRoleId)
+            .UpdateAsync();
+
         await guildSettings.UpdateGuildConfig(guildId, gc);
     }
 

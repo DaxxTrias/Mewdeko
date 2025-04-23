@@ -8,7 +8,7 @@ public class PunishQueueItem
     /// <summary>
     ///     Gets or sets the action to be taken as punishment.
     /// </summary>
-    public PunishmentAction Action { get; set; }
+    public int Action { get; set; }
 
     /// <summary>
     ///     Gets or sets the type of protection for which the punishment is intended.

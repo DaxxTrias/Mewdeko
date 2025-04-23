@@ -1,6 +1,6 @@
-﻿using Mewdeko.Common.ModuleBehaviors;
-using Mewdeko.Database.DbContextStuff;
-using Microsoft.EntityFrameworkCore;
+﻿using DataModel;
+using LinqToDB;
+using Mewdeko.Common.ModuleBehaviors;
 using Serilog;
 
 namespace Mewdeko.Modules.Starboard.Services;
@@ -11,22 +11,22 @@ namespace Mewdeko.Modules.Starboard.Services;
 public class StarboardService : INService, IReadyExecutor
 {
     private readonly DiscordShardedClient client;
-    private readonly DbContextProvider dbProvider;
+    private readonly IDataConnectionFactory dbFactory;
 
     private List<StarboardPost> starboardPosts = [];
-    private List<StarboardConfig> starboardConfigs = [];
+    private List<DataModel.Starboard> starboardConfigs = [];
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="StarboardService" /> class.
     /// </summary>
     /// <param name="client">The Discord socket client.</param>
-    /// <param name="dbProvider">The database context provider.</param>
+    /// <param name="dbFactory">The database context provider.</param>
     /// <param name="eventHandler">The event handler.</param>
-    public StarboardService(DiscordShardedClient client, DbContextProvider dbProvider,
+    public StarboardService(DiscordShardedClient client, IDataConnectionFactory dbFactory,
        EventHandler eventHandler)
     {
         this.client = client;
-        this.dbProvider = dbProvider;
+        this.dbFactory = dbFactory;
         eventHandler.ReactionAdded += OnReactionAddedAsync;
         eventHandler.MessageDeleted += OnMessageDeletedAsync;
         eventHandler.ReactionRemoved += OnReactionRemoveAsync;
@@ -37,7 +37,7 @@ public class StarboardService : INService, IReadyExecutor
     public async Task OnReadyAsync()
     {
         Log.Information($"Starting {GetType()} Cache");
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
         starboardPosts = await dbContext.StarboardPosts.ToListAsync();
         starboardConfigs = await dbContext.Starboards.ToListAsync();
@@ -54,8 +54,8 @@ public class StarboardService : INService, IReadyExecutor
     /// <returns>The ID of the created starboard configuration.</returns>
     public async Task<int> CreateStarboard(IGuild guild, ulong channelId, string emote, int threshold)
     {
-        await using var db = await dbProvider.GetContextAsync();
-        var config = new StarboardConfig
+        await using var db = await dbFactory.CreateConnectionAsync();
+        var config = new DataModel.Starboard
         {
             GuildId = guild.Id,
             StarboardChannelId = channelId,
@@ -70,8 +70,7 @@ public class StarboardService : INService, IReadyExecutor
             RepostThreshold = 0
         };
 
-        db.Starboards.Add(config);
-        await db.SaveChangesAsync();
+        await db.InsertAsync(config);
         starboardConfigs.Add(config);
         return config.Id;
     }
@@ -88,9 +87,9 @@ public class StarboardService : INService, IReadyExecutor
         if (config == null)
             return false;
 
-        await using var db = await dbProvider.GetContextAsync();
-        db.Starboards.Remove(config);
-        await db.SaveChangesAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
+        await db.DeleteAsync(config);
+
         starboardConfigs.Remove(config);
         return true;
     }
@@ -100,7 +99,7 @@ public class StarboardService : INService, IReadyExecutor
     /// </summary>
     /// <param name="guildId">The ID of the guild.</param>
     /// <returns>A list of starboard configurations.</returns>
-    public List<StarboardConfig> GetStarboards(ulong guildId)
+    public List<DataModel.Starboard> GetStarboards(ulong guildId)
         => starboardConfigs.Where(x => x.GuildId == guildId).ToList();
 
     /// <summary>
@@ -116,10 +115,10 @@ public class StarboardService : INService, IReadyExecutor
         if (config == null)
             return false;
 
-        await using var db = await dbProvider.GetContextAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
         config.AllowBots = allowed;
-        db.Starboards.Update(config);
-        await db.SaveChangesAsync();
+        await db.UpdateAsync(config);
+
         return true;
     }
 
@@ -136,10 +135,10 @@ public class StarboardService : INService, IReadyExecutor
         if (config == null)
             return false;
 
-        await using var db = await dbProvider.GetContextAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
         config.RemoveOnDelete = removeOnDelete;
-        db.Starboards.Update(config);
-        await db.SaveChangesAsync();
+        await db.UpdateAsync(config);
+
         return true;
     }
 
@@ -156,10 +155,10 @@ public class StarboardService : INService, IReadyExecutor
         if (config == null)
             return false;
 
-        await using var db = await dbProvider.GetContextAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
         config.RemoveOnReactionsClear = removeOnClear;
-        db.Starboards.Update(config);
-        await db.SaveChangesAsync();
+        await db.UpdateAsync(config);
+
         return true;
     }
 
@@ -176,10 +175,10 @@ public class StarboardService : INService, IReadyExecutor
         if (config == null)
             return false;
 
-        await using var db = await dbProvider.GetContextAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
         config.RemoveOnBelowThreshold = removeBelowThreshold;
-        db.Starboards.Update(config);
-        await db.SaveChangesAsync();
+        await db.UpdateAsync(config);
+
         return true;
     }
 
@@ -196,10 +195,10 @@ public class StarboardService : INService, IReadyExecutor
         if (config == null)
             return false;
 
-        await using var db = await dbProvider.GetContextAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
         config.RepostThreshold = threshold;
-        db.Starboards.Update(config);
-        await db.SaveChangesAsync();
+        await db.UpdateAsync(config);
+
         return true;
     }
 
@@ -216,10 +215,10 @@ public class StarboardService : INService, IReadyExecutor
         if (config == null)
             return false;
 
-        await using var db = await dbProvider.GetContextAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
         config.Threshold = threshold;
-        db.Starboards.Update(config);
-        await db.SaveChangesAsync();
+        await db.UpdateAsync(config);
+
         return true;
     }
 
@@ -236,10 +235,10 @@ public class StarboardService : INService, IReadyExecutor
         if (config == null)
             return false;
 
-        await using var db = await dbProvider.GetContextAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
         config.UseBlacklist = useBlacklist;
-        db.Starboards.Update(config);
-        await db.SaveChangesAsync();
+        await db.UpdateAsync(config);
+
         return true;
     }
 
@@ -250,7 +249,7 @@ public class StarboardService : INService, IReadyExecutor
     /// <param name="starboardId">The ID of the starboard configuration.</param>
     /// <param name="channelId">The channel ID to toggle.</param>
     /// <returns>A tuple containing whether the channel was added and the starboard configuration.</returns>
-    public async Task<(bool WasAdded, StarboardConfig Config)> ToggleChannel(IGuild guild, int starboardId, string channelId)
+    public async Task<(bool WasAdded, DataModel.Starboard Config)> ToggleChannel(IGuild guild, int starboardId, string channelId)
     {
         var config = starboardConfigs.FirstOrDefault(x => x.Id == starboardId && x.GuildId == guild.Id);
         if (config == null)
@@ -258,27 +257,27 @@ public class StarboardService : INService, IReadyExecutor
 
         var channels = config.CheckedChannels.Split(" ", StringSplitOptions.RemoveEmptyEntries).ToList();
 
-        await using var db = await dbProvider.GetContextAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
         if (!channels.Contains(channelId))
         {
             channels.Add(channelId);
             config.CheckedChannels = string.Join(" ", channels);
-            db.Starboards.Update(config);
-            await db.SaveChangesAsync();
+            await db.UpdateAsync(config);
+
             return (true, config);
         }
 
         channels.Remove(channelId);
         config.CheckedChannels = string.Join(" ", channels);
-        db.Starboards.Update(config);
-        await db.SaveChangesAsync();
+        await db.UpdateAsync(config);
+
         return (false, config);
     }
 
 
     private async Task AddStarboardPost(ulong messageId, ulong postId, int starboardId)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
         var post = starboardPosts.Find(x => x.MessageId == messageId && x.StarboardConfigId == starboardId);
         if (post == null)
@@ -290,8 +289,8 @@ public class StarboardService : INService, IReadyExecutor
                 StarboardConfigId = starboardId
             };
             starboardPosts.Add(toAdd);
-            dbContext.StarboardPosts.Add(toAdd);
-            await dbContext.SaveChangesAsync();
+            await dbContext.InsertAsync(toAdd);
+
             return;
         }
 
@@ -300,9 +299,9 @@ public class StarboardService : INService, IReadyExecutor
 
         starboardPosts.Remove(post);
         post.PostId = postId;
-        dbContext.StarboardPosts.Update(post);
+        await dbContext.UpdateAsync(post);
         starboardPosts.Add(post);
-        await dbContext.SaveChangesAsync();
+
     }
 
     private async Task RemoveStarboardPost(ulong messageId, int starboardId)
@@ -311,10 +310,10 @@ public class StarboardService : INService, IReadyExecutor
         if (toRemove == null)
             return;
 
-        await using var dbContext = await dbProvider.GetContextAsync();
-        dbContext.StarboardPosts.Remove(toRemove);
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
+        await dbContext.DeleteAsync(toRemove);
         starboardPosts.Remove(toRemove);
-        await dbContext.SaveChangesAsync();
+
     }
 
     private async Task OnReactionAddedAsync(Cacheable<IUserMessage, ulong> message,
@@ -360,7 +359,7 @@ public class StarboardService : INService, IReadyExecutor
     private async Task HandleReactionChange(Cacheable<IUserMessage, ulong> message,
         Cacheable<IMessageChannel, ulong> channel,
         SocketReaction reaction,
-        StarboardConfig starboard,
+        DataModel.Starboard starboard,
         bool isAdd)
     {
         var textChannel = channel.Value as ITextChannel;

@@ -1,5 +1,6 @@
 ﻿using Mewdeko.Database.Common;
 
+
 namespace Mewdeko.Modules.Searches.Common.StreamNotifications.Models;
 
 /// <summary>
@@ -10,7 +11,7 @@ public record StreamData
     /// <summary>
     ///     Gets or sets the type of the stream based on the platform.
     /// </summary>
-    public FollowedStream.FType StreamType { get; set; }
+    public FType StreamType { get; set; }
 
     /// <summary>
     ///     Gets or sets the display name of the streamer.

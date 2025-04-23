@@ -262,7 +262,7 @@ public class VoteSlashCommands(InteractiveService interactivity) : MewdekoSlashM
     [CheckPermissions]
     public async Task VotesLeaderboard(bool monthly = false)
     {
-        List<Database.Models.Votes> votes;
+        List<DataModel.Vote> votes;
         if (monthly)
             votes = (await Service.GetVotes(ctx.Guild.Id)).Where(x => x.DateAdded.Value.Month == DateTime.UtcNow.Month)
                 .ToList();

@@ -1,12 +1,14 @@
+using DataModel;
 using Discord.Commands;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
 using Humanizer;
+using LinqToDB;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Common.TypeReaders.Models;
-using Mewdeko.Database.DbContextStuff;
+using Mewdeko.Modules.Administration.Common;
+using Mewdeko.Modules.Moderation.Common;
 using Mewdeko.Modules.Moderation.Services;
-using Mewdeko.Services.Settings;
 using NekosBestApiNet;
 using Serilog;
 using Swan;
@@ -20,17 +22,15 @@ public partial class Moderation : MewdekoModule
     ///     Module for user punishment commands.
     /// </summary>
     /// <param name="mute">The mute service</param>
-    /// <param name="db">The database service</param>
+    /// <param name="dbFactory">The database service</param>
     /// <param name="serv">The service used to handle embed pagination</param>
     /// <param name="nekos">The NekosBest API</param>
-    /// <param name="config">The bot config service used for yml based configs</param>
     [Group]
     public class UserPunishCommands(
         MuteService mute,
-        DbContextProvider dbProvider,
+        IDataConnectionFactory dbFactory,
         InteractiveService serv,
-        NekosBestApi nekos,
-        BotConfigService config)
+        NekosBestApi nekos)
         : MewdekoSubmodule<UserPunishService>
     {
         /// <summary>
@@ -342,7 +342,7 @@ public partial class Moderation : MewdekoModule
         [RequireContext(ContextType.Guild)]
         [UserPerm(GuildPermission.ModerateMembers)]
         [BotPerm(GuildPermission.ModerateMembers)]
-        public async Task Timeout(StoopidTime time, IGuildUser user, [Remainder] string? reason = null)
+        public async Task Timeout(StoopidTime time, IGuildUser? user, [Remainder] string? reason = null)
         {
             if (!await CheckRoleHierarchy(user))
                 return;
@@ -371,7 +371,7 @@ public partial class Moderation : MewdekoModule
         [RequireContext(ContextType.Guild)]
         [UserPerm(GuildPermission.ModerateMembers)]
         [BotPerm(GuildPermission.ModerateMembers)]
-        public async Task UnTimeOut(IGuildUser user)
+        public async Task UnTimeOut(IGuildUser? user)
         {
             if (!await CheckRoleHierarchy(user))
                 return;
@@ -391,7 +391,7 @@ public partial class Moderation : MewdekoModule
         [Aliases]
         [RequireContext(ContextType.Guild)]
         [UserPerm(GuildPermission.BanMembers)]
-        public async Task Warn(IGuildUser user, [Remainder] string? reason = null)
+        public async Task Warn(IGuildUser? user, [Remainder] string? reason = null)
         {
             if (!await CheckRoleHierarchy(user))
                 return;
@@ -449,11 +449,11 @@ public partial class Moderation : MewdekoModule
             await ctx.Channel.EmbedAsync(embed);
             if (await Service.GetWarnlogChannel(ctx.Guild.Id) != 0)
             {
-                await using var dbContext = await dbProvider.GetContextAsync();
+                await using var dbContext = await dbFactory.CreateConnectionAsync();
 
-                var warnings = dbContext.Warnings
-                    .ForId(ctx.Guild.Id, user.Id)
-                    .Count(w => !w.Forgiven && w.UserId == user.Id);
+                var warnings = await dbContext.Warnings
+                    .Where(x => x.GuildId == ctx.Guild.Id && x.UserId == user.Id)
+                    .CountAsync(w => !w.Forgiven && w.UserId == user.Id);
                 var condition = punishment != null;
                 var punishtime = condition ? TimeSpan.FromMinutes(punishment.Time).ToString() : " ";
                 var punishaction = condition ? punishment.Punishment.Humanize() : "None";
@@ -578,14 +578,22 @@ public partial class Moderation : MewdekoModule
                     foreach (var w in warnings)
                     {
                         i++;
-                        var name = Strings.WarnedOnBy(ctx.Guild.Id, $"<t:{w.DateAdded.Value.ToUnixEpochDate()}:D>",
-                            $"<t:{w.DateAdded.Value.ToUnixEpochDate()}:T>", w.Moderator);
-                        if (w.Forgiven)
-                            name = $"{Format.Strikethrough(name)} {Strings.WarnClearedBy(ctx.Guild.Id, w.ForgivenBy)}";
+                        if (w.DateAdded != null)
+                        {
+                            var name = Strings.WarnedOnBy(ctx.Guild.Id, $"<t:{w.DateAdded.Value.ToUnixEpochDate()}:D>",
+                                $"<t:{w.DateAdded.Value.ToUnixEpochDate()}:T>", w.Moderator);
+                            if (w.Forgiven)
+                                name = $"{Format.Strikethrough(name)} {Strings.WarnClearedBy(ctx.Guild.Id, w.ForgivenBy)}";
 
-                        embed.AddField(x => x
-                            .WithName($"#`{i}` {name}")
-                            .WithValue(w.Reason.TrimTo(1020)));
+                            var i1 = i;
+                            embed.AddField(x =>
+                            {
+                                if (w.Reason != null)
+                                    x
+                                        .WithName($"#`{i1}` {name}")
+                                        .WithValue(w.Reason.TrimTo(1020));
+                            });
+                        }
                     }
                 }
 
@@ -646,13 +654,13 @@ public partial class Moderation : MewdekoModule
         [Aliases]
         [RequireContext(ContextType.Guild)]
         [UserPerm(GuildPermission.BanMembers)]
-        public async Task Warnclear(IGuildUser user, int index = 0)
+        public async Task Warnclear(IGuildUser? user, int index = 0)
         {
             if (index < 0)
                 return;
             if (!await CheckRoleHierarchy(user))
                 return;
-            var success = await Service.WarnClearAsync(ctx.Guild.Id, user.Id, index, ctx.User.ToString())
+            var success = await Service.WarnClearAsync(ctx.Guild.Id, user.Id, index, ctx.User.ToString()!)
                 .ConfigureAwait(false);
             var userStr = user.ToString();
             if (index == 0)
@@ -689,7 +697,7 @@ public partial class Moderation : MewdekoModule
         public async Task WarnPunish(int number, AddRole _, IRole role, StoopidTime? time = null)
         {
             const PunishmentAction punish = PunishmentAction.AddRole;
-            var success = await Service.WarnPunish(ctx.Guild.Id, number, punish, time, role);
+            var success = await Service.WarnPunish(ctx.Guild.Id, number, (int)punish, time, role);
 
             if (!success)
                 return;
@@ -729,7 +737,7 @@ public partial class Moderation : MewdekoModule
                     return;
             }
 
-            var success = await Service.WarnPunish(ctx.Guild.Id, number, punish, time);
+            var success = await Service.WarnPunish(ctx.Guild.Id, number, (int)punish, time);
 
             if (!success)
                 return;
@@ -789,7 +797,7 @@ public partial class Moderation : MewdekoModule
             {
                 list = string.Join("\n",
                     ps.Select(x =>
-                        $"{x.Count} -> {x.Punishment} {(x.Punishment == PunishmentAction.AddRole ? $"<@&{x.RoleId}>" : "")} {(x.Time <= 0 ? "" : $"{x.Time}m")} "));
+                        $"{x.Count} -> {x.Punishment} {(x.Punishment == (int)PunishmentAction.AddRole ? $"<@&{x.RoleId}>" : "")} {(x.Time <= 0 ? "" : $"{x.Time}m")} "));
             }
             else
             {
@@ -815,7 +823,7 @@ public partial class Moderation : MewdekoModule
         [UserPerm(GuildPermission.BanMembers)]
         [BotPerm(GuildPermission.BanMembers)]
         [Priority(1)]
-        public async Task Ban(StoopidTime pruneTime, StoopidTime time, IGuildUser user, [Remainder] string? msg = null)
+        public async Task Ban(StoopidTime pruneTime, StoopidTime time, IGuildUser? user, [Remainder] string? msg = null)
         {
             if (time.Time > TimeSpan.FromDays(49))
                 return;
@@ -935,7 +943,7 @@ public partial class Moderation : MewdekoModule
         [UserPerm(GuildPermission.BanMembers)]
         [BotPerm(GuildPermission.BanMembers)]
         [Priority(2)]
-        public async Task Ban(IGuildUser user, [Remainder] string? msg = null)
+        public async Task Ban(IGuildUser? user, [Remainder] string? msg = null)
         {
             if (!await CheckRoleHierarchy(user).ConfigureAwait(false))
                 return;
@@ -989,7 +997,7 @@ public partial class Moderation : MewdekoModule
         [UserPerm(GuildPermission.BanMembers)]
         [BotPerm(GuildPermission.BanMembers)]
         [Priority(2)]
-        public async Task Ban(StoopidTime time, IGuildUser user, [Remainder] string? msg = null)
+        public async Task Ban(StoopidTime time, IGuildUser? user, [Remainder] string? msg = null)
         {
             if (!await CheckRoleHierarchy(user).ConfigureAwait(false))
                 return;
@@ -1055,7 +1063,7 @@ public partial class Moderation : MewdekoModule
                 return;
             }
 
-            Service.SetBanTemplate(Context.Guild.Id, message);
+            await Service.SetBanTemplate(Context.Guild.Id, message);
             await ctx.OkAsync().ConfigureAwait(false);
         }
 
@@ -1068,10 +1076,10 @@ public partial class Moderation : MewdekoModule
         [RequireContext(ContextType.Guild)]
         [UserPerm(GuildPermission.BanMembers)]
         [BotPerm(GuildPermission.BanMembers)]
-        public Task BanMsgReset()
+        public async Task BanMsgReset()
         {
-            Service.SetBanTemplate(Context.Guild.Id, null);
-            return ctx.OkAsync();
+            await Service.SetBanTemplate(Context.Guild.Id, null);
+            await ctx.OkAsync();
         }
 
         /// <summary>
@@ -1205,7 +1213,7 @@ public partial class Moderation : MewdekoModule
         [RequireContext(ContextType.Guild)]
         [UserPerm(GuildPermission.KickMembers | GuildPermission.ManageMessages)]
         [BotPerm(GuildPermission.BanMembers)]
-        public Task Softban(IGuildUser user, [Remainder] string? msg = null)
+        public Task Softban(IGuildUser? user, [Remainder] string? msg = null)
         {
             return SoftbanInternal(user, msg);
         }
@@ -1230,7 +1238,7 @@ public partial class Moderation : MewdekoModule
             await SoftbanInternal(user).ConfigureAwait(false);
         }
 
-        private async Task SoftbanInternal(IGuildUser user, [Remainder] string? msg = null)
+        private async Task SoftbanInternal(IGuildUser? user, [Remainder] string? msg = null)
         {
             if (!await CheckRoleHierarchy(user).ConfigureAwait(false))
                 return;
@@ -1285,7 +1293,7 @@ public partial class Moderation : MewdekoModule
         [UserPerm(GuildPermission.KickMembers)]
         [BotPerm(GuildPermission.KickMembers)]
         [Priority(1)]
-        public Task Kick(IGuildUser user, [Remainder] string? msg = null)
+        public Task Kick(IGuildUser? user, [Remainder] string? msg = null)
         {
             return KickInternal(user, msg);
         }
@@ -1348,7 +1356,7 @@ public partial class Moderation : MewdekoModule
             await Context.Channel.SendMessageAsync(embed: eb.Build());
         }
 
-        private async Task KickInternal(IGuildUser user, string? msg = null)
+        private async Task KickInternal(IGuildUser? user, string? msg = null)
         {
             if (!await CheckRoleHierarchy(user).ConfigureAwait(false))
                 return;
@@ -1402,13 +1410,14 @@ public partial class Moderation : MewdekoModule
                 missStr = "-";
 
             //send a message but don't wait for it
+            var valueTuples = bans as (string Original, ulong? id, string Reason)[] ?? bans.ToArray();
             var banningMessageTask = ctx.Channel.EmbedAsync(new EmbedBuilder()
-                .WithDescription(Strings.MassKillInProgress(ctx.Guild.Id, bans.Count()))
+                .WithDescription(Strings.MassKillInProgress(ctx.Guild.Id, valueTuples.Count()))
                 .AddField(Strings.Invalid(ctx.Guild.Id, missing), missStr)
                 .WithOkColor());
 
             //do the banning
-            await Task.WhenAll(bans
+            await Task.WhenAll(valueTuples
                     .Where(x => x.id.HasValue)
                     .Select(x => ctx.Guild.AddBanAsync(x.id.Value, 7, "", new RequestOptions
                     {
@@ -1420,7 +1429,7 @@ public partial class Moderation : MewdekoModule
             var banningMessage = await banningMessageTask.ConfigureAwait(false);
 
             await banningMessage.ModifyAsync(x => x.Embed = new EmbedBuilder()
-                .WithDescription(Strings.MassKillCompleted(ctx.Guild.Id, bans.Count()))
+                .WithDescription(Strings.MassKillCompleted(ctx.Guild.Id, valueTuples.Count()))
                 .AddField(Strings.Invalid(ctx.Guild.Id, missing), missStr)
                 .WithOkColor()
                 .Build()).ConfigureAwait(false);

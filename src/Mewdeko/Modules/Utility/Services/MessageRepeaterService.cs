@@ -1,7 +1,7 @@
 ﻿using Mewdeko.Common.ModuleBehaviors;
-using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.Utility.Common;
-using Microsoft.EntityFrameworkCore;
+using DataModel;
+using LinqToDB;
 using Serilog;
 
 namespace Mewdeko.Modules.Utility.Services;
@@ -13,7 +13,7 @@ namespace Mewdeko.Modules.Utility.Services;
 public class MessageRepeaterService : INService, IReadyExecutor, IDisposable
 {
     private readonly DiscordShardedClient client;
-    private readonly DbContextProvider dbProvider;
+    private readonly IDataConnectionFactory dbFactory;
     private readonly Mewdeko bot;
     private readonly GuildSettingsService gss;
     private readonly EventHandler handler;
@@ -37,18 +37,18 @@ public class MessageRepeaterService : INService, IReadyExecutor, IDisposable
     ///     Sets up event handlers for guild-related events and initializes the service dependencies.
     /// </summary>
     /// <param name="client">The Discord client instance used for sending messages and handling events.</param>
-    /// <param name="dbProvider">Provider for database context access.</param>
+    /// <param name="dbFactory">Provider for database context access.</param>
     /// <param name="bot">The main bot instance.</param>
     /// <param name="gss">Service for accessing guild settings.</param>
     /// <param name="handler">Service for handling Discord events asynchronously</param>
     public MessageRepeaterService(
         DiscordShardedClient client,
-        DbContextProvider dbProvider,
+        IDataConnectionFactory dbFactory,
         Mewdeko bot,
         GuildSettingsService gss, EventHandler handler)
     {
         this.client = client;
-        this.dbProvider = dbProvider;
+        this.dbFactory = dbFactory;
         this.bot = bot;
         this.gss = gss;
         this.handler = handler;
@@ -89,7 +89,7 @@ public class MessageRepeaterService : INService, IReadyExecutor, IDisposable
     /// </summary>
     /// <param name="r">The repeater configuration to remove.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    public async Task RemoveRepeater(Repeater r)
+    public async Task RemoveRepeater(GuildRepeater r)
     {
         if (Repeaters.TryGetValue(r.GuildId, out var guildRepeaters))
         {
@@ -99,14 +99,16 @@ public class MessageRepeaterService : INService, IReadyExecutor, IDisposable
             }
         }
 
-        await using var dbContext = await dbProvider.GetContextAsync();
-        var gr = (await dbContext.ForGuildId(r.GuildId, x => x.Include(y => y.GuildRepeaters)))
-            .GuildRepeaters;
-        var toDelete = gr.Find(x => x.Id == r.Id);
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
+
+        // Direct query by Id and GuildId
+        var toDelete = await dbContext.GuildRepeaters
+            .FirstOrDefaultAsync(x => x.Id == r.Id && x.GuildId == r.GuildId);
+
         if (toDelete != null)
         {
-            dbContext.Set<Repeater>().Remove(toDelete);
-            await dbContext.SaveChangesAsync().ConfigureAwait(false);
+            await dbContext.DeleteAsync(toDelete);
+
         }
     }
 
@@ -121,10 +123,10 @@ public class MessageRepeaterService : INService, IReadyExecutor, IDisposable
     {
         try
         {
-            await using var dbContext = await dbProvider.GetContextAsync();
-            var rep = await dbContext.Repeaters.FirstOrDefaultAsync(x => x.Id == repeaterId).ConfigureAwait(false);
+            await using var dbContext = await dbFactory.CreateConnectionAsync();
+            var rep = await dbContext.GuildRepeaters.FirstOrDefaultAsync(x => x.Id == repeaterId).ConfigureAwait(false);
             rep.LastMessageId = lastMsgId;
-            await dbContext.SaveChangesAsync().ConfigureAwait(false);
+
         }
         catch (Exception ex)
         {
@@ -136,15 +138,21 @@ public class MessageRepeaterService : INService, IReadyExecutor, IDisposable
     {
         try
         {
-            var config = await gss.GetGuildConfig(guild.Id, x => x.Include(x => x.GuildRepeaters));
-            var guildRepeaters = new ConcurrentDictionary<int, RepeatRunner>();
+            await using var dbContext = await dbFactory.CreateConnectionAsync();
 
-            foreach (var repeater in config.GuildRepeaters.Where(gr => gr.DateAdded is not null))
+            // Direct query with GuildId filter
+            var guildRepeaters = await dbContext.GuildRepeaters
+                .Where(gr => gr.GuildId == guild.Id && gr.DateAdded != null)
+                .ToListAsync();
+
+            var repeaterDictionary = new ConcurrentDictionary<int, RepeatRunner>();
+
+            foreach (var repeater in guildRepeaters)
             {
                 try
                 {
                     var runner = new RepeatRunner(client, guild, repeater, this);
-                    guildRepeaters.TryAdd(repeater.Id, runner);
+                    repeaterDictionary.TryAdd(repeater.Id, runner);
                 }
                 catch (Exception ex)
                 {
@@ -153,7 +161,7 @@ public class MessageRepeaterService : INService, IReadyExecutor, IDisposable
                 }
             }
 
-            Repeaters.AddOrUpdate(guild.Id, guildRepeaters,
+            Repeaters.AddOrUpdate(guild.Id, repeaterDictionary,
                 (_, existing) =>
                 {
                     foreach (var runner in existing.Values)
@@ -161,7 +169,7 @@ public class MessageRepeaterService : INService, IReadyExecutor, IDisposable
                         runner.Stop();
                     }
 
-                    return guildRepeaters;
+                    return repeaterDictionary;
                 });
         }
         catch (Exception ex)
@@ -169,6 +177,7 @@ public class MessageRepeaterService : INService, IReadyExecutor, IDisposable
             Log.Error(ex, "Failed to load repeaters for Guild {GuildId}", guild.Id);
         }
     }
+
 
     private Task OnGuildAvailable(IGuild guild)
     {
@@ -218,7 +227,7 @@ public class MessageRepeaterService : INService, IReadyExecutor, IDisposable
         string? startTimeOfDay = null,
         bool allowMentions = false)
     {
-        var toAdd = new Repeater
+        var toAdd = new GuildRepeater
         {
             ChannelId = channelId,
             GuildId = guildId,
@@ -229,10 +238,11 @@ public class MessageRepeaterService : INService, IReadyExecutor, IDisposable
             DateAdded = DateTime.UtcNow
         };
 
-        await using var dbContext = await dbProvider.GetContextAsync();
-        var gc = await dbContext.ForGuildId(guildId, set => set.Include(x => x.GuildRepeaters));
-        gc.GuildRepeaters.Add(toAdd);
-        await dbContext.SaveChangesAsync().ConfigureAwait(false);
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
+
+        // Add directly to Repeaters
+        await dbContext.InsertAsync(toAdd);
+
 
         var guild = client.GetGuild(guildId);
         if (guild == null) return null;
@@ -257,14 +267,16 @@ public class MessageRepeaterService : INService, IReadyExecutor, IDisposable
     public async Task<bool> UpdateRepeaterMessageAsync(ulong guildId, int repeaterId, string newMessage,
         bool allowMentions)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
-        var guildConfig = await dbContext.ForGuildId(guildId, set => set.Include(gc => gc.GuildRepeaters));
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
-        var item = guildConfig.GuildRepeaters.Find(r => r.Id == repeaterId);
+        // Direct query by Id and GuildId
+        var item = await dbContext.GuildRepeaters
+            .FirstOrDefaultAsync(r => r.Id == repeaterId && r.GuildId == guildId);
+
         if (item == null) return false;
 
         item.Message = allowMentions ? newMessage : newMessage.SanitizeMentions(true);
-        await dbContext.SaveChangesAsync().ConfigureAwait(false);
+
 
         if (Repeaters.TryGetValue(guildId, out var guildRepeaters) &&
             guildRepeaters.TryGetValue(repeaterId, out var runner))
@@ -275,19 +287,22 @@ public class MessageRepeaterService : INService, IReadyExecutor, IDisposable
         return true;
     }
 
+
     /// <summary>
     ///     Updates the channel of an existing repeater.
     /// </summary>
     public async Task<bool> UpdateRepeaterChannelAsync(ulong guildId, int repeaterId, ulong newChannelId)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
-        var guildConfig = await dbContext.ForGuildId(guildId, set => set.Include(gc => gc.GuildRepeaters));
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
-        var item = guildConfig.GuildRepeaters.Find(r => r.Id == repeaterId);
+        // Direct query by Id and GuildId
+        var item = await dbContext.GuildRepeaters
+            .FirstOrDefaultAsync(r => r.Id == repeaterId && r.GuildId == guildId);
+
         if (item == null) return false;
 
         item.ChannelId = newChannelId;
-        await dbContext.SaveChangesAsync().ConfigureAwait(false);
+
 
         if (Repeaters.TryGetValue(guildId, out var guildRepeaters) &&
             guildRepeaters.TryGetValue(repeaterId, out var runner))
@@ -303,14 +318,16 @@ public class MessageRepeaterService : INService, IReadyExecutor, IDisposable
     /// </summary>
     public async Task<bool> ToggleRepeaterRedundancyAsync(ulong guildId, int repeaterId)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
-        var guildConfig = await dbContext.ForGuildId(guildId, set => set.Include(gc => gc.GuildRepeaters));
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
-        var item = guildConfig.GuildRepeaters.Find(r => r.Id == repeaterId);
+        // Direct query by Id and GuildId
+        var item = await dbContext.GuildRepeaters
+            .FirstOrDefaultAsync(r => r.Id == repeaterId && r.GuildId == guildId);
+
         if (item == null) return false;
 
         item.NoRedundant = !item.NoRedundant;
-        await dbContext.SaveChangesAsync().ConfigureAwait(false);
+
 
         if (Repeaters.TryGetValue(guildId, out var guildRepeaters) &&
             guildRepeaters.TryGetValue(repeaterId, out var runner))

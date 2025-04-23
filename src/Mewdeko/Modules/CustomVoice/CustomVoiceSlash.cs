@@ -1,7 +1,8 @@
 ﻿using System.Text.Json;
+using DataModel;
 using Discord.Interactions;
+using LinqToDB;
 using Mewdeko.Common.Attributes.InteractionCommands;
-using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.CustomVoice.Services;
 using Serilog;
 
@@ -10,7 +11,7 @@ namespace Mewdeko.Modules.CustomVoice;
 /// <summary>
 ///     Interaction commands for managing custom voice channels.
 /// </summary>
-public class CustomVoiceSlash(DiscordShardedClient client, DbContextProvider dbContextProvider) : MewdekoSlashModuleBase<CustomVoiceService>
+public class CustomVoiceSlash(DiscordShardedClient client, IDataConnectionFactory dbFactory) : MewdekoSlashModuleBase<CustomVoiceService>
 {
 
     /// <summary>
@@ -257,10 +258,10 @@ public class CustomVoiceSlash(DiscordShardedClient client, DbContextProvider dbC
                         }
 
                         // Update the keep-alive status
-                        await using var db = await dbContextProvider.GetContextAsync();
+                        await using var dbContext = await dbFactory.CreateConnectionAsync();
                         customChannel.KeepAlive = keepAlive;
-                        db.CustomVoiceChannels.Update(customChannel);
-                        await db.SaveChangesAsync();
+                        await dbContext.InsertAsync(customChannel);
+
 
                         var actionText = keepAlive
                             ? Strings.CustomVoiceKeptAlive(ctx.Guild.Id)
@@ -721,11 +722,9 @@ public class CustomVoiceSlash(DiscordShardedClient client, DbContextProvider dbC
                 if (allowedUsers.Remove(targetUserId))
                 {
                     // Update the allowed users list
-                    await using var db = await dbContextProvider.GetContextAsync();
+                    await using var dbContext = await dbFactory.CreateConnectionAsync();
                     customChannel.AllowedUsersJson = JsonSerializer.Serialize(allowedUsers);
-                    db.CustomVoiceChannels.Update(customChannel);
-                    await db.SaveChangesAsync();
-
+                    await dbContext.InsertAsync(customChannel);
                     // Update permissions if the channel is locked
                     if (customChannel.IsLocked)
                     {
@@ -765,10 +764,10 @@ public class CustomVoiceSlash(DiscordShardedClient client, DbContextProvider dbC
                 if (deniedUsers.Remove(targetUserId))
                 {
                     // Update the denied users list
-                    await using var db = await dbContextProvider.GetContextAsync();
+                    await using var dbContext = await dbFactory.CreateConnectionAsync();
                     customChannel.DeniedUsersJson = JsonSerializer.Serialize(deniedUsers);
-                    db.CustomVoiceChannels.Update(customChannel);
-                    await db.SaveChangesAsync();
+                    await dbContext.InsertAsync(customChannel);
+
 
                     // Update permissions
                     var voiceChannel = await ctx.Guild.GetVoiceChannelAsync(parsedChannelId);

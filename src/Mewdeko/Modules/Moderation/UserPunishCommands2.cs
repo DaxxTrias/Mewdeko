@@ -1,10 +1,13 @@
+using DataModel;
 using Discord.Commands;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
 using Humanizer;
+using LinqToDB;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Common.TypeReaders.Models;
-using Mewdeko.Database.DbContextStuff;
+using Mewdeko.Modules.Administration.Common;
+using Mewdeko.Modules.Moderation.Common;
 using Mewdeko.Modules.Moderation.Services;
 using Serilog;
 using Swan;
@@ -16,10 +19,10 @@ public partial class Moderation
     /// <summary>
     ///     Module for managing mini warnings.
     /// </summary>
-    /// <param name="db"></param>
-    /// <param name="serv"></param>
+    /// <param name="dbFactory">The db provider</param>
+    /// <param name="serv">Fergun.Interactive paginator builder</param>
     [Group]
-    public class UserPunishCommands2(DbContextProvider dbProvider, InteractiveService serv)
+    public class UserPunishCommands2(IDataConnectionFactory dbFactory, InteractiveService serv)
         : MewdekoSubmodule<UserPunishService2>
     {
         /// <summary>
@@ -128,11 +131,11 @@ public partial class Moderation
 
             if (await Service.GetMWarnlogChannel(ctx.Guild.Id) != 0)
             {
-                await using var dbContext = await dbProvider.GetContextAsync();
+                await using var dbContext = await dbFactory.CreateConnectionAsync();
 
-                var warnings = dbContext.Warnings2
-                    .ForId(ctx.Guild.Id, user.Id)
-                    .Count(w => !w.Forgiven && w.UserId == user.Id);
+                var warnings = await dbContext.Warnings2s
+                    .Where(x => x.UserId == user.Id && x.GuildId == ctx.Guild.Id)
+                    .CountAsync(w => !w.Forgiven && w.UserId == user.Id);
                 var condition = punishment != null;
                 var punishtime = condition ? TimeSpan.FromMinutes(punishment.Time).Humanize() : " ";
                 var punishaction = condition ? punishment.Punishment.ToString() : "None";
@@ -390,7 +393,7 @@ public partial class Moderation
         public async Task MWarnPunish(int number, AddRole _, IRole role, StoopidTime? time = null)
         {
             const PunishmentAction punish = PunishmentAction.AddRole;
-            var success = await Service.WarnPunish(ctx.Guild.Id, number, punish, time, role);
+            var success = await Service.WarnPunish(ctx.Guild.Id, number, (int)punish, time, role);
 
             if (!success)
                 return;
@@ -419,7 +422,7 @@ public partial class Moderation
             if (punish == PunishmentAction.AddRole)
                 return;
 
-            var success = await Service.WarnPunish(ctx.Guild.Id, number, punish, time);
+            var success = await Service.WarnPunish(ctx.Guild.Id, number, (int)punish, time);
 
             if (!success)
                 return;
@@ -470,7 +473,7 @@ public partial class Moderation
                 Strings.MiniWarnPunishListTitle(ctx.Guild.Id),
                 ps.Length > 0
                     ? string.Join("\n", ps.Select(x =>
-                        $"{x.Count} -> {x.Punishment} {(x.Punishment == PunishmentAction.AddRole ? $"<@&{x.RoleId}>" : "")} {(x.Time <= 0 ? "" : $"{x.Time}m")} "))
+                        $"{x.Count} -> {x.Punishment} {(x.Punishment == (int)PunishmentAction.AddRole ? $"<@&{x.RoleId}>" : "")} {(x.Time <= 0 ? "" : $"{x.Time}m")} "))
                     : Strings.MiniWarnPunishListNone(ctx.Guild.Id)
             );
         }

@@ -3,16 +3,18 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
+using LinqToDB;
 using Lavalink4NET;
 using Lavalink4NET.Players;
 using Lavalink4NET.Protocol.Payloads.Events;
 using Lavalink4NET.Rest.Entities.Tracks;
 using Mewdeko.Common.Configs;
-using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.Music.Common;
 using Mewdeko.Services.Strings;
-using Microsoft.EntityFrameworkCore;
+using DataModel;
+using Hqub.Lastfm;
 using Microsoft.Extensions.DependencyInjection;
+using Serilog;
 using SpotifyAPI.Web;
 using Embed = Discord.Embed;
 
@@ -30,7 +32,7 @@ public sealed class MewdekoPlayer : LavalinkPlayer
     private readonly IDataCache cache;
     private readonly IMessageChannel channel;
     private readonly DiscordShardedClient client;
-    private readonly DbContextProvider dbProvider;
+    private readonly IDataConnectionFactory dbFactory;
     private readonly GeneratedBotStrings Strings;
     private readonly Random random = new();
     private bool isAprilFoolsJokeRunning;
@@ -54,7 +56,7 @@ public sealed class MewdekoPlayer : LavalinkPlayer
         creds = properties.ServiceProvider.GetRequiredService<IBotCredentials>();
         channel = properties.Options.Value.Channel;
         client = properties.ServiceProvider.GetRequiredService<DiscordShardedClient>();
-        dbProvider = properties.ServiceProvider.GetRequiredService<DbContextProvider>();
+        dbFactory = properties.ServiceProvider.GetRequiredService<IDataConnectionFactory>();
         cache = properties.ServiceProvider.GetRequiredService<IDataCache>();
         Strings = properties.ServiceProvider.GetRequiredService<GeneratedBotStrings>();
     }
@@ -252,29 +254,29 @@ public sealed class MewdekoPlayer : LavalinkPlayer
         var settings = await GetMusicSettings();
         settings.MusicChannelId = channelId;
 
-        await using var dbContext = await dbProvider.GetContextAsync();
-        await dbContext.SaveChangesAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
+        await db.UpdateAsync(settings);
         await cache.SetMusicPlayerSettings(GuildId, settings);
     }
 
-    private async Task<MusicPlayerSettings> GetMusicSettings()
+    private async Task<MusicPlayerSetting> GetMusicSettings()
     {
         var guildId = GuildId;
         var settings = await cache.GetMusicPlayerSettings(guildId);
         if (settings is not null)
             return settings;
 
-        await using var dbContext = await dbProvider.GetContextAsync();
-        settings = await dbContext.MusicPlayerSettings.FirstOrDefaultAsync(x => x.GuildId == guildId);
+        await using var db = await dbFactory.CreateConnectionAsync();
+        settings = await db.MusicPlayerSettings
+            .FirstOrDefaultAsync(x => x.GuildId == guildId);
 
         if (settings is null)
         {
-            settings = new MusicPlayerSettings
+            settings = new MusicPlayerSetting
             {
                 GuildId = guildId
             };
-            await dbContext.MusicPlayerSettings.AddAsync(settings);
-            await dbContext.SaveChangesAsync();
+            await db.InsertAsync(settings);
         }
 
         await cache.SetMusicPlayerSettings(guildId, settings);
@@ -289,8 +291,8 @@ public sealed class MewdekoPlayer : LavalinkPlayer
         var settings = await GetMusicSettings();
         settings.DjRoleId = roleId;
 
-        await using var dbContext = await dbProvider.GetContextAsync();
-        await dbContext.SaveChangesAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
+        await db.UpdateAsync(settings);
         await cache.SetMusicPlayerSettings(GuildId, settings);
     }
 
@@ -506,101 +508,89 @@ public sealed class MewdekoPlayer : LavalinkPlayer
     ///     Contains logic for handling autoplay in a server using Spotify's recommendation system.
     /// </summary>
     /// <returns>A bool indicating if the operation was successful.</returns>
-    public async Task<bool> AutoPlay()
+/// <summary>
+///     Contains logic for handling autoplay in a server using Last.fm's similar tracks API.
+/// </summary>
+/// <returns>A bool indicating if the operation was successful.</returns>
+public async Task<bool> AutoPlay()
+{
+    try
     {
-        try
+        var autoPlay = await GetAutoPlay();
+        if (autoPlay == 0)
+            return true;
+
+        var queue = await cache.GetMusicQueue(GuildId);
+        var lastSong = queue.MaxBy(x => x.Index);
+        if (lastSong is null)
+            return true;
+
+        // Extract track and artist information
+        var (artistName, trackTitle) = ExtractTrackInfo(lastSong.Track.Title, lastSong.Track.Author);
+
+        // Initialize Last.fm client using API key from credentials
+        if (string.IsNullOrEmpty(creds.LastFmApiKey))
         {
-            var autoPlay = await GetAutoPlay();
-            if (autoPlay == 0)
-                return true;
+            Log.Warning("Last.fm API key is not configured. AutoPlay cannot function.");
+            return false;
+        }
 
-            var queue = await cache.GetMusicQueue(GuildId);
-            var lastSong = queue.MaxBy(x => x.Index);
-            if (lastSong is null)
-                return true;
+        var lastfmClient = new LastfmClient(creds.LastFmApiKey);
 
-            // Extract track and artist information
-            var (artistName, trackTitle) = ExtractTrackInfo(lastSong.Track.Title, lastSong.Track.Author);
-
-            // Use existing Spotify client
-            var spotifyClient = await GetSpotifyClient();
-
-            // Search for the track on Spotify
-            var searchRequest = new SearchRequest(SearchRequest.Types.Track, $"{trackTitle} {artistName}");
-            var searchResults = await spotifyClient.Search.Item(searchRequest);
-
-            // If no results found, try with just the track title
-            if (searchResults.Tracks.Items.Count == 0)
-            {
-                searchRequest = new SearchRequest(SearchRequest.Types.Track, trackTitle);
-                searchResults = await spotifyClient.Search.Item(searchRequest);
-
-                // If still no results, return
-                if (searchResults.Tracks.Items.Count == 0)
-                    return true;
-            }
-
-            // Get recommendations based on seed track
-            var seedTrack = searchResults.Tracks.Items[0];
-
-            // Create recommendation request with enhanced parameters
-            var recommendationsRequest = new RecommendationsRequest();
-
-            // Add seed track
-            recommendationsRequest.SeedTracks.Add(seedTrack.Id);
-
-            // If we have space, add seed artists (up to 2, ensuring we don't exceed 5 total seeds)
-            foreach (var artist in seedTrack.Artists.Take(Math.Min(4, seedTrack.Artists.Count)))
-            {
-                recommendationsRequest.SeedArtists.Add(artist.Id);
-
-                // Break if we've reached max of 5 seed values
-                if (recommendationsRequest.SeedArtists.Count + recommendationsRequest.SeedTracks.Count >= 5)
-                    break;
-            }
-
-            // Set limit to number of tracks to autoplay
-            recommendationsRequest.Limit = autoPlay;
-
-            // Get recommendations
-            var recommendations = await spotifyClient.Browse.GetRecommendations(recommendationsRequest);
-
-            // Filter out tracks that are already in the queue
-            var queuedTrackNames =
-                new HashSet<string>(queue.Select(q => q.Track.Title), StringComparer.OrdinalIgnoreCase);
-            var filteredTracks = recommendations.Tracks
-                .Where(t => !queuedTrackNames.Contains(t.Name))
-                .ToList();
-
-            var toTake = Math.Min(autoPlay, filteredTracks.Count);
-
-            foreach (var track in filteredTracks.Take(toTake))
-            {
-                // Create search query with track name and primary artist
-                var artistsString = string.Join(", ", track.Artists.Take(1).Select(a => a.Name));
-                var searchQuery = $"{track.Name} {artistsString}";
-
-                var trackToLoad = await audioService.Tracks.LoadTrackAsync(searchQuery, TrackSearchMode.YouTube);
-                if (trackToLoad is null)
-                    continue;
-
-                queue.Add(new MewdekoTrack(queue.Count + 1, trackToLoad, new PartialUser
-                {
-                    AvatarUrl = client.CurrentUser.GetAvatarUrl(), Username = "Mewdeko", Id = client.CurrentUser.Id
-                }));
-            }
-
-            await cache.SetMusicQueue(GuildId, queue);
+        // Get similar tracks from Last.fm
+        var similarTracks = await lastfmClient.Track.GetSimilarAsync(trackTitle, artistName, limit: autoPlay * 2);
+        if (similarTracks == null || !similarTracks.Any())
+        {
+            Log.Warning($"No similar tracks found for {trackTitle} by {artistName}");
             return true;
         }
-        catch (Exception e)
+
+        // Filter out tracks that are already in the queue
+        var queuedTrackNames = new HashSet<string>(
+            queue.Select(q => q.Track.Title.ToLower()),
+            StringComparer.OrdinalIgnoreCase);
+
+        var filteredTracks = similarTracks
+            .Where(t => !queuedTrackNames.Contains($"{t.Name} - {t.Artist.Name}".ToLower()))
+            .ToList();
+
+        var toTake = Math.Min(autoPlay, filteredTracks.Count);
+
+        Log.Information($"Last.fm AutoPlay found {filteredTracks.Count} potential tracks, adding {toTake}");
+
+        foreach (var track in filteredTracks.Take(toTake))
         {
-            Console.WriteLine($"Spotify AutoPlay error: {e.Message}");
-            // Fall back to default behavior if Spotify fails
-            return true;
+            // Create search query with track name and artist
+            var searchQuery = $"{track.Name} {track.Artist.Name}";
+
+            var trackToLoad = await audioService.Tracks.LoadTrackAsync(searchQuery, TrackSearchMode.YouTube);
+            if (trackToLoad is null)
+            {
+                Log.Debug($"Could not load track: {searchQuery}");
+                continue;
+            }
+
+            queue.Add(new MewdekoTrack(queue.Count + 1, trackToLoad, new PartialUser
+            {
+                AvatarUrl = client.CurrentUser.GetAvatarUrl(),
+                Username = "Mewdeko (Last.fm AutoPlay)",
+                Id = client.CurrentUser.Id
+            }));
+
+            Log.Debug($"Added track to queue: {trackToLoad.Title}");
         }
+
+        await cache.SetMusicQueue(GuildId, queue);
+
+        // If we've added tracks, return success
+        return true;
     }
-
+    catch (Exception e)
+    {
+        Log.Error(e, "Last.fm AutoPlay error");
+        return false;
+    }
+}
     /// <summary>
     ///     Extracts the artist name and track title from a song's metadata.
     /// </summary>
@@ -649,8 +639,8 @@ public sealed class MewdekoPlayer : LavalinkPlayer
         var settings = await GetMusicSettings();
         settings.Volume = volume;
 
-        await using var dbContext = await dbProvider.GetContextAsync();
-        await dbContext.SaveChangesAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
+        await db.UpdateAsync(settings);
         await cache.SetMusicPlayerSettings(GuildId, settings);
     }
 
@@ -659,12 +649,11 @@ public sealed class MewdekoPlayer : LavalinkPlayer
     /// </summary>
     /// <param name="guildId"></param>
     /// <param name="settings"></param>
-    public async Task SetMusicSettings(ulong guildId, MusicPlayerSettings settings)
+    public async Task SetMusicSettings(ulong guildId, MusicPlayerSetting settings)
     {
-        await using var db = await dbProvider.GetContextAsync();
-        db.MusicPlayerSettings.Update(settings);
+        await using var db = await dbFactory.CreateConnectionAsync();
+        await db.UpdateAsync(settings);
         await cache.SetMusicPlayerSettings(guildId, settings);
-        await db.SaveChangesAsync();
     }
 
     /// <summary>
@@ -674,7 +663,7 @@ public sealed class MewdekoPlayer : LavalinkPlayer
     public async Task<PlayerRepeatType> GetRepeatType()
     {
         var settings = await GetMusicSettings();
-        return settings.PlayerRepeat;
+        return (PlayerRepeatType)settings.PlayerRepeat;
     }
 
     /// <summary>
@@ -685,10 +674,10 @@ public sealed class MewdekoPlayer : LavalinkPlayer
     public async Task SetRepeatTypeAsync(PlayerRepeatType repeatType)
     {
         var settings = await GetMusicSettings();
-        settings.PlayerRepeat = repeatType;
+        settings.PlayerRepeat = (int)repeatType;
 
-        await using var dbContext = await dbProvider.GetContextAsync();
-        await dbContext.SaveChangesAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
+        await db.UpdateAsync(settings);
         await cache.SetMusicPlayerSettings(GuildId, settings);
     }
 
@@ -710,8 +699,8 @@ public sealed class MewdekoPlayer : LavalinkPlayer
         var settings = await GetMusicSettings();
         settings.AutoPlay = autoPlay;
 
-        await using var dbContext = await dbProvider.GetContextAsync();
-        await dbContext.SaveChangesAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
+        await db.UpdateAsync(settings);
         await cache.SetMusicPlayerSettings(GuildId, settings);
     }
 

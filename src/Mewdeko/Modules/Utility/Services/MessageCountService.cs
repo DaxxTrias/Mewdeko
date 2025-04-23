@@ -1,7 +1,8 @@
 using System.Data;
 using System.Threading;
-using Mewdeko.Database.DbContextStuff;
-using Microsoft.EntityFrameworkCore;
+using DataModel;
+using LinqToDB;
+using LinqToDB.Data;
 using Microsoft.Extensions.Caching.Memory;
 using Npgsql;
 using Polly;
@@ -37,7 +38,7 @@ public class MessageCountService : INService
         User
     }
 
-    private readonly DbContextProvider dbContext;
+    private readonly IDataConnectionFactory dbFactory;
     private readonly ConcurrentDictionary<ulong, int> minCounts = [];
     private readonly HashSet<ulong> countGuilds = [];
     private readonly IMemoryCache cache;
@@ -49,19 +50,42 @@ public class MessageCountService : INService
 
     /// <summary>
     /// </summary>
-    public MessageCountService(DbContextProvider dbContext, EventHandler handler, IMemoryCache cache)
+    public MessageCountService(IDataConnectionFactory dbFactory, EventHandler handler, IMemoryCache cache)
     {
-        this.dbContext = dbContext;
+        this.dbFactory = dbFactory;
         this.cache = cache;
+        _ = InitializeGuildSettings();
         handler.MessageReceived += HandleCount;
         updateChannel = Channel.CreateUnbounded<(ulong, ulong, ulong, DateTime)>();
         _ = ProcessUpdatesAsync(); // Start background processor
     }
 
+    private async Task InitializeGuildSettings()
+    {
+        try
+        {
+            await using var db = await dbFactory.CreateConnectionAsync();
+            var enabledGuilds = await db.GuildConfigs
+                .Where(gc => gc.UseMessageCount)
+                .Select(gc => new { gc.GuildId, gc.MinMessageLength })
+                .ToListAsync();
+
+            foreach (var guild in enabledGuilds)
+            {
+                countGuilds.Add(guild.GuildId);
+                minCounts[guild.GuildId] = guild.MinMessageLength;
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Failed to initialize guild message count settings");
+        }
+    }
+
     private static readonly AsyncCircuitBreakerPolicy<MessageCount> CircuitBreaker =
         Policy<MessageCount>
             .Handle<Exception>()
-            .CircuitBreakerAsync<MessageCount>(
+            .CircuitBreakerAsync(
                 handledEventsAllowedBeforeBreaking: 10,
                 durationOfBreak: TimeSpan.FromSeconds(30),
                 onBreak: (ex, duration) =>
@@ -113,39 +137,68 @@ public class MessageCountService : INService
         {}
     }
 
-    private async Task ProcessBatchAsync(List<(ulong GuildId, ulong ChannelId, ulong UserId, DateTime Timestamp)> batch)
+private async Task ProcessBatchAsync(List<(ulong GuildId, ulong ChannelId, ulong UserId, DateTime Timestamp)> batch)
+{
+    await updateLock.WaitAsync();
+    try
     {
-        await updateLock.WaitAsync();
-        try
+        var updates = batch.GroupBy(x => (x.GuildId, x.ChannelId, x.UserId))
+            .ToDictionary(g => g.Key, g => g.Count());
+
+        // Dictionary to store MessageCount objects that need updating
+        var messageCountsToUpdate = new List<MessageCount>();
+        var messageCountIds = new Dictionary<(ulong GuildId, ulong ChannelId, ulong UserId), long>();
+
+        // First, process each group to get the corresponding MessageCount
+        foreach (var ((guildId, channelId, userId), count) in updates)
         {
-            var updates = batch.GroupBy(x => (x.GuildId, x.ChannelId, x.UserId))
-                .ToDictionary(g => g.Key, g => g.Count());
+            var key = $"msgcount:{guildId}:{channelId}:{userId}";
+            var current = await GetOrCreateMessageCountAsync(guildId, channelId, userId);
 
-            foreach (var ((guildId, channelId, userId), count) in updates)
-            {
-                var key = $"msgcount:{guildId}:{channelId}:{userId}";
-                var current = await GetOrCreateMessageCountAsync(guildId, channelId, userId);
-                current.Count += (ulong)count;
+            // Update the count
+            current.Count += (ulong)count;
 
-                cache.Set(key, current, TimeSpan.FromMinutes(CacheMinutes));
-            }
+            // Add to list for database update
+            messageCountsToUpdate.Add(current);
 
-            // Batch update timestamps
-            await using var db = await dbContext.GetContextAsync();
-            var timestamps = batch.Select(x => new MessageTimestamp
-            {
-                GuildId = x.GuildId, ChannelId = x.ChannelId, UserId = x.UserId, Timestamp = x.Timestamp
-            });
+            // Update the cache
+            cache.Set(key, current, TimeSpan.FromMinutes(CacheMinutes));
 
-            await db.MessageTimestamps.AddRangeAsync(timestamps);
-            await db.SaveChangesAsync();
+            // Store the ID for timestamps
+            messageCountIds[(guildId, channelId, userId)] = current.Id;
         }
-        finally
+
+        // Update the database
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        // Bulk update the message counts
+        foreach (var countRecord in messageCountsToUpdate)
         {
-            updateLock.Release();
+            await db.UpdateAsync(countRecord);
         }
+
+        // Create and insert timestamps
+        var timestamps = batch.Select(x => new MessageTimestamp
+        {
+            GuildId = x.GuildId,
+            ChannelId = x.ChannelId,
+            UserId = x.UserId,
+            Timestamp = x.Timestamp,
+            MessageCountId = messageCountIds[(x.GuildId, x.ChannelId, x.UserId)]
+        }).ToList();
+
+        // Use bulk insert for timestamps
+        await db.BulkCopyAsync(timestamps);
     }
-
+    catch (Exception ex)
+    {
+        Log.Error(ex, "Error processing message count batch: {ErrorMessage}", ex.Message);
+    }
+    finally
+    {
+        updateLock.Release();
+    }
+}
     private async Task HandleCount(SocketMessage msg)
     {
         if (!IsValidMessage(msg))
@@ -169,72 +222,77 @@ public class MessageCountService : INService
     /// <param name="cancellationToken"></param>
     /// <returns>The existing or newly created MessageCount record.</returns>
     private async Task<MessageCount> GetOrCreateMessageCountAsync(
-    ulong guildId,
-    ulong channelId,
-    ulong userId,
-    CancellationToken cancellationToken = default)
-{
-    var key = $"msgcount:{guildId}:{channelId}:{userId}";
-
-    try
+        ulong guildId,
+        ulong channelId,
+        ulong userId,
+        CancellationToken cancellationToken = default)
     {
-        // Try cache first, outside of retry policy
-        if (cache.TryGetValue(key, out MessageCount cachedCount))
+        var key = $"msgcount:{guildId}:{channelId}:{userId}";
+
+        try
         {
-            Log.Debug("Cache hit for key {Key}", key);
-            return cachedCount;
-        }
-
-        Log.Debug("Cache miss for key {Key}", key);
-
-        // Combine policies
-        var policy = DatabasePolicy.WrapAsync(CircuitBreaker);
-
-        var count = await policy.ExecuteAsync(async _ =>
-        {
-            await using var db = await dbContext.GetContextAsync();
-
-            var record = await db.MessageCounts
-                .FirstOrDefaultAsync(x =>
-                    x.GuildId == guildId &&
-                    x.ChannelId == channelId &&
-                    x.UserId == userId,
-                    cancellationToken);
-
-            if (record == null)
+            // Try cache first, outside of retry policy
+            if (cache.TryGetValue(key, out MessageCount cachedCount))
             {
-                record = new MessageCount
-                {
-                    GuildId = guildId,
-                    ChannelId = channelId,
-                    UserId = userId,
-                    Count = 0
-                };
-
-                db.MessageCounts.Add(record);
-                await db.SaveChangesAsync(cancellationToken);
-                Log.Information("Created new message count record for {Key}", key);
+                Log.Debug("Cache hit for key {Key}", key);
+                return cachedCount;
             }
 
-            // Cache the result
-            var cacheEntryOptions = new MemoryCacheEntryOptions()
-                .SetSlidingExpiration(TimeSpan.FromMinutes(CacheMinutes))
-                .RegisterPostEvictionCallback((k, v, r, s) =>
-                    Log.Debug("Cache entry {Key} evicted due to {Reason}", k, r));
+            Log.Debug("Cache miss for key {Key}", key);
 
-            cache.Set(key, record, cacheEntryOptions);
+            // Combine policies
+            var policy = DatabasePolicy.WrapAsync(CircuitBreaker);
 
-            return record;
-        }, new Context { ["CacheKey"] = key });
+            var count = await policy.ExecuteAsync(async _ =>
+            {
+                await using var db = await dbFactory.CreateConnectionAsync(cancellationToken);
 
-        return count;
+                var record = await db.MessageCounts
+                    .LoadWithAsTable(x => x.MessageTimestamps)
+                    .FirstOrDefaultAsync(x =>
+                            x.GuildId == guildId &&
+                            x.ChannelId == channelId &&
+                            x.UserId == userId,
+                        cancellationToken);
+
+                if (record == null)
+                {
+                    record = new MessageCount
+                    {
+                        GuildId = guildId, ChannelId = channelId, UserId = userId, Count = 0
+                    };
+
+                    record.Id = await db.InsertWithInt32IdentityAsync(record, token: cancellationToken);
+                    Log.Information("Created new message count record for {Key}", key);
+                }
+
+                // Cache the result
+                var cacheEntryOptions = new MemoryCacheEntryOptions()
+                    .SetSlidingExpiration(TimeSpan.FromMinutes(CacheMinutes))
+                    .RegisterPostEvictionCallback((k, v, r, s) =>
+                        Log.Debug("Cache entry {Key} evicted due to {Reason}", k, r));
+
+                cache.Set(key, record, cacheEntryOptions);
+
+                return record;
+            }, new Context
+            {
+                ["CacheKey"] = key
+            });
+
+            return count;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Log.Error(ex, "Failed to get/create message count for {Key}", key);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"This shouldnt happen in message counts: {ex}");
+            throw;
+        }
     }
-    catch (Exception ex) when (ex is not OperationCanceledException)
-    {
-        Log.Error(ex, "Failed to get/create message count for {Key}", key);
-        throw;
-    }
-}
 
     /// <summary>
     ///     Checks if a message is valid for counting based on guild settings and message properties.
@@ -264,8 +322,8 @@ public class MessageCountService : INService
     {
         var wasAdded = false;
 
-        await using var db = await dbContext.GetContextAsync();
-        await using var transaction = await db.Database.BeginTransactionAsync(
+        await using var db = await dbFactory.CreateConnectionAsync();
+        await using var transaction = await db.BeginTransactionAsync(
             IsolationLevel.ReadCommitted,
             CancellationToken.None);
 
@@ -295,6 +353,7 @@ public class MessageCountService : INService
 
                 // Load existing counts into cache
                 var existingCounts = await db.MessageCounts
+                    .LoadWithAsTable(x => x.MessageTimestamps)
                     .Where(x => x.GuildId == guildId)
                     .ToListAsync();
 
@@ -310,17 +369,13 @@ public class MessageCountService : INService
                 countGuilds.Remove(guildId);
                 minCounts.TryRemove(guildId, out _);
 
-                // Clear cache for this guild
                 _ = $"msgcount:{guildId}:*";
-                // Note: Implementation of cache pattern removal depends on your cache provider
-                // You may need to track keys separately if your cache doesn't support pattern matching
             }
 
-            // Update database
             await db.GuildConfigs
                 .Where(x => x.GuildId == guildId)
-                .ExecuteUpdateAsync(s => s
-                    .SetProperty(b => b.UseMessageCount, wasAdded));
+                .Set(x => x.UseMessageCount, wasAdded)
+                .UpdateAsync();
 
             await transaction.CommitAsync();
             return wasAdded;
@@ -361,26 +416,59 @@ public class MessageCountService : INService
         if (!countGuilds.Contains(guildId))
             return ([], false);
 
-        await using var db = await dbContext.GetContextAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
 
-        var query = queryType switch
+        // Define the base query
+        IQueryable<MessageCount> query;
+
+        // Build query based on query type
+        switch (queryType)
         {
-            CountQueryType.Guild => db.MessageCounts
-                .Where(x => x.GuildId == snowflakeId)
-                .Include(x => x.Timestamps),
+            case CountQueryType.Guild:
+                query = db.MessageCounts.LoadWithAsTable(x => x.MessageTimestamps).Where(x => x.GuildId == snowflakeId);
+                break;
+            case CountQueryType.Channel:
+                query = db.MessageCounts.LoadWithAsTable(x => x.MessageTimestamps).Where(x => x.ChannelId == snowflakeId && x.GuildId == guildId);
+                break;
+            case CountQueryType.User:
+                query = db.MessageCounts.LoadWithAsTable(x => x.MessageTimestamps).Where(x => x.UserId == snowflakeId && x.GuildId == guildId);
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(queryType), queryType, null);
+        }
 
-            CountQueryType.Channel => db.MessageCounts
-                .Where(x => x.ChannelId == snowflakeId && x.GuildId == guildId)
-                .Include(x => x.Timestamps),
-
-            CountQueryType.User => db.MessageCounts
-                .Where(x => x.UserId == snowflakeId && x.GuildId == guildId)
-                .Include(x => x.Timestamps),
-
-            _ => throw new ArgumentOutOfRangeException(nameof(queryType), queryType, null)
-        };
-
+        // Execute query to get message counts
         var counts = await query.ToArrayAsync();
+
+        if (counts.Length > 0)
+        {
+            var timestampQuery = queryType switch
+            {
+                CountQueryType.Guild => db.MessageTimestamps.Where(x => x.GuildId == snowflakeId),
+                CountQueryType.Channel => db.MessageTimestamps.Where(x => x.ChannelId == snowflakeId && x.GuildId == guildId),
+                CountQueryType.User => db.MessageTimestamps.Where(x => x.UserId == snowflakeId && x.GuildId == guildId),
+                _ => throw new ArgumentOutOfRangeException(nameof(queryType), queryType, null)
+            };
+
+            var timestamps = await timestampQuery.ToListAsync();
+
+            // Group timestamps by their identifiers for efficient lookup
+            var timestampGroups = timestamps.GroupBy(
+                t => (t.GuildId, t.ChannelId, t.UserId),
+                t => t,
+                (key, group) => new { Key = key, Timestamps = group.ToList() }
+            ).ToDictionary(g => g.Key, g => g.Timestamps);
+
+            // Assign timestamps to their corresponding message counts
+            foreach (var count in counts)
+            {
+                var key = (count.GuildId, count.ChannelId, count.UserId);
+                if (timestampGroups.TryGetValue(key, out var matchingTimestamps))
+                {
+                    count.MessageTimestamps = matchingTimestamps;
+                }
+            }
+        }
 
         // Cache the results
         foreach (var count in counts)
@@ -405,7 +493,7 @@ public class MessageCountService : INService
         if (!countGuilds.Contains(guildId))
             return 0;
 
-        await using var db = await dbContext.GetContextAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
 
         var query = queryType switch
         {
@@ -424,7 +512,6 @@ public class MessageCountService : INService
         return (ulong)await query.SumAsync(x => (decimal)x.Count);
     }
 
-
     /// <summary>
     ///     Gets the busiest hours for a guild
     /// </summary>
@@ -433,7 +520,7 @@ public class MessageCountService : INService
     /// <returns>Collection of hours and their message counts</returns>
     public async Task<IEnumerable<(int Hour, int Count)>> GetBusiestHours(ulong guildId, int days = 7)
     {
-        await using var db = await dbContext.GetContextAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
         var startDate = DateTime.UtcNow.AddDays(-Math.Min(days, 30));
 
         var results = await db.MessageTimestamps
@@ -458,7 +545,7 @@ public class MessageCountService : INService
     /// <returns>Collection of days and their message counts</returns>
     public async Task<IEnumerable<(DayOfWeek Day, int Count)>> GetBusiestDays(ulong guildId, int weeks = 4)
     {
-        await using var db = await dbContext.GetContextAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
         var startDate = DateTime.UtcNow.AddDays(-Math.Min(7 * weeks, 30));
 
         var results = await db.MessageTimestamps
@@ -484,8 +571,8 @@ public class MessageCountService : INService
     /// <returns>True if any records were found and removed, false otherwise</returns>
     public async Task<bool> ResetCount(ulong guildId, ulong userId = 0, ulong channelId = 0)
     {
-        await using var db = await dbContext.GetContextAsync();
-        await using var transaction = await db.Database.BeginTransactionAsync(
+        await using var db = await dbFactory.CreateConnectionAsync();
+        await using var transaction = await db.BeginTransactionAsync(
             IsolationLevel.ReadCommitted,
             CancellationToken.None);
 
@@ -513,12 +600,9 @@ public class MessageCountService : INService
             if (!countsToRemove.Any())
                 return false;
 
-            // Remove records from database
-            db.MessageCounts.RemoveRange(countsToRemove);
-            await db.SaveChangesAsync();
+            await countsQuery.DeleteAsync();
 
-            // Remove associated timestamps
-            await timestampsQuery.ExecuteDeleteAsync();
+            await timestampsQuery.DeleteAsync();
 
             // Clear cache entries
             foreach (var key in countsToRemove.Select(count =>

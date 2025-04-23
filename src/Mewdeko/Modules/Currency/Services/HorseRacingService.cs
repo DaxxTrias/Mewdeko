@@ -21,20 +21,19 @@ public class HorseRacingService : INService
     /// <summary>
     ///     Allows a user to join a race or starts a new race if none exists.
     /// </summary>
-    /// <param name="userId">The ID of the user joining the race.</param>
+    /// <param name="user">The ID of the user joining the race.</param>
     /// <param name="guildId">The ID of the guild where the race is taking place.</param>
     /// <param name="betAmount">The amount of currency the user is betting.</param>
     /// <returns>A tuple indicating the success of joining, a message, and whether the race has started.</returns>
     /// <summary>
     ///     Allows a user to join a race or starts a new race if none exists.
     /// </summary>
-    /// <param name="user">The user joining the race.</param>
-    /// <param name="guildId">The ID of the guild where the race is taking place.</param>
-    /// <param name="betAmount">The amount of currency the user is betting.</param>
     /// <returns>A tuple indicating the success of joining, a message, and whether the race has started.</returns>
     public async Task<(bool Success, string Message, bool RaceStarted)> JoinRace(IUser user, ulong guildId,
         int betAmount)
     {
+        await Task.CompletedTask;
+
         var race = races.GetOrAdd(guildId, _ => new RaceData());
 
         lock (race)
@@ -69,6 +68,7 @@ public class HorseRacingService : INService
     /// <param name="guildId">The ID of the guild where the race is taking place.</param>
     private async Task AddAiPlayersIfNeeded(ulong guildId)
     {
+        await Task.CompletedTask;
         if (races.TryGetValue(guildId, out var race))
         {
             var rand = new Random();
@@ -98,6 +98,8 @@ public class HorseRacingService : INService
     /// <returns>A list of updated racer progress.</returns>
     public async Task<List<RacerProgress>>? UpdateRaceProgress(ulong guildId)
     {
+        await Task.CompletedTask;
+
         if (!races.TryGetValue(guildId, out var race))
             return [];
 

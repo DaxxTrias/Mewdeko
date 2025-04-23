@@ -1,4 +1,5 @@
-﻿using Mewdeko.Modules.Searches.Common.StreamNotifications.Models;
+﻿
+using Mewdeko.Modules.Searches.Common.StreamNotifications.Models;
 
 namespace Mewdeko.Modules.Searches.Common.StreamNotifications.Providers;
 
@@ -15,7 +16,7 @@ public abstract class Provider
     /// <summary>
     ///     Type of the platform.
     /// </summary>
-    public abstract FollowedStream.FType Platform { get; }
+    public abstract FType Platform { get; }
 
     /// <summary>
     ///     Gets the stream usernames which fail to execute due to an error, and when they started throwing errors.
@@ -63,7 +64,7 @@ public abstract class Provider
     ///     if you've overridden the <see cref="FailingStreams" /> property.
     /// </summary>
     /// <param name="login"></param>
-    public virtual void ClearErrorsFor(string login)
+    public virtual void ClearErrorsFor(string? login)
     {
         FailingStreams.Clear();
     }

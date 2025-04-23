@@ -272,7 +272,7 @@ public class Vote(InteractiveService interactivity) : MewdekoModuleBase<VoteServ
     [RequireContext(ContextType.Guild)]
     public async Task VotesLeaderboard(bool monthly = false)
     {
-        List<Database.Models.Votes> votes;
+        List<DataModel.Vote> votes;
         if (monthly)
             votes = (await Service.GetVotes(ctx.Guild.Id)).Where(x => x.DateAdded.Value.Month == DateTime.UtcNow.Month)
                 .ToList();

@@ -1,15 +1,14 @@
 ﻿using System.Globalization;
 using System.Text.RegularExpressions;
 using Discord.Net;
-using LinqToDB.EntityFrameworkCore;
+using LinqToDB;
 using Mewdeko.Common.Configs;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Common.PubSub;
-using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.Administration.Services;
 using Mewdeko.Modules.Moderation.Services;
 using Mewdeko.Services.Strings;
-using Microsoft.EntityFrameworkCore;
+using DataModel;
 using Serilog;
 
 namespace Mewdeko.Modules.Permissions.Services;
@@ -25,7 +24,7 @@ public class FilterService : IEarlyBehavior, INService
     private readonly DiscordShardedClient client;
     private readonly BotConfig config;
     private readonly CultureInfo? cultureInfo = new("en-US");
-    private readonly DbContextProvider dbProvider;
+    private readonly IDataConnectionFactory dbFactory;
     private readonly GuildSettingsService gss;
     private readonly UserPunishService userPunServ;
 
@@ -36,11 +35,11 @@ public class FilterService : IEarlyBehavior, INService
     ///     On initialization, this service loads filtering configurations from the database and subscribes to necessary events
     ///     for real-time monitoring and filtering of messages across all guilds the bot is part of.
     /// </remarks>
-    public FilterService(DiscordShardedClient client, DbContextProvider dbProvider, IPubSub pubSub,
+    public FilterService(DiscordShardedClient client, IDataConnectionFactory dbFactory, IPubSub pubSub,
         UserPunishService upun2, GeneratedBotStrings strng, AdministrationService ass,
         GuildSettingsService gss, EventHandler eventHandler, BotConfig config)
     {
-        this.dbProvider = dbProvider;
+        this.dbFactory = dbFactory;
         this.client = client;
         userPunServ = upun2;
         Strings = strng;
@@ -112,14 +111,15 @@ public class FilterService : IEarlyBehavior, INService
     /// <param name="id2">The ID of the guild for which the word is blacklisted.</param>
     public async Task WordBlacklist(string id, ulong id2)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
 
-        var item = new AutoBanEntry
+        var item = new AutoBanWord
         {
-            Word = id, GuildId = id2
+            Word = id,
+            GuildId = id2
         };
-        dbContext.AutoBanWords.Add(item);
-        await dbContext.SaveChangesAsync();
+
+        await db.InsertAsync(item);
     }
 
     /// <summary>
@@ -129,15 +129,11 @@ public class FilterService : IEarlyBehavior, INService
     /// <param name="id2">The ID of the guild from which the word is removed.</param>
     public async Task UnBlacklist(string id, ulong id2)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
 
-        var toRemove = dbContext.AutoBanWords
-            .FirstOrDefault(bi => bi.Word == id && bi.GuildId == id2);
-
-        if (toRemove is not null)
-            dbContext.AutoBanWords.Remove(toRemove);
-
-        await dbContext.SaveChangesAsync();
+        await db.AutoBanWords
+            .Where(bi => bi.Word == id && bi.GuildId == id2)
+            .DeleteAsync();
     }
 
     /// <summary>
@@ -148,8 +144,10 @@ public class FilterService : IEarlyBehavior, INService
     /// <returns>A set of filtered words for the channel, or null if no filters are set.</returns>
     public async Task<bool> FilterChannel(ulong channelId, ulong guildId)
     {
-        var config = await gss.GetGuildConfig(guildId);
-        return config.FilterWordsChannelIds.Any(x => x.ChannelId == channelId);
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        return await db.FilterWordsChannelIds
+            .AnyAsync(x => x.GuildId == guildId && x.ChannelId == channelId);
     }
 
     /// <summary>
@@ -159,7 +157,7 @@ public class FilterService : IEarlyBehavior, INService
     /// <returns>The number of warnings set for invite violations in the guild.</returns>
     public async Task<int> GetInvWarn(ulong id)
     {
-        return (await gss.GetGuildConfig(id)).invwarn;
+        return (await gss.GetGuildConfig(id)).Invwarn;
     }
 
     /// <summary>
@@ -177,14 +175,9 @@ public class FilterService : IEarlyBehavior, INService
             _ => yesno
         };
 
-
-        await using var dbContext = await dbProvider.GetContextAsync();
-        {
-            await using var db = await dbProvider.GetContextAsync();
-            var gc = await db.ForGuildId(guild.Id, set => set);
-            gc.invwarn = yesno;
-            await gss.UpdateGuildConfig(guild.Id, gc);
-        }
+        var gc = await gss.GetGuildConfig(guild.Id);
+        gc.Invwarn = yesno;
+        await gss.UpdateGuildConfig(guild.Id, gc);
     }
 
     /// <summary>
@@ -194,7 +187,7 @@ public class FilterService : IEarlyBehavior, INService
     /// <returns>The number of warnings set for filtered word violations in the guild.</returns>
     public async Task<int> GetFw(ulong id)
     {
-        return (await gss.GetGuildConfig(id)).fwarn;
+        return (await gss.GetGuildConfig(id)).Fwarn;
     }
 
     /// <summary>
@@ -212,14 +205,9 @@ public class FilterService : IEarlyBehavior, INService
             _ => yesno
         };
 
-
-        await using var dbContext = await dbProvider.GetContextAsync();
-        {
-            await using var db = await dbProvider.GetContextAsync();
-            var gc = await db.ForGuildId(guild.Id, set => set);
-            gc.fwarn = yesno;
-            await gss.UpdateGuildConfig(guild.Id, gc);
-        }
+        var gc = await gss.GetGuildConfig(guild.Id);
+        gc.Fwarn = yesno;
+        await gss.UpdateGuildConfig(guild.Id, gc);
     }
 
     /// <summary>
@@ -228,16 +216,27 @@ public class FilterService : IEarlyBehavior, INService
     /// <param name="guildId">The ID of the guild for which to clear filtered words.</param>
     public async Task ClearFilteredWords(ulong guildId)
     {
-        await using var db = await dbProvider.GetContextAsync();
-        var gc = await db.ForGuildId(guildId,
-            set => set.Include(x => x.FilteredWords)
-                .Include(x => x.FilterWordsChannelIds));
+        await using var db = await dbFactory.CreateConnectionAsync();
 
-        gc.FilterWords = false;
-        gc.FilteredWords.Clear();
-        gc.FilterWordsChannelIds.Clear();
+        // Delete all filtered words for this guild
+        await db.FilteredWords
+            .Where(x => x.GuildId == guildId)
+            .DeleteAsync();
 
-        await gss.UpdateGuildConfig(guildId, gc);
+        // Delete all filter channel IDs for this guild
+        await db.FilterWordsChannelIds
+            .Where(x => x.GuildId == guildId)
+            .DeleteAsync();
+
+        // Update FilterWords flag in GuildConfig
+        var guildConfig = await db.GuildConfigs
+            .FirstOrDefaultAsync(gc => gc.GuildId == guildId);
+
+        if (guildConfig != null)
+        {
+            guildConfig.FilterWords = false;
+            await db.UpdateAsync(guildConfig);
+        }
     }
 
     /// <summary>
@@ -247,8 +246,15 @@ public class FilterService : IEarlyBehavior, INService
     /// <returns>A set of filtered words for the server, or null if no filters are set.</returns>
     public async Task<HashSet<string>?> FilteredWordsForServer(ulong guildId)
     {
-        var config = await gss.GetGuildConfig(guildId);
-        return config.FilteredWords.Select(x => x.Word).ToHashSet();
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        // Get filtered words for this guild
+        var words = await db.FilteredWords
+            .Where(x => x.GuildId == guildId)
+            .Select(x => x.Word)
+            .ToListAsync();
+
+        return words.Count > 0 ? words.ToHashSet() : [];
     }
 
 
@@ -315,93 +321,98 @@ public class FilterService : IEarlyBehavior, INService
 
     private async Task<bool> ShouldFilterChannel(ulong channelId, ulong guildId)
     {
-        var config = await gss.GetGuildConfig(guildId);
-        return config.FilterWordsChannelIds.Any(x => x.ChannelId == channelId);
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        return await db.FilterWordsChannelIds
+            .AnyAsync(x => x.GuildId == guildId && x.ChannelId == channelId);
     }
 
     private async Task<HashSet<string>> GetFilteredWordsForServer(ulong guildId)
     {
-        var config = await gss.GetGuildConfig(guildId);
-        return config.FilteredWords.Select(x => x.Word).ToHashSet();
-    }
+        await using var db = await dbFactory.CreateConnectionAsync();
 
+        var words = await db.FilteredWords
+            .Where(x => x.GuildId == guildId)
+            .Select(x => x.Word)
+            .ToListAsync();
+
+        return words.ToHashSet();
+    }
 
     private async Task<HashSet<string>> GetBannedWordsForServer(ulong guildId)
-{
-    await using var dbContext = await dbProvider.GetContextAsync();
-    return dbContext.AutoBanWords.ToLinqToDB()
-        .Where(x => x.GuildId == guildId)
-        .Select(x => x.Word)
-        .ToHashSet();
-}
-
-private async Task<(bool banned, string matchedText)> IsWordBanned(string word, string content, ulong guildId)
-{
-    try
     {
-        var regex = new Regex(word, RegexOptions.Compiled, TimeSpan.FromMilliseconds(250));
-        var match = regex.Match(content);
-        return (match.Success, match.Value);
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        return await db.AutoBanWords
+            .Where(x => x.GuildId == guildId)
+            .Select(x => x.Word)
+            .ToListAsync()
+            .ContinueWith(t => t.Result.ToHashSet());
     }
-    catch (ArgumentException)
+
+    private async Task<(bool banned, string matchedText)> IsWordBanned(string word, string content, ulong guildId)
     {
-        await RemoveInvalidBannedRegex(word, guildId);
-        return (false, string.Empty);
-    }
-}
-
-private async Task RemoveInvalidBannedRegex(string word, ulong guildId)
-{
-    Log.Error("Invalid regex, removing.: {Word}", word);
-    await using var dbContext = await dbProvider.GetContextAsync();
-    var toRemove = await dbContext.AutoBanWords
-        .FirstOrDefaultAsync(bi => bi.Word == word && bi.GuildId == guildId);
-
-    if (toRemove is not null)
-    {
-        dbContext.AutoBanWords.Remove(toRemove);
-        await dbContext.SaveChangesAsync();
-    }
-}
-
-private async Task<bool> HandleBannedWord(IUserMessage msg, IGuild guild, string word, string matchedText)
-{
-    try
-    {
-        await msg.DeleteAsync().ConfigureAwait(false);
-        var defaultMessage = Strings.BanDm(guild.Id, Format.Bold(guild.Name),
-            Strings.AutobanWordDetected(guild.Id, word));
-
         try
         {
-            var embed = await userPunServ.GetBanUserDmEmbed(client, guild as SocketGuild,
-                await guild.GetUserAsync(client.CurrentUser.Id).ConfigureAwait(false),
-                msg.Author as IGuildUser,
-                defaultMessage,
-                $"Banned for saying autoban word {matchedText}",
-                null).ConfigureAwait(false);
-
-            await (await msg.Author.CreateDMChannelAsync().ConfigureAwait(false))
-                .SendMessageAsync(embed.Item2, embeds: embed.Item1, components: embed.Item3.Build())
-                .ConfigureAwait(false);
+            var regex = new Regex(word, RegexOptions.Compiled, TimeSpan.FromMilliseconds(250));
+            var match = regex.Match(content);
+            return (match.Success, match.Value);
         }
-        catch
+        catch (ArgumentException)
         {
-            // DM failed, continue with ban anyway
+            await RemoveInvalidBannedRegex(word, guildId);
+            return (false, string.Empty);
         }
-
-        await guild.AddBanAsync(msg.Author, options: new RequestOptions {
-            AuditLogReason = Strings.AutobanReason(guild.Id, matchedText)
-        }).ConfigureAwait(false);
-
-        return true;
     }
-    catch (Exception ex)
+
+    private async Task RemoveInvalidBannedRegex(string word, ulong guildId)
     {
-        Log.Error(ex, Strings.AutobanError(guild.Id, msg.Channel.Name));
-        return false;
+        Log.Error("Invalid regex, removing.: {Word}", word);
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        await db.AutoBanWords
+            .Where(bi => bi.Word == word && bi.GuildId == guildId)
+            .DeleteAsync();
     }
-}
+
+    private async Task<bool> HandleBannedWord(IUserMessage msg, IGuild guild, string word, string matchedText)
+    {
+        try
+        {
+            await msg.DeleteAsync().ConfigureAwait(false);
+            var defaultMessage = Strings.BanDm(guild.Id, Format.Bold(guild.Name),
+                Strings.AutobanWordDetected(guild.Id, word));
+
+            try
+            {
+                var embed = await userPunServ.GetBanUserDmEmbed(client, guild as SocketGuild,
+                    await guild.GetUserAsync(client.CurrentUser.Id).ConfigureAwait(false),
+                    msg.Author as IGuildUser,
+                    defaultMessage,
+                    $"Banned for saying autoban word {matchedText}",
+                    null).ConfigureAwait(false);
+
+                await (await msg.Author.CreateDMChannelAsync().ConfigureAwait(false))
+                    .SendMessageAsync(embed.Item2, embeds: embed.Item1, components: embed.Item3.Build())
+                    .ConfigureAwait(false);
+            }
+            catch
+            {
+                // DM failed, continue with ban anyway
+            }
+
+            await guild.AddBanAsync(msg.Author, options: new RequestOptions {
+                AuditLogReason = Strings.AutobanReason(guild.Id, matchedText)
+            }).ConfigureAwait(false);
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, Strings.AutobanError(guild.Id, msg.Channel.Name));
+            return false;
+        }
+    }
 
     private async Task<bool> IsWordMatched(string word, string content, ulong guildId)
     {
@@ -421,15 +432,12 @@ private async Task<bool> HandleBannedWord(IUserMessage msg, IGuild guild, string
     private async Task RemoveInvalidRegex(string word, ulong guildId)
     {
         Log.Error("Invalid regex, removing: {Word}", word);
-        await using var dbContext = await dbProvider.GetContextAsync();
-        var config = await dbContext.ForGuildId(guildId, set => set.Include(gc => gc.FilteredWords));
-        var removed = config.FilteredWords.FirstOrDefault(fw =>
-            fw.Word.Trim().Equals(word, StringComparison.InvariantCultureIgnoreCase));
-        if (removed != null)
-        {
-            dbContext.Remove(removed);
-            await gss.UpdateGuildConfig(guildId, config);
-        }
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        await db.FilteredWords
+            .Where(fw => fw.GuildId == guildId &&
+                   fw.Word.Trim().Equals(word, StringComparison.InvariantCultureIgnoreCase))
+            .DeleteAsync();
     }
 
     private async Task<bool> HandleFilteredWord(IUserMessage usrMsg, IGuild guild, string word)
@@ -461,11 +469,23 @@ private async Task<bool> HandleBannedWord(IUserMessage msg, IGuild guild, string
         if (guild is null || usrMsg?.Author is null)
             return false;
 
-        var servConfig = await gss.GetGuildConfig(guild.Id);
+        await using var db = await dbFactory.CreateConnectionAsync();
 
-        var shouldFilter = servConfig.FilterInvites &&
-                           (servConfig.FilterInvitesChannelIds.Count == 0 || servConfig.FilterInvitesChannelIds
-                               .Select(x => x.ChannelId).Contains(usrMsg.Channel.Id)) &&
+        // Get guild configuration
+        var guildConfig = await db.GuildConfigs
+            .FirstOrDefaultAsync(gc => gc.GuildId == guild.Id);
+
+        if (guildConfig == null || !guildConfig.FilterInvites)
+            return false;
+
+        // Check if there are any channel IDs to filter or if the current channel is in the list
+        var channelFilters = await db.FilterInvitesChannelIds
+            .Where(x => x.GuildId == guild.Id)
+            .ToListAsync();
+
+        var shouldFilter = guildConfig.FilterInvites &&
+                           (channelFilters.Count == 0 ||
+                            channelFilters.Any(x => x.ChannelId == usrMsg.Channel.Id)) &&
                            usrMsg.Content.IsDiscordInvite();
 
         if (!shouldFilter)
@@ -506,11 +526,22 @@ private async Task<bool> HandleBannedWord(IUserMessage msg, IGuild guild, string
         if (guild is null || usrMsg is null)
             return false;
 
-        var servConfig = await gss.GetGuildConfig(guild.Id);
+        await using var db = await dbFactory.CreateConnectionAsync();
 
-        var shouldFilter = (servConfig.FilterLinksChannelIds.Any(x => x.ChannelId == usrMsg.Channel.Id) ||
-                            servConfig.FilterLinks)
-                           && usrMsg.Content.TryGetUrlPath(out _);
+        // Get guild configuration
+        var guildConfig = await db.GuildConfigs
+            .FirstOrDefaultAsync(gc => gc.GuildId == guild.Id);
+
+        if (guildConfig == null)
+            return false;
+
+        // Check if channel is configured for link filtering
+        var hasChannelFilter = await db.FilterLinksChannelIds
+            .AnyAsync(x => x.GuildId == guild.Id && x.ChannelId == usrMsg.Channel.Id);
+
+        // Check if links should be filtered based on configuration
+        var shouldFilter = (hasChannelFilter || guildConfig.FilterLinks) &&
+                           usrMsg.Content.TryGetUrlPath(out _);
 
         if (!shouldFilter)
             return false;

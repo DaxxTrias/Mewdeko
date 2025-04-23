@@ -6,6 +6,7 @@ using Mewdeko.Common.Attributes.InteractionCommands;
 using Mewdeko.Common.Autocompleters;
 using Mewdeko.Common.Configs;
 using Mewdeko.Common.Modals;
+using Mewdeko.Modules.Chat_Triggers.Common;
 using Mewdeko.Modules.Chat_Triggers.Services;
 
 namespace Mewdeko.Modules.Chat_Triggers;

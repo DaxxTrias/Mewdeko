@@ -19,9 +19,7 @@ public class RequireDragonAttribute : PreconditionAttribute
         ICommandInfo commandInfo, IServiceProvider services)
     {
         // Get the database service.
-        var db = services.GetRequiredService<MewdekoContext>();
-
-        // Get the database context.
+        await using var db = await services.GetRequiredService<IDataConnectionFactory>().CreateConnectionAsync();
 
         // Get or create the user in the database.
         var user = await db.GetOrCreateUser(context.User);

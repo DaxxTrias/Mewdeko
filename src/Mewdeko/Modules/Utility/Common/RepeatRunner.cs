@@ -1,4 +1,5 @@
 ﻿using System.Threading;
+using DataModel;
 using Discord.Net;
 using Mewdeko.Modules.Utility.Services;
 using Serilog;
@@ -24,7 +25,7 @@ public class RepeatRunner : IDisposable
     /// <param name="guild">The guild where messages will be sent.</param>
     /// <param name="repeater">The repeater configuration.</param>
     /// <param name="mrs">The message repeater service.</param>
-    public RepeatRunner(DiscordShardedClient client, IGuild guild, Repeater repeater,
+    public RepeatRunner(DiscordShardedClient client, IGuild guild, GuildRepeater repeater,
         MessageRepeaterService mrs)
     {
         Repeater = repeater ?? throw new ArgumentNullException(nameof(repeater));
@@ -39,7 +40,7 @@ public class RepeatRunner : IDisposable
     /// <summary>
     ///     Gets the repeater configuration for this runner.
     /// </summary>
-    public Repeater Repeater { get; }
+    public GuildRepeater Repeater { get; }
 
     /// <summary>
     ///     Gets the guild where the repeater operates.

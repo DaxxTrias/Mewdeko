@@ -3,17 +3,18 @@ using System.Globalization;
 using System.IO;
 using System.Net.Http;
 using System.Runtime.InteropServices;
+using DataModel;
 using Discord.Commands;
 using Discord.Net;
 using Discord.Rest;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
 using LibGit2Sharp;
-using LinqToDB.EntityFrameworkCore;
+using LinqToDB;
+using LinqToDB.Data;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Common.Configs;
 using Mewdeko.Common.DiscordImplementations;
-using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.OwnerOnly.Services;
 using Mewdeko.Services.Impl;
 using Mewdeko.Services.Settings;
@@ -21,7 +22,6 @@ using Mewdeko.Services.strings;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Scripting;
 using Microsoft.CodeAnalysis.Scripting;
-using Microsoft.EntityFrameworkCore;
 using Serilog;
 
 namespace Mewdeko.Modules.OwnerOnly;
@@ -34,9 +34,8 @@ namespace Mewdeko.Modules.OwnerOnly;
 /// <param name="bot">The main instance of the Mewdeko bot.</param>
 /// <param name="strings">Provides access to localized strings within the bot.</param>
 /// <param name="serv">Interactive service for handling interactive user commands.</param>
-/// <param name="coord">Coordinator for managing bot operations across different services and modules.</param>
 /// <param name="settingServices">A collection of configuration services for managing bot settings.</param>
-/// <param name="db">Service for database operations and access.</param>
+/// <param name="dbFactory">Service for database operations and access.</param>
 /// <param name="cache">Cache service for storing and retrieving temporary data.</param>
 /// <param name="commandService">Service for handling and executing Discord commands.</param>
 /// <param name="services">The service provider for dependency injection.</param>
@@ -49,13 +48,15 @@ public class OwnerOnly(
     IBotStrings strings,
     InteractiveService serv,
     IEnumerable<IConfigService> settingServices,
-    DbContextProvider dbProvider,
+    IDataConnectionFactory dbFactory,
     IDataCache cache,
     CommandService commandService,
     IServiceProvider services,
     GuildSettingsService guildSettings,
     CommandHandler commandHandler,
-    BotConfig botConfig, HttpClient httpClient, Localization localization)
+    BotConfig botConfig,
+    HttpClient httpClient,
+    Localization localization)
     : MewdekoModuleBase<OwnerOnlyService>
 {
     /// <summary>
@@ -258,13 +259,14 @@ public class OwnerOnly(
     [Aliases]
     public async Task SqlExec([Remainder] string sql)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
         if (!await PromptUserConfirmAsync(Strings.SqlExecConfirm(ctx.Guild.Id), ctx.User.Id).ConfigureAwait(false))
             return;
 
-        var affected = await dbContext.Database.ExecuteSqlRawAsync(sql).ConfigureAwait(false);
-        await ctx.Channel.SendErrorAsync(Strings.SqlAffectedRows(ctx.Guild.Id, affected), botConfig).ConfigureAwait(false);
+        var affected = await dbContext.ExecuteAsync(sql).ConfigureAwait(false);
+        await ctx.Channel.SendErrorAsync(Strings.SqlAffectedRows(ctx.Guild.Id, affected), botConfig)
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -303,7 +305,9 @@ public class OwnerOnly(
                 eb.AddField(
                     Strings.ServerInfoName(ctx.Guild.Id, i.Name, i.Id),
                     Strings.ServerInfoMembers(ctx.Guild.Id, i.Users.Count) + "\n" +
-                    Strings.ServerInfoOnline(ctx.Guild.Id, i.Users.Count(x => x.Status is UserStatus.Online or UserStatus.DoNotDisturb or UserStatus.Idle)) + "\n" +
+                    Strings.ServerInfoOnline(ctx.Guild.Id,
+                        i.Users.Count(x =>
+                            x.Status is UserStatus.Online or UserStatus.DoNotDisturb or UserStatus.Idle)) + "\n" +
                     Strings.ServerInfoOwner(ctx.Guild.Id, i.Owner, i.OwnerId) + "\n" +
                     Strings.ServerInfoCreated(ctx.Guild.Id, TimestampTag.FromDateTimeOffset(i.CreatedAt))
                 );
@@ -326,60 +330,77 @@ public class OwnerOnly(
     [Aliases]
     public async Task CommandStats()
     {
-        await using var context1 = await dbProvider.GetContextAsync();
-        await using var context2 = await dbProvider.GetContextAsync();
-        await using var context3 = await dbProvider.GetContextAsync();
-        await using var context4 = await dbProvider.GetContextAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
-        var topCommandTask = context1.CommandStats
+        var topCommand = await dbContext.CommandStats
             .Where(x => !x.Trigger)
             .GroupBy(q => q.NameOrId)
-            .Select(g => new { g.Key, Count = g.Count() })
+            .Select(g => new
+            {
+                Name = g.Key, Count = g.Count()
+            })
             .OrderByDescending(gc => gc.Count)
-            .FirstOrDefaultAsyncLinqToDB();
+            .FirstOrDefaultAsync();
 
-        var topModuleTask = context2.CommandStats
+        var topModule = await dbContext.CommandStats
             .Where(x => !x.Trigger)
             .GroupBy(q => q.Module)
-            .Select(g => new { g.Key, Count = g.Count() })
+            .Select(g => new
+            {
+                Name = g.Key, Count = g.Count()
+            })
             .OrderByDescending(gc => gc.Count)
-            .FirstOrDefaultAsyncLinqToDB();
+            .FirstOrDefaultAsync();
 
-        var topGuildTask = context3.CommandStats
+        var topGuildStat = await dbContext.CommandStats
             .Where(x => !x.Trigger)
             .GroupBy(q => q.GuildId)
-            .Select(g => new { g.Key, Count = g.Count() })
+            .Select(g => new
+            {
+                GuildId = g.Key, Count = g.Count()
+            })
             .OrderByDescending(gc => gc.Count)
-            .FirstOrDefaultAsyncLinqToDB();
+            .FirstOrDefaultAsync();
 
-        var topUserTask = context4.CommandStats
+        var topUserStat = await dbContext.CommandStats
             .Where(x => !x.Trigger)
             .GroupBy(q => q.UserId)
-            .Select(g => new { g.Key, Count = g.Count() })
+            .Select(g => new
+            {
+                UserId = g.Key, Count = g.Count()
+            })
             .OrderByDescending(gc => gc.Count)
-            .FirstOrDefaultAsyncLinqToDB();
+            .FirstOrDefaultAsync();
 
-        await Task.WhenAll(topCommandTask, topModuleTask, topGuildTask, topUserTask);
+        IGuild? guild = null;
+        IUser? user = null;
 
-        var topCommand = await topCommandTask;
-        var topModule = await topModuleTask;
-        var topGuild = await topGuildTask;
-        var topUser = await topUserTask;
-
-        var guild = await client.Rest.GetGuildAsync(topGuild.Key);
-        var user = await client.Rest.GetUserAsync(topUser.Key);
+        // Parallel fetch of guild and user details
+        await Task.WhenAll(
+            Task.Run(async () =>
+            {
+                if (topGuildStat?.GuildId != null)
+                    guild = await client.Rest.GetGuildAsync(topGuildStat.GuildId);
+            }),
+            Task.Run(async () =>
+            {
+                if (topUserStat?.UserId != null)
+                    user = await client.Rest.GetUserAsync(topUserStat.UserId);
+            })
+        );
 
         var eb = new EmbedBuilder()
             .WithOkColor()
             .WithTitle(Strings.CommandStatsTitle(ctx.Guild.Id))
             .AddField(Strings.CommandStats(ctx.Guild.Id),
-                Strings.StatsTopCommand(ctx.Guild.Id, topCommand.Key, topCommand.Count))
+                Strings.StatsTopCommand(ctx.Guild.Id, topCommand?.Name ?? "N/A", topCommand?.Count ?? 0))
             .AddField(Strings.ModuleStats(ctx.Guild.Id),
-                Strings.StatsTopModule(ctx.Guild.Id, topModule.Key, topModule.Count))
+                Strings.StatsTopModule(ctx.Guild.Id, topModule?.Name ?? "N/A", topModule?.Count ?? 0))
             .AddField(Strings.UserStats(ctx.Guild.Id),
-                Strings.StatsTopUser(ctx.Guild.Id, user, topUser.Count))
+                Strings.StatsTopUser(ctx.Guild.Id, user, topUserStat?.Count ?? 0))
             .AddField(Strings.GuildStats(ctx.Guild.Id),
-                Strings.StatsTopGuild(ctx.Guild.Id, guild?.Name ?? Strings.UnknownGuild(ctx.Guild.Id), topGuild.Count));
+                Strings.StatsTopGuild(ctx.Guild.Id, guild?.Name ?? Strings.UnknownGuild(ctx.Guild.Id),
+                    topGuildStat?.Count ?? 0));
 
         await ctx.Channel.SendMessageAsync(embed: eb.Build());
     }
@@ -1290,7 +1311,8 @@ public class OwnerOnly(
             }
 
             await channel.SendMessageAsync(rep.Replace(msg)).ConfigureAwait(false);
-            await ctx.Channel.SendConfirmAsync(Strings.MessageSentChannel(ctx.Guild.Id, potentialServer, channel.Mention));
+            await ctx.Channel.SendConfirmAsync(Strings.MessageSentChannel(ctx.Guild.Id, potentialServer,
+                channel.Mention));
             return;
         }
 
@@ -1314,7 +1336,6 @@ public class OwnerOnly(
 
         await channel.SendMessageAsync(rep.Replace(msg)).ConfigureAwait(false);
         await ctx.Channel.SendConfirmAsync(Strings.MessageSentUser(ctx.Guild.Id, user.Mention));
-
     }
 
     /// <summary>
@@ -1482,40 +1503,40 @@ public class OwnerOnly(
         var evaluationSource = "code block";
 
         // Check if there's at least one attachment
-        if (ctx.Message.Attachments.Count!=0)
+        if (ctx.Message.Attachments.Count != 0)
         {
             var attachment = Context.Message.Attachments.First();
 
             // Validate the file extension
-                // Optional: Validate the file size (e.g., limit to 100 KB)
-                if (attachment.Size > 100 * 1024)
-                {
-                    await ReplyAsync(Strings.EvalTooLarge(ctx.Guild.Id));
-                    return;
-                }
+            // Optional: Validate the file size (e.g., limit to 100 KB)
+            if (attachment.Size > 100 * 1024)
+            {
+                await ReplyAsync(Strings.EvalTooLarge(ctx.Guild.Id));
+                return;
+            }
 
-                try
-                {
-                    // Download the attachment content
-                    await using var stream = await httpClient.GetStreamAsync(attachment.Url);
-                    using var reader = new StreamReader(stream);
-                    codeToEvaluate = await reader.ReadToEndAsync();
-                    evaluationSource = $"attachment `{attachment.Filename}`";
-                }
-                catch (Exception ex)
-                {
-                    await ReplyAsync(Strings.EvalReadError(ctx.Guild.Id, ex.Message));
-                    return;
-                }
+            try
+            {
+                // Download the attachment content
+                await using var stream = await httpClient.GetStreamAsync(attachment.Url);
+                using var reader = new StreamReader(stream);
+                codeToEvaluate = await reader.ReadToEndAsync();
+                evaluationSource = $"attachment `{attachment.Filename}`";
+            }
+            catch (Exception ex)
+            {
+                await ReplyAsync(Strings.EvalReadError(ctx.Guild.Id, ex.Message));
+                return;
+            }
         }
         else
         {
-
             if (string.IsNullOrWhiteSpace(code))
             {
                 await ReplyAsync(Strings.EvalNoCode(ctx.Guild.Id));
                 return;
             }
+
             var startIndex = code.IndexOf("```", StringComparison.Ordinal);
             if (startIndex != -1)
             {
@@ -1542,8 +1563,7 @@ public class OwnerOnly(
 
         var embed = new EmbedBuilder
         {
-            Title = Strings.EvalCompiling(ctx.Guild.Id),
-            Color = new Color(0xD091B2)
+            Title = Strings.EvalCompiling(ctx.Guild.Id), Color = new Color(0xD091B2)
         };
         var msg = await Context.Channel.SendMessageAsync(embed: embed.Build()).ConfigureAwait(false);
 
@@ -1591,20 +1611,24 @@ public class OwnerOnly(
             embed = new EmbedBuilder
             {
                 Title = "Compilation Failed",
-                Description = $"Compilation failed after {compilationStopwatch.ElapsedMilliseconds:#,##0}ms with {compilationDiagnostics.Length:#,##0} error(s).",
+                Description =
+                    $"Compilation failed after {compilationStopwatch.ElapsedMilliseconds:#,##0}ms with {compilationDiagnostics.Length:#,##0} error(s).",
                 Color = new Color(0xE74C3C)
             };
 
-            foreach (var diagnostic in compilationDiagnostics.Where(diag => diag.Severity == DiagnosticSeverity.Error).Take(3))
+            foreach (var diagnostic in compilationDiagnostics.Where(diag => diag.Severity == DiagnosticSeverity.Error)
+                         .Take(3))
             {
                 var lineSpan = diagnostic.Location.GetLineSpan();
-                embed.AddField($"Error at Line {lineSpan.StartLinePosition.Line + 1}, Character {lineSpan.StartLinePosition.Character + 1}",
+                embed.AddField(
+                    $"Error at Line {lineSpan.StartLinePosition.Line + 1}, Character {lineSpan.StartLinePosition.Character + 1}",
                     $"```csharp\n{diagnostic.GetMessage()}\n```");
             }
 
             if (compilationDiagnostics.Length > 3)
             {
-                embed.AddField("Additional Errors", $"{compilationDiagnostics.Length - 3:#,##0} more error(s) not displayed.");
+                embed.AddField("Additional Errors",
+                    $"{compilationDiagnostics.Length - 3:#,##0} more error(s) not displayed.");
             }
 
             await msg.ModifyAsync(x => x.Embed = embed.Build()).ConfigureAwait(false);
@@ -1624,6 +1648,7 @@ public class OwnerOnly(
         {
             executionException = ex;
         }
+
         executionStopwatch.Stop();
 
         // Handle execution exceptions
@@ -1632,7 +1657,8 @@ public class OwnerOnly(
             embed = new EmbedBuilder
             {
                 Title = "Execution Failed",
-                Description = $"Execution failed after {executionStopwatch.ElapsedMilliseconds:#,##0}ms with `{executionException.GetType()}: {executionException.Message}`.",
+                Description =
+                    $"Execution failed after {executionStopwatch.ElapsedMilliseconds:#,##0}ms with `{executionException.GetType()}: {executionException.Message}`.",
                 Color = new Color(0xE74C3C)
             };
             await msg.ModifyAsync(x => x.Embed = embed.Build()).ConfigureAwait(false);
@@ -1642,16 +1668,15 @@ public class OwnerOnly(
         // Execution succeeded
         embed = new EmbedBuilder
         {
-            Title = "Evaluation Successful",
-            Color = new Color(0x2ECC71)
+            Title = "Evaluation Successful", Color = new Color(0x2ECC71)
         };
 
         var result = scriptState.ReturnValue != null ? scriptState.ReturnValue.ToString() : "No value returned";
 
         embed.AddField("Result", $"```csharp\n{result}\n```")
-             .AddField("Source", evaluationSource, true)
-             .AddField("Compilation Time", $"{compilationStopwatch.ElapsedMilliseconds:#,##0}ms", true)
-             .AddField("Execution Time", $"{executionStopwatch.ElapsedMilliseconds:#,##0}ms", true);
+            .AddField("Source", evaluationSource, true)
+            .AddField("Compilation Time", $"{compilationStopwatch.ElapsedMilliseconds:#,##0}ms", true)
+            .AddField("Execution Time", $"{executionStopwatch.ElapsedMilliseconds:#,##0}ms", true);
 
         if (scriptState.ReturnValue != null)
         {

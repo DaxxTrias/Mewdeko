@@ -71,8 +71,8 @@ public class ClaudeStreamParser : IAiStreamParser
                 typeProperty.GetString() == "message_delta" &&
                 root.TryGetProperty("usage", out var usageProperty))
             {
-                int inputTokens = 0;
-                int outputTokens = 0;
+                var inputTokens = 0;
+                var outputTokens = 0;
 
                 if (usageProperty.TryGetProperty("input_tokens", out var inputProperty))
                     inputTokens = inputProperty.GetInt32();
@@ -89,8 +89,8 @@ public class ClaudeStreamParser : IAiStreamParser
                 root.TryGetProperty("message", out var messageProperty) &&
                 messageProperty.TryGetProperty("usage", out usageProperty))
             {
-                int inputTokens = 0;
-                int outputTokens = 0;
+                var inputTokens = 0;
+                var outputTokens = 0;
 
                 if (usageProperty.TryGetProperty("input_tokens", out var inputProperty))
                     inputTokens = inputProperty.GetInt32();

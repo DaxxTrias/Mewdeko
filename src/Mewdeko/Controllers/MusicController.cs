@@ -1,4 +1,5 @@
 ﻿using System.Text.Json;
+using DataModel;
 using Lavalink4NET;
 using Lavalink4NET.Filters;
 using Lavalink4NET.Players;
@@ -691,11 +692,11 @@ public class MusicController : Controller
                 break;
             case "track":
             case "1":
-                settings.PlayerRepeat = (PlayerRepeatType)1;
+                settings.PlayerRepeat = 1;
                 break;
             case "queue":
             case "2":
-                settings.PlayerRepeat = (PlayerRepeatType)2;
+                settings.PlayerRepeat = 2;
                 break;
             default:
                 return BadRequest("Invalid repeat mode. Valid modes: off, track, queue");
@@ -733,7 +734,7 @@ public class MusicController : Controller
     /// <returns>The updated settings</returns>
     [HttpPost("settings")]
     [Authorize("ApiKeyPolicy")]
-    public async Task<IActionResult> UpdateSettings(ulong guildId, [FromBody] MusicPlayerSettings settings)
+    public async Task<IActionResult> UpdateSettings(ulong guildId, [FromBody] MusicPlayerSetting settings)
     {
         var player = await audioService.Players.GetPlayerAsync<MewdekoPlayer>(guildId);
         await player.SetMusicSettings(guildId, settings);

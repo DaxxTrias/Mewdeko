@@ -1,4 +1,4 @@
-using System.Text;
+/*using System.Text;
 using System.Text.Json;
 using Discord.Commands;
 using Fergun.Interactive;
@@ -1018,4 +1018,4 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
             }
         }
     }
-}
+}*/

@@ -1,6 +1,7 @@
 ﻿using System.Text;
 using Discord.Commands;
 using Mewdeko.Common.Attributes.TextCommands;
+using Mewdeko.Modules.Games.Common;
 using Mewdeko.Modules.Games.Services;
 
 namespace Mewdeko.Modules.Games;
@@ -62,7 +63,7 @@ public partial class Games
             }
 
             // Checks if the number of poll answers exceeds the limit
-            if (poll.Answers.Count > 25)
+            if (poll.PollAnswers.Count() > 25)
             {
                 await ctx.Channel.SendErrorAsync(Strings.PollOptionLimit(ctx.Guild.Id), Config);
                 return;
@@ -74,12 +75,12 @@ public partial class Games
                 // Constructs an embed for the poll
                 var eb = new EmbedBuilder().WithOkColor().WithTitle(Strings.PollCreated(ctx.Guild.Id, ctx.User.ToString()))
                     .WithDescription(
-                        $"{Format.Bold(poll.Question)}\n\n{string.Join("\n", poll.Answers.Select(x => $"`{x.Index + 1}.` {Format.Bold(x.Text)}"))}");
+                        $"{Format.Bold(poll.Question)}\n\n{string.Join("\n", poll.PollAnswers.Select(x => $"`{x.Index + 1}.` {Format.Bold(x.Text)}"))}");
 
                 // Constructs a component builder for the poll buttons
                 var count = 1;
                 var builder = new ComponentBuilder();
-                foreach (var _ in poll.Answers)
+                foreach (var _ in poll.PollAnswers)
                 {
                     var component =
                         new ButtonBuilder(customId: $"pollbutton:{count}", label: count.ToString());
@@ -143,7 +144,7 @@ public partial class Games
         [RequireContext(ContextType.Guild)]
         public async Task Pollend()
         {
-            Polls p;
+            DataModel.Poll p;
             // Stops the current poll in the guild and retrieves its information
             if ((p = await Service.StopPoll(ctx.Guild.Id)) == null)
                 return;
@@ -160,10 +161,10 @@ public partial class Games
         /// <param name="polls">The poll to generate statistics for.</param>
         /// <param name="title">The title of the embed.</param>
         /// <returns>The embed containing the poll statistics.</returns>
-        public EmbedBuilder GetStats(Polls polls, string? title)
+        public EmbedBuilder GetStats(DataModel.Poll polls, string? title)
         {
             // Group the votes by their corresponding answer index and calculate the total votes cast for each answer
-            var results = polls.Votes.GroupBy(kvp => kvp.VoteIndex)
+            var results = polls.PollVotes.GroupBy(kvp => kvp.VoteIndex)
                 .ToDictionary(x => x.Key, x => x.Sum(_ => 1));
 
             var totalVotesCast = results.Sum(x => x.Value);
@@ -176,7 +177,7 @@ public partial class Games
                 .AppendLine();
 
             // Retrieve the statistics for each answer, ordered by the number of votes in descending order
-            var stats = polls.Answers
+            var stats = polls.PollAnswers
                 .Select(x =>
                 {
                     results.TryGetValue(x.Index, out var votes);

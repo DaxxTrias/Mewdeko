@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 using Mewdeko.Modules.Music.Common;
 using Mewdeko.Modules.Searches.Services;
 using Mewdeko.Modules.Utility.Common;
-
+using DataModel;
 using Serilog;
 using StackExchange.Redis;
 
@@ -27,7 +27,7 @@ public class RedisCache : IDataCache
     ///     Initializes a new instance of the <see cref="RedisCache" /> class.
     /// </summary>
     /// <param name="creds">The bot credentials.</param>
-    /// <param name="shardId">The shard ID.</param>
+    /// <param name="shardCount">The shard count.</param>
     public RedisCache(IBotCredentials creds, int shardCount)
     {
         RedisConnectionManager.Initialize(creds.RedisConnections, shardCount);
@@ -105,11 +105,11 @@ public class RedisCache : IDataCache
     /// <param name="guildId">The guild ID.</param>
     /// <param name="userId">The user ID.</param>
     /// <returns>The afk status.</returns>
-    public async Task<Afk?> RetrieveAfk(ulong guildId, ulong userId)
+    public async Task<DataModel.Afk?> RetrieveAfk(ulong guildId, ulong userId)
     {
         var db = Redis.GetDatabase();
         var afkJson = await db.StringGetAsync($"{redisKey}_{guildId}_{userId}_afk");
-        return afkJson.HasValue ? JsonSerializer.Deserialize<Afk>(afkJson) : null;
+        return afkJson.HasValue ? JsonSerializer.Deserialize<DataModel.Afk>(afkJson) : null;
     }
 
     /// <summary>
@@ -151,7 +151,7 @@ public class RedisCache : IDataCache
     ///     Caches all status roles.
     /// </summary>
     /// <param name="statusRoles">The status roles to cache.</param>
-    public async Task SetStatusRoleCache(List<StatusRolesTable> statusRoles)
+    public async Task SetStatusRoleCache(List<StatusRole> statusRoles)
     {
         var db = Redis.GetDatabase();
         await db.StringSetAsync($"{redisKey}_statusroles", JsonSerializer.Serialize(statusRoles));
@@ -161,12 +161,12 @@ public class RedisCache : IDataCache
     ///     Retrieves all status roles.
     /// </summary>
     /// <returns>The status roles.</returns>
-    public async Task<List<StatusRolesTable>> GetStatusRoleCache()
+    public async Task<List<StatusRole>> GetStatusRoleCache()
     {
         var db = Redis.GetDatabase();
         var result = await db.StringGetAsync($"{redisKey}_statusroles");
         return result.HasValue
-            ? JsonSerializer.Deserialize<List<StatusRolesTable>>(result)
+            ? JsonSerializer.Deserialize<List<StatusRole>>(result)
             : [];
     }
 
@@ -199,9 +199,9 @@ public class RedisCache : IDataCache
     /// <param name="id">The user ID.</param>
     /// <param name="objectList">The list of highlights.</param>
     /// <returns></returns>
-    public Task CacheHighlights(ulong id, List<Highlights> objectList)
+    public Task CacheHighlights(ulong id, List<Highlight> objectList)
     {
-        _ = Task.Run(() => new RedisDictionary<ulong, List<Highlights>>($"{redisKey}_Highlights", Redis)
+        _ = Task.Run(() => new RedisDictionary<ulong, List<Highlight>>($"{redisKey}_Highlights", Redis)
         {
             {
                 id, objectList
@@ -330,11 +330,11 @@ public class RedisCache : IDataCache
     /// </summary>
     /// <param name="id">The server ID.</param>
     /// <returns>The music player settings if found, null otherwise.</returns>
-    public async Task<MusicPlayerSettings?> GetMusicPlayerSettings(ulong id)
+    public async Task<MusicPlayerSetting?> GetMusicPlayerSettings(ulong id)
     {
         var db = Redis.GetDatabase();
         var result = await db.StringGetAsync($"{redisKey}_musicSettings_{id}");
-        return result.HasValue ? JsonSerializer.Deserialize<MusicPlayerSettings>(result, options) : null;
+        return result.HasValue ? JsonSerializer.Deserialize<MusicPlayerSetting>(result, options) : null;
     }
 
     /// <summary>
@@ -342,7 +342,7 @@ public class RedisCache : IDataCache
     /// </summary>
     /// <param name="id">The server ID.</param>
     /// <param name="settings">The settings to cache.</param>
-    public async Task SetMusicPlayerSettings(ulong id, MusicPlayerSettings settings)
+    public async Task SetMusicPlayerSettings(ulong id, MusicPlayerSetting settings)
     {
         var db = Redis.GetDatabase();
         await db.StringSetAsync(
@@ -387,9 +387,9 @@ public class RedisCache : IDataCache
     /// <param name="id">The user ID.</param>
     /// <param name="objectList">The list of highlight settings.</param>
     /// <returns></returns>
-    public Task CacheHighlightSettings(ulong id, List<HighlightSettings> objectList)
+    public Task CacheHighlightSettings(ulong id, List<HighlightSetting> objectList)
     {
-        _ = Task.Run(() => new RedisDictionary<ulong, List<HighlightSettings>>($"{redisKey}_highlightSettings", Redis)
+        _ = Task.Run(() => new RedisDictionary<ulong, List<HighlightSetting>>($"{redisKey}_highlightSettings", Redis)
         {
             {
                 id, objectList
@@ -418,9 +418,9 @@ public class RedisCache : IDataCache
     /// <param name="id">The user ID.</param>
     /// <param name="newHighlight">The list of highlights.</param>
     /// <returns></returns>
-    public Task AddHighlightToCache(ulong id, List<Highlights?> newHighlight)
+    public Task AddHighlightToCache(ulong id, List<Highlight?> newHighlight)
     {
-        var customers = new RedisDictionary<ulong, List<Highlights?>>($"{redisKey}_highlights", Redis);
+        var customers = new RedisDictionary<ulong, List<Highlight?>>($"{redisKey}_highlights", Redis);
         customers.Remove(id);
         customers.Add(id, newHighlight);
         return Task.CompletedTask;
@@ -455,9 +455,9 @@ public class RedisCache : IDataCache
     /// <param name="id">The user ID.</param>
     /// <param name="newHighlight">The list of highlights.</param>
     /// <returns></returns>
-    public Task RemoveHighlightFromCache(ulong id, List<Highlights?> newHighlight)
+    public Task RemoveHighlightFromCache(ulong id, List<Highlight?> newHighlight)
     {
-        var customers = new RedisDictionary<ulong, List<Highlights?>>($"{redisKey}_highlights", Redis);
+        var customers = new RedisDictionary<ulong, List<Highlight?>>($"{redisKey}_highlights", Redis);
         customers.Remove(id);
         customers.Add(id, newHighlight);
         return Task.CompletedTask;
@@ -469,9 +469,9 @@ public class RedisCache : IDataCache
     /// <param name="id">The user ID.</param>
     /// <param name="newHighlight">The list of highlight settings.</param>
     /// <returns></returns>
-    public Task AddHighlightSettingToCache(ulong id, List<HighlightSettings?> newHighlight)
+    public Task AddHighlightSettingToCache(ulong id, List<HighlightSetting?> newHighlight)
     {
-        var customers = new RedisDictionary<ulong, List<HighlightSettings?>>($"{redisKey}_highlightSettings", Redis);
+        var customers = new RedisDictionary<ulong, List<HighlightSetting?>>($"{redisKey}_highlightSettings", Redis);
         customers.Remove(id);
         customers.Add(id, newHighlight);
         return Task.CompletedTask;
@@ -493,9 +493,9 @@ public class RedisCache : IDataCache
     /// </summary>
     /// <param name="id">The guild ID.</param>
     /// <returns></returns>
-    public List<Highlights?>? GetHighlightsForGuild(ulong id)
+    public List<Highlight?>? GetHighlightsForGuild(ulong id)
     {
-        var customers = new RedisDictionary<ulong, List<Highlights?>?>($"{redisKey}_highlights", Redis);
+        var customers = new RedisDictionary<ulong, List<Highlight?>?>($"{redisKey}_highlights", Redis);
         return customers[id];
     }
 
@@ -504,9 +504,9 @@ public class RedisCache : IDataCache
     /// </summary>
     /// <param name="id">The guild ID.</param>
     /// <returns></returns>
-    public List<HighlightSettings>? GetHighlightSettingsForGuild(ulong id)
+    public List<HighlightSetting>? GetHighlightSettingsForGuild(ulong id)
     {
-        var customers = new RedisDictionary<ulong, List<HighlightSettings?>?>($"{redisKey}_highlightSettings", Redis);
+        var customers = new RedisDictionary<ulong, List<HighlightSetting?>?>($"{redisKey}_highlightSettings", Redis);
         return customers[id];
     }
 

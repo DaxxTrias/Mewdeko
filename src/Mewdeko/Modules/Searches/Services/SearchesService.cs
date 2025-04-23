@@ -9,6 +9,7 @@ using AngleSharp.Html.Dom;
 using AngleSharp.Html.Parser;
 using GTranslate.Translators;
 using Html2Markdown;
+using LinqToDB;
 using MartineApiNet;
 using MartineApiNet.Enums;
 using MartineApiNet.Models.Images;
@@ -64,13 +65,8 @@ public class SearchesService : INService, IUnloadableService
     private readonly MartineApi martineApi;
     private readonly IBotCredentials creds;
     private readonly IGoogleApiService google;
-    private readonly GuildSettingsService gss;
+    private readonly IDataConnectionFactory dbFactory;
     private readonly IHttpClientFactory httpFactory;
-
-    private readonly JsonSerializerOptions jsonOptions = new()
-    {
-        PropertyNameCaseInsensitive = true
-    };
 
     private readonly ConcurrentDictionary<ulong, SearchImageCacher> imageCacher = new();
     private readonly IImageCache imgs;
@@ -84,23 +80,24 @@ public class SearchesService : INService, IUnloadableService
     /// <summary>
     ///     Initializes a new instance of the <see cref="SearchesService" /> class.
     /// </summary>
-    /// <param name="client">The Discord client.</param>
     /// <param name="google">The Google API service.</param>
     /// <param name="cache">The data cache.</param>
     /// <param name="factory">The HTTP client factory.</param>
     /// <param name="creds">The bot credentials.</param>
-    /// <param name="gss">The guild setting service.</param>
-    public SearchesService(DiscordShardedClient client, IGoogleApiService google, IDataCache cache,
+    /// <param name="handler">Async discord event handler because stoopid</param>
+    /// <param name="martineApi">Reddit!</param>
+    /// <param name="dbFactory">The db context provider</param>
+    public SearchesService(IGoogleApiService google, IDataCache cache,
         IHttpClientFactory factory,
-        IBotCredentials creds, GuildSettingsService gss, EventHandler handler, MartineApi martineApi)
+        IBotCredentials creds, EventHandler handler, MartineApi martineApi, IDataConnectionFactory dbFactory)
     {
         httpFactory = factory;
         this.google = google;
         imgs = cache.LocalImages;
         this.cache = cache;
         this.creds = creds;
-        this.gss = gss;
         this.martineApi = martineApi;
+        this.dbFactory = dbFactory;
         rng = new MewdekoRandom();
 
         //translate commands
@@ -273,7 +270,7 @@ public class SearchesService : INService, IUnloadableService
     /// <remarks>
     ///     This method generates an image with the provided text and an avatar image, typically used in memorial contexts.
     /// </remarks>
-    public async Task<Stream> GetRipPictureAsync(string text, Uri imgUrl)
+    public async Task<Stream?> GetRipPictureAsync(string text, Uri imgUrl)
     {
         var data = await cache.GetOrAddCachedDataAsync($"Mewdeko_rip_{text}_{imgUrl}",
             GetRipPictureFactory,
@@ -296,7 +293,8 @@ public class SearchesService : INService, IUnloadableService
 
             using (var avatarImg = SKBitmap.Decode(data))
             {
-                var resizedAvatarImg = avatarImg.Resize(new SKImageInfo(85, 85), SKFilterQuality.High);
+                var samplingOptions = new SKSamplingOptions(SKFilterMode.Linear);
+                var resizedAvatarImg = avatarImg.Resize(new SKImageInfo(85, 85), samplingOptions);
                 var roundedAvatarImg = ApplyRoundedCorners(resizedAvatarImg, 42);
 
                 data = SKImage.FromBitmap(roundedAvatarImg).Encode().ToArray();
@@ -311,17 +309,23 @@ public class SearchesService : INService, IUnloadableService
             DrawAvatar(bg, avatarImg);
         }
 
-        var textPaint = new SKPaint
+        // Create a font first
+        var textFont = new SKFont
         {
             Typeface = SKTypeface.FromFamilyName("Arial", SKFontStyleWeight.Bold, SKFontStyleWidth.Normal,
                 SKFontStyleSlant.Upright),
-            TextSize = 14,
+            Size = 14
+        };
+
+        var textPaint = new SKPaint
+        {
             IsAntialias = true,
             Color = SKColors.Black
         };
 
         using var canvas = new SKCanvas(bg);
-        canvas.DrawText(text, new SKPoint(25, 225), textPaint);
+
+        canvas.DrawText(text, 25, 225, textFont, textPaint);
 
         //flowa
         using var flowers = SKBitmap.Decode(imgs.RipOverlay.ToArray());
@@ -329,16 +333,13 @@ public class SearchesService : INService, IUnloadableService
 
         return SKImage.FromBitmap(bg).Encode().ToArray();
     }
-
 // Helper method to draw rounded corners
     private static SKBitmap ApplyRoundedCorners(SKBitmap input, float radius)
     {
         var output = new SKBitmap(input.Width, input.Height, input.AlphaType == SKAlphaType.Opaque);
 
-        using var paint = new SKPaint
-        {
-            IsAntialias = true
-        };
+        using var paint = new SKPaint();
+        paint.IsAntialias = true;
         using var clipPath = new SKPath();
 
         var rect = new SKRect(0, 0, input.Width, input.Height);
@@ -387,7 +388,7 @@ public class SearchesService : INService, IUnloadableService
             TimeSpan.FromHours(3));
     }
 
-    private async Task<WeatherData>? GetWeatherDataFactory(string query)
+    private async Task<WeatherData?>? GetWeatherDataFactory(string query)
     {
         using var http = httpFactory.CreateClient();
         try
@@ -446,35 +447,39 @@ public class SearchesService : INService, IUnloadableService
                 return http.GetStringAsync(url);
             }, "", TimeSpan.FromHours(1)).ConfigureAwait(false);
 
-            var responses = JsonSerializer.Deserialize<LocationIqResponse[]>(res);
-            if (responses is null || responses.Length == 0)
+            if (res != null)
             {
-                Log.Warning("Geocode lookup failed for: {Query}", query);
-                return (default, TimeErrors.NotFound);
+                var responses = JsonSerializer.Deserialize<LocationIqResponse[]>(res);
+                if (responses is null || responses.Length == 0)
+                {
+                    Log.Warning("Geocode lookup failed for: {Query}", query);
+                    return (default, TimeErrors.NotFound);
+                }
+
+                var geoData = responses[0];
+
+                using var req = new HttpRequestMessage(HttpMethod.Get,
+                    $"http://api.timezonedb.com/v2.1/get-time-zone?key={creds.TimezoneDbApiKey}&format=json&by=position&lat={geoData.Lat}&lng={geoData.Lon}");
+                using var geoRes = await http.SendAsync(req).ConfigureAwait(false);
+                var resString = await geoRes.Content.ReadAsStringAsync().ConfigureAwait(false);
+                var timeObj = JsonSerializer.Deserialize<TimeZoneResult>(resString);
+
+                var time = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+                    .AddSeconds(timeObj.Timestamp);
+
+                return ((
+                    Address: responses[0].DisplayName,
+                    Time: time,
+                    TimeZoneName: timeObj.TimezoneName
+                ), default);
             }
-
-            var geoData = responses[0];
-
-            using var req = new HttpRequestMessage(HttpMethod.Get,
-                $"http://api.timezonedb.com/v2.1/get-time-zone?key={creds.TimezoneDbApiKey}&format=json&by=position&lat={geoData.Lat}&lng={geoData.Lon}");
-            using var geoRes = await http.SendAsync(req).ConfigureAwait(false);
-            var resString = await geoRes.Content.ReadAsStringAsync().ConfigureAwait(false);
-            var timeObj = JsonSerializer.Deserialize<TimeZoneResult>(resString);
-
-            var time = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)
-                .AddSeconds(timeObj.Timestamp);
-
-            return ((
-                Address: responses[0].DisplayName,
-                Time: time,
-                TimeZoneName: timeObj.TimezoneName
-            ), default);
         }
         catch (Exception ex)
         {
             Log.Error(ex, "Weather error: {Message}", ex.Message);
             return (default, TimeErrors.NotFound);
         }
+        return (default, TimeErrors.NotFound);
     }
 
     /// <summary>
@@ -619,10 +624,15 @@ public class SearchesService : INService, IUnloadableService
     /// <returns>A HashSet containing the blacklisted tags for the guild.</returns>
     private async Task<HashSet<string>> GetBlacklistedTags(ulong guildId)
     {
-        var config = await gss.GetGuildConfig(guildId);
-        return config.NsfwBlacklistedTags.Count != 0
-            ? [..config.NsfwBlacklistedTags.Select(x => x.Tag)]
-            : [];
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
+
+        // Direct query with GuildId filter
+        var tags = await dbContext.NsfwBlacklistedTags
+            .Where(t => t.GuildId == guildId)
+            .Select(x => x.Tag)
+            .ToListAsync();
+
+        return tags.Count != 0 ? tags.ToHashSet() : [];
     }
 
     /// <summary>

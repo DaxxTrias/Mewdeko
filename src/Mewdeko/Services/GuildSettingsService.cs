@@ -1,29 +1,28 @@
 using System.Threading;
+using DataModel;
+using LinqToDB;
 using Mewdeko.Common.Configs;
-using Mewdeko.Database.Common;
 using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Services.Impl;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Serilog;
 
 namespace Mewdeko.Services;
 
 /// <summary>
-///     Service responsible for managing Discord guild configurations.
-///     Provides methods for retrieving and updating guild settings with proper database context management.
+///     Service responsible for managing Discord guild configurations using LinqToDB.
+///     Provides methods for retrieving and updating guild settings with caching and context management.
 /// </summary>
 public class GuildSettingsService
 {
-    private readonly DbContextProvider dbProvider;
+    private readonly IDataConnectionFactory dbFactory;
     private readonly BotConfig botSettings;
     private readonly IMemoryCache cache;
     private readonly PerformanceMonitorService perfService;
-    private readonly ConcurrentDictionary<ulong, SemaphoreSlim> updateLocks;
+    private readonly ConcurrentDictionary<ulong, SemaphoreSlim> updateLocks; // Use ulong as key
     private readonly TimeSpan defaultCacheExpiration = TimeSpan.FromMinutes(30);
     private readonly TimeSpan slidingCacheExpiration = TimeSpan.FromMinutes(10);
 
-    // Cache keys
     private static string GetPrefixCacheKey(ulong guildId)
     {
         return $"prefix_{guildId}";
@@ -40,34 +39,31 @@ public class GuildSettingsService
     }
 
     /// <summary>
-    ///     Initializes a new instance of the GuildSettingsService.
+    ///     Initializes a new instance of the <see cref="GuildSettingsService" /> class.
     /// </summary>
-    /// <param name="dbProvider">Provider for database context access.</param>
+    /// <param name="dbFactory">Factory for creating LinqToDB database connections.</param>
     /// <param name="botSettings">Service for accessing bot configuration settings.</param>
     /// <param name="memoryCache">Memory cache for storing frequently accessed guild settings.</param>
     /// <param name="perfService">Service for monitoring performance metrics.</param>
     /// <exception cref="ArgumentNullException">Thrown when any required dependency is null.</exception>
     public GuildSettingsService(
-        DbContextProvider dbProvider,
+        IDataConnectionFactory dbFactory,
         BotConfig botSettings,
         IMemoryCache memoryCache,
         PerformanceMonitorService perfService)
     {
-        this.dbProvider = dbProvider ?? throw new ArgumentNullException(nameof(dbProvider));
+        this.dbFactory = dbFactory ?? throw new ArgumentNullException(nameof(dbFactory));
         this.botSettings = botSettings ?? throw new ArgumentNullException(nameof(botSettings));
         cache = memoryCache ?? throw new ArgumentNullException(nameof(memoryCache));
-        this.perfService = perfService;
-        updateLocks = new ConcurrentDictionary<ulong, SemaphoreSlim>();
+        this.perfService = perfService ?? throw new ArgumentNullException(nameof(perfService));
+        updateLocks = new ConcurrentDictionary<ulong, SemaphoreSlim>(); // Use ulong as key
     }
 
     /// <summary>
     ///     Retrieves the command prefix for a specified guild with caching.
     /// </summary>
-    /// <param name="guild">The Discord guild to get the prefix for. Can be null for default prefix.</param>
-    /// <returns>
-    ///     The guild's custom prefix if set, otherwise the default bot prefix.
-    ///     Returns default prefix if guild is null.
-    /// </returns>
+    /// <param name="guild">The guild to get the prefix for. Can be null for default prefix.</param>
+    /// <returns>The guild's custom prefix if set, otherwise the default bot prefix.</returns>
     public async Task<string> GetPrefix(IGuild? guild)
     {
         using (perfService.Measure(nameof(GetPrefix)))
@@ -75,25 +71,29 @@ public class GuildSettingsService
             if (guild == null)
                 return botSettings.Prefix;
 
-            var cacheKey = GetPrefixCacheKey(guild.Id);
+            var guildId = guild.Id;
+            var cacheKey = GetPrefixCacheKey(guildId);
 
-            // Try to get prefix from cache first
-            if (cache.TryGetValue(cacheKey, out string cachedPrefix))
+            if (cache.TryGetValue(cacheKey, out string? cachedPrefix) && cachedPrefix != null)
                 return cachedPrefix;
 
+            string? prefix = null;
+            try
+            {
+                await using var db = await dbFactory.CreateConnectionAsync();
+                prefix = await db.GuildConfigs
+                    .Where(x => x.GuildId == guildId)
+                    .Select(x => x.Prefix)
+                    .FirstOrDefaultAsync();
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Failed to retrieve prefix for guild {GuildId}", guildId);
+                return botSettings.Prefix;
+            }
 
-            await using var db = await dbProvider.GetContextAsync();
-            var config = await db.GuildConfigs
-                .AsNoTracking()
-                .Where(x => x.GuildId == guild.Id)
-                .Select(x => x.Prefix)
-                .FirstOrDefaultAsync();
+            var result = string.IsNullOrWhiteSpace(prefix) ? botSettings.Prefix : prefix;
 
-            var result = string.IsNullOrWhiteSpace(config)
-                ? botSettings.Prefix
-                : config;
-
-            // Store in cache with sliding expiration
             cache.Set(cacheKey, result, new MemoryCacheEntryOptions
             {
                 AbsoluteExpirationRelativeToNow = defaultCacheExpiration, SlidingExpiration = slidingCacheExpiration
@@ -106,7 +106,7 @@ public class GuildSettingsService
     /// <summary>
     ///     Sets a new command prefix for a specified guild and updates cache.
     /// </summary>
-    /// <param name="guild">The Discord guild to set the prefix for.</param>
+    /// <param name="guild">The guild to set the prefix for.</param>
     /// <param name="prefix">The new prefix to set.</param>
     /// <returns>The newly set prefix.</returns>
     /// <exception cref="ArgumentNullException">Thrown when either guild or prefix is null.</exception>
@@ -117,30 +117,38 @@ public class GuildSettingsService
             ArgumentNullException.ThrowIfNull(guild);
             ArgumentNullException.ThrowIfNull(prefix);
 
-            // Get lock for this guild to prevent concurrent updates
-            var updateLock = updateLocks.GetOrAdd(guild.Id, _ => new SemaphoreSlim(1, 1));
+            var guildId = guild.Id;
+            var updateLock = updateLocks.GetOrAdd(guildId, _ => new SemaphoreSlim(1, 1));
 
             try
             {
-                await updateLock.WaitAsync();
+                await updateLock.WaitAsync().ConfigureAwait(false);
 
-                await using var db = await dbProvider.GetContextAsync();
-                var config = await db.ForGuildId(guild.Id);
-
-                config.Prefix = prefix;
-                await db.SaveChangesAsync();
-
-                // Update cache
-                var cacheKey = GetPrefixCacheKey(guild.Id);
-                cache.Set(cacheKey, prefix, new MemoryCacheEntryOptions
+                await using var db = await dbFactory.CreateConnectionAsync();
+                await using var tx = await db.BeginTransactionAsync();
+                try
                 {
-                    AbsoluteExpirationRelativeToNow = defaultCacheExpiration, SlidingExpiration = slidingCacheExpiration
-                });
+                    var config = await GetOrCreateGuildConfigInternal(db, guildId);
+                    config.Prefix = prefix;
+                    await db.UpdateAsync(config);
+                    await tx.CommitAsync();
 
-                // Invalidate full guild config cache if it exists
-                cache.Remove(GetGuildConfigCacheKey(guild.Id));
+                    var cacheKey = GetPrefixCacheKey(guildId);
+                    cache.Set(cacheKey, prefix, new MemoryCacheEntryOptions
+                    {
+                        AbsoluteExpirationRelativeToNow = defaultCacheExpiration,
+                        SlidingExpiration = slidingCacheExpiration
+                    });
+                    cache.Remove(GetGuildConfigCacheKey(guildId));
 
-                return prefix;
+                    return prefix;
+                }
+                catch (Exception ex)
+                {
+                    await tx.RollbackAsync();
+                    Log.Error(ex, "Failed to set prefix for guild {GuildId} in transaction", guildId);
+                    throw;
+                }
             }
             finally
             {
@@ -151,35 +159,28 @@ public class GuildSettingsService
 
     /// <summary>
     ///     Gets the guild configuration for the specified guild ID with caching.
+    ///     Retrieves from cache if available, otherwise fetches from DB (or creates if non-existent).
     /// </summary>
     /// <param name="guildId">The ID of the guild to get configuration for.</param>
-    /// <param name="includes">Optional function to include additional related data.</param>
     /// <param name="bypassCache">Set to true to force a database fetch, bypassing cache.</param>
-    /// <returns>The guild configuration with any specified includes.</returns>
-    /// <exception cref="Exception">Thrown when failing to get guild config.</exception>
-    public async Task<GuildConfig> GetGuildConfig(
-        ulong guildId,
-        Func<DbSet<GuildConfig>, IQueryable<GuildConfig>>? includes = null,
-        bool bypassCache = false)
+    /// <returns>The guild configuration, or null if an error occurs during fetching or creation.</returns>
+    public async Task<GuildConfig?> GetGuildConfig(ulong guildId, bool bypassCache = false)
     {
         using (perfService.Measure(nameof(GetGuildConfig)))
         {
+            var cacheKey = GetGuildConfigCacheKey(guildId);
+
+            if (!bypassCache && cache.TryGetValue(cacheKey, out GuildConfig? cachedConfig))
+            {
+                return cachedConfig;
+            }
+
             try
             {
-                var cacheKey = GetGuildConfigCacheKey(guildId);
+                await using var db = await dbFactory.CreateConnectionAsync();
+                var config = await GetOrCreateGuildConfigInternal(db, guildId);
 
-                // Only use cache if no includes are requested and cache bypass is not requested
-                if (!bypassCache && includes == null && cache.TryGetValue(cacheKey, out GuildConfig cachedConfig))
-                {
-                    return cachedConfig;
-                }
-
-
-                await using var db = await dbProvider.GetContextAsync();
-                var config = await db.ForGuildId(guildId, includes);
-
-                // Only cache if no includes were requested (simpler caching strategy)
-                if (includes == null)
+                if (config != null)
                 {
                     cache.Set(cacheKey, config, new MemoryCacheEntryOptions
                     {
@@ -192,106 +193,203 @@ public class GuildSettingsService
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Failed to get guild config for {GuildId}", guildId);
-                throw;
+                Log.Error(ex, "Failed to get or create guild config for {GuildId}", guildId);
+                return null;
             }
         }
     }
 
     /// <summary>
     ///     Updates the guild configuration for a specified guild with proper cache invalidation.
+    ///     Requires the GuildConfig object passed in to have the correct primary key (Id) set if it represents an existing
+    ///     record.
     /// </summary>
     /// <param name="guildId">The ID of the guild to update configuration for.</param>
-    /// <param name="toUpdate">The updated guild configuration.</param>
+    /// <param name="toUpdate">The updated guild configuration object.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    /// <exception cref="Exception">Thrown when the update operation fails.</exception>
+    /// <exception cref="ArgumentException">Thrown if the GuildId in the passed object does not match the specified guildId.</exception>
+    /// <exception cref="Exception">Thrown when the database update operation fails.</exception>
     public async Task UpdateGuildConfig(ulong guildId, GuildConfig toUpdate)
     {
         using (perfService.Measure(nameof(UpdateGuildConfig)))
         {
+            if (toUpdate.GuildId != guildId)
+            {
+                throw new ArgumentException("GuildConfig GuildId does not match the provided guildId.",
+                    nameof(toUpdate));
+            }
+
+            var updateLock = updateLocks.GetOrAdd(guildId, _ => new SemaphoreSlim(1, 1));
+
             try
             {
+                await updateLock.WaitAsync().ConfigureAwait(false);
 
-                // Get update lock for this guild
-                var updateLock = updateLocks.GetOrAdd(guildId, _ => new SemaphoreSlim(1, 1));
+                await using var db = await dbFactory.CreateConnectionAsync();
+
+                await using var tx = await db.BeginTransactionAsync();
 
                 try
                 {
-                    await updateLock.WaitAsync();
+                    var existingConfig = await db.GuildConfigs
+                        .FirstOrDefaultAsync(x => x.Id == toUpdate.Id);
 
-                    await using var db = await dbProvider.GetContextAsync();
-                    db.GuildConfigs.Update(toUpdate);
-                    await db.SaveChangesAsync();
+                    if (existingConfig == null)
+                    {
+                        Log.Warning("GuildConfig with ID {Id} not found in database", toUpdate.Id);
+                        existingConfig = await db.GuildConfigs
+                            .FirstOrDefaultAsync(x => x.GuildId == guildId);
 
-                    // Update cache with new configuration
+                        if (existingConfig == null)
+                        {
+                            Log.Warning("No GuildConfig found for GuildId {GuildId}, creating new one", guildId);
+                            existingConfig = await GetOrCreateGuildConfigInternal(db, guildId);
+                        }
+                    }
+
+                    var properties = typeof(GuildConfig).GetProperties()
+                        .Where(p => p.CanRead && p.CanWrite && p.Name != "Id" && p.Name != "DateAdded");
+
+                    foreach (var prop in properties)
+                    {
+                        var oldValue = prop.GetValue(existingConfig);
+                        var newValue = prop.GetValue(toUpdate);
+
+                        if (!Equals(oldValue, newValue))
+                        {
+                            prop.SetValue(existingConfig, newValue);
+                        }
+                    }
+
+                    existingConfig.CommandLogChannel = toUpdate.CommandLogChannel;
+
+                    await db.UpdateAsync(existingConfig);
+
+                    await tx.CommitAsync();
+
+                    // Update cache with the database entity
                     var cacheKey = GetGuildConfigCacheKey(guildId);
-                    cache.Set(cacheKey, toUpdate, new MemoryCacheEntryOptions
+                    cache.Set(cacheKey, existingConfig, new MemoryCacheEntryOptions
                     {
                         AbsoluteExpirationRelativeToNow = defaultCacheExpiration,
                         SlidingExpiration = slidingCacheExpiration
                     });
 
-                    // Update prefix cache if it exists
-                    if (!string.IsNullOrWhiteSpace(toUpdate.Prefix))
+                    // Update prefix cache if needed
+                    if (!string.IsNullOrWhiteSpace(existingConfig.Prefix))
                     {
-                        cache.Set(GetPrefixCacheKey(guildId), toUpdate.Prefix, new MemoryCacheEntryOptions
+                        cache.Set(GetPrefixCacheKey(guildId), existingConfig.Prefix, new MemoryCacheEntryOptions
                         {
                             AbsoluteExpirationRelativeToNow = defaultCacheExpiration,
                             SlidingExpiration = slidingCacheExpiration
                         });
                     }
+                    else
+                    {
+                        cache.Remove(GetPrefixCacheKey(guildId));
+                    }
 
-                    // Invalidate any potentially affected sub-caches
                     cache.Remove(GetReactionRolesCacheKey(guildId));
                 }
-                finally
+                catch (Exception ex)
                 {
-                    updateLock.Release();
+                    await tx.RollbackAsync();
+                    Log.Error(ex, "Exception type: {Type}, Message: {Message}", ex.GetType().Name, ex.Message);
+                    Log.Error(ex, "Stack trace: {StackTrace}", ex.StackTrace);
+                    Log.Error(ex, "Failed to update guild config for {GuildId} in transaction", guildId);
+                    throw;
                 }
             }
-            catch (Exception ex)
+            finally
             {
-                Log.Error(ex, "Failed to update guild config for {GuildId}", guildId);
-                throw;
+                updateLock.Release();
             }
         }
     }
 
     /// <summary>
-    ///     Gets the reaction roles for a specific guild with caching.
+    ///     Clears the cache for a specific guild. Useful after manual database changes or significant configuration resets.
+    /// </summary>
+    /// <param name="guildId">The ID of the guild whose cache should be cleared.</param>
+    public void ClearCacheForGuild(ulong guildId)
+    {
+        cache.Remove(GetPrefixCacheKey(guildId));
+        cache.Remove(GetGuildConfigCacheKey(guildId));
+        cache.Remove(GetReactionRolesCacheKey(guildId));
+        Log.Information("Cache cleared for GuildId {GuildId}", guildId);
+    }
+
+    /// <summary>
+    ///     Gets the reaction roles for a specific guild with caching, including associated role details.
     /// </summary>
     /// <param name="guildId">The ID of the guild to get reaction roles for.</param>
     /// <param name="bypassCache">Set to true to force a database fetch, bypassing cache.</param>
-    /// <returns>The collection of reaction role messages for the guild.</returns>
-    /// <exception cref="Exception">Thrown when failing to get reaction roles.</exception>
-    public async Task<IndexedCollection<ReactionRoleMessage>> GetReactionRoles(ulong guildId, bool bypassCache = false)
+    /// <returns>
+    ///     A collection of reaction role messages for the guild, potentially with associated roles loaded, or null on
+    ///     error.
+    /// </returns>
+    public async Task<HashSet<ReactionRoleMessage>?> GetReactionRoles(ulong guildId, bool bypassCache = false)
     {
         using (perfService.Measure(nameof(GetReactionRoles)))
         {
+            var cacheKey = GetReactionRolesCacheKey(guildId);
+
+            if (!bypassCache && cache.TryGetValue(cacheKey, out HashSet<ReactionRoleMessage>? cachedRoles))
+            {
+                return cachedRoles;
+            }
+
+            List<ReactionRoleMessage>? reactionRoleMessages = null;
             try
             {
-                var cacheKey = GetReactionRolesCacheKey(guildId);
-                if (!bypassCache && cache.TryGetValue(cacheKey, out IndexedCollection<ReactionRoleMessage> cachedRoles))
-                {
-                    return cachedRoles;
-                }
-
-
-                await using var db = await dbProvider.GetContextAsync();
-                var roles = await db.GetReactionRoles(guildId);
-
-                cache.Set(cacheKey, roles, new MemoryCacheEntryOptions
-                {
-                    AbsoluteExpirationRelativeToNow = defaultCacheExpiration, SlidingExpiration = slidingCacheExpiration
-                });
-
-                return roles;
+                await using var db = await dbFactory.CreateConnectionAsync();
+                reactionRoleMessages = await db.ReactionRoleMessages
+                    .LoadWithAsTable(rrm => rrm.ReactionRoles)
+                    .Where(x => x.GuildId == guildId)
+                    .OrderBy(rrm => rrm.Index)
+                    .ToListAsync();
             }
             catch (Exception ex)
             {
                 Log.Error(ex, "Failed to get reaction roles for {GuildId}", guildId);
-                throw;
+                return null;
             }
+
+            var reactionRolesSet =
+                new HashSet<ReactionRoleMessage>(reactionRoleMessages ?? new List<ReactionRoleMessage>());
+
+            cache.Set(cacheKey, reactionRolesSet, new MemoryCacheEntryOptions
+            {
+                AbsoluteExpirationRelativeToNow = defaultCacheExpiration, SlidingExpiration = slidingCacheExpiration
+            });
+
+            return reactionRolesSet;
         }
+    }
+
+    /// <summary>
+    ///     Internal helper to get or create a guild configuration within a given DB connection.
+    ///     Ensures configuration exists before returning.
+    /// </summary>
+    /// <param name="db">The active LinqToDB database connection (<see cref="MewdekoDb" />).</param>
+    /// <param name="guildId">The ulong ID of the guild.</param>
+    /// <returns>The existing or newly created guild configuration.</returns>
+    private async Task<GuildConfig> GetOrCreateGuildConfigInternal(MewdekoDb db, ulong guildId)
+    {
+        var config = await db.GuildConfigs.FirstOrDefaultAsync(x => x.GuildId == guildId);
+
+        if (config == null)
+        {
+            Log.Information("Creating new GuildConfig for GuildId {GuildId}", guildId);
+            config = new GuildConfig
+            {
+                GuildId = guildId, DateAdded = DateTime.UtcNow
+            };
+
+            var newId = await db.InsertWithInt32IdentityAsync(config);
+            config.Id = newId;
+        }
+
+        return config;
     }
 }

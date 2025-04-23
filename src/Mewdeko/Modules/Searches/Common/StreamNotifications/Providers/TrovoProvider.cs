@@ -1,6 +1,7 @@
 ﻿using System.Net.Http;
 using System.Net.Http.Json;
 using System.Text.RegularExpressions;
+
 using Mewdeko.Modules.Searches.Common.StreamNotifications.Models;
 using Serilog;
 
@@ -29,11 +30,11 @@ public class TrovoProvider : Provider
     }
 
     /// <inheritdoc />
-    public override FollowedStream.FType Platform
+    public override FType Platform
     {
         get
         {
-            return FollowedStream.FType.Trovo;
+            return FType.Trovo;
         }
     }
 

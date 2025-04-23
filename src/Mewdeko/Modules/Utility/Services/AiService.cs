@@ -5,11 +5,12 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using DataModel;
+using LinqToDB;
 using Mewdeko.Common.Configs;
-using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.Utility.Services.Impl;
 using Mewdeko.Services.Strings;
-using Microsoft.EntityFrameworkCore;
+
 using Serilog;
 using Embed = Discord.Embed;
 
@@ -20,7 +21,7 @@ namespace Mewdeko.Modules.Utility.Services;
 /// </summary>
 public class AiService : INService
 {
-    private readonly DbContextProvider dbProvider;
+    private readonly IDataConnectionFactory dbFactory;
     private readonly DiscordShardedClient client;
     private readonly GeneratedBotStrings strings;
     private readonly BotConfig botConfig;
@@ -108,10 +109,10 @@ public class AiService : INService
     /// <summary>
     ///     Initializes a new instance of the <see cref="AiService" /> class.
     /// </summary>
-    public AiService(DbContextProvider dbProvider, IHttpClientFactory httpFactory,
+    public AiService(IDataConnectionFactory dbFactory, IHttpClientFactory httpFactory,
         GeneratedBotStrings strings, BotConfig config, EventHandler handler, DiscordShardedClient client)
     {
-        this.dbProvider = dbProvider;
+        this.dbFactory = dbFactory;
         this.httpFactory = httpFactory;
         this.strings = strings;
         botConfig = config;
@@ -129,8 +130,8 @@ public class AiService : INService
     /// <returns>The guild's Ai configuration.</returns>
     public async Task<GuildAiConfig> GetOrCreateConfig(ulong guildId)
     {
-        await using var db = await dbProvider.GetContextAsync();
-        return await db.GuildAiConfig.FirstOrDefaultAsync(x => x.GuildId == guildId)
+        await using var db = await dbFactory.CreateConnectionAsync();
+        return await db.GuildAiConfigs.FirstOrDefaultAsync(x => x.GuildId == guildId)
                ?? new GuildAiConfig
                {
                    GuildId = guildId
@@ -143,12 +144,11 @@ public class AiService : INService
     /// <param name="config">The configuration to update.</param>
     public async Task UpdateConfig(GuildAiConfig config)
     {
-        await using var db = await dbProvider.GetContextAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
         if (config.Id == 0)
-            db.GuildAiConfig.Add(config);
+            await db.InsertAsync(config);
         else
-            db.GuildAiConfig.Update(config);
-        await db.SaveChangesAsync();
+            await db.UpdateAsync(config);
     }
 
     /// <summary>
@@ -250,25 +250,24 @@ public class AiService : INService
 
     private async Task ClearConversation(ulong guildId, ulong userId)
     {
-        await using var db = await dbProvider.GetContextAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
         var conversation = await db.AiConversations
-            .Include(x => x.Messages)
+            .LoadWithAsTable(x => x.AiMessages)
             .FirstOrDefaultAsync(x => x.GuildId == guildId && x.UserId == userId);
 
         if (conversation != null)
         {
-            db.AiMessages.RemoveRange(conversation.Messages);
-            db.AiConversations.Remove(conversation);
-            await db.SaveChangesAsync();
+            await db.AiMessages.Intersect(conversation.AiMessages).DeleteAsync();
+            await db.AiConversations.Select(x => conversation).DeleteAsync();
         }
     }
 
     private async Task StreamResponse(GuildAiConfig config, ulong? webhookMessageId, SocketMessage userMsg,
         DiscordWebhookClient? webhook)
     {
-        await using var db = await dbProvider.GetContextAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
         var conversation = await db.AiConversations
-            .Include(x => x.Messages)
+            .LoadWithAsTable(x => x.AiMessages)
             .FirstOrDefaultAsync(x => x.GuildId == config.GuildId && x.UserId == userMsg.Author.Id);
 
         var guildChannel = userMsg.Channel as SocketTextChannel;
@@ -281,13 +280,14 @@ public class AiService : INService
 
         var sysPrompt = replacer.Replace(config.SystemPrompt);
 
+        var convId = 0;
         if (conversation == null)
         {
             conversation = new AiConversation
             {
                 GuildId = config.GuildId,
                 UserId = userMsg.Author.Id,
-                Messages =
+                AiMessages =
                 [
                     new AiMessage
                     {
@@ -295,21 +295,20 @@ public class AiService : INService
                     }
                 ]
             };
-            db.AiConversations.Add(conversation);
+            convId = await db.InsertWithInt32IdentityAsync(conversation);
         }
 
-        conversation.Messages.Add(new AiMessage
+        await db.InsertAsync(new AiMessage
         {
-            Role = "user", Content = userMsg.Content
+            ConversationId = convId, Role = "user", Content = userMsg.Content
         });
-        await db.SaveChangesAsync();
 
         // Maintain history size for all providers
         const int maxHistorySize = 5;
 
         // Keep system message plus most recent messages
-        var systemMessage = conversation.Messages.FirstOrDefault(m => m.Role == "system");
-        var nonSystemMessages = conversation.Messages
+        var systemMessage = conversation.AiMessages.FirstOrDefault(m => m.Role == "system");
+        var nonSystemMessages = conversation.AiMessages
             .Where(m => m.Role != "system")
             .OrderByDescending(m => m.Id)
             .Take(maxHistorySize)
@@ -319,23 +318,26 @@ public class AiService : INService
         if (systemMessage != null)
             messagesToKeep.Add(systemMessage.Id);
 
-        var toRemove = conversation.Messages
+        var toRemove = conversation.AiMessages
             .Where(m => !messagesToKeep.Contains(m.Id))
             .ToList();
 
         if (toRemove.Any())
         {
             Log.Information($"Removing {toRemove.Count} older messages from conversation to manage payload size");
-            db.AiMessages.RemoveRange(toRemove);
-            await db.SaveChangesAsync();
+            await db.AiMessages
+                .Where(m =>
+                    m.ConversationId == conversation.Id &&
+                    !messagesToKeep.Contains(m.Id))
+                .DeleteAsync();
 
             // Make sure to refresh the conversation object after removing messages
             conversation = await db.AiConversations
-                .Include(x => x.Messages)
+                .LoadWithAsTable(x => x.AiMessages)
                 .FirstOrDefaultAsync(x => x.GuildId == config.GuildId && x.UserId == userMsg.Author.Id);
         }
 
-        var (aiClient, streamParser) = aiClientFactory.Create(config.Provider);
+        var (aiClient, streamParser) = aiClientFactory.Create((AiProvider)config.Provider);
         var responseBuilder = new StringBuilder();
         var lastUpdate = DateTime.UtcNow;
         var tokenCount = 0;
@@ -361,7 +363,7 @@ public class AiService : INService
         }
 
         var timeout = DateTime.UtcNow.AddMinutes(1); // 5-minute timeout as a safety
-        var stream = await aiClient.StreamResponseAsync(conversation.Messages, config.Model, config.ApiKey);
+        var stream = await aiClient.StreamResponseAsync(conversation.AiMessages, config.Model, config.ApiKey);
         await foreach (var rawJson in stream)
         {
             if (string.IsNullOrEmpty(rawJson)) continue;
@@ -370,7 +372,7 @@ public class AiService : INService
             Log.Information($"Claude raw response: {rawJson}");
 
             // IMPORTANT: Parse the delta to extract just the content
-            var contentDelta = streamParser.ParseDelta(rawJson, config.Provider);
+            var contentDelta = streamParser.ParseDelta(rawJson, (AiProvider)config.Provider);
             if (!string.IsNullOrEmpty(contentDelta))
             {
                 responseBuilder.Append(contentDelta);
@@ -378,7 +380,7 @@ public class AiService : INService
             }
 
             // Check for usage information
-            var usage = streamParser.ParseUsage(rawJson, config.Provider);
+            var usage = streamParser.ParseUsage(rawJson, (AiProvider)config.Provider);
             if (usage.HasValue)
             {
                 tokenCount = usage.Value.TotalTokens;
@@ -394,7 +396,7 @@ public class AiService : INService
             }
 
             // Check if stream is finished
-            if (streamParser.IsStreamFinished(rawJson, config.Provider))
+            if (streamParser.IsStreamFinished(rawJson, (AiProvider)config.Provider))
             {
                 Log.Information("AI stream finished");
                 break;
@@ -408,14 +410,14 @@ public class AiService : INService
             }
         }
 
-        // Add the assistant's response to the conversation history
-        conversation.Messages.Add(new AiMessage
+        await db.InsertAsync(new AiMessage
         {
-            Role = "assistant", Content = responseBuilder.ToString()
+            ConversationId = conversation.Id,
+            Role = "assistant",
+            Content = responseBuilder.ToString()
         });
         config.TokensUsed += tokenCount;
-
-        await db.SaveChangesAsync();
+        await db.UpdateAsync(config);
 
         // Final update with completed response
         await UpdateMessageEmbed(true); // true = final update

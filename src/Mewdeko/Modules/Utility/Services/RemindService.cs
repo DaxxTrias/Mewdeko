@@ -1,9 +1,10 @@
 ﻿using System.Text.RegularExpressions;
 using System.Threading;
-using Mewdeko.Database.DbContextStuff;
+using LinqToDB;
+using DataModel;
 using Mewdeko.Modules.Administration.Services;
 using Mewdeko.Services.Strings;
-using Microsoft.EntityFrameworkCore;
+
 using Serilog;
 using Swan;
 
@@ -15,7 +16,7 @@ namespace Mewdeko.Modules.Utility.Services;
 public partial class RemindService : INService
 {
     private readonly DiscordShardedClient client;
-    private readonly DbContextProvider dbProvider;
+    private readonly IDataConnectionFactory dbFactory;
     private readonly GuildTimezoneService tz;
     private readonly GeneratedBotStrings Strings;
 
@@ -26,12 +27,12 @@ public partial class RemindService : INService
     ///     Initializes the reminder service, starting the background task to check for and execute reminders.
     /// </summary>
     /// <param name="client">The Discord client used for sending reminder notifications.</param>
-    /// <param name="dbProvider">The database service for managing reminders.</param>
+    /// <param name="dbFactory">The database service for managing reminders.</param>
     /// <param name="tz">The timezone service for guild timezones.</param>
-    public RemindService(DiscordShardedClient client, DbContextProvider dbProvider, GuildTimezoneService tz, GeneratedBotStrings strings)
+    public RemindService(DiscordShardedClient client, IDataConnectionFactory dbFactory, GuildTimezoneService tz, GeneratedBotStrings strings)
     {
         this.client = client;
-        this.dbProvider = dbProvider;
+        this.dbFactory = dbFactory;
         this.tz = tz;
         Strings = strings;
         reminderTimers = new ConcurrentDictionary<int, Timer>();
@@ -79,12 +80,9 @@ public partial class RemindService : INService
 
     private async Task<List<Reminder>> GetRemindersAsync()
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
-        var reminders = await dbContext.Reminders.ToListAsync();
-        return reminders;
+        await using var db = await dbFactory.CreateConnectionAsync();
+        return await db.Reminders.ToListAsync();
     }
-
-
 
     /// <summary>
     ///     Executes the reminder action.
@@ -138,10 +136,12 @@ public partial class RemindService : INService
             await timer.DisposeAsync();
         }
 
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
 
-        dbContext.Set<Reminder>().Remove(reminder);
-        await dbContext.SaveChangesAsync().ConfigureAwait(false);
+        // Use LinqToDB to delete the reminder
+        await db.Reminders
+            .Where(r => r.Id == reminder.Id)
+            .DeleteAsync();
     }
 
     /// <summary>
@@ -184,9 +184,11 @@ public partial class RemindService : INService
             ServerId = serverId ?? 0
         };
 
-        await using var dbContext = await dbProvider.GetContextAsync();
-        dbContext.Reminders.Add(rem);
-        await dbContext.SaveChangesAsync().ConfigureAwait(false);
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        // Insert using LinqToDB
+        rem.Id = await db.InsertWithInt32IdentityAsync(rem);
+
         await ScheduleReminder(rem);
 
         var gTime = serverId == null
@@ -209,8 +211,9 @@ public partial class RemindService : INService
     /// <returns>A list of all reminders for the specified user.</returns>
     public async Task<List<Reminder>> GetUserRemindersAsync(ulong userId)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
-        return await dbContext.Reminders
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        return await db.Reminders
             .Where(x => x.UserId == userId)
             .OrderBy(x => x.When)
             .ToListAsync();
@@ -227,7 +230,6 @@ public partial class RemindService : INService
         if (index < 0)
             return false;
 
-        await using var dbContext = await dbProvider.GetContextAsync();
         var rems = await GetUserRemindersAsync(userId);
 
         var pageIndex = index % 10;
@@ -235,8 +237,13 @@ public partial class RemindService : INService
             return false;
 
         var rem = rems[pageIndex];
-        dbContext.Reminders.Remove(rem);
-        await dbContext.SaveChangesAsync().ConfigureAwait(false);
+
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        // Delete using LinqToDB
+        await db.Reminders
+            .Where(r => r.Id == rem.Id)
+            .DeleteAsync();
 
         if (reminderTimers.TryRemove(rem.Id, out var timer))
         {

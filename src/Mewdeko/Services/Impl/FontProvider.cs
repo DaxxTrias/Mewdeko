@@ -40,9 +40,16 @@ public class FontProvider
                 FallBackFonts.Add(SKTypeface.FromFile(font));
         }
 
-        RipFont = new SKPaint
+        // Create the font for text
+        RipTextFont = new SKFont
         {
-            Typeface = NotoSans, TextSize = 20, IsAntialias = true
+            Typeface = NotoSans,
+            Size = 20
+        };
+
+        RipPaint = new SKPaint
+        {
+            IsAntialias = true
         };
     }
 
@@ -57,9 +64,14 @@ public class FontProvider
     public SKTypeface NotoSans { get; }
 
     /// <summary>
-    ///     Gets the font used for the .rip command.
+    ///     Gets the font used for the .rip command text.
     /// </summary>
-    public SKPaint RipFont { get; }
+    public SKFont RipTextFont { get; }
+
+    /// <summary>
+    ///     Gets the paint used for the .rip command.
+    /// </summary>
+    public SKPaint RipPaint { get; }
 
     /// <summary>
     ///     Gets the list of fallback fonts.

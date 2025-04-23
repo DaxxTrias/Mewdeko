@@ -148,7 +148,7 @@ public class MewdekoUserMessage : IUserMessage
     public IMessageChannel Channel { get; set; }
 
     /// <inheritdoc />
-    public IUser Author { get; set; }
+    public IUser? Author { get; set; }
 
     /// <inheritdoc />
     public IReadOnlyCollection<IAttachment> Attachments { get; set; } = new List<IAttachment>();

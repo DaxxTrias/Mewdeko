@@ -1,5 +1,4 @@
 ﻿using System.Security.Cryptography;
-using Mewdeko.Database.Common;
 
 namespace Mewdeko.Extensions;
 
@@ -163,19 +162,6 @@ public static class EnumerableExtensions
     {
         return new ConcurrentDictionary<TKey, TValue>(dict);
     }
-
-    /// <summary>
-    ///     Converts a sequence of items into an indexed collection.
-    /// </summary>
-    /// <typeparam name="T">The type of items in the sequence.</typeparam>
-    /// <param name="enumerable">The sequence of items to convert.</param>
-    /// <returns>An IndexedCollection containing the items from the sequence.</returns>
-    public static IndexedCollection<T> ToIndexed<T>(this IEnumerable<T> enumerable)
-        where T : class, IIndexed
-    {
-        return new IndexedCollection<T>(enumerable);
-    }
-
 
     /// <summary>
     ///     Creates a task that will complete when all of the <see cref="Task{TResult}" /> objects in an enumerable

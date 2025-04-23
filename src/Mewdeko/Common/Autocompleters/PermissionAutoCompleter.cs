@@ -36,7 +36,7 @@ public class PermissionAutoCompleter : AutocompleteHandler
         IParameterInfo parameter, IServiceProvider services)
     {
         var cache = await Perms.GetCacheFor(context.Guild.Id);
-        var perms = cache.Permissions.Source;
+        var perms = cache.Permissions;
         return AutocompletionResult.FromSuccess(perms
             .Select(x => $"{x.Index}: {x.GetCommand("/", (SocketGuild)context.Guild)}").Take(20)
             .Where(x => x.Contains((string)autocompleteInteraction.Data.Current.Value)).Select(x =>

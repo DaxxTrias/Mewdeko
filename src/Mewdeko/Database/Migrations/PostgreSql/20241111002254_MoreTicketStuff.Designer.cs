@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using Mewdeko.Database;
+using Mewdeko.Database.EF.EFCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;

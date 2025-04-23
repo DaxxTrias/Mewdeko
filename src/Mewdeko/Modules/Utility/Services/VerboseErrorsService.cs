@@ -1,6 +1,6 @@
 ﻿using Discord.Commands;
+using LinqToDB;
 using Mewdeko.Common.DiscordImplementations;
-using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.Permissions.Common;
 using Mewdeko.Modules.Permissions.Services;
 using Mewdeko.Services.Settings;
@@ -16,7 +16,7 @@ public class VerboseErrorsService : INService, IUnloadableService
 {
     private readonly BotConfigService botConfigService;
     private readonly CommandHandler ch;
-    private readonly DbContextProvider dbProvider;
+    private readonly IDataConnectionFactory dbFactory;
     private readonly GuildSettingsService guildSettings;
     private readonly IServiceProvider services;
     private readonly IBotStrings strings;
@@ -24,14 +24,14 @@ public class VerboseErrorsService : INService, IUnloadableService
     /// <summary>
     ///     Initializes a new instance of the <see cref="VerboseErrorsService" /> class.
     /// </summary>
-    /// <param name="db">The database service.</param>
+    /// <param name="dbFactory">The database factory.</param>
     /// <param name="ch">The command handler.</param>
     /// <param name="strings">The bot strings service.</param>
     /// <param name="guildSettings">The guild settings service.</param>
     /// <param name="services">The service provider.</param>
     /// <param name="botConfigService">The bot configuration service.</param>
     /// <param name="bot">The bot instance.</param>
-    public VerboseErrorsService(DbContextProvider dbProvider, CommandHandler ch,
+    public VerboseErrorsService(IDataConnectionFactory dbFactory, CommandHandler ch,
         IBotStrings strings,
         GuildSettingsService guildSettings,
         IServiceProvider services, BotConfigService botConfigService, Mewdeko bot)
@@ -40,7 +40,7 @@ public class VerboseErrorsService : INService, IUnloadableService
         this.guildSettings = guildSettings;
         this.services = services;
         this.botConfigService = botConfigService;
-        this.dbProvider = dbProvider;
+        this.dbFactory = dbFactory;
         this.ch = ch;
         this.ch.CommandErrored += LogVerboseError;
     }
@@ -112,12 +112,25 @@ public class VerboseErrorsService : INService, IUnloadableService
     /// <returns>True if verbose errors are enabled after the operation; otherwise, false.</returns>
     public async Task<bool> ToggleVerboseErrors(ulong guildId, bool? enabled = null)
     {
-        await using var db = await dbProvider.GetContextAsync();
-        var gc = await db.ForGuildId(guildId, set => set);
-        gc.VerboseErrors = !gc.VerboseErrors;
+        await using var db = await dbFactory.CreateConnectionAsync();
 
-        await guildSettings.UpdateGuildConfig(guildId, gc);
+        // Get guild config using LinqToDB
+        var gc = await db.GuildConfigs
+            .FirstOrDefaultAsync(x => x.GuildId == guildId);
 
-        return gc.VerboseErrors;
+        if (gc != null)
+        {
+            gc.VerboseErrors = enabled ?? !gc.VerboseErrors;
+
+            // Update using LinqToDB
+            await db.UpdateAsync(gc);
+
+            // Update the settings in the service
+            await guildSettings.UpdateGuildConfig(guildId, gc);
+
+            return gc.VerboseErrors;
+        }
+
+        return false;
     }
 }

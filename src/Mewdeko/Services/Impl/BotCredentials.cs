@@ -6,7 +6,6 @@ using Microsoft.Extensions.Configuration;
 
 using Npgsql;
 using Serilog;
-using StackExchange.Redis;
 
 namespace Mewdeko.Services.Impl;
 
@@ -514,12 +513,18 @@ public class BotCredentials : IBotCredentials
                 // Check if Redis is running
                 try
                 {
-                    var connect = ConnectionMultiplexer.Connect(RedisConnections.Split(";")[0]);
-                    connect.Close();
+                    // Don't create a new connection on every credential update
+                    if (!string.IsNullOrWhiteSpace(RedisConnections) &&
+                        RedisConnectionManager.Connection == null)
+                    {
+                        Log.Information("Initializing Redis with connection: {0}",
+                            RedisConnections.Split(";")[0]);
+                        RedisConnectionManager.Initialize(RedisConnections, TotalShards);
+                    }
                 }
                 catch (Exception ex)
                 {
-                    Log.Error("Redis is not running! Make sure it's installed and running, then restart the bot. {0}", ex);
+                    Log.Warning("Redis initialization will be attempted again when needed: {0}", ex.Message);
                 }
             }
 

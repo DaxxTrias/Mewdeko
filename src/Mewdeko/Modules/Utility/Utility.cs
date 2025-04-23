@@ -12,7 +12,6 @@ using LinqToDB;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Common.JsonSettings;
 using Mewdeko.Common.TypeReaders.Models;
-using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.Utility.Common;
 using Mewdeko.Modules.Utility.Services;
 using Mewdeko.Services.Impl;
@@ -45,9 +44,8 @@ public partial class Utility(
     GuildSettingsService guildSettings,
     HttpClient httpClient,
     BotConfigService config,
-    DbContextProvider dbProvider,
-    IDataCache cache,
-    CryptoService cryptoService)
+    IDataConnectionFactory dbFactory,
+    IDataCache cache)
     : MewdekoModuleBase<UtilityService>
 {
     /// <summary>
@@ -67,20 +65,6 @@ public partial class Utility(
     }
 
     private static readonly SemaphoreSlim Sem = new(1, 1);
-
-    /// <summary>
-    ///     Crypto command to generate a chart with the given days
-    /// </summary>
-    /// <param name="cryptoName"></param>
-    /// <param name="time"></param>
-    [Cmd]
-    [Aliases]
-    public async Task Crypto(string cryptoName, StoopidTime? time = null)
-    {
-        var (image, embed) = await cryptoService.GenerateCryptoPriceChartAsync(cryptoName,
-            time is null ? TimeSpan.FromDays(1).Days : time.Time.Days);
-        await ctx.Channel.SendFileAsync(image, "cryptopricechart.png", embed: embed);
-    }
 
 
     /// <summary>
@@ -1863,7 +1847,7 @@ public partial class Utility(
     [Aliases]
     public async Task Stats()
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
         var fiveSecondsAgo = DateTime.Now.AddSeconds(-5);
         var commandStatsTask = dbContext.CommandStats

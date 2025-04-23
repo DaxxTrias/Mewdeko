@@ -10,13 +10,11 @@ public partial class Games
     /// <summary>
     ///     A module containing Trivia commands.
     /// </summary>
-    /// <param name="client">The discord client</param>
     /// <param name="cache">Redis cache</param>
     /// <param name="gamesConfig">Games service for fetching game configs</param>
     /// <param name="guildSettings">The guild settings service</param>
     [Group]
     public class TriviaCommands(
-        DiscordShardedClient client,
         IDataCache cache,
         GamesConfigService gamesConfig,
         GuildSettingsService guildSettings, EventHandler handler)

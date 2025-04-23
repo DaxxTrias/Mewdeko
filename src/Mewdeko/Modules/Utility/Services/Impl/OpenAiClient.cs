@@ -1,4 +1,5 @@
 ﻿using System.Threading;
+using DataModel;
 using OpenAI.Chat;
 
 namespace Mewdeko.Modules.Utility.Services.Impl;
@@ -30,6 +31,7 @@ public class OpenAiClient : IAiClient
     public async Task<IAsyncEnumerable<string>> StreamResponseAsync(IEnumerable<AiMessage> messages, string model,
         string apiKey, CancellationToken cancellationToken = default)
     {
+        await Task.CompletedTask;
         var client = new ChatClient(model, apiKey);
 
         var chatMessages = messages.Select<AiMessage, ChatMessage>(m => m.Role switch

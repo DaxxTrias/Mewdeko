@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using Mewdeko.Database;
+using Mewdeko.Database.EF.EFCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
@@ -23,7 +24,7 @@ namespace Mewdeko.Database.Migrations.PostgreSql
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("Mewdeko.Database.Models.Afk", b =>
+            modelBuilder.Entity("Mewdeko.Database.Models.Afk.Afk", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -105,221 +106,6 @@ namespace Mewdeko.Database.Migrations.PostgreSql
                     b.HasIndex("ConversationId");
 
                     b.ToTable("AiMessages");
-                });
-
-            modelBuilder.Entity("Mewdeko.Database.Models.AntiAltSetting", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("Action")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("ActionDurationMinutes")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("GuildConfigId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("MinAge")
-                        .HasColumnType("text");
-
-                    b.Property<decimal?>("RoleId")
-                        .HasColumnType("numeric(20,0)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("GuildConfigId")
-                        .IsUnique();
-
-                    b.ToTable("AntiAltSetting");
-                });
-
-            modelBuilder.Entity("Mewdeko.Database.Models.AntiMassMentionSetting", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("Action")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime?>("DateAdded")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<int>("GuildConfigId")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("IgnoreBots")
-                        .HasColumnType("boolean");
-
-                    b.Property<int>("MaxMentionsInTimeWindow")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("MentionThreshold")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("MuteTime")
-                        .HasColumnType("integer");
-
-                    b.Property<decimal?>("RoleId")
-                        .HasColumnType("numeric(20,0)");
-
-                    b.Property<int>("TimeWindowSeconds")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("GuildConfigId")
-                        .IsUnique();
-
-                    b.ToTable("AntiMassMentionSetting");
-                });
-
-            modelBuilder.Entity("Mewdeko.Database.Models.AntiRaidSetting", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("Action")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime?>("DateAdded")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<int>("GuildConfigId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("PunishDuration")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("Seconds")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("UserThreshold")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("GuildConfigId")
-                        .IsUnique();
-
-                    b.ToTable("AntiRaidSetting");
-                });
-
-            modelBuilder.Entity("Mewdeko.Database.Models.AntiSpamIgnore", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int?>("AntiMassMentionSettingId")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("AntiSpamSettingId")
-                        .HasColumnType("integer");
-
-                    b.Property<decimal>("ChannelId")
-                        .HasColumnType("numeric(20,0)");
-
-                    b.Property<DateTime?>("DateAdded")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AntiMassMentionSettingId");
-
-                    b.HasIndex("AntiSpamSettingId");
-
-                    b.ToTable("AntiSpamIgnore");
-                });
-
-            modelBuilder.Entity("Mewdeko.Database.Models.AntiSpamSetting", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("Action")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime?>("DateAdded")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<int>("GuildConfigId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("MessageThreshold")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("MuteTime")
-                        .HasColumnType("integer");
-
-                    b.Property<decimal?>("RoleId")
-                        .HasColumnType("numeric(20,0)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("GuildConfigId")
-                        .IsUnique();
-
-                    b.ToTable("AntiSpamSetting");
-                });
-
-            modelBuilder.Entity("Mewdeko.Database.Models.AutoBanEntry", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime?>("DateAdded")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<decimal>("GuildId")
-                        .HasColumnType("numeric(20,0)");
-
-                    b.Property<string>("Word")
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("AutoBanWords");
-                });
-
-            modelBuilder.Entity("Mewdeko.Database.Models.AutoBanRoles", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime?>("DateAdded")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<decimal>("GuildId")
-                        .HasColumnType("numeric(20,0)");
-
-                    b.Property<decimal>("RoleId")
-                        .HasColumnType("numeric(20,0)");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("AutoBanRoles");
                 });
 
             modelBuilder.Entity("Mewdeko.Database.Models.AutoCommand", b =>
@@ -410,81 +196,6 @@ namespace Mewdeko.Database.Migrations.PostgreSql
                         .IsUnique();
 
                     b.ToTable("BanTemplates");
-                });
-
-            modelBuilder.Entity("Mewdeko.Database.Models.BlacklistEntry", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime?>("DateAdded")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<decimal>("ItemId")
-                        .HasColumnType("numeric(20,0)");
-
-                    b.Property<string>("Reason")
-                        .HasColumnType("text");
-
-                    b.Property<int>("Type")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("Blacklist");
-                });
-
-            modelBuilder.Entity("Mewdeko.Database.Models.BlacklistedPermission", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime?>("DateAdded")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<decimal>("GuildId")
-                        .HasColumnType("numeric(20,0)");
-
-                    b.Property<decimal>("Permission")
-                        .HasColumnType("numeric(20,0)");
-
-                    b.Property<int?>("PunishmentAction")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("BlacklistedPermissions");
-                });
-
-            modelBuilder.Entity("Mewdeko.Database.Models.BlacklistedRole", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime?>("DateAdded")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<decimal>("GuildId")
-                        .HasColumnType("numeric(20,0)");
-
-                    b.Property<int?>("PunishmentAction")
-                        .HasColumnType("integer");
-
-                    b.Property<decimal>("RoleId")
-                        .HasColumnType("numeric(20,0)");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("BlacklistedRoles");
                 });
 
             modelBuilder.Entity("Mewdeko.Database.Models.BotInstance", b =>
@@ -746,8 +457,8 @@ namespace Mewdeko.Database.Migrations.PostgreSql
                     b.Property<DateTime?>("DateAdded")
                         .HasColumnType("timestamp without time zone");
 
-                    b.Property<int?>("GuildConfigId")
-                        .HasColumnType("integer");
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)");
 
                     b.Property<string>("Mapping")
                         .HasColumnType("text");
@@ -756,8 +467,6 @@ namespace Mewdeko.Database.Migrations.PostgreSql
                         .HasColumnType("text");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("GuildConfigId");
 
                     b.ToTable("CommandAlias");
                 });
@@ -776,15 +485,13 @@ namespace Mewdeko.Database.Migrations.PostgreSql
                     b.Property<DateTime?>("DateAdded")
                         .HasColumnType("timestamp without time zone");
 
-                    b.Property<int>("GuildConfigId")
-                        .HasColumnType("integer");
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)");
 
                     b.Property<int>("Seconds")
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("GuildConfigId");
 
                     b.ToTable("CommandCooldown");
                 });
@@ -997,8 +704,8 @@ namespace Mewdeko.Database.Migrations.PostgreSql
                     b.Property<DateTime?>("DateAdded")
                         .HasColumnType("timestamp without time zone");
 
-                    b.Property<int>("GuildConfigId")
-                        .HasColumnType("integer");
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)");
 
                     b.Property<bool>("State")
                         .ValueGeneratedOnAdd()
@@ -1007,9 +714,7 @@ namespace Mewdeko.Database.Migrations.PostgreSql
 
                     b.HasKey("Id");
 
-                    b.HasIndex("GuildConfigId");
-
-                    b.ToTable("DelMsgOnCmdChannel");
+                    b.ToTable("DelMsgOnCmdChannels");
                 });
 
             modelBuilder.Entity("Mewdeko.Database.Models.DiscordPermOverride", b =>
@@ -1163,33 +868,6 @@ namespace Mewdeko.Database.Migrations.PostgreSql
                     b.ToTable("Embeds");
                 });
 
-            modelBuilder.Entity("Mewdeko.Database.Models.ExcludedItem", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime?>("DateAdded")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<decimal>("ItemId")
-                        .HasColumnType("numeric(20,0)");
-
-                    b.Property<int>("ItemType")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("XpSettingsId")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("XpSettingsId");
-
-                    b.ToTable("ExcludedItem");
-                });
-
             modelBuilder.Entity("Mewdeko.Database.Models.FeedSub", b =>
                 {
                     b.Property<int>("Id")
@@ -1204,24 +882,21 @@ namespace Mewdeko.Database.Migrations.PostgreSql
                     b.Property<DateTime?>("DateAdded")
                         .HasColumnType("timestamp without time zone");
 
-                    b.Property<int>("GuildConfigId")
-                        .HasColumnType("integer");
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)");
 
                     b.Property<string>("Message")
                         .HasColumnType("text");
 
                     b.Property<string>("Url")
-                        .IsRequired()
                         .HasColumnType("text");
 
                     b.HasKey("Id");
 
-                    b.HasAlternateKey("GuildConfigId", "Url");
-
                     b.ToTable("FeedSub");
                 });
 
-            modelBuilder.Entity("Mewdeko.Database.Models.FilterInvitesChannelIds", b =>
+            modelBuilder.Entity("Mewdeko.Database.Models.Filters.AutoBanEntry", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -1229,92 +904,150 @@ namespace Mewdeko.Database.Migrations.PostgreSql
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
-                    b.Property<decimal>("ChannelId")
+                    b.Property<DateTime?>("DateAdded")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<decimal>("GuildId")
                         .HasColumnType("numeric(20,0)");
-
-                    b.Property<DateTime?>("DateAdded")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<int>("GuildConfigId")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("GuildConfigId");
-
-                    b.ToTable("FilterInvitesChannelIds");
-                });
-
-            modelBuilder.Entity("Mewdeko.Database.Models.FilterLinksChannelId", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<decimal>("ChannelId")
-                        .HasColumnType("numeric(20,0)");
-
-                    b.Property<DateTime?>("DateAdded")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<int>("GuildConfigId")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("GuildConfigId");
-
-                    b.ToTable("FilterLinksChannelId");
-                });
-
-            modelBuilder.Entity("Mewdeko.Database.Models.FilterWordsChannelIds", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<decimal>("ChannelId")
-                        .HasColumnType("numeric(20,0)");
-
-                    b.Property<DateTime?>("DateAdded")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<int>("GuildConfigId")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("GuildConfigId");
-
-                    b.ToTable("FilterWordsChannelIds");
-                });
-
-            modelBuilder.Entity("Mewdeko.Database.Models.FilteredWord", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime?>("DateAdded")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<int>("GuildConfigId")
-                        .HasColumnType("integer");
 
                     b.Property<string>("Word")
                         .HasColumnType("text");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("GuildConfigId");
+                    b.ToTable("AutoBanWords");
+                });
+
+            modelBuilder.Entity("Mewdeko.Database.Models.Filters.AutoBanRoles", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("DateAdded")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)");
+
+                    b.Property<decimal>("RoleId")
+                        .HasColumnType("numeric(20,0)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("AutoBanRoles");
+                });
+
+            modelBuilder.Entity("Mewdeko.Database.Models.Filters.FilterInvitesChannelIds", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("ChannelId")
+                        .HasColumnType("numeric(20,0)");
+
+                    b.Property<DateTime?>("DateAdded")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("FilterInvitesChannelIds");
+                });
+
+            modelBuilder.Entity("Mewdeko.Database.Models.Filters.FilterLinksChannelId", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("ChannelId")
+                        .HasColumnType("numeric(20,0)");
+
+                    b.Property<DateTime?>("DateAdded")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("FilterLinksChannelIds");
+                });
+
+            modelBuilder.Entity("Mewdeko.Database.Models.Filters.FilterWordsChannelIds", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("ChannelId")
+                        .HasColumnType("numeric(20,0)");
+
+                    b.Property<DateTime?>("DateAdded")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("FilterWordsChannelIds");
+                });
+
+            modelBuilder.Entity("Mewdeko.Database.Models.Filters.FilteredWord", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("DateAdded")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)");
+
+                    b.Property<string>("Word")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
 
                     b.ToTable("FilteredWord");
+                });
+
+            modelBuilder.Entity("Mewdeko.Database.Models.Filters.NsfwBlacklitedTag", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("DateAdded")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)");
+
+                    b.Property<string>("Tag")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("NsfwBlacklistedTags");
                 });
 
             modelBuilder.Entity("Mewdeko.Database.Models.FollowedStream", b =>
@@ -1331,9 +1064,6 @@ namespace Mewdeko.Database.Migrations.PostgreSql
                     b.Property<DateTime?>("DateAdded")
                         .HasColumnType("timestamp without time zone");
 
-                    b.Property<int>("GuildConfigId")
-                        .HasColumnType("integer");
-
                     b.Property<decimal>("GuildId")
                         .HasColumnType("numeric(20,0)");
 
@@ -1348,9 +1078,7 @@ namespace Mewdeko.Database.Migrations.PostgreSql
 
                     b.HasKey("Id");
 
-                    b.HasIndex("GuildConfigId");
-
-                    b.ToTable("FollowedStream");
+                    b.ToTable("FollowedStreams");
                 });
 
             modelBuilder.Entity("Mewdeko.Database.Models.GiveawayUsers", b =>
@@ -1458,35 +1186,7 @@ namespace Mewdeko.Database.Migrations.PostgreSql
                     b.ToTable("GlobalUserBalance");
                 });
 
-            modelBuilder.Entity("Mewdeko.Database.Models.GroupName", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime?>("DateAdded")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<int>("GuildConfigId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Name")
-                        .HasColumnType("text");
-
-                    b.Property<int>("Number")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("GuildConfigId", "Number")
-                        .IsUnique();
-
-                    b.ToTable("GroupName");
-                });
-
-            modelBuilder.Entity("Mewdeko.Database.Models.GuildAiConfig", b =>
+            modelBuilder.Entity("Mewdeko.Database.Models.GuildConfigs.GuildAiConfig", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -1532,7 +1232,7 @@ namespace Mewdeko.Database.Migrations.PostgreSql
                     b.ToTable("GuildAiConfig");
                 });
 
-            modelBuilder.Entity("Mewdeko.Database.Models.GuildConfig", b =>
+            modelBuilder.Entity("Mewdeko.Database.Models.GuildConfigs.GuildConfig", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -1770,9 +1470,6 @@ namespace Mewdeko.Database.Migrations.PostgreSql
                     b.Property<string>("Locale")
                         .HasColumnType("text");
 
-                    b.Property<int?>("LogSettingId")
-                        .HasColumnType("integer");
-
                     b.Property<int>("MaxSuggestLength")
                         .HasColumnType("integer");
 
@@ -1998,6 +1695,69 @@ namespace Mewdeko.Database.Migrations.PostgreSql
                     b.HasIndex("GuildId", "Prefix");
 
                     b.ToTable("GuildConfigs");
+                });
+
+            modelBuilder.Entity("Mewdeko.Database.Models.GuildConfigs.GuildXpSettings", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("CustomXpImageUrl")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<double>("DailyDecayPercentage")
+                        .HasColumnType("double precision");
+
+                    b.Property<DateTime?>("DateAdded")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<bool>("EnableXpDecay")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("ExclusiveRoleRewards")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("FirstMessageBonus")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)");
+
+                    b.Property<int>("InactivityDaysBeforeDecay")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("LevelUpMessage")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("MessageXpCooldown")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("VoiceXpPerMinute")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("VoiceXpTimeout")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("XpCurveType")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("XpGainDisabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<double>("XpMultiplier")
+                        .HasColumnType("double precision");
+
+                    b.Property<int>("XpPerMessage")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("GuildXpSettings");
                 });
 
             modelBuilder.Entity("Mewdeko.Database.Models.GuildTicketSettings", b =>
@@ -2612,8 +2372,8 @@ namespace Mewdeko.Database.Migrations.PostgreSql
                     b.Property<DateTime?>("DateAdded")
                         .HasColumnType("timestamp without time zone");
 
-                    b.Property<int>("GuildConfigId")
-                        .HasColumnType("integer");
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)");
 
                     b.Property<string>("Roles")
                         .HasColumnType("text");
@@ -2622,8 +2382,6 @@ namespace Mewdeko.Database.Migrations.PostgreSql
                         .HasColumnType("numeric(20,0)");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("GuildConfigId");
 
                     b.ToTable("MutedUserId");
                 });
@@ -2663,30 +2421,6 @@ namespace Mewdeko.Database.Migrations.PostgreSql
                     b.HasIndex("TicketNoteId");
 
                     b.ToTable("NoteEdit");
-                });
-
-            modelBuilder.Entity("Mewdeko.Database.Models.NsfwBlacklitedTag", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime?>("DateAdded")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<int>("GuildConfigId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Tag")
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("GuildConfigId");
-
-                    b.ToTable("NsfwBlacklitedTag");
                 });
 
             modelBuilder.Entity("Mewdeko.Database.Models.OwnerOnly", b =>
@@ -2863,8 +2597,8 @@ namespace Mewdeko.Database.Migrations.PostgreSql
                     b.Property<DateTime?>("DateAdded")
                         .HasColumnType("timestamp without time zone");
 
-                    b.Property<int?>("GuildConfigId")
-                        .HasColumnType("integer");
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)");
 
                     b.Property<int>("Index")
                         .HasColumnType("integer");
@@ -2889,9 +2623,7 @@ namespace Mewdeko.Database.Migrations.PostgreSql
 
                     b.HasKey("Id");
 
-                    b.HasIndex("GuildConfigId");
-
-                    b.ToTable("Permissionv2");
+                    b.ToTable("Permissions");
                 });
 
             modelBuilder.Entity("Mewdeko.Database.Models.PlaylistSong", b =>
@@ -3014,6 +2746,240 @@ namespace Mewdeko.Database.Migrations.PostgreSql
                         .IsUnique();
 
                     b.ToTable("Poll");
+                });
+
+            modelBuilder.Entity("Mewdeko.Database.Models.Protections.AntiAltSetting", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("Action")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ActionDurationMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)");
+
+                    b.Property<string>("MinAge")
+                        .HasColumnType("text");
+
+                    b.Property<decimal?>("RoleId")
+                        .HasColumnType("numeric(20,0)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("AntiAltSetting");
+                });
+
+            modelBuilder.Entity("Mewdeko.Database.Models.Protections.AntiMassMentionSetting", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("Action")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("DateAdded")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)");
+
+                    b.Property<bool>("IgnoreBots")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("MaxMentionsInTimeWindow")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("MentionThreshold")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("MuteTime")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("RoleId")
+                        .HasColumnType("numeric(20,0)");
+
+                    b.Property<int>("TimeWindowSeconds")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("AntiMassMentionSetting");
+                });
+
+            modelBuilder.Entity("Mewdeko.Database.Models.Protections.AntiRaidSetting", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("Action")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("DateAdded")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)");
+
+                    b.Property<int>("PunishDuration")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Seconds")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("UserThreshold")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("AntiRaidSetting");
+                });
+
+            modelBuilder.Entity("Mewdeko.Database.Models.Protections.AntiSpamIgnore", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("AntiMassMentionSettingId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("AntiSpamSettingId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("ChannelId")
+                        .HasColumnType("numeric(20,0)");
+
+                    b.Property<DateTime?>("DateAdded")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AntiMassMentionSettingId");
+
+                    b.HasIndex("AntiSpamSettingId");
+
+                    b.ToTable("AntiSpamIgnore");
+                });
+
+            modelBuilder.Entity("Mewdeko.Database.Models.Protections.AntiSpamSetting", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("Action")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("DateAdded")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)");
+
+                    b.Property<int>("MessageThreshold")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("MuteTime")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("RoleId")
+                        .HasColumnType("numeric(20,0)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("AntiSpamSetting");
+                });
+
+            modelBuilder.Entity("Mewdeko.Database.Models.Protections.BlacklistEntry", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("DateAdded")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<decimal>("ItemId")
+                        .HasColumnType("numeric(20,0)");
+
+                    b.Property<string>("Reason")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Blacklist");
+                });
+
+            modelBuilder.Entity("Mewdeko.Database.Models.Protections.BlacklistedPermission", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("DateAdded")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)");
+
+                    b.Property<decimal>("Permission")
+                        .HasColumnType("numeric(20,0)");
+
+                    b.Property<int?>("PunishmentAction")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("BlacklistedPermissions");
+                });
+
+            modelBuilder.Entity("Mewdeko.Database.Models.Protections.BlacklistedRole", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("DateAdded")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)");
+
+                    b.Property<int?>("PunishmentAction")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("RoleId")
+                        .HasColumnType("numeric(20,0)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("BlacklistedRoles");
                 });
 
             modelBuilder.Entity("Mewdeko.Database.Models.PublishUserBlacklist", b =>
@@ -3145,8 +3111,8 @@ namespace Mewdeko.Database.Migrations.PostgreSql
                     b.Property<bool>("Exclusive")
                         .HasColumnType("boolean");
 
-                    b.Property<int>("GuildConfigId")
-                        .HasColumnType("integer");
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)");
 
                     b.Property<int>("Index")
                         .HasColumnType("integer");
@@ -3156,9 +3122,7 @@ namespace Mewdeko.Database.Migrations.PostgreSql
 
                     b.HasKey("Id");
 
-                    b.HasIndex("GuildConfigId");
-
-                    b.ToTable("ReactionRoleMessage");
+                    b.ToTable("ReactionRoleMessages");
                 });
 
             modelBuilder.Entity("Mewdeko.Database.Models.Reminder", b =>
@@ -3211,9 +3175,6 @@ namespace Mewdeko.Database.Migrations.PostgreSql
                     b.Property<DateTime?>("DateAdded")
                         .HasColumnType("timestamp without time zone");
 
-                    b.Property<int>("GuildConfigId")
-                        .HasColumnType("integer");
-
                     b.Property<decimal>("GuildId")
                         .HasColumnType("numeric(20,0)");
 
@@ -3233,8 +3194,6 @@ namespace Mewdeko.Database.Migrations.PostgreSql
                         .HasColumnType("text");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("GuildConfigId");
 
                     b.ToTable("GuildRepeater");
                 });
@@ -3681,16 +3640,13 @@ namespace Mewdeko.Database.Migrations.PostgreSql
                     b.Property<decimal>("FromRoleId")
                         .HasColumnType("numeric(20,0)");
 
-                    b.Property<int>("GuildConfigId")
-                        .HasColumnType("integer");
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)");
 
                     b.Property<string>("Keyword")
                         .HasColumnType("text");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("GuildConfigId")
-                        .IsUnique();
 
                     b.ToTable("StreamRoleSettings");
                 });
@@ -3825,265 +3781,6 @@ namespace Mewdeko.Database.Migrations.PostgreSql
                     b.HasKey("Id");
 
                     b.ToTable("Suggestions");
-                });
-
-            modelBuilder.Entity("Mewdeko.Database.Models.Template", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("AwardedColor")
-                        .HasColumnType("text");
-
-                    b.Property<int>("AwardedFontSize")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("AwardedX")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("AwardedY")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime?>("DateAdded")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<decimal>("GuildId")
-                        .HasColumnType("numeric(20,0)");
-
-                    b.Property<int>("OutputSizeX")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("OutputSizeY")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("ShowAwarded")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("ShowTimeOnLevel")
-                        .HasColumnType("boolean");
-
-                    b.Property<int>("TemplateBarId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("TemplateClubId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("TemplateGuildId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("TemplateUserId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("TimeOnLevelColor")
-                        .HasColumnType("text");
-
-                    b.Property<int>("TimeOnLevelFontSize")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("TimeOnLevelFormat")
-                        .HasColumnType("text");
-
-                    b.Property<int>("TimeOnLevelX")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("TimeOnLevelY")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("TemplateBarId");
-
-                    b.HasIndex("TemplateClubId");
-
-                    b.HasIndex("TemplateGuildId");
-
-                    b.HasIndex("TemplateUserId");
-
-                    b.ToTable("Template");
-                });
-
-            modelBuilder.Entity("Mewdeko.Database.Models.TemplateBar", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("BarColor")
-                        .HasColumnType("text");
-
-                    b.Property<int>("BarDirection")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("BarLength")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("BarPointAx")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("BarPointAy")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("BarPointBx")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("BarPointBy")
-                        .HasColumnType("integer");
-
-                    b.Property<byte>("BarTransparency")
-                        .HasColumnType("smallint");
-
-                    b.Property<DateTime?>("DateAdded")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<bool>("ShowBar")
-                        .HasColumnType("boolean");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("TemplateBar");
-                });
-
-            modelBuilder.Entity("Mewdeko.Database.Models.TemplateClub", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("ClubIconSizeX")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("ClubIconSizeY")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("ClubIconX")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("ClubIconY")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("ClubNameColor")
-                        .HasColumnType("text");
-
-                    b.Property<int>("ClubNameFontSize")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("ClubNameX")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("ClubNameY")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime?>("DateAdded")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<bool>("ShowClubIcon")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("ShowClubName")
-                        .HasColumnType("boolean");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("TemplateClub");
-                });
-
-            modelBuilder.Entity("Mewdeko.Database.Models.TemplateGuild", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime?>("DateAdded")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<string>("GuildLevelColor")
-                        .HasColumnType("text");
-
-                    b.Property<int>("GuildLevelFontSize")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("GuildLevelX")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("GuildLevelY")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("GuildRankColor")
-                        .HasColumnType("text");
-
-                    b.Property<int>("GuildRankFontSize")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("GuildRankX")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("GuildRankY")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("ShowGuildLevel")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("ShowGuildRank")
-                        .HasColumnType("boolean");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("TemplateGuild");
-                });
-
-            modelBuilder.Entity("Mewdeko.Database.Models.TemplateUser", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime?>("DateAdded")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<int>("FontSize")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("IconSizeX")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("IconSizeY")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("IconX")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("IconY")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("ShowIcon")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("ShowText")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("TextColor")
-                        .HasColumnType("text");
-
-                    b.Property<int>("TextX")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("TextY")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("TemplateUser");
                 });
 
             modelBuilder.Entity("Mewdeko.Database.Models.Ticket", b =>
@@ -4352,8 +4049,8 @@ namespace Mewdeko.Database.Migrations.PostgreSql
                     b.Property<DateTime?>("DateAdded")
                         .HasColumnType("timestamp without time zone");
 
-                    b.Property<int>("GuildConfigId")
-                        .HasColumnType("integer");
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)");
 
                     b.Property<DateTime>("UnbanAt")
                         .HasColumnType("timestamp without time zone");
@@ -4362,8 +4059,6 @@ namespace Mewdeko.Database.Migrations.PostgreSql
                         .HasColumnType("numeric(20,0)");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("GuildConfigId");
 
                     b.ToTable("UnbanTimer");
                 });
@@ -4379,8 +4074,8 @@ namespace Mewdeko.Database.Migrations.PostgreSql
                     b.Property<DateTime?>("DateAdded")
                         .HasColumnType("timestamp without time zone");
 
-                    b.Property<int?>("GuildConfigId")
-                        .HasColumnType("integer");
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)");
 
                     b.Property<DateTime>("UnmuteAt")
                         .HasColumnType("timestamp without time zone");
@@ -4389,8 +4084,6 @@ namespace Mewdeko.Database.Migrations.PostgreSql
                         .HasColumnType("numeric(20,0)");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("GuildConfigId");
 
                     b.ToTable("UnmuteTimer");
                 });
@@ -4406,8 +4099,8 @@ namespace Mewdeko.Database.Migrations.PostgreSql
                     b.Property<DateTime?>("DateAdded")
                         .HasColumnType("timestamp without time zone");
 
-                    b.Property<int>("GuildConfigId")
-                        .HasColumnType("integer");
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)");
 
                     b.Property<decimal>("RoleId")
                         .HasColumnType("numeric(20,0)");
@@ -4419,8 +4112,6 @@ namespace Mewdeko.Database.Migrations.PostgreSql
                         .HasColumnType("numeric(20,0)");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("GuildConfigId");
 
                     b.ToTable("UnroleTimer");
                 });
@@ -4514,9 +4205,7 @@ namespace Mewdeko.Database.Migrations.PostgreSql
                         .HasColumnType("numeric(20,0)");
 
                     b.Property<DateTime>("LastLevelUp")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp without time zone")
-                        .HasDefaultValue(new DateTime(2017, 9, 21, 20, 53, 13, 307, DateTimeKind.Local));
+                        .HasColumnType("timestamp without time zone");
 
                     b.Property<int>("NotifyOnLevelUp")
                         .HasColumnType("integer");
@@ -4528,17 +4217,6 @@ namespace Mewdeko.Database.Migrations.PostgreSql
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("AwardedXp");
-
-                    b.HasIndex("GuildId");
-
-                    b.HasIndex("UserId");
-
-                    b.HasIndex("Xp");
-
-                    b.HasIndex("UserId", "GuildId")
-                        .IsUnique();
 
                     b.HasIndex("UserId", "GuildId", "Xp");
 
@@ -4581,8 +4259,8 @@ namespace Mewdeko.Database.Migrations.PostgreSql
                     b.Property<DateTime?>("DateAdded")
                         .HasColumnType("timestamp without time zone");
 
-                    b.Property<int>("GuildConfigId")
-                        .HasColumnType("integer");
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)");
 
                     b.Property<decimal>("RoleId")
                         .HasColumnType("numeric(20,0)");
@@ -4591,8 +4269,6 @@ namespace Mewdeko.Database.Migrations.PostgreSql
                         .HasColumnType("numeric(20,0)");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("GuildConfigId");
 
                     b.ToTable("VcRoleInfo");
                 });
@@ -4735,8 +4411,8 @@ namespace Mewdeko.Database.Migrations.PostgreSql
                     b.Property<DateTime?>("DateAdded")
                         .HasColumnType("timestamp without time zone");
 
-                    b.Property<int>("GuildConfigId")
-                        .HasColumnType("integer");
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)");
 
                     b.Property<int>("Punishment")
                         .HasColumnType("integer");
@@ -4748,8 +4424,6 @@ namespace Mewdeko.Database.Migrations.PostgreSql
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("GuildConfigId");
 
                     b.ToTable("WarningPunishment");
                 });
@@ -4768,8 +4442,8 @@ namespace Mewdeko.Database.Migrations.PostgreSql
                     b.Property<DateTime?>("DateAdded")
                         .HasColumnType("timestamp without time zone");
 
-                    b.Property<int>("GuildConfigId")
-                        .HasColumnType("integer");
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)");
 
                     b.Property<int>("Punishment")
                         .HasColumnType("integer");
@@ -4781,8 +4455,6 @@ namespace Mewdeko.Database.Migrations.PostgreSql
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("GuildConfigId");
 
                     b.ToTable("WarningPunishment2");
                 });
@@ -4831,7 +4503,49 @@ namespace Mewdeko.Database.Migrations.PostgreSql
                     b.ToTable("WhitelistedUsers");
                 });
 
-            modelBuilder.Entity("Mewdeko.Database.Models.XpCurrencyReward", b =>
+            modelBuilder.Entity("Mewdeko.Database.Models.Xp.GuildUserXp", b =>
+                {
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)");
+
+                    b.Property<decimal>("UserId")
+                        .HasColumnType("numeric(20,0)");
+
+                    b.Property<long>("BonusXp")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime?>("DateAdded")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("Id")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("LastActivity")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime>("LastLevelUp")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("NotifyType")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("TotalXp")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("GuildId", "UserId");
+
+                    b.HasIndex("GuildId");
+
+                    b.HasIndex("LastActivity");
+
+                    b.HasIndex("TotalXp");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("GuildUserXp");
+                });
+
+            modelBuilder.Entity("Mewdeko.Database.Models.Xp.Template", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -4839,26 +4553,173 @@ namespace Mewdeko.Database.Migrations.PostgreSql
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
-                    b.Property<int>("Amount")
+                    b.Property<string>("AwardedColor")
+                        .HasColumnType("text");
+
+                    b.Property<int>("AwardedFontSize")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("AwardedX")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("AwardedY")
                         .HasColumnType("integer");
 
                     b.Property<DateTime?>("DateAdded")
                         .HasColumnType("timestamp without time zone");
 
-                    b.Property<int>("Level")
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)");
+
+                    b.Property<int>("OutputSizeX")
                         .HasColumnType("integer");
 
-                    b.Property<int>("XpSettingsId")
+                    b.Property<int>("OutputSizeY")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("ShowAwarded")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("ShowTimeOnLevel")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("TemplateBarId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TemplateClubId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TemplateGuildId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TemplateUserId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("TimeOnLevelColor")
+                        .HasColumnType("text");
+
+                    b.Property<int>("TimeOnLevelFontSize")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("TimeOnLevelFormat")
+                        .HasColumnType("text");
+
+                    b.Property<int>("TimeOnLevelX")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TimeOnLevelY")
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("XpSettingsId");
+                    b.HasIndex("GuildId")
+                        .IsUnique();
 
-                    b.ToTable("XpCurrencyReward");
+                    b.HasIndex("TemplateBarId")
+                        .IsUnique();
+
+                    b.HasIndex("TemplateClubId")
+                        .IsUnique();
+
+                    b.HasIndex("TemplateGuildId")
+                        .IsUnique();
+
+                    b.HasIndex("TemplateUserId")
+                        .IsUnique();
+
+                    b.ToTable("Template");
                 });
 
-            modelBuilder.Entity("Mewdeko.Database.Models.XpRoleReward", b =>
+            modelBuilder.Entity("Mewdeko.Database.Models.Xp.TemplateBar", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("BarColor")
+                        .HasColumnType("text");
+
+                    b.Property<int>("BarDirection")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("BarLength")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("BarPointAx")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("BarPointAy")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("BarPointBx")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("BarPointBy")
+                        .HasColumnType("integer");
+
+                    b.Property<byte>("BarTransparency")
+                        .HasColumnType("smallint");
+
+                    b.Property<DateTime?>("DateAdded")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<bool>("ShowBar")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("TemplateBar");
+                });
+
+            modelBuilder.Entity("Mewdeko.Database.Models.Xp.TemplateClub", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ClubIconSizeX")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ClubIconSizeY")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ClubIconX")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ClubIconY")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ClubNameColor")
+                        .HasColumnType("text");
+
+                    b.Property<int>("ClubNameFontSize")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ClubNameX")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ClubNameY")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("DateAdded")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<bool>("ShowClubIcon")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("ShowClubName")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("TemplateClub");
+                });
+
+            modelBuilder.Entity("Mewdeko.Database.Models.Xp.TemplateGuild", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -4869,24 +4730,400 @@ namespace Mewdeko.Database.Migrations.PostgreSql
                     b.Property<DateTime?>("DateAdded")
                         .HasColumnType("timestamp without time zone");
 
-                    b.Property<int>("Level")
+                    b.Property<string>("GuildLevelColor")
+                        .HasColumnType("text");
+
+                    b.Property<int>("GuildLevelFontSize")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("GuildLevelX")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("GuildLevelY")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("GuildRankColor")
+                        .HasColumnType("text");
+
+                    b.Property<int>("GuildRankFontSize")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("GuildRankX")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("GuildRankY")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("ShowGuildLevel")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("ShowGuildRank")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("TemplateGuild");
+                });
+
+            modelBuilder.Entity("Mewdeko.Database.Models.Xp.TemplateUser", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("DateAdded")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("FontSize")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("IconSizeX")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("IconSizeY")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("IconX")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("IconY")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("ShowIcon")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("ShowText")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("TextColor")
+                        .HasColumnType("text");
+
+                    b.Property<int>("TextX")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TextY")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("TemplateUser");
+                });
+
+            modelBuilder.Entity("Mewdeko.Database.Models.Xp.XpBoostEvent", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ApplicableChannels")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ApplicableRoles")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("DateAdded")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime>("EndTime")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)");
+
+                    b.Property<double>("Multiplier")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("StartTime")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("XpBoostEvents");
+                });
+
+            modelBuilder.Entity("Mewdeko.Database.Models.Xp.XpChannelMultiplier", b =>
+                {
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)");
+
+                    b.Property<decimal>("ChannelId")
+                        .HasColumnType("numeric(20,0)");
+
+                    b.Property<DateTime?>("DateAdded")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("Id")
+                        .HasColumnType("integer");
+
+                    b.Property<double>("Multiplier")
+                        .HasColumnType("double precision");
+
+                    b.HasKey("GuildId", "ChannelId");
+
+                    b.HasIndex("GuildId");
+
+                    b.ToTable("XpChannelMultipliers");
+                });
+
+            modelBuilder.Entity("Mewdeko.Database.Models.Xp.XpCompetition", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal?>("AnnouncementChannelId")
+                        .HasColumnType("numeric(20,0)");
+
+                    b.Property<DateTime?>("DateAdded")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime>("EndTime")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("StartTime")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("TargetLevel")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("XpCompetitions");
+                });
+
+            modelBuilder.Entity("Mewdeko.Database.Models.Xp.XpCompetitionEntry", b =>
+                {
+                    b.Property<int>("CompetitionId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("UserId")
+                        .HasColumnType("numeric(20,0)");
+
+                    b.Property<DateTime?>("AchievedTargetAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<long>("CurrentXp")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime?>("DateAdded")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("FinalPlacement")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Id")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("StartingXp")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("CompetitionId", "UserId");
+
+                    b.HasIndex("AchievedTargetAt");
+
+                    b.HasIndex("CompetitionId");
+
+                    b.HasIndex("CurrentXp");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("XpCompetitionEntries");
+                });
+
+            modelBuilder.Entity("Mewdeko.Database.Models.Xp.XpCompetitionReward", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CompetitionId")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("CurrencyAmount")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("CustomReward")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("DateAdded")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("Position")
                         .HasColumnType("integer");
 
                     b.Property<decimal>("RoleId")
                         .HasColumnType("numeric(20,0)");
 
-                    b.Property<int>("XpSettingsId")
+                    b.Property<int>("XpAmount")
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("XpSettingsId", "Level")
-                        .IsUnique();
-
-                    b.ToTable("XpRoleReward");
+                    b.ToTable("XpCompetitionRewards");
                 });
 
-            modelBuilder.Entity("Mewdeko.Database.Models.XpSettings", b =>
+            modelBuilder.Entity("Mewdeko.Database.Models.Xp.XpCurrencyReward", b =>
+                {
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)");
+
+                    b.Property<int>("Level")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("Amount")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime?>("DateAdded")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("Id")
+                        .HasColumnType("integer");
+
+                    b.HasKey("GuildId", "Level");
+
+                    b.HasIndex("GuildId");
+
+                    b.ToTable("XpCurrencyRewards");
+                });
+
+            modelBuilder.Entity("Mewdeko.Database.Models.Xp.XpExcludedItem", b =>
+                {
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)");
+
+                    b.Property<decimal>("ItemId")
+                        .HasColumnType("numeric(20,0)");
+
+                    b.Property<int>("ItemType")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("DateAdded")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("Id")
+                        .HasColumnType("integer");
+
+                    b.HasKey("GuildId", "ItemId", "ItemType");
+
+                    b.HasIndex("GuildId");
+
+                    b.HasIndex("ItemId", "ItemType");
+
+                    b.ToTable("XpExcludedItems");
+                });
+
+            modelBuilder.Entity("Mewdeko.Database.Models.Xp.XpRoleMultiplier", b =>
+                {
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)");
+
+                    b.Property<decimal>("RoleId")
+                        .HasColumnType("numeric(20,0)");
+
+                    b.Property<DateTime?>("DateAdded")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("Id")
+                        .HasColumnType("integer");
+
+                    b.Property<double>("Multiplier")
+                        .HasColumnType("double precision");
+
+                    b.HasKey("GuildId", "RoleId");
+
+                    b.HasIndex("GuildId");
+
+                    b.ToTable("XpRoleMultipliers");
+                });
+
+            modelBuilder.Entity("Mewdeko.Database.Models.Xp.XpRoleReward", b =>
+                {
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)");
+
+                    b.Property<int>("Level")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("DateAdded")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("Id")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("RoleId")
+                        .HasColumnType("numeric(20,0)");
+
+                    b.HasKey("GuildId", "Level");
+
+                    b.HasIndex("GuildId");
+
+                    b.ToTable("XpRoleRewards");
+                });
+
+            modelBuilder.Entity("Mewdeko.Database.Models.Xp.XpRoleTracking", b =>
+                {
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)");
+
+                    b.Property<decimal>("RoleId")
+                        .HasColumnType("numeric(20,0)");
+
+                    b.Property<DateTime>("StartTracking")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime?>("DateAdded")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime?>("EndTracking")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("Id")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("TotalXpGained")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("TrackingTitle")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("GuildId", "RoleId", "StartTracking");
+
+                    b.HasIndex("EndTracking");
+
+                    b.HasIndex("GuildId");
+
+                    b.HasIndex("RoleId");
+
+                    b.ToTable("XpRoleTracking");
+                });
+
+            modelBuilder.Entity("Mewdeko.Database.Models.Xp.XpUserSnapshot", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -4897,24 +5134,28 @@ namespace Mewdeko.Database.Migrations.PostgreSql
                     b.Property<DateTime?>("DateAdded")
                         .HasColumnType("timestamp without time zone");
 
-                    b.Property<int>("GuildConfigId")
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)");
+
+                    b.Property<int>("Level")
                         .HasColumnType("integer");
 
-                    b.Property<string>("NotifyMessage")
-                        .HasColumnType("text");
+                    b.Property<DateTime>("Timestamp")
+                        .HasColumnType("timestamp without time zone");
 
-                    b.Property<bool>("ServerExcluded")
-                        .HasColumnType("boolean");
+                    b.Property<long>("TotalXp")
+                        .HasColumnType("bigint");
 
-                    b.Property<bool>("XpRoleRewardExclusive")
-                        .HasColumnType("boolean");
+                    b.Property<decimal>("UserId")
+                        .HasColumnType("numeric(20,0)");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("GuildConfigId")
-                        .IsUnique();
+                    b.HasIndex("Timestamp");
 
-                    b.ToTable("XpSettings");
+                    b.HasIndex("GuildId", "UserId");
+
+                    b.ToTable("XpUserSnapshots");
                 });
 
             modelBuilder.Entity("Mewdeko.Database.Models.AiMessage", b =>
@@ -4928,53 +5169,6 @@ namespace Mewdeko.Database.Migrations.PostgreSql
                     b.Navigation("Conversation");
                 });
 
-            modelBuilder.Entity("Mewdeko.Database.Models.AntiAltSetting", b =>
-                {
-                    b.HasOne("Mewdeko.Database.Models.GuildConfig", null)
-                        .WithOne("AntiAltSetting")
-                        .HasForeignKey("Mewdeko.Database.Models.AntiAltSetting", "GuildConfigId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Mewdeko.Database.Models.AntiMassMentionSetting", b =>
-                {
-                    b.HasOne("Mewdeko.Database.Models.GuildConfig", null)
-                        .WithOne("AntiMassMentionSetting")
-                        .HasForeignKey("Mewdeko.Database.Models.AntiMassMentionSetting", "GuildConfigId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Mewdeko.Database.Models.AntiRaidSetting", b =>
-                {
-                    b.HasOne("Mewdeko.Database.Models.GuildConfig", null)
-                        .WithOne("AntiRaidSetting")
-                        .HasForeignKey("Mewdeko.Database.Models.AntiRaidSetting", "GuildConfigId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Mewdeko.Database.Models.AntiSpamIgnore", b =>
-                {
-                    b.HasOne("Mewdeko.Database.Models.AntiMassMentionSetting", null)
-                        .WithMany("IgnoredChannels")
-                        .HasForeignKey("AntiMassMentionSettingId");
-
-                    b.HasOne("Mewdeko.Database.Models.AntiSpamSetting", null)
-                        .WithMany("IgnoredChannels")
-                        .HasForeignKey("AntiSpamSettingId");
-                });
-
-            modelBuilder.Entity("Mewdeko.Database.Models.AntiSpamSetting", b =>
-                {
-                    b.HasOne("Mewdeko.Database.Models.GuildConfig", null)
-                        .WithOne("AntiSpamSetting")
-                        .HasForeignKey("Mewdeko.Database.Models.AntiSpamSetting", "GuildConfigId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
             modelBuilder.Entity("Mewdeko.Database.Models.CaseNote", b =>
                 {
                     b.HasOne("Mewdeko.Database.Models.TicketCase", "Case")
@@ -4984,103 +5178,6 @@ namespace Mewdeko.Database.Migrations.PostgreSql
                         .IsRequired();
 
                     b.Navigation("Case");
-                });
-
-            modelBuilder.Entity("Mewdeko.Database.Models.CommandAlias", b =>
-                {
-                    b.HasOne("Mewdeko.Database.Models.GuildConfig", null)
-                        .WithMany("CommandAliases")
-                        .HasForeignKey("GuildConfigId");
-                });
-
-            modelBuilder.Entity("Mewdeko.Database.Models.CommandCooldown", b =>
-                {
-                    b.HasOne("Mewdeko.Database.Models.GuildConfig", null)
-                        .WithMany("CommandCooldowns")
-                        .HasForeignKey("GuildConfigId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Mewdeko.Database.Models.DelMsgOnCmdChannel", b =>
-                {
-                    b.HasOne("Mewdeko.Database.Models.GuildConfig", null)
-                        .WithMany("DelMsgOnCmdChannels")
-                        .HasForeignKey("GuildConfigId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Mewdeko.Database.Models.ExcludedItem", b =>
-                {
-                    b.HasOne("Mewdeko.Database.Models.XpSettings", null)
-                        .WithMany("ExclusionList")
-                        .HasForeignKey("XpSettingsId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Mewdeko.Database.Models.FeedSub", b =>
-                {
-                    b.HasOne("Mewdeko.Database.Models.GuildConfig", null)
-                        .WithMany("FeedSubs")
-                        .HasForeignKey("GuildConfigId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Mewdeko.Database.Models.FilterInvitesChannelIds", b =>
-                {
-                    b.HasOne("Mewdeko.Database.Models.GuildConfig", null)
-                        .WithMany("FilterInvitesChannelIds")
-                        .HasForeignKey("GuildConfigId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Mewdeko.Database.Models.FilterLinksChannelId", b =>
-                {
-                    b.HasOne("Mewdeko.Database.Models.GuildConfig", null)
-                        .WithMany("FilterLinksChannelIds")
-                        .HasForeignKey("GuildConfigId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Mewdeko.Database.Models.FilterWordsChannelIds", b =>
-                {
-                    b.HasOne("Mewdeko.Database.Models.GuildConfig", null)
-                        .WithMany("FilterWordsChannelIds")
-                        .HasForeignKey("GuildConfigId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Mewdeko.Database.Models.FilteredWord", b =>
-                {
-                    b.HasOne("Mewdeko.Database.Models.GuildConfig", null)
-                        .WithMany("FilteredWords")
-                        .HasForeignKey("GuildConfigId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Mewdeko.Database.Models.FollowedStream", b =>
-                {
-                    b.HasOne("Mewdeko.Database.Models.GuildConfig", null)
-                        .WithMany("FollowedStreams")
-                        .HasForeignKey("GuildConfigId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Mewdeko.Database.Models.GroupName", b =>
-                {
-                    b.HasOne("Mewdeko.Database.Models.GuildConfig", null)
-                        .WithMany("SelfAssignableRoleGroupNames")
-                        .HasForeignKey("GuildConfigId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
                 });
 
             modelBuilder.Entity("Mewdeko.Database.Models.MessageTimestamp", b =>
@@ -5105,15 +5202,6 @@ namespace Mewdeko.Database.Migrations.PostgreSql
                     b.Navigation("Playlist");
                 });
 
-            modelBuilder.Entity("Mewdeko.Database.Models.MutedUserId", b =>
-                {
-                    b.HasOne("Mewdeko.Database.Models.GuildConfig", null)
-                        .WithMany("MutedUsers")
-                        .HasForeignKey("GuildConfigId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
             modelBuilder.Entity("Mewdeko.Database.Models.NoteEdit", b =>
                 {
                     b.HasOne("Mewdeko.Database.Models.CaseNote", null)
@@ -5123,15 +5211,6 @@ namespace Mewdeko.Database.Migrations.PostgreSql
                     b.HasOne("Mewdeko.Database.Models.TicketNote", null)
                         .WithMany("EditHistory")
                         .HasForeignKey("TicketNoteId");
-                });
-
-            modelBuilder.Entity("Mewdeko.Database.Models.NsfwBlacklitedTag", b =>
-                {
-                    b.HasOne("Mewdeko.Database.Models.GuildConfig", null)
-                        .WithMany("NsfwBlacklistedTags")
-                        .HasForeignKey("GuildConfigId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
                 });
 
             modelBuilder.Entity("Mewdeko.Database.Models.PanelButton", b =>
@@ -5171,13 +5250,6 @@ namespace Mewdeko.Database.Migrations.PostgreSql
                     b.Navigation("Next");
                 });
 
-            modelBuilder.Entity("Mewdeko.Database.Models.Permissionv2", b =>
-                {
-                    b.HasOne("Mewdeko.Database.Models.GuildConfig", null)
-                        .WithMany("Permissions")
-                        .HasForeignKey("GuildConfigId");
-                });
-
             modelBuilder.Entity("Mewdeko.Database.Models.PollAnswers", b =>
                 {
                     b.HasOne("Mewdeko.Database.Models.Polls", null)
@@ -5192,29 +5264,22 @@ namespace Mewdeko.Database.Migrations.PostgreSql
                         .HasForeignKey("PollsId");
                 });
 
+            modelBuilder.Entity("Mewdeko.Database.Models.Protections.AntiSpamIgnore", b =>
+                {
+                    b.HasOne("Mewdeko.Database.Models.Protections.AntiMassMentionSetting", null)
+                        .WithMany("IgnoredChannels")
+                        .HasForeignKey("AntiMassMentionSettingId");
+
+                    b.HasOne("Mewdeko.Database.Models.Protections.AntiSpamSetting", null)
+                        .WithMany("IgnoredChannels")
+                        .HasForeignKey("AntiSpamSettingId");
+                });
+
             modelBuilder.Entity("Mewdeko.Database.Models.ReactionRole", b =>
                 {
                     b.HasOne("Mewdeko.Database.Models.ReactionRoleMessage", null)
                         .WithMany("ReactionRoles")
                         .HasForeignKey("ReactionRoleMessageId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Mewdeko.Database.Models.ReactionRoleMessage", b =>
-                {
-                    b.HasOne("Mewdeko.Database.Models.GuildConfig", null)
-                        .WithMany("ReactionRoleMessages")
-                        .HasForeignKey("GuildConfigId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Mewdeko.Database.Models.Repeater", b =>
-                {
-                    b.HasOne("Mewdeko.Database.Models.GuildConfig", null)
-                        .WithMany("GuildRepeaters")
-                        .HasForeignKey("GuildConfigId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
@@ -5239,15 +5304,6 @@ namespace Mewdeko.Database.Migrations.PostgreSql
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("Mewdeko.Database.Models.StreamRoleSettings", b =>
-                {
-                    b.HasOne("Mewdeko.Database.Models.GuildConfig", null)
-                        .WithOne("StreamRole")
-                        .HasForeignKey("Mewdeko.Database.Models.StreamRoleSettings", "GuildConfigId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
             modelBuilder.Entity("Mewdeko.Database.Models.StreamRoleWhitelistedUser", b =>
                 {
                     b.HasOne("Mewdeko.Database.Models.StreamRoleSettings", null)
@@ -5255,41 +5311,6 @@ namespace Mewdeko.Database.Migrations.PostgreSql
                         .HasForeignKey("StreamRoleSettingsId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-                });
-
-            modelBuilder.Entity("Mewdeko.Database.Models.Template", b =>
-                {
-                    b.HasOne("Mewdeko.Database.Models.TemplateBar", "TemplateBar")
-                        .WithMany()
-                        .HasForeignKey("TemplateBarId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Mewdeko.Database.Models.TemplateClub", "TemplateClub")
-                        .WithMany()
-                        .HasForeignKey("TemplateClubId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Mewdeko.Database.Models.TemplateGuild", "TemplateGuild")
-                        .WithMany()
-                        .HasForeignKey("TemplateGuildId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Mewdeko.Database.Models.TemplateUser", "TemplateUser")
-                        .WithMany()
-                        .HasForeignKey("TemplateUserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("TemplateBar");
-
-                    b.Navigation("TemplateClub");
-
-                    b.Navigation("TemplateGuild");
-
-                    b.Navigation("TemplateUser");
                 });
 
             modelBuilder.Entity("Mewdeko.Database.Models.Ticket", b =>
@@ -5324,87 +5345,39 @@ namespace Mewdeko.Database.Migrations.PostgreSql
                     b.Navigation("Ticket");
                 });
 
-            modelBuilder.Entity("Mewdeko.Database.Models.UnbanTimer", b =>
+            modelBuilder.Entity("Mewdeko.Database.Models.Xp.Template", b =>
                 {
-                    b.HasOne("Mewdeko.Database.Models.GuildConfig", null)
-                        .WithMany("UnbanTimer")
-                        .HasForeignKey("GuildConfigId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Mewdeko.Database.Models.UnmuteTimer", b =>
-                {
-                    b.HasOne("Mewdeko.Database.Models.GuildConfig", null)
-                        .WithMany("UnmuteTimers")
-                        .HasForeignKey("GuildConfigId");
-                });
-
-            modelBuilder.Entity("Mewdeko.Database.Models.UnroleTimer", b =>
-                {
-                    b.HasOne("Mewdeko.Database.Models.GuildConfig", null)
-                        .WithMany("UnroleTimer")
-                        .HasForeignKey("GuildConfigId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Mewdeko.Database.Models.VcRoleInfo", b =>
-                {
-                    b.HasOne("Mewdeko.Database.Models.GuildConfig", null)
-                        .WithMany("VcRoleInfos")
-                        .HasForeignKey("GuildConfigId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Mewdeko.Database.Models.WarningPunishment", b =>
-                {
-                    b.HasOne("Mewdeko.Database.Models.GuildConfig", null)
-                        .WithMany("WarnPunishments")
-                        .HasForeignKey("GuildConfigId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Mewdeko.Database.Models.WarningPunishment2", b =>
-                {
-                    b.HasOne("Mewdeko.Database.Models.GuildConfig", null)
-                        .WithMany("WarnPunishments2")
-                        .HasForeignKey("GuildConfigId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Mewdeko.Database.Models.XpCurrencyReward", b =>
-                {
-                    b.HasOne("Mewdeko.Database.Models.XpSettings", "XpSettings")
-                        .WithMany("CurrencyRewards")
-                        .HasForeignKey("XpSettingsId")
+                    b.HasOne("Mewdeko.Database.Models.Xp.TemplateBar", "TemplateBar")
+                        .WithOne()
+                        .HasForeignKey("Mewdeko.Database.Models.Xp.Template", "TemplateBarId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.Navigation("XpSettings");
-                });
-
-            modelBuilder.Entity("Mewdeko.Database.Models.XpRoleReward", b =>
-                {
-                    b.HasOne("Mewdeko.Database.Models.XpSettings", "XpSettings")
-                        .WithMany("RoleRewards")
-                        .HasForeignKey("XpSettingsId")
+                    b.HasOne("Mewdeko.Database.Models.Xp.TemplateClub", "TemplateClub")
+                        .WithOne()
+                        .HasForeignKey("Mewdeko.Database.Models.Xp.Template", "TemplateClubId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.Navigation("XpSettings");
-                });
-
-            modelBuilder.Entity("Mewdeko.Database.Models.XpSettings", b =>
-                {
-                    b.HasOne("Mewdeko.Database.Models.GuildConfig", null)
-                        .WithOne("XpSettings")
-                        .HasForeignKey("Mewdeko.Database.Models.XpSettings", "GuildConfigId")
+                    b.HasOne("Mewdeko.Database.Models.Xp.TemplateGuild", "TemplateGuild")
+                        .WithOne()
+                        .HasForeignKey("Mewdeko.Database.Models.Xp.Template", "TemplateGuildId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.HasOne("Mewdeko.Database.Models.Xp.TemplateUser", "TemplateUser")
+                        .WithOne()
+                        .HasForeignKey("Mewdeko.Database.Models.Xp.Template", "TemplateUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("TemplateBar");
+
+                    b.Navigation("TemplateClub");
+
+                    b.Navigation("TemplateGuild");
+
+                    b.Navigation("TemplateUser");
                 });
 
             modelBuilder.Entity("Mewdeko.Database.Models.AiConversation", b =>
@@ -5412,80 +5385,9 @@ namespace Mewdeko.Database.Migrations.PostgreSql
                     b.Navigation("Messages");
                 });
 
-            modelBuilder.Entity("Mewdeko.Database.Models.AntiMassMentionSetting", b =>
-                {
-                    b.Navigation("IgnoredChannels");
-                });
-
-            modelBuilder.Entity("Mewdeko.Database.Models.AntiSpamSetting", b =>
-                {
-                    b.Navigation("IgnoredChannels");
-                });
-
             modelBuilder.Entity("Mewdeko.Database.Models.CaseNote", b =>
                 {
                     b.Navigation("EditHistory");
-                });
-
-            modelBuilder.Entity("Mewdeko.Database.Models.GuildConfig", b =>
-                {
-                    b.Navigation("AntiAltSetting")
-                        .IsRequired();
-
-                    b.Navigation("AntiMassMentionSetting")
-                        .IsRequired();
-
-                    b.Navigation("AntiRaidSetting")
-                        .IsRequired();
-
-                    b.Navigation("AntiSpamSetting")
-                        .IsRequired();
-
-                    b.Navigation("CommandAliases");
-
-                    b.Navigation("CommandCooldowns");
-
-                    b.Navigation("DelMsgOnCmdChannels");
-
-                    b.Navigation("FeedSubs");
-
-                    b.Navigation("FilterInvitesChannelIds");
-
-                    b.Navigation("FilterLinksChannelIds");
-
-                    b.Navigation("FilterWordsChannelIds");
-
-                    b.Navigation("FilteredWords");
-
-                    b.Navigation("FollowedStreams");
-
-                    b.Navigation("GuildRepeaters");
-
-                    b.Navigation("MutedUsers");
-
-                    b.Navigation("NsfwBlacklistedTags");
-
-                    b.Navigation("Permissions");
-
-                    b.Navigation("ReactionRoleMessages");
-
-                    b.Navigation("SelfAssignableRoleGroupNames");
-
-                    b.Navigation("StreamRole");
-
-                    b.Navigation("UnbanTimer");
-
-                    b.Navigation("UnmuteTimers");
-
-                    b.Navigation("UnroleTimer");
-
-                    b.Navigation("VcRoleInfos");
-
-                    b.Navigation("WarnPunishments");
-
-                    b.Navigation("WarnPunishments2");
-
-                    b.Navigation("XpSettings");
                 });
 
             modelBuilder.Entity("Mewdeko.Database.Models.MessageCount", b =>
@@ -5514,6 +5416,16 @@ namespace Mewdeko.Database.Migrations.PostgreSql
                     b.Navigation("Answers");
 
                     b.Navigation("Votes");
+                });
+
+            modelBuilder.Entity("Mewdeko.Database.Models.Protections.AntiMassMentionSetting", b =>
+                {
+                    b.Navigation("IgnoredChannels");
+                });
+
+            modelBuilder.Entity("Mewdeko.Database.Models.Protections.AntiSpamSetting", b =>
+                {
+                    b.Navigation("IgnoredChannels");
                 });
 
             modelBuilder.Entity("Mewdeko.Database.Models.ReactionRoleMessage", b =>
@@ -5550,15 +5462,6 @@ namespace Mewdeko.Database.Migrations.PostgreSql
                     b.Navigation("Buttons");
 
                     b.Navigation("SelectMenus");
-                });
-
-            modelBuilder.Entity("Mewdeko.Database.Models.XpSettings", b =>
-                {
-                    b.Navigation("CurrencyRewards");
-
-                    b.Navigation("ExclusionList");
-
-                    b.Navigation("RoleRewards");
                 });
 #pragma warning restore 612, 618
         }

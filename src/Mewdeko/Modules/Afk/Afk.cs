@@ -285,7 +285,7 @@ public class Afk(InteractiveService serv) : MewdekoModuleBase<AfkService>
     [Aliases]
     [Priority(0)]
     [UserPerm(GuildPermission.ManageMessages)]
-    public async Task AfkView(IGuildUser user)
+    public async Task AfkView(IGuildUser? user)
     {
         if (!await CheckRoleHierarchy(user))
             return;

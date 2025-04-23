@@ -1,8 +1,8 @@
+using LinqToDB;
 using Mewdeko.Common.ModuleBehaviors;
-using Mewdeko.Database.Common;
-using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.Games.Common;
 using Serilog;
+using PollAnswer = DataModel.PollAnswer;
 
 namespace Mewdeko.Modules.Games.Services;
 
@@ -11,15 +11,15 @@ namespace Mewdeko.Modules.Games.Services;
 /// </summary>
 public class PollService : INService, IReadyExecutor
 {
-    private readonly DbContextProvider dbProvider;
+    private readonly IDataConnectionFactory dbFactory;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="PollService" /> class.
     /// </summary>
-    /// <param name="db">The database service.</param>
-    public PollService(DbContextProvider dbProvider)
+    /// <param name="dbFactory">The database service.</param>
+    public PollService(IDataConnectionFactory dbFactory)
     {
-        this.dbProvider = dbProvider;
+        this.dbFactory = dbFactory;
     }
 
     /// <summary>
@@ -30,10 +30,10 @@ public class PollService : INService, IReadyExecutor
     /// <inheritdoc />
     public async Task OnReadyAsync()
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
-        ActivePolls = (await dbContext.Poll.GetAllPolls())
-            .ToDictionary(x => x.GuildId, x => new PollRunner(dbProvider, x))
+        ActivePolls = (await dbContext.Polls.ToListAsync())
+            .ToDictionary(x => x.GuildId, x => new PollRunner(dbFactory, x))
             .ToConcurrent();
     }
 
@@ -58,7 +58,7 @@ public class PollService : INService, IReadyExecutor
             Log.Warning(ex, "Error voting");
         }
 
-        return (true, poll.Polls.PollType);
+        return (true, (PollType)poll.Polls.PollType);
     }
 
     /// <summary>
@@ -69,7 +69,7 @@ public class PollService : INService, IReadyExecutor
     /// <param name="input">The input string for creating the poll.</param>
     /// <param name="type">The type of the poll.</param>
     /// <returns>The created poll.</returns>
-    public static Polls? CreatePoll(ulong guildId, ulong channelId, string input, PollType type)
+    public static DataModel.Poll? CreatePoll(ulong guildId, ulong channelId, string input, PollType type)
     {
         if (string.IsNullOrWhiteSpace(input) || !input.Contains(';'))
             return null;
@@ -77,20 +77,20 @@ public class PollService : INService, IReadyExecutor
         if (data.Length < 3)
             return null;
 
-        var col = new IndexedCollection<PollAnswers>(data.Skip(1)
-            .Select(x => new PollAnswers
+        var col = new List<PollAnswer>(data.Skip(1)
+            .Select(x => new PollAnswer
             {
                 Text = x
             }));
 
-        return new Polls
+        return new DataModel.Poll
         {
-            Answers = col,
+            PollAnswers = col,
             Question = data[0],
             ChannelId = channelId,
             GuildId = guildId,
-            Votes = [],
-            PollType = type
+            PollVotes = [],
+            PollType = (int)type
         };
     }
 
@@ -99,15 +99,14 @@ public class PollService : INService, IReadyExecutor
     /// </summary>
     /// <param name="p">The poll to start.</param>
     /// <returns>True if the poll started successfully, otherwise false.</returns>
-    public async Task<bool> StartPoll(Polls p)
+    public async Task<bool> StartPoll(DataModel.Poll p)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
-        var pr = new PollRunner(dbProvider, p);
+        var pr = new PollRunner(dbFactory, p);
         if (!ActivePolls.TryAdd(p.GuildId, pr)) return false;
 
-        dbContext.Poll.Add(p);
-        await dbContext.SaveChangesAsync();
+        await dbContext.InsertAsync(p);
         return true;
     }
 
@@ -116,13 +115,12 @@ public class PollService : INService, IReadyExecutor
     /// </summary>
     /// <param name="guildId">The ID of the guild where the poll is taking place.</param>
     /// <returns>The stopped poll.</returns>
-    public async Task<Polls?> StopPoll(ulong guildId)
+    public async Task<DataModel.Poll?> StopPoll(ulong guildId)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
         if (!ActivePolls.TryRemove(guildId, out var pr)) return null;
-        await dbContext.RemovePoll(pr.Polls.Id);
-        await dbContext.SaveChangesAsync();
+        await dbContext.Polls.Select(x => pr.Polls).DeleteAsync();
 
         return pr.Polls;
     }

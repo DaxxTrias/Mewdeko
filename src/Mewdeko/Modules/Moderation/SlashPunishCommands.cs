@@ -2,13 +2,16 @@
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
 using Humanizer;
+using LinqToDB;
 using Mewdeko.Common.Attributes.InteractionCommands;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Common.TypeReaders.Models;
-using Mewdeko.Database.DbContextStuff;
+using Mewdeko.Modules.Administration.Common;
+using Mewdeko.Modules.Moderation.Common;
 using Mewdeko.Modules.Moderation.Services;
 using NekosBestApiNet;
 using Serilog;
+using DataModel;
 using Swan;
 
 namespace Mewdeko.Modules.Moderation;
@@ -20,23 +23,23 @@ namespace Mewdeko.Modules.Moderation;
 [CheckPermissions]
 public class SlashPunishCommands : MewdekoSlashSubmodule<UserPunishService>
 {
-    private readonly DbContextProvider dbProvider;
+    private readonly IDataConnectionFactory dbFactory;
     private readonly InteractiveService interactivity;
     private readonly NekosBestApi nekos;
 
     /// <summary>
     ///     Initializes a new instance of <see cref="SlashPunishCommands" />.
     /// </summary>
-    /// <param name="db">The database provider</param>
+    /// <param name="dbFactory">The database provider</param>
     /// <param name="serv">The service used for embed pagination</param>
     /// <param name="nekos">The service used to get anime gifs from the nekos.best api</param>
-    public SlashPunishCommands(DbContextProvider dbProvider,
+    public SlashPunishCommands(IDataConnectionFactory dbFactory,
         InteractiveService serv,
         NekosBestApi nekos)
     {
         interactivity = serv;
         this.nekos = nekos;
-        this.dbProvider = dbProvider;
+        this.dbFactory = dbFactory;
     }
 
     /// <summary>
@@ -66,7 +69,8 @@ public class SlashPunishCommands : MewdekoSlashSubmodule<UserPunishService>
 
         var oldWarnChannel = await ctx.Guild.GetTextChannelAsync(warnlogChannel).ConfigureAwait(false);
         await Service.SetWarnlogChannelId(ctx.Guild, channel).ConfigureAwait(false);
-        await ctx.Interaction.SendConfirmAsync(Strings.WarnlogChannelChanged(ctx.Guild.Id, oldWarnChannel.Mention, channel.Mention));
+        await ctx.Interaction.SendConfirmAsync(Strings.WarnlogChannelChanged(ctx.Guild.Id, oldWarnChannel.Mention,
+            channel.Mention));
     }
 
     /// <summary>
@@ -107,7 +111,8 @@ public class SlashPunishCommands : MewdekoSlashSubmodule<UserPunishService>
         {
             AuditLogReason = reason
         }).ConfigureAwait(false);
-        await ReplyConfirmAsync(Strings.TimeoutSet(ctx.Guild.Id, user.Mention, time.Time.Humanize(maxUnit: TimeUnit.Day)))
+        await ReplyConfirmAsync(Strings.TimeoutSet(ctx.Guild.Id, user.Mention,
+                time.Time.Humanize(maxUnit: TimeUnit.Day)))
             .ConfigureAwait(false);
     }
 
@@ -198,11 +203,12 @@ public class SlashPunishCommands : MewdekoSlashSubmodule<UserPunishService>
         await ctx.Interaction.RespondAsync(embed: embed.Build());
         if (await Service.GetWarnlogChannel(ctx.Guild.Id) != 0)
         {
-            await using var dbContext = await dbProvider.GetContextAsync();
+            await using var db = await dbFactory.CreateConnectionAsync();
 
-            var warnings = dbContext.Warnings
-                .ForId(ctx.Guild.Id, user.Id)
-                .Count(w => !w.Forgiven && w.UserId == user.Id);
+            var warnings = await db.Warnings
+                .Where(w => w.GuildId == ctx.Guild.Id && w.UserId == user.Id && !w.Forgiven)
+                .CountAsync();
+
             var condition = punishment != null;
             var punishtime = condition ? TimeSpan.FromMinutes(punishment.Time).ToString() : " ";
             var punishaction = condition ? punishment.Punishment.Humanize() : "None";
@@ -453,7 +459,7 @@ public class SlashPunishCommands : MewdekoSlashSubmodule<UserPunishService>
             return;
         }
 
-        var success = await Service.WarnPunish(ctx.Guild.Id, number, punish, time);
+        var success = await Service.WarnPunish(ctx.Guild.Id, number, (int)punish, time);
 
         if (!success)
             return;
@@ -497,7 +503,7 @@ public class SlashPunishCommands : MewdekoSlashSubmodule<UserPunishService>
         {
             list = string.Join("\n",
                 ps.Select(x =>
-                    $"{x.Count} -> {x.Punishment} {(x.Punishment == PunishmentAction.AddRole ? $"<@&{x.RoleId}>" : "")} {(x.Time <= 0 ? "" : $"{x.Time}m")} "));
+                    $"{x.Count} -> {x.Punishment} {(x.Punishment == (int)PunishmentAction.AddRole ? $"<@&{x.RoleId}>" : "")} {(x.Time <= 0 ? "" : $"{x.Time}m")} "));
         }
         else
         {
@@ -553,7 +559,7 @@ public class SlashPunishCommands : MewdekoSlashSubmodule<UserPunishService>
     [RequireContext(ContextType.Guild)]
     [SlashUserPerm(GuildPermission.BanMembers)]
     [BotPerm(GuildPermission.BanMembers)]
-    public async Task Ban(IGuildUser user, string reason = null, string time = null)
+    public async Task Ban(IGuildUser? user, string reason = null, string time = null)
     {
         if (time is not null)
         {
@@ -582,7 +588,7 @@ public class SlashPunishCommands : MewdekoSlashSubmodule<UserPunishService>
         bool hackBan = false,
         string reason = null,
         TimeSpan time = default,
-        IGuildUser user = null)
+        IGuildUser? user = null)
     {
         if (hackBan)
         {
@@ -642,7 +648,8 @@ public class SlashPunishCommands : MewdekoSlashSubmodule<UserPunishService>
 
                 var toSend = new EmbedBuilder().WithOkColor()
                     .WithTitle($"⛔️ {Strings.BannedUser(ctx.Guild.Id)}")
-                    .AddField(efb => efb.WithName(Strings.Username(ctx.Guild.Id)).WithValue(user.ToString()).WithIsInline(true))
+                    .AddField(efb =>
+                        efb.WithName(Strings.Username(ctx.Guild.Id)).WithValue(user.ToString()).WithIsInline(true))
                     .AddField(efb => efb.WithName("ID").WithValue(user.Id.ToString()).WithIsInline(true))
                     .WithImageUrl((await nekos.ActionsApi.Kick().ConfigureAwait(false)).Results.First().Url);
 
@@ -680,7 +687,8 @@ public class SlashPunishCommands : MewdekoSlashSubmodule<UserPunishService>
 
                 var toSend = new EmbedBuilder().WithOkColor()
                     .WithTitle($"⛔️ {Strings.BannedUser(ctx.Guild.Id)}")
-                    .AddField(efb => efb.WithName(Strings.Username(ctx.Guild.Id)).WithValue(user.ToString()).WithIsInline(true))
+                    .AddField(efb =>
+                        efb.WithName(Strings.Username(ctx.Guild.Id)).WithValue(user.ToString()).WithIsInline(true))
                     .AddField(efb => efb.WithName("ID").WithValue(user.Id.ToString()).WithIsInline(true))
                     .WithImageUrl((await nekos.ActionsApi.Kick().ConfigureAwait(false)).Results.First().Url);
 
@@ -747,7 +755,8 @@ public class SlashPunishCommands : MewdekoSlashSubmodule<UserPunishService>
 
         try
         {
-            await user.SendErrorAsync(Strings.Sbdm(ctx.Guild.Id, Format.Bold(ctx.Guild.Name), msg)).ConfigureAwait(false);
+            await user.SendErrorAsync(Strings.Sbdm(ctx.Guild.Id, Format.Bold(ctx.Guild.Name), msg))
+                .ConfigureAwait(false);
         }
         catch
         {

@@ -1,4 +1,5 @@
 ﻿using System.IO;
+using DataModel;
 using Discord.Commands;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
@@ -26,7 +27,8 @@ public partial class Currency(InteractiveService interactive, BlackjackService b
     {
         var eb = new EmbedBuilder()
             .WithOkColor()
-            .WithDescription(Strings.CashBalance(ctx.Guild.Id, await Service.GetUserBalanceAsync(ctx.User.Id, ctx.Guild.Id),
+            .WithDescription(Strings.CashBalance(ctx.Guild.Id,
+                await Service.GetUserBalanceAsync(ctx.User.Id, ctx.Guild.Id),
                 await Service.GetCurrencyEmote(ctx.Guild.Id)));
 
         await ReplyAsync(embed: eb.Build());
@@ -71,6 +73,7 @@ public partial class Currency(InteractiveService interactive, BlackjackService b
     /// <summary>
     ///     Adds money to a users balance
     /// </summary>
+    /// <param name="user">The user to add it to.</param>
     /// <param name="amount">The amount to add, dont go too crazy lol. Can be negative</param>
     /// <param name="reason">The reason you are doing this to this, person, thing, whatever</param>
     [Cmd]
@@ -79,7 +82,7 @@ public partial class Currency(InteractiveService interactive, BlackjackService b
     public async Task ModifyBalance(IUser user, long amount, [Remainder] string? reason = null)
     {
         await Service.AddUserBalanceAsync(user.Id, amount, ctx.Guild.Id);
-        await Service.AddTransactionAsync(user.Id, amount, reason, ctx.Guild.Id);
+        await Service.AddTransactionAsync(user.Id, amount, reason ??= "", ctx.Guild.Id);
         await ReplyConfirmAsync(Strings.UserBalanceModified(ctx.Guild.Id, user.Mention, amount, reason));
     }
 
@@ -100,7 +103,8 @@ public partial class Currency(InteractiveService interactive, BlackjackService b
 
         var minimumTimeBetweenClaims = TimeSpan.FromSeconds(cooldownSeconds);
 
-        var recentTransactions = (await Service.GetTransactionsAsync(ctx.User.Id, ctx.Guild.Id))
+        var recentTransactions = (await Service.GetTransactionsAsync(ctx.User.Id, ctx.Guild.Id) ??
+                                  Array.Empty<TransactionHistory>())
             .Where(t => t.Description == Strings.DailyRewardTransaction(ctx.Guild.Id) &&
                         t.DateAdded > DateTime.UtcNow - minimumTimeBetweenClaims);
 
@@ -115,7 +119,8 @@ public partial class Currency(InteractiveService interactive, BlackjackService b
         }
 
         await Service.AddUserBalanceAsync(ctx.User.Id, rewardAmount, ctx.Guild.Id);
-        await Service.AddTransactionAsync(ctx.User.Id, rewardAmount, Strings.DailyRewardTransaction(ctx.Guild.Id), ctx.Guild.Id);
+        await Service.AddTransactionAsync(ctx.User.Id, rewardAmount, Strings.DailyRewardTransaction(ctx.Guild.Id),
+            ctx.Guild.Id);
         await ctx.Channel.SendConfirmAsync(
             Strings.DailyRewardClaimed(ctx.Guild.Id, rewardAmount, await Service.GetCurrencyEmote(ctx.Guild.Id)));
     }
@@ -227,7 +232,8 @@ public partial class Currency(InteractiveService interactive, BlackjackService b
         if (betAmount > balance)
         {
             await ctx.Channel.SendErrorAsync(
-                Strings.SpinwheelInsufficientBalance(ctx.Guild.Id, await Service.GetCurrencyEmote(ctx.Guild.Id)), Config);
+                Strings.SpinwheelInsufficientBalance(ctx.Guild.Id, await Service.GetCurrencyEmote(ctx.Guild.Id)),
+                Config);
             return;
         }
 
@@ -269,7 +275,9 @@ public partial class Currency(InteractiveService interactive, BlackjackService b
                 : Strings.SpinwheelWinTransaction(ctx.Guild.Id), ctx.Guild.Id);
 
         var eb = new EmbedBuilder()
-            .WithTitle(balanceChange > 0 ? Strings.SpinwheelWinTitle(ctx.Guild.Id) : Strings.SpinwheelLossTitle(ctx.Guild.Id))
+            .WithTitle(balanceChange > 0
+                ? Strings.SpinwheelWinTitle(ctx.Guild.Id)
+                : Strings.SpinwheelLossTitle(ctx.Guild.Id))
             .WithDescription(Strings.SpinwheelResult(ctx.Guild.Id, segments[winningSegment], balanceChange,
                 await Service.GetCurrencyEmote(ctx.Guild.Id)))
             .WithColor(balanceChange > 0 ? Color.Green : Color.Red)
@@ -296,23 +304,23 @@ public partial class Currency(InteractiveService interactive, BlackjackService b
         }
 
         // Helper method to compute balance change
-        Task<long> ComputeBalanceChange(string segment, long betAmount)
+        Task<long> ComputeBalanceChange(string segment, long amount)
         {
-            long balanceChange = 0;
+            long change;
 
             if (segment.EndsWith("%"))
             {
                 var percent = int.Parse(segment[1..^1]);
-                var portion = (long)Math.Ceiling(betAmount * (percent / 100.0));
-                balanceChange = segment.StartsWith("-") ? -portion : portion;
+                var portion = (long)Math.Ceiling(amount * (percent / 100.0));
+                change = segment.StartsWith("-") ? -portion : portion;
             }
             else
             {
                 var val = int.Parse(segment.Replace("$", "").Replace("+", "").Replace("-", ""));
-                balanceChange = segment.StartsWith("-") ? -val : val;
+                change = segment.StartsWith("-") ? -val : val;
             }
 
-            return Task.FromResult(balanceChange);
+            return Task.FromResult(change);
         }
     }
 
@@ -421,7 +429,8 @@ public partial class Currency(InteractiveService interactive, BlackjackService b
 
         await Service.AddUserBalanceAsync(ctx.User.Id, balanceChange, ctx.Guild.Id);
         await Service.AddTransactionAsync(ctx.User.Id, balanceChange,
-            playerWon ? Strings.BlackjackWonTransaction(ctx.Guild.Id) : Strings.BlackjackLostTransaction(ctx.Guild.Id), ctx.Guild.Id);
+            playerWon ? Strings.BlackjackWonTransaction(ctx.Guild.Id) : Strings.BlackjackLostTransaction(ctx.Guild.Id),
+            ctx.Guild.Id);
 
         BlackjackService.EndGame(ctx.User);
 
@@ -440,7 +449,8 @@ public partial class Currency(InteractiveService interactive, BlackjackService b
     {
         if (bet < 1)
         {
-            await ctx.Channel.SendErrorAsync(Strings.SlotMinimumBet(ctx.Guild.Id, await Service.GetCurrencyEmote(ctx.Guild.Id)),
+            await ctx.Channel.SendErrorAsync(
+                Strings.SlotMinimumBet(ctx.Guild.Id, await Service.GetCurrencyEmote(ctx.Guild.Id)),
                 Config);
             return;
         }
@@ -466,15 +476,18 @@ public partial class Currency(InteractiveService interactive, BlackjackService b
 
         var balanceChange = winnings - bet;
         await Service.AddUserBalanceAsync(ctx.User.Id, balanceChange, ctx.Guild.Id);
-        await Service.AddTransactionAsync(ctx.User.Id, balanceChange, Strings.SlotTransaction(ctx.Guild.Id), ctx.Guild.Id);
+        await Service.AddTransactionAsync(ctx.User.Id, balanceChange, Strings.SlotTransaction(ctx.Guild.Id),
+            ctx.Guild.Id);
 
         var eb = new EmbedBuilder()
             .WithOkColor()
             .WithTitle(Strings.SlotTitle(ctx.Guild.Id))
             .WithDescription(Strings.SlotResult(ctx.Guild.Id, result[0], result[1], result[2]))
             .AddField(Strings.SlotBet(ctx.Guild.Id), $"{bet} {await Service.GetCurrencyEmote(ctx.Guild.Id)}", true)
-            .AddField(Strings.SlotWinnings(ctx.Guild.Id), $"{winnings} {await Service.GetCurrencyEmote(ctx.Guild.Id)}", true)
-            .AddField(Strings.SlotNetProfit(ctx.Guild.Id), $"{balanceChange} {await Service.GetCurrencyEmote(ctx.Guild.Id)}",
+            .AddField(Strings.SlotWinnings(ctx.Guild.Id), $"{winnings} {await Service.GetCurrencyEmote(ctx.Guild.Id)}",
+                true)
+            .AddField(Strings.SlotNetProfit(ctx.Guild.Id),
+                $"{balanceChange} {await Service.GetCurrencyEmote(ctx.Guild.Id)}",
                 true);
 
         await ctx.Channel.SendMessageAsync(embed: eb.Build());
@@ -566,9 +579,12 @@ public partial class Currency(InteractiveService interactive, BlackjackService b
             .WithTitle(Strings.RouletteTitle(ctx.Guild.Id))
             .WithDescription(Strings.RouletteResult(ctx.Guild.Id, result, color))
             .AddField(Strings.RouletteBet(ctx.Guild.Id),
-                Strings.RouletteBetDetails(ctx.Guild.Id, betAmount, await Service.GetCurrencyEmote(ctx.Guild.Id), betType), true)
-            .AddField(Strings.RouletteOutcome(ctx.Guild.Id), won ? Strings.RouletteWon(ctx.Guild.Id) : Strings.RouletteLost(ctx.Guild.Id), true)
-            .AddField(Strings.RouletteProfit(ctx.Guild.Id), $"{profit} {await Service.GetCurrencyEmote(ctx.Guild.Id)}", true);
+                Strings.RouletteBetDetails(ctx.Guild.Id, betAmount, await Service.GetCurrencyEmote(ctx.Guild.Id),
+                    betType), true)
+            .AddField(Strings.RouletteOutcome(ctx.Guild.Id),
+                won ? Strings.RouletteWon(ctx.Guild.Id) : Strings.RouletteLost(ctx.Guild.Id), true)
+            .AddField(Strings.RouletteProfit(ctx.Guild.Id), $"{profit} {await Service.GetCurrencyEmote(ctx.Guild.Id)}",
+                true);
 
         await ctx.Channel.SendMessageAsync(embed: eb.Build());
     }
@@ -628,12 +644,12 @@ public partial class Currency(InteractiveService interactive, BlackjackService b
     /// <example>.transactions @user</example>
     [Cmd]
     [Aliases]
-    public async Task Transactions(IUser user = null)
+    public async Task Transactions(IUser? user = null)
     {
         user ??= ctx.User;
 
         var transactions = await Service.GetTransactionsAsync(user.Id, ctx.Guild.Id);
-        transactions = transactions.OrderByDescending(x => x.DateAdded);
+        transactions = transactions?.OrderByDescending(x => x.DateAdded);
         var paginator = new LazyPaginatorBuilder()
             .AddUser(ctx.User)
             .WithPageFactory(PageFactory)
@@ -655,7 +671,8 @@ public partial class Currency(InteractiveService interactive, BlackjackService b
 
             for (var i = index * 10; i < (index + 1) * 10 && i < transactions.Count(); i++)
             {
-                pageBuilder.AddField(Strings.TransactionsEntry(ctx.Guild.Id, i + 1, transactions.ElementAt(i).Description),
+                pageBuilder.AddField(
+                    Strings.TransactionsEntry(ctx.Guild.Id, i + 1, transactions.ElementAt(i).Description),
                     Strings.TransactionsDetails(ctx.Guild.Id, transactions.ElementAt(i).Amount,
                         await Service.GetCurrencyEmote(ctx.Guild.Id),
                         TimestampTag.FromDateTime(transactions.ElementAt(i).DateAdded.Value)));
@@ -721,7 +738,8 @@ public partial class Currency(InteractiveService interactive, BlackjackService b
             await Service.AddTransactionAsync(ctx.User.Id, profit, Strings.RpsTransactionDescription(ctx.Guild.Id),
                 ctx.Guild.Id);
 
-            eb.AddField(Strings.RpsEmbedProfit(ctx.Guild.Id), $"{profit} {await Service.GetCurrencyEmote(ctx.Guild.Id)}", true);
+            eb.AddField(Strings.RpsEmbedProfit(ctx.Guild.Id),
+                $"{profit} {await Service.GetCurrencyEmote(ctx.Guild.Id)}", true);
         }
 
         await ctx.Channel.SendMessageAsync(embed: eb.Build());
@@ -792,22 +810,24 @@ public partial class Currency(InteractiveService interactive, BlackjackService b
                 startAngle, sweepAngle, true, paint);
         }
 
+        // Create a font for the text
+        using var textFont = new SKFont();
+        textFont.Size = 20;
+
         using var textPaint = new SKPaint();
         textPaint.Color = SKColors.Black;
-        textPaint.TextSize = 20;
         textPaint.IsAntialias = true;
-        textPaint.TextAlign = SKTextAlign.Center;
 
         for (var i = 0; i < numSegments; i++)
         {
             var startAngle = i * 360 / numSegments - offsetAngle;
             var middleAngle = startAngle + 360 / numSegments / 2;
-            var textPosition = new SKPoint(
-                centerX + radius * 0.7f * (float)Math.Cos(DegreesToRadians(middleAngle)),
-                centerY + radius * 0.7f * (float)Math.Sin(DegreesToRadians(middleAngle)) +
-                textPaint.TextSize / 2);
 
-            canvas.DrawText(segments[i], textPosition.X, textPosition.Y, textPaint);
+            // Calculate position for center-aligned text
+            var textX = centerX + radius * 0.7f * (float)Math.Cos(DegreesToRadians(middleAngle));
+            var textY = centerY + radius * 0.7f * (float)Math.Sin(DegreesToRadians(middleAngle)) + textFont.Size / 2;
+
+            canvas.DrawText(segments[i], textX, textY, SKTextAlign.Center, textFont, textPaint);
         }
 
         var arrowShaftLength = radius * 0.2f;

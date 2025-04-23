@@ -1,5 +1,6 @@
 ﻿using Discord.Net;
-using Mewdeko.Database.DbContextStuff;
+using LinqToDB;
+using DataModel;
 using Mewdeko.Modules.Utility.Services;
 using Serilog;
 
@@ -11,25 +12,25 @@ namespace Mewdeko.Modules.MultiGreets.Services;
 public class MultiGreetService : INService
 {
     private readonly DiscordShardedClient client;
-    private readonly DbContextProvider dbProvider;
+    private readonly IDataConnectionFactory dbFactory;
     private readonly GuildSettingsService guildSettingsService;
     private readonly InviteCountService inviteCountService;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MultiGreetService"/> class.
     /// </summary>
-    /// <param name="dbProvider">The database context provider.</param>
+    /// <param name="dbFactory">The database context provider.</param>
     /// <param name="client">The Discord client.</param>
     /// <param name="guildSettingsService">The guild settings service.</param>
     /// <param name="eventHandler">The event handler for user join events.</param>
     /// <param name="inviteCountService">The invite count service.</param>
-    public MultiGreetService(DbContextProvider dbProvider, DiscordShardedClient client,
+    public MultiGreetService(IDataConnectionFactory dbFactory, DiscordShardedClient client,
         GuildSettingsService guildSettingsService, EventHandler eventHandler, InviteCountService inviteCountService)
     {
         this.client = client;
         this.guildSettingsService = guildSettingsService;
         this.inviteCountService = inviteCountService;
-        this.dbProvider = dbProvider;
+        this.dbFactory = dbFactory;
         eventHandler.UserJoined += DoMultiGreet;
     }
 
@@ -38,11 +39,21 @@ public class MultiGreetService : INService
     /// </summary>
     /// <param name="guildId">The ID of the guild.</param>
     /// <returns>An array of MultiGreet objects for the specified guild.</returns>
-    public async Task<MultiGreet[]?> GetGreets(ulong guildId) =>
-        await WithMewdekoContext(db => Task.FromResult(db.MultiGreets.GetAllGreets(guildId)));
+    public async Task<MultiGreet[]?> GetGreets(ulong guildId)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+        return await db.MultiGreets
+            .Where(x => x.GuildId == guildId)
+            .ToArrayAsync();
+    }
 
-    private async Task<MultiGreet[]?> GetForChannel(ulong channelId) =>
-        await WithMewdekoContext(db => Task.FromResult(db.MultiGreets.GetForChannel(channelId)));
+    private async Task<MultiGreet[]?> GetForChannel(ulong channelId)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+        return await db.MultiGreets
+            .Where(x => x.ChannelId == channelId)
+            .ToArrayAsync();
+    }
 
     private async Task DoMultiGreet(IGuildUser user)
     {
@@ -77,12 +88,9 @@ public class MultiGreetService : INService
     /// <param name="type">The type of multi-greet to set.</param>
     public async Task SetMultiGreetType(IGuild guild, int type)
     {
-        await WithMewdekoContextNoReturn(async db =>
-        {
-            var gc = await db.ForGuildId(guild.Id, set => set);
-            gc.MultiGreetType = type;
-            await guildSettingsService.UpdateGuildConfig(guild.Id, gc);
-        });
+        var gc = await guildSettingsService.GetGuildConfig(guild.Id);
+        gc.MultiGreetType = type;
+        await guildSettingsService.UpdateGuildConfig(guild.Id, gc);
     }
 
     /// <summary>
@@ -104,11 +112,13 @@ public class MultiGreetService : INService
         if ((await GetForChannel(channelId)).Length == 5 || (await GetGreets(guildId)).Length == 30)
             return false;
 
-        await WithMewdekoContextNoReturn(db =>
-        {
-            db.MultiGreets.Add(new MultiGreet { ChannelId = channelId, GuildId = guildId });
-            return db.SaveChangesAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        await db.InsertAsync(new MultiGreet {
+            ChannelId = channelId,
+            GuildId = guildId
         });
+
         return true;
     }
 
@@ -148,23 +158,25 @@ public class MultiGreetService : INService
     /// Removes a specific multi-greet.
     /// </summary>
     /// <param name="greet">The multi-greet to remove.</param>
-    public async Task RemoveMultiGreetInternal(MultiGreet greet) =>
-        await WithMewdekoContextNoReturn(db =>
-        {
-            db.MultiGreets.Remove(greet);
-            return db.SaveChangesAsync();
-        });
+    public async Task RemoveMultiGreetInternal(MultiGreet greet)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+        await db.DeleteAsync(greet);
+    }
 
     /// <summary>
     /// Removes multiple multi-greets.
     /// </summary>
     /// <param name="greets">An array of multi-greets to remove.</param>
-    public async Task MultiRemoveMultiGreetInternal(MultiGreet[] greets) =>
-        await WithMewdekoContextNoReturn(db =>
+    public async Task MultiRemoveMultiGreetInternal(MultiGreet[] greets)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        foreach (var greet in greets)
         {
-            db.MultiGreets.RemoveRange(greets);
-            return db.SaveChangesAsync();
-        });
+            await db.DeleteAsync(greet);
+        }
+    }
 
     /// <summary>
     /// Enables or disables a specific multi-greet.
@@ -174,13 +186,13 @@ public class MultiGreetService : INService
     public async Task MultiGreetDisable(MultiGreet greet, bool disabled) =>
         await UpdateMultiGreet(greet, mg => mg.Disabled = disabled);
 
-    private async Task UpdateMultiGreet(MultiGreet greet, Action<MultiGreet> updateAction) =>
-        await WithMewdekoContextNoReturn(db =>
-        {
-            updateAction(greet);
-            db.MultiGreets.Update(greet);
-            return db.SaveChangesAsync();
-        });
+    private async Task UpdateMultiGreet(MultiGreet greet, Action<MultiGreet> updateAction)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        updateAction(greet);
+        await db.UpdateAsync(greet);
+    }
 
     private static async Task SendSmartEmbedMessage(IMessageChannel channel, string content, ulong guildId, int deleteTime = 0)
     {
@@ -276,17 +288,5 @@ public class MultiGreetService : INService
                 Log.Information($"MultiGreet disabled in {user.Guild} due to {ex.DiscordCode}.");
             }
         }
-    }
-
-    private async Task<T> WithMewdekoContext<T>(Func<MewdekoContext, Task<T>> action)
-    {
-        await using var dbContext = await dbProvider.GetContextAsync();
-        return await action(dbContext);
-    }
-
-    private async Task WithMewdekoContextNoReturn(Func<MewdekoContext, Task> action)
-    {
-        await using var dbContext = await dbProvider.GetContextAsync();
-        await action(dbContext);
     }
 }

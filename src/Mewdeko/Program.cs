@@ -10,9 +10,11 @@ using Lavalink4NET.Extensions;
 using MartineApiNet;
 using Mewdeko.AuthHandlers;
 using Mewdeko.Common.Configs;
+using Mewdeko.Common.Constraints;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Common.PubSub;
-using Mewdeko.Database.DbContextStuff;
+using Mewdeko.Database.EF.EFCore;
+using Mewdeko.Database.Impl;
 using Mewdeko.Modules.Currency.Services;
 using Mewdeko.Modules.Currency.Services.Impl;
 using Mewdeko.Modules.Nsfw;
@@ -24,13 +26,13 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.OpenApi.Models;
 using NekosBestApiNet;
-using Npgsql;
 using Serilog;
 using ZiggyCreatures.Caching.Fusion;
 using RunMode = Discord.Commands.RunMode;
@@ -38,23 +40,29 @@ using RunMode = Discord.Commands.RunMode;
 namespace Mewdeko;
 
 /// <summary>
-///     The main entry point class for the Mewdeko application.
+/// The main entry point class for the Mewdeko application.
+/// Handles initialization, dependency injection, and starting the bot or web host.
 /// </summary>
 public class Program
 {
-    private static IDataCache Cache { get; set; }
+    /// <summary>
+    /// Gets or sets the shared data cache instance.
+    /// </summary>
+    private static IDataCache Cache { get; set; } = null!;
 
     /// <summary>
-    ///     The entry point of the application.
+    /// The entry point of the application. Configures logging, dependencies, migrations,
+    /// and starts either the web host and bot or just the bot based on configuration.
     /// </summary>
     /// <param name="args">Command-line arguments passed to the application.</param>
     /// <returns>A <see cref="Task" /> representing the asynchronous operation of running the application.</returns>
     public static async Task Main(string[] args)
     {
         AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
-        var log = LogSetup.SetupLogger("Api");
+        var log = LogSetup.SetupLogger("Startup"); // Initial logger name
         var credentials = new BotCredentials();
         DependencyInstaller.CheckAndInstallDependencies(credentials.PsqlConnectionString);
+
         var discordRestClient = new DiscordRestClient();
         await discordRestClient.LoginAsync(TokenType.Bot, credentials.Token);
         var botGatewayInfo = await discordRestClient.GetBotGatewayAsync();
@@ -67,42 +75,47 @@ public class Program
             Helpers.ReadErrorAndExit(5);
         }
 
-        var migrationService = new MigrationService(
-            null,
-            credentials.Token,
-            credentials.PsqlConnectionString,
-            credentials.MigrateToPsql);
-
-        await migrationService.ApplyMigrations(
-            new MewdekoPostgresContext(new DbContextOptions<MewdekoPostgresContext>()));
-
-        // Set up the Host or WebApplication based on IsApiEnabled
+        try
+        {
+            await using var dbMigrationContext = new MewdekoPostgresContext(new DbContextOptions<MewdekoPostgresContext>());
+            await dbMigrationContext.Database.MigrateAsync();
+        }
+        catch (Exception ex)
+        {
+            Log.Fatal(ex, "Database migration failed: {ErrorMessage}", ex.Message);
+            Helpers.ReadErrorAndExit(6);
+        }
 
         if (credentials.IsApiEnabled)
         {
             var builder = WebApplication.CreateBuilder(args);
-            var services = builder.Services;
-
-            // Configure logging
             builder.Logging.ClearProviders();
 
+            ConfigureServices(builder.Services, credentials, Cache);
 
-            // Configure services
-            ConfigureServices(services, credentials, Cache);
-
-            // Configure web host settings
             builder.WebHost.UseUrls($"http://localhost:{credentials.ApiPort}");
-            services.AddTransient<IApiKeyValidation, ApiKeyValidation>();
-            services.AddAuthorization();
+            builder.Services.Configure<RouteOptions>(options =>
+            {
+                options.ConstraintMap["ulong"] = typeof(UlongRouteConstraint);
+            });
+            builder.Services.AddTransient<IApiKeyValidation, ApiKeyValidation>();
+            builder.Services.AddAuthorization();
 
-            services.AddControllers()
+            builder.Services.AddControllers()
                 .AddJsonOptions(options =>
                 {
                     options.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
                     options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
-                });
-            services.AddEndpointsApiExplorer();
-            services.AddSwaggerGen(x =>
+                    options.JsonSerializerOptions.DefaultIgnoreCondition =
+                        JsonIgnoreCondition.WhenWritingNull;
+                    options.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
+                })
+                .ConfigureApiBehaviorOptions(options =>
+                {
+                    options.SuppressModelStateInvalidFilter = true;
+                });;
+            builder.Services.AddEndpointsApiExplorer();
+            builder.Services.AddSwaggerGen(x =>
             {
                 x.AddSecurityDefinition("ApiKeyHeader", new OpenApiSecurityScheme
                 {
@@ -121,24 +134,20 @@ public class Program
                                 Type = ReferenceType.SecurityScheme, Id = "ApiKeyHeader"
                             }
                         },
-                        [
-                        ]
+                        []
                     }
                 });
             });
 
-            var auth = services.AddAuthentication(options =>
+            var auth = builder.Services.AddAuthentication(options =>
             {
                 options.AddScheme<AuthHandler>(AuthHandler.SchemeName, AuthHandler.SchemeName);
             });
-
             auth.AddScheme<AuthenticationSchemeOptions, ApiKeyAuthHandler>("ApiKey", null);
 
-            services.AddAuthorizationBuilder()
-                .AddPolicy("ApiKeyPolicy", policy =>
-                    policy.RequireAuthenticatedUser().AddAuthenticationSchemes("ApiKey"))
-                .AddPolicy("TopggPolicy", policy => policy.RequireClaim(AuthHandler.TopggClaim)
-                        .AddAuthenticationSchemes(AuthHandler.SchemeName));
+            builder.Services.AddAuthorizationBuilder()
+                .AddPolicy("ApiKeyPolicy", policy => policy.RequireAuthenticatedUser().AddAuthenticationSchemes("ApiKey"))
+                .AddPolicy("TopggPolicy", policy => policy.RequireClaim(AuthHandler.TopggClaim).AddAuthenticationSchemes(AuthHandler.SchemeName));
 
             builder.Services.AddCors(options =>
             {
@@ -146,14 +155,14 @@ public class Program
                 {
                     policy
                         .WithOrigins($"http://localhost:{credentials.ApiPort}", $"https://localhost:{credentials.ApiPort}", "https://mewdeko.tech")
-                        .AllowAnyMethod() // Allow GET, POST, etc.
-                        .AllowAnyHeader() // Allow any headers including custom auth headers
+                        .AllowAnyMethod()
+                        .AllowAnyHeader()
                         .AllowCredentials();
                 });
             });
 
-
             var app = builder.Build();
+
             app.Use(async (context, next) =>
             {
                 try
@@ -179,91 +188,61 @@ public class Program
                     try
                     {
                         var requestBody = string.Empty;
-
                         if (httpContext.Request.ContentLength > 0)
                         {
-                            // Enable buffering for multiple reads
                             httpContext.Request.EnableBuffering();
-
-                            // Create a StreamReader that leaves the stream open
-                            using var reader = new StreamReader(
-                                httpContext.Request.Body,
-                                Encoding.UTF8,
-                                false,
-                                -1,
-                                true);
+                            using var reader = new StreamReader(httpContext.Request.Body, Encoding.UTF8, false, -1, true);
                             requestBody = reader.ReadToEndAsync().Result;
-                            // Reset the stream position back to the beginning
                             httpContext.Request.Body.Position = 0;
                         }
-
                         diagnosticContext.Set("RequestBody", requestBody);
                         diagnosticContext.Set("QueryString", httpContext.Request.QueryString);
                     }
                     catch (Exception ex)
                     {
-                        // Log any errors but don't throw them to avoid breaking the request pipeline
                         Log.Error(ex, "Error reading request body for logging");
                         diagnosticContext.Set("RequestBody", "Error reading request body");
                     }
                 };
             });
 
-            // Configure the HTTP request pipeline.
             if (builder.Environment.IsDevelopment())
             {
                 app.UseSwagger();
                 app.UseSwaggerUI();
             }
 
-            app.UseWebSockets(new WebSocketOptions
-            {
-                KeepAliveInterval = TimeSpan.FromSeconds(120),
-            });
+            app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.FromSeconds(120) });
             app.UseAuthorization();
             app.MapControllers();
 
-            foreach (var address in app.Urls)
-            {
-                Log.Information("Listening on {Address}", address);
-            }
-
-            // Start the app and the bot
+            foreach (var address in app.Urls) Log.Information("API Listening on {Address}", address);
             await app.RunAsync();
         }
         else
         {
-            // Create a generic host when IsApiEnabled is false
             var host = Host.CreateDefaultBuilder(args)
-                .ConfigureLogging(logging =>
+                .UseSerilog()
+                .ConfigureLogging(logging => logging.ClearProviders())
+                .ConfigureServices((_, services) =>
                 {
-                    logging.ClearProviders();
-                    logging.AddSerilog(log);
-                })
-                .ConfigureServices((context, services) =>
-                {
-                    // Configure services without web-specific services
                     ConfigureServices(services, credentials, Cache);
                 })
                 .Build();
 
-            // Start the bot without hosting any servers
+            Log.Information("API is disabled. Starting bot only.");
             await host.RunAsync();
         }
     }
 
+    /// <summary>
+    /// Configures the shared services for the application (both bot and API).
+    /// </summary>
+    /// <param name="services">The service collection to configure.</param>
+    /// <param name="credentials">The bot credentials.</param>
+    /// <param name="cache">The shared data cache instance.</param>
     private static void ConfigureServices(IServiceCollection services, BotCredentials credentials, IDataCache cache)
     {
-
-        var discordRestClient = new DiscordRestClient();
-        discordRestClient.LoginAsync(TokenType.Bot, credentials.Token).GetAwaiter().GetResult();
-        var botGatewayInfo = discordRestClient.GetBotGatewayAsync().GetAwaiter().GetResult();
-        discordRestClient.LogoutAsync().GetAwaiter().GetResult();
-
-        Log.Information("Discord recommends {0} shards with {1} max concurrency",
-            botGatewayInfo.Shards,
-            botGatewayInfo.SessionStartLimit.MaxConcurrency);
-
         var client = new DiscordShardedClient(new DiscordSocketConfig
         {
             MessageCacheSize = 15,
@@ -273,7 +252,8 @@ public class Program
             GatewayIntents = GatewayIntents.All,
             FormatUsersInBidirectionalUnicode = false,
             LogGatewayIntentWarnings = false,
-            DefaultRetryMode = RetryMode.RetryRatelimit
+            DefaultRetryMode = RetryMode.RetryRatelimit,
+            TotalShards = credentials.TotalShards
         });
 
         services.AddSerilog(LogSetup.SetupLogger("Mewdeko"));
@@ -282,77 +262,53 @@ public class Program
         services.AddSingleton(cache);
         services.AddSingleton(cache.Redis);
 
-        services
-            .AddSingleton<FontProvider>()
-            .AddSingleton<IBotCredentials>(credentials);
-        services.AddDbContext<MewdekoPostgresContext>(); //# used only for migrations
-        services.AddPooledDbContextFactory<MewdekoContext>(dbContextOptionsBuilder =>
-            {
-                var connString = new NpgsqlConnectionStringBuilder(credentials.PsqlConnectionString)
-                {
-                    Pooling = true,
-                    MinPoolSize = 20,
-                    MaxPoolSize = 100,
-                    ConnectionIdleLifetime = 300,
-                    ConnectionPruningInterval = 10
-                }.ToString();
+        services.AddSingleton<FontProvider>();
+        services.AddSingleton<IBotCredentials>(credentials);
 
-                dbContextOptionsBuilder
-                    .UseNpgsql(connString, npgsqlOptions =>
-                    {
-                        npgsqlOptions.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery);
-                        npgsqlOptions.MaxBatchSize(1000);
-                        npgsqlOptions.EnableRetryOnFailure(
-                            3,
-                            TimeSpan.FromSeconds(3),
-                            null);
-                    })
-                    .EnableDetailedErrors()
-                    .EnableSensitiveDataLogging();
-            })
-            .AddSingleton<DbContextProvider>()
-            .AddSingleton<EventHandler>()
-            .AddSingleton(new CommandService(new CommandServiceConfig
-            {
-                CaseSensitiveCommands = false, DefaultRunMode = RunMode.Async
-            }))
-            .AddSingleton(new MartineApi())
-            .AddTransient<ISeria, JsonSeria>()
-            .AddTransient<IPubSub, RedisPubSub>()
-            .AddTransient<IConfigSeria, YamlSeria>()
-            .AddSingleton(new InteractiveService(client, new InteractiveConfig
-            {
-                ReturnAfterSendingPaginator = true
-            }))
-            .AddSingleton(new NekosBestApi("Mewdeko"))
-            .AddSingleton(p => new InteractionService(p.GetRequiredService<DiscordShardedClient>()))
-            .AddSingleton<Localization>()
-            .AddSingleton<GeneratedBotStrings>()
-            .AddSingleton<BotConfigService>()
-            .AddSingleton<BotConfig>()
-            .AddConfigServices()
-            .AddBotStringsServices(credentials.TotalShards)
-            .AddMemoryCache()
-            .AddLavalink()
+        services.AddDbContext<MewdekoPostgresContext>(options =>
+            options.UseNpgsql(credentials.PsqlConnectionString));
+
+        services.AddSingleton<IDataConnectionFactory>(sp =>
+            new PostgreSqlConnectionFactory(credentials.PsqlConnectionString));
+
+        services.AddSingleton<EventHandler>();
+        services.AddSingleton(new CommandService(new CommandServiceConfig
+        {
+            CaseSensitiveCommands = false, DefaultRunMode = RunMode.Async
+        }));
+        services.AddSingleton(new MartineApi());
+        services.AddTransient<ISeria, JsonSeria>();
+        services.AddTransient<IPubSub, RedisPubSub>();
+        services.AddTransient<IConfigSeria, YamlSeria>();
+        services.AddSingleton(new InteractiveService(client, new InteractiveConfig
+        {
+            ReturnAfterSendingPaginator = true
+        }));
+        services.AddSingleton(new NekosBestApi("Mewdeko"));
+        services.AddSingleton(p => new InteractionService(p.GetRequiredService<DiscordShardedClient>()));
+        services.AddSingleton<Localization>();
+        services.AddSingleton<GeneratedBotStrings>();
+        services.AddSingleton<BotConfigService>();
+        services.AddSingleton<BotConfig>();
+        services.AddConfigServices();
+        services.AddBotStringsServices(credentials.TotalShards);
+        services.AddMemoryCache();
+        services.AddLavalink()
             .ConfigureLavalink(x =>
             {
                 x.Passphrase = "Hope4a11";
                 x.BaseAddress = new Uri(credentials.LavalinkUrl);
-            })
-            .AddSingleton<ISearchImagesService, SearchImagesService>()
-            .AddSingleton<ToneTagService>()
-            .AddTransient<GuildSettingsService>();
+            });
+        services.AddSingleton<ISearchImagesService, SearchImagesService>();
+        services.AddSingleton<ToneTagService>();
+        services.AddTransient<GuildSettingsService>();
 
         services.AddFusionCache().TryWithAutoSetup();
 
         if (credentials.UseGlobalCurrency)
-        {
             services.AddTransient<ICurrencyService, GlobalCurrencyService>();
-        }
         else
-        {
             services.AddTransient<ICurrencyService, GuildCurrencyService>();
-        }
 
         services.AddHttpClient();
         services.AddHttpClient("memelist").ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
@@ -371,7 +327,7 @@ public class Program
             .WithSingletonLifetime()
         );
 
-        services.AddSingleton<Mewdeko>()
-            .AddHostedService<MewdekoService>();
+        services.AddSingleton<Mewdeko>();
+        services.AddHostedService<MewdekoService>();
     }
 }

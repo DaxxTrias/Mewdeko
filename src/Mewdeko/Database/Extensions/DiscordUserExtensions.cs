@@ -1,95 +1,105 @@
 ﻿using LinqToDB;
-using LinqToDB.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore;
+using Mewdeko.Database.DbContextStuff;
+using DataModel;
 
 namespace Mewdeko.Database.Extensions;
 
 /// <summary>
-///     Provides extension methods for working with DiscordUser entities in the MewdekoContext.
+///     Provides extension methods for working with DiscordUser entities.
 /// </summary>
 public static class DiscordUserExtensions
 {
     /// <summary>
     ///     Ensures that a Discord user is created in the database. If the user already exists, updates the user information.
     /// </summary>
-    /// <param name="ctx">The database context.</param>
+    /// <param name="db">The database connection.</param>
     /// <param name="userId">The ID of the Discord user.</param>
     /// <param name="username">The username of the Discord user.</param>
     /// <param name="avatarId">The avatar ID of the Discord user.</param>
     public static async Task EnsureUserCreated(
-        this MewdekoContext ctx,
+        this MewdekoDb db,
         ulong userId,
         string username,
         string avatarId)
     {
-        await ctx.DiscordUser.ToLinqToDBTable().InsertOrUpdateAsync(() => new DiscordUser
+        try
         {
-            UserId = userId,
-            Username = username,
-            AvatarId = avatarId,
-            TotalXp = 0
-        }, old => new DiscordUser
+            // Check if user exists
+            var exists = await db.DiscordUsers
+                .FirstOrDefaultAsync(u => u.UserId == userId);
+
+            if (exists is not null)
+            {
+                // Update existing user
+                exists.Username = username;
+                exists.AvatarId = avatarId;
+                await db.UpdateAsync(exists);
+            }
+            else
+            {
+                // Insert new user
+                await db.InsertAsync(new DiscordUser
+                {
+                    UserId = userId, Username = username, AvatarId = avatarId, TotalXp = 0
+                });
+            }
+        }
+        catch (Exception e)
         {
-            Username = username, AvatarId = avatarId
-        }, () => new DiscordUser
-        {
-            UserId = userId
-        }).ConfigureAwait(false);
+            Console.WriteLine(e);
+            throw;
+        }
     }
 
     /// <summary>
     ///     Retrieves or creates a Discord user in the database.
     /// </summary>
-    /// <param name="ctx">The database context.</param>
+    /// <param name="db">The database connection.</param>
     /// <param name="userId">The ID of the Discord user.</param>
     /// <param name="username">The username of the Discord user.</param>
     /// <param name="avatarId">The avatar ID of the Discord user.</param>
     /// <returns>The Discord user entity.</returns>
     public static async Task<DiscordUser> GetOrCreateUser(
-        this MewdekoContext ctx,
+        this MewdekoDb db,
         ulong userId,
         string username,
         string avatarId)
     {
-        await ctx.EnsureUserCreated(userId, username, avatarId);
-        return await ctx.DiscordUser.FirstOrDefaultAsyncEF(u => u.UserId == userId)
-            .ConfigureAwait(false);
+        await db.EnsureUserCreated(userId, username, avatarId);
+        var toReturn = await db.DiscordUsers.FirstOrDefaultAsync(x => x.UserId == userId);
+        return toReturn;
     }
 
     /// <summary>
     ///     Retrieves or creates a Discord user in the database from an IUser instance.
     /// </summary>
-    /// <param name="ctx">The database context.</param>
+    /// <param name="db">The database connection.</param>
     /// <param name="original">The IUser instance representing the Discord user.</param>
     /// <returns>The Discord user entity.</returns>
-    public static async Task<DiscordUser> GetOrCreateUser(this MewdekoContext ctx, IUser original)
+    public static async Task<DiscordUser> GetOrCreateUser(this MewdekoDb db, IUser? original)
     {
-        return await ctx.GetOrCreateUser(original.Id, original.Username, original.AvatarId);
+        var toReturn = await db.GetOrCreateUser(original.Id, original.Username, original.AvatarId);
+        return toReturn;
     }
 
     /// <summary>
     ///     Retrieves the global rank of a Discord user based on their total XP.
     /// </summary>
-    /// <param name="users">The DbSet of DiscordUser entities.</param>
+    /// <param name="users">The ITable of DiscordUser entities.</param>
     /// <param name="id">The ID of the Discord user.</param>
     /// <returns>The global rank of the Discord user.</returns>
-    public static async Task<int> GetUserGlobalRank(this DbSet<DiscordUser> users, ulong id)
+    public static async Task<int> GetUserGlobalRank(this ITable<DiscordUser> users, ulong id)
     {
-        return await users.AsQueryable().CountAsyncEF(x =>
-                       x.TotalXp > users.AsQueryable().Where(y => y.UserId == id).Select(y => y.TotalXp)
-                           .FirstOrDefault())
-                   .ConfigureAwait(false)
-               + 1;
-    }
+        // Get user's XP
+        var userXp = await users
+            .Where(u => u.UserId == id)
+            .Select(u => u.TotalXp)
+            .FirstOrDefaultAsync();
 
-    /// <summary>
-    ///     Retrieves the XP leaderboard for Discord users for a specific page.
-    /// </summary>
-    /// <param name="users">The DbSet of DiscordUser entities.</param>
-    /// <param name="page">The page number of the leaderboard.</param>
-    /// <returns>An array of DiscordUser entities sorted by total XP.</returns>
-    public static async Task<DiscordUser[]> GetUsersXpLeaderboardFor(this DbSet<DiscordUser> users, int page)
-    {
-        return (await users.ToListAsyncEF()).OrderByDescending(x => x.TotalXp).Skip(page * 9).Take(9).ToArray();
+        // Count users with higher XP
+        var rank = await users
+            .CountAsync(u => u.TotalXp > userXp);
+
+        return rank + 1;
     }
 }

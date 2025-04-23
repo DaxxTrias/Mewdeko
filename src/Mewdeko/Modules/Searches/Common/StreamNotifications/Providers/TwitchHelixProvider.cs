@@ -1,6 +1,7 @@
 ﻿using System.Net.Http;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+
 using Mewdeko.Modules.Searches.Common.StreamNotifications.Models;
 using Serilog;
 using TwitchLib.Api;
@@ -38,11 +39,11 @@ public class TwitchHelixProvider : Provider
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     /// <inheritdoc />
-    public override FollowedStream.FType Platform
+    public override FType Platform
     {
         get
         {
-            return FollowedStream.FType.Twitch;
+            return FType.Twitch;
         }
     }
 
@@ -187,7 +188,7 @@ public class TwitchHelixProvider : Provider
             AvatarUrl = user.ProfileImageUrl,
             IsLive = false,
             StreamUrl = $"https://twitch.tv/{user.Login}",
-            StreamType = FollowedStream.FType.Twitch,
+            StreamType = FType.Twitch,
             Preview = user.OfflineImageUrl,
             ChannelId = user.Id
         };
@@ -197,7 +198,7 @@ public class TwitchHelixProvider : Provider
     {
         return partial with
         {
-            StreamType = FollowedStream.FType.Twitch,
+            StreamType = FType.Twitch,
             Viewers = apiData.ViewerCount,
             Title = apiData.Title,
             IsLive = apiData.Type == "live",

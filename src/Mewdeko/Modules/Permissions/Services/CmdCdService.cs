@@ -1,15 +1,28 @@
 ﻿using Discord.Commands;
 using Discord.Interactions;
+using LinqToDB;
 using Mewdeko.Common.Collections;
 using Mewdeko.Common.ModuleBehaviors;
+using CommandInfo = Discord.Commands.CommandInfo;
 
 namespace Mewdeko.Modules.Permissions.Services;
 
 /// <summary>
 ///     Represents a service for managing command cooldowns.
 /// </summary>
-public class CmdCdService(GuildSettingsService gss) : ILateBlocker, INService
+public class CmdCdService : ILateBlocker, INService
 {
+    private readonly IDataConnectionFactory dbFactory;
+
+    /// <summary>
+    ///     Initializes a new instance of the <see cref="CmdCdService"/> class.
+    /// </summary>
+    /// <param name="dbFactory">The database connection factory.</param>
+    public CmdCdService(IDataConnectionFactory dbFactory)
+    {
+        this.dbFactory = dbFactory;
+    }
+
     /// <summary>
     ///     Tracks active cooldowns for commands being executed by users across different guilds.
     /// </summary>
@@ -91,18 +104,23 @@ public class CmdCdService(GuildSettingsService gss) : ILateBlocker, INService
         if (guild is null)
             return false;
 
-        var config = await gss.GetGuildConfig(guild.Id);
-        var cmdcds = config.CommandCooldowns;
-        CommandCooldown cdRule;
-        if ((cdRule = cmdcds.FirstOrDefault(cc => cc.CommandName == commandName)) == null)
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        // Query CommandCooldowns with GuildId filter
+        var cdRule = await db.CommandCooldowns
+            .FirstOrDefaultAsync(cc => cc.GuildId == guild.Id && cc.CommandName == commandName);
+
+        if (cdRule == null)
             return false;
+
         var activeCdsForGuild = ActiveCooldowns.GetOrAdd(guild.Id, []);
         if (activeCdsForGuild.FirstOrDefault(ac => ac.UserId == user.Id && ac.Command == commandName) != null)
             return true;
 
         activeCdsForGuild.Add(new ActiveCooldown
         {
-            UserId = user.Id, Command = commandName
+            UserId = user.Id,
+            Command = commandName
         });
 
         _ = Task.Run(async () =>

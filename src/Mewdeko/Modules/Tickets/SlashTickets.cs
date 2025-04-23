@@ -1,4 +1,4 @@
-using System.Text;
+/*using System.Text;
 using System.Text.Json;
 using Discord.Interactions;
 using Fergun.Interactive;
@@ -1452,4 +1452,4 @@ public class TicketCommands : MewdekoSlashModuleBase<TicketService>
     }
 
     #endregion
-}
+}*/

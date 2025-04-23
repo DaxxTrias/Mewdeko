@@ -1,6 +1,8 @@
+using DataModel;
 using Discord.Commands;
+using LinqToDB;
 using Mewdeko.Common.Attributes.TextCommands;
-using Mewdeko.Database.DbContextStuff;
+using Mewdeko.Modules.Utility.Common;
 
 namespace Mewdeko.Modules.Utility;
 
@@ -11,7 +13,7 @@ public partial class Utility
     ///     triggers exist.
     /// </summary>
     [Group]
-    public class QuoteCommands(DbContextProvider dbProvider) : MewdekoSubmodule
+    public class QuoteCommands(IDataConnectionFactory dbFactory) : MewdekoSubmodule
     {
         /// <summary>
         ///     Lists quotes in the guild. Quotes can be ordered by keyword or date added.
@@ -45,9 +47,16 @@ public partial class Utility
 
             IEnumerable<Quote> quotes;
 
-            await using var dbContext = await dbProvider.GetContextAsync();
+            await using var db = await dbFactory.CreateConnectionAsync();
             {
-                quotes = dbContext.Quotes.GetGroup(ctx.Guild.Id, page, order);
+                var query = db.Quotes.Where(x => x.GuildId == ctx.Guild.Id);
+
+                if (order == OrderType.Keyword)
+                    query = query.OrderBy(x => x.Keyword);
+                else
+                    query = query.OrderBy(x => x.Id);
+
+                quotes = await query.Skip(15 * page).Take(15).ToListAsync();
             }
 
             var enumerable = quotes as Quote[] ?? quotes.ToArray();
@@ -80,9 +89,15 @@ public partial class Utility
 
             keyword = keyword.ToUpperInvariant();
 
-            await using var dbContext = await dbProvider.GetContextAsync();
-            var quote = await dbContext.Quotes.GetRandomQuoteByKeywordAsync(ctx.Guild.Id, keyword)
-                .ConfigureAwait(false);
+            await using var db = await dbFactory.CreateConnectionAsync();
+
+            var matchingQuotes = await db.Quotes
+                .Where(q => q.GuildId == ctx.Guild.Id && q.Keyword == keyword)
+                .ToListAsync();
+
+            var quote = matchingQuotes.Any()
+                ? matchingQuotes.MinBy(_ => new Random().Next())
+                : null;
 
             if (quote == null)
                 return;
@@ -104,7 +119,6 @@ public partial class Utility
                 .ConfigureAwait(false);
         }
 
-
         /// <summary>
         ///     Displays the quote with the specified ID.
         /// </summary>
@@ -115,9 +129,10 @@ public partial class Utility
         [RequireContext(ContextType.Guild)]
         public async Task QuoteShow(int id)
         {
-            await using var dbContext = await dbProvider.GetContextAsync();
-            var quote = await dbContext.Quotes.GetById(id);
-            if (quote.GuildId != Context.Guild.Id)
+            await using var db = await dbFactory.CreateConnectionAsync();
+            var quote = await db.Quotes.FirstOrDefaultAsync(q => q.Id == id);
+
+            if (quote?.GuildId != Context.Guild.Id)
                 quote = null;
 
             if (quote is null)
@@ -158,9 +173,17 @@ public partial class Utility
 
             keyword = keyword.ToUpperInvariant();
 
-            await using var dbContext = await dbProvider.GetContextAsync();
-            var keywordquote = await dbContext.Quotes.SearchQuoteKeywordTextAsync(ctx.Guild.Id, keyword, text)
-                .ConfigureAwait(false);
+            await using var db = await dbFactory.CreateConnectionAsync();
+
+            var matchingQuotes = await db.Quotes
+                .Where(q => q.GuildId == ctx.Guild.Id &&
+                           q.Keyword == keyword &&
+                           q.Text.ToUpper().Contains(text.ToUpper()))
+                .ToListAsync();
+
+            var keywordquote = matchingQuotes.Any()
+                ? matchingQuotes.MinBy(_ => new Random().Next())
+                : null;
 
             if (keywordquote == null)
                 return;
@@ -186,9 +209,8 @@ public partial class Utility
                 .WithDefault(Context)
                 .Build();
 
-
-            await using var dbContext = await dbProvider.GetContextAsync();
-            var quote = await dbContext.Quotes.GetById(id);
+            await using var db = await dbFactory.CreateConnectionAsync();
+            var quote = await db.Quotes.FirstOrDefaultAsync(q => q.Id == id);
 
             if (quote is null || quote.GuildId != ctx.Guild.Id)
             {
@@ -229,18 +251,17 @@ public partial class Utility
 
             keyword = keyword.ToUpperInvariant();
 
-            Quote q;
-
-            await using var dbContext = await dbProvider.GetContextAsync();
-            dbContext.Quotes.Add(q = new Quote
+            var q = new Quote
             {
                 AuthorId = ctx.Message.Author.Id,
                 AuthorName = ctx.Message.Author.Username,
                 GuildId = ctx.Guild.Id,
                 Keyword = keyword,
                 Text = text
-            });
-            await dbContext.SaveChangesAsync().ConfigureAwait(false);
+            };
+
+            await using var db = await dbFactory.CreateConnectionAsync();
+            await db.InsertAsync(q);
 
             await ReplyConfirmAsync(Strings.QuoteAddedNew(ctx.Guild.Id, Format.Code(q.Id.ToString()))).ConfigureAwait(false);
         }
@@ -260,8 +281,8 @@ public partial class Utility
             var success = false;
             string? response;
 
-            await using var dbContext = await dbProvider.GetContextAsync();
-            var q = await dbContext.Quotes.GetById(id);
+            await using var db = await dbFactory.CreateConnectionAsync();
+            var q = await db.Quotes.FirstOrDefaultAsync(q => q.Id == id);
 
             if (q?.GuildId != ctx.Guild.Id || !isAdmin && q.AuthorId != ctx.Message.Author.Id)
             {
@@ -269,8 +290,7 @@ public partial class Utility
             }
             else
             {
-                dbContext.Quotes.Remove(q);
-                await dbContext.SaveChangesAsync().ConfigureAwait(false);
+                await db.DeleteAsync(q);
                 success = true;
                 response = Strings.QuoteDeleted(ctx.Guild.Id, id);
             }
@@ -297,11 +317,11 @@ public partial class Utility
 
             keyword = keyword.ToUpperInvariant();
 
+            await using var db = await dbFactory.CreateConnectionAsync();
 
-            await using var dbContext = await dbProvider.GetContextAsync();
-            dbContext.Quotes.RemoveAllByKeyword(ctx.Guild.Id, keyword.ToUpperInvariant());
-
-            await dbContext.SaveChangesAsync().ConfigureAwait(false);
+            await db.Quotes
+                .Where(x => x.GuildId == ctx.Guild.Id && x.Keyword.ToUpper() == keyword)
+                .DeleteAsync();
 
             await ReplyConfirmAsync(Strings.QuotesDeleted(ctx.Guild.Id, Format.Bold(keyword.SanitizeAllMentions())))
                 .ConfigureAwait(false);

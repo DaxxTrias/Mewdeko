@@ -1,4 +1,5 @@
-﻿using Mewdeko.Modules.Music.Common;
+﻿using DataModel;
+using Mewdeko.Modules.Music.Common;
 using Mewdeko.Modules.Searches.Services;
 using Mewdeko.Modules.Utility.Common;
 using StackExchange.Redis;
@@ -133,7 +134,7 @@ public interface IDataCache
     /// </summary>
     /// <param name="id">The server ID.</param>
     /// <returns>The music player settings if found, null otherwise.</returns>
-    Task<MusicPlayerSettings?> GetMusicPlayerSettings(ulong id);
+    Task<MusicPlayerSetting?> GetMusicPlayerSettings(ulong id);
 
     /// <summary>
     ///     Sets music player settings for a server.
@@ -141,7 +142,7 @@ public interface IDataCache
     /// <param name="id">The server ID.</param>
     /// <param name="settings">The settings to cache.</param>
     /// <returns>A task representing the operation.</returns>
-    Task SetMusicPlayerSettings(ulong id, MusicPlayerSettings settings);
+    Task SetMusicPlayerSettings(ulong id, MusicPlayerSetting settings);
 
     /// <summary>
     ///     Gets the set of users who have voted to skip the current track.
@@ -175,22 +176,22 @@ public interface IDataCache
     /// <summary>
     ///     Caches highlights for a guild.
     /// </summary>
-    Task CacheHighlights(ulong id, List<Highlights> highlights);
+    Task CacheHighlights(ulong id, List<Highlight> highlights);
 
     /// <summary>
     ///     Caches highlight settings for a guild.
     /// </summary>
-    Task CacheHighlightSettings(ulong id, List<HighlightSettings> highlightSettings);
+    Task CacheHighlightSettings(ulong id, List<HighlightSetting> highlightSettings);
 
     /// <summary>
     ///     Adds highlights to cache for a guild.
     /// </summary>
-    Task AddHighlightToCache(ulong id, List<Highlights?> newHighlight);
+    Task AddHighlightToCache(ulong id, List<Highlight?> newHighlight);
 
     /// <summary>
     ///     Removes highlights from cache for a guild.
     /// </summary>
-    Task RemoveHighlightFromCache(ulong id, List<Highlights?> newHighlight);
+    Task RemoveHighlightFromCache(ulong id, List<Highlight?> newHighlight);
 
     /// <summary>
     ///     Executes a Redis command.
@@ -200,7 +201,7 @@ public interface IDataCache
     /// <summary>
     ///     Adds a highlight setting to cache for a guild.
     /// </summary>
-    Task AddHighlightSettingToCache(ulong id, List<HighlightSettings?> newHighlightSetting);
+    Task AddHighlightSettingToCache(ulong id, List<HighlightSetting?> newHighlightSetting);
 
     /// <summary>
     ///     Tries to add a highlight stagger for a user.
@@ -210,12 +211,12 @@ public interface IDataCache
     /// <summary>
     ///     Gets highlights for a guild.
     /// </summary>
-    List<Highlights?>? GetHighlightsForGuild(ulong id);
+    List<Highlight?>? GetHighlightsForGuild(ulong id);
 
     /// <summary>
     ///     Gets highlight settings for a guild.
     /// </summary>
-    List<HighlightSettings>? GetHighlightSettingsForGuild(ulong id);
+    List<HighlightSetting>? GetHighlightSettingsForGuild(ulong id);
 
     /// <summary>
     ///     Gets snipes for a guild.
@@ -286,12 +287,12 @@ public interface IDataCache
     /// <summary>
     ///     Sets status role cache.
     /// </summary>
-    Task SetStatusRoleCache(List<StatusRolesTable> statusRoles);
+    Task SetStatusRoleCache(List<StatusRole> statusRoles);
 
     /// <summary>
     ///     Gets status role cache.
     /// </summary>
-    Task<List<StatusRolesTable>?> GetStatusRoleCache();
+    Task<List<StatusRole>?> GetStatusRoleCache();
 
     #endregion
 }

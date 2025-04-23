@@ -1,7 +1,7 @@
 ﻿using CodeHollow.FeedReader;
 using CodeHollow.FeedReader.Feeds;
-using Mewdeko.Database.DbContextStuff;
-using Microsoft.EntityFrameworkCore;
+using DataModel;
+using LinqToDB;
 using Embed = Discord.Embed;
 
 namespace Mewdeko.Modules.Searches.Services;
@@ -12,7 +12,7 @@ namespace Mewdeko.Modules.Searches.Services;
 public class FeedsService : INService
 {
     private readonly DiscordShardedClient client;
-    private readonly DbContextProvider dbProvider;
+    private readonly IDataConnectionFactory dbFactory;
 
     private readonly ConcurrentDictionary<string, DateTime> lastPosts =
         new();
@@ -22,26 +22,17 @@ public class FeedsService : INService
     /// <summary>
     ///     Initializes a new instance of the <see cref="FeedsService" /> class.
     /// </summary>
-    /// <param name="db">The database service.</param>
+    /// <param name="dbFactory">The database service.</param>
     /// <param name="client">The Discord client.</param>
     /// <param name="bot">The bot instance.</param>
-    public FeedsService(DbContextProvider dbProvider, DiscordShardedClient client, Mewdeko bot)
+    public FeedsService(IDataConnectionFactory dbFactory, DiscordShardedClient client, Mewdeko bot)
     {
-        this.dbProvider = dbProvider;
+        this.dbFactory = dbFactory;
         subs = new ConcurrentDictionary<string, HashSet<FeedSub>>();
 
         this.client = client;
 
         _ = Task.Run(async () => await TrackFeeds(client.Guilds.Select(x => x.Id)));
-    }
-
-
-    private async Task<GuildConfig> GetGuildConfigFromId(int guildConfigId)
-    {
-        await using var dbContext = await dbProvider.GetContextAsync();
-
-        return await dbContext.GuildConfigs.AsQueryable().AsNoTracking()
-            .FirstOrDefaultAsync(x => x.Id == guildConfigId);
     }
 
     /// <summary>
@@ -57,6 +48,8 @@ public class FeedsService : INService
             var feeds = await GetFeeds(serverId);
             foreach (var feed in feeds)
             {
+                if (feed == null) continue;
+
                 subs.AddOrUpdate(feed.Url.ToLower(), [feed], (_, old) =>
                 {
                     old.Add(feed);
@@ -188,8 +181,7 @@ public class FeedsService : INService
                         //send the created embed to all subscribed channels
                         foreach (var feed1 in value)
                         {
-                            var guildConfig = await GetGuildConfigFromId(feed1.GuildConfigId);
-                            var channel = client.GetGuild(guildConfig.GuildId).GetTextChannel(feed1.ChannelId);
+                            var channel = client.GetGuild(feed1.GuildId).GetTextChannel(feed1.ChannelId);
                             if (channel is null)
                                 continue;
                             var (builder, content, componentBuilder) =
@@ -316,13 +308,13 @@ public class FeedsService : INService
     /// <returns>A list of feed subscriptions.</returns>
     public async Task<List<FeedSub?>> GetFeeds(ulong guildId)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
 
-        return (await dbContext.ForGuildId(guildId,
-                set => set.Include(x => x.FeedSubs)))
-            .FeedSubs
+        // Direct query with GuildId filter
+        return await db.FeedSubs
+            .Where(fs => fs.GuildId == guildId)
             .OrderBy(x => x.Id)
-            .ToList();
+            .ToListAsync();
     }
 
     /// <summary>
@@ -336,25 +328,39 @@ public class FeedsService : INService
     {
         rssFeed.ThrowIfNull(nameof(rssFeed));
 
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        // Check if feed already exists for this guild
+        var exists = await db.FeedSubs
+            .AnyAsync(x => x.GuildId == guildId && x.Url.ToLower() == rssFeed.Trim().ToLower());
+
+        if (exists)
+            return false;
+
+        // Check feed count limit
+        var feedCount = await db.FeedSubs
+            .CountAsync(x => x.GuildId == guildId);
+
+        if (feedCount >= 10)
+            return false;
+
+        // Create and add new feed with GuildId
         var fs = new FeedSub
         {
-            ChannelId = channelId, Url = rssFeed.Trim()
+            GuildId = guildId,
+            ChannelId = channelId,
+            Url = rssFeed.Trim()
         };
 
+        await db.InsertAsync(fs);
 
-        await using var dbContext = await dbProvider.GetContextAsync();
+        // Get all feeds for this guild to update subscriptions
+        var guildFeeds = await db.FeedSubs
+            .Where(x => x.GuildId == guildId)
+            .ToListAsync();
 
-        var gc = await dbContext.ForGuildId(guildId,
-            set => set.Include(x => x.FeedSubs));
-
-        if (gc.FeedSubs.Any(x => x.Url.ToLower() == fs.Url.ToLower()))
-            return false;
-        if (gc.FeedSubs.Count >= 10) return false;
-
-        gc.FeedSubs.Add(fs);
-        await dbContext.SaveChangesAsync();
-        //adding all, in case bot wasn't on this guild when it started
-        foreach (var feed in gc.FeedSubs)
+        // Update subscriptions
+        foreach (var feed in guildFeeds)
             subs.AddOrUpdate(feed.Url.ToLower(), [feed], (_, old) =>
             {
                 old.Add(feed);
@@ -363,6 +369,7 @@ public class FeedsService : INService
 
         return true;
     }
+
 
     /// <summary>
     ///     Adds or updates the message template for a feed subscription.
@@ -376,26 +383,34 @@ public class FeedsService : INService
         if (index < 0)
             return false;
 
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
 
-        var items = (await dbContext.ForGuildId(guildId, set => set.Include(x => x.FeedSubs)))
-            .FeedSubs
+        // Direct query with GuildId filter
+        var items = await db.FeedSubs
+            .Where(fs => fs.GuildId == guildId)
             .OrderBy(x => x.Id)
-            .ToList();
+            .ToListAsync();
+
+        if (items.Count <= index)
+            return false;
+
         var toupdate = items[index];
+
         subs.AddOrUpdate(toupdate.Url.ToLower(), [], (_, old) =>
         {
             old.Remove(toupdate);
             return old;
         });
+
         toupdate.Message = message;
-        dbContext.Update(toupdate);
-        await dbContext.SaveChangesAsync().ConfigureAwait(false);
+        await db.UpdateAsync(toupdate);
+
         subs.AddOrUpdate(toupdate.Url.ToLower(), [], (_, old) =>
         {
             old.Add(toupdate);
             return old;
         });
+
         return true;
     }
 
@@ -410,23 +425,28 @@ public class FeedsService : INService
         if (index < 0)
             return false;
 
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
 
-        var items = dbContext.ForGuildId(guildId, set => set.Include(x => x.FeedSubs)).GetAwaiter().GetResult()
-            .FeedSubs
+        // Direct query with GuildId filter
+        var items = await db.FeedSubs
+            .Where(fs => fs.GuildId == guildId)
             .OrderBy(x => x.Id)
-            .ToList();
+            .ToListAsync();
 
         if (items.Count <= index)
             return false;
+
         var toRemove = items[index];
+
         subs.AddOrUpdate(toRemove.Url.ToLower(), [], (_, old) =>
         {
             old.Remove(toRemove);
             return old;
         });
-        dbContext.Remove(toRemove);
-        dbContext.SaveChanges();
+
+        await db.FeedSubs
+            .Where(x => x.Id == toRemove.Id)
+            .DeleteAsync();
 
         return true;
     }

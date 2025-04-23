@@ -1,27 +1,47 @@
-﻿using Mewdeko.Common.TypeReaders.Models;
-using Mewdeko.Database.DbContextStuff;
+﻿using DataModel;
+using LinqToDB;
+using Mewdeko.Common.TypeReaders.Models;
 using Mewdeko.Modules.Afk.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
+using Serilog;
 
 namespace Mewdeko.Controllers;
 
 /// <summary>
-///     Controller for managing afk stuff for the bot
+///     Controller for managing AFK (Away From Keyboard) statuses and settings via API.
 /// </summary>
-/// <param name="afk">The afk service</param>
 [ApiController]
 [Route("botapi/[controller]/{guildId}")]
 [Authorize("ApiKeyPolicy")]
-public class AfkController(AfkService afk, DiscordShardedClient client, DbContextProvider provider) : Controller
+public class AfkController : Controller
 {
+    private readonly AfkService afk;
+    private readonly DiscordShardedClient client;
+    private readonly IDataConnectionFactory dbFactory;
+
     /// <summary>
-    ///     Gets a users afk status.
+    ///     Initializes a new instance of the <see cref="AfkController" /> class.
     /// </summary>
-    /// <param name="guildId">The guildid to check the users afk in</param>
-    /// <param name="userId">The user to check afk for</param>
-    /// <returns>Returns a <see cref="Afk" /> or a 404 if the user has never had an afk in that guild before.</returns>
+    /// <param name="afk">The AFK service instance.</param>
+    /// <param name="client">The Discord sharded client instance.</param>
+    /// <param name="dbFactory">The factory for creating database connections.</param>
+    public AfkController(AfkService afk, DiscordShardedClient client, IDataConnectionFactory dbFactory)
+    {
+        this.afk = afk;
+        this.client = client;
+        this.dbFactory = dbFactory;
+    }
+
+    /// <summary>
+    ///     Gets a specific user's AFK status in a guild.
+    /// </summary>
+    /// <param name="guildId">The ID of the guild to check within.</param>
+    /// <param name="userId">The ID of the user whose AFK status is requested.</param>
+    /// <returns>
+    ///     An <see cref="IActionResult" /> containing the <see cref="Afk" /> status if found, otherwise
+    ///     <see cref="NotFoundResult" />.
+    /// </returns>
     [HttpGet("{userId}")]
     public async Task<IActionResult> GetAfkStatus(ulong guildId, ulong userId)
     {
@@ -34,52 +54,72 @@ public class AfkController(AfkService afk, DiscordShardedClient client, DbContex
     }
 
     /// <summary>
-    ///     Sets a users afk status
+    ///     Sets a user's AFK status in a guild.
     /// </summary>
-    /// <param name="guildId">The guild to set the afk for</param>
-    /// <param name="userId">The userid of the user to set the afk for</param>
-    /// <param name="message">The afk message to set.</param>
-    /// <returns>A 200 status code</returns>
+    /// <param name="guildId">The ID of the guild.</param>
+    /// <param name="userId">The ID of the user.</param>
+    /// <param name="message">The AFK message to set.</param>
+    /// <returns>An <see cref="OkResult" /> indicating success.</returns>
     [HttpPost("{userId}")]
     public async Task<IActionResult> SetAfkStatus(ulong guildId, ulong userId, [FromBody] string message)
     {
         await afk.AfkSet(guildId, userId, message);
-
         return Ok();
     }
 
     /// <summary>
-    ///     Removes a users afk status.
+    ///     Removes a user's AFK status by setting an empty message.
     /// </summary>
-    /// <param name="guildId">The guild id to remove a users afk status for</param>
-    /// <param name="userId">The userid of the user to remove the afk status for</param>
-    /// <returns></returns>
+    /// <param name="guildId">The ID of the guild.</param>
+    /// <param name="userId">The ID of the user.</param>
+    /// <returns>An <see cref="OkResult" /> indicating success.</returns>
     [HttpDelete("{userId}")]
     public async Task<IActionResult> DeleteAfkStatus(ulong guildId, ulong userId)
     {
-        await afk.AfkSet(guildId, userId, "");
-
+        await afk.AfkSet(guildId, userId, ""); // Setting empty message clears AFK
         return Ok();
     }
 
     /// <summary>
-    ///     Retrieves all latest afks within a guild
+    ///     Retrieves the latest AFK status for all users currently in the specified guild.
     /// </summary>
-    /// <param name="guildId">The guild to retrieve statuses for</param>
-    /// <returns></returns>
+    /// <param name="guildId">The ID of the guild to retrieve statuses for.</param>
+    /// <returns>
+    ///     An <see cref="IActionResult" /> containing a list of users with their latest AFK status, or
+    ///     <see cref="NotFoundResult" /> if the guild is not found.
+    /// </returns>
     [HttpGet]
     public async Task<IActionResult> GetAllAfkStatus(ulong guildId)
     {
-        await using var db = await provider.GetContextAsync();
         var guild = client.GetGuild(guildId);
+        if (guild is null)
+            return NotFound("Guild not found.");
 
+        // Fetch users first to avoid holding DB connection longer than needed
         var users = guild.Users;
+        if (users is null || !users.Any())
+            return Ok(Enumerable.Empty<object>()); // Return empty list if no users
 
-        var latestAfks = await db.Afk
-            .Where(x => x.GuildId == guildId)
-            .GroupBy(x => x.UserId)
-            .Select(g => g.OrderByDescending(x => x.DateAdded).FirstOrDefault())
-            .ToListAsync();
+        List<Afk> latestAfks;
+        try
+        {
+            await using var db = await dbFactory.CreateConnectionAsync();
+            var allAfksInGuild = await db.Afks
+                .Where(x => x.GuildId == guildId)
+                .ToListAsync();
+
+            // Group in memory to get the latest AFK per user
+            latestAfks = allAfksInGuild
+                .GroupBy(x => x.UserId)
+                .Select(g => g.OrderByDescending(x => x.DateAdded).First())
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Failed to retrieve AFK statuses for guild {GuildId}", guildId);
+            return StatusCode(500, "Failed to retrieve AFK data."); // Internal Server Error
+        }
+
 
         var result = users.Select(user => new
         {
@@ -87,7 +127,8 @@ public class AfkController(AfkService afk, DiscordShardedClient client, DbContex
             user.Username,
             user.Nickname,
             AvatarUrl = user.GetAvatarUrl() ?? user.GetDefaultAvatarUrl(),
-            AfkStatus = latestAfks.FirstOrDefault(a => a.UserId == user.Id)
+            // Find the matching latest AFK status for this user
+            AfkStatus = latestAfks.FirstOrDefault(a => a != null && a.UserId == user.Id)
         }).ToList();
 
         return Ok(result);
@@ -96,8 +137,8 @@ public class AfkController(AfkService afk, DiscordShardedClient client, DbContex
     /// <summary>
     ///     Gets the auto-deletion time for AFK messages in a guild.
     /// </summary>
-    /// <param name="guildId">The guild ID to get the deletion time for</param>
-    /// <returns>The deletion time in seconds</returns>
+    /// <param name="guildId">The guild ID to get the deletion time for.</param>
+    /// <returns>An <see cref="IActionResult" /> containing the deletion time in seconds.</returns>
     [HttpGet("deletion")]
     public async Task<IActionResult> GetAfkDel(ulong guildId)
     {
@@ -108,13 +149,14 @@ public class AfkController(AfkService afk, DiscordShardedClient client, DbContex
     /// <summary>
     ///     Sets the auto-deletion time for AFK messages in a guild.
     /// </summary>
-    /// <param name="guildId">The guild ID to set the deletion time for</param>
-    /// <param name="time">The deletion time in seconds</param>
-    /// <returns>A 200 status code</returns>
+    /// <param name="guildId">The guild ID to set the deletion time for.</param>
+    /// <param name="time">The deletion time in seconds.</param>
+    /// <returns>An <see cref="OkResult" /> indicating success.</returns>
     [HttpPost("deletion")]
     public async Task<IActionResult> AfkDelSet(ulong guildId, [FromBody] int time)
     {
         var guild = client.GetGuild(guildId);
+        if (guild is null) return NotFound("Guild not found.");
         await afk.AfkDelSet(guild, time);
         return Ok();
     }
@@ -122,8 +164,8 @@ public class AfkController(AfkService afk, DiscordShardedClient client, DbContex
     /// <summary>
     ///     Gets the maximum length for AFK messages in a guild.
     /// </summary>
-    /// <param name="guildId">The guild ID to get the max length for</param>
-    /// <returns>The maximum length for AFK messages</returns>
+    /// <param name="guildId">The guild ID to get the max length for.</param>
+    /// <returns>An <see cref="IActionResult" /> containing the maximum length.</returns>
     [HttpGet("length")]
     public async Task<IActionResult> GetAfkLength(ulong guildId)
     {
@@ -134,22 +176,23 @@ public class AfkController(AfkService afk, DiscordShardedClient client, DbContex
     /// <summary>
     ///     Sets the maximum length for AFK messages in a guild.
     /// </summary>
-    /// <param name="guildId">The guild ID to set the max length for</param>
-    /// <param name="length">The maximum length for AFK messages</param>
-    /// <returns>A 200 status code</returns>
+    /// <param name="guildId">The guild ID to set the max length for.</param>
+    /// <param name="length">The maximum length.</param>
+    /// <returns>An <see cref="OkResult" /> indicating success.</returns>
     [HttpPost("length")]
     public async Task<IActionResult> AfkLengthSet(ulong guildId, [FromBody] int length)
     {
         var guild = client.GetGuild(guildId);
+        if (guild is null) return NotFound("Guild not found.");
         await afk.AfkLengthSet(guild, length);
         return Ok();
     }
 
     /// <summary>
-    ///     Gets the AFK type for a guild.
+    ///     Gets the AFK type setting for a guild.
     /// </summary>
-    /// <param name="guildId">The guild ID to get the AFK type for</param>
-    /// <returns>The AFK type</returns>
+    /// <param name="guildId">The guild ID to get the AFK type for.</param>
+    /// <returns>An <see cref="IActionResult" /> containing the AFK type.</returns>
     [HttpGet("type")]
     public async Task<IActionResult> GetAfkType(ulong guildId)
     {
@@ -158,24 +201,25 @@ public class AfkController(AfkService afk, DiscordShardedClient client, DbContex
     }
 
     /// <summary>
-    ///     Sets the AFK type for a guild.
+    ///     Sets the AFK type setting for a guild.
     /// </summary>
-    /// <param name="guildId">The guild ID to set the AFK type for</param>
-    /// <param name="type">The AFK type to set</param>
-    /// <returns>A 200 status code</returns>
+    /// <param name="guildId">The guild ID to set the AFK type for.</param>
+    /// <param name="type">The AFK type to set.</param>
+    /// <returns>An <see cref="OkResult" /> indicating success.</returns>
     [HttpPost("type")]
     public async Task<IActionResult> AfkTypeSet(ulong guildId, [FromBody] int type)
     {
         var guild = client.GetGuild(guildId);
+        if (guild is null) return NotFound("Guild not found.");
         await afk.AfkTypeSet(guild, type);
         return Ok();
     }
 
     /// <summary>
-    ///     Gets the AFK timeout for a guild.
+    ///     Gets the AFK timeout setting for a guild.
     /// </summary>
-    /// <param name="guildId">The guild ID to get the AFK timeout for</param>
-    /// <returns>The AFK timeout in seconds</returns>
+    /// <param name="guildId">The guild ID to get the AFK timeout for.</param>
+    /// <returns>An <see cref="IActionResult" /> containing the AFK timeout in seconds.</returns>
     [HttpGet("timeout")]
     public async Task<IActionResult> GetAfkTimeout(ulong guildId)
     {
@@ -184,17 +228,18 @@ public class AfkController(AfkService afk, DiscordShardedClient client, DbContex
     }
 
     /// <summary>
-    ///     Sets the AFK timeout for a guild.
+    ///     Sets the AFK timeout setting for a guild.
     /// </summary>
-    /// <param name="guildId">The guild ID to set the AFK timeout for</param>
-    /// <param name="timeout">The AFK timeout in seconds</param>
-    /// <returns>A 200 status code</returns>
+    /// <param name="guildId">The guild ID to set the AFK timeout for.</param>
+    /// <param name="timeout">The AFK timeout as a string (e.g., "5m", "1h").</param>
+    /// <returns>An <see cref="OkResult" /> indicating success.</returns>
     [HttpPost("timeout")]
     public async Task<IActionResult> AfkTimeoutSet(ulong guildId, [FromBody] string timeout)
     {
-        var stoopidTime = StoopidTime.FromInput(timeout);
+        var stoopidTime = StoopidTime.FromInput(timeout); // Assuming StoopidTime is accessible
         var timeoutSeconds = (int)stoopidTime.Time.TotalSeconds;
         var guild = client.GetGuild(guildId);
+        if (guild is null) return NotFound("Guild not found.");
         await afk.AfkTimeoutSet(guild, timeoutSeconds);
         return Ok();
     }
@@ -202,8 +247,8 @@ public class AfkController(AfkService afk, DiscordShardedClient client, DbContex
     /// <summary>
     ///     Gets the disabled AFK channels for a guild.
     /// </summary>
-    /// <param name="guildId">The guild ID to get the disabled channels for</param>
-    /// <returns>A comma-separated string of disabled channel IDs</returns>
+    /// <param name="guildId">The guild ID to get the disabled channels for.</param>
+    /// <returns>An <see cref="IActionResult" /> containing a comma-separated string of disabled channel IDs.</returns>
     [HttpGet("disabled-channels")]
     public async Task<IActionResult> GetDisabledAfkChannels(ulong guildId)
     {
@@ -214,22 +259,23 @@ public class AfkController(AfkService afk, DiscordShardedClient client, DbContex
     /// <summary>
     ///     Sets the disabled AFK channels for a guild.
     /// </summary>
-    /// <param name="guildId">The guild ID to set the disabled channels for</param>
-    /// <param name="channels">A comma-separated string of channel IDs to disable</param>
-    /// <returns>A 200 status code</returns>
+    /// <param name="guildId">The guild ID to set the disabled channels for.</param>
+    /// <param name="channels">A comma-separated string of channel IDs to disable.</param>
+    /// <returns>An <see cref="OkResult" /> indicating success.</returns>
     [HttpPost("disabled-channels")]
     public async Task<IActionResult> AfkDisabledSet(ulong guildId, [FromBody] string channels)
     {
         var guild = client.GetGuild(guildId);
+        if (guild is null) return NotFound("Guild not found.");
         await afk.AfkDisabledSet(guild, channels);
         return Ok();
     }
 
     /// <summary>
-    ///     Gets the custom AFK message for a guild.
+    ///     Gets the custom AFK message format for a guild.
     /// </summary>
-    /// <param name="guildId">The guild ID to get the custom message for</param>
-    /// <returns>The custom AFK message</returns>
+    /// <param name="guildId">The guild ID to get the custom message for.</param>
+    /// <returns>An <see cref="IActionResult" /> containing the custom AFK message format.</returns>
     [HttpGet("custom-message")]
     public async Task<IActionResult> GetCustomAfkMessage(ulong guildId)
     {
@@ -238,15 +284,16 @@ public class AfkController(AfkService afk, DiscordShardedClient client, DbContex
     }
 
     /// <summary>
-    ///     Sets the custom AFK message for a guild.
+    ///     Sets the custom AFK message format for a guild.
     /// </summary>
-    /// <param name="guildId">The guild ID to set the custom message for</param>
-    /// <param name="message">The custom AFK message to set</param>
-    /// <returns>A 200 status code</returns>
+    /// <param name="guildId">The guild ID to set the custom message for.</param>
+    /// <param name="message">The custom AFK message format to set.</param>
+    /// <returns>An <see cref="OkResult" /> indicating success.</returns>
     [HttpPost("custom-message")]
     public async Task<IActionResult> SetCustomAfkMessage(ulong guildId, [FromBody] string message)
     {
         var guild = client.GetGuild(guildId);
+        if (guild is null) return NotFound("Guild not found.");
         await afk.SetCustomAfkMessage(guild, message);
         return Ok();
     }

@@ -1,5 +1,5 @@
 ﻿using System.Text.RegularExpressions;
-using Mewdeko.Database.DbContextStuff;
+using LinqToDB;
 using Mewdeko.Modules.Utility.Common;
 using VirusTotalNet;
 using VirusTotalNet.Results;
@@ -14,19 +14,19 @@ public partial class UtilityService : INService
 {
     private readonly IDataCache cache;
     private readonly DiscordShardedClient client;
-    private readonly DbContextProvider dbProvider;
+    private readonly IDataConnectionFactory dbFactory;
     private readonly GuildSettingsService guildSettings;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="UtilityService" /> class.
     /// </summary>
-    /// <param name="db">The database service.</param>
+    /// <param name="dbFactory">The database factory.</param>
     /// <param name="cache">The data cache service.</param>
     /// <param name="guildSettings">The guild settings service.</param>
     /// <param name="eventHandler">The event handler service.</param>
     /// <param name="client">The Discord client.</param>
     public UtilityService(
-        DbContextProvider dbProvider,
+        IDataConnectionFactory dbFactory,
         IDataCache cache,
         GuildSettingsService guildSettings,
         EventHandler eventHandler,
@@ -36,7 +36,7 @@ public partial class UtilityService : INService
         eventHandler.MessageUpdated += MsgStore2;
         eventHandler.MessageReceived += MsgReciev;
         eventHandler.MessagesBulkDeleted += BulkMsgStore;
-        this.dbProvider = dbProvider;
+        this.dbFactory = dbFactory;
         this.cache = cache;
         this.guildSettings = guildSettings;
         this.client = client;
@@ -73,18 +73,26 @@ public partial class UtilityService : INService
     public async Task PreviewLinks(IGuild guild, string yesnt)
     {
         var yesno = -1;
-        await using var dbContext = await dbProvider.GetContextAsync();
+
+        yesno = yesnt switch
         {
-            yesno = yesnt switch
-            {
-                "y" => 1,
-                "n" => 0,
-                _ => yesno
-            };
+            "y" => 1,
+            "n" => 0,
+            _ => yesno
+        };
+
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        // Using LinqToDB to update the guild config
+        var gc = await db.GuildConfigs
+            .FirstOrDefaultAsync(x => x.GuildId == guild.Id);
+
+        if (gc != null)
+        {
+            gc.PreviewLinks = yesno;
+            await db.UpdateAsync(gc);
         }
 
-        var gc = await dbContext.ForGuildId(guild.Id, set => set);
-        gc.PreviewLinks = yesno;
         await guildSettings.UpdateGuildConfig(guild.Id, gc);
     }
 
@@ -95,7 +103,7 @@ public partial class UtilityService : INService
     /// <returns>A task that represents the asynchronous operation, containing a boolean indicating if snipe set is enabled.</returns>
     public async Task<bool> GetSnipeSet(ulong id)
     {
-        return (await guildSettings.GetGuildConfig(id)).snipeset;
+        return (await guildSettings.GetGuildConfig(id)).Snipeset;
     }
 
     /// <summary>
@@ -105,14 +113,22 @@ public partial class UtilityService : INService
     /// <param name="enabled">A boolean indicating whether to enable or disable snipe set.</param>
     public async Task SnipeSet(IGuild guild, bool enabled)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
 
-        var gc = await dbContext.ForGuildId(guild.Id, set => set);
-        gc.snipeset = enabled; // Converting bool to long
-        await dbContext.SaveChangesAsync().ConfigureAwait(false);
+        // Get guild config using LinqToDB
+        var gc = await db.GuildConfigs
+            .FirstOrDefaultAsync(x => x.GuildId == guild.Id);
+
+        if (gc != null)
+        {
+            gc.Snipeset = enabled;
+
+            // Update using LinqToDB
+            await db.UpdateAsync(gc);
+        }
+
         await guildSettings.UpdateGuildConfig(guild.Id, gc);
     }
-
 
     private async Task BulkMsgStore(IReadOnlyCollection<Cacheable<IMessage, ulong>> messages,
         Cacheable<IMessageChannel, ulong> channel)
@@ -196,7 +212,6 @@ public partial class UtilityService : INService
     private async Task MsgStore2(Cacheable<IMessage, ulong> optMsg, SocketMessage imsg2, ISocketMessageChannel ch)
     {
         if (ch is not IGuildChannel channel) return;
-
 
         if (!await GetSnipeSet(channel.Guild.Id)) return;
 

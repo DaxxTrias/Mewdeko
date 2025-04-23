@@ -1,5 +1,6 @@
 ﻿using System.IO;
 using System.Text.RegularExpressions;
+using Mewdeko.Database.EF.EFCore;
 
 namespace Mewdeko.Extensions;
 
@@ -250,7 +251,7 @@ public static partial class UserExtensions
     /// <param name="user">The user to send the error message to.</param>
     /// <param name="error">The error description.</param>
     /// <returns>A task representing the asynchronous operation. The task result contains the sent message.</returns>
-    public static async Task<IUserMessage> SendErrorAsync(this IUser user, string? error)
+    public static async Task<IUserMessage> SendErrorAsync(this IUser? user, string? error)
     {
         return await (await user.CreateDMChannelAsync().ConfigureAwait(false))
             .SendMessageAsync(embed: new EmbedBuilder().WithErrorColor().WithDescription(error).Build())
@@ -298,7 +299,7 @@ public static partial class UserExtensions
     /// <param name="usr">The user to get the avatar URL for.</param>
     /// <param name="size">The desired size of the avatar image.</param>
     /// <returns>The URL of the user's avatar.</returns>
-    public static Uri RealAvatarUrl(this IUser usr, ushort size = 2048)
+    public static Uri RealAvatarUrl(this IUser? usr, ushort size = 2048)
     {
         return usr.AvatarId == null
             ? new Uri(usr.GetDefaultAvatarUrl())

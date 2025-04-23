@@ -31,9 +31,9 @@ public static class LogSetup
             .MinimumLevel.Override("Microsoft.EntityFrameworkCore.Database.Command", LogEventLevel.Error)
             .MinimumLevel.Override("Microsoft.EntityFrameworkCore.Database.Transaction", LogEventLevel.Error)
             .MinimumLevel.Override("Microsoft.EntityFrameworkCore.Database.Connection", LogEventLevel.Error)
-            .MinimumLevel.Override("Npgsql", LogEventLevel.Error)
-            .MinimumLevel.Override("Npgsql.Command", LogEventLevel.Error)
-            .MinimumLevel.Override("Npgsql.Connection", LogEventLevel.Error)
+            .MinimumLevel.Override("Npgsql", LogEventLevel.Debug)
+            .MinimumLevel.Override("Npgsql.Command", LogEventLevel.Debug)
+            .MinimumLevel.Override("Npgsql.Connection", LogEventLevel.Debug)
 
             // Enrichers
             .Enrich.FromLogContext()
@@ -42,7 +42,7 @@ public static class LogSetup
             // Output configuration
             .WriteTo.Console(
                 restrictedToMinimumLevel: LogEventLevel.Information,
-                theme: AnsiConsoleTheme.Code,
+                theme: AnsiConsoleTheme.Literate,
                 outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] | #{LogSource} | " +
                               "{Message:lj}{NewLine}")
             .CreateBootstrapLogger();

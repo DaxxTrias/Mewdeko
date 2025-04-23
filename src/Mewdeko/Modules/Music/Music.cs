@@ -1,6 +1,7 @@
 ﻿using System.Text;
 using System.Text.Json;
 using System.Threading;
+using DataModel;
 using Discord.Commands;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
@@ -539,7 +540,7 @@ public partial class Music(
     public async Task SetDjRole(IRole role = null)
     {
         var settings = await cache.GetMusicPlayerSettings(ctx.Guild.Id)
-                       ?? new MusicPlayerSettings
+                       ?? new MusicPlayerSetting
                        {
                            GuildId = ctx.Guild.Id
                        };
@@ -599,7 +600,7 @@ public partial class Music(
         {
             Name = name,
             AuthorId = ctx.User.Id,
-            Tracks = queue.Select(x => new MusicPlaylistTrack
+            MusicPlaylistTracks = queue.Select(x => new MusicPlaylistTrack
             {
                 Title = x.Track.Title, Uri = x.Track.Uri.ToString(), Duration = x.Track.Duration
             }).ToList()
@@ -645,7 +646,7 @@ public partial class Music(
         var queue = clear ? [] : await cache.GetMusicQueue(ctx.Guild.Id);
         var startIndex = queue.Count + 1;
 
-        foreach (var savedTrack in playlist.Tracks)
+        foreach (var savedTrack in playlist.MusicPlaylistTracks)
         {
             var trackResult = await service.Tracks.LoadTrackAsync(savedTrack.Uri, TrackSearchMode.YouTube);
             if (trackResult is null) continue;
@@ -665,7 +666,7 @@ public partial class Music(
         }
 
         await ReplyConfirmAsync(
-            Strings.MusicPlaylistLoaded(ctx.Guild.Id, name, playlist.Tracks.Count, playlist.AuthorId)
+            Strings.MusicPlaylistLoaded(ctx.Guild.Id, name, playlist.MusicPlaylistTracks.Count(), playlist.AuthorId)
         ).ConfigureAwait(false);
     }
 
@@ -691,7 +692,7 @@ public partial class Music(
             sb.AppendLine(Strings.MusicPlaylistEntry(
                 ctx.Guild.Id,
                 playlist.Name,
-                playlist.Tracks.Count,
+                playlist.MusicPlaylistTracks.Count(),
                 user?.Username ?? "Unknown"
             ));
         }

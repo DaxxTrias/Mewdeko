@@ -1,3 +1,4 @@
+using DataModel;
 using Discord.Interactions;
 
 namespace Mewdeko.Common.TypeReaders.Interactions;
@@ -5,7 +6,7 @@ namespace Mewdeko.Common.TypeReaders.Interactions;
 /// <summary>
 ///     Class that converts a string to a StatusRolesTable object.
 /// </summary>
-public class StatusRolesTypeConverter : TypeConverter<StatusRolesTable>
+public class StatusRolesTypeConverter : TypeConverter<StatusRole>
 {
     /// <summary>
     ///     Returns the Discord type of the option.

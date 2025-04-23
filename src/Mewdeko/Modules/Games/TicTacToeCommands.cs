@@ -11,9 +11,8 @@ public partial class Games
     /// <summary>
     ///     A module containing TicTacToe commands.
     /// </summary>
-    /// <param name="client"></param>
     [Group]
-    public class TicTacToeCommands(DiscordShardedClient client, EventHandler handler) : MewdekoSubmodule<GamesService>
+    public class TicTacToeCommands(EventHandler handler) : MewdekoSubmodule<GamesService>
     {
         private readonly SemaphoreSlim sem = new(1, 1);
 
@@ -40,7 +39,7 @@ public partial class Games
                     return;
                 }
 
-                game = new TicTacToe(Strings, client, channel, (IGuildUser)ctx.User, options, Config, handler);
+                game = new TicTacToe(Strings, channel, (IGuildUser)ctx.User, options, Config, handler);
                 Service.TicTacToeGames.Add(channel.Id, game);
                 await ReplyConfirmAsync(Strings.TttCreated(ctx.Guild.Id)).ConfigureAwait(false);
 

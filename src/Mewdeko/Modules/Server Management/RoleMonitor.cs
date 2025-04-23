@@ -1,7 +1,7 @@
 ﻿using Discord.Commands;
 using LinqToDB;
 using Mewdeko.Common.Attributes.TextCommands;
-using Mewdeko.Database.DbContextStuff;
+using Mewdeko.Modules.Administration.Common;
 using Mewdeko.Modules.Server_Management.Services;
 
 namespace Mewdeko.Modules.Server_Management;
@@ -11,7 +11,7 @@ public partial class ServerManagement
     /// <summary>
     ///     Manages role monitoring settings, blacklists, and whitelists.
     /// </summary>
-    public class RoleMonitorCommands(DbContextProvider dbContextProvider) : MewdekoSubmodule<RoleMonitorService>
+    public class RoleMonitorCommands(IDataConnectionFactory dbFactory) : MewdekoSubmodule<RoleMonitorService>
     {
         /// <summary>
         ///     Sets the default punishment action for the guild.
@@ -188,7 +188,7 @@ public partial class ServerManagement
         [RequireServerOwner]
         public async Task ListBlacklists()
         {
-            await using var context = await dbContextProvider.GetContextAsync();
+            await using var context = await dbFactory.CreateConnectionAsync();
 
             var blacklistedRoles = await context.BlacklistedRoles
                 .Where(r => r.GuildId == ctx.Guild.Id)

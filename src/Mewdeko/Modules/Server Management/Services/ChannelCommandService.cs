@@ -1,6 +1,8 @@
-﻿using Mewdeko.Common.ModuleBehaviors;
-using Mewdeko.Database.DbContextStuff;
-using Microsoft.EntityFrameworkCore;
+﻿using DataModel;
+using LinqToDB;
+using Mewdeko.Common.ModuleBehaviors;
+using Mewdeko.Modules.Administration.Common;
+
 using StackExchange.Redis;
 
 namespace Mewdeko.Modules.Server_Management.Services;
@@ -13,7 +15,7 @@ public class ChannelCommandService : INService, IReadyExecutor
 {
     private readonly DiscordShardedClient client;
     private readonly IDataCache dataCache;
-    private readonly DbContextProvider dbContext;
+    private readonly IDataConnectionFactory dbFactory;
 
     private readonly ConcurrentDictionary<ulong, (ServerManagement.LockdownType, PunishmentAction?)> lockdownGuilds =
         new();
@@ -23,13 +25,13 @@ public class ChannelCommandService : INService, IReadyExecutor
     /// </summary>
     /// <param name="dataCache">The data cache for accessing Redis.</param>
     /// <param name="handler">The event handler.</param>
-    /// <param name="dbContext">The databse connection provider</param>
+    /// <param name="dbFactory">The databse connection provider</param>
     /// <param name="client">The discord client</param>
-    public ChannelCommandService(IDataCache dataCache, EventHandler handler, DbContextProvider dbContext,
+    public ChannelCommandService(IDataCache dataCache, EventHandler handler, IDataConnectionFactory dbFactory,
         DiscordShardedClient client)
     {
         this.dataCache = dataCache;
-        this.dbContext = dbContext;
+        this.dbFactory = dbFactory;
         this.client = client;
         handler.UserJoined += HandleUserJoinDuringLockdown;
     }
@@ -44,7 +46,7 @@ public class ChannelCommandService : INService, IReadyExecutor
         var redisDb = dataCache.Redis.GetDatabase();
         var redisJoinBlockedGuilds = await redisDb.SetMembersAsync("join-blocked-guilds").ConfigureAwait(false);
 
-        await using var context = await dbContext.GetContextAsync();
+         await using var context = await dbFactory.CreateConnectionAsync();
 
         // Fetch all guilds from the database that have lockdown channel permissions stored
         var dbLockdownGuilds = await context.LockdownChannelPermissions
@@ -195,7 +197,7 @@ public class ChannelCommandService : INService, IReadyExecutor
     /// <returns>A task that represents the asynchronous operation.</returns>
     public async Task StoreOriginalPermissions(IGuild guild)
     {
-        await using var context = await dbContext.GetContextAsync();
+         await using var context = await dbFactory.CreateConnectionAsync();
         var channels = await guild.GetChannelsAsync();
 
         var existingPermissions = await context.LockdownChannelPermissions
@@ -209,12 +211,12 @@ public class ChannelCommandService : INService, IReadyExecutor
             let existingEntry =
                 existingPermissions.FirstOrDefault(p => p.ChannelId == channel.Id && p.TargetId == overwrite.TargetId)
             where existingEntry == null
-            select new LockdownChannelPermissions
+            select new LockdownChannelPermission
             {
                 GuildId = guild.Id,
                 ChannelId = channel.Id,
                 TargetId = overwrite.TargetId,
-                TargetType = overwrite.TargetType, // Role or User
+                TargetType = (int)overwrite.TargetType, // Role or User
                 AllowPermissions = GetRawPermissionValue(overwrite.Permissions.ToAllowList()),
                 DenyPermissions = GetRawPermissionValue(overwrite.Permissions.ToDenyList())
             }).ToList();
@@ -222,8 +224,7 @@ public class ChannelCommandService : INService, IReadyExecutor
         // Add all new permissions in one batch
         if (newPermissions.Count != 0)
         {
-            await context.LockdownChannelPermissions.AddRangeAsync(newPermissions);
-            await context.SaveChangesAsync();
+            await context.InsertAsync(newPermissions);
         }
     }
 
@@ -265,7 +266,7 @@ public class ChannelCommandService : INService, IReadyExecutor
         var everyoneRole = guild.EveryoneRole;
         var channels = await guild.GetChannelsAsync();
 
-        await using var context = await dbContext.GetContextAsync();
+         await using var context = await dbFactory.CreateConnectionAsync();
 
         var relevantChannels = channels.Where(IsRelevantChannel).ToList();
         var channelPermissions = new List<(IGuildChannel Channel, OverwritePermissions Permissions)>();
@@ -274,7 +275,7 @@ public class ChannelCommandService : INService, IReadyExecutor
         {
             var storedPerm = await context.LockdownChannelPermissions.FirstOrDefaultAsync(p =>
                 p.GuildId == guild.Id && p.ChannelId == channel.Id && p.TargetId == everyoneRole.Id &&
-                p.TargetType == PermissionTarget.Role);
+                p.TargetType == (int)PermissionTarget.Role);
 
             var existingPerms = storedPerm != null
                 ? new OverwritePermissions(storedPerm.AllowPermissions, storedPerm.DenyPermissions)
@@ -370,7 +371,7 @@ public class ChannelCommandService : INService, IReadyExecutor
     /// <returns>A task that represents the asynchronous operation.</returns>
     public async Task RestoreOriginalPermissions(IGuild guild)
     {
-        await using var context = await dbContext.GetContextAsync();
+         await using var context = await dbFactory.CreateConnectionAsync();
         var channels = await guild.GetChannelsAsync();
 
         var relevantChannels = channels.Where(IsRelevantChannel).ToList();
@@ -395,7 +396,7 @@ public class ChannelCommandService : INService, IReadyExecutor
             {
                 var permissions = new OverwritePermissions(storedPerm.AllowPermissions, storedPerm.DenyPermissions);
 
-                switch (storedPerm.TargetType)
+                switch ((PermissionTarget)storedPerm.TargetType)
                 {
                     case PermissionTarget.Role when guildRoleIds.Contains(storedPerm.TargetId):
                         overwrites.Add(new Overwrite(storedPerm.TargetId, PermissionTarget.Role, permissions));
@@ -411,10 +412,8 @@ public class ChannelCommandService : INService, IReadyExecutor
 
             await channel.ModifyAsync(x => x.PermissionOverwrites = new Optional<IEnumerable<Overwrite>>(overwrites));
 
-            context.LockdownChannelPermissions.RemoveRange(storedPermissions);
+            await context.DeleteAsync(storedPermissions);
         }
-
-        await context.SaveChangesAsync();
     }
 
 
