@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Authorization;
+﻿using DataModel;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Mewdeko.Modules.RoleStates.Services;
 
@@ -143,5 +144,60 @@ public class RoleStatesController : Controller
 
         await roleStatesService.SetRoleStateManually(user, guildId, roleIds);
         return Ok();
+    }
+
+    /// <summary>
+    /// Toggles the option to clear saved roles upon a user's ban
+    /// </summary>
+    [HttpPost("clear-on-ban")]
+    public async Task<IActionResult> ToggleClearOnBan(ulong guildId, [FromBody] object data)
+    {
+        var settings = await roleStatesService.GetRoleStateSettings(guildId);
+        if (settings == null)
+            return NotFound("Role state settings not found");
+
+        var result = await roleStatesService.ToggleClearOnBan(settings);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Toggles the option to ignore bots when saving and restoring roles
+    /// </summary>
+    [HttpPost("ignore-bots")]
+    public async Task<IActionResult> ToggleIgnoreBots(ulong guildId, [FromBody] object data)
+    {
+        var settings = await roleStatesService.GetRoleStateSettings(guildId);
+        if (settings == null)
+            return NotFound("Role state settings not found");
+
+        var result = await roleStatesService.ToggleIgnoreBots(settings);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Updates the role state settings for a guild
+    /// </summary>
+    [HttpPost("settings")]
+    public async Task<IActionResult> UpdateSettings(ulong guildId, [FromBody] RoleStateSetting settings)
+    {
+        if (settings.GuildId != guildId)
+            return BadRequest("Guild ID mismatch");
+
+        await roleStatesService.UpdateRoleStateSettings(settings);
+        return Ok();
+    }
+
+    /// <summary>
+    /// Saves the current role states of all users in a guild
+    /// </summary>
+    [HttpPost("save-all")]
+    public async Task<IActionResult> SaveAllUserRoleStates(ulong guildId)
+    {
+        var guild = client.GetGuild(guildId);
+        if (guild == null)
+            return NotFound("Guild not found");
+
+        var (savedCount, errorMessage) = await roleStatesService.SaveAllUserRoleStates(guild);
+        return Ok(new { savedCount, errorMessage });
     }
 }
