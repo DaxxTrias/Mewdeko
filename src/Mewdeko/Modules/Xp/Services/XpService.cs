@@ -117,7 +117,7 @@ public partial class XpService : INService, IUnloadableService
         EventHandler.MessageReceived += HandleMessageXp;
         EventHandler.UserVoiceStateUpdated += voiceTracker.HandleVoiceStateUpdate;
         EventHandler.GuildAvailable += OnGuildAvailable;
-        Client.MessageReceived += OnMessageReceived;
+        EventHandler.MessageReceived += OnMessageReceived;
 
         Log.Information("XP Service initialized");
     }
@@ -131,7 +131,7 @@ public partial class XpService : INService, IUnloadableService
         EventHandler.MessageReceived -= HandleMessageXp;
         EventHandler.UserVoiceStateUpdated -= voiceTracker.HandleVoiceStateUpdate;
         EventHandler.GuildAvailable -= OnGuildAvailable;
-        Client.MessageReceived -= OnMessageReceived;
+        EventHandler.MessageReceived -= OnMessageReceived;
 
         // Clean up resources
         backgroundProcessor.Dispose();
