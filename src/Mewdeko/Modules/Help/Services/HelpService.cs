@@ -1,9 +1,11 @@
 ﻿using System.Reflection;
+using System.Text;
 using CommandLine;
 using Discord.Commands;
 using Discord.Interactions;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Modules.Administration.Services;
+using Mewdeko.Modules.OwnerOnly.Services;
 using Mewdeko.Modules.Permissions.Common;
 using Mewdeko.Modules.Permissions.Services;
 using Mewdeko.Services.Settings;
@@ -127,11 +129,13 @@ public class HelpService : INService
             compBuilder.WithSelectMenu(selMenu); // add the select menu to the component builder
         }
 
-        compBuilder.WithButton(genStrings.ToggleDescriptions(guild?.Id ?? 0), $"toggle-descriptions:{descriptions},{user.Id}");
+        compBuilder.WithButton(genStrings.ToggleDescriptions(guild?.Id ?? 0),
+            $"toggle-descriptions:{descriptions},{user.Id}");
         compBuilder.WithButton(genStrings.InviteMe(guild?.Id ?? 0), style: ButtonStyle.Link,
             url:
             "https://discord.com/oauth2/authorize?client_id=752236274261426212&scope=bot&permissions=66186303&scope=bot%20applications.commands");
-        compBuilder.WithButton(genStrings.Donatetext(guild?.Id ?? 0), style: ButtonStyle.Link, url: "https://ko-fi.com/mewdeko");
+        compBuilder.WithButton(genStrings.Donatetext(guild?.Id ?? 0), style: ButtonStyle.Link,
+            url: "https://ko-fi.com/mewdeko");
         return compBuilder;
     }
 
@@ -148,7 +152,8 @@ public class HelpService : INService
     {
         var prefix = await guildSettings.GetPrefix(guild);
         EmbedBuilder embed = new();
-        embed.WithAuthor(new EmbedAuthorBuilder().WithName(genStrings.HelpmenuHelptext(guild?.Id ?? 0, client.CurrentUser))
+        embed.WithAuthor(new EmbedAuthorBuilder()
+            .WithName(genStrings.HelpmenuHelptext(guild?.Id ?? 0, client.CurrentUser))
             .WithIconUrl(client.CurrentUser.RealAvatarUrl().AbsoluteUri));
         embed.WithOkColor();
         embed.WithDescription(
@@ -197,36 +202,39 @@ public class HelpService : INService
         return !pc.Permissions.CheckSlashPermissions(moduleName, "none", user, channel, out _) ? "❌" : "✅";
     }
 
-    private string? GetModuleDescription(string module, IGuild? guild) => module.ToLower() switch
+    private string? GetModuleDescription(string module, IGuild? guild)
     {
-        "administration" => genStrings.ModuleDescriptionAdministration(guild?.Id ?? 0),
-        "afk" => genStrings.ModuleDescriptionAfk(guild?.Id ?? 0),
-        "chattriggers" => genStrings.ModuleDescriptionChattriggers(guild?.Id ?? 0),
-        "confessions" => genStrings.ModuleDescriptionConfessions(guild?.Id ?? 0),
-        "currency" => genStrings.ModuleDescriptionCurrency(guild?.Id ?? 0),
-        "gambling" => genStrings.ModuleDescriptionGambling(guild?.Id ?? 0),
-        "games" => genStrings.ModuleDescriptionGames(guild?.Id ?? 0),
-        "giveaways" => genStrings.ModuleDescriptionGiveaways(guild?.Id ?? 0),
-        "help" => genStrings.ModuleDescriptionHelp(guild?.Id ?? 0),
-        "highlights" => genStrings.ModuleDescriptionHighlights(guild?.Id ?? 0),
-        "multigreets" => genStrings.ModuleDescriptionMultigreets(guild?.Id ?? 0),
-        "music" => genStrings.ModuleDescriptionMusic(guild?.Id ?? 0),
-        "nsfw" => genStrings.ModuleDescriptionNsfw(guild?.Id ?? 0),
-        "owneronly" => genStrings.ModuleDescriptionOwneronly(guild?.Id ?? 0),
-        "permissions" => genStrings.ModuleDescriptionPermissions(guild?.Id ?? 0),
-        "rolegreets" => genStrings.ModuleDescriptionRolegreets(guild?.Id ?? 0),
-        "rolestates" => genStrings.ModuleDescriptionRolestates(guild?.Id ?? 0),
-        "searches" => genStrings.ModuleDescriptionSearches(guild?.Id ?? 0),
-        "servermanagement" => genStrings.ModuleDescriptionServermanagement(guild?.Id ?? 0),
-        "starboard" => genStrings.ModuleDescriptionStarboard(guild?.Id ?? 0),
-        "statusroles" => genStrings.ModuleDescriptionStatusroles(guild?.Id ?? 0),
-        "suggestions" => genStrings.ModuleDescriptionSuggestions(guild?.Id ?? 0),
-        "userprofile" => genStrings.ModuleDescriptionUserprofile(guild?.Id ?? 0),
-        "utility" => genStrings.ModuleDescriptionUtility(guild?.Id ?? 0),
-        "vote" => genStrings.ModuleDescriptionVote(guild?.Id ?? 0),
-        "xp" => genStrings.ModuleDescriptionXp(guild?.Id ?? 0),
-        _ => null
-    };
+        return module.ToLower() switch
+        {
+            "administration" => genStrings.ModuleDescriptionAdministration(guild?.Id ?? 0),
+            "afk" => genStrings.ModuleDescriptionAfk(guild?.Id ?? 0),
+            "chattriggers" => genStrings.ModuleDescriptionChattriggers(guild?.Id ?? 0),
+            "confessions" => genStrings.ModuleDescriptionConfessions(guild?.Id ?? 0),
+            "currency" => genStrings.ModuleDescriptionCurrency(guild?.Id ?? 0),
+            "gambling" => genStrings.ModuleDescriptionGambling(guild?.Id ?? 0),
+            "games" => genStrings.ModuleDescriptionGames(guild?.Id ?? 0),
+            "giveaways" => genStrings.ModuleDescriptionGiveaways(guild?.Id ?? 0),
+            "help" => genStrings.ModuleDescriptionHelp(guild?.Id ?? 0),
+            "highlights" => genStrings.ModuleDescriptionHighlights(guild?.Id ?? 0),
+            "multigreets" => genStrings.ModuleDescriptionMultigreets(guild?.Id ?? 0),
+            "music" => genStrings.ModuleDescriptionMusic(guild?.Id ?? 0),
+            "nsfw" => genStrings.ModuleDescriptionNsfw(guild?.Id ?? 0),
+            "owneronly" => genStrings.ModuleDescriptionOwneronly(guild?.Id ?? 0),
+            "permissions" => genStrings.ModuleDescriptionPermissions(guild?.Id ?? 0),
+            "rolegreets" => genStrings.ModuleDescriptionRolegreets(guild?.Id ?? 0),
+            "rolestates" => genStrings.ModuleDescriptionRolestates(guild?.Id ?? 0),
+            "searches" => genStrings.ModuleDescriptionSearches(guild?.Id ?? 0),
+            "servermanagement" => genStrings.ModuleDescriptionServermanagement(guild?.Id ?? 0),
+            "starboard" => genStrings.ModuleDescriptionStarboard(guild?.Id ?? 0),
+            "statusroles" => genStrings.ModuleDescriptionStatusroles(guild?.Id ?? 0),
+            "suggestions" => genStrings.ModuleDescriptionSuggestions(guild?.Id ?? 0),
+            "userprofile" => genStrings.ModuleDescriptionUserprofile(guild?.Id ?? 0),
+            "utility" => genStrings.ModuleDescriptionUtility(guild?.Id ?? 0),
+            "vote" => genStrings.ModuleDescriptionVote(guild?.Id ?? 0),
+            "xp" => genStrings.ModuleDescriptionXp(guild?.Id ?? 0),
+            _ => null
+        };
+    }
 
     private async Task HandlePing(SocketMessage msg)
     {
@@ -286,25 +294,29 @@ public class HelpService : INService
             .ConfigureAwait(false);
     }
 
+
     /// <summary>
     ///     Gets the help for a command
     /// </summary>
     /// <param name="com">The command in question</param>
     /// <param name="guild">The guild where this was executed</param>
     /// <param name="user">The user who executed the command</param>
-    /// <returns>A tuple containing a <see cref="ComponentBuilder" /> and <see cref="EmbedBuilder" /></returns>
+    /// <returns>A tuple containing a <see cref="EmbedBuilder" /> and <see cref="ComponentBuilder" /></returns>
     public async Task<(EmbedBuilder, ComponentBuilder)> GetCommandHelp(CommandInfo com, IGuild? guild, IGuildUser user)
     {
         var actualUrl = GenerateDocumentationUrl(com);
         if (com.Attributes.Any(x => x is HelpDisabled))
             return (new EmbedBuilder().WithDescription("Help is disabled for this command."), new ComponentBuilder());
+
         var prefix = await guildSettings.GetPrefix(guild);
         var potentialCommand = interactionService.SlashCommands.FirstOrDefault(x =>
             string.Equals(x.MethodName, com.MethodName(), StringComparison.CurrentCultureIgnoreCase));
+
         var str = $"**{prefix + com.Aliases[0]}**";
         var alias = com.Aliases.Skip(1).FirstOrDefault();
         if (alias != null)
             str += $" **| {prefix + alias}**";
+
         var em = new EmbedBuilder().AddField(fb =>
             fb.WithName(str).WithValue($"{com.RealSummary(strings, guild?.Id, prefix)}").WithIsInline(true));
 
@@ -312,6 +324,7 @@ public class HelpService : INService
         var reqs = GetCommandRequirements(com, tryGetOverrides ? overrides : null);
         var botReqs = GetCommandBotRequirements(com);
         var attribute = (RatelimitAttribute)com.Preconditions.FirstOrDefault(x => x is RatelimitAttribute);
+
         if (reqs.Length > 0)
             em.AddField("User Permissions", string.Join("\n", reqs));
         if (botReqs.Length > 0)
@@ -319,9 +332,7 @@ public class HelpService : INService
         if (actualUrl != null)
             em.AddField("Documentation", $"[Click here]({actualUrl})");
         if (attribute?.Seconds > 0)
-        {
             em.AddField("Cooldown", $"{attribute.Seconds} seconds");
-        }
 
         var cb = new ComponentBuilder()
             .WithButton(genStrings.HelpRunCmd(guild?.Id ?? 0), $"runcmd.{com.Aliases[0]}", ButtonStyle.Success);
@@ -346,6 +357,62 @@ public class HelpService : INService
                     potentialCommand == null
                         ? "`None`"
                         : $"</{potentialCommand.Module.SlashGroupName} {potentialCommand.Name}:{guildCommand.Id}>");
+        }
+
+        // Get command strings from YAML documentation
+        var commandStrings = strings.GetCommandStrings(com.Name, guild?.Id);
+
+        // Add parameter descriptions if available
+        if (commandStrings.Parameters?.Count > 0)
+        {
+            var sb = new StringBuilder();
+            foreach (var param in commandStrings.Parameters)
+            {
+                var optionalText = param.IsOptional
+                    ? $" (Optional{(string.IsNullOrEmpty(param.DefaultValue) ? "" : $", default: {param.DefaultValue}")})"
+                    : "";
+
+                sb.AppendLine($"• `{param.Name}`{optionalText}: {param.Description}");
+            }
+
+            em.AddField(genStrings.Parameters(guild?.Id ?? 0), sb.ToString());
+        }
+
+        // Add overload information if available
+        if (commandStrings.Overloads?.Count > 0)
+        {
+            var sb = new StringBuilder();
+
+            // Show the main command format first
+            var mainParams = string.Join(" ", com.Parameters.Select(p =>
+                p.IsOptional ? $"[{p.Name}]" : p.Name));
+            sb.AppendLine($"**{prefix}{com.Name} {mainParams}**");
+
+            // Show overloads
+            sb.AppendLine("\n**Other versions:**");
+
+            foreach (var overload in commandStrings.Overloads)
+            {
+                var overloadParams = string.Join(" ", overload.Parameters.Select(p =>
+                    p.IsOptional ? $"[{p.Name}]" : p.Name));
+
+                sb.AppendLine($"• **{prefix}{com.Name} {overloadParams}**");
+
+                // Add detailed parameter descriptions for this overload if needed
+                if (overload.Parameters?.Count > 0)
+                {
+                    foreach (var param in overload.Parameters)
+                    {
+                        var optionalText = param.IsOptional
+                            ? $" (Optional{(string.IsNullOrEmpty(param.DefaultValue) ? "" : $", default: {param.DefaultValue}")})"
+                            : "";
+
+                        sb.AppendLine($"  → `{param.Name}`{optionalText}: {param.Description}");
+                    }
+                }
+            }
+
+            em.AddField(genStrings.Overloads(guild?.Id ?? 0), sb.ToString());
         }
 
         em.AddField(fb => fb.WithName(genStrings.Usage(guild.Id)).WithValue(string.Join("\n",
@@ -429,6 +496,102 @@ public class HelpService : INService
         }
 
         return toReturn.ToArray();
+    }
+
+    /// <summary>
+    /// </summary>
+    /// <param name="commandName"></param>
+    /// <param name="overloads"></param>
+    /// <param name="prefix"></param>
+    /// <returns></returns>
+    public string FormatCommandHelp(string commandName, List<OwnerOnlyService.CommandInfo> overloads, string prefix)
+    {
+        var sb = new StringBuilder();
+
+        // If there's only one version, format it normally
+        if (overloads.Count == 1 && !overloads[0].IsOverload)
+        {
+            var cmd = overloads[0];
+            sb.AppendLine($"**{prefix}{commandName}**");
+            sb.AppendLine(cmd.Desc);
+
+            // Add usage examples
+            if (cmd.Args.Count > 0)
+            {
+                sb.AppendLine("\n**Usage:**");
+                foreach (var usage in cmd.Args)
+                {
+                    sb.AppendLine($"`{prefix}{commandName} {usage}`");
+                }
+            }
+
+            // Add parameter descriptions if available
+            if (cmd.Parameters.Count > 0)
+            {
+                sb.AppendLine("\n**Parameters:**");
+                foreach (var param in cmd.Parameters)
+                {
+                    var optional = param.IsOptional
+                        ? " (Optional" + (param.DefaultValue != null ? $", default: {param.DefaultValue}" : "") + ")"
+                        : "";
+                    var paramDesc = !string.IsNullOrEmpty(param.Description) ? $" - {param.Description}" : "";
+                    sb.AppendLine($"• `{param.Name}`: {param.Type}{optional}{paramDesc}");
+                }
+            }
+        }
+        else
+        {
+            // Multiple overloads
+            sb.AppendLine($"**{prefix}{commandName}** (Multiple Versions)");
+
+            // Add the first description (they should be similar)
+            sb.AppendLine(overloads[0].Desc);
+
+            // Show each overload
+            sb.AppendLine("\n**Overloads:**");
+
+            for (var i = 0; i < overloads.Count; i++)
+            {
+                var cmd = overloads[i];
+
+                // Format parameters for this overload
+                var paramList = string.Join(", ", cmd.Parameters.Select(p =>
+                {
+                    var paramString = $"{p.Name}: {p.Type}";
+                    if (p.IsOptional) paramString = $"[{paramString}]";
+                    return paramString;
+                }));
+
+                sb.AppendLine($"\n**Version {i + 1}:** `{prefix}{commandName} {paramList}`");
+
+                // Add parameter descriptions
+                if (cmd.Parameters.Count > 0)
+                {
+                    sb.AppendLine("Parameters:");
+                    foreach (var param in cmd.Parameters)
+                    {
+                        var optional = param.IsOptional
+                            ? " (Optional" + (param.DefaultValue != null ? $", default: {param.DefaultValue}" : "") +
+                              ")"
+                            : "";
+                        var paramDesc = !string.IsNullOrEmpty(param.Description) ? $" - {param.Description}" : "";
+                        sb.AppendLine($"• `{param.Name}`: {param.Type}{optional}{paramDesc}");
+                    }
+                }
+
+                // Add usage examples for this overload
+                if (cmd.Args.Count > 0)
+                {
+                    sb.AppendLine("Examples:");
+                    foreach (var usage in cmd.Args)
+                    {
+                        sb.AppendLine($"`{prefix}{commandName} {usage}`");
+                    }
+                }
+            }
+        }
+
+        return sb.ToString();
     }
 
     private static string[] GetCommandBotRequirements(CommandInfo cmd)

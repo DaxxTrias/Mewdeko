@@ -105,11 +105,11 @@ public class RedisCache : IDataCache
     /// <param name="guildId">The guild ID.</param>
     /// <param name="userId">The user ID.</param>
     /// <returns>The afk status.</returns>
-    public async Task<DataModel.Afk?> RetrieveAfk(ulong guildId, ulong userId)
+    public async Task<Afk?> RetrieveAfk(ulong guildId, ulong userId)
     {
         var db = Redis.GetDatabase();
         var afkJson = await db.StringGetAsync($"{redisKey}_{guildId}_{userId}_afk");
-        return afkJson.HasValue ? JsonSerializer.Deserialize<DataModel.Afk>(afkJson) : null;
+        return afkJson.HasValue ? JsonSerializer.Deserialize<Afk>(afkJson) : null;
     }
 
     /// <summary>

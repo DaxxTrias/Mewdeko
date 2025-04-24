@@ -18,4 +18,5 @@ public interface IStringsSource
     /// </summary>
     /// <returns>A dictionary containing command strings indexed by locale name and then by command name.</returns>
     Dictionary<string, Dictionary<string, CommandStrings>> GetCommandStrings();
+
 }

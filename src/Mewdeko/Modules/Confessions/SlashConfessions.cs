@@ -36,7 +36,7 @@ public class SlashConfessions : MewdekoSlashModuleBase<ConfessionService>
     [CheckPermissions]
     public async Task Confess(string confession, IAttachment? attachment = null)
     {
-        var blacklists = (await guildSettings.GetGuildConfig(ctx.Guild.Id)).ConfessionBlacklist.Split(" ");
+        var blacklists = (await guildSettings.GetGuildConfig(ctx.Guild.Id)).ConfessionBlacklist?.Split(" ");
         var attachUrl = attachment?.Url;
         if ((await guildSettings.GetGuildConfig(ctx.Guild.Id)).ConfessionChannel is 0)
         {
@@ -44,7 +44,7 @@ public class SlashConfessions : MewdekoSlashModuleBase<ConfessionService>
             return;
         }
 
-        if (blacklists.Length > 0)
+        if (blacklists?.Length > 0)
         {
             if (blacklists.Contains(ctx.User.Id.ToString()))
             {

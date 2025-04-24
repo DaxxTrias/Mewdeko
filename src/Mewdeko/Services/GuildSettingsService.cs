@@ -371,7 +371,7 @@ public class GuildSettingsService
     ///     Internal helper to get or create a guild configuration within a given DB connection.
     ///     Ensures configuration exists before returning.
     /// </summary>
-    /// <param name="db">The active LinqToDB database connection (<see cref="MewdekoDb" />).</param>
+    /// <param name="dbFactory">The active LinqToDB database connection (<see cref="MewdekoDb" />).</param>
     /// <param name="guildId">The ulong ID of the guild.</param>
     /// <returns>The existing or newly created guild configuration.</returns>
     private async Task<GuildConfig> GetOrCreateGuildConfigInternal(MewdekoDb db, ulong guildId)

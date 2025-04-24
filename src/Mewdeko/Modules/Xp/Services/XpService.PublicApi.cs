@@ -1,10 +1,9 @@
 using System.IO;
 using System.Text.Json;
-using LinqToDB;
 using DataModel;
+using LinqToDB;
 using Mewdeko.Database.EF.EFCore.Enums;
 using Mewdeko.Modules.Xp.Models;
-
 using Serilog;
 using UserXpStats = Mewdeko.Modules.Xp.Models.UserXpStats;
 using XpNotificationType = Mewdeko.Modules.Xp.Models.XpNotificationType;
@@ -28,13 +27,19 @@ public partial class XpService
     ///     Gets the Discord client.
     /// </summary>
     /// <returns>The Discord client.</returns>
-    public DiscordShardedClient GetClient() => Client;
+    public DiscordShardedClient GetClient()
+    {
+        return Client;
+    }
 
     /// <summary>
     ///     Gets the background processor.
     /// </summary>
     /// <returns>The background processor.</returns>
-    public XpBackgroundProcessor GetBackgroundProcessor() => backgroundProcessor;
+    public XpBackgroundProcessor GetBackgroundProcessor()
+    {
+        return backgroundProcessor;
+    }
 
     /// <summary>
     ///     Queues an XP gain for a user.
@@ -85,7 +90,8 @@ public partial class XpService
 
         var level = XpCalculator.CalculateLevel(userXp.TotalXp, (XpCurveType)settings.XpCurveType);
         var levelXp = userXp.TotalXp - XpCalculator.CalculateXpForLevel(level, (XpCurveType)settings.XpCurveType);
-        var requiredXp = XpCalculator.CalculateXpForLevel(level + 1, (XpCurveType)settings.XpCurveType) - XpCalculator.CalculateXpForLevel(level, (XpCurveType)settings.XpCurveType);
+        var requiredXp = XpCalculator.CalculateXpForLevel(level + 1, (XpCurveType)settings.XpCurveType) -
+                         XpCalculator.CalculateXpForLevel(level, (XpCurveType)settings.XpCurveType);
 
         return new UserXpStats
         {
@@ -168,7 +174,8 @@ public partial class XpService
             var user = users[i];
             var level = XpCalculator.CalculateLevel(user.TotalXp, (XpCurveType)settings.XpCurveType);
             var levelXp = user.TotalXp - XpCalculator.CalculateXpForLevel(level, (XpCurveType)settings.XpCurveType);
-            var requiredXp = XpCalculator.CalculateXpForLevel(level + 1, (XpCurveType)settings.XpCurveType) - XpCalculator.CalculateXpForLevel(level, (XpCurveType)settings.XpCurveType);
+            var requiredXp = XpCalculator.CalculateXpForLevel(level + 1, (XpCurveType)settings.XpCurveType) -
+                             XpCalculator.CalculateXpForLevel(level, (XpCurveType)settings.XpCurveType);
 
             result.Add(new UserXpStats
             {
@@ -318,6 +325,51 @@ public partial class XpService
     }
 
     /// <summary>
+    ///     Resets XP for all users in the guild.
+    /// </summary>
+    /// <param name="guildId">The guild ID.</param>
+    /// <param name="resetBonusXp">Whether to also reset bonus XP for all users.</param>
+    /// <returns>A task representing the asynchronous operation and the number of affected users.</returns>
+    public async Task<int> ResetGuildXp(ulong guildId, bool resetBonusXp = false)
+    {
+        Log.Information("Resetting XP for all users in guild {GuildId}", guildId);
+
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        var now = DateTime.UtcNow;
+
+        // Perform bulk update using LinqToDB
+        int affectedUsers;
+
+        if (resetBonusXp)
+        {
+            // Reset both total XP and bonus XP
+            affectedUsers = await db.GuildUserXps
+                .Where(x => x.GuildId == guildId)
+                .Set(x => x.TotalXp, 0L)
+                .Set(x => x.BonusXp, 0)
+                .Set(x => x.LastLevelUp, now)
+                .UpdateAsync();
+        }
+        else
+        {
+            // Reset only total XP
+            affectedUsers = await db.GuildUserXps
+                .Where(x => x.GuildId == guildId)
+                .Set(x => x.TotalXp, 0L)
+                .Set(x => x.LastLevelUp, now)
+                .UpdateAsync();
+        }
+
+        // Clear all caches for this guild using the cache manager
+        await cacheManager.ClearGuildXpCachesAsync(guildId);
+
+        Log.Information("Successfully reset XP for {UserCount} users in guild {GuildId}", affectedUsers, guildId);
+
+        return affectedUsers;
+    }
+
+    /// <summary>
     ///     Gets the guild XP settings.
     /// </summary>
     /// <param name="guildId">The guild ID.</param>
@@ -417,9 +469,7 @@ public partial class XpService
             {
                 var newMultiplier = new XpChannelMultiplier
                 {
-                    GuildId = guildId,
-                    ChannelId = channelId,
-                    Multiplier = multiplier
+                    GuildId = guildId, ChannelId = channelId, Multiplier = multiplier
                 };
                 await db.InsertAsync(newMultiplier);
             }
@@ -455,9 +505,7 @@ public partial class XpService
             {
                 var newMultiplier = new XpRoleMultiplier
                 {
-                    GuildId = guildId,
-                    RoleId = roleId,
-                    Multiplier = multiplier
+                    GuildId = guildId, RoleId = roleId, Multiplier = multiplier
                 };
                 await db.InsertAsync(newMultiplier);
             }
@@ -594,9 +642,7 @@ public partial class XpService
         {
             var newItem = new XpExcludedItem
             {
-                GuildId = guildId,
-                ItemId = itemId,
-                ItemType = (int)itemType
+                GuildId = guildId, ItemId = itemId, ItemType = (int)itemType
             };
             await db.InsertAsync(newItem);
         }
@@ -797,7 +843,7 @@ public partial class XpService
     {
         // This would be loaded from a resource file or similar
         // For now, returning a placeholder
-        return System.IO.File.ReadAllBytes("data/images/default_xp_background.png");
+        return File.ReadAllBytes("data/images/default_xp_background.png");
     }
 
     #endregion

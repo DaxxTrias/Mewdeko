@@ -6,9 +6,9 @@ using Humanizer;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Common.TypeReaders.Models;
 using Mewdeko.Database.EF.EFCore.Enums;
+using Mewdeko.Modules.Currency.Services;
 using Mewdeko.Modules.Xp.Models;
 using Mewdeko.Modules.Xp.Services;
-using Mewdeko.Modules.Currency.Services;
 using Serilog;
 using XpCurveType = Mewdeko.Database.EF.EFCore.Enums.XpCurveType;
 
@@ -25,7 +25,8 @@ public class Xp(InteractiveService serv, ICurrencyService currencyService) : Mew
     /// <param name="user">The user to show the XP card for. If not specified, shows the caller's card.</param>
     /// <example>.rank</example>
     /// <example>.rank @user</example>
-    [Cmd, Aliases]
+    [Cmd]
+    [Aliases]
     public async Task Rank([Remainder] IGuildUser? user = null)
     {
         user ??= (IGuildUser)ctx.User;
@@ -47,7 +48,8 @@ public class Xp(InteractiveService serv, ICurrencyService currencyService) : Mew
                 await ReplyErrorAsync(Strings.XpYouNoXp(ctx.Guild.Id)).ConfigureAwait(false);
                 return;
             }
-            else if (stats.TotalXp == 0)
+
+            if (stats.TotalXp == 0)
             {
                 await ReplyErrorAsync(Strings.XpUserNoXp(ctx.Guild.Id, user.ToString())).ConfigureAwait(false);
                 return;
@@ -65,64 +67,67 @@ public class Xp(InteractiveService serv, ICurrencyService currencyService) : Mew
     }
 
     /// <summary>
-///     Shows a user's XP information in a text format that's accessible for screen readers.
-/// </summary>
-/// <param name="user">The user to show XP information for. If not specified, shows the caller's stats.</param>
-/// <example>.textrank</example>
-/// <example>.textrank @user</example>
-[Cmd, Aliases]
-public async Task TextRank([Remainder] IGuildUser? user = null)
-{
-    user ??= (IGuildUser)ctx.User;
-
-    // Prevent showing ranks for bots
-    if (user.IsBot)
+    ///     Shows a user's XP information in a text format that's accessible for screen readers.
+    /// </summary>
+    /// <param name="user">The user to show XP information for. If not specified, shows the caller's stats.</param>
+    /// <example>.textrank</example>
+    /// <example>.textrank @user</example>
+    [Cmd]
+    [Aliases]
+    public async Task TextRank([Remainder] IGuildUser? user = null)
     {
-        await ReplyErrorAsync(Strings.XpBotsNoRank(ctx.Guild.Id)).ConfigureAwait(false);
-        return;
-    }
+        user ??= (IGuildUser)ctx.User;
 
-    try
-    {
-        var stats = await Service.GetUserXpStatsAsync(ctx.Guild.Id, user.Id);
-
-        // Check if user has any XP
-        if (stats.TotalXp == 0 && user.Id == ctx.User.Id)
+        // Prevent showing ranks for bots
+        if (user.IsBot)
         {
-            await ReplyErrorAsync(Strings.XpYouNoXp(ctx.Guild.Id)).ConfigureAwait(false);
-            return;
-        }
-        else if (stats.TotalXp == 0)
-        {
-            await ReplyErrorAsync(Strings.XpUserNoXp(ctx.Guild.Id, user.ToString())).ConfigureAwait(false);
+            await ReplyErrorAsync(Strings.XpBotsNoRank(ctx.Guild.Id)).ConfigureAwait(false);
             return;
         }
 
-        // Calculate progress percentage
-        var progressPercent = (int)((double)stats.LevelXp / stats.RequiredXp * 100);
-
-        // Format the text response in an accessible way
-        var response = new StringBuilder();
-        response.AppendLine(Strings.TextRankHeader(ctx.Guild.Id, user.ToString()));
-        response.AppendLine(Strings.TextRankLevel(ctx.Guild.Id, stats.Level));
-        response.AppendLine(Strings.TextRankXp(ctx.Guild.Id, stats.TotalXp));
-        response.AppendLine(Strings.TextRankProgress(ctx.Guild.Id, stats.LevelXp, stats.RequiredXp, progressPercent));
-        response.AppendLine(Strings.TextRankServerPosition(ctx.Guild.Id, stats.Rank));
-
-        // Check if user has bonus XP
-        if (stats.BonusXp > 0)
+        try
         {
-            response.AppendLine(Strings.TextRankBonusXp(ctx.Guild.Id, stats.BonusXp));
-        }
+            var stats = await Service.GetUserXpStatsAsync(ctx.Guild.Id, user.Id);
 
-        await ReplyAsync(response.ToString()).ConfigureAwait(false);
+            // Check if user has any XP
+            if (stats.TotalXp == 0 && user.Id == ctx.User.Id)
+            {
+                await ReplyErrorAsync(Strings.XpYouNoXp(ctx.Guild.Id)).ConfigureAwait(false);
+                return;
+            }
+
+            if (stats.TotalXp == 0)
+            {
+                await ReplyErrorAsync(Strings.XpUserNoXp(ctx.Guild.Id, user.ToString())).ConfigureAwait(false);
+                return;
+            }
+
+            // Calculate progress percentage
+            var progressPercent = (int)((double)stats.LevelXp / stats.RequiredXp * 100);
+
+            // Format the text response in an accessible way
+            var response = new StringBuilder();
+            response.AppendLine(Strings.TextRankHeader(ctx.Guild.Id, user.ToString()));
+            response.AppendLine(Strings.TextRankLevel(ctx.Guild.Id, stats.Level));
+            response.AppendLine(Strings.TextRankXp(ctx.Guild.Id, stats.TotalXp));
+            response.AppendLine(
+                Strings.TextRankProgress(ctx.Guild.Id, stats.LevelXp, stats.RequiredXp, progressPercent));
+            response.AppendLine(Strings.TextRankServerPosition(ctx.Guild.Id, stats.Rank));
+
+            // Check if user has bonus XP
+            if (stats.BonusXp > 0)
+            {
+                response.AppendLine(Strings.TextRankBonusXp(ctx.Guild.Id, stats.BonusXp));
+            }
+
+            await ReplyAsync(response.ToString()).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Error getting text XP stats for {UserId} in {GuildId}", user.Id, ctx.Guild.Id);
+            await ReplyErrorAsync(Strings.XpErrorGettingStats(ctx.Guild.Id));
+        }
     }
-    catch (Exception ex)
-    {
-        Log.Error(ex, "Error getting text XP stats for {UserId} in {GuildId}", user.Id, ctx.Guild.Id);
-        await ReplyErrorAsync(Strings.XpErrorGettingStats(ctx.Guild.Id));
-    }
-}
 
     /// <summary>
     ///     Shows the XP leaderboard for the server.
@@ -130,7 +135,8 @@ public async Task TextRank([Remainder] IGuildUser? user = null)
     /// <param name="page">Page number to display (starts at 1).</param>
     /// <example>.leaderboard</example>
     /// <example>.leaderboard 2</example>
-    [Cmd, Aliases]
+    [Cmd]
+    [Aliases]
     public async Task Leaderboard(int page = 1)
     {
         if (page < 1)
@@ -189,7 +195,8 @@ public async Task TextRank([Remainder] IGuildUser? user = null)
     /// <param name="user">The user to add XP to.</param>
     /// <param name="amount">The amount of XP to add.</param>
     /// <example>.addxp @user 100</example>
-    [Cmd, Aliases]
+    [Cmd]
+    [Aliases]
     [UserPerm(GuildPermission.ManageGuild)]
     public async Task AddXp(IGuildUser user, int amount)
     {
@@ -215,7 +222,8 @@ public async Task TextRank([Remainder] IGuildUser? user = null)
     /// <param name="user">The user to set XP for.</param>
     /// <param name="amount">The amount of XP to set.</param>
     /// <example>.setxp @user 1000</example>
-    [Cmd, Aliases]
+    [Cmd]
+    [Aliases]
     [UserPerm(GuildPermission.ManageGuild)]
     public async Task SetXp(IGuildUser user, long amount)
     {
@@ -242,7 +250,8 @@ public async Task TextRank([Remainder] IGuildUser? user = null)
     /// <param name="resetBonus">Whether to also reset bonus XP. Defaults to false.</param>
     /// <example>.resetxp @user</example>
     /// <example>.resetxp @user true</example>
-    [Cmd, Aliases]
+    [Cmd]
+    [Aliases]
     [UserPerm(GuildPermission.ManageGuild)]
     public async Task ResetXp(IGuildUser user, bool resetBonus = false)
     {
@@ -255,11 +264,26 @@ public async Task TextRank([Remainder] IGuildUser? user = null)
     }
 
     /// <summary>
+    ///     Resets a user's XP to zero.
+    /// </summary>
+    /// <example>.resetxp @user</example>
+    /// <example>.resetxp @user true</example>
+    [Cmd]
+    [Aliases]
+    [UserPerm(GuildPermission.Administrator)]
+    public async Task ResetXp()
+    {
+        await Service.ResetGuildXp(ctx.Guild.Id, true);
+        await ReplyConfirmAsync(Strings.XpResetGuild(ctx.Guild.Id)).ConfigureAwait(false);
+    }
+
+    /// <summary>
     ///     Sets how users are notified when they level up.
     /// </summary>
     /// <param name="type">The notification type: None, Channel, or DM.</param>
     /// <example>.levelnotif Channel</example>
-    [Cmd, Aliases]
+    [Cmd]
+    [Aliases]
     public async Task LevelNotif(XpNotificationType type)
     {
         await Service.SetUserNotificationPreferenceAsync(ctx.Guild.Id, ctx.User.Id, type);
@@ -270,7 +294,8 @@ public async Task TextRank([Remainder] IGuildUser? user = null)
     ///     Shows the server's XP leaderboard settings.
     /// </summary>
     /// <example>.xpsettings</example>
-    [Cmd, Aliases]
+    [Cmd]
+    [Aliases]
     [UserPerm(GuildPermission.ManageGuild)]
     public async Task XpSettings()
     {
@@ -320,7 +345,8 @@ public async Task TextRank([Remainder] IGuildUser? user = null)
     /// </summary>
     /// <param name="amount">The amount of XP to award per message.</param>
     /// <example>.setmsgxp 5</example>
-    [Cmd, Aliases]
+    [Cmd]
+    [Aliases]
     [UserPerm(GuildPermission.ManageGuild)]
     public async Task SetMessageXp(int amount)
     {
@@ -332,7 +358,8 @@ public async Task TextRank([Remainder] IGuildUser? user = null)
 
         if (amount > XpService.MaxXpPerMessage)
         {
-            await ReplyErrorAsync(Strings.XpMessageTooHigh(ctx.Guild.Id, XpService.MaxXpPerMessage)).ConfigureAwait(false);
+            await ReplyErrorAsync(Strings.XpMessageTooHigh(ctx.Guild.Id, XpService.MaxXpPerMessage))
+                .ConfigureAwait(false);
             return;
         }
 
@@ -345,7 +372,8 @@ public async Task TextRank([Remainder] IGuildUser? user = null)
     /// </summary>
     /// <param name="seconds">The cooldown in seconds.</param>
     /// <example>.setxpcooldown 60</example>
-    [Cmd, Aliases]
+    [Cmd]
+    [Aliases]
     [UserPerm(GuildPermission.ManageGuild)]
     public async Task SetXpCooldown(int seconds)
     {
@@ -368,7 +396,8 @@ public async Task TextRank([Remainder] IGuildUser? user = null)
     /// </summary>
     /// <param name="amount">The amount of XP to award per minute in voice.</param>
     /// <example>.setvoicexp 2</example>
-    [Cmd, Aliases]
+    [Cmd]
+    [Aliases]
     [UserPerm(GuildPermission.ManageGuild)]
     public async Task SetVoiceXp(int amount)
     {
@@ -380,7 +409,8 @@ public async Task TextRank([Remainder] IGuildUser? user = null)
 
         if (amount > XpService.MaxVoiceXpPerMinute)
         {
-            await ReplyErrorAsync(Strings.XpVoiceTooHigh(ctx.Guild.Id, XpService.MaxVoiceXpPerMinute)).ConfigureAwait(false);
+            await ReplyErrorAsync(Strings.XpVoiceTooHigh(ctx.Guild.Id, XpService.MaxVoiceXpPerMinute))
+                .ConfigureAwait(false);
             return;
         }
 
@@ -397,7 +427,8 @@ public async Task TextRank([Remainder] IGuildUser? user = null)
     /// </summary>
     /// <param name="minutes">The timeout in minutes.</param>
     /// <example>.setvoicetimeout 5</example>
-    [Cmd, Aliases]
+    [Cmd]
+    [Aliases]
     [UserPerm(GuildPermission.ManageGuild)]
     public async Task SetVoiceTimeout(int minutes)
     {
@@ -416,7 +447,8 @@ public async Task TextRank([Remainder] IGuildUser? user = null)
     /// </summary>
     /// <param name="multiplier">The XP multiplier value.</param>
     /// <example>.setxpmultiplier 1.5</example>
-    [Cmd, Aliases]
+    [Cmd]
+    [Aliases]
     [UserPerm(GuildPermission.ManageGuild)]
     public async Task SetXpMultiplier(double multiplier)
     {
@@ -435,7 +467,8 @@ public async Task TextRank([Remainder] IGuildUser? user = null)
     /// </summary>
     /// <param name="type">The XP curve type: Default, Flat, or Steep.</param>
     /// <example>.setxpcurve Flat</example>
-    [Cmd, Aliases]
+    [Cmd]
+    [Aliases]
     [UserPerm(GuildPermission.ManageGuild)]
     public async Task SetXpCurve(XpCurveType type)
     {
@@ -449,7 +482,8 @@ public async Task TextRank([Remainder] IGuildUser? user = null)
     /// <param name="channel">The channel to set the multiplier for.</param>
     /// <param name="multiplier">The multiplier value.</param>
     /// <example>.setchannelxp #general 2.0</example>
-    [Cmd, Aliases]
+    [Cmd]
+    [Aliases]
     [UserPerm(GuildPermission.ManageGuild)]
     public async Task SetChannelXp(ITextChannel channel, double multiplier)
     {
@@ -462,9 +496,11 @@ public async Task TextRank([Remainder] IGuildUser? user = null)
         await Service.SetChannelMultiplierAsync(ctx.Guild.Id, channel.Id, multiplier);
 
         if (multiplier == 1.0)
-            await ReplyConfirmAsync(Strings.XpChannelMultiplierReset(ctx.Guild.Id, channel.Mention)).ConfigureAwait(false);
+            await ReplyConfirmAsync(Strings.XpChannelMultiplierReset(ctx.Guild.Id, channel.Mention))
+                .ConfigureAwait(false);
         else
-            await ReplyConfirmAsync(Strings.XpChannelMultiplierSet(ctx.Guild.Id, channel.Mention, multiplier)).ConfigureAwait(false);
+            await ReplyConfirmAsync(Strings.XpChannelMultiplierSet(ctx.Guild.Id, channel.Mention, multiplier))
+                .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -473,7 +509,8 @@ public async Task TextRank([Remainder] IGuildUser? user = null)
     /// <param name="role">The role to set the multiplier for.</param>
     /// <param name="multiplier">The multiplier value.</param>
     /// <example>.setrolexp "VIP Members" 1.5</example>
-    [Cmd, Aliases]
+    [Cmd]
+    [Aliases]
     [UserPerm(GuildPermission.ManageGuild)]
     public async Task SetRoleXp(IRole role, double multiplier)
     {
@@ -488,7 +525,8 @@ public async Task TextRank([Remainder] IGuildUser? user = null)
         if (multiplier == 1.0)
             await ReplyConfirmAsync(Strings.XpRoleMultiplierReset(ctx.Guild.Id, role.Mention)).ConfigureAwait(false);
         else
-            await ReplyConfirmAsync(Strings.XpRoleMultiplierSet(ctx.Guild.Id, role.Mention, multiplier)).ConfigureAwait(false);
+            await ReplyConfirmAsync(Strings.XpRoleMultiplierSet(ctx.Guild.Id, role.Mention, multiplier))
+                .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -498,7 +536,8 @@ public async Task TextRank([Remainder] IGuildUser? user = null)
     /// <param name="multiplier">The XP multiplier for the boost.</param>
     /// <param name="name">The name of the boost event.</param>
     /// <example>.xpboost 2h 2.0 Weekend XP Event</example>
-    [Cmd, Aliases]
+    [Cmd]
+    [Aliases]
     [UserPerm(GuildPermission.ManageGuild)]
     public async Task XpBoost(StoopidTime time, double multiplier, [Remainder] string name)
     {
@@ -543,7 +582,8 @@ public async Task TextRank([Remainder] IGuildUser? user = null)
     ///     Lists active XP boost events.
     /// </summary>
     /// <example>.xpboosts</example>
-    [Cmd, Aliases]
+    [Cmd]
+    [Aliases]
     public async Task XpBoosts()
     {
         var boosts = await Service.GetActiveBoostEventsAsync(ctx.Guild.Id);
@@ -575,7 +615,8 @@ public async Task TextRank([Remainder] IGuildUser? user = null)
     /// </summary>
     /// <param name="eventId">ID of the event to cancel.</param>
     /// <example>.cancelboost 3</example>
-    [Cmd, Aliases]
+    [Cmd]
+    [Aliases]
     [UserPerm(GuildPermission.ManageGuild)]
     public async Task CancelBoost(int eventId)
     {
@@ -592,7 +633,8 @@ public async Task TextRank([Remainder] IGuildUser? user = null)
     /// </summary>
     /// <param name="user">The user to exclude.</param>
     /// <example>.xpexclude @user</example>
-    [Cmd, Aliases]
+    [Cmd]
+    [Aliases]
     [UserPerm(GuildPermission.ManageGuild)]
     public async Task XpExclude(IGuildUser user)
     {
@@ -605,7 +647,8 @@ public async Task TextRank([Remainder] IGuildUser? user = null)
     /// </summary>
     /// <param name="role">The role to exclude.</param>
     /// <example>.xpexclude @role</example>
-    [Cmd, Aliases]
+    [Cmd]
+    [Aliases]
     [UserPerm(GuildPermission.ManageGuild)]
     public async Task XpExclude(IRole role)
     {
@@ -618,7 +661,8 @@ public async Task TextRank([Remainder] IGuildUser? user = null)
     /// </summary>
     /// <param name="channel">The channel to exclude.</param>
     /// <example>.xpexclude #channel</example>
-    [Cmd, Aliases]
+    [Cmd]
+    [Aliases]
     [UserPerm(GuildPermission.ManageGuild)]
     public async Task XpExclude(ITextChannel channel)
     {
@@ -631,7 +675,8 @@ public async Task TextRank([Remainder] IGuildUser? user = null)
     /// </summary>
     /// <param name="user">The user to include.</param>
     /// <example>.xpinclude @user</example>
-    [Cmd, Aliases]
+    [Cmd]
+    [Aliases]
     [UserPerm(GuildPermission.ManageGuild)]
     public async Task XpInclude(IGuildUser user)
     {
@@ -644,7 +689,8 @@ public async Task TextRank([Remainder] IGuildUser? user = null)
     /// </summary>
     /// <param name="role">The role to include.</param>
     /// <example>.xpinclude @role</example>
-    [Cmd, Aliases]
+    [Cmd]
+    [Aliases]
     [UserPerm(GuildPermission.ManageGuild)]
     public async Task XpInclude(IRole role)
     {
@@ -657,7 +703,8 @@ public async Task TextRank([Remainder] IGuildUser? user = null)
     /// </summary>
     /// <param name="channel">The channel to include.</param>
     /// <example>.xpinclude #channel</example>
-    [Cmd, Aliases]
+    [Cmd]
+    [Aliases]
     [UserPerm(GuildPermission.ManageGuild)]
     public async Task XpInclude(ITextChannel channel)
     {
@@ -670,12 +717,13 @@ public async Task TextRank([Remainder] IGuildUser? user = null)
     /// </summary>
     /// <param name="type">The type of exclusions to list: users, roles, or channels.</param>
     /// <example>.xpexcludelist users</example>
-    [Cmd, Aliases]
+    [Cmd]
+    [Aliases]
     public async Task XpExcludeList(string type = null)
     {
         type = type?.ToLower();
 
-        if (string.IsNullOrWhiteSpace(type) || (type != "users" && type != "roles" && type != "channels"))
+        if (string.IsNullOrWhiteSpace(type) || type != "users" && type != "roles" && type != "channels")
         {
             await ReplyErrorAsync(Strings.XpExcludeListInvalid(ctx.Guild.Id)).ConfigureAwait(false);
             return;
@@ -758,7 +806,8 @@ public async Task TextRank([Remainder] IGuildUser? user = null)
     /// <param name="level">The level that triggers the reward.</param>
     /// <param name="role">The role to award.</param>
     /// <example>.rolereward 10 @VIP</example>
-    [Cmd, Aliases]
+    [Cmd]
+    [Aliases]
     [UserPerm(GuildPermission.ManageRoles)]
     public async Task RoleReward(int level, IRole role)
     {
@@ -784,7 +833,8 @@ public async Task TextRank([Remainder] IGuildUser? user = null)
     /// </summary>
     /// <param name="level">The level to remove the reward from.</param>
     /// <example>.removerr 10</example>
-    [Cmd, Aliases]
+    [Cmd]
+    [Aliases]
     [UserPerm(GuildPermission.ManageRoles)]
     public async Task RemoveRoleReward(int level)
     {
@@ -802,7 +852,8 @@ public async Task TextRank([Remainder] IGuildUser? user = null)
     ///     Lists all role rewards.
     /// </summary>
     /// <example>.rolerewards</example>
-    [Cmd, Aliases]
+    [Cmd]
+    [Aliases]
     public async Task RoleRewards()
     {
         var rewards = await Service.GetRoleRewardsAsync(ctx.Guild.Id);
@@ -836,7 +887,8 @@ public async Task TextRank([Remainder] IGuildUser? user = null)
     /// <param name="level">The level that triggers the reward.</param>
     /// <param name="amount">The amount of currency to award.</param>
     /// <example>.currencyreward 5 100</example>
-    [Cmd, Aliases]
+    [Cmd]
+    [Aliases]
     [UserPerm(GuildPermission.ManageGuild)]
     public async Task CurrencyReward(int level, long amount)
     {
@@ -867,7 +919,8 @@ public async Task TextRank([Remainder] IGuildUser? user = null)
     /// </summary>
     /// <param name="level">The level to remove the reward from.</param>
     /// <example>.removecr 5</example>
-    [Cmd, Aliases]
+    [Cmd]
+    [Aliases]
     [UserPerm(GuildPermission.ManageGuild)]
     public async Task RemoveCurrencyReward(int level)
     {
@@ -885,7 +938,8 @@ public async Task TextRank([Remainder] IGuildUser? user = null)
     ///     Lists all currency rewards.
     /// </summary>
     /// <example>.currencyrewards</example>
-    [Cmd, Aliases]
+    [Cmd]
+    [Aliases]
     public async Task CurrencyRewards()
     {
         var rewards = await Service.GetCurrencyRewardsAsync(ctx.Guild.Id);
@@ -921,9 +975,11 @@ public async Task TextRank([Remainder] IGuildUser? user = null)
     /// <param name="name">The name of the competition.</param>
     /// <example>.xpcompetition 1d MostGained Weekly XP Race</example>
     /// <example>.xpcompetition 3d ReachLevel 20 First to Level 20</example>
-    [Cmd, Aliases]
+    [Cmd]
+    [Aliases]
     [UserPerm(GuildPermission.ManageGuild)]
-    public async Task XpCompetition(StoopidTime time, XpCompetitionType type, int targetLevel = 0, [Remainder] string name = null)
+    public async Task XpCompetition(StoopidTime time, XpCompetitionType type, int targetLevel = 0,
+        [Remainder] string name = null)
     {
         if (time.Time.TotalMinutes < 60)
         {
@@ -979,7 +1035,8 @@ public async Task TextRank([Remainder] IGuildUser? user = null)
     /// <example>.addcompetitionreward 1 1 Role @Winner</example>
     /// <example>.addcompetitionreward 1 2 XP 1000</example>
     /// <example>.addcompetitionreward 1 3 Currency 500</example>
-    [Cmd, Aliases]
+    [Cmd]
+    [Aliases]
     [UserPerm(GuildPermission.ManageGuild)]
     public async Task AddCompetitionReward(int competitionId, int position, string type, [Remainder] string reward)
     {
@@ -1055,7 +1112,8 @@ public async Task TextRank([Remainder] IGuildUser? user = null)
     ///     Lists active XP competitions.
     /// </summary>
     /// <example>.xpcompetitions</example>
-    [Cmd, Aliases]
+    [Cmd]
+    [Aliases]
     public async Task XpCompetitions()
     {
         var competitions = await Service.GetActiveCompetitionsAsync(ctx.Guild.Id);
@@ -1091,7 +1149,8 @@ public async Task TextRank([Remainder] IGuildUser? user = null)
     /// </summary>
     /// <param name="competitionId">ID of the competition.</param>
     /// <example>.competitionlb 1</example>
-    [Cmd, Aliases]
+    [Cmd]
+    [Aliases]
     public async Task CompetitionLeaderboard(int competitionId)
     {
         var competition = await Service.GetCompetitionAsync(competitionId);
@@ -1129,6 +1188,7 @@ public async Task TextRank([Remainder] IGuildUser? user = null)
                     var gained = entry.CurrentXp - entry.StartingXp;
                     leaderboard.Add((username, gained.ToString("N0"), i + 1));
                 }
+
                 break;
 
             case XpCompetitionType.ReachLevel:
@@ -1145,6 +1205,7 @@ public async Task TextRank([Remainder] IGuildUser? user = null)
                     var achievedAt = (entry.AchievedTargetAt ?? DateTime.UtcNow).ToString("yyyy-MM-dd HH:mm:ss");
                     leaderboard.Add((username, achievedAt, i + 1));
                 }
+
                 break;
 
             case XpCompetitionType.HighestTotal:
@@ -1156,6 +1217,7 @@ public async Task TextRank([Remainder] IGuildUser? user = null)
                     var username = user?.ToString() ?? entry.UserId.ToString();
                     leaderboard.Add((username, entry.CurrentXp.ToString("N0"), i + 1));
                 }
+
                 break;
         }
 
@@ -1197,7 +1259,8 @@ public async Task TextRank([Remainder] IGuildUser? user = null)
     /// </summary>
     /// <param name="competitionId">ID of the competition to end.</param>
     /// <example>.endcompetition 1</example>
-    [Cmd, Aliases]
+    [Cmd]
+    [Aliases]
     [UserPerm(GuildPermission.ManageGuild)]
     public async Task EndCompetition(int competitionId)
     {
@@ -1211,11 +1274,13 @@ public async Task TextRank([Remainder] IGuildUser? user = null)
 
         if (competition.EndTime < DateTime.UtcNow)
         {
-            await ReplyErrorAsync(Strings.XpCompetitionAlreadyEnded(ctx.Guild.Id, competition.Name)).ConfigureAwait(false);
+            await ReplyErrorAsync(Strings.XpCompetitionAlreadyEnded(ctx.Guild.Id, competition.Name))
+                .ConfigureAwait(false);
             return;
         }
 
         await Service.FinalizeCompetitionAsync(competitionId);
-        await ReplyConfirmAsync(Strings.XpCompetitionManuallyEnded(ctx.Guild.Id, competition.Name)).ConfigureAwait(false);
+        await ReplyConfirmAsync(Strings.XpCompetitionManuallyEnded(ctx.Guild.Id, competition.Name))
+            .ConfigureAwait(false);
     }
 }

@@ -12,7 +12,7 @@ public static class DiscordUserExtensions
     /// <summary>
     ///     Ensures that a Discord user is created in the database. If the user already exists, updates the user information.
     /// </summary>
-    /// <param name="db">The database connection.</param>
+    /// <param name="dbFactory">The database connection.</param>
     /// <param name="userId">The ID of the Discord user.</param>
     /// <param name="username">The username of the Discord user.</param>
     /// <param name="avatarId">The avatar ID of the Discord user.</param>
@@ -54,7 +54,7 @@ public static class DiscordUserExtensions
     /// <summary>
     ///     Retrieves or creates a Discord user in the database.
     /// </summary>
-    /// <param name="db">The database connection.</param>
+    /// <param name="dbFactory">The database connection.</param>
     /// <param name="userId">The ID of the Discord user.</param>
     /// <param name="username">The username of the Discord user.</param>
     /// <param name="avatarId">The avatar ID of the Discord user.</param>
@@ -73,7 +73,7 @@ public static class DiscordUserExtensions
     /// <summary>
     ///     Retrieves or creates a Discord user in the database from an IUser instance.
     /// </summary>
-    /// <param name="db">The database connection.</param>
+    /// <param name="dbFactory">The database connection.</param>
     /// <param name="original">The IUser instance representing the Discord user.</param>
     /// <returns>The Discord user entity.</returns>
     public static async Task<DiscordUser> GetOrCreateUser(this MewdekoDb db, IUser? original)

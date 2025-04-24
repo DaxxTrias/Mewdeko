@@ -226,7 +226,27 @@ public class OwnerOnly(
         _ = Task.Run(() => commandHandler.ExecuteCommandsInChannelAsync(ctx.Channel.Id))
             .ConfigureAwait(false);
     }
+    /// <summary>
+    /// Generates command documentation YML files
+    /// </summary>
+    [Cmd]
+    [Aliases]
+    [OwnerOnly]
+    public async Task GenerateDocs()
+    {
+        await ctx.Channel.SendMessageAsync("⏱ Generating command documentation...");
 
+        try
+        {
+            await Service.GenerateDocumentationAsync("/home/sylv/RiderProjects/mewdeko/src/Mewdeko/Modules");
+            await ctx.Channel.SendMessageAsync("✅ Command documentation successfully generated!");
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Error generating command documentation");
+            await ctx.Channel.SendMessageAsync("❌ Error generating documentation. Check logs for details.");
+        }
+    }
 
     /// <summary>
     ///     Executes a Redis command and returns the result.

@@ -253,7 +253,7 @@ public class XpBackgroundProcessor : INService, IDisposable
                                     TotalXp = totalXp,
                                     LastActivity = DateTime.UtcNow,
                                     LastLevelUp = DateTime.UtcNow,
-                                    NotifyType = (int)XpNotificationType.Channel // Default
+                                    NotifyType = (int)XpNotificationType.None // Default
                                 };
 
                                 // Insert using LinqToDB

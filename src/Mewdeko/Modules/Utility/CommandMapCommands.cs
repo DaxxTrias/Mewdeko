@@ -14,7 +14,7 @@ public partial class Utility
     /// <summary>
     ///     Commands for managing command aliases.
     /// </summary>
-    /// <param name="db">The database service.</param>
+    /// <param name="dbFactory">The database service.</param>
     /// <param name="serv">The interactive service.</param>
     [Group]
     public class CommandMapCommands(IDataConnectionFactory dbFactory, InteractiveService serv, GuildSettingsService service)
