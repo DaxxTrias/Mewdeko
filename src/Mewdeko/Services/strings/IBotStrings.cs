@@ -46,4 +46,6 @@ public interface IBotStrings
     /// <param name="cultureInfo">The culture info specifying the locale of the command strings. Default is null.</param>
     /// <returns>The command strings.</returns>
     CommandStrings GetCommandStrings(string commandName, CultureInfo? cultureInfo);
+
+
 }

@@ -261,7 +261,7 @@ public partial class Utility
             };
 
             await using var db = await dbFactory.CreateConnectionAsync();
-            await db.InsertAsync(q);
+            q.Id = await db.InsertWithInt32IdentityAsync(q);
 
             await ReplyConfirmAsync(Strings.QuoteAddedNew(ctx.Guild.Id, Format.Code(q.Id.ToString()))).ConfigureAwait(false);
         }

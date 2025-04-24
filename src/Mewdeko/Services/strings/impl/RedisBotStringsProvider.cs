@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Web;
 using StackExchange.Redis;
 
@@ -48,21 +49,43 @@ public class RedisBotStringsProvider : IBotStringsProvider
     /// <returns>The command strings for the specified command and locale.</returns>
     public CommandStrings? GetCommandStrings(string localeName, string commandName)
     {
-        string argsStr = redis.GetDatabase()
-            .HashGet($"{creds.RedisKey()}:commands:{localeName}", $"{commandName}::args");
-        if (argsStr == default)
+        var redisDb = redis.GetDatabase();
+        string argsStr = redisDb.HashGet($"{creds.RedisKey()}:commands:{localeName}", $"{commandName}::args");
+        if (argsStr == null)
             return null;
 
-        var descStr = redis.GetDatabase()
-            .HashGet($"{creds.RedisKey()}:commands:{localeName}", $"{commandName}::desc");
+        var descStr = redisDb.HashGet($"{creds.RedisKey()}:commands:{localeName}", $"{commandName}::desc");
         if (descStr == default)
             return null;
 
+        var signatureStr = redisDb.HashGet($"{creds.RedisKey()}:commands:{localeName}", $"{commandName}::signature");
+        var paramsStr = redisDb.HashGet($"{creds.RedisKey()}:commands:{localeName}", $"{commandName}::params");
+
         var args = Array.ConvertAll(argsStr.Split('&'), HttpUtility.UrlDecode);
-        return new CommandStrings
+
+        var cmdStrings = new CommandStrings
         {
-            Args = args, Desc = descStr
+            Args = args,
+            Desc = descStr,
+            Signature = signatureStr
         };
+
+        // Parse parameters if they exist
+        if (string.IsNullOrEmpty(paramsStr)) return cmdStrings;
+        try
+        {
+            var parameters = JsonSerializer.Deserialize<List<ParameterString>>(
+                HttpUtility.UrlDecode(paramsStr));
+
+            if (parameters != null)
+                cmdStrings.Parameters = parameters;
+        }
+        catch (Exception)
+        {
+            // If there's an error deserializing, just continue with empty parameters
+        }
+
+        return cmdStrings;
     }
 
     /// <summary>
@@ -82,14 +105,138 @@ public class RedisBotStringsProvider : IBotStringsProvider
 
         foreach (var (localeName, localeStrings) in source.GetCommandStrings())
         {
-            var hashFields = localeStrings
-                .Select(x => new HashEntry($"{x.Key}::args",
-                    string.Join('&', Array.ConvertAll(x.Value.Args, HttpUtility.UrlEncode))))
-                .Concat(localeStrings
-                    .Select(x => new HashEntry($"{x.Key}::desc", x.Value.Desc)))
-                .ToArray();
+            List<HashEntry> hashFields = new();
 
-            redisDb.HashSet($"{creds.RedisKey()}:commands:{localeName}", hashFields);
+            foreach (var commandEntry in localeStrings)
+            {
+                // Add basic command information
+                hashFields.Add(new HashEntry(
+                    $"{commandEntry.Key}::args",
+                    string.Join('&', Array.ConvertAll(commandEntry.Value.Args, HttpUtility.UrlEncode))
+                ));
+
+                hashFields.Add(new HashEntry(
+                    $"{commandEntry.Key}::desc",
+                    commandEntry.Value.Desc
+                ));
+
+                // Add signature if available
+                if (!string.IsNullOrEmpty(commandEntry.Value.Signature))
+                {
+                    hashFields.Add(new HashEntry(
+                        $"{commandEntry.Key}::signature",
+                        commandEntry.Value.Signature
+                    ));
+                }
+
+                // Add parameters if available
+                if (commandEntry.Value.Parameters?.Count > 0)
+                {
+                    var paramsJson = JsonSerializer.Serialize(commandEntry.Value.Parameters);
+                    hashFields.Add(new HashEntry(
+                        $"{commandEntry.Key}::params",
+                        HttpUtility.UrlEncode(paramsJson)
+                    ));
+                }
+
+                // Add overloads if available
+                if (commandEntry.Value.Overloads?.Count > 0)
+                {
+                    for (var i = 0; i < commandEntry.Value.Overloads.Count; i++)
+                    {
+                        var overload = commandEntry.Value.Overloads[i];
+                        var overloadKey = $"{commandEntry.Key}_overload_{i}";
+
+                        hashFields.Add(new HashEntry(
+                            $"{overloadKey}::args",
+                            string.Join('&', Array.ConvertAll(overload.Args, HttpUtility.UrlEncode))
+                        ));
+
+                        hashFields.Add(new HashEntry(
+                            $"{overloadKey}::desc",
+                            overload.Desc
+                        ));
+
+                        if (!string.IsNullOrEmpty(overload.Signature))
+                        {
+                            hashFields.Add(new HashEntry(
+                                $"{overloadKey}::signature",
+                                overload.Signature
+                            ));
+                        }
+
+                        if (overload.Parameters?.Count > 0)
+                        {
+                            var paramsJson = JsonSerializer.Serialize(overload.Parameters);
+                            hashFields.Add(new HashEntry(
+                                $"{overloadKey}::params",
+                                HttpUtility.UrlEncode(paramsJson)
+                            ));
+                        }
+                    }
+                }
+            }
+
+            redisDb.HashSet($"{creds.RedisKey()}:commands:{localeName}", hashFields.ToArray());
         }
+    }
+
+    /// <summary>
+    ///     Retrieves overloaded versions of a command for the specified locale and command name.
+    /// </summary>
+    /// <param name="localeName">The name of the locale.</param>
+    /// <param name="commandName">The base name of the command.</param>
+    /// <returns>A list of overloaded versions of the command.</returns>
+    public List<CommandOverload> GetCommandOverloads(string localeName, string commandName)
+    {
+        var overloads = new List<CommandOverload>();
+        var redisDb = redis.GetDatabase();
+        var baseCommandKey = commandName.ToLowerInvariant();
+        var index = 0;
+
+        while (true)
+        {
+            var overloadKey = $"{baseCommandKey}_overload_{index}";
+
+            string argsStr = redisDb.HashGet($"{creds.RedisKey()}:commands:{localeName}", $"{overloadKey}::args");
+            if (argsStr == default)
+                break;
+
+            string descStr = redisDb.HashGet($"{creds.RedisKey()}:commands:{localeName}", $"{overloadKey}::desc");
+            string paramsStr = redisDb.HashGet($"{creds.RedisKey()}:commands:{localeName}", $"{overloadKey}::params");
+            string signatureStr =
+                redisDb.HashGet($"{creds.RedisKey()}:commands:{localeName}", $"{overloadKey}::signature");
+
+            var args = Array.ConvertAll(argsStr.Split('&'), HttpUtility.UrlDecode);
+
+            // Create the overload
+            var overload = new CommandOverload
+            {
+                Args = args, Desc = descStr, Signature = signatureStr
+            };
+
+            // Parse parameters if they exist
+            if (!string.IsNullOrEmpty(paramsStr))
+            {
+                try
+                {
+                    // Deserialize parameters from JSON
+                    var parameters = JsonSerializer.Deserialize<List<ParameterString>>(
+                        HttpUtility.UrlDecode(paramsStr));
+
+                    if (parameters != null)
+                        overload.Parameters = parameters;
+                }
+                catch (Exception)
+                {
+                    // If there's an error deserializing, just continue with empty parameters
+                }
+            }
+
+            overloads.Add(overload);
+            index++;
+        }
+
+        return overloads;
     }
 }

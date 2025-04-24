@@ -290,7 +290,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
             var dbUser = await dbContext.GetOrCreateUser(msg.Author);
             if (!guildConfig.StatsOptOut && !dbUser.StatsOptOut)
             {
-                var toAdd = new DataModel.CommandStat
+                var toAdd = new CommandStat
                 {
                     ChannelId = msg.Channel.Id,
                     Trigger = true,

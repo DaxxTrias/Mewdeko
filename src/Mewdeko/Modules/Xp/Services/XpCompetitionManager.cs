@@ -77,7 +77,7 @@ public class XpCompetitionManager : INService, IDisposable
     /// <summary>
     ///     Updates competition entries with new XP data.
     /// </summary>
-    /// <param name="db">The database connection.</param>
+    /// <param name="dbFactory">The database connection.</param>
     /// <param name="updates">The list of competition updates.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
     public async Task UpdateCompetitionsAsync(MewdekoDb db, List<CompetitionUpdateItem> updates)

@@ -33,7 +33,7 @@ public static class WarnExtensions
     ///
     /// </summary>
     /// <param name="set"></param>
-    /// <param name="db"></param>
+    /// <param name="dbFactory"></param>
     /// <param name="guildId"></param>
     /// <param name="userId"></param>
     /// <param name="mod"></param>
@@ -81,7 +81,7 @@ public static class WarnExtensions
     ///
     /// </summary>
     /// <param name="set"></param>
-    /// <param name="db"></param>
+    /// <param name="dbFactory"></param>
     /// <param name="guildId"></param>
     /// <param name="userId"></param>
     /// <param name="mod"></param>

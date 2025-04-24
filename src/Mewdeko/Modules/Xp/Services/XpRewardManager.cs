@@ -41,7 +41,7 @@ public class XpRewardManager : INService
     /// <summary>
     ///     Gets the role reward for a specific level.
     /// </summary>
-    /// <param name="db">The database connection.</param>
+    /// <param name="dbFactory">The database connection.</param>
     /// <param name="guildId">The guild ID.</param>
     /// <param name="level">The level.</param>
     /// <returns>The role reward for the specified level, or null if none exists.</returns>
@@ -78,7 +78,7 @@ public class XpRewardManager : INService
     /// <summary>
     ///     Gets the currency reward for a specific level.
     /// </summary>
-    /// <param name="db">The database connection.</param>
+    /// <param name="dbFactory">The database connection.</param>
     /// <param name="guildId">The guild ID.</param>
     /// <param name="level">The level.</param>
     /// <returns>The currency reward for the specified level, or null if none exists.</returns>
@@ -389,7 +389,7 @@ public class XpRewardManager : INService
     /// <summary>
     ///     Gets the highest level reward for a user from a group of rewards.
     /// </summary>
-    /// <param name="db">The database connection.</param>
+    /// <param name="dbFactory">The database connection.</param>
     /// <param name="guildId">The guild ID.</param>
     /// <param name="userRewards">The user's rewards.</param>
     /// <returns>The highest level reward.</returns>

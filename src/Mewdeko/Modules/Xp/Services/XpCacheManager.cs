@@ -49,7 +49,7 @@ public class XpCacheManager : INService
     /// <summary>
     ///     Gets or creates a guild user XP record.
     /// </summary>
-    /// <param name="db">The database connection.</param>
+    /// <param name="dbFactory">The database connection.</param>
     /// <param name="guildId">The guild ID.</param>
     /// <param name="userId">The user ID.</param>
     /// <returns>The guild user XP record.</returns>
@@ -394,6 +394,42 @@ public class XpCacheManager : INService
         catch (Exception ex)
         {
             Log.Error(ex, "Error cleaning up caches");
+        }
+    }
+
+    /// <summary>
+    ///     Clears all XP-related caches for a specific guild.
+    /// </summary>
+    /// <param name="guildId">The guild ID.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    public async Task ClearGuildXpCachesAsync(ulong guildId)
+    {
+        try
+        {
+            // Get the Redis server instance
+            var server = dataCache.Redis.GetServer(dataCache.Redis.GetEndPoints().First());
+
+            // Clear all user XP cache entries for this guild
+            var userXpPattern = $"xp:guild_user:{guildId}:*";
+
+            // Clear all leaderboard cache entries for this guild
+            var leaderboardPattern = $"xp:leaderboard:{guildId}:*";
+
+            // Get all keys matching our patterns
+            var cacheKeys = server.Keys(pattern: userXpPattern)
+                .Concat(server.Keys(pattern: leaderboardPattern))
+                .ToArray();
+
+            if (cacheKeys.Length > 0)
+            {
+                // Delete all cache keys in a single batch operation
+                await redisCache.KeyDeleteAsync(cacheKeys);
+                Log.Debug("Cleared {KeyCount} cache entries for guild {GuildId}", cacheKeys.Length, guildId);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Error clearing XP caches for guild {GuildId}", guildId);
         }
     }
 }

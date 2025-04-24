@@ -22,7 +22,7 @@ public class InviteCountService : INService, IReadyExecutor
     /// Service for counting invites
     /// </summary>
     /// <param name="handler"></param>
-    /// <param name="db"></param>
+    /// <param name="dbFactory"></param>
     public InviteCountService(EventHandler handler, IDataConnectionFactory dbFactory, DiscordShardedClient client)
     {
         this.dbFactory = dbFactory;
