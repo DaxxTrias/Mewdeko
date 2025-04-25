@@ -1,7 +1,6 @@
 using Mewdeko.Modules.Currency.Services;
-using Mewdeko.Services.Strings;
-using Serilog;
 using Mewdeko.Modules.Xp.Models;
+using Serilog;
 
 namespace Mewdeko.Modules.Xp.Services;
 
@@ -52,13 +51,8 @@ public partial class XpService : INService, IUnloadableService
     #region Fields
 
     internal readonly DiscordShardedClient Client;
-    internal readonly CommandHandler CommandHandler;
     internal readonly IDataConnectionFactory dbFactory;
-    internal readonly IDataCache DataCache;
-    internal readonly IBotCredentials Credentials;
     internal readonly EventHandler EventHandler;
-    internal readonly ICurrencyService CurrencyService;
-    internal readonly GeneratedBotStrings Strings;
 
 
     // Core components
@@ -73,34 +67,23 @@ public partial class XpService : INService, IUnloadableService
     #region Constructor and Initialization
 
     /// <summary>
-    ///     Initializes a new instance of the <see cref="XpService"/> class.
+    ///     Initializes a new instance of the <see cref="XpService" /> class.
     /// </summary>
     /// <param name="client">The Discord client.</param>
-    /// <param name="commandHandler">The command handler.</param>
     /// <param name="dbFactory">The database context provider.</param>
-    /// <param name="strings">The string localization service.</param>
     /// <param name="dataCache">The data cache service.</param>
-    /// <param name="credentials">The bot credentials.</param>
     /// <param name="eventHandler">The Discord event handler.</param>
     /// <param name="currencyService">The currency service.</param>
     public XpService(
         DiscordShardedClient client,
-        CommandHandler commandHandler,
         IDataConnectionFactory dbFactory,
-        GeneratedBotStrings strings,
         IDataCache dataCache,
-        IBotCredentials credentials,
         EventHandler eventHandler,
         ICurrencyService currencyService)
     {
         Client = client;
-        CommandHandler = commandHandler;
         this.dbFactory = dbFactory;
-        Strings = strings;
-        DataCache = dataCache;
-        Credentials = credentials;
         EventHandler = eventHandler;
-        CurrencyService = currencyService;
 
         // Initialize sub-components
         cacheManager = new XpCacheManager(dataCache, dbFactory, client);
@@ -264,5 +247,4 @@ public partial class XpService : INService, IUnloadableService
     }
 
     #endregion
-
 }

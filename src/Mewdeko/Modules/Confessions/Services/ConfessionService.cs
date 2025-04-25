@@ -1,7 +1,5 @@
 ﻿using DataModel;
 using LinqToDB;
-using LinqToDB.Common.Logging;
-using LinqToDB.Data;
 using Mewdeko.Common.Configs;
 using Serilog;
 

@@ -1,7 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using Mewdeko.Database.EF.EFCore.Base;
-using Mewdeko.Database.EF.EFCore.Enums;
+using Mewdeko.Modules.Xp.Models;
 
 namespace Mewdeko.Database.EF.EFCore.Xp;
 

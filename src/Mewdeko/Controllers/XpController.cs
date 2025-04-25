@@ -1,6 +1,6 @@
 using DataModel;
 using LinqToDB;
-using Mewdeko.Database.EF.EFCore.Enums;
+using Mewdeko.Modules.Xp.Models;
 using Mewdeko.Modules.Xp.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
