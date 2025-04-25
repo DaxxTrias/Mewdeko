@@ -662,7 +662,7 @@ public class XpBackgroundProcessor : INService, IDisposable
                 }
                 catch (Exception ex)
                 {
-                    Log.Error(ex, "Error processing XP decay for guild {GuildId}", settings.GuildId);
+                    Log.Error("Error processing XP decay for guild {GuildId}:{ex}", settings.GuildId, ex);
                 }
             }
         }
