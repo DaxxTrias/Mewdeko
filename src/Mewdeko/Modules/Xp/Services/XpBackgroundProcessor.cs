@@ -557,15 +557,28 @@ public class XpBackgroundProcessor : INService, IDisposable
             // Bulk update existing records
             if (xpRecordsToUpdate.Count > 0)
             {
-                await db.GuildUserXps.BulkCopyAsync(xpRecordsToUpdate);
+                var tempTable = xpRecordsToUpdate.AsQueryable();
 
-                // Update cache for updated records
+                await db.GuildUserXps
+                    .Merge()
+                    .Using(tempTable)
+                    .OnTargetKey()
+                    .UpdateWhenMatched(
+                        (target, source) => new GuildUserXp
+                        {
+                            TotalXp = source.TotalXp,
+                            LastActivity = source.LastActivity,
+                            LastLevelUp = source.LastLevelUp,
+                            NotifyType = source.NotifyType
+                        })
+                    .MergeAsync();
+
                 foreach (var record in xpRecordsToUpdate)
                 {
                     cacheManager.UpdateUserXpCacheAsync(record);
                 }
 
-                Log.Debug("Bulk updated {Count} existing XP records for guild {GuildId}",
+                Log.Debug("Merged {Count} existing XP records for guild {GuildId}",
                     xpRecordsToUpdate.Count, guildId);
             }
         }
