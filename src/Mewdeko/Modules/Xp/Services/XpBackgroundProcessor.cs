@@ -542,10 +542,7 @@ public class XpBackgroundProcessor : INService, IDisposable
             // Bulk insert new records
             if (xpRecordsToInsert.Count > 0)
             {
-                await db.BulkCopyAsync(new BulkCopyOptions
-                {
-                    TableName = "GuildUserXps"
-                }, xpRecordsToInsert);
+                await db.GuildUserXps.BulkCopyAsync(xpRecordsToInsert);
 
                 // Update cache for new records
                 foreach (var record in xpRecordsToInsert)
@@ -560,7 +557,7 @@ public class XpBackgroundProcessor : INService, IDisposable
             // Bulk update existing records
             if (xpRecordsToUpdate.Count > 0)
             {
-                await db.BulkCopyAsync(xpRecordsToUpdate);
+                await db.GuildUserXps.BulkCopyAsync(xpRecordsToUpdate);
 
                 // Update cache for updated records
                 foreach (var record in xpRecordsToUpdate)
