@@ -2,7 +2,6 @@ using System.IO;
 using System.Text.Json;
 using DataModel;
 using LinqToDB;
-using Mewdeko.Database.EF.EFCore.Enums;
 using Mewdeko.Modules.Xp.Models;
 using Serilog;
 using UserXpStats = Mewdeko.Modules.Xp.Models.UserXpStats;
@@ -22,15 +21,6 @@ public partial class XpService
     /// </summary>
     public static XpService Instance { get; private set; }
 
-
-    /// <summary>
-    ///     Gets the Discord client.
-    /// </summary>
-    /// <returns>The Discord client.</returns>
-    public DiscordShardedClient GetClient()
-    {
-        return Client;
-    }
 
     /// <summary>
     ///     Gets the background processor.
@@ -148,9 +138,16 @@ public partial class XpService
         var possibleData = await red.StringGetAsync(cacheKey);
         if (possibleData.HasValue)
         {
-            var possibleDeserialize = JsonSerializer.Deserialize<List<UserXpStats>>(possibleData);
-            if (possibleDeserialize != null)
-                return possibleDeserialize;
+            try
+            {
+                var possibleDeserialize = JsonSerializer.Deserialize<List<UserXpStats>>(possibleData);
+                if (possibleDeserialize != null)
+                    return possibleDeserialize;
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Failed to deserialize leaderboard data for guild {GuildId}", guildId);
+            }
         }
 
         // Calculate skip
@@ -196,6 +193,7 @@ public partial class XpService
 
         return result;
     }
+
 
     /// <summary>
     ///     Resets a user's XP in a guild.

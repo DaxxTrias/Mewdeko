@@ -5,12 +5,10 @@ using Fergun.Interactive.Pagination;
 using Humanizer;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Common.TypeReaders.Models;
-using Mewdeko.Database.EF.EFCore.Enums;
 using Mewdeko.Modules.Currency.Services;
 using Mewdeko.Modules.Xp.Models;
 using Mewdeko.Modules.Xp.Services;
 using Serilog;
-using XpCurveType = Mewdeko.Database.EF.EFCore.Enums.XpCurveType;
 
 namespace Mewdeko.Modules.Xp;
 
@@ -130,64 +128,67 @@ public class Xp(InteractiveService serv, ICurrencyService currencyService) : Mew
     }
 
     /// <summary>
-    ///     Shows the XP leaderboard for the server.
-    /// </summary>
-    /// <param name="page">Page number to display (starts at 1).</param>
-    /// <example>.leaderboard</example>
-    /// <example>.leaderboard 2</example>
-    [Cmd]
-    [Aliases]
-    public async Task Leaderboard(int page = 1)
+///     Shows the XP leaderboard for the server.
+/// </summary>
+/// <param name="page">Page number to display (starts at 1).</param>
+/// <example>.leaderboard</example>
+/// <example>.leaderboard 2</example>
+[Cmd]
+[Aliases]
+public async Task Leaderboard(int page = 1)
+{
+    if (page < 1)
+        page = 1;
+
+    var serverLb = await Service.GetLeaderboardAsync(ctx.Guild.Id, page);
+
+    if (serverLb.Count == 0)
     {
-        if (page < 1)
-            page = 1;
-
-        var serverLb = await Service.GetLeaderboardAsync(ctx.Guild.Id, page);
-
-        if (serverLb.Count == 0)
-        {
-            await ReplyErrorAsync(Strings.XpLeaderboardEmpty(ctx.Guild.Id)).ConfigureAwait(false);
-            return;
-        }
-
-        var paginator = new LazyPaginatorBuilder()
-            .AddUser(ctx.User)
-            .WithPageFactory(PageFactory)
-            .WithFooter(PaginatorFooter.PageNumber | PaginatorFooter.Users)
-            .WithMaxPageIndex((await Service.GetLeaderboardAsync(ctx.Guild.Id, 1, int.MaxValue)).Count / 10)
-            .WithDefaultEmotes()
-            .WithActionOnCancellation(ActionOnStop.DeleteMessage)
-            .Build();
-
-        await serv.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
-
-        async Task<PageBuilder> PageFactory(int pageNum)
-        {
-            var users = await Service.GetLeaderboardAsync(ctx.Guild.Id, pageNum + 1);
-
-            var embed = new PageBuilder()
-                .WithOkColor()
-                .WithTitle(Strings.XpLeaderboardTitle(ctx.Guild.Id));
-
-            var lb = new List<string>();
-
-            foreach (var user in users)
-            {
-                var userObj = await ctx.Guild.GetUserAsync(user.UserId);
-                var username = userObj?.ToString() ?? user.UserId.ToString();
-
-                lb.Add(Strings.XpLeaderboardLine(
-                    ctx.Guild.Id,
-                    user.Rank,
-                    username,
-                    user.Level,
-                    user.TotalXp));
-            }
-
-            embed.WithDescription(string.Join("\n", lb));
-            return embed;
-        }
+        await ReplyErrorAsync(Strings.XpLeaderboardEmpty(ctx.Guild.Id)).ConfigureAwait(false);
+        return;
     }
+
+    var users = await ctx.Guild.GetUsersAsync();
+
+    var userDict = users.ToDictionary(u => u.Id, u => u);
+
+    var paginator = new LazyPaginatorBuilder()
+        .AddUser(ctx.User)
+        .WithPageFactory(pageNum => BuildPage(pageNum, userDict))
+        .WithFooter(PaginatorFooter.PageNumber | PaginatorFooter.Users)
+        .WithDefaultEmotes()
+        .WithActionOnCancellation(ActionOnStop.DeleteMessage)
+        .Build();
+
+    await serv.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
+    return;
+
+    async Task<PageBuilder> BuildPage(int pageNum, Dictionary<ulong, IGuildUser> userLookup)
+    {
+        var pageUsers = await Service.GetLeaderboardAsync(ctx.Guild.Id, pageNum + 1);
+
+        var embed = new PageBuilder()
+            .WithOkColor()
+            .WithTitle(Strings.XpLeaderboardTitle(ctx.Guild.Id));
+
+        var lb = new List<string>();
+
+        foreach (var user in pageUsers)
+        {
+            var username = userLookup.TryGetValue(user.UserId, out var guildUser) ? guildUser.ToString() : user.UserId.ToString();
+
+            lb.Add(Strings.XpLeaderboardLine(
+                ctx.Guild.Id,
+                user.Rank,
+                username,
+                user.Level,
+                user.TotalXp));
+        }
+
+        embed.WithDescription(string.Join("\n", lb));
+        return embed;
+    }
+}
 
     /// <summary>
     ///     Adds XP to a user.

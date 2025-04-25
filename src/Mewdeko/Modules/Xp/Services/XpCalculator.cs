@@ -1,4 +1,4 @@
-using Mewdeko.Database.EF.EFCore.Enums;
+using Mewdeko.Modules.Xp.Models;
 
 namespace Mewdeko.Modules.Xp.Services;
 
