@@ -571,7 +571,7 @@ public class XpBackgroundProcessor : INService, IDisposable
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error executing bulk operations for guild {GuildId}", guildId);
+            Log.Error("Error executing bulk operations for guild {GuildId}:{ex}", guildId, ex);
         }
     }
 
