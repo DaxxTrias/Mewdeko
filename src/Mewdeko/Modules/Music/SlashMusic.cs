@@ -37,18 +37,6 @@ public class SlashMusic(
     [CheckPermissions]
     public async Task Join()
     {
-        var userVoiceChannel = (Context.User as IVoiceState)?.VoiceChannel;
-        if (userVoiceChannel == null)
-        {
-            var eb = new EmbedBuilder()
-                .WithErrorColor()
-                //.WithDescription(GetText("music_not_in_channel"));
-                .WithDescription(Strings.MusicNotInChannel(ctx.Guild.Id));
-
-            await Context.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
-            return;
-        }
-
         var (player, result) = await GetPlayerAsync();
         if (string.IsNullOrWhiteSpace(result))
             await ReplyConfirmAsync(Strings.MusicJoinSuccess(ctx.Guild.Id, player.VoiceChannelId))
@@ -157,13 +145,6 @@ public class SlashMusic(
         await player.StopAsync();
         await player.PlayAsync(trackToPlay.Track).ConfigureAwait(false);
         await cache.SetCurrentTrack(Context.Guild.Id, trackToPlay);
-
-        // Update the indices of the tracks in the queue
-        for (var i = 0; i < queue.Count; i++)
-        {
-            queue[i].Index = i + 1;
-        }
-        await cache.SetMusicQueue(ctx.Guild.Id, queue);
     }
 
     /// <summary>
@@ -663,55 +644,6 @@ public class SlashMusic(
 
         await player.SetRepeatTypeAsync(repeatType).ConfigureAwait(false);
         await ReplyConfirmAsync(Strings.MusicRepeatType(ctx.Guild.Id, repeatType)).ConfigureAwait(false);
-
-        if (repeatType == PlayerRepeatType.Shuffle)
-        {
-            await ShuffleQueue();
-        }
-    }
-
-    /// <summary>
-    ///     Shuffles the music queue
-    /// </summary>
-    [SlashCommand("shufflequeue", "Shuffles the music queue")]
-    [RequireContext(ContextType.Guild)]
-    [CheckPermissions]
-    public async Task ShuffleQueue()
-    {
-        var (player, result) = await GetPlayerAsync(false);
-        if (result is not null)
-        {
-            var eb = new EmbedBuilder()
-                .WithErrorColor()
-                .WithTitle(Strings.MusicPlayerError(ctx.Guild.Id))
-                .WithDescription(result);
-
-            await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
-            return;
-        }
-
-        var queue = await cache.GetMusicQueue(ctx.Guild.Id);
-        if (queue.Count == 0)
-        {
-            await ReplyErrorAsync("music_queue_empty").ConfigureAwait(false);
-            return;
-        }
-
-        var shuffledQueue = queue.Shuffle().ToList();
-
-        // verify shuffled
-        if (queue.SequenceEqual(shuffledQueue))
-        {
-            await ReplyErrorAsync("music_queue_shuffle_failed").ConfigureAwait(false);
-            return;
-        }
-
-        // debug log it
-        Log.Information("Shuffled Queue: {Queue}", string.Join(", ", shuffledQueue.Select(x => x.Track.Title)));
-
-
-        await cache.SetMusicQueue(ctx.Guild.Id, shuffledQueue);
-        await ReplyConfirmAsync("music_queue_shuffled").ConfigureAwait(false);
     }
 
     /// <summary>
@@ -725,7 +657,8 @@ public class SlashMusic(
     {
         await DeferAsync();
 
-        if (ctx.User.Id != userId) return;
+        if (ctx.User.Id != userId)
+            return;
 
         var componentInteraction = ctx.Interaction as IComponentInteraction;
 
@@ -744,7 +677,9 @@ public class SlashMusic(
         queue.AddRange(
             selectedTracks.Select(track => new MewdekoTrack(startIndex++, track, new PartialUser
             {
-                Id = ctx.User.Id, Username = ctx.User.Username, AvatarUrl = ctx.User.GetAvatarUrl()
+                Id = ctx.User.Id,
+                Username = ctx.User.Username,
+                AvatarUrl = ctx.User.GetAvatarUrl()
             })));
 
         if (selectedTracks.Count == 1)
@@ -792,7 +727,9 @@ public class SlashMusic(
             await cache.SetCurrentTrack(ctx.Guild.Id,
                 new MewdekoTrack(1, selectedTracks[0], new PartialUser
                 {
-                    Id = ctx.User.Id, Username = ctx.User.Username, AvatarUrl = ctx.User.GetAvatarUrl()
+                    Id = ctx.User.Id,
+                    Username = ctx.User.Username,
+                    AvatarUrl = ctx.User.GetAvatarUrl()
                 }));
             await player.PlayAsync(selectedTracks[0]);
         }
@@ -948,7 +885,8 @@ public class SlashMusic(
                 var track = await spotify.Tracks.Get(id);
                 var searchQuery = $"{track.Name} {string.Join(" ", track.Artists.Select(a => a.Name))}";
                 var ytTrack = await service.Tracks.LoadTrackAsync(searchQuery, TrackSearchMode.YouTube);
-                if (ytTrack != null) tracks.Add(ytTrack);
+                if (ytTrack != null)
+                    tracks.Add(ytTrack);
             }
             else if (url.Contains("/album/"))
             {
@@ -975,7 +913,8 @@ public class SlashMusic(
                              $"{track.Name} {string.Join(" ", track.Artists.Select(a => a.Name))}"))
                 {
                     var ytTrack = await service.Tracks.LoadTrackAsync(searchQuery, TrackSearchMode.YouTube);
-                    if (ytTrack == null) continue;
+                    if (ytTrack == null)
+                        continue;
                     tracks.Add(ytTrack);
 
                     // Play first track immediately if queue is empty
@@ -1036,11 +975,13 @@ public class SlashMusic(
 
                 foreach (var item in playlist.Tracks.Items)
                 {
-                    if (item.Track is not FullTrack track) continue;
+                    if (item.Track is not FullTrack track)
+                        continue;
 
                     var searchQuery = $"{track.Name} {string.Join(" ", track.Artists.Select(a => a.Name))}";
                     var ytTrack = await service.Tracks.LoadTrackAsync(searchQuery, TrackSearchMode.YouTube);
-                    if (ytTrack == null) continue;
+                    if (ytTrack == null)
+                        continue;
                     tracks.Add(ytTrack);
 
                     // Play first track immediately if queue is empty
@@ -1093,15 +1034,18 @@ public class SlashMusic(
     /// </summary>
     private async Task AddTracksToQueue(List<LavalinkTrack> tracks, List<MewdekoTrack> queue, MewdekoPlayer player)
     {
-        if (!tracks.Any()) return;
+        if (!tracks.Any())
+            return;
 
         var startIndex = queue.Count + 1;
         var addedTracks = new List<MewdekoTrack>();
 
         foreach (var mewdekoTrack in tracks.Select(track => new MewdekoTrack(startIndex++, track, new PartialUser
-                 {
-                     Id = Context.User.Id, Username = Context.User.Username, AvatarUrl = Context.User.GetAvatarUrl()
-                 })))
+        {
+            Id = Context.User.Id,
+            Username = Context.User.Username,
+            AvatarUrl = Context.User.GetAvatarUrl()
+        })))
         {
             queue.Add(mewdekoTrack);
             addedTracks.Add(mewdekoTrack);
@@ -1327,7 +1271,8 @@ public class SlashMusic(
 
             await result.Player.SetVolumeAsync(await result.Player.GetVolume() / 100f).ConfigureAwait(false);
 
-            if (result.IsSuccess) return (result.Player, null);
+            if (result.IsSuccess)
+                return (result.Player, null);
             var errorMessage = result.Status switch
             {
                 PlayerRetrieveStatus.UserNotInVoiceChannel => Strings.MusicNotInChannel(ctx.Guild.Id),
