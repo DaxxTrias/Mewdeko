@@ -24,9 +24,7 @@ public class XpVoiceTracker : INService, IDisposable
     private TimeSpan voiceXpInterval = TimeSpan.FromSeconds(60); // Start with 1 minute, adjust based on load
     private readonly SemaphoreSlim voiceProcessingSemaphore = new(1, 1); // Ensure only one processing task at a time
 
-    // Constants to prevent abuse
-    private const int MAX_ACTIVE_SESSIONS = 5000; // Limit total active sessions
-    private const int MIN_USERS_FOR_XP = 2; // Need at least 2 users for XP
+    private const int MinUsersForXp = 2; // Need at least 2 users for XP
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="XpVoiceTracker" /> class.
@@ -80,16 +78,7 @@ public class XpVoiceTracker : INService, IDisposable
                 (before.VoiceChannel == null || before.VoiceChannel.Id != after.VoiceChannel.Id))
             {
                 // Only start session if we're below the max limit
-                if (voiceSessions.Count < MAX_ACTIVE_SESSIONS)
-                {
-                    await StartVoiceSession(guildUser, after.VoiceChannel);
-                }
-                else
-                {
-                    Log.Warning(
-                        "Voice session limit reached ({Count}/{Max}). Cannot start session for {UserId} in {GuildId}",
-                        voiceSessions.Count, MAX_ACTIVE_SESSIONS, guildUser.Id, guildUser.Guild.Id);
-                }
+                await StartVoiceSession(guildUser, after.VoiceChannel);
             }
         }
         catch (Exception ex)
@@ -105,14 +94,6 @@ public class XpVoiceTracker : INService, IDisposable
     /// <returns>A task representing the asynchronous operation.</returns>
     public async Task ScanGuildVoiceChannels(SocketGuild guild)
     {
-        // Early exit if we're already at the session limit
-        if (voiceSessions.Count >= MAX_ACTIVE_SESSIONS)
-        {
-            Log.Warning("Cannot scan guild voice channels: session limit reached ({Count}/{Max})",
-                voiceSessions.Count, MAX_ACTIVE_SESSIONS);
-            return;
-        }
-
         // Batch process voice channels
         var validChannels = guild.VoiceChannels
             .Where(ShouldTrackVoiceChannel)
@@ -123,10 +104,6 @@ public class XpVoiceTracker : INService, IDisposable
             try
             {
                 await ScanVoiceChannel(channel);
-
-                // Break if we reach the limit during scanning
-                if (voiceSessions.Count >= MAX_ACTIVE_SESSIONS)
-                    break;
             }
             catch (Exception ex)
             {
@@ -146,8 +123,7 @@ public class XpVoiceTracker : INService, IDisposable
     {
         // Skip if excluded or if voice XP is disabled or if we've reached the limit
         if (!ShouldTrackVoiceChannel(voiceChannel) ||
-            !await CanGainVoiceXp(user.Id, user.Guild.Id, voiceChannel.Id) ||
-            voiceSessions.Count >= MAX_ACTIVE_SESSIONS)
+            !await CanGainVoiceXp(user.Id, user.Guild.Id, voiceChannel.Id))
             return;
 
         var key = GetVoiceSessionKey(user.Id, voiceChannel.Id);
@@ -499,10 +475,6 @@ public class XpVoiceTracker : INService, IDisposable
         if (!ShouldTrackVoiceChannel(voiceChannel))
             return;
 
-        // Check if we have space for potential new sessions
-        var potentialNewSessions = voiceChannel.Users.Count(u => !u.IsBot && IsParticipatingInVoice(u));
-        if (voiceSessions.Count + potentialNewSessions > MAX_ACTIVE_SESSIONS)
-            return;
 
         // Check for channel exclusion once instead of per user
         if (!await CanChannelGainXp(voiceChannel.Guild.Id, voiceChannel.Id))
@@ -529,7 +501,7 @@ public class XpVoiceTracker : INService, IDisposable
     private bool ShouldTrackVoiceChannel(SocketVoiceChannel channel)
     {
         // Need at least MIN_USERS_FOR_XP non-bot, participating users
-        return channel.Users.Count(u => !u.IsBot && IsParticipatingInVoice(u)) >= MIN_USERS_FOR_XP;
+        return channel.Users.Count(u => !u.IsBot && IsParticipatingInVoice(u)) >= MinUsersForXp;
     }
 
     /// <summary>
