@@ -92,6 +92,28 @@ public interface IDataCache
     Task<List<MusicPlaylist>> GetPlaylists(ulong userId);
 
     /// <summary>
+    ///     Sets the player state for a specific guild.
+    /// </summary>
+    /// <param name="guildId">The ID of the guild.</param>
+    /// <param name="state">The player state to save.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    Task SetPlayerState(ulong guildId, MusicPlayerState state);
+
+    /// <summary>
+    ///     Retrieves the player state for a specific guild.
+    /// </summary>
+    /// <param name="guildId">The ID of the guild.</param>
+    /// <returns>The player state if found; otherwise, null.</returns>
+    Task<MusicPlayerState?> GetPlayerState(ulong guildId);
+
+    /// <summary>
+    ///     Removes the player state for a specific guild.
+    /// </summary>
+    /// <param name="guildId">The ID of the guild.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    Task RemovePlayerState(ulong guildId);
+
+    /// <summary>
     ///     Deletes a playlist.
     /// </summary>
     /// <param name="userId">The guild ID.</param>

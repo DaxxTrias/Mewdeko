@@ -26,6 +26,7 @@ namespace Mewdeko.Modules.Music.CustomPlayer;
 public sealed class MewdekoPlayer : LavalinkPlayer
 {
     private readonly IAudioService audioService;
+    private PlayerStateTracker stateTracker;
     private readonly BotConfig config;
     private readonly IBotCredentials creds;
     private readonly HttpClient httpClient;
@@ -59,6 +60,7 @@ public sealed class MewdekoPlayer : LavalinkPlayer
         dbFactory = properties.ServiceProvider.GetRequiredService<IDataConnectionFactory>();
         cache = properties.ServiceProvider.GetRequiredService<IDataCache>();
         Strings = properties.ServiceProvider.GetRequiredService<GeneratedBotStrings>();
+        stateTracker = new PlayerStateTracker(this, cache);
     }
 
 
@@ -71,6 +73,8 @@ public sealed class MewdekoPlayer : LavalinkPlayer
     protected override async ValueTask NotifyTrackEndedAsync(ITrackQueueItem item, TrackEndReason reason,
         CancellationToken token = default)
     {
+        if (stateTracker != null && (State == PlayerState.Playing || State == PlayerState.Paused))
+            await stateTracker.ForceUpdate();
         var musicChannel = await GetMusicChannel();
         var queue = await cache.GetMusicQueue(GuildId);
         var currentTrack = await cache.GetCurrentTrack(GuildId);
@@ -147,6 +151,7 @@ public sealed class MewdekoPlayer : LavalinkPlayer
     protected override async ValueTask NotifyTrackStartedAsync(ITrackQueueItem track,
         CancellationToken cancellationToken = default)
     {
+        await stateTracker.ForceUpdate();
         var queue = await cache.GetMusicQueue(GuildId);
         var currentTrack = await cache.GetCurrentTrack(GuildId);
         var musicChannel = await GetMusicChannel();
@@ -634,6 +639,25 @@ public async Task<bool> AutoPlay()
         return settings.Volume;
     }
 
+
+    /// <inheritdoc />
+    public override async ValueTask SeekAsync(TimeSpan position, CancellationToken cancellationToken = default)
+    {
+        await base.SeekAsync(position, cancellationToken);
+
+        var state = new MusicPlayerState
+        {
+            GuildId = GuildId,
+            VoiceChannelId = VoiceChannelId,
+            CurrentPosition = position,
+            IsPlaying = State == PlayerState.Playing,
+            IsPaused = State == PlayerState.Paused,
+            Volume = Volume,
+            LastUpdateTime = DateTime.UtcNow
+        };
+
+        await cache.SetPlayerState(GuildId, state);
+    }
 
     /// <summary>
     ///     Sets the volume for the player.
