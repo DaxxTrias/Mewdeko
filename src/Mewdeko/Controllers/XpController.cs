@@ -4,6 +4,7 @@ using Mewdeko.Modules.Xp.Models;
 using Mewdeko.Modules.Xp.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Serilog;
 
 namespace Mewdeko.Controllers;
 
@@ -39,6 +40,9 @@ public class XpController(XpService xp, DiscordShardedClient client, IDataConnec
         if (settings.GuildId != guildId)
             return BadRequest("Guild ID mismatch");
 
+        var currentSettings = await xp.GetGuildXpSettingsAsync(guildId);
+        var curveTypeChanged = currentSettings.XpCurveType != settings.XpCurveType;
+
         var updatedSettings = await xp.UpdateGuildXpSettingsAsync(guildId, s =>
         {
             if (settings.XpPerMessage > 0) s.XpPerMessage = settings.XpPerMessage;
@@ -50,6 +54,21 @@ public class XpController(XpService xp, DiscordShardedClient client, IDataConnec
             s.CustomXpImageUrl = settings.CustomXpImageUrl;
             s.XpGainDisabled = settings.XpGainDisabled;
         });
+
+        if (curveTypeChanged)
+        {
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await xp.RecomputeAllLevelsAsync(guildId, (XpCurveType)settings.XpCurveType);
+                }
+                catch (Exception ex)
+                {
+                    Log.Error(ex, "Error recomputing levels for guild {GuildId}", guildId);
+                }
+            });
+        }
 
         return Ok(updatedSettings);
     }
@@ -159,7 +178,7 @@ public class XpController(XpService xp, DiscordShardedClient client, IDataConnec
         var enrichedLeaderboard = new List<object>();
         var guild = client.GetGuild(guildId);
 
-        foreach (var entry in leaderboard)
+        foreach (var entry in leaderboard.Users)
         {
             var username = "Unknown";
             string avatarUrl = null;

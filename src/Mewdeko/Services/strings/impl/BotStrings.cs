@@ -136,8 +136,8 @@ public CommandStrings GetCommandStrings(string commandName, CultureInfo? culture
     {
         Args = [ "" ],
         Desc = "?",
-        Parameters = new List<ParameterString>(),
-        Overloads = new List<CommandOverload>()
+        Parameters = [],
+        Overloads = []
     };
 }
 
@@ -201,13 +201,13 @@ public class CommandStrings
     ///     Parameter information for this command
     /// </summary>
     [YamlMember(Alias = "params")]
-    public List<ParameterString> Parameters { get; set; } = new();
+    public List<ParameterString> Parameters { get; set; } = [];
 
     /// <summary>
     ///     Overloaded versions of this command (if any)
     /// </summary>
     [YamlMember(Alias = "overloads")]
-    public List<CommandOverload> Overloads { get; set; } = new();
+    public List<CommandOverload> Overloads { get; set; } = [];
 
     /// <summary>
     ///     The method signature for this command (for overload identification)
@@ -279,13 +279,13 @@ public class CommandOverload
     ///     Gets or sets the usage examples for this overload
     /// </summary>
     [YamlMember(Alias = "args")]
-    public string[] Args { get; set; } = Array.Empty<string>();
+    public string[] Args { get; set; } = [];
 
     /// <summary>
     ///     Gets or sets the parameters for this overload
     /// </summary>
     [YamlMember(Alias = "params")]
-    public List<ParameterString> Parameters { get; set; } = new();
+    public List<ParameterString> Parameters { get; set; } = [];
 
     /// <summary>
     ///     Gets or sets the signature for this overload

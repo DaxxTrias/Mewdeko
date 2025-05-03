@@ -297,11 +297,10 @@ public class XpCardGenerator : INService
 
         var rect = new SKRect(0, 0, width, height);
         using var roundRect = new SKRoundRect();
-        roundRect.SetRectRadii(rect, new[]
-        {
+        roundRect.SetRectRadii(rect, [
             new SKPoint(cornerRadius, cornerRadius), new SKPoint(cornerRadius, cornerRadius),
             new SKPoint(cornerRadius, cornerRadius), new SKPoint(cornerRadius, cornerRadius)
-        });
+        ]);
 
         // Clear canvas and create clipping region
         canvas.Clear(SKColors.Transparent);

@@ -491,13 +491,13 @@ namespace Mewdeko.Database.Migrations.PostgreSql
             migrationBuilder.CreateIndex(
                 name: "IX_GroupName_GuildId_Number",
                 table: "GroupName",
-                columns: new[] { "GuildId", "Number" },
+                columns: ["GuildId", "Number"],
                 unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_CommandAlias_GuildId_Trigger",
                 table: "CommandAlias",
-                columns: new[] { "GuildId", "Trigger" });
+                columns: ["GuildId", "Trigger"]);
 
             migrationBuilder.CreateIndex(
                 name: "IX_CommandCooldown_GuildId",
@@ -512,18 +512,18 @@ namespace Mewdeko.Database.Migrations.PostgreSql
             migrationBuilder.CreateIndex(
                 name: "IX_WarningPunishment2_GuildId_Count",
                 table: "WarningPunishment2",
-                columns: new[] { "GuildId", "Count" },
+                columns: ["GuildId", "Count"],
                 unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_UnmuteTimer_GuildId_UserId",
                 table: "UnmuteTimer",
-                columns: new[] { "GuildId", "UserId" });
+                columns: ["GuildId", "UserId"]);
 
             migrationBuilder.CreateIndex(
                 name: "IX_UnbanTimer_GuildId_UserId",
                 table: "UnbanTimer",
-                columns: new[] { "GuildId", "UserId" });
+                columns: ["GuildId", "UserId"]);
 
             migrationBuilder.CreateIndex(
                 name: "IX_GuildRepeater_GuildId",
@@ -533,7 +533,7 @@ namespace Mewdeko.Database.Migrations.PostgreSql
             migrationBuilder.CreateIndex(
                 name: "IX_FeedSub_GuildId_Url",
                 table: "FeedSub",
-                columns: new[] { "GuildId", "Url" },
+                columns: ["GuildId", "Url"],
                 unique: true);
 
             // 5. Drop the old GuildConfigId columns

@@ -654,7 +654,7 @@ public class AfkService : INService, IReadyExecutor, IDisposable
                 var prefix = await guildSettings.GetPrefix(user.Guild); // Fetch prefix using GuildSettingsService
                 if (msg.Content.StartsWith(prefix)) return; // Ignore commands
 
-                var disabledChannels = guildConfig.AfkDisabledChannels?.Split(',') ?? Array.Empty<string>();
+                var disabledChannels = guildConfig.AfkDisabledChannels?.Split(',') ?? [];
                 if (disabledChannels.Contains(msg.Channel.Id.ToString())) return;
 
                 foreach (var mentionedUser in msg.MentionedUsers.Take(5)) // Limit checks per message

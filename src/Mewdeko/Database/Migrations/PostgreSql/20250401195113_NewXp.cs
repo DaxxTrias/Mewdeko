@@ -391,7 +391,7 @@ namespace Mewdeko.Database.Migrations.PostgreSql
             migrationBuilder.CreateIndex(
                 name: "IX_XpExcludedItems_ItemId_ItemType",
                 table: "XpExcludedItems",
-                columns: new[] { "ItemId", "ItemType" });
+                columns: ["ItemId", "ItemType"]);
 
             migrationBuilder.CreateIndex(
                 name: "IX_XpRoleMultipliers_GuildId",
@@ -421,7 +421,7 @@ namespace Mewdeko.Database.Migrations.PostgreSql
             migrationBuilder.CreateIndex(
                 name: "IX_XpUserSnapshots_GuildId_UserId",
                 table: "XpUserSnapshots",
-                columns: new[] { "GuildId", "UserId" });
+                columns: ["GuildId", "UserId"]);
 
             migrationBuilder.CreateIndex(
                 name: "IX_XpUserSnapshots_Timestamp",
@@ -607,7 +607,7 @@ namespace Mewdeko.Database.Migrations.PostgreSql
             migrationBuilder.CreateIndex(
                 name: "IX_UserXpStats_UserId_GuildId",
                 table: "UserXpStats",
-                columns: new[] { "UserId", "GuildId" },
+                columns: ["UserId", "GuildId"],
                 unique: true);
 
             migrationBuilder.CreateIndex(
@@ -648,7 +648,7 @@ namespace Mewdeko.Database.Migrations.PostgreSql
             migrationBuilder.CreateIndex(
                 name: "IX_XpRoleReward_XpSettingsId_Level",
                 table: "XpRoleReward",
-                columns: new[] { "XpSettingsId", "Level" },
+                columns: ["XpSettingsId", "Level"],
                 unique: true);
 
             migrationBuilder.CreateIndex(

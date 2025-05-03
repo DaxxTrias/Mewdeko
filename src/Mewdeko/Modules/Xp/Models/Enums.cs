@@ -54,7 +54,12 @@ public enum XpCurveType
     /// <summary>
     ///     Custom curve defined by formula.
     /// </summary>
-    Custom = 4
+    Custom = 4,
+
+    /// <summary>
+    /// Uses the old xp curve approach before the xp rewrite.
+    /// </summary>
+    Legacy = 5
 }
 
 /// <summary>

@@ -38,10 +38,10 @@ public sealed class MewdekoPlayer : LavalinkPlayer
     private readonly Random random = new();
     private bool isAprilFoolsJokeRunning;
 
-    private readonly string[] soundIds = new[]
-    {
+    private readonly string[] soundIds =
+    [
         "1356473693294825603", "1356473638899159050", "1356473603775922256"
-    };
+    ];
 
     private const ulong SourceGuildId = 843489716674494475;
 

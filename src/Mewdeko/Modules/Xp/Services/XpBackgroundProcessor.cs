@@ -21,34 +21,50 @@ public class XpBackgroundProcessor : INService, IDisposable
     private readonly XpCompetitionManager competitionManager;
 
     // Multi-threaded queue for XP updates with bounded capacity
-    private readonly ConcurrentQueue<XpGainItem> xpUpdateQueue = new();
-    private readonly NonBlocking.ConcurrentDictionary<ulong, byte> activeUserIds = new(); // Set to track active users
+    private readonly BlockingCollection<XpGainItem> xpQueue;
 
-    // Constants for processing limits and throttling
-    private const int MaxQueueSize = 50000;
-    private const int BatchSize = 200;
-    private const int MaxConcurrentDbOps = 3;
+    private readonly NonBlocking.ConcurrentDictionary<(ulong GuildId, ulong UserId), List<XpGainItem>> batchingBuffer =
+        new();
 
-    // Thread-safe processing flags
-    private int processingInProgress;
+    private readonly NonBlocking.ConcurrentDictionary<ulong, byte> activeUserIds = new();
+    private readonly NonBlocking.ConcurrentDictionary<ulong, DateTime> recentlyActiveUsers = new();
+
+    // Constants for processing configuration
+    private const int QueueCapacity = 500000;
+    private const int OptimalBatchSize = 1000;
+    private const int MaxConcurrentDbOps = 16;
+    private const int DbMaxRetries = 3;
+
+    // Processing state
     private long totalProcessed;
     private readonly SemaphoreSlim dbThrottle;
+    private DateTime lastActiveUserCleanup = DateTime.UtcNow;
 
-    // Timers for background processing
+    private volatile int isProcessing;
+
+    // Timers
     private readonly Timer processingTimer;
     private readonly Timer decayTimer;
     private readonly Timer cleanupTimer;
 
-    // Adaptive timing parameters
-    private TimeSpan processingInterval = TimeSpan.FromSeconds(5);
+    // Processing parameters
+    private readonly TimeSpan minProcessingInterval = TimeSpan.FromMilliseconds(200);
+    private readonly TimeSpan maxProcessingInterval = TimeSpan.FromSeconds(5);
+    private TimeSpan currentProcessingInterval = TimeSpan.FromSeconds(1);
+
+    // Settings cache to reduce lookups
+    private readonly NonBlocking.ConcurrentDictionary<ulong, (GuildXpSetting Settings, DateTime CacheTime)>
+        settingsCache = new();
+
+    private readonly TimeSpan settingsCacheTtl = TimeSpan.FromMinutes(5);
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="XpBackgroundProcessor" /> class.
     /// </summary>
     /// <param name="dbFactory">The database context provider.</param>
-    /// <param name="cacheManager">The cache manager.</param>
-    /// <param name="rewardManager">The reward manager.</param>
-    /// <param name="competitionManager">The competition manager.</param>
+    /// <param name="cacheManager">The cache manager for XP operations.</param>
+    /// <param name="rewardManager">The reward manager for handling XP rewards.</param>
+    /// <param name="competitionManager">The competition manager for handling XP competitions.</param>
     public XpBackgroundProcessor(
         IDataConnectionFactory dbFactory,
         XpCacheManager cacheManager,
@@ -60,59 +76,141 @@ public class XpBackgroundProcessor : INService, IDisposable
         this.rewardManager = rewardManager;
         this.competitionManager = competitionManager;
 
-        // Initialize throttling with optimal concurrency
+        // Initialize thread-safe bounded queue with backpressure
+        xpQueue = new BlockingCollection<XpGainItem>(QueueCapacity);
+
+        // Initialize database throttling with optimal concurrency
         dbThrottle = new SemaphoreSlim(MaxConcurrentDbOps, MaxConcurrentDbOps);
 
-        // Initialize background processing timers with adaptive intervals
-        processingTimer = new Timer(ProcessXpBatch, null, TimeSpan.FromSeconds(5), processingInterval);
+        // Initialize single adaptive processing timer
+        processingTimer = new Timer(ProcessXpBatches, null, TimeSpan.FromSeconds(1), currentProcessingInterval);
         decayTimer = new Timer(ProcessXpDecay, null, TimeSpan.FromHours(12), TimeSpan.FromHours(12));
         cleanupTimer = new Timer(CleanupCaches, null, TimeSpan.FromHours(2), TimeSpan.FromHours(2));
 
-        Log.Information("XP Background Processor initialized with batch size {BatchSize}, " +
-                        "max queue size {MaxQueueSize}, and {Concurrency} concurrent operations",
-            BatchSize, MaxQueueSize, MaxConcurrentDbOps);
+        Log.Information(
+            "XP Background Processor initialized with queue capacity {Capacity} and {Concurrency} concurrent DB operations",
+            QueueCapacity, MaxConcurrentDbOps);
+
+        // Start background consumer task
+        Task.Run(BackgroundConsumer);
     }
 
     /// <summary>
-    ///     Queues an XP gain for processing with overflow protection.
+    ///     Background task that constantly takes items from the blocking queue and adds them to the batching buffer.
+    /// </summary>
+    private async Task BackgroundConsumer()
+    {
+        while (!xpQueue.IsCompleted)
+        {
+            try
+            {
+                // Take one item at a time from the blocking queue
+                if (xpQueue.TryTake(out var item, 100))
+                {
+                    var key = (item.GuildId, item.UserId);
+
+                    // Add to batching buffer, grouped by guild and user
+                    batchingBuffer.AddOrUpdate(
+                        key,
+                        _ => [item],
+                        (_, existing) =>
+                        {
+                            lock (existing)
+                            {
+                                existing.Add(item);
+                                return existing;
+                            }
+                        });
+
+                    // Track activity
+                    activeUserIds[item.UserId] = 0;
+                    recentlyActiveUsers[item.UserId] = DateTime.UtcNow;
+                }
+
+                // Trigger processing if buffer is getting full, regardless of timer
+                if (batchingBuffer.Count > OptimalBatchSize * 2 && isProcessing != 1)
+                {
+                    ProcessXpBatches(null);
+                }
+
+                // Yield to other tasks occasionally
+                await Task.Delay(1);
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Error in XP background consumer");
+            }
+        }
+    }
+
+    /// <summary>
+    ///     Queues an XP gain for processing. Uses backpressure for high load.
     /// </summary>
     /// <param name="guildId">The guild ID.</param>
     /// <param name="userId">The user ID.</param>
     /// <param name="amount">The amount of XP to add.</param>
-    /// <param name="channelId">The channel ID.</param>
+    /// <param name="channelId">The channel ID where the XP was earned.</param>
     /// <param name="source">The source of the XP gain.</param>
     public void QueueXpGain(ulong guildId, ulong userId, int amount, ulong channelId, XpSource source)
     {
         if (amount <= 0)
             return;
 
-        // Check queue size to prevent memory issues
-        if (xpUpdateQueue.Count >= MaxQueueSize)
+        try
         {
-            // Log warning if this is the first overflow
-            if (xpUpdateQueue.Count == MaxQueueSize)
+            // Check for server exclusion using local cache to avoid Redis calls for known excluded servers
+            if (settingsCache.TryGetValue(guildId, out var settingsData) &&
+                DateTime.UtcNow - settingsData.CacheTime < settingsCacheTtl)
             {
-                Log.Warning("XP update queue overflow! Queue size has reached {Size} items. " +
-                            "Some XP updates will be dropped until the queue is processed.",
-                    MaxQueueSize);
+                if (settingsData.Settings.XpGainDisabled)
+                    return;
             }
 
-            return;
+            var item = new XpGainItem
+            {
+                GuildId = guildId,
+                UserId = userId,
+                Amount = amount,
+                ChannelId = channelId,
+                Source = source,
+                Timestamp = DateTime.UtcNow
+            };
+
+            // Try to add with timeout - if we can't add within 100ms, we aggregate with existing items
+            if (!xpQueue.TryAdd(item, 100))
+            {
+                var key = (guildId, userId);
+
+                // If queue is full, try to combine with existing items in the batching buffer
+                if (batchingBuffer.TryGetValue(key, out var existingItems))
+                {
+                    lock (existingItems)
+                    {
+                        existingItems.Add(item);
+                    }
+                }
+                else
+                {
+                    // If we can't add to the queue and no existing batch, log warning
+                    if (Random.Shared.Next(100) == 0) // Only log occasionally to prevent log spam
+                    {
+                        Log.Warning("XP queue at capacity ({QueueSize}), using fallback buffering", xpQueue.Count);
+                    }
+
+                    // Create new batch (could still fail but last resort)
+                    batchingBuffer.TryAdd(key, [item]);
+                }
+            }
+
+            // If queue is getting too full, adjust processing interval to be more aggressive
+            if (!(xpQueue.Count > QueueCapacity * 0.8) || currentProcessingInterval <= minProcessingInterval) return;
+            currentProcessingInterval = minProcessingInterval;
+            processingTimer.Change(TimeSpan.Zero, currentProcessingInterval);
         }
-
-        // Add to processing queue
-        xpUpdateQueue.Enqueue(new XpGainItem
+        catch (Exception ex)
         {
-            GuildId = guildId,
-            UserId = userId,
-            Amount = amount,
-            ChannelId = channelId,
-            Source = source,
-            Timestamp = DateTime.UtcNow
-        });
-
-        // Track active user
-        activeUserIds[userId] = 0; // Value doesn't matter, using as a set
+            Log.Error(ex, "Error queueing XP gain for user {UserId} in guild {GuildId}", userId, guildId);
+        }
     }
 
     /// <summary>
@@ -127,14 +225,11 @@ public class XpBackgroundProcessor : INService, IDisposable
         if (await cacheManager.IsServerExcludedAsync(user.Guild.Id))
             return;
 
-        // Check for first message of the day using atomic Redis operations
         var key = $"xp:first_msg:{user.Guild.Id}:{user.Id}";
         var dateString = DateTime.UtcNow.ToString("yyyy-MM-dd");
-
-        // Use Redis for distributed first-message tracking
         var redis = cacheManager.GetRedisDatabase();
 
-        // Atomic operation: Only set if the key doesn't exist or has different value
+        // Atomic operation: Only set if the key doesn't exist
         var wasSet = await redis.StringSetAsync(
             key,
             dateString,
@@ -144,7 +239,7 @@ public class XpBackgroundProcessor : INService, IDisposable
 
         if (wasSet)
         {
-            // Award first message bonus (only if first message of the day)
+            // Award first message bonus
             var settings = await cacheManager.GetGuildXpSettingsAsync(user.Guild.Id);
             if (settings.FirstMessageBonus > 0)
             {
@@ -156,449 +251,651 @@ public class XpBackgroundProcessor : INService, IDisposable
                     XpSource.FirstMessage
                 );
             }
+
+            // Update local settings cache
+            settingsCache[user.Guild.Id] = (settings, DateTime.UtcNow);
         }
     }
 
     /// <summary>
-    ///     Processes batches of XP updates with adaptive timing.
+    ///     Main processing method for batched XP updates.
     /// </summary>
-    private async void ProcessXpBatch(object state)
+    /// <param name="state">The state object (not used).</param>
+    private async void ProcessXpBatches(object state)
     {
-        // Skip if already processing or queue is empty
-        if (Interlocked.CompareExchange(ref processingInProgress, 1, 0) != 0 ||
-            xpUpdateQueue.IsEmpty)
-        {
+        if (Interlocked.Exchange(ref isProcessing, 1) != 0)
             return;
-        }
 
         var startTime = DateTime.UtcNow;
         var itemsProcessed = 0;
-        var batchSize = Math.Min(BatchSize, xpUpdateQueue.Count);
 
         try
         {
-            // Dequeue items into a batch
-            var batchItems = new List<XpGainItem>(batchSize);
-            while (batchItems.Count < batchSize && xpUpdateQueue.TryDequeue(out var item))
+            // Take a snapshot of the current batching buffer to process
+            var snapshot = new Dictionary<(ulong, ulong), List<XpGainItem>>();
+
+            foreach (var kvp in batchingBuffer)
             {
-                batchItems.Add(item);
-                itemsProcessed++;
+                var items = kvp.Value;
+                // Skip empty batches
+                if (items.Count == 0)
+                    continue;
+
+                // Take the batch and replace with empty list atomically
+                batchingBuffer.TryUpdate(kvp.Key, [], items);
+                snapshot.Add(kvp.Key, items);
             }
 
-            if (batchItems.Count == 0)
-                return;
-
-            // Group items by guild and user for bulk processing
-            var groupedByGuild = batchItems
-                .GroupBy(x => x.GuildId)
-                .ToDictionary(g => g.Key, g => g.ToList());
-
-            // Process each guild with a throttled connection
-            if (await dbThrottle.WaitAsync(TimeSpan.FromSeconds(5)))
+            if (snapshot.Count == 0)
             {
+                // If no items to process, adjust interval to be less aggressive
+                if (currentProcessingInterval >= maxProcessingInterval) return;
+                currentProcessingInterval = TimeSpan.FromMilliseconds(
+                    Math.Min(maxProcessingInterval.TotalMilliseconds,
+                        currentProcessingInterval.TotalMilliseconds * 1.5));
+                processingTimer.Change(currentProcessingInterval, currentProcessingInterval);
+
+                return;
+            }
+
+            // Group by guild for efficient processing
+            var guildGroups = snapshot
+                .SelectMany(kvp => kvp.Value.Select(item => (item.GuildId, item, kvp.Key)))
+                .GroupBy(x => x.GuildId)
+                .Select(g => (GuildId: g.Key, Items: g.Select(x => (x.item, x.Key)).ToList()))
+                .ToList();
+
+            // Process each guild's data in parallel with throttling
+            await Task.WhenAll(guildGroups.Select(async group =>
+            {
+                // Wait for available DB connection slot
+                await dbThrottle.WaitAsync();
                 try
                 {
-                    await ProcessXpBatchForGuilds(groupedByGuild);
+                    // Process this guild's XP updates
+                    var processed = await ProcessGuildXpBatch(group.GuildId, group.Items);
+                    Interlocked.Add(ref itemsProcessed, processed);
                 }
                 finally
                 {
                     dbThrottle.Release();
                 }
-            }
-            else
-            {
-                Log.Warning("Could not acquire database throttle after waiting 5 seconds");
-
-                // Re-queue items if we couldn't process them
-                foreach (var item in batchItems)
-                {
-                    // Only re-queue if we're not at capacity
-                    if (xpUpdateQueue.Count < MaxQueueSize)
-                    {
-                        xpUpdateQueue.Enqueue(item);
-                    }
-                }
-            }
+            }));
 
             // Update statistics
             Interlocked.Add(ref totalProcessed, itemsProcessed);
 
-            // Adjust timing based on performance
+            // Adjust processing interval based on load and performance
             AdjustProcessingInterval(startTime, itemsProcessed);
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error processing XP batch");
+            Log.Error(ex, "Error processing XP batches");
         }
         finally
         {
-            // Reset processing flag
-            Interlocked.Exchange(ref processingInProgress, 0);
+            // Reset processing flag - use 0 to indicate not processing
+            Interlocked.Exchange(ref isProcessing, 0);
         }
     }
 
     /// <summary>
     ///     Adjusts the processing interval based on load and performance.
     /// </summary>
+    /// <param name="startTime">The time processing started.</param>
+    /// <param name="itemsProcessed">The number of items processed.</param>
     private void AdjustProcessingInterval(DateTime startTime, int itemsProcessed)
     {
         if (itemsProcessed == 0)
             return;
 
-        var elapsedMs = (DateTime.UtcNow - startTime).TotalMilliseconds;
-        var queueSize = xpUpdateQueue.Count;
+        var processingTime = DateTime.UtcNow - startTime;
+        var queueSize = xpQueue.Count;
 
-        // Calculate target interval based on current load
-        var targetInterval = TimeSpan.FromSeconds(5); // Default
+        // Calculate optimal interval based on current conditions
+        TimeSpan targetInterval;
 
-        if (queueSize > 1000)
+        if (queueSize > QueueCapacity * 0.5)
         {
             // High load - process more frequently
-            targetInterval = TimeSpan.FromSeconds(1);
+            targetInterval = minProcessingInterval;
         }
-        else if (queueSize > 500)
+        else if (queueSize > QueueCapacity * 0.2)
         {
             // Medium load
-            targetInterval = TimeSpan.FromSeconds(2);
+            targetInterval = TimeSpan.FromMilliseconds(Math.Min(1000, processingTime.TotalMilliseconds * 2));
         }
-        else if (queueSize < 100 && elapsedMs < 100)
+        else
         {
-            // Light load - save resources
-            targetInterval = TimeSpan.FromSeconds(10);
+            // Light load - conserve resources
+            targetInterval = TimeSpan.FromMilliseconds(Math.Min(maxProcessingInterval.TotalMilliseconds,
+                processingTime.TotalMilliseconds * 5));
         }
 
-        // Only change timer if significantly different (to avoid timer thrashing)
-        if (Math.Abs((targetInterval - processingInterval).TotalSeconds) > 1)
-        {
-            processingInterval = targetInterval;
-            processingTimer.Change(processingInterval, processingInterval);
-
-            Log.Debug(
-                "Adjusted XP processing interval to {Interval}s based on queue size {QueueSize} and processing time {ProcessingTime}ms",
-                processingInterval.TotalSeconds, queueSize, elapsedMs);
-        }
+        // Only change timer if interval changes significantly
+        if (!(Math.Abs((targetInterval - currentProcessingInterval).TotalMilliseconds) > 200)) return;
+        currentProcessingInterval = targetInterval;
+        processingTimer.Change(currentProcessingInterval, currentProcessingInterval);
     }
 
     /// <summary>
-    ///     Processes XP updates for multiple guilds in a batch using a single connection.
+    ///     Processes XP updates for a single guild.
     /// </summary>
-    private async Task ProcessXpBatchForGuilds(Dictionary<ulong, List<XpGainItem>> groupedByGuild)
+    /// <param name="guildId">The guild ID.</param>
+    /// <param name="items">The list of items to process with their keys.</param>
+    /// <returns>The number of items processed.</returns>
+    private async Task<int> ProcessGuildXpBatch(ulong guildId,
+        List<(XpGainItem Item, (ulong GuildId, ulong UserId) Key)> items)
     {
-        if (groupedByGuild.Count == 0)
-            return;
+        // Skip if no items
+        if (items.Count == 0)
+            return 0;
 
-        var notificationsToSend = new List<XpNotification>();
-        var roleRewardsToGrant = new List<RoleRewardItem>();
-        var currencyRewardsToGrant = new List<CurrencyRewardItem>();
-        var competitionUpdates = new List<CompetitionUpdateItem>();
-
-        // Get a single connection for the entire batch
-        await using var db = await dbFactory.CreateConnectionAsync();
-
-        foreach (var guildEntry in groupedByGuild)
+        try
         {
-            var guildId = guildEntry.Key;
-            var guildItems = guildEntry.Value;
+            // Get a single DB connection for the entire batch
+            await using var db = await dbFactory.CreateConnectionAsync();
 
-            try
+            // Get guild settings from cache manager
+            var settings = await cacheManager.GetGuildXpSettingsAsync(guildId);
+
+            // Update local cache for quick access
+            settingsCache[guildId] = (settings, DateTime.UtcNow);
+
+            // Skip if XP is disabled for this guild
+            if (settings.XpGainDisabled)
+                return 0;
+
+            // Get active competitions
+            var activeCompetitions = await competitionManager.GetActiveCompetitionsAsync(guildId);
+
+            // Aggregation step: Sum XP gains by user and track last items
+            var userXpAggregation = new Dictionary<ulong, (int TotalXp, XpGainItem LastItem, List<XpSource> Sources)>();
+
+            foreach (var (item, _) in items)
             {
-                // Get guild settings once for the entire guild
-                var settings = await cacheManager.GetGuildXpSettingsAsync(guildId);
-
-                // Skip if XP is disabled for this guild
-                if (settings.XpGainDisabled)
-                    continue;
-
-                // Check if this guild has active competitions (once per guild)
-                var activeCompetitions = await competitionManager.GetActiveCompetitionsAsync(guildId);
-
-                // Process each user's combined XP in this guild
-                var userGroups = guildItems.GroupBy(x => x.UserId)
-                    .ToDictionary(g => g.Key, g => g.ToList());
-
-                // Process all users in this guild as a batch
-                await ProcessUserBatchForGuild(
-                    db,
-                    guildId,
-                    userGroups,
-                    settings,
-                    activeCompetitions,
-                    notificationsToSend,
-                    roleRewardsToGrant,
-                    currencyRewardsToGrant,
-                    competitionUpdates);
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "Error processing XP batch for guild {GuildId}", guildId);
-            }
-        }
-
-        // Process all notifications and rewards after all users are updated
-        await Task.WhenAll(
-            rewardManager.SendNotificationsAsync(notificationsToSend),
-            rewardManager.GrantRoleRewardsAsync(roleRewardsToGrant),
-            rewardManager.GrantCurrencyRewardsAsync(currencyRewardsToGrant),
-            competitionManager.UpdateCompetitionsAsync(db, competitionUpdates)
-        );
-    }
-
-    /// <summary>
-    ///     Processes a batch of users for a specific guild with bulk operations.
-    /// </summary>
-    private async Task ProcessUserBatchForGuild(
-        MewdekoDb db,
-        ulong guildId,
-        Dictionary<ulong, List<XpGainItem>> userGroups,
-        GuildXpSetting settings,
-        List<XpCompetition> activeCompetitions,
-        List<XpNotification> notificationsToSend,
-        List<RoleRewardItem> roleRewardsToGrant,
-        List<CurrencyRewardItem> currencyRewardsToGrant,
-        List<CompetitionUpdateItem> competitionUpdates)
-    {
-        if (userGroups.Count == 0)
-            return;
-
-        // Get all user IDs in this batch
-        var userIds = userGroups.Keys.ToList();
-
-        // Get all existing XP records for these users in a single query
-        var existingUserXp = await db.GuildUserXps
-            .Where(x => x.GuildId == guildId && userIds.Contains(x.UserId))
-            .ToDictionaryAsync(k => k.UserId, v => v);
-
-        // Prepare collections for bulk operations
-        var xpRecordsToInsert = new List<GuildUserXp>();
-        var xpRecordsToUpdate = new List<GuildUserXp>();
-        var now = DateTime.UtcNow;
-
-        // Process each user
-        foreach (var userEntry in userGroups)
-        {
-            var userId = userEntry.Key;
-            var userItems = userEntry.Value;
-
-            // Calculate total XP for this user
-            var totalXpGain = userItems.Sum(x => x.Amount);
-            if (totalXpGain <= 0)
-                continue;
-
-            // Get last message details for notifications
-            var lastItem = userItems.OrderByDescending(x => x.Timestamp).FirstOrDefault();
-            if (lastItem == null)
-                continue;
-
-            var sources = string.Join(", ", userItems.Select(x => x.Source.ToString()).Distinct());
-
-            try
-            {
-                // Check if user exists in the DB already
-                if (existingUserXp.TryGetValue(userId, out var userXp))
+                if (!userXpAggregation.TryGetValue(item.UserId, out var existing))
                 {
-                    // Calculate levels before update
-                    var oldLevel = XpCalculator.CalculateLevel(userXp.TotalXp, (XpCurveType)settings.XpCurveType);
-
-                    // Update XP and last activity
-                    userXp.TotalXp += totalXpGain;
-                    userXp.LastActivity = now;
-
-                    // Calculate new level
-                    var newLevel = XpCalculator.CalculateLevel(userXp.TotalXp, (XpCurveType)settings.XpCurveType);
-
-                    // Check for level up
-                    if (newLevel > oldLevel)
+                    userXpAggregation[item.UserId] = (item.Amount, item, [item.Source]);
+                }
+                else
+                {
+                    // Sum XP and keep track of last message per timestamp
+                    var sources = existing.Sources;
+                    if (!sources.Contains(item.Source))
                     {
-                        userXp.LastLevelUp = now;
+                        sources.Add(item.Source);
+                    }
 
-                        // Add notification if enabled
-                        if ((XpNotificationType)userXp.NotifyType != XpNotificationType.None)
+                    userXpAggregation[item.UserId] = (
+                        existing.TotalXp + item.Amount,
+                        item.Timestamp > existing.LastItem.Timestamp ? item : existing.LastItem,
+                        sources);
+                }
+            }
+
+            // Prepare result collections
+            var notifications = new List<XpNotification>();
+            var roleRewards = new List<RoleRewardItem>();
+            var currencyRewards = new List<CurrencyRewardItem>();
+            var competitionUpdates = new List<CompetitionUpdateItem>();
+
+            // Cache for role and currency rewards
+            var roleRewardCache = new Dictionary<int, XpRoleReward>();
+            var currencyRewardCache = new Dictionary<int, XpCurrencyReward>();
+
+            // Get all users in one query
+            var userIds = userXpAggregation.Keys.ToList();
+            var existingUserXp = await db.GuildUserXps
+                .Where(x => x.GuildId == guildId && userIds.Contains(x.UserId))
+                .ToDictionaryAsync(k => k.UserId, v => v);
+
+            // Prepare collections for DB operations
+            var insertRecords = new List<GuildUserXp>();
+            var updateRecords = new List<GuildUserXp>();
+            var now = DateTime.UtcNow;
+
+            // Process each user
+            foreach (var (userId, (totalXp, lastItem, sources)) in userXpAggregation)
+            {
+                try
+                {
+                    var sourcesText = string.Join(", ", sources.Select(s => s.ToString()));
+
+                    // Check if user exists
+                    if (existingUserXp.TryGetValue(userId, out var userXp))
+                    {
+                        // Update existing user
+                        var oldLevel = XpCalculator.CalculateLevel(userXp.TotalXp, (XpCurveType)settings.XpCurveType);
+
+                        // Update XP and last activity
+                        userXp.TotalXp += totalXp;
+                        userXp.LastActivity = now;
+
+                        // Calculate new level
+                        var newLevel = XpCalculator.CalculateLevel(userXp.TotalXp, (XpCurveType)settings.XpCurveType);
+
+                        // Handle level up
+                        if (newLevel > oldLevel)
                         {
-                            notificationsToSend.Add(new XpNotification
+                            userXp.LastLevelUp = now;
+
+                            // Add notification
+                            if ((XpNotificationType)userXp.NotifyType != XpNotificationType.None)
+                            {
+                                notifications.Add(new XpNotification
+                                {
+                                    GuildId = guildId,
+                                    UserId = userId,
+                                    Level = newLevel,
+                                    ChannelId = lastItem.ChannelId,
+                                    NotificationType = (XpNotificationType)userXp.NotifyType,
+                                    Sources = sourcesText
+                                });
+                            }
+
+                            // Process role rewards
+                            await ProcessRoleRewards(
+                                db,
+                                guildId,
+                                userId,
+                                oldLevel,
+                                newLevel,
+                                settings.ExclusiveRoleRewards,
+                                roleRewardCache,
+                                roleRewards);
+
+                            // Process currency rewards
+                            await ProcessCurrencyRewards(
+                                db,
+                                guildId,
+                                userId,
+                                oldLevel,
+                                newLevel,
+                                currencyRewardCache,
+                                currencyRewards);
+                        }
+
+                        // Add to update collection
+                        updateRecords.Add(userXp);
+
+                        // Add competition updates
+                        if (activeCompetitions.Count <= 0) continue;
+                        competitionUpdates.AddRange(activeCompetitions.Select(competition => new CompetitionUpdateItem
+                        {
+                            CompetitionId = competition.Id, UserId = userId, XpGained = totalXp, CurrentLevel = newLevel
+                        }));
+                    }
+                    else
+                    {
+                        // Create new user record
+                        var newUserXp = new GuildUserXp
+                        {
+                            GuildId = guildId,
+                            UserId = userId,
+                            TotalXp = totalXp,
+                            LastActivity = now,
+                            LastLevelUp = now,
+                            NotifyType = (int)XpNotificationType.None
+                        };
+
+                        // Calculate level
+                        var newLevel =
+                            XpCalculator.CalculateLevel(newUserXp.TotalXp, (XpCurveType)settings.XpCurveType);
+
+                        // Add notification for first level
+                        if (newLevel > 0)
+                        {
+                            notifications.Add(new XpNotification
                             {
                                 GuildId = guildId,
                                 UserId = userId,
                                 Level = newLevel,
                                 ChannelId = lastItem.ChannelId,
-                                NotificationType = (XpNotificationType)userXp.NotifyType,
-                                Sources = sources
+                                NotificationType = XpNotificationType.None,
+                                Sources = sourcesText
                             });
+
+                            // For new users, process rewards
+                            await ProcessRoleRewards(
+                                db,
+                                guildId,
+                                userId,
+                                0,
+                                newLevel,
+                                settings.ExclusiveRoleRewards,
+                                roleRewardCache,
+                                roleRewards);
+
+                            await ProcessCurrencyRewards(
+                                db,
+                                guildId,
+                                userId,
+                                0,
+                                newLevel,
+                                currencyRewardCache,
+                                currencyRewards);
                         }
 
-                        // Get rewards for new levels
-                        for (var level = oldLevel + 1; level <= newLevel; level++)
+                        // Add to insert collection
+                        insertRecords.Add(newUserXp);
+
+                        // Add competition updates
+                        if (activeCompetitions.Count <= 0) continue;
+                        competitionUpdates.AddRange(activeCompetitions.Select(competition => new CompetitionUpdateItem
                         {
-                            // Check for role rewards
-                            var roleReward = await rewardManager.GetRoleRewardForLevelAsync(db, guildId, level);
-                            if (roleReward != null)
-                            {
-                                roleRewardsToGrant.Add(new RoleRewardItem
-                                {
-                                    GuildId = guildId, UserId = userId, RoleId = roleReward.RoleId
-                                });
-                            }
-
-                            // Check for currency rewards
-                            var currencyReward = await rewardManager.GetCurrencyRewardForLevelAsync(db, guildId, level);
-                            if (currencyReward != null)
-                            {
-                                currencyRewardsToGrant.Add(new CurrencyRewardItem
-                                {
-                                    GuildId = guildId, UserId = userId, Amount = currencyReward.Amount
-                                });
-                            }
-                        }
-                    }
-
-                    // Add to update batch
-                    xpRecordsToUpdate.Add(userXp);
-
-                    // Add competition updates
-                    foreach (var competition in activeCompetitions)
-                    {
-                        competitionUpdates.Add(new CompetitionUpdateItem
-                        {
-                            CompetitionId = competition.Id,
-                            UserId = userId,
-                            XpGained = totalXpGain,
-                            CurrentLevel =
-                                XpCalculator.CalculateLevel(userXp.TotalXp, (XpCurveType)settings.XpCurveType)
-                        });
+                            CompetitionId = competition.Id, UserId = userId, XpGained = totalXp, CurrentLevel = newLevel
+                        }));
                     }
                 }
-                else
+                catch (Exception ex)
                 {
-                    // Create new user XP record
-                    var newUserXp = new GuildUserXp
-                    {
-                        GuildId = guildId,
-                        UserId = userId,
-                        TotalXp = totalXpGain,
-                        LastActivity = now,
-                        LastLevelUp = now,
-                        NotifyType = (int)XpNotificationType.Channel // Default
-                    };
-
-                    // Add to insert batch
-                    xpRecordsToInsert.Add(newUserXp);
-
-                    // Check if user gained enough XP to level up
-                    var newLevel = XpCalculator.CalculateLevel(newUserXp.TotalXp, (XpCurveType)settings.XpCurveType);
-                    if (newLevel > 0)
-                    {
-                        // Add notification for first level
-                        notificationsToSend.Add(new XpNotification
-                        {
-                            GuildId = guildId,
-                            UserId = userId,
-                            Level = newLevel,
-                            ChannelId = lastItem.ChannelId,
-                            NotificationType = XpNotificationType.Channel,
-                            Sources = sources
-                        });
-
-                        // Check for rewards at this level
-                        var roleReward = await rewardManager.GetRoleRewardForLevelAsync(db, guildId, newLevel);
-                        if (roleReward != null)
-                        {
-                            roleRewardsToGrant.Add(new RoleRewardItem
-                            {
-                                GuildId = guildId, UserId = userId, RoleId = roleReward.RoleId
-                            });
-                        }
-
-                        var currencyReward = await rewardManager.GetCurrencyRewardForLevelAsync(db, guildId, newLevel);
-                        if (currencyReward != null)
-                        {
-                            currencyRewardsToGrant.Add(new CurrencyRewardItem
-                            {
-                                GuildId = guildId, UserId = userId, Amount = currencyReward.Amount
-                            });
-                        }
-                    }
-
-                    // Add competition updates for new users
-                    foreach (var competition in activeCompetitions)
-                    {
-                        competitionUpdates.Add(new CompetitionUpdateItem
-                        {
-                            CompetitionId = competition.Id,
-                            UserId = userId,
-                            XpGained = totalXpGain,
-                            CurrentLevel = newLevel
-                        });
-                    }
+                    Log.Error(ex, "Error processing XP for user {UserId} in guild {GuildId}", userId, guildId);
                 }
             }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "Error processing XP for user {UserId} in guild {GuildId}", userId, guildId);
-            }
-        }
 
-        // Execute bulk operations
-        try
-        {
-            // Bulk insert new records
-            if (xpRecordsToInsert.Count > 0)
-            {
-                await db.GuildUserXps.BulkCopyAsync(xpRecordsToInsert);
+            // Execute database operations with retry
+            await ExecuteDatabaseOperationsWithRetry(db, guildId, insertRecords, updateRecords);
 
-                // Update cache for new records
-                foreach (var record in xpRecordsToInsert)
-                {
-                    cacheManager.UpdateUserXpCacheAsync(record);
-                }
+            // Process notifications and rewards
+            await Task.WhenAll(
+                ProcessNotificationsInBatches(notifications),
+                ProcessRoleRewardsInBatches(roleRewards),
+                ProcessCurrencyRewardsInBatches(currencyRewards),
+                competitionManager.UpdateCompetitionsAsync(db, competitionUpdates)
+            );
 
-                Log.Debug("Bulk inserted {Count} new XP records for guild {GuildId}",
-                    xpRecordsToInsert.Count, guildId);
-            }
-
-            // Bulk update existing records
-            if (xpRecordsToUpdate.Count > 0)
-            {
-                var tempTable = xpRecordsToUpdate.AsQueryable();
-
-                await db.GuildUserXps
-                    .Merge()
-                    .Using(tempTable)
-                    .OnTargetKey()
-                    .UpdateWhenMatched(
-                        (target, source) => new GuildUserXp
-                        {
-                            TotalXp = source.TotalXp,
-                            LastActivity = source.LastActivity,
-                            LastLevelUp = source.LastLevelUp,
-                            NotifyType = source.NotifyType
-                        })
-                    .MergeAsync();
-
-                foreach (var record in xpRecordsToUpdate)
-                {
-                    cacheManager.UpdateUserXpCacheAsync(record);
-                }
-
-                Log.Debug("Merged {Count} existing XP records for guild {GuildId}",
-                    xpRecordsToUpdate.Count, guildId);
-            }
+            return items.Count;
         }
         catch (Exception ex)
         {
-            Log.Error("Error executing bulk operations for guild {GuildId}:{ex}", guildId, ex);
+            Log.Error(ex, "Error processing guild XP batch for {GuildId}", guildId);
+            return 0;
         }
     }
 
     /// <summary>
-    ///     Processes XP decay for inactive users with bulk operations.
+    ///     Processes role rewards for a level change.
     /// </summary>
+    /// <param name="db">The database connection.</param>
+    /// <param name="guildId">The guild ID.</param>
+    /// <param name="userId">The user ID.</param>
+    /// <param name="oldLevel">The old level.</param>
+    /// <param name="newLevel">The new level.</param>
+    /// <param name="exclusiveRoleRewards">Whether role rewards are exclusive.</param>
+    /// <param name="roleRewardCache">The role reward cache.</param>
+    /// <param name="roleRewards">The list to add role rewards to.</param>
+    /// <returns>A task representing the operation.</returns>
+    private async Task ProcessRoleRewards(
+        MewdekoDb db,
+        ulong guildId,
+        ulong userId,
+        int oldLevel,
+        int newLevel,
+        bool exclusiveRoleRewards,
+        Dictionary<int, XpRoleReward> roleRewardCache,
+        List<RoleRewardItem> roleRewards)
+    {
+        if (exclusiveRoleRewards)
+        {
+            // For exclusive rewards, find highest level reward
+            for (var level = newLevel; level > 0; level--)
+            {
+                if (!roleRewardCache.TryGetValue(level, out var roleReward))
+                {
+                    roleReward = await rewardManager.GetRoleRewardForLevelAsync(db, guildId, level);
+                    roleRewardCache[level] = roleReward;
+                }
+
+                if (roleReward != null)
+                {
+                    roleRewards.Add(new RoleRewardItem
+                    {
+                        GuildId = guildId, UserId = userId, RoleId = roleReward.RoleId
+                    });
+                    break;
+                }
+            }
+        }
+        else
+        {
+            // For non-exclusive, add rewards for all new levels
+            for (var level = oldLevel + 1; level <= newLevel; level++)
+            {
+                if (!roleRewardCache.TryGetValue(level, out var roleReward))
+                {
+                    roleReward = await rewardManager.GetRoleRewardForLevelAsync(db, guildId, level);
+                    roleRewardCache[level] = roleReward;
+                }
+
+                if (roleReward != null)
+                {
+                    roleRewards.Add(new RoleRewardItem
+                    {
+                        GuildId = guildId, UserId = userId, RoleId = roleReward.RoleId
+                    });
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    ///     Processes currency rewards for a level change.
+    /// </summary>
+    /// <param name="db">The database connection.</param>
+    /// <param name="guildId">The guild ID.</param>
+    /// <param name="userId">The user ID.</param>
+    /// <param name="oldLevel">The old level.</param>
+    /// <param name="newLevel">The new level.</param>
+    /// <param name="currencyRewardCache">The currency reward cache.</param>
+    /// <param name="currencyRewards">The list to add currency rewards to.</param>
+    /// <returns>A task representing the operation.</returns>
+    private async Task ProcessCurrencyRewards(
+        MewdekoDb db,
+        ulong guildId,
+        ulong userId,
+        int oldLevel,
+        int newLevel,
+        Dictionary<int, XpCurrencyReward> currencyRewardCache,
+        List<CurrencyRewardItem> currencyRewards)
+    {
+        for (var level = oldLevel + 1; level <= newLevel; level++)
+        {
+            if (!currencyRewardCache.TryGetValue(level, out var currencyReward))
+            {
+                currencyReward = await rewardManager.GetCurrencyRewardForLevelAsync(db, guildId, level);
+                currencyRewardCache[level] = currencyReward;
+            }
+
+            if (currencyReward != null)
+            {
+                currencyRewards.Add(new CurrencyRewardItem
+                {
+                    GuildId = guildId, UserId = userId, Amount = currencyReward.Amount
+                });
+            }
+        }
+    }
+
+    /// <summary>
+    ///     Processes notifications in batches to avoid rate limiting.
+    /// </summary>
+    /// <param name="notifications">The notifications to process.</param>
+    /// <returns>A task representing the operation.</returns>
+    private async Task ProcessNotificationsInBatches(List<XpNotification> notifications)
+    {
+        const int batchSize = 25;
+
+        for (var i = 0; i < notifications.Count; i += batchSize)
+        {
+            var batch = notifications.Skip(i).Take(batchSize).ToList();
+            await rewardManager.SendNotificationsAsync(batch);
+
+            if (i + batchSize < notifications.Count)
+            {
+                await Task.Delay(100);
+            }
+        }
+    }
+
+    /// <summary>
+    ///     Processes role rewards in batches to avoid rate limiting.
+    /// </summary>
+    /// <param name="rewards">The role rewards to process.</param>
+    /// <returns>A task representing the operation.</returns>
+    private async Task ProcessRoleRewardsInBatches(List<RoleRewardItem> rewards)
+    {
+        const int batchSize = 25;
+
+        for (var i = 0; i < rewards.Count; i += batchSize)
+        {
+            var batch = rewards.Skip(i).Take(batchSize).ToList();
+            await rewardManager.GrantRoleRewardsAsync(batch);
+
+            if (i + batchSize < rewards.Count)
+            {
+                await Task.Delay(200);
+            }
+        }
+    }
+
+    /// <summary>
+    ///     Processes currency rewards in batches to avoid rate limiting.
+    /// </summary>
+    /// <param name="rewards">The currency rewards to process.</param>
+    /// <returns>A task representing the operation.</returns>
+    private async Task ProcessCurrencyRewardsInBatches(List<CurrencyRewardItem> rewards)
+    {
+        const int batchSize = 50;
+
+        for (var i = 0; i < rewards.Count; i += batchSize)
+        {
+            var batch = rewards.Skip(i).Take(batchSize).ToList();
+            await rewardManager.GrantCurrencyRewardsAsync(batch);
+
+            if (i + batchSize < rewards.Count)
+            {
+                await Task.Delay(100);
+            }
+        }
+    }
+
+    /// <summary>
+    ///     Executes database operations with retry logic for reliability.
+    /// </summary>
+    /// <param name="db">The database connection.</param>
+    /// <param name="guildId">The guild ID.</param>
+    /// <param name="insertRecords">Records to insert.</param>
+    /// <param name="updateRecords">Records to update.</param>
+    /// <returns>A task representing the operation.</returns>
+    private async Task ExecuteDatabaseOperationsWithRetry(
+        MewdekoDb db,
+        ulong guildId,
+        List<GuildUserXp> insertRecords,
+        List<GuildUserXp> updateRecords)
+    {
+        // Process inserts
+        if (insertRecords.Count > 0)
+        {
+            for (var attempt = 0; attempt < DbMaxRetries; attempt++)
+            {
+                try
+                {
+                    // Process in optimal batch sizes
+                    for (var i = 0; i < insertRecords.Count; i += OptimalBatchSize)
+                    {
+                        var chunk = insertRecords.Skip(i).Take(OptimalBatchSize).ToList();
+                        await db.BulkCopyAsync(chunk);
+
+                        // Update cache
+                        foreach (var record in chunk)
+                        {
+                            await cacheManager.UpdateUserXpCacheAsync(record);
+                        }
+                    }
+
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    if (attempt == DbMaxRetries - 1)
+                    {
+                        Log.Error(ex, "Failed to insert XP records for guild {GuildId} after {Attempts} attempts",
+                            guildId, DbMaxRetries);
+                    }
+                    else
+                    {
+                        await Task.Delay(50 * (attempt + 1));
+                    }
+                }
+            }
+        }
+
+        // Process updates
+        if (updateRecords.Count > 0)
+        {
+            for (var attempt = 0; attempt < DbMaxRetries; attempt++)
+            {
+                try
+                {
+                    for (var i = 0; i < updateRecords.Count; i += OptimalBatchSize)
+                    {
+                        var chunk = updateRecords.Skip(i).Take(OptimalBatchSize).ToList();
+
+                        await db.GuildUserXps
+                            .Merge()
+                            .Using(chunk.AsQueryable())
+                            .OnTargetKey()
+                            .UpdateWhenMatched((target, source) => new GuildUserXp
+                            {
+                                TotalXp = source.TotalXp,
+                                LastActivity = source.LastActivity,
+                                LastLevelUp = source.LastLevelUp,
+                                NotifyType = source.NotifyType
+                            })
+                            .MergeAsync();
+
+                        // Update cache
+                        foreach (var record in chunk)
+                        {
+                            await cacheManager.UpdateUserXpCacheAsync(record);
+                        }
+                    }
+
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    if (attempt == DbMaxRetries - 1)
+                    {
+                        Log.Error(ex, "Failed to update XP records for guild {GuildId} after {Attempts} attempts",
+                            guildId, DbMaxRetries);
+                    }
+                    else
+                    {
+                        await Task.Delay(50 * (attempt + 1));
+                    }
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    ///     Processes XP decay for inactive users.
+    /// </summary>
+    /// <param name="state">The state object (not used).</param>
     private async void ProcessXpDecay(object state)
     {
         try
         {
-            // Get a fresh DB connection for decay processing
+            Log.Information("Starting XP decay processing");
+            var startTime = DateTime.UtcNow;
+            var totalGuildsProcessed = 0;
+            var totalUsersDecayed = 0;
+
             await using var db = await dbFactory.CreateConnectionAsync();
 
-            // Get all guild settings with XP decay enabled
+            // Get guilds with decay enabled
             var guildsWithDecay = await db.GuildXpSettings
                 .Where(g => g.EnableXpDecay)
                 .ToListAsync();
@@ -608,22 +905,23 @@ public class XpBackgroundProcessor : INService, IDisposable
 
             Log.Information("Processing XP decay for {Count} guilds with decay enabled", guildsWithDecay.Count);
 
+            // Process guilds sequentially with throttling
             foreach (var settings in guildsWithDecay)
             {
+                await dbThrottle.WaitAsync();
                 try
                 {
-                    // Calculate inactive threshold
                     var inactiveThreshold = DateTime.UtcNow.AddDays(-settings.InactivityDaysBeforeDecay);
+                    var guildDecayed = 0;
 
                     // Process in batches to avoid memory issues with large guilds
-                    const int decayBatchSize = 500;
-                    var totalDecayed = 0;
+                    const int decayBatchSize = 1000;
                     var hasMoreRecords = true;
                     var lastUserId = 0UL;
 
                     while (hasMoreRecords)
                     {
-                        // Get batch of inactive users
+                        // Get batch of inactive users using LinqToDB
                         var inactiveUsers = await db.GuildUserXps
                             .Where(x =>
                                 x.GuildId == settings.GuildId &&
@@ -641,43 +939,52 @@ public class XpBackgroundProcessor : INService, IDisposable
                         // Update last user ID for pagination
                         lastUserId = inactiveUsers[^1].UserId;
 
-                        // Apply decay to all users in batch
+                        // Apply decay in memory
                         foreach (var user in inactiveUsers)
                         {
                             var decayAmount = (long)(user.TotalXp * (settings.DailyDecayPercentage / 100.0));
-                            if (decayAmount > 0)
-                            {
-                                user.TotalXp -= decayAmount;
+                            if (decayAmount <= 0) continue;
+                            user.TotalXp -= decayAmount;
 
-                                // Ensure total XP doesn't go below 0
-                                if (user.TotalXp < 0)
-                                    user.TotalXp = 0;
+                            // Ensure total XP doesn't go below 0
+                            if (user.TotalXp < 0)
+                                user.TotalXp = 0;
 
-                                totalDecayed++;
-                            }
+                            guildDecayed++;
                         }
 
-                        // Bulk update decayed users
-                        await db.GuildUserXps.BulkCopyAsync(inactiveUsers);
+                        // Use BulkCopy for the update
+                        await db.BulkCopyAsync(inactiveUsers);
 
                         // Update cache for each decayed user
                         foreach (var user in inactiveUsers)
                         {
-                            cacheManager.UpdateUserXpCacheAsync(user);
+                            await cacheManager.UpdateUserXpCacheAsync(user);
                         }
                     }
 
-                    if (totalDecayed > 0)
+                    if (guildDecayed > 0)
                     {
+                        totalGuildsProcessed++;
+                        totalUsersDecayed += guildDecayed;
                         Log.Information("Applied XP decay to {Count} inactive users in guild {GuildId}",
-                            totalDecayed, settings.GuildId);
+                            guildDecayed, settings.GuildId);
                     }
                 }
                 catch (Exception ex)
                 {
-                    Log.Error("Error processing XP decay for guild {GuildId}:{ex}", settings.GuildId, ex);
+                    Log.Error(ex, "Error processing XP decay for guild {GuildId}", settings.GuildId);
+                }
+                finally
+                {
+                    dbThrottle.Release();
                 }
             }
+
+            var elapsedTime = DateTime.UtcNow - startTime;
+            Log.Information("XP decay processing completed in {ElapsedTime}s. " +
+                            "Processed {Guilds} guilds and decayed {Users} users.",
+                elapsedTime.TotalSeconds, totalGuildsProcessed, totalUsersDecayed);
         }
         catch (Exception ex)
         {
@@ -686,8 +993,9 @@ public class XpBackgroundProcessor : INService, IDisposable
     }
 
     /// <summary>
-    ///     Cleans up expired cache entries and reports statistics.
+    ///     Cleans up expired cache entries.
     /// </summary>
+    /// <param name="state">The state object (not used).</param>
     private async void CleanupCaches(object state)
     {
         try
@@ -695,19 +1003,53 @@ public class XpBackgroundProcessor : INService, IDisposable
             Log.Debug("Running cache cleanup task");
 
             // Clean up Redis caches
-            await cacheManager.CleanupCachesAsync();
+            var cleanupStats = await cacheManager.CleanupCachesAsync();
 
-            // Clear active user tracking to prevent memory leaks
-            if (activeUserIds.Count > 10000)
+            // Clean up active user tracking to prevent memory leaks
+            var timeSinceLastCleanup = DateTime.UtcNow - lastActiveUserCleanup;
+            if (timeSinceLastCleanup > TimeSpan.FromHours(4) || activeUserIds.Count > 50000)
             {
-                activeUserIds.Clear();
-                Log.Debug("Cleared active user tracking (had {Count} entries)", activeUserIds.Count);
+                var oldCount = activeUserIds.Count;
+
+                // Clean inactive users
+                var currentTime = DateTime.UtcNow;
+                var inactiveUsers = recentlyActiveUsers
+                    .Where(pair => (currentTime - pair.Value).TotalHours > 1)
+                    .Select(pair => pair.Key)
+                    .ToList();
+
+                foreach (var userId in inactiveUsers)
+                {
+                    activeUserIds.TryRemove(userId, out _);
+                    recentlyActiveUsers.TryRemove(userId, out _);
+                }
+
+                // Clean local settings cache periodically
+                if (settingsCache.Count > 500)
+                {
+                    var oldSettings = settingsCache
+                        .Where(pair =>
+                            (currentTime - pair.Value.CacheTime).TotalMinutes > settingsCacheTtl.TotalMinutes)
+                        .Select(pair => pair.Key)
+                        .ToList();
+
+                    foreach (var guildId in oldSettings)
+                    {
+                        settingsCache.TryRemove(guildId, out _);
+                    }
+                }
+
+                lastActiveUserCleanup = DateTime.UtcNow;
+
+                Log.Debug("Cleared {Count} inactive users from tracking (had {OldCount} entries, now {NewCount})",
+                    inactiveUsers.Count, oldCount, activeUserIds.Count);
             }
 
             // Log statistics
             Log.Information("XP Background Processor stats: Queue size: {QueueSize}, " +
-                            "Total processed: {TotalProcessed}, Active users tracked: {ActiveUsers}",
-                xpUpdateQueue.Count, totalProcessed, activeUserIds.Count);
+                            "Total processed: {TotalProcessed}, Active users tracked: {ActiveUsers}, " +
+                            "Redis cache entries cleaned: {RedisCachesCleared}",
+                xpQueue.Count, totalProcessed, activeUserIds.Count, cleanupStats.keysRemoved);
         }
         catch (Exception ex)
         {
@@ -720,46 +1062,34 @@ public class XpBackgroundProcessor : INService, IDisposable
     /// </summary>
     public void Dispose()
     {
-        processingTimer?.Dispose();
-        decayTimer?.Dispose();
-        cleanupTimer?.Dispose();
-        dbThrottle?.Dispose();
-
-        // Process any remaining items in the queue
-        ProcessFinalBatches();
-    }
-
-    /// <summary>
-    ///     Processes any remaining XP items when shutting down.
-    /// </summary>
-    private void ProcessFinalBatches()
-    {
-        Log.Information("Processing final XP batches before shutdown...");
-
         try
         {
-            // Process a fixed number of batches on shutdown
-            var remainingItems = xpUpdateQueue.Count;
-            var batches = Math.Min(10, remainingItems / BatchSize + 1);
+            // Mark queue as complete for consumer
+            xpQueue.CompleteAdding();
 
-            for (var i = 0; i < batches && !xpUpdateQueue.IsEmpty; i++)
-            {
-                // Force processing to continue despite flag
-                Interlocked.Exchange(ref processingInProgress, 0);
-                ProcessXpBatch(null!);
-                Thread.Sleep(100); // Short delay between batches
-            }
+            // Stop timers
+            processingTimer?.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+            decayTimer?.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+            cleanupTimer?.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
 
-            // Log how many items we couldn't process
-            var unprocessed = xpUpdateQueue.Count;
-            if (unprocessed > 0)
-            {
-                Log.Warning("{Count} XP updates remain unprocessed during shutdown", unprocessed);
-            }
+            // Process remaining items
+            ProcessXpBatches(null);
+
+            // Wait briefly for processing to complete
+            Thread.Sleep(500);
+
+            // Dispose resources
+            processingTimer?.Dispose();
+            decayTimer?.Dispose();
+            cleanupTimer?.Dispose();
+            dbThrottle?.Dispose();
+            xpQueue?.Dispose();
+
+            Log.Information("XP Background Processor successfully disposed");
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error processing final XP batches");
+            Log.Error(ex, "Error during XP Background Processor disposal");
         }
     }
 }
