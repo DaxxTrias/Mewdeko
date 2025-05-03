@@ -130,13 +130,13 @@ namespace Mewdeko.Database.Migrations.PostgreSql
             migrationBuilder.CreateIndex(
                 name: "IX_MusicPlaylists_GuildId_Name",
                 table: "MusicPlaylists",
-                columns: new[] { "GuildId", "Name" },
+                columns: ["GuildId", "Name"],
                 unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_MusicPlaylistTracks_PlaylistId_Index",
                 table: "MusicPlaylistTracks",
-                columns: new[] { "PlaylistId", "Index" });
+                columns: ["PlaylistId", "Index"]);
 
             migrationBuilder.AddForeignKey(
                 name: "FK_CaseNotes_TicketCases_CaseId",

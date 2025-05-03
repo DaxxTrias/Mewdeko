@@ -128,67 +128,74 @@ public class Xp(InteractiveService serv, ICurrencyService currencyService) : Mew
     }
 
     /// <summary>
-///     Shows the XP leaderboard for the server.
-/// </summary>
-/// <param name="page">Page number to display (starts at 1).</param>
-/// <example>.leaderboard</example>
-/// <example>.leaderboard 2</example>
-[Cmd]
-[Aliases]
-public async Task Leaderboard(int page = 1)
-{
-    if (page < 1)
-        page = 1;
-
-    var serverLb = await Service.GetLeaderboardAsync(ctx.Guild.Id, page);
-
-    if (serverLb.Count == 0)
+    ///     Shows the XP leaderboard for the server.
+    /// </summary>
+    /// <param name="page">Page number to display (starts at 1).</param>
+    /// <example>.leaderboard</example>
+    /// <example>.leaderboard 2</example>
+    [Cmd]
+    [Aliases]
+    public async Task Leaderboard(int page = 1)
     {
-        await ReplyErrorAsync(Strings.XpLeaderboardEmpty(ctx.Guild.Id)).ConfigureAwait(false);
-        return;
-    }
+        if (page < 1)
+            page = 1;
 
-    var users = await ctx.Guild.GetUsersAsync();
+        var (serverLb, totalCount) = await Service.GetLeaderboardAsync(ctx.Guild.Id, page);
 
-    var userDict = users.ToDictionary(u => u.Id, u => u);
-
-    var paginator = new LazyPaginatorBuilder()
-        .AddUser(ctx.User)
-        .WithPageFactory(pageNum => BuildPage(pageNum, userDict))
-        .WithFooter(PaginatorFooter.PageNumber | PaginatorFooter.Users)
-        .WithDefaultEmotes()
-        .WithActionOnCancellation(ActionOnStop.DeleteMessage)
-        .Build();
-
-    await serv.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
-    return;
-
-    async Task<PageBuilder> BuildPage(int pageNum, Dictionary<ulong, IGuildUser> userLookup)
-    {
-        var pageUsers = await Service.GetLeaderboardAsync(ctx.Guild.Id, pageNum + 1);
-
-        var embed = new PageBuilder()
-            .WithOkColor()
-            .WithTitle(Strings.XpLeaderboardTitle(ctx.Guild.Id));
-
-        var lb = new List<string>();
-
-        foreach (var user in pageUsers)
+        if (serverLb.Count == 0)
         {
-            var username = userLookup.TryGetValue(user.UserId, out var guildUser) ? guildUser.ToString() : user.UserId.ToString();
-
-            lb.Add(Strings.XpLeaderboardLine(
-                ctx.Guild.Id,
-                user.Rank,
-                username,
-                user.Level,
-                user.TotalXp));
+            await ReplyErrorAsync(Strings.XpLeaderboardEmpty(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
         }
 
-        embed.WithDescription(string.Join("\n", lb));
-        return embed;
+        var users = await ctx.Guild.GetUsersAsync();
+        var userDict = users.ToDictionary(u => u.Id, u => u);
+
+        // Calculate max pages (10 users per page by default)
+        const int pageSize = 10;
+        var maxPageIndex = (int)Math.Ceiling(totalCount / (double)pageSize) - 1;
+
+        var paginator = new LazyPaginatorBuilder()
+            .AddUser(ctx.User)
+            .WithPageFactory(pageNum => BuildPage(pageNum, userDict))
+            .WithFooter(PaginatorFooter.PageNumber | PaginatorFooter.Users)
+            .WithMaxPageIndex(maxPageIndex) // Set the maximum page index
+            .WithDefaultEmotes()
+            .WithActionOnCancellation(ActionOnStop.DeleteMessage)
+            .Build();
+
+        await serv.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
+        return;
+
+        async Task<PageBuilder> BuildPage(int pageNum, Dictionary<ulong, IGuildUser> userLookup)
+        {
+            var pageData = await Service.GetLeaderboardAsync(ctx.Guild.Id, pageNum + 1);
+            var pageUsers = pageData.Users;
+
+            var embed = new PageBuilder()
+                .WithOkColor()
+                .WithTitle(Strings.XpLeaderboardTitle(ctx.Guild.Id));
+
+            var lb = new List<string>();
+
+            foreach (var user in pageUsers)
+            {
+                var username = userLookup.TryGetValue(user.UserId, out var guildUser)
+                    ? guildUser.ToString()
+                    : user.UserId.ToString();
+
+                lb.Add(Strings.XpLeaderboardLine(
+                    ctx.Guild.Id,
+                    user.Rank,
+                    username,
+                    user.Level,
+                    user.TotalXp));
+            }
+
+            embed.WithDescription(string.Join("\n", lb));
+            return embed;
+        }
     }
-}
 
     /// <summary>
     ///     Adds XP to a user.
@@ -466,17 +473,52 @@ public async Task Leaderboard(int page = 1)
     /// <summary>
     ///     Sets the XP curve type used for level calculations.
     /// </summary>
-    /// <param name="type">The XP curve type: Default, Flat, or Steep.</param>
+    /// <param name="type">The XP curve type: Standard, Linear, Accelerated, Decelerated, Custom, or Legacy.</param>
+    /// <param name="recompute">Whether to recompute all user levels (defaults to false).</param>
     /// <example>.setxpcurve Flat</example>
+    /// <example>.setxpcurve Legacy true</example>
     [Cmd]
     [Aliases]
     [UserPerm(GuildPermission.ManageGuild)]
-    public async Task SetXpCurve(XpCurveType type)
+    public async Task SetXpCurve(XpCurveType type, bool recompute = true)
     {
         await Service.UpdateGuildXpSettingsAsync(ctx.Guild.Id, settings => settings.XpCurveType = (int)type);
-        await ReplyConfirmAsync(Strings.XpCurveSet(ctx.Guild.Id, type)).ConfigureAwait(false);
-    }
 
+        if (!recompute)
+        {
+            await ReplyConfirmAsync(Strings.XpCurveSet(ctx.Guild.Id, type)).ConfigureAwait(false);
+            return;
+        }
+
+        // Inform user that recomputation is starting
+        await ReplyConfirmAsync(Strings.XpCurveRecomputeStarted(ctx.Guild.Id, type)).ConfigureAwait(false);
+
+        // Recompute all levels in background task to avoid blocking
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Service.RecomputeAllLevelsAsync(ctx.Guild.Id, type);
+
+                // Try to send follow-up message when complete
+                var channel = await ctx.Guild.GetTextChannelAsync(ctx.Channel.Id);
+                if (channel != null)
+                {
+                    await channel.SendConfirmAsync(Strings.XpCurveRecomputeComplete(ctx.Guild.Id, type));
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Error recomputing levels for guild {GuildId}", ctx.Guild.Id);
+
+                var channel = await ctx.Guild.GetTextChannelAsync(ctx.Channel.Id);
+                if (channel != null)
+                {
+                    await channel.SendErrorAsync(Strings.XpCurveRecomputeError(ctx.Guild.Id), Config);
+                }
+            }
+        });
+    }
     /// <summary>
     ///     Sets an XP multiplier for a channel.
     /// </summary>

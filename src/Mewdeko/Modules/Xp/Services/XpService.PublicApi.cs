@@ -4,6 +4,7 @@ using DataModel;
 using LinqToDB;
 using Mewdeko.Modules.Xp.Models;
 using Serilog;
+using StackExchange.Redis;
 using UserXpStats = Mewdeko.Modules.Xp.Models.UserXpStats;
 using XpNotificationType = Mewdeko.Modules.Xp.Models.XpNotificationType;
 
@@ -48,6 +49,59 @@ public partial class XpService
 
     #region User XP Management
 
+
+    /// <summary>
+    ///     Recomputes all user levels in a guild after changing the XP curve type.
+    /// </summary>
+    /// <param name="guildId">The guild ID.</param>
+    /// <param name="newCurveType">The new XP curve type.</param>
+    /// <returns>A task representing the asynchronous operation and the number of affected users.</returns>
+    public async Task<int> RecomputeAllLevelsAsync(ulong guildId, XpCurveType newCurveType)
+    {
+        Log.Information("Recomputing levels for all users in guild {GuildId} with curve type {CurveType}",
+            guildId, newCurveType);
+
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        // Update the guild settings with the new curve type
+        var settings = await cacheManager.GetGuildXpSettingsAsync(guildId);
+        settings.XpCurveType = (int)newCurveType;
+        await cacheManager.UpdateGuildXpSettingsAsync(settings);
+
+        // Get all users with XP in this guild
+        var users = await db.GuildUserXps
+            .Where(x => x.GuildId == guildId && x.TotalXp > 0)
+            .ToListAsync();
+
+        if (users.Count == 0)
+            return 0;
+
+        // Clear relevant leaderboard cache keys
+        var redis = cacheManager.GetRedisDatabase();
+        var keysToDelete = new List<RedisKey>();
+
+        // Get a Redis server for scanning
+        var server = redis.Multiplexer.GetServer(redis.Multiplexer.GetEndPoints().First());
+        var pattern = $"xp:leaderboard:{guildId}:*";
+
+        await foreach (var key in server.KeysAsync(pattern: pattern))
+        {
+            keysToDelete.Add(key);
+        }
+
+        if (keysToDelete.Count > 0)
+        {
+            await redis.KeyDeleteAsync(keysToDelete.ToArray());
+            Log.Debug("Deleted {Count} leaderboard cache keys for guild {GuildId}",
+                keysToDelete.Count, guildId);
+        }
+
+        Log.Information("Recomputed levels for {Count} users in guild {GuildId}",
+            users.Count, guildId);
+
+        return users.Count;
+    }
+
     /// <summary>
     ///     Adds XP to a user in a guild.
     /// </summary>
@@ -71,7 +125,7 @@ public partial class XpService
     /// <param name="guildId">The guild ID.</param>
     /// <param name="userId">The user ID.</param>
     /// <returns>The user's XP statistics.</returns>
-    public async Task<UserXpStats> GetUserXpStatsAsync(ulong guildId, ulong userId)
+    public async Task<UserXpStats?> GetUserXpStatsAsync(ulong guildId, ulong userId)
     {
         await using var db = await dbFactory.CreateConnectionAsync();
 
@@ -122,8 +176,9 @@ public partial class XpService
     /// <param name="guildId">The guild ID.</param>
     /// <param name="page">The page number (1-based).</param>
     /// <param name="pageSize">The number of users per page.</param>
-    /// <returns>The XP leaderboard.</returns>
-    public async Task<List<UserXpStats>> GetLeaderboardAsync(ulong guildId, int page = 1, int pageSize = 10)
+    /// <returns>A tuple containing the XP leaderboard and the total number of users with XP.</returns>
+    public async Task<(List<UserXpStats> Users, int TotalCount)> GetLeaderboardAsync(ulong guildId, int page = 1,
+        int pageSize = 10)
     {
         if (page < 1)
             page = 1;
@@ -131,18 +186,27 @@ public partial class XpService
         if (pageSize < 1 || pageSize > 100)
             pageSize = 10;
 
-        // Check cache for leaderboard
-        var cacheKey = $"xp:leaderboard:{guildId}:{page}:{pageSize}";
+        // Check cache for leaderboard and count
+        var cacheKeyLb = $"xp:leaderboard:{guildId}:{page}:{pageSize}";
+        var cacheKeyCount = $"xp:leaderboard:count:{guildId}";
 
         var red = cacheManager.GetRedisDatabase();
-        var possibleData = await red.StringGetAsync(cacheKey);
+
+        // Try to get cached data
+        var possibleData = await red.StringGetAsync(cacheKeyLb);
+        var possibleCount = await red.StringGetAsync(cacheKeyCount);
+
+        List<UserXpStats> result = null;
+        var totalCount = 0;
+
+        // Try to get leaderboard from cache
         if (possibleData.HasValue)
         {
             try
             {
                 var possibleDeserialize = JsonSerializer.Deserialize<List<UserXpStats>>(possibleData);
                 if (possibleDeserialize != null)
-                    return possibleDeserialize;
+                    result = possibleDeserialize;
             }
             catch (Exception ex)
             {
@@ -150,50 +214,73 @@ public partial class XpService
             }
         }
 
-        // Calculate skip
-        var skip = (page - 1) * pageSize;
-
-        await using var db = await dbFactory.CreateConnectionAsync();
-
-        var settings = await cacheManager.GetGuildXpSettingsAsync(guildId);
-
-        var users = await db.GuildUserXps
-            .Where(x => x.GuildId == guildId)
-            .OrderByDescending(x => x.TotalXp)
-            .Skip(skip)
-            .Take(pageSize)
-            .ToListAsync();
-
-        var result = new List<UserXpStats>();
-
-        for (var i = 0; i < users.Count; i++)
+        // Try to get count from cache
+        if (possibleCount.HasValue)
         {
-            var user = users[i];
-            var level = XpCalculator.CalculateLevel(user.TotalXp, (XpCurveType)settings.XpCurveType);
-            var levelXp = user.TotalXp - XpCalculator.CalculateXpForLevel(level, (XpCurveType)settings.XpCurveType);
-            var requiredXp = XpCalculator.CalculateXpForLevel(level + 1, (XpCurveType)settings.XpCurveType) -
-                             XpCalculator.CalculateXpForLevel(level, (XpCurveType)settings.XpCurveType);
-
-            result.Add(new UserXpStats
-            {
-                UserId = user.UserId,
-                GuildId = guildId,
-                TotalXp = user.TotalXp,
-                Level = level,
-                LevelXp = levelXp,
-                RequiredXp = requiredXp,
-                Rank = skip + i + 1,
-                BonusXp = user.BonusXp
-            });
+            if (int.TryParse(possibleCount, out var count))
+                totalCount = count;
         }
 
-        var cereal = JsonSerializer.Serialize(result);
-        // Cache the result
-        await red.StringSetAsync(cacheKey, cereal, TimeSpan.FromMinutes(5));
+        // If either the leaderboard or count isn't in cache, get from database
+        if (result != null && totalCount != 0) return (result, totalCount);
+        await using var db = await dbFactory.CreateConnectionAsync();
 
-        return result;
+        // Get the total count if needed
+        if (totalCount == 0)
+        {
+            totalCount = await db.GuildUserXps
+                .Where(x => x.GuildId == guildId)
+                .CountAsync();
+
+            // Cache the count (longer expiration since it changes less frequently)
+            await red.StringSetAsync(cacheKeyCount, totalCount.ToString(), TimeSpan.FromMinutes(10));
+        }
+
+        // Get the leaderboard data if needed
+        if (result != null) return (result, totalCount);
+        {
+            // Calculate skip
+            var skip = (page - 1) * pageSize;
+
+            var settings = await cacheManager.GetGuildXpSettingsAsync(guildId);
+
+            var users = await db.GuildUserXps
+                .Where(x => x.GuildId == guildId)
+                .OrderByDescending(x => x.TotalXp)
+                .Skip(skip)
+                .Take(pageSize)
+                .ToListAsync();
+
+            result = [];
+
+            for (var i = 0; i < users.Count; i++)
+            {
+                var user = users[i];
+                var level = XpCalculator.CalculateLevel(user.TotalXp, (XpCurveType)settings.XpCurveType);
+                var levelXp = user.TotalXp - XpCalculator.CalculateXpForLevel(level, (XpCurveType)settings.XpCurveType);
+                var requiredXp = XpCalculator.CalculateXpForLevel(level + 1, (XpCurveType)settings.XpCurveType) -
+                                 XpCalculator.CalculateXpForLevel(level, (XpCurveType)settings.XpCurveType);
+
+                result.Add(new UserXpStats
+                {
+                    UserId = user.UserId,
+                    GuildId = guildId,
+                    TotalXp = user.TotalXp,
+                    Level = level,
+                    LevelXp = levelXp,
+                    RequiredXp = requiredXp,
+                    Rank = skip + i + 1,
+                    BonusXp = user.BonusXp
+                });
+            }
+
+            var cereal = JsonSerializer.Serialize(result);
+            // Cache the result
+            await red.StringSetAsync(cacheKeyLb, cereal, TimeSpan.FromMinutes(5));
+        }
+
+        return (result, totalCount);
     }
-
 
     /// <summary>
     ///     Resets a user's XP in a guild.

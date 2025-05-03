@@ -157,7 +157,7 @@ public class RoleCommandsService : INService
 
             var toRemove = gusr.Guild.GetRole(reactionRole.RoleId);
             if (toRemove != null && gusr.Roles.Any(r => r.Id == toRemove.Id))
-                await gusr.RemoveRolesAsync(new[] { toRemove }).ConfigureAwait(false);
+                await gusr.RemoveRolesAsync([toRemove]).ConfigureAwait(false);
         }
         catch (Exception ex)
         {

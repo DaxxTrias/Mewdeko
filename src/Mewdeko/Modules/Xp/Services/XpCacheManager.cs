@@ -126,7 +126,7 @@ public class XpCacheManager : INService
     ///     Updates the user XP cache.
     /// </summary>
     /// <param name="userXp">The user XP record to cache.</param>
-    public async void UpdateUserXpCacheAsync(GuildUserXp userXp)
+    public async Task UpdateUserXpCacheAsync(GuildUserXp userXp)
     {
         var cacheKey = $"{RedisKeyPrefix}{GuildUserKey}:{userXp.GuildId}:{userXp.UserId}";
 
@@ -476,9 +476,12 @@ public class XpCacheManager : INService
     /// <summary>
     ///     Cleans up expired caches in batches to reduce system impact.
     /// </summary>
-    /// <returns>A task representing the asynchronous operation.</returns>
-    public async Task CleanupCachesAsync()
+    /// <returns>A tuple containing the number of keys removed and examined.</returns>
+    public async Task<(int keysRemoved, int keysExamined)> CleanupCachesAsync()
     {
+        var keysRemoved = 0;
+        var keysExamined = 0;
+
         try
         {
             // Get a Redis server for scanning
@@ -507,20 +510,33 @@ public class XpCacheManager : INService
             }
 
             // Process Redis keys in batches to prevent long-running operations
-            await ProcessDisconnectedGuildsAsync(server);
-            await RefreshMultiplierCachesAsync(server);
+            var disconnectedStats = await ProcessDisconnectedGuildsAsync(server);
+            var multiplierStats = await RefreshMultiplierCachesAsync(server);
+
+            keysRemoved = disconnectedStats.keysRemoved + multiplierStats.keysRemoved;
+            keysExamined = disconnectedStats.keysExamined + multiplierStats.keysExamined;
+
+            Log.Debug("Cache cleanup stats: {Removed} keys removed, {Examined} keys examined",
+                keysRemoved, keysExamined);
         }
         catch (Exception ex)
         {
             Log.Error(ex, "Error cleaning up caches");
         }
+
+        return (keysRemoved, keysExamined);
     }
 
     /// <summary>
     ///     Processes guilds that are no longer connected.
     /// </summary>
-    private async Task ProcessDisconnectedGuildsAsync(IServer server)
+    /// <param name="server">The Redis server.</param>
+    /// <returns>A tuple containing the number of keys removed and examined.</returns>
+    private async Task<(int keysRemoved, int keysExamined)> ProcessDisconnectedGuildsAsync(IServer server)
     {
+        var keysRemoved = 0;
+        var keysExamined = 0;
+
         // Build list of connected guild IDs for quick lookup
         var connectedGuildIds = new HashSet<ulong>(
             client.Guilds.Select(g => g.Id));
@@ -531,6 +547,8 @@ public class XpCacheManager : INService
 
         await foreach (var key in server.KeysAsync(pattern: pattern))
         {
+            keysExamined++;
+
             var keyString = key.ToString();
             if (string.IsNullOrEmpty(keyString)) continue;
 
@@ -538,42 +556,46 @@ public class XpCacheManager : INService
             if (string.IsNullOrEmpty(guildIdString) || !ulong.TryParse(guildIdString, out var guildId))
                 continue;
 
-            if (!connectedGuildIds.Contains(guildId))
-            {
-                keysToDelete.Add(key);
+            if (connectedGuildIds.Contains(guildId)) continue;
+            keysToDelete.Add(key);
 
-                // Remove from memory cache too
-                guildSettingsCache.TryRemove(guildId, out _);
+            // Remove from memory cache too
+            guildSettingsCache.TryRemove(guildId, out _);
 
-                // Process in batches
-                if (keysToDelete.Count >= MaxBatchSize)
-                {
-                    await redisCache.KeyDeleteAsync(keysToDelete.ToArray());
-                    Log.Debug("Deleted {Count} Redis keys for disconnected guilds", keysToDelete.Count);
-                    keysToDelete.Clear();
-                }
-            }
+            // Process in batches
+            if (keysToDelete.Count < MaxBatchSize) continue;
+            await redisCache.KeyDeleteAsync(keysToDelete.ToArray());
+            keysRemoved += keysToDelete.Count;
+            Log.Debug("Deleted {Count} Redis keys for disconnected guilds", keysToDelete.Count);
+            keysToDelete.Clear();
         }
 
         // Delete any remaining keys
-        if (keysToDelete.Count > 0)
-        {
-            await redisCache.KeyDeleteAsync(keysToDelete.ToArray());
-            Log.Debug("Deleted {Count} Redis keys for disconnected guilds", keysToDelete.Count);
-        }
+        if (keysToDelete.Count <= 0) return (keysRemoved, keysExamined);
+        await redisCache.KeyDeleteAsync(keysToDelete.ToArray());
+        keysRemoved += keysToDelete.Count;
+        Log.Debug("Deleted {Count} Redis keys for disconnected guilds", keysToDelete.Count);
+
+        return (keysRemoved, keysExamined);
     }
 
     /// <summary>
     ///     Refreshes multiplier caches to ensure they don't expire.
     /// </summary>
-    private async Task RefreshMultiplierCachesAsync(IServer server)
+    /// <param name="server">The Redis server.</param>
+    /// <returns>A tuple containing the number of keys refreshed and examined.</returns>
+    private async Task<(int keysRemoved, int keysExamined)> RefreshMultiplierCachesAsync(IServer server)
     {
+        var keysRefreshed = 0;
+        var keysExamined = 0;
+
         // Process multiplier keys to ensure they have proper expiration
         var keysToRefresh = new List<RedisKey>();
         var pattern = $"{RedisKeyPrefix}{MultiplierKey}:*";
 
         await foreach (var key in server.KeysAsync(pattern: pattern))
         {
+            keysExamined++;
             keysToRefresh.Add(key);
 
             // Process in batches
@@ -581,17 +603,21 @@ public class XpCacheManager : INService
             {
                 var tasks = keysToRefresh.Select(key => redisCache.KeyExpireAsync(key, MultiplierTtl)).ToArray();
                 await Task.WhenAll(tasks);
+                keysRefreshed += keysToRefresh.Count;
 
                 keysToRefresh.Clear();
             }
         }
 
         // Process any remaining keys
-        if (keysToRefresh.Count > 0)
+        if (keysToRefresh.Count <= 0) return (keysRefreshed, keysExamined);
         {
             var tasks = keysToRefresh.Select(key => redisCache.KeyExpireAsync(key, MultiplierTtl)).ToArray();
             await Task.WhenAll(tasks);
+            keysRefreshed += keysToRefresh.Count;
         }
+
+        return (keysRefreshed, keysExamined);
     }
 
     /// <summary>
