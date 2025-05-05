@@ -2,6 +2,7 @@ using System.Threading;
 using DataModel;
 using LinqToDB;
 using Mewdeko.Modules.Xp.Models;
+using Microsoft.Extensions.Caching.Memory;
 using Serilog;
 
 namespace Mewdeko.Modules.Xp.Services;
@@ -15,88 +16,124 @@ public class XpVoiceTracker : INService, IDisposable
     private readonly IDataConnectionFactory dbFactory;
     private readonly XpCacheManager cacheManager;
 
-    // Track active voice sessions without processing them periodically
-    private readonly ConcurrentDictionary<string, VoiceSession> voiceSessions = new();
+    // Track active voice sessions
+    private readonly ConcurrentDictionary<(ulong UserId, ulong ChannelId), VoiceSession> voiceSessions = new();
 
-    // Local caches to reduce database and Redis calls
+    private readonly MemoryCache exclusionCache;
+    private readonly MemoryCacheOptions cacheOptions = new()
+    {
+        ExpirationScanFrequency = TimeSpan.FromMinutes(5)
+    };
+
+    // Cache for guild settings
     private readonly ConcurrentDictionary<ulong, (bool IsExcluded, DateTime LastChecked)> guildExclusionCache = new();
     private readonly ConcurrentDictionary<ulong, (GuildXpSetting Settings, DateTime LastChecked)> guildSettingsCache = new();
-    private readonly ConcurrentDictionary<(ulong GuildId, ulong ChannelId), (bool IsExcluded, DateTime LastChecked)> channelExclusionCache = new();
-    private readonly ConcurrentDictionary<(ulong GuildId, ulong UserId), (bool IsExcluded, DateTime LastChecked)> userExclusionCache = new();
 
     // Track channel eligibility (requires at least 2 users)
     private readonly ConcurrentDictionary<(ulong GuildId, ulong ChannelId), (bool IsEligible, DateTime LastChecked)> channelEligibilityCache = new();
 
     // Cache TTLs
-    private readonly TimeSpan guildCacheTtl = TimeSpan.FromMinutes(30);
-    private readonly TimeSpan exclusionCacheTtl = TimeSpan.FromMinutes(15);
-    private readonly TimeSpan eligibilityCacheTtl = TimeSpan.FromMinutes(5);
+    private readonly TimeSpan guildCacheTtl = TimeSpan.FromMinutes(15);
+    private readonly TimeSpan exclusionCacheTtl = TimeSpan.FromMinutes(5);
+    private readonly TimeSpan eligibilityCacheTtl = TimeSpan.FromMinutes(2);
 
     // Constants
     private const int MinUsersForXp = 2;
 
-    // Timer for validating channel eligibility periodically (very infrequently)
+    // Timers for maintenance operations
     private readonly Timer validationTimer;
     private readonly Timer cleanupTimer;
+    private readonly Timer diagnosticsTimer;
 
-    // Session validation interval (10 minutes)
-    private readonly TimeSpan validationInterval = TimeSpan.FromMinutes(10);
+    // Session validation interval
+    private readonly TimeSpan validationInterval = TimeSpan.FromMinutes(5);
 
+    // Processing flag to prevent overlapping operations
+    private int isProcessing;
+
+    /// <summary>
+    ///     Represents a voice session for a user in a voice channel.
+    /// </summary>
     private class VoiceSession
     {
-        // Basic session info
+        /// <summary>
+        ///     Gets or sets the user ID.
+        /// </summary>
         public ulong UserId { get; set; }
+
+        /// <summary>
+        ///     Gets or sets the guild ID.
+        /// </summary>
         public ulong GuildId { get; set; }
+
+        /// <summary>
+        ///     Gets or sets the channel ID.
+        /// </summary>
         public ulong ChannelId { get; set; }
-        public string SessionKey { get; set; }
+
+        /// <summary>
+        ///     Gets or sets the join time.
+        /// </summary>
         public DateTime JoinTime { get; set; }
 
-        // Track eligible time periods
-        private List<(DateTime Start, DateTime? End)> EligiblePeriods { get; set; } = new();
+        /// <summary>
+        ///     Gets or sets the total eligible duration.
+        /// </summary>
+        public TimeSpan TotalEligibleDuration { get; set; } = TimeSpan.Zero;
 
-        // Current eligibility state
+        /// <summary>
+        ///     Gets or sets the last eligibility start time.
+        /// </summary>
+        public DateTime? LastEligibilityStart { get; set; }
+
+        /// <summary>
+        ///     Gets or sets a value indicating whether the session is currently eligible.
+        /// </summary>
         public bool CurrentlyEligible { get; set; }
+
+        /// <summary>
+        ///     Gets or sets the last time the eligibility state changed.
+        /// </summary>
         public DateTime LastEligibilityChange { get; set; }
 
-        // Calculate total eligible duration so far
+        /// <summary>
+        ///     Calculates the total eligible duration so far.
+        /// </summary>
+        /// <param name="referenceTime">The reference time to calculate up to.</param>
+        /// <returns>The total eligible duration.</returns>
         public TimeSpan GetEligibleDuration(DateTime referenceTime)
         {
-            var totalTicks = 0L;
+            if (!CurrentlyEligible) return TotalEligibleDuration;
+            if (!LastEligibilityStart.HasValue) return TotalEligibleDuration;
 
-            // Add up completed periods
-            foreach (var (start, end) in EligiblePeriods.Where(p => p.End.HasValue))
-            {
-                totalTicks += (end.Value - start).Ticks;
-            }
-
-            // Add current period if eligible
-            if (!CurrentlyEligible) return new TimeSpan(totalTicks);
-            var periodStart = EligiblePeriods.LastOrDefault().End ?? LastEligibilityChange;
-            totalTicks += (referenceTime - periodStart).Ticks;
-
-            return new TimeSpan(totalTicks);
+            return TotalEligibleDuration + (referenceTime - LastEligibilityStart.Value);
         }
 
-        // Start tracking eligible time
+        /// <summary>
+        ///     Starts tracking eligible time.
+        /// </summary>
+        /// <param name="timestamp">The timestamp when eligibility started.</param>
         public void StartEligiblePeriod(DateTime timestamp)
         {
             if (CurrentlyEligible) return;
+
             CurrentlyEligible = true;
             LastEligibilityChange = timestamp;
-            EligiblePeriods.Add((timestamp, null));
+            LastEligibilityStart = timestamp;
         }
 
-        // End current eligible period
+        /// <summary>
+        ///     Ends current eligible period.
+        /// </summary>
+        /// <param name="timestamp">The timestamp when eligibility ended.</param>
         public void EndEligiblePeriod(DateTime timestamp)
         {
-            if (!CurrentlyEligible || EligiblePeriods.Count <= 0) return;
+            if (!CurrentlyEligible || !LastEligibilityStart.HasValue) return;
+
+            TotalEligibleDuration += (timestamp - LastEligibilityStart.Value);
             CurrentlyEligible = false;
             LastEligibilityChange = timestamp;
-
-            // Update the latest period's end time
-            var lastIdx = EligiblePeriods.Count - 1;
-            var lastPeriod = EligiblePeriods[lastIdx];
-            EligiblePeriods[lastIdx] = (lastPeriod.Start, timestamp);
+            LastEligibilityStart = null;
         }
     }
 
@@ -115,16 +152,22 @@ public class XpVoiceTracker : INService, IDisposable
         this.dbFactory = dbFactory;
         this.cacheManager = cacheManager;
 
-        // Initialize a very infrequent validation timer (10 minutes)
-        // This only validates channel eligibility for existing sessions
+        // Initialize memory cache
+        exclusionCache = new MemoryCache(cacheOptions);
+
+        // Initialize validation timer (5 minutes)
         validationTimer = new Timer(ValidateActiveSessions, null,
             TimeSpan.FromMinutes(1), validationInterval);
 
-        // Initialize cleanup timer to run every hour
+        // Initialize cleanup timer to run every 20 minutes
         cleanupTimer = new Timer(CleanupStaleData, null,
-            TimeSpan.FromHours(1), TimeSpan.FromHours(1));
+            TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(20));
 
-        Log.Information("Voice XP Tracker initialized in exit-only mode for maximum efficiency");
+        // Initialize diagnostics timer to log stats every hour
+        diagnosticsTimer = new Timer(_ => LogDiagnostics(), null,
+            TimeSpan.FromMinutes(10), TimeSpan.FromHours(1));
+
+        Log.Information("Voice XP Tracker initialized with optimized memory usage");
     }
 
     /// <summary>
@@ -145,8 +188,11 @@ public class XpVoiceTracker : INService, IDisposable
             var guildId = guildUser.Guild.Id;
             var userId = guildUser.Id;
 
-            // Quick check for server exclusion from local cache first
-            if (IsGuildExcluded(guildId))
+            // Get guild settings
+            var settings = await GetGuildSettingsAsync(guildId);
+
+            // Skip if voice XP is disabled
+            if (settings.XpGainDisabled || settings.VoiceXpPerMinute <= 0)
                 return;
 
             // User left voice channel
@@ -154,7 +200,7 @@ public class XpVoiceTracker : INService, IDisposable
                 (after.VoiceChannel == null || after.VoiceChannel.Id != before.VoiceChannel.Id))
             {
                 var channelId = before.VoiceChannel.Id;
-                var key = GetSessionKey(userId, channelId);
+                var key = (userId, channelId);
 
                 if (voiceSessions.TryRemove(key, out var session))
                 {
@@ -203,19 +249,12 @@ public class XpVoiceTracker : INService, IDisposable
             var now = DateTime.UtcNow;
             var guildId = guild.Id;
 
-            // Quick check for server exclusion from local cache first
-            if (IsGuildExcluded(guildId))
-                return;
-
-            // Get guild settings from local cache first
+            // Get guild settings
             var settings = await GetGuildSettingsAsync(guildId);
 
             // Skip if voice XP is disabled
-            if (settings.VoiceXpPerMinute <= 0 || settings.VoiceXpTimeout <= 0)
+            if (settings.XpGainDisabled || settings.VoiceXpPerMinute <= 0 || settings.VoiceXpTimeout <= 0)
                 return;
-
-            // Get all exclusions for this guild in a single query to populate local cache
-            await GetExclusionsForGuildAsync(guildId);
 
             // Process all voice channels
             foreach (var channel in guild.VoiceChannels)
@@ -232,12 +271,15 @@ public class XpVoiceTracker : INService, IDisposable
                     continue;
 
                 // Check channel exclusion
-                if (IsChannelExcluded(guildId, channel.Id))
+                if (await IsChannelExcludedAsync(guildId, channel.Id))
                     continue;
 
                 // Start sessions for eligible users
-                foreach (var user in eligibleUsers.Where(user => !IsUserExcluded(guildId, user.Id)))
+                foreach (var user in eligibleUsers)
                 {
+                    if (await IsUserExcludedAsync(guildId, user.Id))
+                        continue;
+
                     await StartVoiceSession(user, channel, now);
                 }
             }
@@ -264,35 +306,27 @@ public class XpVoiceTracker : INService, IDisposable
         try
         {
             // Check if user is excluded
-            if (IsUserExcluded(guildId, userId))
+            if (await IsUserExcludedAsync(guildId, userId))
                 return;
 
             // Check if channel is excluded
-            if (IsChannelExcluded(guildId, channelId))
+            if (await IsChannelExcludedAsync(guildId, channelId))
                 return;
 
             // Get or create session
-            var key = GetSessionKey(userId, channelId);
+            var key = (userId, channelId);
             var session = voiceSessions.GetOrAdd(key, _ => new VoiceSession
             {
                 UserId = userId,
                 GuildId = guildId,
                 ChannelId = channelId,
-                SessionKey = key,
                 JoinTime = timestamp,
                 CurrentlyEligible = false,
                 LastEligibilityChange = timestamp
             });
 
             // Check channel eligibility (requires 2+ users)
-            var isEligible = IsChannelEligible(guildId, channelId);
-
-            // If not in cache, check actual channel
-            if (!isEligible)
-            {
-                isEligible = voiceChannel.Users.Count(u => !u.IsBot && IsParticipatingInVoice(u)) >= MinUsersForXp;
-                channelEligibilityCache[(guildId, channelId)] = (isEligible, timestamp);
-            }
+            var isEligible = await IsChannelEligibleAsync(guildId, channelId, voiceChannel);
 
             // Start eligible period if conditions are met
             if (isEligible && IsParticipatingInVoice(user))
@@ -322,7 +356,7 @@ public class XpVoiceTracker : INService, IDisposable
         var guildId = user.Guild.Id;
         var userId = user.Id;
         var channelId = voiceChannel.Id;
-        var key = GetSessionKey(userId, channelId);
+        var key = (userId, channelId);
 
         // Only proceed if we have an existing session
         if (!voiceSessions.TryGetValue(key, out var session))
@@ -331,14 +365,7 @@ public class XpVoiceTracker : INService, IDisposable
         try
         {
             // Check overall channel eligibility
-            var isChannelEligible = IsChannelEligible(guildId, channelId);
-
-            // If not cached, check actual channel
-            if (!isChannelEligible)
-            {
-                isChannelEligible = voiceChannel.Users.Count(u => !u.IsBot && IsParticipatingInVoice(u)) >= MinUsersForXp;
-                channelEligibilityCache[(guildId, channelId)] = (isChannelEligible, timestamp);
-            }
+            var isChannelEligible = await IsChannelEligibleAsync(guildId, channelId, voiceChannel);
 
             // Is this user participating
             var isUserParticipating = IsParticipatingInVoice(user);
@@ -346,15 +373,16 @@ public class XpVoiceTracker : INService, IDisposable
             // Update session eligibility based on current conditions
             var shouldBeEligible = isChannelEligible && isUserParticipating;
 
-            if (shouldBeEligible && !session.CurrentlyEligible)
+            switch (shouldBeEligible)
             {
-                // Start new eligible period
-                session.StartEligiblePeriod(timestamp);
-            }
-            else if (!shouldBeEligible && session.CurrentlyEligible)
-            {
-                // End current eligible period
-                session.EndEligiblePeriod(timestamp);
+                case true when !session.CurrentlyEligible:
+                    // Start new eligible period
+                    session.StartEligiblePeriod(timestamp);
+                    break;
+                case false when session.CurrentlyEligible:
+                    // End current eligible period
+                    session.EndEligiblePeriod(timestamp);
+                    break;
             }
 
             // Update session in dictionary
@@ -453,7 +481,7 @@ public class XpVoiceTracker : INService, IDisposable
     /// <param name="state">The state object.</param>
     private async void ValidateActiveSessions(object state)
     {
-        if (voiceSessions.IsEmpty)
+        if (Interlocked.Exchange(ref isProcessing, 1) != 0)
             return;
 
         var startTime = DateTime.UtcNow;
@@ -461,7 +489,13 @@ public class XpVoiceTracker : INService, IDisposable
 
         try
         {
-            // Group sessions by guild/channel for efficient processing
+            // Skip if no sessions to validate
+            if (voiceSessions.IsEmpty)
+                return;
+
+            // Process in batches to avoid memory spikes
+            var batchesProcessed = 0;
+
             var sessionsByChannel = voiceSessions.Values
                 .GroupBy(s => (s.GuildId, s.ChannelId))
                 .ToDictionary(g => g.Key, g => g.ToList());
@@ -475,7 +509,7 @@ public class XpVoiceTracker : INService, IDisposable
                         continue;
 
                     // Skip if channel is excluded
-                    if (IsChannelExcluded(guildId, channelId))
+                    if (await IsChannelExcludedAsync(guildId, channelId))
                         continue;
 
                     // Get guild and channel
@@ -513,12 +547,12 @@ public class XpVoiceTracker : INService, IDisposable
                                 // Update session eligibility
                                 case true when !session.CurrentlyEligible && IsParticipatingInVoice(user):
                                     session.StartEligiblePeriod(startTime);
-                                    voiceSessions[session.SessionKey] = session;
+                                    voiceSessions[(session.UserId, session.ChannelId)] = session;
                                     sessionsUpdated++;
                                     break;
                                 case false when session.CurrentlyEligible:
                                     session.EndEligiblePeriod(startTime);
-                                    voiceSessions[session.SessionKey] = session;
+                                    voiceSessions[(session.UserId, session.ChannelId)] = session;
                                     sessionsUpdated++;
                                     break;
                             }
@@ -535,16 +569,29 @@ public class XpVoiceTracker : INService, IDisposable
                     Log.Error(ex, "Error validating channel {ChannelId} in guild {GuildId}",
                         channelId, guildId);
                 }
+
+                // Add a delay between batches to reduce CPU spikes
+                batchesProcessed++;
+                if (batchesProcessed % 5 == 0)
+                {
+                    await Task.Delay(50);
+                }
             }
 
-            if (sessionsUpdated <= 0) return;
-            var elapsedMs = (DateTime.UtcNow - startTime).TotalMilliseconds;
-            Log.Debug("Updated eligibility for {Count} voice sessions in {Time:F1}ms",
-                sessionsUpdated, elapsedMs);
+            if (sessionsUpdated > 0)
+            {
+                var elapsedMs = (DateTime.UtcNow - startTime).TotalMilliseconds;
+                Log.Debug("Updated eligibility for {Count} voice sessions in {Time:F1}ms",
+                    sessionsUpdated, elapsedMs);
+            }
         }
         catch (Exception ex)
         {
             Log.Error(ex, "Error validating voice sessions");
+        }
+        finally
+        {
+            Interlocked.Exchange(ref isProcessing, 0);
         }
     }
 
@@ -552,103 +599,66 @@ public class XpVoiceTracker : INService, IDisposable
     ///     Cleans up stale data to prevent memory leaks.
     /// </summary>
     /// <param name="state">The state object.</param>
-    private void CleanupStaleData(object state)
+    private async void CleanupStaleData(object state)
     {
         var now = DateTime.UtcNow;
         var sessionsRemoved = 0;
 
         try
         {
-            var keysToRemove = new List<string>();
+            // Take snapshot of session keys to avoid modification during iteration
+            var sessionKeys = voiceSessions.Keys.ToList();
 
-            foreach (var session in voiceSessions.Values)
+            // Process in batches to reduce CPU spikes
+            const int batchSize = 100;
+            for (var i = 0; i < sessionKeys.Count; i += batchSize)
             {
-                try
+                var batchKeys = sessionKeys.Skip(i).Take(batchSize).ToList();
+                foreach (var key in batchKeys)
                 {
-                    var guild = client.GetGuild(session.GuildId);
-                    if (guild == null)
-                    {
-                        keysToRemove.Add(session.SessionKey);
+                    if (!voiceSessions.TryGetValue(key, out var session))
                         continue;
-                    }
 
-                    var user = guild.GetUser(session.UserId);
-                    if (user == null)
+                    try
                     {
-                        keysToRemove.Add(session.SessionKey);
-                        continue;
-                    }
+                        var guild = client.GetGuild(session.GuildId);
+                        if (guild == null)
+                        {
+                            voiceSessions.TryRemove(key, out _);
+                            sessionsRemoved++;
+                            continue;
+                        }
 
-                    // Check if user is still in this voice channel
-                    if (user.VoiceChannel == null || user.VoiceChannel.Id != session.ChannelId)
+                        var user = guild.GetUser(session.UserId);
+                        if (user == null)
+                        {
+                            voiceSessions.TryRemove(key, out _);
+                            sessionsRemoved++;
+                            continue;
+                        }
+
+                        // Check if user is still in this voice channel
+                        if (user.VoiceChannel == null || user.VoiceChannel.Id != session.ChannelId)
+                        {
+                            voiceSessions.TryRemove(key, out _);
+                            sessionsRemoved++;
+                        }
+                    }
+                    catch
                     {
-                        keysToRemove.Add(session.SessionKey);
+                        // If any error occurs, remove the key to be safe
+                        voiceSessions.TryRemove(key, out _);
+                        sessionsRemoved++;
                     }
                 }
-                catch
-                {
-                    // If any error occurs, mark for removal to be safe
-                    keysToRemove.Add(session.SessionKey);
-                }
+
+                // Add a delay between batches
+                await Task.Delay(50);
             }
 
-            // Remove sessions
-            sessionsRemoved += keysToRemove.Count(key => voiceSessions.TryRemove(key, out _));
+            // Clear expired cache entries
+            ClearExpiredCaches(now);
 
-            // Clear expired guild cache entries
-            var expiredGuilds = guildExclusionCache
-                .Where(kvp => (now - kvp.Value.LastChecked) > guildCacheTtl)
-                .Select(kvp => kvp.Key)
-                .ToList();
-
-            foreach (var guildId in expiredGuilds)
-            {
-                guildExclusionCache.TryRemove(guildId, out _);
-            }
-
-            expiredGuilds = guildSettingsCache
-                .Where(kvp => (now - kvp.Value.LastChecked) > guildCacheTtl)
-                .Select(kvp => kvp.Key)
-                .ToList();
-
-            foreach (var guildId in expiredGuilds)
-            {
-                guildSettingsCache.TryRemove(guildId, out _);
-            }
-
-            // Clear expired exclusion cache entries
-            var expiredChannels = channelExclusionCache
-                .Where(kvp => (now - kvp.Value.LastChecked) > exclusionCacheTtl)
-                .Select(kvp => kvp.Key)
-                .ToList();
-
-            foreach (var key in expiredChannels)
-            {
-                channelExclusionCache.TryRemove(key, out _);
-            }
-
-            var expiredUsers = userExclusionCache
-                .Where(kvp => (now - kvp.Value.LastChecked) > exclusionCacheTtl)
-                .Select(kvp => kvp.Key)
-                .ToList();
-
-            foreach (var key in expiredUsers)
-            {
-                userExclusionCache.TryRemove(key, out _);
-            }
-
-            // Clear expired eligibility cache entries
-            var expiredEligibility = channelEligibilityCache
-                .Where(kvp => (now - kvp.Value.LastChecked) > eligibilityCacheTtl)
-                .Select(kvp => kvp.Key)
-                .ToList();
-
-            foreach (var key in expiredEligibility)
-            {
-                channelEligibilityCache.TryRemove(key, out _);
-            }
-
-            // Log stats if anything significant happened
             if (sessionsRemoved > 0)
             {
                 Log.Information("Voice tracker cleanup: removed {Count} stale sessions, " +
@@ -660,6 +670,48 @@ public class XpVoiceTracker : INService, IDisposable
         {
             Log.Error(ex, "Error in voice tracker cleanup");
         }
+    }
+
+    /// <summary>
+    ///     Clears expired cache entries.
+    /// </summary>
+    /// <param name="now">The current time.</param>
+    private void ClearExpiredCaches(DateTime now)
+    {
+        // Clear expired guild cache entries
+        var expiredGuilds = guildExclusionCache
+            .Where(kvp => (now - kvp.Value.LastChecked) > guildCacheTtl)
+            .Select(kvp => kvp.Key)
+            .ToList();
+
+        foreach (var guildId in expiredGuilds)
+        {
+            guildExclusionCache.TryRemove(guildId, out _);
+        }
+
+        expiredGuilds = guildSettingsCache
+            .Where(kvp => (now - kvp.Value.LastChecked) > guildCacheTtl)
+            .Select(kvp => kvp.Key)
+            .ToList();
+
+        foreach (var guildId in expiredGuilds)
+        {
+            guildSettingsCache.TryRemove(guildId, out _);
+        }
+
+        // Clear expired eligibility cache entries
+        var expiredEligibility = channelEligibilityCache
+            .Where(kvp => (now - kvp.Value.LastChecked) > eligibilityCacheTtl)
+            .Select(kvp => kvp.Key)
+            .ToList();
+
+        foreach (var key in expiredEligibility)
+        {
+            channelEligibilityCache.TryRemove(key, out _);
+        }
+
+        // Compact the memory cache
+        exclusionCache?.Compact(100);
     }
 
     /// <summary>
@@ -691,76 +743,6 @@ public class XpVoiceTracker : INService, IDisposable
     }
 
     /// <summary>
-    ///     Gets exclusions for a guild and populates local caches.
-    /// </summary>
-    /// <param name="guildId">The guild ID.</param>
-    /// <returns>A task representing the asynchronous operation.</returns>
-    private async Task GetExclusionsForGuildAsync(ulong guildId)
-    {
-        try
-        {
-            var now = DateTime.UtcNow;
-
-            // Get exclusions from database
-            await using var db = await dbFactory.CreateConnectionAsync();
-
-            // Get all exclusions for this guild in one query
-            var exclusions = await db.XpExcludedItems
-                .Where(x => x.GuildId == guildId)
-                .ToListAsync();
-
-            // Populate channel exclusion cache
-            var channelExclusions = exclusions
-                .Where(x => (ExcludedItemType)x.ItemType == ExcludedItemType.Channel)
-                .Select(x => x.ItemId)
-                .ToList();
-
-            foreach (var channelId in channelExclusions)
-            {
-                channelExclusionCache[(guildId, channelId)] = (true, now);
-            }
-
-            // Populate user exclusion cache
-            var userExclusions = exclusions
-                .Where(x => (ExcludedItemType)x.ItemType == ExcludedItemType.User)
-                .Select(x => x.ItemId)
-                .ToList();
-
-            foreach (var userId in userExclusions)
-            {
-                userExclusionCache[(guildId, userId)] = (true, now);
-            }
-
-            // Store role exclusions for reference in user checks
-            var roleExclusions = exclusions
-                .Where(x => (ExcludedItemType)x.ItemType == ExcludedItemType.Role)
-                .Select(x => x.ItemId)
-                .ToList();
-
-            // We don't cache role exclusions directly, but use them to check users
-            if (roleExclusions.Count > 0)
-            {
-                var guild = client.GetGuild(guildId);
-                if (guild != null)
-                {
-                    // Find all users with excluded roles
-                    foreach (var user in guild.Users)
-                    {
-                        if (user.Roles.Any(r => roleExclusions.Contains(r.Id)))
-                        {
-                            userExclusionCache[(guildId, user.Id)] = (true, now);
-                        }
-                    }
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "Error getting exclusions for guild {GuildId}", guildId);
-        }
-    }
-
-    /// <summary>
     ///     Checks if a guild is excluded from XP gain using local cache.
     /// </summary>
     /// <param name="guildId">The guild ID.</param>
@@ -782,45 +764,84 @@ public class XpVoiceTracker : INService, IDisposable
     }
 
     /// <summary>
-    ///     Checks if a channel is excluded using local cache.
+    ///     Checks if a channel is excluded.
     /// </summary>
     /// <param name="guildId">The guild ID.</param>
     /// <param name="channelId">The channel ID.</param>
-    /// <returns>True if the channel is excluded.</returns>
-    private bool IsChannelExcluded(ulong guildId, ulong channelId)
+    /// <returns>A task representing the asynchronous operation with a boolean result.</returns>
+    private async Task<bool> IsChannelExcludedAsync(ulong guildId, ulong channelId)
     {
-        var now = DateTime.UtcNow;
-
-        // Check local cache
-        if (channelExclusionCache.TryGetValue((guildId, channelId), out var cacheEntry) &&
-            (now - cacheEntry.LastChecked) < exclusionCacheTtl)
+        // Try to get from memory cache
+        var cacheKey = $"channel:{guildId}:{channelId}";
+        if (exclusionCache.TryGetValue(cacheKey, out bool isExcluded))
         {
-            return cacheEntry.IsExcluded;
+            return isExcluded;
         }
 
-        // Not in cache, we'll check database on next cycle
-        return false;
+        // Check from database
+        await using var db = await dbFactory.CreateConnectionAsync();
+        isExcluded = await db.XpExcludedItems
+            .AnyAsync(x => x.GuildId == guildId &&
+                          x.ItemId == channelId &&
+                          x.ItemType == (int)ExcludedItemType.Channel);
+
+        // Cache the result
+        var options = new MemoryCacheEntryOptions()
+            .SetSize(1)
+            .SetAbsoluteExpiration(exclusionCacheTtl);
+
+        exclusionCache.Set(cacheKey, isExcluded, options);
+
+        return isExcluded;
     }
 
     /// <summary>
-    ///     Checks if a user is excluded using local cache.
+    ///     Checks if a user is excluded.
     /// </summary>
     /// <param name="guildId">The guild ID.</param>
     /// <param name="userId">The user ID.</param>
-    /// <returns>True if the user is excluded.</returns>
-    private bool IsUserExcluded(ulong guildId, ulong userId)
+    /// <returns>A task representing the asynchronous operation with a boolean result.</returns>
+    private async Task<bool> IsUserExcludedAsync(ulong guildId, ulong userId)
     {
-        var now = DateTime.UtcNow;
-
-        // Check local cache
-        if (userExclusionCache.TryGetValue((guildId, userId), out var cacheEntry) &&
-            (now - cacheEntry.LastChecked) < exclusionCacheTtl)
+        // Try to get from memory cache
+        var cacheKey = $"user:{guildId}:{userId}";
+        if (exclusionCache.TryGetValue(cacheKey, out bool isExcluded))
         {
-            return cacheEntry.IsExcluded;
+            return isExcluded;
         }
 
-        // Not in cache, we'll check database on next cycle
-        return false;
+        // Check database for user exclusion
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        // Direct user exclusion
+        isExcluded = await db.XpExcludedItems
+            .AnyAsync(x => x.GuildId == guildId &&
+                          x.ItemId == userId &&
+                          x.ItemType == (int)ExcludedItemType.User);
+
+        if (!isExcluded)
+        {
+            // User could be excluded by role
+            var user = client.GetGuild(guildId)?.GetUser(userId);
+            if (user != null)
+            {
+                var excludedRoles = await db.XpExcludedItems
+                    .Where(x => x.GuildId == guildId && x.ItemType == (int)ExcludedItemType.Role)
+                    .Select(x => x.ItemId)
+                    .ToListAsync();
+
+                isExcluded = user.Roles.Any(r => excludedRoles.Contains(r.Id));
+            }
+        }
+
+        // Cache the result
+        var options = new MemoryCacheEntryOptions()
+            .SetSize(1)
+            .SetAbsoluteExpiration(exclusionCacheTtl);
+
+        exclusionCache.Set(cacheKey, isExcluded, options);
+
+        return isExcluded;
     }
 
     /// <summary>
@@ -828,20 +849,42 @@ public class XpVoiceTracker : INService, IDisposable
     /// </summary>
     /// <param name="guildId">The guild ID.</param>
     /// <param name="channelId">The channel ID.</param>
-    /// <returns>True if the channel is eligible.</returns>
-    private bool IsChannelEligible(ulong guildId, ulong channelId)
+    /// <param name="voiceChannel">The voice channel, if available.</param>
+    /// <returns>A task representing the asynchronous operation with a boolean result.</returns>
+    private async Task<bool> IsChannelEligibleAsync(ulong guildId, ulong channelId, SocketVoiceChannel? voiceChannel = null)
     {
         var now = DateTime.UtcNow;
 
-        // Check local cache
+        // Check local cache for recent results
         if (channelEligibilityCache.TryGetValue((guildId, channelId), out var cacheEntry) &&
             (now - cacheEntry.LastChecked) < eligibilityCacheTtl)
         {
             return cacheEntry.IsEligible;
         }
 
-        // Not in cache, we'll need to check - default to not eligible
-        return false;
+        // If we have the channel object, check it directly
+        if (voiceChannel != null)
+        {
+            var isEligible = voiceChannel.Users.Count(u => !u.IsBot && IsParticipatingInVoice(u)) >= MinUsersForXp;
+            channelEligibilityCache[(guildId, channelId)] = (isEligible, now);
+            return isEligible;
+        }
+
+        // Otherwise, get the channel and check
+        var guild = client.GetGuild(guildId);
+        var channel = guild?.GetVoiceChannel(channelId);
+
+        if (channel == null)
+        {
+            channelEligibilityCache[(guildId, channelId)] = (false, now);
+            return false;
+        }
+
+        var eligibleCount = channel.Users.Count(u => !u.IsBot && IsParticipatingInVoice(u));
+        var eligible = eligibleCount >= MinUsersForXp;
+
+        channelEligibilityCache[(guildId, channelId)] = (eligible, now);
+        return eligible;
     }
 
     /// <summary>
@@ -856,14 +899,17 @@ public class XpVoiceTracker : INService, IDisposable
     }
 
     /// <summary>
-    ///     Gets the key for a voice session.
+    ///     Logs diagnostic information about the voice tracker.
     /// </summary>
-    /// <param name="userId">The user ID.</param>
-    /// <param name="channelId">The channel ID.</param>
-    /// <returns>The session key.</returns>
-    private static string GetSessionKey(ulong userId, ulong channelId)
+    private void LogDiagnostics()
     {
-        return $"{userId}:{channelId}";
+        Log.Information("XpVoiceTracker stats: Active sessions: {SessionCount}, " +
+                       "Guild cache: {GuildCount}, Channel eligibility cache: {ChannelCount}, " +
+                       "Exclusion cache: {ExclusionCount}",
+            voiceSessions.Count,
+            guildSettingsCache.Count,
+            channelEligibilityCache.Count,
+            exclusionCache.Count);
     }
 
     /// <summary>
@@ -873,6 +919,11 @@ public class XpVoiceTracker : INService, IDisposable
     {
         validationTimer?.Dispose();
         cleanupTimer?.Dispose();
+        diagnosticsTimer?.Dispose();
         voiceSessions.Clear();
+        exclusionCache.Dispose();
+        guildExclusionCache.Clear();
+        guildSettingsCache.Clear();
+        channelEligibilityCache.Clear();
     }
 }
