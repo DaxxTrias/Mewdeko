@@ -639,31 +639,6 @@ public partial class Searches(
         }
     }
 
-
-    /// <summary>
-    ///     Generates a Let Me Google That For You (LMGTFY) link for the provided query.
-    /// </summary>
-    /// <param name="ffs">The search query to be used in the LMGTFY link.</param>
-    /// <remarks>
-    ///     This command takes a search query as input and generates a LMGTFY link.
-    ///     The LMGTFY link is then shortened using the google.ShortenUrl method and sent to the channel.
-    ///     If the provided query is null or whitespace, the command will return without sending a message.
-    /// </remarks>
-    /// <example>
-    ///     <code>.lmgtfy query</code>
-    /// </example>
-    [Cmd]
-    [Aliases]
-    public async Task Lmgtfy([Remainder] string? ffs = null)
-    {
-        if (!await ValidateQuery(ctx.Channel, ffs).ConfigureAwait(false))
-            return;
-
-        await ctx.Channel.SendConfirmAsync(
-                $"<{await google.ShortenUrl($"https://lmgtfy.com/?q={Uri.EscapeDataString(ffs)}").ConfigureAwait(false)}>")
-            .ConfigureAwait(false);
-    }
-
     /// <summary>
     ///     Shortens a provided URL using the goolnk.com API.
     /// </summary>
@@ -773,87 +748,6 @@ public partial class Searches(
             .WithFooter(efb => efb.WithText(data.TotalResults))
             .WithDescription(descStr)
             .WithOkColor();
-
-        await ctx.Channel.EmbedAsync(embed).ConfigureAwait(false);
-    }
-
-    /// <summary>
-    ///     Fetches and displays information about a Magic: The Gathering card.
-    /// </summary>
-    /// <param name="search">The name or identifier of the Magic: The Gathering card to search for.</param>
-    /// <remarks>
-    ///     Utilizing an external API, this command retrieves details about a specified Magic: The Gathering card,
-    ///     including its name, description, mana cost, types, and an image if available.
-    ///     The information is presented in an embed format.
-    /// </remarks>
-    /// <example>
-    ///     <code>.magicthegathering "Black Lotus"</code>
-    /// </example>
-    [Cmd]
-    [Aliases]
-    public async Task MagicTheGathering([Remainder] string search)
-    {
-        if (!await ValidateQuery(ctx.Channel, search).ConfigureAwait(false))
-            return;
-
-        await ctx.Channel.TriggerTypingAsync().ConfigureAwait(false);
-        var card = await Service.GetMtgCardAsync(search).ConfigureAwait(false);
-
-        if (card == null)
-        {
-            await ReplyErrorAsync(Strings.CardNotFound(ctx.Guild.Id)).ConfigureAwait(false);
-            return;
-        }
-
-        var embed = new EmbedBuilder().WithOkColor()
-            .WithTitle(card.Name)
-            .WithDescription(card.Description)
-            .WithImageUrl(card.ImageUrl)
-            .AddField(efb => efb.WithName(Strings.StoreUrl(ctx.Guild.Id)).WithValue(card.StoreUrl).WithIsInline(true))
-            .AddField(efb => efb.WithName(Strings.Cost(ctx.Guild.Id)).WithValue(card.ManaCost).WithIsInline(true))
-            .AddField(efb => efb.WithName(Strings.Types(ctx.Guild.Id)).WithValue(card.Types).WithIsInline(true));
-
-        await ctx.Channel.EmbedAsync(embed).ConfigureAwait(false);
-    }
-
-    /// <summary>
-    ///     Searches for and displays information about a Hearthstone card.
-    /// </summary>
-    /// <param name="name">The name of the Hearthstone card to search for.</param>
-    /// <remarks>
-    ///     This command searches for a Hearthstone card by name and displays its image and flavor text, if available.
-    ///     It requires a valid Mashape API key set in the bot's configuration to access the Hearthstone API.
-    /// </remarks>
-    /// <example>
-    ///     <code>.hearthstone "Leeroy Jenkins"</code>
-    /// </example>
-    [Cmd]
-    [Aliases]
-    public async Task Hearthstone([Remainder] string name)
-    {
-        if (!await ValidateQuery(ctx.Channel, name).ConfigureAwait(false))
-            return;
-
-        if (string.IsNullOrWhiteSpace(creds.MashapeKey))
-        {
-            await ReplyErrorAsync(Strings.MashapeApiMissing(ctx.Guild.Id)).ConfigureAwait(false);
-            return;
-        }
-
-        await ctx.Channel.TriggerTypingAsync().ConfigureAwait(false);
-        var card = await Service.GetHearthstoneCardDataAsync(name).ConfigureAwait(false);
-
-        if (card == null)
-        {
-            await ReplyErrorAsync(Strings.CardNotFound(ctx.Guild.Id)).ConfigureAwait(false);
-            return;
-        }
-
-        var embed = new EmbedBuilder().WithOkColor()
-            .WithImageUrl(card.Img);
-
-        if (!string.IsNullOrWhiteSpace(card.Flavor))
-            embed.WithDescription(card.Flavor);
 
         await ctx.Channel.EmbedAsync(embed).ConfigureAwait(false);
     }

@@ -30,13 +30,6 @@ public interface IGoogleApiService : INService
     Task<SearchResult[]> GetVideoLinksByKeywordAsync(string keywords);
 
     /// <summary>
-    ///     Shortens the given URL.
-    /// </summary>
-    /// <param name="url">The URL to shorten.</param>
-    /// <returns>The shortened URL.</returns>
-    Task<string> ShortenUrl(string url);
-
-    /// <summary>
     ///     Gets an images safesearch param
     /// </summary>
     /// <param name="imageUrl">The image to check</param>
