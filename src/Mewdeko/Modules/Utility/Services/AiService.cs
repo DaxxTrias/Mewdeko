@@ -296,6 +296,11 @@ public class AiService : INService
                 ]
             };
             convId = await db.InsertWithInt32IdentityAsync(conversation);
+            conversation.Id = convId;
+        }
+        else
+        {
+            convId = conversation.Id;
         }
 
         await db.InsertAsync(new AiMessage
@@ -412,7 +417,7 @@ public class AiService : INService
 
         await db.InsertAsync(new AiMessage
         {
-            ConversationId = conversation.Id,
+            ConversationId = convId,
             Role = "assistant",
             Content = responseBuilder.ToString()
         });
