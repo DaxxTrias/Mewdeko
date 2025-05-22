@@ -4,8 +4,6 @@ using System.Net.Http;
 using Google;
 using Google.Apis.Auth.OAuth2;
 using Google.Apis.Services;
-using Google.Apis.Urlshortener.v1;
-using Google.Apis.Urlshortener.v1.Data;
 using Google.Apis.YouTube.v3;
 using Google.Apis.YouTube.v3.Data;
 using Google.Cloud.Vision.V1;
@@ -417,8 +415,6 @@ public class GoogleApiService : IGoogleApiService
         }
     };
 
-    private readonly UrlshortenerService sh;
-
     private readonly ImageAnnotatorClient? visionClient;
 
     private readonly YouTubeService yt;
@@ -455,7 +451,6 @@ public class GoogleApiService : IGoogleApiService
         }
 
         yt = new YouTubeService(bcs);
-        sh = new UrlshortenerService(bcs);
     }
 
 
@@ -518,40 +513,6 @@ public class GoogleApiService : IGoogleApiService
         return (await query.ExecuteAsync().ConfigureAwait(false)).Items.ToArray();
     }
 
-
-    /// <summary>
-    ///     Shortens a given url.
-    /// </summary>
-    /// <param name="url">The URL to shorten.</param>
-    /// <returns>The shortened URL.</returns>
-    /// <exception cref="ArgumentNullException"></exception>
-    public async Task<string> ShortenUrl(string url)
-    {
-        await Task.Yield();
-        if (string.IsNullOrWhiteSpace(url))
-            throw new ArgumentNullException(nameof(url));
-
-        if (string.IsNullOrWhiteSpace(creds.GoogleApiKey))
-            return url;
-
-        try
-        {
-            var response = await sh.Url.Insert(new Url
-            {
-                LongUrl = url
-            }).ExecuteAsync().ConfigureAwait(false);
-            return response.Id;
-        }
-        catch (GoogleApiException ex) when (ex.HttpStatusCode == HttpStatusCode.Forbidden)
-        {
-            return url;
-        }
-        catch (Exception ex)
-        {
-            Log.Warning(ex, "Error shortening URL");
-            return url;
-        }
-    }
 
     /// <summary>
     ///     Gets the list of supported languages.

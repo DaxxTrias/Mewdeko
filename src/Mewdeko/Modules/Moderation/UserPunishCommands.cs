@@ -270,14 +270,14 @@ public partial class Moderation : MewdekoModule
                 await user.ModifyAsync(u => u.Nickname = newNickname);
                 await ctx.Channel.SendConfirmAsync(
                     Strings.UserDehoisted(ctx.Guild.Id, user.Mention, newNickname));
-
             }
             else
             {
                 var newNickname = UserExtensions.ReplaceSpecialChars(user.Username);
                 await user.ModifyAsync(u => u.Nickname = newNickname);
                 await ctx.Channel.SendConfirmAsync(
-                    Strings.UserDehoistedSuccess(ctx.Guild.Id, user.Mention, newNickname));            }
+                    Strings.UserDehoistedSuccess(ctx.Guild.Id, user.Mention, newNickname));
+            }
         }
 
         /// <summary>
@@ -545,21 +545,27 @@ public partial class Moderation : MewdekoModule
         private async Task InternalWarnlog(ulong userId)
         {
             var warnings = await Service.UserWarnings(ctx.Guild.Id, userId);
+
+            var maxPageIndex = warnings.Length > 0 ? (warnings.Length - 1) / 9 : 0;
+
             var paginator = new LazyPaginatorBuilder()
                 .AddUser(ctx.User)
                 .WithPageFactory(PageFactory)
                 .WithFooter(PaginatorFooter.PageNumber | PaginatorFooter.Users)
-                .WithMaxPageIndex(warnings.Length / 9)
+                .WithMaxPageIndex(maxPageIndex)
                 .WithDefaultCanceledPage()
                 .WithDefaultEmotes()
                 .WithActionOnCancellation(ActionOnStop.DeleteMessage)
                 .Build();
+
             await serv.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
+            return;
 
             async Task<PageBuilder> PageFactory(int page)
             {
                 await Task.CompletedTask.ConfigureAwait(false);
-                warnings = warnings.Skip(page)
+
+                var pageWarnings = warnings.Skip(page * 9)
                     .Take(9)
                     .ToArray();
 
@@ -568,31 +574,34 @@ public partial class Moderation : MewdekoModule
                         (ctx.Guild as SocketGuild)?.GetUser(userId)?.ToString() ?? userId.ToString()))
                     .WithFooter(efb => efb.WithText(Strings.Page(ctx.Guild.Id, page + 1)));
 
-                if (warnings.Length == 0)
+                if (pageWarnings.Length == 0)
                 {
                     embed.WithDescription(Strings.WarningsNone(ctx.Guild.Id));
                 }
                 else
                 {
-                    var i = page * 9;
-                    foreach (var w in warnings)
+                    var startIndex = page * 9;
+                    for (var j = 0; j < pageWarnings.Length; j++)
                     {
-                        i++;
+                        var w = pageWarnings[j];
+                        var warningNumber = startIndex + j + 1;
+
                         if (w.DateAdded != null)
                         {
-                            var name = Strings.WarnedOnBy(ctx.Guild.Id, $"<t:{w.DateAdded.Value.ToUnixEpochDate()}:D>",
-                                $"<t:{w.DateAdded.Value.ToUnixEpochDate()}:T>", w.Moderator);
-                            if (w.Forgiven)
-                                name = $"{Format.Strikethrough(name)} {Strings.WarnClearedBy(ctx.Guild.Id, w.ForgivenBy)}";
+                            var name = Strings.WarnedOnBy(ctx.Guild.Id,
+                                $"<t:{w.DateAdded.Value.ToUnixEpochDate()}:D>",
+                                $"<t:{w.DateAdded.Value.ToUnixEpochDate()}:T>",
+                                w.Moderator);
 
-                            var i1 = i;
-                            embed.AddField(x =>
-                            {
-                                if (w.Reason != null)
-                                    x
-                                        .WithName($"#`{i1}` {name}")
-                                        .WithValue(w.Reason.TrimTo(1020));
-                            });
+                            if (w.Forgiven)
+                                name =
+                                    $"{Format.Strikethrough(name)} {Strings.WarnClearedBy(ctx.Guild.Id, w.ForgivenBy)}";
+
+                            var reason = string.IsNullOrEmpty(w.Reason) ? "No reason provided" : w.Reason.TrimTo(1020);
+
+                            embed.AddField(x => x
+                                .WithName($"#`{warningNumber}` {name}")
+                                .WithValue(reason));
                         }
                     }
                 }
@@ -797,7 +806,7 @@ public partial class Moderation : MewdekoModule
             {
                 list = string.Join("\n",
                     ps.Select(x =>
-                        $"{x.Count} -> {x.Punishment} {(x.Punishment == (int)PunishmentAction.AddRole ? $"<@&{x.RoleId}>" : "")} {(x.Time <= 0 ? "" : $"{x.Time}m")} "));
+                        $"{x.Count} -> {(PunishmentAction)x.Punishment} {(x.Punishment == (int)PunishmentAction.AddRole ? $"<@&{x.RoleId}>" : "")} {(x.Time <= 0 ? "" : $"{x.Time}m")} "));
             }
             else
             {
