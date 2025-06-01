@@ -931,5 +931,51 @@ public partial class XpService
         return File.ReadAllBytes("data/images/default_xp_background.png");
     }
 
+    /// <summary>
+    ///     Gets a users level
+    /// </summary>
+    public async Task<int> GetUserLevelAsync(ulong guildId, ulong userId)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        var userXp = await db.GuildUserXps
+            .FirstOrDefaultAsync(x => x.GuildId == guildId && x.UserId == userId);
+
+        if (userXp == null)
+            return 0;
+
+        var settings = await cacheManager.GetGuildXpSettingsAsync(guildId);
+        return XpCalculator.CalculateLevel(userXp.TotalXp, (XpCurveType)settings.XpCurveType);
+    }
+
+    /// <summary>
+    ///     Batch method to get levels for multiple users efficiently
+    /// </summary>
+    /// <param name="guildId">The guild ID.</param>
+    /// <param name="userIds">The user IDs to get levels for.</param>
+    /// <returns>A dictionary mapping user IDs to their levels.</returns>
+    public async Task<Dictionary<ulong, int>> GetUserLevelsAsync(ulong guildId, IEnumerable<ulong> userIds)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        var userIdList = userIds.ToList();
+        var userXpData = await db.GuildUserXps
+            .Where(x => x.GuildId == guildId && userIdList.Contains(x.UserId))
+            .ToDictionaryAsync(x => x.UserId, x => x.TotalXp);
+
+        var settings = await cacheManager.GetGuildXpSettingsAsync(guildId);
+        var curveType = (XpCurveType)settings.XpCurveType;
+
+        var result = new Dictionary<ulong, int>();
+
+        foreach (var userId in userIdList)
+        {
+            var totalXp = userXpData.GetValueOrDefault(userId, 0);
+            result[userId] = XpCalculator.CalculateLevel(totalXp, curveType);
+        }
+
+        return result;
+    }
+
     #endregion
 }
