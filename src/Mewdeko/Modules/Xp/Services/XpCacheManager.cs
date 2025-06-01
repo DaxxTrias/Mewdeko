@@ -718,6 +718,7 @@ public class XpCacheManager : INService
             }
 
             Log.Information("Preloading {Count} role rewards into cache", allRoleRewards.Count);
+            Log.Information(string.Join(",", allRoleRewards.Select(x => $"{x.GuildId}|{x.RoleId}|{x.Level}")));
 
             var redis = GetRedisDatabase();
             var cacheOperations = new List<Task>();
@@ -726,7 +727,7 @@ public class XpCacheManager : INService
             for (var i = 0; i < allRoleRewards.Count; i += batchSize)
             {
                 var batch = allRoleRewards.Skip(i).Take(batchSize);
-                cacheOperations.AddRange((from roleReward in batch let cacheKey = $"{RedisKeyPrefix}rewards:{roleReward.GuildId}:role:{roleReward.Level}" let serializedReward = JsonSerializer.Serialize(roleReward) select redis.StringSetAsync(cacheKey, serializedReward, TimeSpan.FromMinutes(30), When.Always, CommandFlags.FireAndForget)).Cast<Task>());
+                cacheOperations.AddRange((from roleReward in batch let cacheKey = $"{RedisKeyPrefix}rewards:{roleReward.GuildId}:role:{roleReward.Level}" let serializedReward = JsonSerializer.Serialize(roleReward) select redis.StringSetAsync(cacheKey, serializedReward, TimeSpan.FromMinutes(30), When.Always)));
 
                 await Task.WhenAll(cacheOperations);
                 cacheOperations.Clear();
@@ -778,7 +779,7 @@ public class XpCacheManager : INService
             {
                 var batch = allCurrencyRewards.Skip(i).Take(batchSize);
 
-                cacheOperations.AddRange((from currencyReward in batch let cacheKey = $"{RedisKeyPrefix}rewards:{currencyReward.GuildId}:currency:{currencyReward.Level}" let serializedReward = JsonSerializer.Serialize(currencyReward) select redis.StringSetAsync(cacheKey, serializedReward, TimeSpan.FromMinutes(30), When.Always, CommandFlags.FireAndForget)).Cast<Task>());
+                cacheOperations.AddRange((from currencyReward in batch let cacheKey = $"{RedisKeyPrefix}rewards:{currencyReward.GuildId}:currency:{currencyReward.Level}" let serializedReward = JsonSerializer.Serialize(currencyReward) select redis.StringSetAsync(cacheKey, serializedReward, TimeSpan.FromMinutes(30), When.Always)));
 
                 await Task.WhenAll(cacheOperations);
                 cacheOperations.Clear();
