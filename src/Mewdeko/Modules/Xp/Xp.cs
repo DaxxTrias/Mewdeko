@@ -299,7 +299,7 @@ public class Xp(InteractiveService serv, ICurrencyService currencyService) : Mew
     }
 
     /// <summary>
-    ///     Shows the server's XP leaderboard settings.
+    ///     Shows the server's XP settings.
     /// </summary>
     /// <example>.xpsettings</example>
     [Cmd]
@@ -310,7 +310,6 @@ public class Xp(InteractiveService serv, ICurrencyService currencyService) : Mew
         var settings = await Service.GetGuildXpSettingsAsync(ctx.Guild.Id);
         var exclusions = new List<string>();
 
-        // Get exclusion information
         var excludedUsers = await Service.GetExcludedItemsAsync(ctx.Guild.Id, ExcludedItemType.User);
         if (excludedUsers.Count > 0)
             exclusions.Add(Strings.XpExcludedUsers(ctx.Guild.Id, excludedUsers.Count));
@@ -323,7 +322,6 @@ public class Xp(InteractiveService serv, ICurrencyService currencyService) : Mew
         if (excludedChannels.Count > 0)
             exclusions.Add(Strings.XpExcludedChannels(ctx.Guild.Id, excludedChannels.Count));
 
-        // Get boost events
         var boostEvents = await Service.GetActiveBoostEventsAsync(ctx.Guild.Id);
         var boostInfo = boostEvents.Count > 0
             ? Strings.XpActiveBoostEvents(ctx.Guild.Id, boostEvents.Count)
@@ -331,16 +329,39 @@ public class Xp(InteractiveService serv, ICurrencyService currencyService) : Mew
 
         var embed = new EmbedBuilder()
             .WithOkColor()
-            .WithTitle(Strings.XpSettingsTitle(ctx.Guild.Id))
-            .AddField(Strings.XpBasicSettings(ctx.Guild.Id), Strings.XpSettingsBasicInfo(
-                ctx.Guild.Id,
-                settings.XpPerMessage,
-                settings.MessageXpCooldown,
-                settings.VoiceXpPerMinute,
-                settings.VoiceXpTimeout,
-                settings.XpMultiplier,
-                settings.XpCurveType
-            ))
+            .WithTitle(Strings.XpSettingsTitle(ctx.Guild.Id, ctx.Guild.Name))
+            .AddField(Strings.XpBasicSettings(ctx.Guild.Id),
+                Strings.XpSettingsBasicInfo(
+                    ctx.Guild.Id,
+                    settings.XpPerMessage,
+                    settings.MessageXpCooldown,
+                    settings.VoiceXpPerMinute,
+                    settings.VoiceXpTimeout,
+                    settings.XpMultiplier,
+                    ((XpCurveType)settings.XpCurveType).ToString(),
+                    settings.FirstMessageBonus
+                ))
+            .AddField(Strings.XpGeneralSettings(ctx.Guild.Id),
+                Strings.XpSettingsGeneralInfo(
+                    ctx.Guild.Id,
+                    settings.XpGainDisabled,
+                    settings.ExclusiveRoleRewards
+                ))
+            .AddField(Strings.XpDisplaySettings(ctx.Guild.Id),
+                Strings.XpSettingsDisplayInfo(
+                    ctx.Guild.Id,
+                    settings.LevelUpMessage,
+                    string.IsNullOrWhiteSpace(settings.CustomXpImageUrl)
+                        ? Strings.No(ctx.Guild.Id)
+                        : Strings.Yes(ctx.Guild.Id)
+                ))
+            .AddField(Strings.XpDecaySettings(ctx.Guild.Id),
+                Strings.XpSettingsDecayInfo(
+                    ctx.Guild.Id,
+                    settings.EnableXpDecay,
+                    settings.InactivityDaysBeforeDecay,
+                    settings.DailyDecayPercentage
+                ))
             .AddField(Strings.XpExclusions(ctx.Guild.Id),
                 exclusions.Count > 0 ? string.Join("\n", exclusions) : Strings.XpNoExclusions(ctx.Guild.Id))
             .AddField(Strings.XpBoosts(ctx.Guild.Id), boostInfo);
@@ -519,6 +540,7 @@ public class Xp(InteractiveService serv, ICurrencyService currencyService) : Mew
             }
         });
     }
+
     /// <summary>
     ///     Sets an XP multiplier for a channel.
     /// </summary>
