@@ -102,6 +102,19 @@ public partial class XpService : INService, IUnloadableService
         EventHandler.GuildAvailable += OnGuildAvailable;
         EventHandler.MessageReceived += OnMessageReceived;
 
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(5));
+                await cacheManager.PreloadAllRewardCachesAsync();
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Error during reward cache preload");
+            }
+        });
+
         Log.Information("XP Service initialized");
     }
 

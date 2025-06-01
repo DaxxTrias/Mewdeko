@@ -696,4 +696,123 @@ public class XpCacheManager : INService
             Log.Error(ex, "Error clearing XP caches for guild {GuildId}", guildId);
         }
     }
+
+    /// <summary>
+    ///     Load role rewards into redis on start.
+    /// </summary>
+    private async Task PreloadRoleRewardsAsync()
+    {
+        try
+        {
+            Log.Information("Starting role reward cache preload...");
+            var startTime = DateTime.UtcNow;
+
+            await using var db = await dbFactory.CreateConnectionAsync();
+
+            var allRoleRewards = await db.XpRoleRewards.ToListAsync();
+
+            if (allRoleRewards.Count == 0)
+            {
+                Log.Information("No role rewards found to preload");
+                return;
+            }
+
+            Log.Information("Preloading {Count} role rewards into cache", allRoleRewards.Count);
+
+            var redis = GetRedisDatabase();
+            var cacheOperations = new List<Task>();
+            const int batchSize = 100;
+
+            for (var i = 0; i < allRoleRewards.Count; i += batchSize)
+            {
+                var batch = allRoleRewards.Skip(i).Take(batchSize);
+                cacheOperations.AddRange((from roleReward in batch let cacheKey = $"{RedisKeyPrefix}rewards:{roleReward.GuildId}:role:{roleReward.Level}" let serializedReward = JsonSerializer.Serialize(roleReward) select redis.StringSetAsync(cacheKey, serializedReward, TimeSpan.FromMinutes(30), When.Always, CommandFlags.FireAndForget)).Cast<Task>());
+
+                await Task.WhenAll(cacheOperations);
+                cacheOperations.Clear();
+
+                if (i + batchSize < allRoleRewards.Count)
+                {
+                    await Task.Delay(10);
+                }
+            }
+
+            var elapsedTime = DateTime.UtcNow - startTime;
+            Log.Information("Successfully preloaded {Count} role rewards into cache in {ElapsedMs}ms",
+                allRoleRewards.Count, elapsedTime.TotalMilliseconds);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Error preloading role rewards into cache");
+        }
+    }
+
+    /// <summary>
+    ///     Loads currency rewards on start to redis.
+    /// </summary>
+    private async Task PreloadCurrencyRewardsAsync()
+    {
+        try
+        {
+            Log.Information("Starting currency reward cache preload...");
+            var startTime = DateTime.UtcNow;
+
+            await using var db = await dbFactory.CreateConnectionAsync();
+
+            // Get all currency rewards from database
+            var allCurrencyRewards = await db.XpCurrencyRewards.ToListAsync();
+
+            if (allCurrencyRewards.Count == 0)
+            {
+                Log.Information("No currency rewards found to preload");
+                return;
+            }
+
+            Log.Information("Preloading {Count} currency rewards into cache", allCurrencyRewards.Count);
+
+            var redis = GetRedisDatabase();
+            var cacheOperations = new List<Task>();
+            const int batchSize = 100;
+
+            for (var i = 0; i < allCurrencyRewards.Count; i += batchSize)
+            {
+                var batch = allCurrencyRewards.Skip(i).Take(batchSize);
+
+                cacheOperations.AddRange((from currencyReward in batch let cacheKey = $"{RedisKeyPrefix}rewards:{currencyReward.GuildId}:currency:{currencyReward.Level}" let serializedReward = JsonSerializer.Serialize(currencyReward) select redis.StringSetAsync(cacheKey, serializedReward, TimeSpan.FromMinutes(30), When.Always, CommandFlags.FireAndForget)).Cast<Task>());
+
+                await Task.WhenAll(cacheOperations);
+                cacheOperations.Clear();
+
+                if (i + batchSize < allCurrencyRewards.Count)
+                {
+                    await Task.Delay(10);
+                }
+            }
+
+            var elapsedTime = DateTime.UtcNow - startTime;
+            Log.Information("Successfully preloaded {Count} currency rewards into cache in {ElapsedMs}ms",
+                allCurrencyRewards.Count, elapsedTime.TotalMilliseconds);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Error preloading currency rewards into cache");
+        }
+    }
+
+    /// <summary>
+    ///     Combined method to preload all reward caches
+    /// </summary>
+    public async Task PreloadAllRewardCachesAsync()
+    {
+        Log.Information("Starting reward cache preload...");
+        var startTime = DateTime.UtcNow;
+
+        await Task.WhenAll(
+            PreloadRoleRewardsAsync(),
+            PreloadCurrencyRewardsAsync()
+        );
+
+        var elapsedTime = DateTime.UtcNow - startTime;
+        Log.Information("Completed reward cache preload in {ElapsedMs}ms", elapsedTime.TotalMilliseconds);
+    }
 }
