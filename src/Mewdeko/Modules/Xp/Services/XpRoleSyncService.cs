@@ -100,7 +100,6 @@ public class XpRoleSyncService : INService
                         await progressCallback(progress);
                     }
 
-                    await Task.Delay(250);
                 }
                 catch (Exception ex)
                 {
@@ -197,7 +196,6 @@ public class XpRoleSyncService : INService
                     if (role == null) continue;
                     await user.AddRoleAsync(role);
                     result.RolesAdded++;
-                    await Task.Delay(100);
                 }
                 catch (Exception ex)
                 {
@@ -213,7 +211,6 @@ public class XpRoleSyncService : INService
                     if (role == null) continue;
                     await user.RemoveRoleAsync(role);
                     result.RolesRemoved++;
-                    await Task.Delay(100);
                 }
                 catch (Exception ex)
                 {
