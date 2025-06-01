@@ -15,7 +15,8 @@ namespace Mewdeko.Modules.Xp;
 /// <summary>
 ///     Module for managing XP system functionality.
 /// </summary>
-public class Xp(InteractiveService serv, ICurrencyService currencyService) : MewdekoModuleBase<XpService>
+public class Xp(InteractiveService serv, ICurrencyService currencyService, XpRoleSyncService roleSyncService)
+    : MewdekoModuleBase<XpService>
 {
     /// <summary>
     ///     Shows a user's XP card with their rank, level, and progress.
@@ -1347,5 +1348,176 @@ public class Xp(InteractiveService serv, ICurrencyService currencyService) : Mew
         await Service.FinalizeCompetitionAsync(competitionId);
         await ReplyConfirmAsync(Strings.XpCompetitionManuallyEnded(ctx.Guild.Id, competition.Name))
             .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Synchronizes XP roles for all users in the guild.
+    /// </summary>
+    [Cmd]
+    [Aliases]
+    [Ratelimit(3600)]
+    [UserPerm(GuildPermission.Administrator)]
+    [BotPerm(GuildPermission.ManageRoles)]
+    public async Task SyncAllXpRoles()
+    {
+        try
+        {
+            var embed = new EmbedBuilder()
+                .WithTitle(Strings.XpRoleSyncAllStarting(ctx.Guild.Id))
+                .WithOkColor()
+                .WithTimestamp(DateTimeOffset.UtcNow);
+
+            var message = await ctx.Channel.EmbedAsync(embed);
+
+            var result = await roleSyncService.SyncAllUsersAsync(ctx.Guild, async progress =>
+            {
+                var progressEmbed = new EmbedBuilder()
+                    .WithTitle(Strings.XpRoleSyncProgress(ctx.Guild.Id))
+                    .WithDescription(Strings.XpRoleSyncProgressDesc(ctx.Guild.Id, progress.CurrentUser,
+                        progress.TotalUsers))
+                    .AddField(Strings.XpProgress(ctx.Guild.Id),
+                        Strings.XpRoleSyncProgressPercent(ctx.Guild.Id, progress.PercentComplete), true)
+                    .AddField(Strings.XpEta(ctx.Guild.Id),
+                        Strings.XpRoleSyncEta(ctx.Guild.Id, progress.EstimatedTimeRemaining.TotalMinutes), true)
+                    .AddField(Strings.XpRolesModified(ctx.Guild.Id),
+                        Strings.XpRoleSyncRolesModified(ctx.Guild.Id, progress.RolesAdded, progress.RolesRemoved), true)
+                    .AddField(Strings.XpErrors(ctx.Guild.Id),
+                        Strings.XpRoleSyncUsersErrors(ctx.Guild.Id, progress.ErrorCount), true)
+                    .WithColor(Color.Blue)
+                    .WithTimestamp(DateTimeOffset.UtcNow);
+
+                try
+                {
+                    await message.ModifyAsync(msg => msg.Embed = progressEmbed.Build());
+                }
+                catch
+                {
+                    // Ignore rate limit errors on progress updates
+                }
+
+                await Task.Delay(5000);
+            });
+
+            var finalEmbed = new EmbedBuilder()
+                .WithTitle(Strings.XpRoleSyncComplete(ctx.Guild.Id))
+                .WithDescription(Strings.XpRoleSyncCompleteDesc(ctx.Guild.Id, result.ProcessedUsers,
+                    result.Duration.TotalMinutes))
+                .AddField(Strings.XpUsersProcessed(ctx.Guild.Id),
+                    Strings.XpRoleSyncUsersProcessed(ctx.Guild.Id, result.ProcessedUsers), true)
+                .AddField(Strings.XpUsersWithErrors(ctx.Guild.Id),
+                    Strings.XpRoleSyncUsersErrors(ctx.Guild.Id, result.ErrorUsers), true)
+                .AddField(Strings.XpRolesAdded(ctx.Guild.Id),
+                    Strings.XpRoleSyncRolesAdded(ctx.Guild.Id, result.RolesAdded), true)
+                .AddField(Strings.XpRolesRemoved(ctx.Guild.Id),
+                    Strings.XpRoleSyncRolesRemoved(ctx.Guild.Id, result.RolesRemoved), true)
+                .WithColor(result.ErrorUsers > 0 ? Color.Gold : Color.Green)
+                .WithTimestamp(DateTimeOffset.UtcNow);
+
+            await message.ModifyAsync(msg => msg.Embed = finalEmbed.Build());
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("already in progress"))
+        {
+            await ReplyErrorAsync(Strings.XpRoleSyncAlreadyInProgress(ctx.Guild.Id)).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Error during role sync for guild {GuildId}", ctx.Guild.Id);
+            await ReplyErrorAsync(Strings.XpRoleSyncError(ctx.Guild.Id)).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    ///     Synchronizes XP roles for the current user.
+    /// </summary>
+    [Cmd]
+    [Aliases]
+    [Ratelimit(300)]
+    public async Task SyncMyXpRoles()
+    {
+        try
+        {
+            var result = await roleSyncService.SyncUserRolesAsync(ctx.Guild, ctx.User.Id);
+
+            if (result.HasError)
+            {
+                await ReplyErrorAsync(result.ErrorMessage ?? Strings.XpRoleSyncFailed(ctx.Guild.Id))
+                    .ConfigureAwait(false);
+                return;
+            }
+
+            var embed = new EmbedBuilder()
+                .WithTitle(Strings.XpRoleSyncMyComplete(ctx.Guild.Id))
+                .AddField(Strings.XpRolesAdded(ctx.Guild.Id),
+                    Strings.XpRoleSyncRolesAdded(ctx.Guild.Id, result.RolesAdded), true)
+                .AddField(Strings.XpRolesRemoved(ctx.Guild.Id),
+                    Strings.XpRoleSyncRolesRemoved(ctx.Guild.Id, result.RolesRemoved), true)
+                .WithOkColor()
+                .WithTimestamp(DateTimeOffset.UtcNow);
+
+            if (result.RolesAdded == 0 && result.RolesRemoved == 0)
+            {
+                embed.WithDescription(Strings.XpRoleSyncMyUpToDate(ctx.Guild.Id, result.Level));
+            }
+            else
+            {
+                embed.WithDescription(Strings.XpRoleSyncMyDesc(ctx.Guild.Id, result.Level));
+            }
+
+            await ctx.Channel.EmbedAsync(embed);
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("cooldown"))
+        {
+            await ReplyErrorAsync(ex.Message).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Error syncing roles for user {UserId} in guild {GuildId}", ctx.User.Id, ctx.Guild.Id);
+            await ReplyErrorAsync(Strings.XpRoleSyncMyError(ctx.Guild.Id)).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    ///     Synchronizes XP roles for a specific user.
+    /// </summary>
+    /// <param name="user">The user to synchronize roles for.</param>
+    [Cmd]
+    [Aliases]
+    [Ratelimit(60)]
+    [UserPerm(GuildPermission.ManageRoles)]
+    [BotPerm(GuildPermission.ManageRoles)]
+    public async Task SyncUserXpRoles(IUser user)
+    {
+        try
+        {
+            var result = await roleSyncService.SyncUserRolesAsync(ctx.Guild, user.Id);
+
+            if (result.HasError)
+            {
+                await ReplyErrorAsync(Strings.XpRoleSyncUserFailed(ctx.Guild.Id, user.Mention, result.ErrorMessage))
+                    .ConfigureAwait(false);
+                return;
+            }
+
+            var embed = new EmbedBuilder()
+                .WithTitle(Strings.XpRoleSyncUserComplete(ctx.Guild.Id))
+                .WithDescription(Strings.XpRoleSyncUserDesc(ctx.Guild.Id, user.Mention, result.Level))
+                .AddField(Strings.XpRolesAdded(ctx.Guild.Id),
+                    Strings.XpRoleSyncRolesAdded(ctx.Guild.Id, result.RolesAdded), true)
+                .AddField(Strings.XpRolesRemoved(ctx.Guild.Id),
+                    Strings.XpRoleSyncRolesRemoved(ctx.Guild.Id, result.RolesRemoved), true)
+                .WithOkColor()
+                .WithTimestamp(DateTimeOffset.UtcNow);
+
+            await ctx.Channel.EmbedAsync(embed);
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("cooldown"))
+        {
+            await ReplyErrorAsync(Strings.XpRoleSyncUserCooldown(ctx.Guild.Id)).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Error syncing roles for user {UserId} in guild {GuildId}", user.Id, ctx.Guild.Id);
+            await ReplyErrorAsync(Strings.XpRoleSyncUserError(ctx.Guild.Id)).ConfigureAwait(false);
+        }
     }
 }
