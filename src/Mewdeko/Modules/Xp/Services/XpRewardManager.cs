@@ -127,11 +127,13 @@ public class XpRewardManager : INService
 
         if (roleId.HasValue)
         {
+            XpRoleReward rewardToCache;
+
             if (existingReward != null)
             {
                 existingReward.RoleId = roleId.Value;
-                // Update using LinqToDB
                 await db.UpdateAsync(existingReward);
+                rewardToCache = existingReward;
             }
             else
             {
@@ -141,20 +143,30 @@ public class XpRewardManager : INService
                     Level = level,
                     RoleId = roleId.Value
                 };
-                // Insert using LinqToDB
                 await db.InsertAsync(newReward);
+                rewardToCache = newReward;
             }
+
+            // Immediately cache the new/updated reward
+            var cacheKey = $"xp:rewards:{guildId}:role:{level}";
+            var serializedReward = JsonSerializer.Serialize(rewardToCache);
+            await cacheManager.GetRedisDatabase().StringSetAsync(cacheKey, serializedReward, TimeSpan.FromMinutes(30));
+
+            Log.Information("Set and cached role reward for guild {GuildId} level {Level}: Role {RoleId}",
+                guildId, level, roleId.Value);
         }
         else if (existingReward != null)
         {
-            // Delete using LinqToDB
+            // Delete from database
             await db.XpRoleRewards
                 .Where(x => x.Id == existingReward.Id)
                 .DeleteAsync();
-        }
 
-        // Clear cache
-        await cacheManager.GetRedisDatabase().KeyDeleteAsync($"xp:rewards:{guildId}:role:{level}");
+            // Clear from cache
+            await cacheManager.GetRedisDatabase().KeyDeleteAsync($"xp:rewards:{guildId}:role:{level}");
+
+            Log.Information("Removed role reward for guild {GuildId} level {Level}", guildId, level);
+        }
     }
 
     /// <summary>
