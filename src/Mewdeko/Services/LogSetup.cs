@@ -44,8 +44,8 @@ public static class LogSetup
                 restrictedToMinimumLevel: LogEventLevel.Information,
                 theme: AnsiConsoleTheme.Literate,
                 outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] | #{LogSource} | " +
-                              "{Message:lj}{NewLine}")
-            .CreateBootstrapLogger();
+                                "{Message:lj}{NewLine}{Exception:lj}")
+                                    .CreateBootstrapLogger();
 
         Console.OutputEncoding = Encoding.UTF8;
 

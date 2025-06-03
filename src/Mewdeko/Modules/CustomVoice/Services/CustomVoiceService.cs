@@ -1342,8 +1342,8 @@ public class CustomVoiceService : INService
                 // Update last active time
                 await using var dbContext = await dbFactory.CreateConnectionAsync();
                 var customChannel =
-                    await dbContext.CustomVoiceChannels.FirstOrDefaultAsync(
-                        c => c.ChannelId == newState.VoiceChannel.Id);
+                    await dbContext.CustomVoiceChannels.FirstOrDefaultAsync(c =>
+                        c.ChannelId == newState.VoiceChannel.Id);
                 if (customChannel != null)
                 {
                     customChannel.LastActive = DateTime.UtcNow;
@@ -1363,45 +1363,56 @@ public class CustomVoiceService : INService
                 oldChannels.Contains(oldState.VoiceChannel.Id))
             {
                 var vc = guild.GetVoiceChannel(oldState.VoiceChannel.Id);
-                // Check if the channel is now empty
-                if (vc.ConnectedUsers.Count == 0)
+
+                // Add null check and use consistent property
+                if (vc != null)
                 {
-                    // Get the channel to check if it should be kept
-                    await using var dbContext = await dbFactory.CreateConnectionAsync();
-                    var customChannel =
-                        await dbContext.CustomVoiceChannels.FirstOrDefaultAsync(c =>
-                            c.ChannelId == oldState.VoiceChannel.Id);
+                    // Add a small delay to ensure user count is updated
+                    await Task.Delay(100);
 
-                    if (customChannel is { KeepAlive: false } && config.DeleteWhenEmpty)
+                    // Refresh the channel reference to get updated user count
+                    vc = guild.GetVoiceChannel(oldState.VoiceChannel.Id);
+
+                    // Check if the channel is now empty (using Users.Count for consistency)
+                    if (vc != null && vc.Users.Count == 0)
                     {
-                        // Mark the channel as empty
-                        emptyChannels.TryAdd(oldState.VoiceChannel.Id, DateTime.UtcNow);
+                        // Get the channel to check if it should be kept
+                        await using var dbContext = await dbFactory.CreateConnectionAsync();
+                        var customChannel =
+                            await dbContext.CustomVoiceChannels.FirstOrDefaultAsync(c =>
+                                c.ChannelId == oldState.VoiceChannel.Id);
 
-                        // Schedule deletion after timeout
-                        if (config.EmptyChannelTimeout > 0)
+                        if (customChannel is { KeepAlive: false } && config.DeleteWhenEmpty)
                         {
-                            var timer = new Timer(_ =>
+                            // Mark the channel as empty
+                            emptyChannels.TryAdd(oldState.VoiceChannel.Id, DateTime.UtcNow);
+
+                            // Schedule deletion after timeout
+                            if (config.EmptyChannelTimeout > 0)
                             {
-                                Task.Run(async () =>
+                                var timer = new Timer(_ =>
                                 {
-                                    try
+                                    Task.Run(async () =>
                                     {
-                                        await DeleteEmptyChannelAsync(guild.Id, oldState.VoiceChannel.Id);
-                                    }
-                                    catch (Exception ex)
-                                    {
-                                        Log.Error(ex, "Timer callback failed for channel {ChannelId}",
-                                            oldState.VoiceChannel.Id);
-                                    }
-                                });
-                            }, null, TimeSpan.FromMinutes(config.EmptyChannelTimeout), Timeout.InfiniteTimeSpan);
+                                        try
+                                        {
+                                            await DeleteEmptyChannelAsync(guild.Id, oldState.VoiceChannel.Id);
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            Log.Error(ex, "Timer callback failed for channel {ChannelId}",
+                                                oldState.VoiceChannel.Id);
+                                        }
+                                    });
+                                }, null, TimeSpan.FromMinutes(config.EmptyChannelTimeout), Timeout.InfiniteTimeSpan);
 
-                            emptyChannelTimers.TryAdd(oldState.VoiceChannel.Id, timer);
-                        }
-                        else
-                        {
-                            // Delete immediately
-                            await DeleteEmptyChannelAsync(guild.Id, oldState.VoiceChannel.Id);
+                                emptyChannelTimers.TryAdd(oldState.VoiceChannel.Id, timer);
+                            }
+                            else
+                            {
+                                // Delete immediately
+                                await DeleteEmptyChannelAsync(guild.Id, oldState.VoiceChannel.Id);
+                            }
                         }
                     }
                 }

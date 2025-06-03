@@ -2,7 +2,6 @@
 using Discord.Net;
 using LinqToDB;
 using Mewdeko.Common.Configs;
-using Mewdeko.Database.EF.EFCore;
 using Mewdeko.Modules.Administration.Services;
 using Mewdeko.Modules.Permissions.Common;
 using Mewdeko.Modules.Permissions.Services;
@@ -2047,7 +2046,7 @@ public class SuggestionsService : INService
         var tocheck = dbContext.SuggestVotes.FirstOrDefault(x => x.MessageId == messageId && x.UserId == userId);
         if (tocheck is null)
         {
-            var toadd = new SuggestVotes
+            var toadd = new SuggestVote
             {
                 EmotePicked = emotePicked, MessageId = messageId, UserId = userId
             };
@@ -2071,7 +2070,7 @@ public class SuggestionsService : INService
     {
         await using var dbContext = await dbFactory.CreateConnectionAsync();
 
-        await dbContext.InsertAsync(new SuggestThreads
+        await dbContext.InsertAsync(new SuggestThread
         {
             MessageId = messageId, ThreadChannelId = threadChannelId
         });

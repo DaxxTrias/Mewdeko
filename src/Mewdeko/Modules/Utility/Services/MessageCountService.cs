@@ -4,7 +4,6 @@ using DataModel;
 using LinqToDB;
 using LinqToDB.Data;
 using Microsoft.Extensions.Caching.Memory;
-using Npgsql;
 using Polly;
 using Polly.CircuitBreaker;
 using Polly.Timeout;
@@ -98,7 +97,7 @@ public class MessageCountService : INService
 
     private static readonly IAsyncPolicy<MessageCount> DatabasePolicy =
         Policy<MessageCount>
-            .Handle<PostgresException>(IsTransient)
+            .Handle<LinqToDBException>()
             .Or<TimeoutRejectedException>()
             .WaitAndRetryAsync(3,
                 retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)),
@@ -619,24 +618,5 @@ private async Task ProcessBatchAsync(List<(ulong GuildId, ulong ChannelId, ulong
             Log.Error(ex, "Failed to reset message counts for guild {GuildId}", guildId);
             return false;
         }
-    }
-
-    private static bool IsTransient(PostgresException ex)
-    {
-        return ex.SqlState switch
-        {
-            "40001" => true, // serialization failure
-            "40P01" => true, // deadlock detected
-            "08000" => true, // connection_exception
-            "08003" => true, // connection_does_not_exist
-            "08006" => true, // connection_failure
-            "08001" => true, // sqlclient_unable_to_establish_sqlconnection
-            "08004" => true, // sqlserver_rejected_establishment_of_sqlconnection
-            "57P01" => true, // admin_shutdown
-            "57P02" => true, // crash_shutdown
-            "57P03" => true, // cannot_connect_now
-            "53300" => true, // too_many_connections
-            _ => false
-        };
     }
 }

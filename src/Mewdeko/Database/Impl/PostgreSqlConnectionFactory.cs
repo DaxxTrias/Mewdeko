@@ -1,6 +1,9 @@
 using System.Threading;
 using LinqToDB;
+using LinqToDB.DataProvider.PostgreSQL;
+using LinqToDB.Mapping;
 using Mewdeko.Database.DbContextStuff;
+using Npgsql;
 
 namespace Mewdeko.Database.Impl;
 
@@ -9,7 +12,7 @@ namespace Mewdeko.Database.Impl;
 /// </summary>
 public class PostgreSqlConnectionFactory : IDataConnectionFactory
 {
-    private readonly DataOptions _dataOptions;
+    private readonly DataOptions dataOptions;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="PostgreSqlConnectionFactory"/> class.
@@ -20,9 +23,10 @@ public class PostgreSqlConnectionFactory : IDataConnectionFactory
         if (string.IsNullOrEmpty(connectionString))
             throw new ArgumentNullException(nameof(connectionString));
 
-        _dataOptions = new DataOptions()
-            .UsePostgreSQL(connectionString);
+        dataOptions = new DataOptions()
+            .UsePostgreSQL(connectionString, PostgreSQLVersion.v15);
     }
+
 
     /// <summary>
     /// Creates a new instance of <see cref="MewdekoDb"/> data connection.
@@ -30,8 +34,7 @@ public class PostgreSqlConnectionFactory : IDataConnectionFactory
     /// <returns>A new instance of a <see cref="MewdekoDb"/> data connection.</returns>
     public MewdekoDb CreateConnection()
     {
-        // Create an instance of YOUR context class
-        return new MewdekoDb(_dataOptions);
+        return new MewdekoDb(dataOptions);
     }
 
     /// <summary>
@@ -41,7 +44,6 @@ public class PostgreSqlConnectionFactory : IDataConnectionFactory
     /// <returns>A task that represents the asynchronous operation. The task result contains a new instance of <see cref="MewdekoDb"/>.</returns>
     public Task<MewdekoDb> CreateConnectionAsync(CancellationToken cancellationToken = default)
     {
-        // Creating the object itself is usually synchronous
         return Task.FromResult(CreateConnection());
     }
 }

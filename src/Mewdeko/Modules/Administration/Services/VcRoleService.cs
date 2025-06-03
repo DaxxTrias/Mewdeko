@@ -196,7 +196,7 @@ public class VcRoleService : INService, IReadyExecutor
                 return; // Success
             }
             // Catch specific exceptions if possible, otherwise generic Exception
-            catch (Exception ex) when (ex is LinqToDBException || ex.InnerException is Npgsql.PostgresException) // Example: Handle potential DB specific or concurrency exceptions
+            catch (Exception ex) when (ex is LinqToDBException) // Example: Handle potential DB specific or concurrency exceptions
             {
                  attempt++;
                  if (attempt >= maxRetries)

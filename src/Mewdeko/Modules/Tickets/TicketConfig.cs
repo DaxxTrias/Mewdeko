@@ -1,4 +1,4 @@
-/*using System.Text;
+using System.Text;
 using System.Text.Json;
 using Discord.Commands;
 using Fergun.Interactive;
@@ -74,8 +74,8 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
                 foreach (var panel in items)
                 {
                     var channel = await ctx.Guild.GetTextChannelAsync(panel.ChannelId);
-                    var buttonCount = panel.Buttons?.Count ?? 0;
-                    var menuCount = panel.SelectMenus?.Count ?? 0;
+                    var buttonCount = panel.PanelButtons?.Count() ?? 0;
+                    var menuCount = panel.PanelSelectMenus?.Count() ?? 0;
 
                     pageBuilder.AddField(
                         $"Panel ID: {panel.MessageId}",
@@ -113,6 +113,76 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
         }
 
         /// <summary>
+///     Deletes a select menu from a panel.
+/// </summary>
+/// <param name="menuId">The ID of the select menu to delete.</param>
+/// <remarks>
+///     This command removes the specified select menu and all its options from the panel.
+///     The menu ID can be found using the panel info command.
+/// </remarks>
+[Cmd]
+[RequireContext(ContextType.Guild)]
+[UserPerm(GuildPermission.Administrator)]
+public async Task DeleteSelectMenu(int menuId)
+{
+    var menu = await Service.GetSelectMenuAsync(menuId.ToString());
+    if (menu == null || menu.Panel.GuildId != ctx.Guild.Id)
+    {
+        await ctx.Channel.SendErrorAsync("Select menu not found.", Config);
+        return;
+    }
+
+    var success = await Service.DeleteSelectMenuAsync(ctx.Guild, menuId);
+    if (success)
+    {
+        await ctx.Channel.SendConfirmAsync($"Successfully deleted select menu '{menu.Placeholder}'");
+    }
+    else
+    {
+        await ctx.Channel.SendErrorAsync("Failed to delete select menu.", Config);
+    }
+}
+
+/// <summary>
+///     Deletes a specific option from a select menu.
+/// </summary>
+/// <param name="optionId">The ID of the option to delete.</param>
+/// <remarks>
+///     This command removes a single option from a select menu.
+///     At least one option must remain in each select menu.
+/// </remarks>
+[Cmd]
+[RequireContext(ContextType.Guild)]
+[UserPerm(GuildPermission.Administrator)]
+public async Task DeleteSelectOption(int optionId)
+{
+    var option = await Service.GetSelectOptionAsync(optionId);
+    if (option == null || option.SelectMenu.Panel.GuildId != ctx.Guild.Id)
+    {
+        await ctx.Channel.SendErrorAsync("Select menu option not found.", Config);
+        return;
+    }
+
+    // Check if this is the last option
+    var optionCount = await Service.GetSelectMenuOptionCountAsync(option.SelectMenuId);
+    if (optionCount <= 1)
+    {
+        await ctx.Channel.SendErrorAsync("Cannot delete the last option from a select menu. Delete the entire menu instead.", Config);
+        return;
+    }
+
+    var success = await Service.DeleteSelectOptionAsync(ctx.Guild, optionId);
+    if (success)
+    {
+        await ctx.Channel.SendConfirmAsync($"Successfully deleted option '{option.Label}'");
+    }
+    else
+    {
+        await ctx.Channel.SendErrorAsync("Failed to delete select menu option.", Config);
+    }
+}
+
+        /// <summary>
         ///     Enables or disables transcript saving for a panel.
         /// </summary>
         /// <param name="panelId">The ID of the panel to modify.</param>
@@ -133,9 +203,9 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
                 return;
             }
 
-            if (panel.Buttons != null)
+            if (panel.PanelButtons != null)
             {
-                foreach (var button in panel.Buttons)
+                foreach (var button in panel.PanelButtons)
                 {
                     await Service.UpdateButtonSettingsAsync(ctx.Guild, button.Id,
                         new Dictionary<string, object>
@@ -230,14 +300,14 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
                         $"Description: {description ?? "None"}\n" +
                         $"Emoji: {emoji ?? "None"}")
                     .AddField("Note",
-                        $"Use `{Config.Prefix}tc config addoption {menu.Id} <label>` to add more options.")
+                        $"Use `{Config.Prefix}addoption {menu.Id} <label>` to add more options.")
                     .WithOkColor();
 
                 await ctx.Channel.SendMessageAsync(embed: confirmEmbed.Build());
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Error creating select menu");
+                Log.Error($"Error creating select menu: {ex}");
                 await ctx.Channel.SendErrorAsync("Failed to create select menu.", Config);
             }
         }
@@ -313,7 +383,7 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
                 .WithDescription($"Placeholder: {menu.Placeholder}")
                 .WithOkColor();
 
-            foreach (var option in menu.Options)
+            foreach (var option in menu.SelectMenuOptions)
             {
                 embed.AddField(option.Label,
                     $"Value: {option.Value}\n" +
@@ -341,14 +411,14 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
                 return;
             }
 
-            var option = menu.Options.FirstOrDefault(o => o.Value == optionValue);
+            var option = menu.SelectMenuOptions.FirstOrDefault(o => o.Value == optionValue);
             if (option == null)
             {
                 await ctx.Channel.SendErrorAsync("Option not found.", Config);
                 return;
             }
 
-            if (menu.Options.Count <= 1)
+            if (menu.SelectMenuOptions.Count() <= 1)
             {
                 await ctx.Channel.SendErrorAsync("Cannot remove the last option from a select menu.", Config);
                 return;
@@ -436,21 +506,21 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
                 .WithTitle("Ticket Panel Information")
                 .WithDescription($"Channel: {(channel == null ? "Deleted" : channel.Mention)}")
                 .AddField("Message ID", panel.MessageId, true)
-                .AddField("Buttons", panel.Buttons?.Count ?? 0, true)
-                .AddField("Select Menus", panel.SelectMenus?.Count ?? 0, true);
+                .AddField("Buttons", panel.PanelButtons?.Count() ?? 0, true)
+                .AddField("Select Menus", panel.PanelSelectMenus?.Count() ?? 0, true);
 
-            if (panel.Buttons?.Any() == true)
+            if (panel.PanelButtons?.Any() == true)
             {
-                var buttonInfo = string.Join("\n", panel.Buttons.Select(b =>
+                var buttonInfo = string.Join("\n", panel.PanelButtons.Select(b =>
                     $"• {b.Label} (ID: {b.Id}) - Style: {b.Style}"));
                 embed.AddField("Button Details", buttonInfo);
             }
 
-            if (panel.SelectMenus?.Any() == true)
+            if (panel.PanelSelectMenus?.Any() == true)
             {
-                foreach (var menu in panel.SelectMenus)
+                foreach (var menu in panel.PanelSelectMenus)
                 {
-                    var optionInfo = string.Join("\n", menu.Options.Select(o =>
+                    var optionInfo = string.Join("\n", menu.SelectMenuOptions.Select(o =>
                         $"• {o.Label} ({o.Value})"));
                     embed.AddField($"Select Menu {menu.Id}",
                         $"Placeholder: {menu.Placeholder}\nOptions:\n{optionInfo}");
@@ -1018,4 +1088,4 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
             }
         }
     }
-}*/
+}

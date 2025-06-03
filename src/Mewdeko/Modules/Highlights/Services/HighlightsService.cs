@@ -2,7 +2,6 @@
 using DataModel;
 using LinqToDB;
 using Mewdeko.Common.ModuleBehaviors;
-using Mewdeko.Database.EF.EFCore;
 using Serilog;
 using ZiggyCreatures.Caching.Fusion;
 
@@ -219,7 +218,7 @@ public class HighlightsService : INService, IReadyExecutor
         var toupdate = dbContext.HighlightSettings.FirstOrDefault(x => x.UserId == userId && x.GuildId == guildId);
         if (toupdate is null)
         {
-            var toadd = new HighlightSettings
+            var toadd = new HighlightSetting
             {
                 GuildId = guildId,
                 UserId = userId,
@@ -229,7 +228,7 @@ public class HighlightsService : INService, IReadyExecutor
             };
             await dbContext.InsertAsync(toadd);
 
-            var current1 = await cache.GetOrSetAsync($"highlightSettings_{guildId}", _ => Task.FromResult(new List<HighlightSettings>()));
+            var current1 = await cache.GetOrSetAsync($"highlightSettings_{guildId}", _ => Task.FromResult(new List<HighlightSetting>()));
             current1.Add(toadd);
             await cache.SetAsync($"highlightSettings_{guildId}", current1).ConfigureAwait(false);
         }
@@ -259,7 +258,7 @@ public class HighlightsService : INService, IReadyExecutor
         var toupdate = dbContext.HighlightSettings.FirstOrDefault(x => x.UserId == userId && x.GuildId == guildId);
         if (toupdate is null)
         {
-            var toadd = new HighlightSettings
+            var toadd = new HighlightSetting
             {
                 GuildId = guildId,
                 UserId = userId,
@@ -272,7 +271,7 @@ public class HighlightsService : INService, IReadyExecutor
             toadd.IgnoredChannels = string.Join(" ", toedit1);
             await dbContext.InsertAsync(toadd);
 
-            var current1 = await cache.GetOrSetAsync($"highlightSettings_{guildId}", _ => Task.FromResult(new List<HighlightSettings>()));
+            var current1 = await cache.GetOrSetAsync($"highlightSettings_{guildId}", _ => Task.FromResult(new List<HighlightSetting>()));
             current1.Add(toadd);
             await cache.SetAsync($"highlightSettings_{guildId}", current1).ConfigureAwait(false);
             return ignored;
@@ -314,7 +313,7 @@ public class HighlightsService : INService, IReadyExecutor
         var toupdate = dbContext.HighlightSettings.FirstOrDefault(x => x.UserId == userId && x.GuildId == guildId);
         if (toupdate is null)
         {
-            var toadd = new HighlightSettings
+            var toadd = new HighlightSetting
             {
                 GuildId = guildId,
                 UserId = userId,
@@ -327,7 +326,7 @@ public class HighlightsService : INService, IReadyExecutor
             toadd.IgnoredUsers = string.Join(" ", toedit1);
             await dbContext.InsertAsync(toadd);
 
-            var current1 = await cache.GetOrSetAsync($"highlightSettings_{guildId}", _ => Task.FromResult(new List<HighlightSettings>()));
+            var current1 = await cache.GetOrSetAsync($"highlightSettings_{guildId}", _ => Task.FromResult(new List<HighlightSetting>()));
             current1.Add(toadd);
             await cache.SetAsync($"highlightSettings_{guildId}", current1).ConfigureAwait(false);
             return ignored;

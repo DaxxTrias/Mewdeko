@@ -3,7 +3,7 @@ using Discord.Interactions;
 using LinqToDB;
 using Mewdeko.Common.Attributes.InteractionCommands;
 using Mewdeko.Common.Modals;
-using Mewdeko.Database.EF.EFCore.Protections;
+using Mewdeko.Database.Enums;
 using Mewdeko.Modules.Permissions.Services;
 using Mewdeko.Modules.UserProfile.Common;
 using Mewdeko.Modules.UserProfile.Services;

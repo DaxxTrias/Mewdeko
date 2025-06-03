@@ -4,7 +4,7 @@ using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Common.PubSub;
 using LinqToDB;
 using LinqToDB.Data;
-using Mewdeko.Database.EF.EFCore.Protections;
+using Mewdeko.Database.Enums;
 using Serilog;
 
 namespace Mewdeko.Modules.Permissions.Services;

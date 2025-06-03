@@ -7,39 +7,34 @@
 
 using LinqToDB.Mapping;
 using System.Collections.Generic;
+using Mewdeko.Database.L2DB;
 
 #pragma warning disable 1573, 1591
 #nullable enable
 
 namespace DataModel
 {
-	[Table("TicketPanels")]
-	public class TicketPanel
-	{
-		[Column("Id"       , IsPrimaryKey = true , IsIdentity = true, SkipOnInsert = true, SkipOnUpdate = true)] public int     Id        { get; set; } // integer
-		[Column("GuildId"                                                                                     )] public ulong GuildId   { get; set; } // numeric(20,0)
-		[Column("ChannelId"                                                                                   )] public ulong ChannelId { get; set; } // numeric(20,0)
-		[Column("EmbedJson", CanBeNull    = false                                                             )] public string  EmbedJson { get; set; } = null!; // text
-		[Column("MessageId"                                                                                   )] public ulong MessageId { get; set; } // numeric(20,0)
+    [Table("TicketPanels")]
+    public class TicketPanel
+    {
+       [Column("Id"       , IsPrimaryKey = true , IsIdentity = true, SkipOnInsert = true, SkipOnUpdate = true)] public int     Id        { get; set; } // integer
+       [Column("GuildId"                                                                                     )] public ulong GuildId   { get; set; } // numeric(20,0)
+       [Column("ChannelId"                                                                                   )] public ulong ChannelId { get; set; } // numeric(20,0)
+       [Column("EmbedJson", CanBeNull    = false                                                             )] public string  EmbedJson { get; set; } = null!; // text
+       [Column("MessageId"                                                                                   )] public ulong MessageId { get; set; } // numeric(20,0)
 
-		#region Associations
-		/// <summary>
-		/// FK_PanelButtons_TicketPanels_Id backreference
-		/// </summary>
-		[Association(ThisKey = nameof(Id), OtherKey = nameof(PanelButton.Id))]
-		public PanelButton? PanelButtons { get; set; }
+       #region Associations
+       /// <summary>
+       /// FK_PanelButtons_TicketPanels_PanelId backreference - Buttons that belong to this panel
+       /// </summary>
+       [Association(ThisKey = nameof(Id), OtherKey = nameof(PanelButton.PanelId))]
+       public IEnumerable<PanelButton>? PanelButtons { get; set; } = null;
 
-		/// <summary>
-		/// FK_PanelButtons_TicketPanels_PanelId backreference
-		/// </summary>
-		[Association(ThisKey = nameof(Id), OtherKey = nameof(PanelButton.PanelId))]
-		public IEnumerable<PanelButton> PanelButtons1 { get; set; } = null!;
-
-		/// <summary>
-		/// FK_PanelSelectMenus_TicketPanels_PanelId backreference
-		/// </summary>
-		[Association(ThisKey = nameof(Id), OtherKey = nameof(PanelSelectMenu.PanelId))]
-		public IEnumerable<PanelSelectMenu> PanelSelectMenus { get; set; } = null!;
-		#endregion
-	}
+       /// <summary>
+       /// FK_PanelSelectMenus_TicketPanels_PanelId backreference
+       /// </summary>
+       [Association(ThisKey = nameof(Id), OtherKey = nameof(PanelSelectMenu.PanelId))]
+       public IEnumerable<PanelSelectMenu> PanelSelectMenus { get; set; } = null!;
+       #endregion
+    }
 }

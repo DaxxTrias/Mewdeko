@@ -1,7 +1,5 @@
 ﻿using System.IO;
 using System.Text.RegularExpressions;
-using Mewdeko.Database.EF.EFCore;
-
 namespace Mewdeko.Extensions;
 
 /// <summary>
@@ -304,20 +302,6 @@ public static partial class UserExtensions
         return usr.AvatarId == null
             ? new Uri(usr.GetDefaultAvatarUrl())
             : new Uri(usr.GetAvatarUrl(ImageFormat.Auto, size));
-    }
-
-    /// <summary>
-    ///     Gets the real avatar URL of the Discord user.
-    /// </summary>
-    /// <param name="usr">The Discord user to get the avatar URL for.</param>
-    /// <returns>The URL of the user's avatar.</returns>
-    public static Uri? RealAvatarUrl(this DiscordUser usr)
-    {
-        return usr.AvatarId == null
-            ? null
-            : new Uri(usr.AvatarId.StartsWith("a_", StringComparison.InvariantCulture)
-                ? $"{DiscordConfig.CDNUrl}avatars/{usr.UserId}/{usr.AvatarId}.gif?size=2048"
-                : $"{DiscordConfig.CDNUrl}avatars/{usr.UserId}/{usr.AvatarId}.png?size=2048");
     }
 
 

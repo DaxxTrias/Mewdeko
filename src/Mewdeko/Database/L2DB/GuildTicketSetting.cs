@@ -27,5 +27,31 @@ namespace DataModel
 		[Column("EnableStaffPings"                                                                                        )] public bool       EnableStaffPings      { get; set; } // boolean
 		[Column("EnableDmNotifications"                                                                                   )] public bool       EnableDmNotifications { get; set; } // boolean
 		[Column("NotificationRoles"    , CanBeNull    = false                                                             )] public ulong[]  NotificationRoles     { get; set; } = null!; // numeric(20,0)[]
+        [Column("DeleteTicketsOnClose")]
+        public bool DeleteTicketsOnClose { get; set; } = false;
+
+        [Column("LockTicketsOnClose")]
+        public bool LockTicketsOnClose { get; set; } = true;
+
+        [Column("RenameTicketsOnClose")]
+        public bool RenameTicketsOnClose { get; set; } = true;
+
+        [Column("RemoveCreatorOnClose")]
+        public bool RemoveCreatorOnClose { get; set; } = true;
+
+        [Column("DeleteDelay")]
+        public TimeSpan DeleteDelay { get; set; } = TimeSpan.FromMinutes(5);
+
+        [Column("LockTicketsOnArchive")]
+        public bool LockTicketsOnArchive { get; set; } = true;
+
+        [Column("RenameTicketsOnArchive")]
+        public bool RenameTicketsOnArchive { get; set; } = true;
+
+        [Column("RemoveCreatorOnArchive")]
+        public bool RemoveCreatorOnArchive { get; set; } = false;
+
+        [Column("AutoArchiveOnClose")]
+        public bool AutoArchiveOnClose { get; set; } = false;
 	}
 }

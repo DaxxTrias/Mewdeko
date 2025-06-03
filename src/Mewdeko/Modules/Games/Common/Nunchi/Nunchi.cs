@@ -191,7 +191,7 @@ public sealed class NunchiGame : IDisposable
                         return;
 
                     //if some players took too long to type a number, boot them all out and start a new round
-                    participants = new HashSet<(ulong, string)>(passed);
+                    participants = [..passed];
                     EndRound();
                 }
                 finally

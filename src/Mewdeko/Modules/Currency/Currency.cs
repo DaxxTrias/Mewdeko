@@ -104,7 +104,7 @@ public partial class Currency(InteractiveService interactive, BlackjackService b
         var minimumTimeBetweenClaims = TimeSpan.FromSeconds(cooldownSeconds);
 
         var recentTransactions = (await Service.GetTransactionsAsync(ctx.User.Id, ctx.Guild.Id) ??
-                                  Array.Empty<TransactionHistory>())
+                                  [])
             .Where(t => t.Description == Strings.DailyRewardTransaction(ctx.Guild.Id) &&
                         t.DateAdded > DateTime.UtcNow - minimumTimeBetweenClaims);
 

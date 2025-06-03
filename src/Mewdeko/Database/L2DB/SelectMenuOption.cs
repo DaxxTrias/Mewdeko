@@ -25,17 +25,67 @@ namespace DataModel
 		[Column("Emoji"                                                                                                  )] public string?    Emoji                { get; set; } // text
 		[Column("OpenMessageJson"                                                                                        )] public string?    OpenMessageJson      { get; set; } // text
 		[Column("ModalJson"                                                                                              )] public string?    ModalJson            { get; set; } // text
-		[Column("ChannelNameFormat"   , CanBeNull    = false                                                             )] public string     ChannelNameFormat    { get; set; } = null!; // text
+		[Column("ChannelNameFormat"   ,CanBeNull                                                            = true)] public string     ChannelNameFormat    { get; set; } = null!; // text
 		[Column("CategoryId"                                                                                             )] public ulong?   CategoryId           { get; set; } // numeric(20,0)
 		[Column("ArchiveCategoryId"                                                                                      )] public ulong?   ArchiveCategoryId    { get; set; } // numeric(20,0)
-		[Column("SupportRoles"                                                                                           )] public ulong[]? SupportRoles         { get; set; } // numeric(20,0)[]
-		[Column("ViewerRoles"                                                                                            )] public ulong[]? ViewerRoles          { get; set; } // numeric(20,0)[]
-		[Column("AutoCloseTime"                                                                                          )] public TimeSpan?  AutoCloseTime        { get; set; } // interval
+        // Internal storage as long[] for database compatibility
+        [Column("SupportRoles")]
+        internal long[] _supportRoles { get; set; } = [];
+
+        [Column("ViewerRoles")]
+        internal long[] _viewerRoles { get; set; } = [];
+        [Column("AutoCloseTime"                                                                                          )] public TimeSpan?  AutoCloseTime        { get; set; } // interval
 		[Column("RequiredResponseTime"                                                                                   )] public TimeSpan?  RequiredResponseTime { get; set; } // interval
 		[Column("MaxActiveTickets"                                                                                       )] public int        MaxActiveTickets     { get; set; } // integer
 		[Column("AllowedPriorities"                                                                                      )] public string[]?  AllowedPriorities    { get; set; } // text[]
 		[Column("DefaultPriority"                                                                                        )] public string?    DefaultPriority      { get; set; } // text
 		[Column("SaveTranscript"                                                                                         )] public bool?      SaveTranscript       { get; set; } // boolean
+        [Column("DeleteOnClose")]
+        public bool DeleteOnClose { get; set; } = false;
+
+        [Column("LockOnClose")]
+        public bool LockOnClose { get; set; } = true;
+
+        [Column("RenameOnClose")]
+        public bool RenameOnClose { get; set; } = true;
+
+        [Column("RemoveCreatorOnClose")]
+        public bool RemoveCreatorOnClose { get; set; } = true;
+
+        [Column("DeleteDelay")]
+        public TimeSpan DeleteDelay { get; set; } = TimeSpan.FromMinutes(5);
+
+        [Column("LockOnArchive")]
+        public bool LockOnArchive { get; set; } = true;
+
+        [Column("RenameOnArchive")]
+        public bool RenameOnArchive { get; set; } = true;
+
+        [Column("RemoveCreatorOnArchive")]
+        public bool RemoveCreatorOnArchive { get; set; } = false;
+
+        [Column("AutoArchiveOnClose")]
+        public bool AutoArchiveOnClose { get; set; } = false;
+
+        /// <summary>
+        /// Support role IDs that can access tickets created with this button
+        /// </summary>
+        [NotColumn]
+        public ulong[] SupportRoles
+        {
+            get => _supportRoles?.Select(x => (ulong)x).ToArray() ?? [];
+            set => _supportRoles = value?.Select(x => (long)x).ToArray() ?? [];
+        }
+
+        /// <summary>
+        /// Viewer role IDs that can view tickets created with this button
+        /// </summary>
+        [NotColumn]
+        public ulong[] ViewerRoles
+        {
+            get => _viewerRoles?.Select(x => (ulong)x).ToArray() ?? [];
+            set => _viewerRoles = value?.Select(x => (long)x).ToArray() ?? [];
+        }
 
 		#region Associations
 		/// <summary>
