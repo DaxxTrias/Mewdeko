@@ -126,7 +126,7 @@ public class MessageRepeaterService : INService, IReadyExecutor, IDisposable
             await using var dbContext = await dbFactory.CreateConnectionAsync();
             var rep = await dbContext.GuildRepeaters.FirstOrDefaultAsync(x => x.Id == repeaterId).ConfigureAwait(false);
             rep.LastMessageId = lastMsgId;
-
+            await dbContext.UpdateAsync(rep);
         }
         catch (Exception ex)
         {
@@ -276,6 +276,8 @@ public class MessageRepeaterService : INService, IReadyExecutor, IDisposable
         if (item == null) return false;
 
         item.Message = allowMentions ? newMessage : newMessage.SanitizeMentions(true);
+        await dbContext.UpdateAsync(item);
+
 
 
         if (Repeaters.TryGetValue(guildId, out var guildRepeaters) &&
@@ -302,6 +304,7 @@ public class MessageRepeaterService : INService, IReadyExecutor, IDisposable
         if (item == null) return false;
 
         item.ChannelId = newChannelId;
+        await dbContext.UpdateAsync(item);
 
 
         if (Repeaters.TryGetValue(guildId, out var guildRepeaters) &&
@@ -327,6 +330,8 @@ public class MessageRepeaterService : INService, IReadyExecutor, IDisposable
         if (item == null) return false;
 
         item.NoRedundant = !item.NoRedundant;
+        await dbContext.UpdateAsync(item);
+
 
 
         if (Repeaters.TryGetValue(guildId, out var guildRepeaters) &&
@@ -359,7 +364,7 @@ public class MessageRepeaterService : INService, IReadyExecutor, IDisposable
     public IReadOnlyList<RepeatRunner> GetGuildRepeaters(ulong guildId)
     {
         if (!Repeaters.TryGetValue(guildId, out var guildRepeaters))
-            return Array.Empty<RepeatRunner>();
+            return [];
 
         return guildRepeaters.Values.ToList();
     }

@@ -9,7 +9,6 @@ using Fergun.Interactive;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Common.Configs;
 using Mewdeko.Common.TypeReaders;
-using Mewdeko.Database.EF.EFCore.GuildConfigs;
 using Mewdeko.Services.strings;
 using Microsoft.Extensions.DependencyInjection;
 using SkiaSharp;
@@ -259,25 +258,6 @@ public static partial class Extensions
         return span < TimeSpan.FromMinutes(2) ? $"{span:mm}m {span:ss}s" : $"{(int)span.TotalHours:D2}h {span:mm}m";
     }
 
-    /// <summary>
-    ///     Tries to retrieve a configuration from the list of guild configurations.
-    /// </summary>
-    /// <param name="configList">List of guild configurations.</param>
-    /// <param name="id">Guild ID.</param>
-    /// <param name="config">Retrieved guild configuration if found, otherwise null.</param>
-    /// <returns>True if the configuration was found, otherwise false.</returns>
-    public static bool TryGetConfig(this List<GuildConfig> configList, ulong id, out GuildConfig? config)
-    {
-        var tocheck = configList.Find(x => x.GuildId == id);
-        if (tocheck == null)
-        {
-            config = null;
-            return false;
-        }
-
-        config = tocheck;
-        return true;
-    }
 
     /// <summary>
     ///     Adds a range of items to the list.

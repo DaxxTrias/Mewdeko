@@ -1,7 +1,9 @@
-﻿/*using Discord.Commands;
-using Mewdeko.Common.Attributes.TextCommands;
-using Mewdeko.Modules.Tickets.Services;
+﻿using System.Text;
 using System.Text.Json;
+using Discord.Commands;
+using Mewdeko.Common.Attributes.TextCommands;
+using Mewdeko.Modules.Tickets.Common;
+using Mewdeko.Modules.Tickets.Services;
 using Serilog;
 
 namespace Mewdeko.Modules.Tickets;
@@ -13,7 +15,7 @@ namespace Mewdeko.Modules.Tickets;
 public partial class Tickets : MewdekoModuleBase<TicketService>
 {
     /// <summary>
-    /// Creates a ticket panel
+    ///     Creates a ticket panel
     /// </summary>
     [Cmd]
     [Aliases]
@@ -31,7 +33,9 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
                     .WithButton("Create", "create");
 
                 var msg = await ctx.Channel.SendMessageAsync(
-                    embed: new EmbedBuilder().WithDescription("Would you like to preview the panel or create it with default settings?").WithOkColor().Build(),
+                    embed: new EmbedBuilder()
+                        .WithDescription("Would you like to preview the panel or create it with default settings?")
+                        .WithOkColor().Build(),
                     components: components.Build()
                 );
 
@@ -48,7 +52,10 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
                             description = "Click a button below to create a ticket",
                             color = "blue"
                         };
-                        await Service.PreviewPanelAsync(channel, JsonSerializer.Serialize(new[] { defaultEmbed }));
+                        await Service.PreviewPanelAsync(channel, JsonSerializer.Serialize(new[]
+                        {
+                            defaultEmbed
+                        }));
                         return;
 
                     case "create":
@@ -65,7 +72,8 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
                     .WithButton("Create", "create");
 
                 var msg = await ctx.Channel.SendMessageAsync(
-                    embed: new EmbedBuilder().WithDescription("Would you like to preview the panel or create it?").WithOkColor().Build(),
+                    embed: new EmbedBuilder().WithDescription("Would you like to preview the panel or create it?")
+                        .WithOkColor().Build(),
                     components: components.Build()
                 );
 
@@ -103,7 +111,8 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
     [Aliases]
     [RequireContext(ContextType.Guild)]
     [UserPerm(GuildPermission.Administrator)]
-    public async Task TicketAddButton(ulong panelId, string label, ButtonStyle style = ButtonStyle.Primary, string? emoji = null)
+    public async Task TicketAddButton(ulong panelId, string label, ButtonStyle style = ButtonStyle.Primary,
+        string? emoji = null)
     {
         var panel = await Service.GetPanelAsync(panelId);
         if (panel == null || panel.GuildId != ctx.Guild.Id)
@@ -119,15 +128,63 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
     /// <summary>
     ///     Deletes an existing ticket panel.
     /// </summary>
+    /// <param name="panelId">The ID of the panel to delete.</param>
+    /// <param name="force">Whether to force deletion even if there are active tickets.</param>
     [Cmd]
     [Aliases]
     [RequireContext(ContextType.Guild)]
     [UserPerm(GuildPermission.Administrator)]
-    public async Task TicketPanelDelete(ulong panelId)
+    public async Task TicketPanelDelete(ulong panelId, bool force = false)
     {
-        await Service.DeletePanelAsync(panelId, ctx.Guild);
-        await ctx.Channel.SendConfirmAsync(Strings.TicketPanelDeleted(ctx.Guild.Id, panelId));
+        var (success, error, activeTickets, deletedTickets) = await Service.DeletePanelAsync(panelId, ctx.Guild, force);
+
+        if (success)
+        {
+            var totalCleared = (activeTickets?.Count ?? 0) + (deletedTickets?.Count ?? 0);
+            if (totalCleared > 0)
+            {
+                await ctx.Channel.SendConfirmAsync(
+                    Strings.TicketPanelDeletedWithReferences(ctx.Guild.Id, panelId,
+                        activeTickets?.Count ?? 0, deletedTickets?.Count ?? 0));
+            }
+            else
+            {
+                await ctx.Channel.SendConfirmAsync(Strings.TicketPanelDeleted(ctx.Guild.Id, panelId));
+            }
+        }
+        else
+        {
+            if (activeTickets?.Any() == true || deletedTickets?.Any() == true)
+            {
+                var embed = new EmbedBuilder()
+                    .WithTitle(Strings.CannotDeletePanelTitle(ctx.Guild.Id))
+                    .WithDescription(Strings.CannotDeletePanelDescription(ctx.Guild.Id, activeTickets?.Count ?? 0))
+                    .WithErrorColor();
+
+                if (activeTickets?.Any() == true)
+                {
+                    embed.AddField(Strings.ActiveTickets(ctx.Guild.Id),
+                        string.Join(", ", activeTickets.Select(id => $"#{id}")), true);
+                }
+
+                if (deletedTickets?.Any() == true)
+                {
+                    embed.AddField(Strings.SoftDeletedTickets(ctx.Guild.Id),
+                        string.Join(", ", deletedTickets.Select(id => $"#{id}")), true);
+                }
+
+                embed.AddField(Strings.Options(ctx.Guild.Id),
+                    Strings.PanelDeleteOptions(ctx.Guild.Id, Config.Prefix, panelId));
+
+                await ctx.Channel.SendMessageAsync(embed: embed.Build());
+            }
+            else
+            {
+                await ctx.Channel.SendErrorAsync(error, Config);
+            }
+        }
     }
+
 
     /// <summary>
     ///     Sets the category where tickets will be created.
@@ -147,7 +204,9 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
 
         await Service.UpdateButtonSettingsAsync(ctx.Guild, buttonId, new Dictionary<string, object>
         {
-            { "categoryId", category?.Id }
+            {
+                "categoryId", category?.Id
+            }
         });
 
         if (category == null)
@@ -174,7 +233,9 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
 
         await Service.UpdateButtonSettingsAsync(ctx.Guild, buttonId, new Dictionary<string, object>
         {
-            { "archiveCategoryId", category?.Id }
+            {
+                "archiveCategoryId", category?.Id
+            }
         });
 
         if (category == null)
@@ -219,13 +280,88 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
     [Cmd]
     [Aliases]
     [RequireContext(ContextType.Guild)]
-    public async Task TicketClose()
+    public async Task TicketClose(bool archive = false)
     {
-        var success = await Service.CloseTicket(ctx.Guild, ctx.Channel.Id);
+        var success = await Service.CloseTicket(ctx.Guild, ctx.Channel.Id, archive);
         if (success)
-            await ctx.Channel.SendConfirmAsync(Strings.TicketClosed(ctx.Guild.Id));
+        {
+            if (archive)
+                await ctx.Channel.SendConfirmAsync(Strings.TicketClosedAndArchived(ctx.Guild.Id));
+            else
+                await ctx.Channel.SendConfirmAsync(Strings.TicketClosed(ctx.Guild.Id));
+        }
         else
             await ctx.Channel.SendErrorAsync(Strings.TicketCloseFailed(ctx.Guild.Id), Config);
+    }
+
+    /// <summary>
+    ///     Sets auto-archive behavior for a button
+    /// </summary>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    [UserPerm(GuildPermission.Administrator)]
+    public async Task TicketAutoArchive(int buttonId, bool enabled = true)
+    {
+        var success = await Service.UpdateButtonSettingsAsync(ctx.Guild, buttonId, new Dictionary<string, object>
+        {
+            {
+                "autoArchiveOnClose", enabled
+            }
+        });
+
+        if (success)
+        {
+            if (enabled)
+                await ctx.Channel.SendConfirmAsync(Strings.AutoArchiveEnabled(ctx.Guild.Id, buttonId));
+            else
+                await ctx.Channel.SendConfirmAsync(Strings.AutoArchiveDisabled(ctx.Guild.Id, buttonId));
+        }
+        else
+        {
+            await ctx.Channel.SendErrorAsync(Strings.ButtonUpdateFailed(ctx.Guild.Id), Config);
+        }
+    }
+
+    /// <summary>
+    ///     Sets multiple close behaviors for a button at once
+    /// </summary>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    [UserPerm(GuildPermission.Administrator)]
+    public async Task TicketCloseBehavior(int buttonId,
+        bool? autoArchive = null,
+        bool? deleteOnClose = null,
+        bool? lockOnClose = null,
+        bool? renameOnClose = null,
+        int? deleteDelayMinutes = null)
+    {
+        var settings = new Dictionary<string, object>();
+
+        if (autoArchive.HasValue)
+            settings["autoArchiveOnClose"] = autoArchive.Value;
+        if (deleteOnClose.HasValue)
+            settings["deleteOnClose"] = deleteOnClose.Value;
+        if (lockOnClose.HasValue)
+            settings["lockOnClose"] = lockOnClose.Value;
+        if (renameOnClose.HasValue)
+            settings["renameOnClose"] = renameOnClose.Value;
+        if (deleteDelayMinutes.HasValue)
+            settings["deleteDelay"] = TimeSpan.FromMinutes(deleteDelayMinutes.Value);
+
+        if (!settings.Any())
+        {
+            await ctx.Channel.SendErrorAsync("No settings provided to update.", Config);
+            return;
+        }
+
+        var success = await Service.UpdateButtonSettingsAsync(ctx.Guild, buttonId, settings);
+        if (success)
+            await ctx.Channel.SendConfirmAsync(
+                $"Updated {settings.Count} close behavior settings for button {buttonId}");
+        else
+            await ctx.Channel.SendErrorAsync(Strings.ButtonUpdateFailed(ctx.Guild.Id), Config);
     }
 
     /// <summary>
@@ -317,7 +453,8 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
     [Aliases]
     [RequireContext(ContextType.Guild)]
     [UserPerm(GuildPermission.Administrator)]
-    public async Task TicketAddPriority(string id, string name, string emoji, int level, bool pingStaff, TimeSpan responseTime, [Remainder] string color)
+    public async Task TicketAddPriority(string id, string name, string emoji, int level, bool pingStaff,
+        TimeSpan responseTime, [Remainder] string color)
     {
         if (!ColorUtils.TryParseColor(color, out var parsedColor))
         {
@@ -325,7 +462,8 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
             return;
         }
 
-        var success = await Service.CreatePriority(ctx.Guild.Id, id, name, emoji, level, pingStaff, responseTime, parsedColor);
+        var success =
+            await Service.CreatePriority(ctx.Guild.Id, id, name, emoji, level, pingStaff, responseTime, parsedColor);
         if (success)
             await ctx.Channel.SendConfirmAsync(Strings.TicketPriorityCreated(ctx.Guild.Id, name));
         else
@@ -446,6 +584,117 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
             await ctx.Channel.SendConfirmAsync(Strings.TicketUserUnblocked(ctx.Guild.Id, user.Mention));
         else
             await ctx.Channel.SendErrorAsync(Strings.TicketUserNotBlocked(ctx.Guild.Id), Config);
+    }
+
+    /// <summary>
+    ///     Recreates a deleted ticket panel in its original channel.
+    /// </summary>
+    /// <param name="panelId">The message ID of the panel to recreate.</param>
+    [Cmd]
+    [RequireContext(ContextType.Guild)]
+    [UserPerm(GuildPermission.Administrator)]
+    public async Task RecreatePanel(ulong panelId)
+    {
+        var (success, newMessageId, channelMention, error) = await Service.RecreatePanelAsync(ctx.Guild.Id, panelId);
+
+        if (success)
+        {
+            await ctx.Channel.SendConfirmAsync(Strings.PanelRecreated(ctx.Guild.Id, channelMention, panelId,
+                newMessageId.Value));
+        }
+        else
+        {
+            await ctx.Channel.SendErrorAsync(error, Config);
+        }
+    }
+
+    /// <summary>
+    ///     Checks all panels in the guild for missing messages.
+    /// </summary>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    [UserPerm(GuildPermission.Administrator)]
+    public async Task CheckPanels()
+    {
+        var panelStatuses = await Service.CheckPanelStatusAsync(ctx.Guild.Id);
+
+        if (!panelStatuses.Any())
+        {
+            await ctx.Channel.SendConfirmAsync(Strings.NoPanelsFound(ctx.Guild.Id));
+            return;
+        }
+
+        var embed = new EmbedBuilder()
+            .WithTitle(Strings.PanelStatusCheckTitle(ctx.Guild.Id))
+            .WithOkColor();
+
+        var statusText = new StringBuilder();
+        var missingCount = 0;
+
+        foreach (var panel in panelStatuses)
+        {
+            switch (panel.Status)
+            {
+                case PanelStatus.OK:
+                    statusText.AppendLine($"✅ {Strings.PanelStatusOk(ctx.Guild.Id, panel.PanelId, panel.ChannelName)}");
+                    break;
+                case PanelStatus.MessageMissing:
+                    statusText.AppendLine(
+                        $"❌ {Strings.PanelStatusMissing(ctx.Guild.Id, panel.PanelId, panel.ChannelName)}");
+                    missingCount++;
+                    break;
+                case PanelStatus.ChannelDeleted:
+                    statusText.AppendLine($"❌ {Strings.PanelStatusChannelDeleted(ctx.Guild.Id, panel.PanelId)}");
+                    break;
+            }
+        }
+
+        embed.WithDescription(statusText.ToString());
+
+        if (missingCount > 0)
+        {
+            embed.AddField(Strings.MissingPanelsTitle(ctx.Guild.Id),
+                Strings.MissingPanelsDescription(ctx.Guild.Id, missingCount, Config.Prefix));
+        }
+
+        await ctx.Channel.SendMessageAsync(embed: embed.Build());
+    }
+
+    /// <summary>
+    ///     Recreates all panels with missing messages.
+    /// </summary>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    [UserPerm(GuildPermission.Administrator)]
+    public async Task RecreateAllPanels()
+    {
+        var msg = await ctx.Channel.SendConfirmAsync(Strings.RecreatingPanels(ctx.Guild.Id));
+
+        var (recreated, failed, errors) = await Service.RecreateAllMissingPanelsAsync(ctx.Guild.Id);
+
+        if (recreated == 0 && failed == 0)
+        {
+            await msg.ModifyAsync(x => x.Embed = new EmbedBuilder()
+                .WithDescription(Strings.NoMissingPanels(ctx.Guild.Id))
+                .WithOkColor()
+                .Build());
+            return;
+        }
+
+        var embed = new EmbedBuilder()
+            .WithTitle(Strings.PanelRecreationComplete(ctx.Guild.Id))
+            .AddField(Strings.Recreated(ctx.Guild.Id), recreated, true)
+            .AddField(Strings.Failed(ctx.Guild.Id), failed, true)
+            .WithOkColor();
+
+        if (errors.Any())
+        {
+            embed.AddField(Strings.Errors(ctx.Guild.Id), string.Join("\n", errors));
+        }
+
+        await msg.ModifyAsync(x => x.Embed = embed.Build());
     }
 
     /// <summary>
@@ -628,7 +877,7 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
     [Aliases]
     [RequireContext(ContextType.Guild)]
     [UserPerm(GuildPermission.Administrator)]
-    public async Task TicketUpdatePanel(ulong panelId, [Remainder] string embedJson)
+    public async Task TicketUpdatePanel(int panelId, [Remainder] string embedJson)
     {
         var success = await Service.UpdatePanelEmbedAsync(ctx.Guild, panelId, embedJson);
         if (success)
@@ -664,7 +913,9 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
     {
         await Service.UpdateButtonSettingsAsync(ctx.Guild, buttonId, new Dictionary<string, object>
         {
-            { "autoCloseTime", hours.HasValue ? TimeSpan.FromHours(hours.Value) : null }
+            {
+                "autoCloseTime", hours.HasValue ? TimeSpan.FromHours(hours.Value) : null
+            }
         });
 
         if (hours.HasValue)
@@ -687,6 +938,4 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
         else
             await ctx.Channel.SendErrorAsync(Strings.NoteAddFailed(ctx.Guild.Id), Config);
     }
-
-
-}*/
+}

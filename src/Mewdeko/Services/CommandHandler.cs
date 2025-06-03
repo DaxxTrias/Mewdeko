@@ -1,6 +1,7 @@
 ﻿using System.Collections.Concurrent;
 using System.Text;
 using System.Threading;
+using DataModel;
 using Discord.Commands;
 using Discord.Interactions;
 using Discord.Net;
@@ -8,8 +9,7 @@ using Discord.Rest;
 using LinqToDB;
 using Mewdeko.Common.Collections;
 using Mewdeko.Common.ModuleBehaviors;
-using Mewdeko.Database.EF.EFCore;
-using Mewdeko.Database.EF.EFCore.Protections;
+using Mewdeko.Database.Enums;
 using Mewdeko.Modules.Chat_Triggers.Services;
 using Mewdeko.Modules.Help.Services;
 using Mewdeko.Modules.Permissions.Common;
@@ -126,7 +126,7 @@ public class CommandHandler : INService
                     var user = await dbContext.GetOrCreateUser(ctx.User);
                     if (!user.StatsOptOut)
                     {
-                        var comStats = new CommandStats
+                        var comStats = new CommandStat
                         {
                             ChannelId = ctx.Channel.Id,
                             GuildId = ctx.Guild.Id,
@@ -259,7 +259,7 @@ public class CommandHandler : INService
                     var user = await dbContext.GetOrCreateUser(ctx.User);
                     if (!user.StatsOptOut)
                     {
-                        var comStats = new CommandStats
+                        var comStats = new CommandStat
                         {
                             ChannelId = ctx.Channel.Id,
                             GuildId = ctx.Guild.Id,
@@ -772,7 +772,7 @@ public class CommandHandler : INService
         var user = await dbContext.GetOrCreateUser(usrMsg.Author).ConfigureAwait(false);
         if (user.StatsOptOut) return;
 
-        var commandStats = new CommandStats
+        var commandStats = new CommandStat
         {
             ChannelId = channel.Id,
             GuildId = guild.Id,

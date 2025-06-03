@@ -4,8 +4,6 @@ using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Modules.Administration.Common;
 using Mewdeko.Modules.Moderation.Services;
 using Mewdeko.Services.Settings;
-using BlacklistedPermission = Mewdeko.Database.EF.EFCore.Protections.BlacklistedPermission;
-using BlacklistedRole = Mewdeko.Database.EF.EFCore.Protections.BlacklistedRole;
 
 
 namespace Mewdeko.Modules.Server_Management.Services;
@@ -592,7 +590,7 @@ public class RoleMonitorService : INService, IReadyExecutor
 
         await context.InsertAsync(new BlacklistedRole
         {
-            GuildId = guild.Id, RoleId = role.Id, PunishmentAction = punishmentAction
+            GuildId = guild.Id, RoleId = role.Id, PunishmentAction = (int?)punishmentAction
         });
 
 
@@ -674,7 +672,7 @@ public class RoleMonitorService : INService, IReadyExecutor
 
         await context.InsertAsync(new BlacklistedPermission
         {
-            GuildId = guild.Id, Permission = permission, PunishmentAction = punishmentAction
+            GuildId = guild.Id, Permission = (ulong)permission, PunishmentAction = (int?)punishmentAction
         });
 
 

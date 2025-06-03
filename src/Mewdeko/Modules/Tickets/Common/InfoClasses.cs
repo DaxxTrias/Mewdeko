@@ -163,3 +163,50 @@ public class PanelInfo
     /// </summary>
     public List<SelectMenuInfo> SelectMenus { get; set; }
 }
+
+    /// <summary>
+    /// Represents the status of a ticket panel.
+    /// </summary>
+    public class PanelStatusInfo
+    {
+        /// <summary>
+        /// Gets or sets the panel's message ID.
+        /// </summary>
+        public ulong PanelId { get; set; }
+
+        /// <summary>
+        /// Gets or sets the channel ID where the panel should be.
+        /// </summary>
+        public ulong ChannelId { get; set; }
+
+        /// <summary>
+        /// Gets or sets the channel name.
+        /// </summary>
+        public string ChannelName { get; set; }
+
+        /// <summary>
+        /// Gets or sets the status of the panel.
+        /// </summary>
+        public PanelStatus Status { get; set; }
+    }
+
+    /// <summary>
+    /// Represents the possible statuses of a ticket panel.
+    /// </summary>
+    public enum PanelStatus
+    {
+        /// <summary>
+        /// Panel message exists and is accessible.
+        /// </summary>
+        OK,
+
+        /// <summary>
+        /// Panel message is missing or deleted.
+        /// </summary>
+        MessageMissing,
+
+        /// <summary>
+        /// The channel containing the panel has been deleted.
+        /// </summary>
+        ChannelDeleted
+    }

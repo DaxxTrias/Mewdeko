@@ -1,6 +1,7 @@
 using LinqToDB;
 using LinqToDB.Data;
 using DataModel;
+using Mewdeko.Database.L2DB;
 using Embed = DataModel.Embed;
 using Poll = DataModel.Poll;
 using PollAnswer = DataModel.PollAnswer;
@@ -24,6 +25,11 @@ public class MewdekoDb : DataConnection
         // Set connection to close after each operation for better connection pooling
         (this as IDataContext).CloseAfterUse = true;
     }
+
+    /// <summary>
+    /// Table for accessing scheduled ticket deletions
+    /// </summary>
+    public ITable<ScheduledTicketDeletion> ScheduledTicketDeletions => this.GetTable<ScheduledTicketDeletion>();
 
     /// <summary>
     /// Gets the global user balances table.

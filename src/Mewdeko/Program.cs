@@ -13,7 +13,6 @@ using Mewdeko.Common.Configs;
 using Mewdeko.Common.Constraints;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Common.PubSub;
-using Mewdeko.Database.EF.EFCore;
 using Mewdeko.Database.Impl;
 using Mewdeko.Modules.Currency.Services;
 using Mewdeko.Modules.Currency.Services.Impl;
@@ -27,7 +26,6 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -62,6 +60,36 @@ public class Program
         var log = LogSetup.SetupLogger("Startup"); // Initial logger name
         var credentials = new BotCredentials();
         DependencyInstaller.CheckAndInstallDependencies(credentials.PsqlConnectionString);
+        var dbUpgrader = new DatabaseUpgrader(credentials.PsqlConnectionString);
+
+        // Test connection first
+        if (!dbUpgrader.TestConnection())
+        {
+            Log.Error("Failed to connect to database! Check connection string.");
+            Helpers.ReadErrorAndExit(6);
+            return;
+        }
+
+        // Check if upgrade is needed
+        if (dbUpgrader.IsUpgradeRequired())
+        {
+            Log.Information("Database upgrade required. Running migrations...");
+            var scriptsToExecute = dbUpgrader.GetScriptsToExecute();
+            Log.Information("Scripts to execute: {Scripts}", string.Join(", ", scriptsToExecute));
+
+            var migrationResult = dbUpgrader.PerformUpgrade();
+            if (!migrationResult.Successful)
+            {
+                Log.Error("Database migration failed! Error: {Error}", migrationResult.Error);
+                Helpers.ReadErrorAndExit(6);
+                return;
+            }
+            Log.Information("Database migrations completed successfully");
+        }
+        else
+        {
+            Log.Information("Database is up to date, no migrations needed");
+        }
 
         var discordRestClient = new DiscordRestClient();
         await discordRestClient.LoginAsync(TokenType.Bot, credentials.Token);
@@ -73,17 +101,6 @@ public class Program
         {
             Log.Error("The Lavalink URL is invalid! Please check the Lavalink URL in the configuration");
             Helpers.ReadErrorAndExit(5);
-        }
-
-        try
-        {
-            await using var dbMigrationContext = new MewdekoPostgresContext(new DbContextOptions<MewdekoPostgresContext>());
-            await dbMigrationContext.Database.MigrateAsync();
-        }
-        catch (Exception ex)
-        {
-            Log.Fatal(ex, "Database migration failed: {ErrorMessage}", ex.Message);
-            Helpers.ReadErrorAndExit(6);
         }
 
         if (credentials.IsApiEnabled)
@@ -265,9 +282,6 @@ public class Program
         services.AddSingleton<FontProvider>();
         services.AddSingleton<IBotCredentials>(credentials);
 
-        services.AddDbContext<MewdekoPostgresContext>(options =>
-            options.UseNpgsql(credentials.PsqlConnectionString));
-
         services.AddSingleton<IDataConnectionFactory>(sp =>
             new PostgreSqlConnectionFactory(credentials.PsqlConnectionString));
 
@@ -329,5 +343,6 @@ public class Program
 
         services.AddSingleton<Mewdeko>();
         services.AddHostedService<MewdekoService>();
+        services.AddHostedService<ScheduledDeletionService>();
     }
 }

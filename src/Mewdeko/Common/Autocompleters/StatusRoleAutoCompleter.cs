@@ -1,5 +1,5 @@
+using DataModel;
 using Discord.Interactions;
-using Mewdeko.Database.EF.EFCore;
 using ZiggyCreatures.Caching.Fusion;
 
 namespace Mewdeko.Common.Autocompleters;
@@ -36,7 +36,7 @@ public class StatusRoleAutocompleter : AutocompleteHandler
         IServiceProvider services)
     {
         var content = (string)interaction.Data.Current.Value;
-        var statusRoles = await cache.GetOrSetAsync("statusRoles", _ => Task.FromResult<List<StatusRolesTable>>([]));
+        var statusRoles = await cache.GetOrSetAsync("statusRoles", _ => Task.FromResult<List<StatusRole>>([]));
 
         if (statusRoles == null)
             return AutocompletionResult.FromSuccess([]);

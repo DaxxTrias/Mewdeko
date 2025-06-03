@@ -11,7 +11,12 @@
     <ApplicationIcon>Mewdeko.ico</ApplicationIcon>
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
     <WarningsAsErrors>CS1591</WarningsAsErrors>
+    <PreferIQueryable>true</PreferIQueryable>
   </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Database\Scripts\*.sql" />
+  </ItemGroup>
 
 
   <!--    DO NOT DELETE   -->
@@ -19,12 +24,14 @@
 
   <ItemGroup>
     <PackageReference Include="Claudia" Version="1.3.1" />
+    <PackageReference Include="dbup-postgresql" Version="6.0.3" />
     <PackageReference Include="Discord.Net.WebSocket" Version="3.17.2" />
     <PackageReference Include="Discord.Net.Rest" Version="3.17.2" />
     <PackageReference Include="Discord.Net.Webhook" Version="3.17.2" />
     <PackageReference Include="Discord.Net.Interactions" Version="3.17.2" />
     <PackageReference Include="Discord.Net.Commands" Version="3.17.2" />
     <PackageReference Include="Discord.Addons.Hosting" Version="6.1.0"/>
+    <PackageReference Include="FluentMigrator" Version="7.1.0" />
     <PackageReference Include="Google.Cloud.Vision.V1" Version="3.7.0"/>
     <PackageReference Include="GroqApiLibrary" Version="1.0.8" />
     <PackageReference Include="HarfBuzzSharp" Version="8.3.0-preview.4.1"/>
@@ -35,6 +42,7 @@
     <PackageReference Include="MathNet.Symbolics" Version="0.25.0"/>
     <PackageReference Include="Microsoft.IO.RecyclableMemoryStream" Version="3.0.1" />
     <PackageReference Include="morelinq" Version="4.4.0" />
+    <PackageReference Include="Npgsql" Version="9.0.3" />
     <PackageReference Include="OpenAI" Version="2.1.0" />
     <PackageReference Include="OxyPlot.Core" Version="2.2.0"/>
     <PackageReference Include="OxyPlot.SkiaSharp" Version="2.2.0"/>
@@ -72,15 +80,6 @@
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="4.11.0" />
     <PackageReference Include="Microsoft.CodeAnalysis.Workspaces.Common" Version="4.11.0" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="4.11.0" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.10" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.10">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-    </PackageReference>
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="8.0.10">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-    </PackageReference>
     <PackageReference Include="Microsoft.Extensions.Configuration" Version="9.0.0-preview.5.24306.7"/>
     <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="9.0.0-preview.5.24306.7"/>
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="9.0.0-preview.5.24306.7"/>
@@ -92,7 +91,6 @@
     <PackageReference Include="NekosBestApiNet" Version="1.0.7"/>
     <PackageReference Include="NHentaiAPI" Version="1.8.0"/>
     <PackageReference Include="NonBlocking" Version="2.1.2"/>
-    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.8"/>
     <PackageReference Include="Octokit" Version="13.0.1" />
     <PackageReference Include="Otp.NET" Version="1.4.0"/>
     <PackageReference Include="PokeApiNet" Version="4.0.0"/>
@@ -148,9 +146,6 @@
     <None Remove="DiscordChatExporter\DiscordChatExporter.Cli.deps.json"/>
     <None Remove="DiscordChatExporter\CliFx.dll"/>
     <None Remove="data\http.txt"/>
-    <Compile Update="Database\Migrations\PostgreSql\SeperateVcRoles.cs">
-      <DependentUpon>SeparateVcRoles.Designer.cs</DependentUpon>
-    </Compile>
   </ItemGroup>
 
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">
@@ -179,10 +174,7 @@
     </Content>
   </ItemGroup>
   <ItemGroup>
-    <Folder Include="Database\EF\" />
-    <Folder Include="Database\Models\" />
     <Folder Include="Modules\Xp\Extensions\" />
-    <Folder Include="Services\Database\" />
   </ItemGroup>
 <!--  <ItemGroup>-->
 <!--    <Reference Include="NHentaiAPI">-->

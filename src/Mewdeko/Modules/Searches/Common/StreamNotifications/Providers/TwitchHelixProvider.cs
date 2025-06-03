@@ -86,7 +86,7 @@ public class TwitchHelixProvider : Provider
     {
         if (logins.Count == 0)
         {
-            return Array.Empty<StreamData>();
+            return [];
         }
 
         var token = await EnsureTokenValidAsync().ConfigureAwait(false);
@@ -95,7 +95,7 @@ public class TwitchHelixProvider : Provider
         {
             Log.Warning(
                 "Twitch client ID and Secret are incorrect! Please go to https://dev.twitch.tv and create an application!");
-            return Array.Empty<StreamData>();
+            return [];
         }
 
         using var http = httpClientFactory.CreateClient();

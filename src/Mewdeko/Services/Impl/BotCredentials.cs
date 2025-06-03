@@ -2,9 +2,10 @@
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using LinqToDB;
+using LinqToDB.Data;
 using Microsoft.Extensions.Configuration;
 
-using Npgsql;
 using Serilog;
 
 namespace Mewdeko.Services.Impl;
@@ -491,8 +492,11 @@ public class BotCredentials : IBotCredentials
                 // Check if PostgreSQL connection string is valid
                 try
                 {
-                    using var conn = new NpgsqlConnection(PsqlConnectionString);
-                    conn.Open();
+                    var dataOptions = new DataOptions()
+                        .UsePostgreSQL(PsqlConnectionString);
+
+                    using var conn = new DataConnection(dataOptions);
+                    conn.EnsureConnectionAsync().GetAwaiter().GetResult();
                     conn.Close();
                 }
                 catch (Exception ex)

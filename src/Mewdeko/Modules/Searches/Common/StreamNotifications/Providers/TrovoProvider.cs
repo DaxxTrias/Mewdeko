@@ -123,7 +123,7 @@ public class TrovoProvider : Provider
         if (string.IsNullOrWhiteSpace(trovoClientId))
         {
             Log.Warning("Trovo streams will be ignored until TrovoClientId is added to creds.yml");
-            return Array.Empty<StreamData?>();
+            return [];
         }
 
         var results = new List<StreamData?>(usernames.Count);

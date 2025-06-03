@@ -116,10 +116,7 @@ public class AutoPublishService : INService
             .ToListAsync();
 
         if (!autoPublishes.Any())
-            return new List<(AutoPublish?, List<PublishUserBlacklist?>, List<PublishWordBlacklist?>)>
-            {
-                (null, [], [])
-            };
+            return [(null, [], [])];
 
         var result = new List<(AutoPublish?, List<PublishUserBlacklist?>, List<PublishWordBlacklist?>)>();
 

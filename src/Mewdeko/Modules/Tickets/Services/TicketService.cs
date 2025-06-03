@@ -1,10 +1,12 @@
-/*using System.IO;
+using System.IO;
 using System.Text;
 using System.Text.Json;
 using DataModel;
-using Mewdeko.Modules.Tickets.Common;
 using LinqToDB;
+using Mewdeko.Database.L2DB;
+using Mewdeko.Modules.Tickets.Common;
 using Serilog;
+using SelectMenuOption = DataModel.SelectMenuOption;
 
 namespace Mewdeko.Modules.Tickets.Services;
 
@@ -15,7 +17,6 @@ public class TicketService : INService
 {
     private readonly IDataConnectionFactory dbFactory;
     private readonly DiscordShardedClient client;
-    private readonly IDataCache cache;
     private const string ClaimButtonId = "ticket_claim";
     private const string CloseButtonId = "ticket_close";
 
@@ -25,13 +26,10 @@ public class TicketService : INService
     public TicketService(
         IDataConnectionFactory dbFactory,
         DiscordShardedClient client,
-        GuildSettingsService guildSettings,
-        IDataCache cache,
         EventHandler eventHandler)
     {
         this.dbFactory = dbFactory;
         this.client = client;
-        this.cache = cache;
 
         eventHandler.MessageDeleted += HandleMessageDeleted;
         eventHandler.ModalSubmitted += HandleModalSubmitted;
@@ -89,12 +87,13 @@ public class TicketService : INService
             ChannelId = channel.Id,
             MessageId = message.Id,
             EmbedJson = finalJson,
-            PanelButtons1 = [],
+            PanelButtons = [],
             PanelSelectMenus = []
         };
 
         await using var ctx = await dbFactory.CreateConnectionAsync();
-        await ctx.InsertAsync(panel);
+        var id = await ctx.InsertWithInt32IdentityAsync(panel);
+        panel.Id = id;
 
 
         return panel;
@@ -219,46 +218,49 @@ public class TicketService : INService
         List<string> allowedPriorities = null,
         string defaultPriority = null)
     {
-        await using var ctx = await dbFactory.CreateConnectionAsync();
-
-        var button = new PanelButton
+        try
         {
-            PanelId = panel.Id,
-            Label = label,
-            Emoji = emoji,
-            CustomId = $"ticket_btn_{Guid.NewGuid():N}",
-            Style = (int)style,
-            OpenMessageJson = openMessageJson,
-            ModalJson = modalJson,
-            ChannelNameFormat = channelFormat,
-            CategoryId = categoryId,
-            ArchiveCategoryId = archiveCategoryId,
-            SupportRoles = supportRoles.ToArray() ?? [],
-            ViewerRoles = viewerRoles.ToArray() ?? [],
-            AutoCloseTime = autoCloseTime,
-            RequiredResponseTime = requiredResponseTime,
-            MaxActiveTickets = maxActiveTickets,
-            AllowedPriorities = allowedPriorities.ToArray() ?? [],
-            DefaultPriority = defaultPriority
-        };
+            await using var ctx = await dbFactory.CreateConnectionAsync();
 
-        await ctx.InsertAsync(button);
+            var button = new PanelButton
+            {
+                PanelId = panel.Id,
+                Label = label,
+                Emoji = emoji,
+                CustomId = $"ticket_btn_{Guid.NewGuid():N}",
+                Style = (int)style,
+                OpenMessageJson = openMessageJson,
+                ModalJson = modalJson,
+                ChannelNameFormat = channelFormat,
+                CategoryId = categoryId,
+                ArchiveCategoryId = archiveCategoryId,
+                SupportRoles = supportRoles?.ToArray() ?? [],
+                ViewerRoles = viewerRoles?.ToArray() ?? [],
+                AutoCloseTime = autoCloseTime,
+                RequiredResponseTime = requiredResponseTime,
+                MaxActiveTickets = maxActiveTickets,
+                AllowedPriorities = allowedPriorities?.ToArray() ?? [],
+                DefaultPriority = defaultPriority,
+                SaveTranscript = false
+            };
 
-        await UpdatePanelComponentsAsync(panel);
+            await ctx.InsertAsync(button);
 
-        return button;
-    }
 
-    /// <summary>
-    ///     Updates a button's properties.
-    /// </summary>
-    public async Task UpdateButtonAsync(PanelButton button, Action<PanelButton> updateAction)
-    {
-        await using var ctx = await dbFactory.CreateConnectionAsync();
-        updateAction(button);
+            var existingButtons = panel.PanelButtons?.ToList() ?? new List<PanelButton>();
+            existingButtons.Add(button);
+            panel.PanelButtons = existingButtons;
 
-        await UpdatePanelComponentsAsync(button.Panel);
+            await UpdatePanelComponentsAsync(panel);
 
+            return button;
+        }
+        catch (Exception e)
+        {
+            Log.Error(e.ToString());
+        }
+
+        return null;
     }
 
     private ComponentBuilder GetDefaultTicketComponents()
@@ -289,55 +291,94 @@ public class TicketService : INService
     {
         await using var ctx = await dbFactory.CreateConnectionAsync();
         return await ctx.TicketCases
-            .Include(c => c.LinkedTickets)
-            .Include(c => c.Notes)
+            .LoadWithAsTable(c => c.Tickets)
+            .LoadWithAsTable(c => c.CaseNotes)
             .FirstOrDefaultAsync(c => c.Id == caseId);
     }
 
     /// <summary>
-    ///     Closes a case and optionally archives linked tickets.
+    ///     Closes a case and optionally archives linked tickets
     /// </summary>
-    /// <param name="ticketCase">The case to close.</param>
-    /// <param name="archiveTickets">Whether to archive linked tickets. Defaults to false.</param>
-    /// <returns>A task that represents the asynchronous operation.</returns>
+    /// <param name="ticketCase">The case to close</param>
+    /// <param name="archiveTickets">Whether to archive linked tickets. Defaults to false</param>
+    /// <returns>A task that represents the asynchronous operation</returns>
     public async Task CloseCaseAsync(TicketCase ticketCase, bool archiveTickets = false)
     {
         await using var ctx = await dbFactory.CreateConnectionAsync();
-        ctx.Attach(ticketCase);
-        ticketCase.ClosedAt = DateTime.UtcNow;
 
-        if (archiveTickets && ticketCase.LinkedTickets.Any())
+        await using var transaction = await ctx.BeginTransactionAsync();
+        try
         {
-            foreach (var ticket in ticketCase.LinkedTickets)
+            // Close the case
+            await ctx.TicketCases
+                .Where(tc => tc.Id == ticketCase.Id)
+                .Set(tc => tc.ClosedAt, DateTime.UtcNow)
+                .UpdateAsync();
+
+            if (archiveTickets)
             {
-                if (!ticket.IsArchived && !ticket.ClosedAt.HasValue)
-                {
-                    ticket.ClosedAt = DateTime.UtcNow;
-                    ticket.IsArchived = true;
-
-                    // If the ticket has an archive category set, move it
-                    var button = ticket.Button;
-                    var option = ticket.SelectOption;
-                    var archiveCategoryId = button?.ArchiveCategoryId ?? option?.ArchiveCategoryId;
-
-                    if (archiveCategoryId.HasValue)
+                // Get linked tickets with their button/option data for archive categories
+                var linkedTicketsWithArchiveInfo = await (
+                    from ticket in ctx.Tickets
+                    where ticket.CaseId == ticketCase.Id &&
+                          !ticket.IsArchived &&
+                          !ticket.ClosedAt.HasValue
+                    select new
                     {
-                        var guild = await client.Rest.GetGuildAsync(ticket.GuildId);
-                        if (guild != null)
+                        Ticket = ticket,
+                        ButtonArchiveCategoryId = ticket.ButtonId.HasValue
+                            ? ctx.PanelButtons.Where(b => b.Id == ticket.ButtonId).Select(b => b.ArchiveCategoryId)
+                                .FirstOrDefault()
+                            : null,
+                        OptionArchiveCategoryId = ticket.SelectOptionId.HasValue
+                            ? ctx.SelectMenuOptions.Where(o => o.Id == ticket.SelectOptionId)
+                                .Select(o => o.ArchiveCategoryId).FirstOrDefault()
+                            : null
+                    }).ToListAsync();
+
+                if (linkedTicketsWithArchiveInfo.Any())
+                {
+                    // Handle Discord channel moves for each ticket
+                    foreach (var item in linkedTicketsWithArchiveInfo)
+                    {
+                        var archiveCategoryId = item.ButtonArchiveCategoryId ?? item.OptionArchiveCategoryId;
+
+                        if (archiveCategoryId.HasValue)
                         {
-                            var channel = await guild.GetTextChannelAsync(ticket.ChannelId);
-                            if (channel != null)
+                            var guild = await client.Rest.GetGuildAsync(item.Ticket.GuildId);
+                            if (guild != null)
                             {
-                                await channel.ModifyAsync(props =>
-                                    props.CategoryId = archiveCategoryId.Value);
+                                var channel = await guild.GetTextChannelAsync(item.Ticket.ChannelId);
+                                if (channel != null)
+                                {
+                                    await channel.ModifyAsync(props =>
+                                        props.CategoryId = archiveCategoryId.Value);
+                                }
                             }
                         }
                     }
+
+                    // Bulk update all linked tickets
+                    var ticketIds = linkedTicketsWithArchiveInfo.Select(item => item.Ticket.Id).ToArray();
+                    await ctx.Tickets
+                        .Where(t => ticketIds.Contains(t.Id))
+                        .Set(t => t.ClosedAt, DateTime.UtcNow)
+                        .Set(t => t.IsArchived, true)
+                        .Set(t => t.LastActivityAt, DateTime.UtcNow)
+                        .UpdateAsync();
                 }
             }
+
+            await transaction.CommitAsync();
+
+            // Update the in-memory object to reflect the changes
+            ticketCase.ClosedAt = DateTime.UtcNow;
         }
-
-
+        catch
+        {
+            await transaction.RollbackAsync();
+            throw;
+        }
     }
 
     /// <summary>
@@ -350,8 +391,8 @@ public class TicketService : INService
     {
         await using var ctx = await dbFactory.CreateConnectionAsync();
         var query = ctx.TicketCases
-            .Include(c => c.LinkedTickets)
-            .Include(c => c.Notes)
+            .LoadWithAsTable(c => c.Tickets)
+            .LoadWithAsTable(c => c.CaseNotes)
             .Where(c => c.GuildId == guildId);
 
         if (!includeDeleted)
@@ -381,117 +422,190 @@ public class TicketService : INService
             CaseId = caseId, AuthorId = authorId, Content = content, CreatedAt = DateTime.UtcNow
         };
 
-        ctx.CaseNotes.Add(note);
+        await ctx.InsertWithInt32IdentityAsync(note);
 
         return note;
     }
 
-    /// <summary>
-    ///     Deletes a ticket panel and all its associated components.
-    /// </summary>
-    /// <param name="panelId">The ID of the panel to delete.</param>
-    /// <param name="guild">The guild containing the panel.</param>
-    /// <returns>A task that represents the asynchronous operation.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when the panel is not found.</exception>
-    public async Task DeletePanelAsync(ulong panelId, IGuild guild)
-    {
-        await using var ctx = await dbFactory.CreateConnectionAsync();
-        await using var transaction = await ctx.Database.BeginTransactionAsync();
 
+    /// <summary>
+    ///     Deletes a ticket panel and all its components.
+    /// </summary>
+    /// <param name="panelId">The message ID of the panel to delete.</param>
+    /// <param name="guild">The guild containing the panel.</param>
+    /// <param name="force">Whether to force delete even if there are tickets referencing the panel's buttons.</param>
+    /// <returns>A tuple containing success status and any error information.</returns>
+    public async Task<(bool success, string error, List<int> activeTickets, List<int> deletedTickets)> DeletePanelAsync(
+        ulong panelId, IGuild guild, bool force = false)
+    {
         try
         {
-            // First get the panel with its buttons to handle dependencies
+            await using var ctx = await dbFactory.CreateConnectionAsync();
+
             var panel = await ctx.TicketPanels
-                .Include(p => p.Buttons)
-                .FirstOrDefaultAsync(p => p.MessageId == panelId);
+                .LoadWithAsTable(p => p.PanelButtons)
+                .LoadWithAsTable(p => p.PanelSelectMenus)
+                .FirstOrDefaultAsync(p => p.MessageId == panelId && p.GuildId == guild.Id);
 
             if (panel == null)
-                throw new InvalidOperationException("Panel not found");
+                return (false, "Panel not found", null, null);
 
-            // Try to delete the Discord message if it exists
+            // Get all component IDs that could be referenced
+            var buttonIds = panel.PanelButtons?.Select(b => b.Id).ToList() ?? [];
+            var selectOptionIds = new List<int>();
+
+            if (panel.PanelSelectMenus?.Any() == true)
+            {
+                var menuIds = panel.PanelSelectMenus.Select(m => m.Id).ToArray();
+                var options = await ctx.SelectMenuOptions
+                    .Where(o => menuIds.Contains(o.SelectMenuId))
+                    .Select(o => o.Id)
+                    .ToListAsync();
+                selectOptionIds.AddRange(options);
+            }
+
+            // Check for ALL tickets (active and soft-deleted) referencing these components
+            // We need to clear ALL references due to foreign key constraints
+            var allReferencedTickets = new List<int>();
+            var activeReferencedTickets = new List<int>();
+            var deletedReferencedTickets = new List<int>();
+
+            if (buttonIds.Any())
+            {
+                var ticketsWithButtons = await ctx.Tickets
+                    .Where(t => t.ButtonId.HasValue && buttonIds.Contains(t.ButtonId.Value))
+                    .Select(t => new
+                    {
+                        t.Id, t.IsDeleted
+                    })
+                    .ToListAsync();
+
+                allReferencedTickets.AddRange(ticketsWithButtons.Select(t => t.Id));
+                activeReferencedTickets.AddRange(ticketsWithButtons.Where(t => !t.IsDeleted).Select(t => t.Id));
+                deletedReferencedTickets.AddRange(ticketsWithButtons.Where(t => t.IsDeleted).Select(t => t.Id));
+            }
+
+            if (selectOptionIds.Any())
+            {
+                var ticketsWithOptions = await ctx.Tickets
+                    .Where(t => t.SelectOptionId.HasValue && selectOptionIds.Contains(t.SelectOptionId.Value))
+                    .Select(t => new
+                    {
+                        t.Id, t.IsDeleted
+                    })
+                    .ToListAsync();
+
+                allReferencedTickets.AddRange(ticketsWithOptions.Select(t => t.Id));
+                activeReferencedTickets.AddRange(ticketsWithOptions.Where(t => !t.IsDeleted).Select(t => t.Id));
+                deletedReferencedTickets.AddRange(ticketsWithOptions.Where(t => t.IsDeleted).Select(t => t.Id));
+            }
+
+            // Remove duplicates
+            allReferencedTickets = allReferencedTickets.Distinct().ToList();
+            activeReferencedTickets = activeReferencedTickets.Distinct().ToList();
+            deletedReferencedTickets = deletedReferencedTickets.Distinct().ToList();
+
+            // If there are active tickets and force is not enabled, return error
+            if (activeReferencedTickets.Any() && !force)
+            {
+                return (false,
+                    "Cannot delete panel because there are active tickets referencing its components",
+                    activeReferencedTickets,
+                    deletedReferencedTickets);
+            }
+
+            // If force is enabled or only soft-deleted tickets are referenced, clear ALL references
+            // This is necessary because foreign key constraints don't respect soft delete flags
+            if (allReferencedTickets.Any() && (force || !activeReferencedTickets.Any()))
+            {
+                // Clear button references from ALL tickets (active and soft-deleted)
+                if (buttonIds.Any())
+                {
+                    await ctx.Tickets
+                        .Where(t => t.ButtonId.HasValue && buttonIds.Contains(t.ButtonId.Value))
+                        .Set(t => t.ButtonId, (int?)null)
+                        .UpdateAsync();
+                }
+
+                // Clear select menu option references from ALL tickets (active and soft-deleted)
+                if (selectOptionIds.Any())
+                {
+                    await ctx.Tickets
+                        .Where(t => t.SelectOptionId.HasValue && selectOptionIds.Contains(t.SelectOptionId.Value))
+                        .Set(t => t.SelectOptionId, (int?)null)
+                        .UpdateAsync();
+                }
+            }
+
+            // Now we can safely delete the panel components in the correct order
+
+            // Delete select menu options first
+            if (panel.PanelSelectMenus?.Any() == true)
+            {
+                var menuIds = panel.PanelSelectMenus.Select(m => m.Id).ToArray();
+                await ctx.SelectMenuOptions
+                    .Where(o => menuIds.Contains(o.SelectMenuId))
+                    .DeleteAsync();
+            }
+
+            // Delete select menus
+            if (panel.PanelSelectMenus?.Any() == true)
+            {
+                foreach (var menu in panel.PanelSelectMenus)
+                {
+                    await ctx.PanelSelectMenus
+                        .Where(m => m.Id == menu.Id)
+                        .DeleteAsync();
+                }
+            }
+
+            // Delete buttons
+            if (panel.PanelButtons?.Any() == true)
+            {
+                foreach (var button in panel.PanelButtons)
+                {
+                    await ctx.PanelButtons
+                        .Where(b => b.Id == button.Id)
+                        .DeleteAsync();
+                }
+            }
+
+            // Delete the panel itself
+            await ctx.TicketPanels
+                .Where(p => p.Id == panel.Id)
+                .DeleteAsync();
+
+            // Try to delete the Discord message
             try
             {
-                var channel = await guild.GetChannelAsync(panel.ChannelId) as ITextChannel;
+                var channel = await guild.GetTextChannelAsync(panel.ChannelId);
                 if (channel != null)
                 {
                     var message = await channel.GetMessageAsync(panel.MessageId);
                     if (message != null)
-                        await message.DeleteAsync();
-                }
-            }
-            catch (Exception ex)
-            {
-                Log.Warning(ex, "Failed to delete panel message");
-                // Continue with database cleanup
-            }
-
-            // Handle tickets that reference the panel's buttons
-            if (panel.Buttons?.Any() == true)
-            {
-                var buttonIds = panel.Buttons.Select(b => b.Id).ToList();
-
-                // Find all tickets referencing these buttons
-                var tickets = await ctx.Tickets
-                    .Where(t => t.ButtonId.HasValue && buttonIds.Contains(t.ButtonId.Value))
-                    .ToListAsync();
-
-                // Update tickets to remove button references
-                foreach (var ticket in tickets)
-                {
-                    ticket.ButtonId = null;
-                    ticket.Button = null;
-                }
-
-
-            }
-
-            // Handle select menu options that may be referenced by tickets
-            try
-            {
-                var menus = await ctx.PanelSelectMenus
-                    .Include(m => m.Options)
-                    .Where(m => m.Panel.MessageId == panelId)
-                    .ToListAsync();
-
-                if (menus.Any())
-                {
-                    var optionIds = menus.SelectMany(m => m.Options).Select(o => o.Id).ToList();
-
-                    // Update tickets to remove select option references
-                    var tickets = await ctx.Tickets
-                        .Where(t => t.SelectOptionId.HasValue && optionIds.Contains(t.SelectOptionId.Value))
-                        .ToListAsync();
-
-                    foreach (var ticket in tickets)
                     {
-                        ticket.SelectOptionId = null;
-                        ticket.SelectOption = null;
+                        await message.DeleteAsync();
                     }
-
-
-
-                    // Now safe to remove menus and options
-                    ctx.PanelSelectMenus.RemoveRange(menus);
-
                 }
             }
             catch (Exception ex)
             {
-                Log.Warning(ex, "Failed to handle select menus - table may not exist");
-                // Continue with deletion
+                Log.Warning(ex, "Failed to delete panel message {MessageId} in guild {GuildId}", panel.MessageId,
+                    guild.Id);
+                // Don't fail the entire operation if we can't delete the Discord message
             }
 
-            // Finally remove the panel itself
-            ctx.TicketPanels.Remove(panel);
+            Log.Information(
+                "Deleted panel {PanelId} in guild {GuildId} (force: {Force}, cleared {TotalTickets} ticket references: {ActiveTickets} active, {DeletedTickets} soft-deleted)",
+                panel.Id, guild.Id, force, allReferencedTickets.Count, activeReferencedTickets.Count,
+                deletedReferencedTickets.Count);
 
-
-            await transaction.CommitAsync();
+            return (true, null, activeReferencedTickets, deletedReferencedTickets);
         }
         catch (Exception ex)
         {
-            await transaction.RollbackAsync();
-            Log.Error(ex, "Failed to delete panel {PanelId}", panelId);
-            throw new InvalidOperationException($"Failed to delete panel: {ex.Message}", ex);
+            Log.Error(ex, "Failed to delete panel {PanelId} in guild {GuildId}", panelId, guild.Id);
+            return (false, $"Failed to delete panel: {ex.Message}", null, null);
         }
     }
 
@@ -508,11 +622,11 @@ public class TicketService : INService
             throw new InvalidOperationException("Ticket is not claimed");
 
         await using var ctx = await dbFactory.CreateConnectionAsync();
-        ctx.Attach(ticket);
 
         var previousClaimer = ticket.ClaimedBy.Value;
         ticket.ClaimedBy = null;
         ticket.LastActivityAt = DateTime.UtcNow;
+        await ctx.UpdateAsync(ticket);
 
         if (await moderator.Guild.GetChannelAsync(ticket.ChannelId) is ITextChannel channel)
         {
@@ -548,8 +662,6 @@ public class TicketService : INService
                 }
             }
         }
-
-
     }
 
     /// <summary>
@@ -599,50 +711,6 @@ public class TicketService : INService
     }
 
     /// <summary>
-    ///     Edits an existing case note.
-    /// </summary>
-    /// <param name="noteId">The ID of the note to edit.</param>
-    /// <param name="editorId">The ID of the user editing the note.</param>
-    /// <param name="newContent">The new content for the note.</param>
-    /// <returns>A task containing true if the edit was successful, false otherwise.</returns>
-    public async Task<bool> EditCaseNoteAsync(int noteId, ulong editorId, string newContent)
-    {
-        await using var ctx = await dbFactory.CreateConnectionAsync();
-        var note = await ctx.CaseNotes.FindAsync(noteId);
-        if (note == null)
-            return false;
-
-        var oldContent = note.Content;
-        note.Content = newContent;
-
-        var edit = new NoteEdit
-        {
-            OldContent = oldContent, NewContent = newContent, EditorId = editorId, EditedAt = DateTime.UtcNow
-        };
-
-        note.EditHistory.Add(edit);
-
-        return true;
-    }
-
-    /// <summary>
-    ///     Deletes a case note.
-    /// </summary>
-    /// <param name="noteId">The ID of the note to delete.</param>
-    /// <returns>A task containing true if the deletion was successful, false otherwise.</returns>
-    public async Task<bool> DeleteCaseNoteAsync(int noteId)
-    {
-        await using var ctx = await dbFactory.CreateConnectionAsync();
-        var note = await ctx.CaseNotes.FindAsync(noteId);
-        if (note == null)
-            return false;
-
-        ctx.CaseNotes.Remove(note);
-
-        return true;
-    }
-
-    /// <summary>
     ///     Unlinks a collection of tickets from their associated cases.
     /// </summary>
     /// <param name="tickets">The collection of tickets to unlink.</param>
@@ -652,12 +720,11 @@ public class TicketService : INService
         await using var ctx = await dbFactory.CreateConnectionAsync();
         foreach (var ticket in tickets)
         {
-            ctx.Attach(ticket);
             ticket.CaseId = null;
             ticket.Case = null;
         }
 
-
+        await ctx.UpdateAsync(tickets);
     }
 
     /// <summary>
@@ -668,9 +735,8 @@ public class TicketService : INService
     public async Task ReopenCaseAsync(TicketCase ticketCase)
     {
         await using var ctx = await dbFactory.CreateConnectionAsync();
-        ctx.Attach(ticketCase);
         ticketCase.ClosedAt = null;
-
+        await ctx.UpdateAsync(ticketCase);
     }
 
     /// <summary>
@@ -690,8 +756,9 @@ public class TicketService : INService
                 ticketCase.Title = title;
             if (!string.IsNullOrEmpty(description))
                 ticketCase.Description = description;
-
         }
+
+        await ctx.UpdateAsync(ticketCase);
     }
 
     /// <summary>
@@ -704,12 +771,12 @@ public class TicketService : INService
     /// <param name="modalResponses">Optional responses from a modal form.</param>
     /// <returns>The created ticket.</returns>
     /// <exception cref="InvalidOperationException">Thrown when ticket creation fails due to limits or permissions.</exception>
-    public async Task<Ticket> CreateTicketAsync(
+    public async Task<Ticket?> CreateTicketAsync(
         IGuild guild,
         IUser creator,
-        PanelButton button = null,
-        SelectMenuOption option = null,
-        Dictionary<string, string> modalResponses = null)
+        PanelButton? button = null,
+        SelectMenuOption? option = null,
+        Dictionary<string, string>? modalResponses = null)
     {
         await using var ctx = await dbFactory.CreateConnectionAsync();
 
@@ -721,15 +788,6 @@ public class TicketService : INService
         }
 
         var id = button?.Id ?? option.Id;
-
-        // Check if user is blacklisted from this specific ticket type
-        if (settings?.BlacklistedTypes?.TryGetValue(creator.Id, out var blacklistedTypes) == true)
-        {
-            if (blacklistedTypes.Contains(id.ToString()))
-            {
-                throw new InvalidOperationException("You are blacklisted from creating this type of ticket.");
-            }
-        }
 
         // Validate ticket limits
         var maxTickets = button?.MaxActiveTickets ?? option?.MaxActiveTickets ?? settings?.DefaultMaxTickets ?? 1;
@@ -780,7 +838,7 @@ public class TicketService : INService
             LastActivityAt = DateTime.UtcNow
         };
 
-        ctx.Tickets.Add(ticket);
+        var newId = await ctx.InsertWithInt32IdentityAsync(ticket);
 
 
         // Send messages in order
@@ -791,7 +849,7 @@ public class TicketService : INService
             if (!string.IsNullOrEmpty(openMessageJson))
             {
                 var replacer = new ReplacementBuilder()
-                    .WithOverride("%ticket.id%", () => ticket.Id.ToString())
+                    .WithOverride("%ticket.id%", () => newId.ToString())
                     .WithOverride("%ticket.channel%", () => channel.Mention)
                     .WithOverride("%ticket.user%", () => creator.ToString())
                     .WithOverride("%ticket.user.mention%", () => creator.Mention)
@@ -870,7 +928,7 @@ public class TicketService : INService
                 {
                     var logEmbed = new EmbedBuilder()
                         .WithTitle("New Ticket Created")
-                        .WithDescription($"Ticket #{ticket.Id} created by {creator.Mention}")
+                        .WithDescription($"Ticket #{newId} created by {creator.Mention}")
                         .AddField("Channel", channel.Mention, true)
                         .AddField("Type", button != null ? $"Button: {button.Label}" : $"Option: {option.Label}", true)
                         .WithColor(Color.Green)
@@ -890,8 +948,7 @@ public class TicketService : INService
             try
             {
                 await channel.DeleteAsync();
-                ctx.Tickets.Remove(ticket);
-
+                await ctx.DeleteAsync(ticket);
             }
             catch (Exception cleanupEx)
             {
@@ -906,7 +963,7 @@ public class TicketService : INService
     ///     Sends notifications about a new ticket to relevant staff members.
     /// </summary>
     private async Task SendTicketNotificationsAsync(Ticket ticket, IUser creator, IGuild guild,
-        GuildTicketSettings settings)
+        GuildTicketSetting settings)
     {
         try
         {
@@ -963,38 +1020,14 @@ public class TicketService : INService
         }
     }
 
-    /// <summary>
-    ///     Claims a ticket for a staff member.
-    /// </summary>
-    public async Task ClaimTicketAsync(Ticket ticket, IGuildUser staff)
-    {
-        if (ticket.ClaimedBy.HasValue)
-            throw new InvalidOperationException("Ticket is already claimed");
-
-        await using var ctx = await dbFactory.CreateConnectionAsync();
-
-        ctx.Attach(ticket);
-        ticket.ClaimedBy = staff.Id;
-        ticket.ClosedAt = DateTime.UtcNow;
-        ticket.LastActivityAt = DateTime.UtcNow;
-
-        if (await staff.Guild.GetChannelAsync(ticket.ChannelId) is ITextChannel channel)
-        {
-            var embed = new EmbedBuilder()
-                .WithTitle("Ticket Claimed")
-                .WithDescription($"This ticket has been claimed by {staff.Mention}")
-                .WithColor(Color.Green)
-                .Build();
-
-            await channel.SendMessageAsync(embed: embed);
-        }
-
-
-    }
 
     /// <summary>
-    ///     Adds a note to a ticket.
+    ///     Adds a note to a ticket
     /// </summary>
+    /// <param name="ticket">The ticket to add the note to</param>
+    /// <param name="author">The user creating the note</param>
+    /// <param name="content">The content of the note</param>
+    /// <returns>The created ticket note</returns>
     public async Task<TicketNote> AddNoteAsync(Ticket ticket, IGuildUser author, string content)
     {
         await using var ctx = await dbFactory.CreateConnectionAsync();
@@ -1004,18 +1037,27 @@ public class TicketService : INService
             TicketId = ticket.Id, AuthorId = author.Id, Content = content, CreatedAt = DateTime.UtcNow
         };
 
-        ctx.Attach(ticket);
-        ticket.Notes.Add(note);
-        ticket.LastActivityAt = DateTime.UtcNow;
+        // Insert the note and get the generated ID
+        note.Id = await ctx.InsertWithInt32IdentityAsync(note);
 
-
+        // Update the ticket's last activity timestamp
+        await ctx.Tickets
+            .Where(t => t.Id == ticket.Id)
+            .Set(t => t.LastActivityAt, DateTime.UtcNow)
+            .UpdateAsync();
 
         return note;
     }
 
     /// <summary>
-    ///     Creates a new case and optionally links tickets to it.
+    ///     Creates a new case and optionally links tickets to it
     /// </summary>
+    /// <param name="guild">The guild where the case is created</param>
+    /// <param name="title">The title of the case</param>
+    /// <param name="description">The description of the case</param>
+    /// <param name="creator">The user creating the case</param>
+    /// <param name="ticketsToLink">Optional tickets to link to this case</param>
+    /// <returns>The created ticket case</returns>
     public async Task<TicketCase> CreateCaseAsync(
         IGuild guild,
         string title,
@@ -1025,124 +1067,285 @@ public class TicketService : INService
     {
         await using var ctx = await dbFactory.CreateConnectionAsync();
 
-        var ticketCase = new TicketCase
+        await using var transaction = await ctx.BeginTransactionAsync();
+        try
         {
-            GuildId = guild.Id,
-            Title = title,
-            Description = description,
-            CreatedBy = creator.Id,
-            CreatedAt = DateTime.UtcNow
-        };
-
-        if (ticketsToLink != null)
-        {
-            foreach (var ticket in ticketsToLink)
+            var ticketCase = new TicketCase
             {
-                ctx.Attach(ticket);
-                ticket.Case = ticketCase;
+                GuildId = guild.Id,
+                Title = title,
+                Description = description,
+                CreatedBy = creator.Id,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            // Insert the case and get the generated ID
+            ticketCase.Id = await ctx.InsertWithInt32IdentityAsync(ticketCase);
+
+            // Link tickets to the case if provided
+            if (ticketsToLink != null)
+            {
+                var ticketIds = ticketsToLink.Select(t => t.Id).ToArray();
+                if (ticketIds.Length > 0)
+                {
+                    await ctx.Tickets
+                        .Where(t => ticketIds.Contains(t.Id))
+                        .Set(t => t.CaseId, ticketCase.Id)
+                        .UpdateAsync();
+                }
             }
+
+            await transaction.CommitAsync();
+            return ticketCase;
         }
-
-        ctx.TicketCases.Add(ticketCase);
-
-
-        return ticketCase;
+        catch
+        {
+            await transaction.RollbackAsync();
+            throw;
+        }
     }
 
     /// <summary>
-    ///     Archives a ticket.
+    ///     Archives a ticket using existing schema
     /// </summary>
+    /// <param name="ticket">The ticket to archive</param>
     public async Task ArchiveTicketAsync(Ticket ticket)
     {
         await using var ctx = await dbFactory.CreateConnectionAsync();
-
-        ctx.Attach(ticket);
 
         IGuild guild = client.GetGuild(ticket.GuildId);
 
         if (await guild.GetChannelAsync(ticket.ChannelId) is ITextChannel channel)
         {
-            if (ticket.Button?.ArchiveCategoryId != null || ticket.SelectOption?.ArchiveCategoryId != null)
+            try
             {
-                var categoryId = ticket.Button?.ArchiveCategoryId ?? ticket.SelectOption?.ArchiveCategoryId;
-                var category = await channel.Guild.GetCategoryChannelAsync(categoryId.Value);
-
-                if (category != null)
-                    await channel.ModifyAsync(c => c.CategoryId = category.Id);
-            }
-
-            // Generate transcript if enabled
-            if (ticket.Button?.SaveTranscript ?? true)
-            {
-                // Implementation for transcript generation
-                ticket.TranscriptUrl = "transcript_url_here"; // Replace with actual transcript generation
-            }
-        }
-
-        ticket.IsArchived = true;
-        ticket.LastActivityAt = DateTime.UtcNow;
-
-
-    }
-
-    private async Task UpdatePanelComponentsAsync(TicketPanel panel)
-    {
-        IGuild guild = client.GetGuild(panel.GuildId);
-        var channel = await guild.GetChannelAsync(panel.ChannelId) as ITextChannel;
-        var message = await channel?.GetMessageAsync(panel.MessageId);
-
-        if (message is not IUserMessage userMessage)
-            return;
-
-        var components = new ComponentBuilder();
-
-        // Add buttons
-        if (panel.Buttons?.Any() == true)
-        {
-            var buttonRow = new ActionRowBuilder();
-            foreach (var button in panel.Buttons)
-            {
-                var btnBuilder = new ButtonBuilder()
-                    .WithLabel(button.Label)
-                    .WithCustomId(button.CustomId)
-                    .WithStyle(button.Style);
-
-                if (!string.IsNullOrEmpty(button.Emoji))
-                    btnBuilder.WithEmote(Emote.Parse(button.Emoji));
-
-                buttonRow.WithButton(btnBuilder);
-            }
-
-            components.AddRow(buttonRow);
-        }
-
-        // Add select menus
-        if (panel.SelectMenus?.Any() == true)
-        {
-            foreach (var menu in panel.SelectMenus)
-            {
-                var selectBuilder = new SelectMenuBuilder()
-                    .WithCustomId(menu.CustomId)
-                    .WithPlaceholder(menu.Placeholder);
-
-                foreach (var option in menu.Options)
+                // Get archive category from existing configuration
+                var archiveCategoryId = ticket.Button?.ArchiveCategoryId ?? ticket.SelectOption?.ArchiveCategoryId;
+                if (archiveCategoryId.HasValue)
                 {
-                    var optBuilder = new SelectMenuOptionBuilder()
-                        .WithLabel(option.Label)
-                        .WithValue(option.Value)
-                        .WithDescription(option.Description);
-
-                    if (!string.IsNullOrEmpty(option.Emoji))
-                        optBuilder.WithEmote(Emote.Parse(option.Emoji));
-
-                    selectBuilder.AddOption(optBuilder);
+                    var category = await guild.GetCategoryChannelAsync(archiveCategoryId.Value);
+                    if (category != null)
+                    {
+                        await channel.ModifyAsync(c => c.CategoryId = category.Id);
+                    }
                 }
 
-                components.AddRow(new ActionRowBuilder().WithSelectMenu(selectBuilder));
+                // Generate transcript if enabled (using existing SaveTranscript field)
+                if (ticket.Button?.SaveTranscript ?? ticket.SelectOption?.SaveTranscript ?? true)
+                {
+                    await GenerateAndSaveTranscriptAsync(guild, channel, ticket);
+                }
+
+                // Handle archiving behaviors using existing fields
+                await HandleArchiveCleanupAsync(guild, channel, ticket);
+
+                // Update the ticket with archive status using existing IsArchived field
+                await ctx.Tickets
+                    .Where(t => t.Id == ticket.Id)
+                    .Set(t => t.IsArchived, true)
+                    .Set(t => t.LastActivityAt, DateTime.UtcNow)
+                    .UpdateAsync();
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Error during ticket archiving process for ticket {TicketId}", ticket.Id);
+
+                // Fallback - just mark as archived
+                await ctx.Tickets
+                    .Where(t => t.Id == ticket.Id)
+                    .Set(t => t.IsArchived, true)
+                    .Set(t => t.LastActivityAt, DateTime.UtcNow)
+                    .UpdateAsync();
             }
         }
+        else
+        {
+            // Channel not found, just mark as archived
+            await ctx.Tickets
+                .Where(t => t.Id == ticket.Id)
+                .Set(t => t.IsArchived, true)
+                .Set(t => t.LastActivityAt, DateTime.UtcNow)
+                .UpdateAsync();
+        }
 
-        await userMessage.ModifyAsync(m => m.Components = components.Build());
+        // Update the in-memory object to reflect the changes
+        ticket.IsArchived = true;
+        ticket.LastActivityAt = DateTime.UtcNow;
+    }
+
+    /// <summary>
+    ///     Handles additional cleanup tasks when archiving a ticket using existing schema
+    /// </summary>
+    /// <param name="guild">The guild containing the ticket</param>
+    /// <param name="channel">The ticket channel</param>
+    /// <param name="ticket">The ticket being archived</param>
+    private async Task HandleArchiveCleanupAsync(IGuild guild, ITextChannel channel, Ticket ticket)
+    {
+        try
+        {
+            // Rename channel with "archived-" prefix if not already done
+            if (!channel.Name.StartsWith("archived-"))
+            {
+                try
+                {
+                    var newName = channel.Name.StartsWith("closed-")
+                        ? channel.Name.Replace("closed-", "archived-")
+                        : $"archived-{channel.Name}";
+                    await channel.ModifyAsync(c => c.Name = newName);
+                }
+                catch (Exception ex)
+                {
+                    Log.Warning(ex, "Failed to rename archived ticket channel {ChannelId}", channel.Id);
+                }
+            }
+
+            // Keep channel locked (if it was closed first, it should already be locked)
+            // If not locked yet, lock it now
+            try
+            {
+                await channel.AddPermissionOverwriteAsync(guild.EveryoneRole,
+                    new OverwritePermissions(
+                        viewChannel: PermValue.Allow,
+                        sendMessages: PermValue.Deny,
+                        addReactions: PermValue.Deny,
+                        useSlashCommands: PermValue.Deny
+                    ));
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Failed to lock archived ticket channel {ChannelId}", channel.Id);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Error during archive cleanup for ticket {TicketId}", ticket.Id);
+        }
+    }
+
+
+    /// <summary>
+    /// Update all components related to a panel.
+    /// </summary>
+    /// <param name="panel">The panel who's message components to update</param>
+    public async Task UpdatePanelComponentsAsync(TicketPanel panel)
+    {
+        try
+        {
+            IGuild guild = client.GetGuild(panel.GuildId);
+            var channel = await guild.GetChannelAsync(panel.ChannelId) as ITextChannel;
+            var message = await channel?.GetMessageAsync(panel.MessageId);
+
+            if (message is not IUserMessage userMessage)
+                return;
+
+            // RELOAD the panel data to ensure we have all buttons and menus
+            await using var ctx = await dbFactory.CreateConnectionAsync();
+            var fullPanel = await ctx.TicketPanels
+                .LoadWithAsTable(p => p.PanelButtons)
+                .LoadWithAsTable(p => p.PanelSelectMenus)
+                .FirstOrDefaultAsync(p => p.Id == panel.Id);
+
+            if (fullPanel == null)
+                return;
+
+            // Load select menu options
+            var menuIds = fullPanel.PanelSelectMenus?.Select(m => m.Id).ToArray() ?? [];
+            if (menuIds.Any())
+            {
+                var options = await ctx.SelectMenuOptions
+                    .Where(o => menuIds.Contains(o.SelectMenuId))
+                    .ToListAsync();
+
+                foreach (var menu in fullPanel.PanelSelectMenus)
+                {
+                    menu.SelectMenuOptions = options.Where(o => o.SelectMenuId == menu.Id).ToList();
+                }
+            }
+
+            var components = new ComponentBuilder();
+
+            // Add buttons
+            if (fullPanel.PanelButtons?.Any() == true)
+            {
+                var buttonRow = new ActionRowBuilder();
+                foreach (var button in fullPanel.PanelButtons)
+                {
+                    var btnBuilder = new ButtonBuilder()
+                        .WithLabel(button.Label)
+                        .WithCustomId(button.CustomId)
+                        .WithStyle((ButtonStyle)button.Style);
+
+                    if (!string.IsNullOrEmpty(button.Emoji))
+                    {
+                        try
+                        {
+                            btnBuilder.WithEmote(Emote.Parse(button.Emoji));
+                        }
+                        catch
+                        {
+                            // If emoji parsing fails, try as unicode emoji
+                            btnBuilder.WithEmote(new Emoji(button.Emoji));
+                        }
+                    }
+
+                    buttonRow.WithButton(btnBuilder);
+                }
+
+                components.AddRow(buttonRow);
+            }
+
+            // Add select menus
+            if (fullPanel.PanelSelectMenus?.Any() == true)
+            {
+                foreach (var menu in fullPanel.PanelSelectMenus)
+                {
+                    var selectBuilder = new SelectMenuBuilder()
+                        .WithCustomId(menu.CustomId)
+                        .WithPlaceholder(menu.Placeholder)
+                        .WithMaxValues(1);
+
+                    foreach (var option in menu.SelectMenuOptions)
+                    {
+                        Log.Information("Processing option: ID={Id}, Label='{Label}', Value='{Value}', SelectMenuId={SelectMenuId}",
+                            option.Id, option.Label ?? "NULL", option.Value ?? "NULL", option.SelectMenuId);
+
+                        if (string.IsNullOrWhiteSpace(option.Label))
+                        {
+                            Log.Warning("Skipping option {Id} - Label is null/empty", option.Id);
+                            continue;
+                        }
+
+                        var optBuilder = new SelectMenuOptionBuilder()
+                            .WithLabel(option.Label)
+                            .WithValue(option.Value)
+                            .WithDescription(option.Description);
+
+                        if (!string.IsNullOrEmpty(option.Emoji))
+                        {
+                            try
+                            {
+                                optBuilder.WithEmote(Emote.Parse(option.Emoji));
+                            }
+                            catch
+                            {
+                                // If emoji parsing fails, try as unicode emoji
+                                optBuilder.WithEmote(new Emoji(option.Emoji));
+                            }
+                        }
+
+                        selectBuilder.AddOption(optBuilder);
+                    }
+
+                    components.AddRow(new ActionRowBuilder().WithSelectMenu(selectBuilder));
+                }
+            }
+
+            await userMessage.ModifyAsync(m => m.Components = components.Build());
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Failed to update panel components for panel {PanelId}", panel.Id);
+        }
     }
 
     private async Task SetTicketPermissionsAsync(ITextChannel channel, IUser creator, PanelButton button = null,
@@ -1191,96 +1394,6 @@ public class TicketService : INService
                         viewChannel: PermValue.Allow,
                         readMessageHistory: PermValue.Allow,
                         sendMessages: PermValue.Deny));
-            }
-        }
-    }
-
-    private async Task HandleMessageComponent(SocketMessageComponent component)
-    {
-        await using var ctx = await dbFactory.CreateConnectionAsync();
-
-        // Handle button clicks
-        if (component.Data.Type == ComponentType.Button && component.Data.CustomId.StartsWith("ticket_btn_"))
-        {
-            var button = await ctx.PanelButtons.FirstOrDefaultAsync(b => b.CustomId == component.Data.CustomId);
-            if (button == null)
-                return;
-
-            try
-            {
-                if (!string.IsNullOrEmpty(button.ModalJson))
-                {
-                    // Show modal if configured
-                    var modalData = JsonSerializer.Deserialize<Dictionary<string, string>>(button.ModalJson);
-                    var modal = new ModalBuilder()
-                        .WithTitle("Create Ticket")
-                        .WithCustomId($"ticket_modal_{button.Id}");
-
-                    foreach (var field in modalData)
-                    {
-                        modal.AddTextInput(field.Key, field.Value, required: true);
-                    }
-
-                    await component.RespondWithModalAsync(modal.Build());
-                }
-                else
-                {
-                    // Create ticket directly
-                    await CreateTicketAsync(
-                        (component.Channel as IGuildChannel)?.Guild,
-                        component.User,
-                        button);
-
-                    await component.RespondAsync("Ticket created!", ephemeral: true);
-                }
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "Error creating ticket from button");
-                await component.RespondAsync("Failed to create ticket. Please try again later.", ephemeral: true);
-            }
-        }
-
-        // Handle select menu selections
-        if (component.Data.Type == ComponentType.SelectMenu && component.Data.CustomId.StartsWith("ticket_select_"))
-        {
-            var menuOption = await ctx.SelectMenuOptions
-                .Include(o => o.SelectMenu)
-                .FirstOrDefaultAsync(o => o.Value == component.Data.Values.First());
-
-            if (menuOption == null)
-                return;
-
-            try
-            {
-                if (!string.IsNullOrEmpty(menuOption.ModalJson))
-                {
-                    var modalData = JsonSerializer.Deserialize<Dictionary<string, string>>(menuOption.ModalJson);
-                    var modal = new ModalBuilder()
-                        .WithTitle("Create Ticket")
-                        .WithCustomId($"ticket_modal_select_{menuOption.Id}");
-
-                    foreach (var field in modalData)
-                    {
-                        modal.AddTextInput(field.Key, field.Value, required: true);
-                    }
-
-                    await component.RespondWithModalAsync(modal.Build());
-                }
-                else
-                {
-                    await CreateTicketAsync(
-                        (component.Channel as IGuildChannel)?.Guild,
-                        component.User,
-                        option: menuOption);
-
-                    await component.RespondAsync("Ticket created!", ephemeral: true);
-                }
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "Error creating ticket from select menu");
-                await component.RespondAsync("Failed to create ticket. Please try again later.", ephemeral: true);
             }
         }
     }
@@ -1340,6 +1453,267 @@ public class TicketService : INService
         }
     }
 
+    /// <summary>
+    ///     Recreates a deleted ticket panel in its original channel and updates the message ID.
+    /// </summary>
+    /// <param name="guildId">The ID of the guild containing the panel.</param>
+    /// <param name="panelId">The message ID of the panel to recreate.</param>
+    /// <returns>A tuple containing success status, new message ID, and channel mention.</returns>
+    public async Task<(bool success, ulong? newMessageId, string channelMention, string error)> RecreatePanelAsync(
+        ulong guildId, ulong panelId)
+    {
+        try
+        {
+            await using var ctx = await dbFactory.CreateConnectionAsync();
+
+            // Load panel with all components
+            var panel = await ctx.TicketPanels
+                .LoadWithAsTable(p => p.PanelButtons)
+                .LoadWithAsTable(p => p.PanelSelectMenus)
+                .FirstOrDefaultAsync(p => p.MessageId == panelId && p.GuildId == guildId);
+
+            if (panel == null)
+                return (false, null, null, "Panel not found in database.");
+
+            // Check if the channel still exists
+            IGuild guild = client.GetGuild(guildId);
+            var channel = await guild.GetTextChannelAsync(panel.ChannelId);
+            if (channel == null)
+                return (false, null, null, "The original channel for this panel no longer exists.");
+
+            // Check if the message still exists
+            try
+            {
+                var existingMessage = await channel.GetMessageAsync(panel.MessageId);
+                if (existingMessage != null)
+                    return (false, null, channel.Mention, "Panel message still exists. No recreation needed.");
+            }
+            catch
+            {
+                // Message doesn't exist, proceed with recreation
+            }
+
+            // Load select menu options if any menus exist
+            if (panel.PanelSelectMenus?.Any() == true)
+            {
+                var menuIds = panel.PanelSelectMenus.Select(m => m.Id).ToArray();
+                var options = await ctx.SelectMenuOptions
+                    .Where(o => menuIds.Contains(o.SelectMenuId))
+                    .ToListAsync();
+
+                foreach (var menu in panel.PanelSelectMenus)
+                {
+                    menu.SelectMenuOptions = options.Where(o => o.SelectMenuId == menu.Id).ToList();
+                }
+            }
+
+            // Parse the embed JSON and recreate the message
+            var success = SmartEmbed.TryParse(panel.EmbedJson, panel.GuildId, out var embeds, out var plainText, out _);
+            if (!success)
+                return (false, null, channel.Mention, "Failed to parse panel embed configuration.");
+
+            // Build components
+            var components = new ComponentBuilder();
+
+            // Add buttons if any exist
+            if (panel.PanelButtons?.Any() == true)
+            {
+                var buttonRow = new ActionRowBuilder();
+                foreach (var button in panel.PanelButtons)
+                {
+                    var btnBuilder = new ButtonBuilder()
+                        .WithLabel(button.Label)
+                        .WithCustomId(button.CustomId)
+                        .WithStyle((ButtonStyle)button.Style);
+
+                    if (!string.IsNullOrEmpty(button.Emoji))
+                    {
+                        try
+                        {
+                            btnBuilder.WithEmote(Emote.Parse(button.Emoji));
+                        }
+                        catch
+                        {
+                            try
+                            {
+                                btnBuilder.WithEmote(new Emoji(button.Emoji));
+                            }
+                            catch (Exception ex)
+                            {
+                                Log.Warning(ex, "Failed to parse emoji {Emoji} for button {ButtonId}", button.Emoji,
+                                    button.Id);
+                            }
+                        }
+                    }
+
+                    buttonRow.WithButton(btnBuilder);
+                }
+
+                components.AddRow(buttonRow);
+            }
+
+            // Add select menus if any exist
+            if (panel.PanelSelectMenus?.Any() == true)
+            {
+                foreach (var menu in panel.PanelSelectMenus)
+                {
+                    var selectBuilder = new SelectMenuBuilder()
+                        .WithCustomId(menu.CustomId)
+                        .WithPlaceholder(menu.Placeholder)
+                        .WithMaxValues(1);
+
+                    foreach (var option in menu.SelectMenuOptions)
+                    {
+                        var optBuilder = new SelectMenuOptionBuilder()
+                            .WithLabel(option.Label)
+                            .WithValue(option.Value)
+                            .WithDescription(option.Description);
+
+                        if (!string.IsNullOrEmpty(option.Emoji))
+                        {
+                            try
+                            {
+                                optBuilder.WithEmote(Emote.Parse(option.Emoji));
+                            }
+                            catch
+                            {
+                                try
+                                {
+                                    optBuilder.WithEmote(new Emoji(option.Emoji));
+                                }
+                                catch (Exception ex)
+                                {
+                                    Log.Warning(ex, "Failed to parse emoji {Emoji} for option {OptionId}", option.Emoji,
+                                        option.Id);
+                                }
+                            }
+                        }
+
+                        selectBuilder.AddOption(optBuilder);
+                    }
+
+                    components.AddRow(new ActionRowBuilder().WithSelectMenu(selectBuilder));
+                }
+            }
+
+            // Send the recreated panel message
+            var newMessage = await channel.SendMessageAsync(
+                plainText,
+                embeds: embeds,
+                components: components.Build());
+
+            // Update the panel's message ID in the database
+            await ctx.TicketPanels
+                .Where(p => p.Id == panel.Id)
+                .Set(p => p.MessageId, newMessage.Id)
+                .UpdateAsync();
+
+            Log.Information("Manually recreated panel {PanelId} with new message ID {MessageId} in guild {GuildId}",
+                panel.Id, newMessage.Id, guildId);
+
+            return (true, newMessage.Id, channel.Mention, null);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Error recreating panel {PanelId} in guild {GuildId}", panelId, guildId);
+            return (false, null, null, "An error occurred while recreating the panel.");
+        }
+    }
+
+    /// <summary>
+    ///     Checks all panels in a guild for missing messages.
+    /// </summary>
+    /// <param name="guildId">The ID of the guild to check.</param>
+    /// <returns>A list of panel status information.</returns>
+    public async Task<List<PanelStatusInfo>> CheckPanelStatusAsync(ulong guildId)
+    {
+        try
+        {
+            await using var ctx = await dbFactory.CreateConnectionAsync();
+
+            var panels = await ctx.TicketPanels
+                .Where(p => p.GuildId == guildId)
+                .ToListAsync();
+
+            var statusList = new List<PanelStatusInfo>();
+            IGuild guild = client.GetGuild(guildId);
+
+            foreach (var panel in panels)
+            {
+                var status = new PanelStatusInfo
+                {
+                    PanelId = panel.MessageId, ChannelId = panel.ChannelId
+                };
+
+                var channel = await guild.GetTextChannelAsync(panel.ChannelId);
+                if (channel == null)
+                {
+                    status.Status = PanelStatus.ChannelDeleted;
+                    status.ChannelName = "deleted-channel";
+                }
+                else
+                {
+                    status.ChannelName = channel.Name;
+                    try
+                    {
+                        var message = await channel.GetMessageAsync(panel.MessageId);
+                        status.Status = message != null ? PanelStatus.OK : PanelStatus.MessageMissing;
+                    }
+                    catch
+                    {
+                        status.Status = PanelStatus.MessageMissing;
+                    }
+                }
+
+                statusList.Add(status);
+            }
+
+            return statusList;
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Error checking panel status in guild {GuildId}", guildId);
+            return [];
+        }
+    }
+
+    /// <summary>
+    ///     Recreates all panels with missing messages in a guild.
+    /// </summary>
+    /// <param name="guildId">The ID of the guild.</param>
+    /// <returns>A tuple containing the number of successfully recreated panels and any that failed.</returns>
+    public async Task<(int recreated, int failed, List<string> errors)> RecreateAllMissingPanelsAsync(ulong guildId)
+    {
+        var panelStatuses = await CheckPanelStatusAsync(guildId);
+        var missingPanels = panelStatuses.Where(p => p.Status == PanelStatus.MessageMissing).ToList();
+
+        var recreated = 0;
+        var failed = 0;
+        var errors = new List<string>();
+
+        foreach (var panel in missingPanels)
+        {
+            var (success, _, _, error) = await RecreatePanelAsync(guildId, panel.PanelId);
+            if (success)
+            {
+                recreated++;
+            }
+            else
+            {
+                failed++;
+                if (!string.IsNullOrEmpty(error))
+                    errors.Add($"Panel {panel.PanelId}: {error}");
+            }
+        }
+
+        return (recreated, failed, errors);
+    }
+
+    /// <summary>
+    ///     Handles message deletion events and recreates ticket panels if they were deleted.
+    /// </summary>
+    /// <param name="message">The deleted message.</param>
+    /// <param name="channel">The channel where the message was deleted.</param>
     private async Task HandleMessageDeleted(Cacheable<IMessage, ulong> message,
         Cacheable<IMessageChannel, ulong> channel)
     {
@@ -1350,55 +1724,291 @@ public class TicketService : INService
 
         // Check if deleted message was a panel
         var panel = await ctx.TicketPanels
+            .LoadWithAsTable(p => p.PanelButtons)
+            .LoadWithAsTable(p => p.PanelSelectMenus)
             .FirstOrDefaultAsync(p => p.MessageId == message.Value.Id);
 
         if (panel != null)
         {
-            // Panel was deleted, clean up
-            ctx.TicketPanels.Remove(panel);
+            try
+            {
+                // Load select menu options if any menus exist
+                if (panel.PanelSelectMenus?.Any() == true)
+                {
+                    var menuIds = panel.PanelSelectMenus.Select(m => m.Id).ToArray();
+                    var options = await ctx.SelectMenuOptions
+                        .Where(o => menuIds.Contains(o.SelectMenuId))
+                        .ToListAsync();
 
+                    foreach (var menu in panel.PanelSelectMenus)
+                    {
+                        menu.SelectMenuOptions = options.Where(o => o.SelectMenuId == menu.Id).ToList();
+                    }
+                }
+
+                // Get the channel where the panel was deleted
+                var targetChannel = channel.Value as ITextChannel;
+                if (targetChannel == null)
+                {
+                    Log.Warning("Cannot recreate panel {PanelId} - channel is not a text channel", panel.Id);
+                    return;
+                }
+
+                // Parse the embed JSON and recreate the message
+                var success = SmartEmbed.TryParse(panel.EmbedJson, panel.GuildId, out var embeds, out var plainText,
+                    out _);
+                if (!success)
+                {
+                    Log.Error("Failed to parse embed JSON for panel {PanelId}", panel.Id);
+                    return;
+                }
+
+                // Build components
+                var components = new ComponentBuilder();
+
+                // Add buttons if any exist
+                if (panel.PanelButtons?.Any() == true)
+                {
+                    var buttonRow = new ActionRowBuilder();
+                    foreach (var button in panel.PanelButtons)
+                    {
+                        var btnBuilder = new ButtonBuilder()
+                            .WithLabel(button.Label)
+                            .WithCustomId(button.CustomId)
+                            .WithStyle((ButtonStyle)button.Style);
+
+                        if (!string.IsNullOrEmpty(button.Emoji))
+                        {
+                            try
+                            {
+                                btnBuilder.WithEmote(Emote.Parse(button.Emoji));
+                            }
+                            catch
+                            {
+                                // If emoji parsing fails, try as unicode emoji
+                                try
+                                {
+                                    btnBuilder.WithEmote(new Emoji(button.Emoji));
+                                }
+                                catch (Exception ex)
+                                {
+                                    Log.Warning(ex, "Failed to parse emoji {Emoji} for button {ButtonId}", button.Emoji,
+                                        button.Id);
+                                }
+                            }
+                        }
+
+                        buttonRow.WithButton(btnBuilder);
+                    }
+
+                    components.AddRow(buttonRow);
+                }
+
+                // Add select menus if any exist
+                if (panel.PanelSelectMenus?.Any() == true)
+                {
+                    foreach (var menu in panel.PanelSelectMenus)
+                    {
+                        var selectBuilder = new SelectMenuBuilder()
+                            .WithCustomId(menu.CustomId)
+                            .WithPlaceholder(menu.Placeholder)
+                            .WithMaxValues(1);
+
+                        foreach (var option in menu.SelectMenuOptions)
+                        {
+                            var optBuilder = new SelectMenuOptionBuilder()
+                                .WithLabel(option.Label)
+                                .WithValue(option.Value)
+                                .WithDescription(option.Description);
+
+                            if (!string.IsNullOrEmpty(option.Emoji))
+                            {
+                                try
+                                {
+                                    optBuilder.WithEmote(Emote.Parse(option.Emoji));
+                                }
+                                catch
+                                {
+                                    // If emoji parsing fails, try as unicode emoji
+                                    try
+                                    {
+                                        optBuilder.WithEmote(new Emoji(option.Emoji));
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        Log.Warning(ex, "Failed to parse emoji {Emoji} for option {OptionId}",
+                                            option.Emoji, option.Id);
+                                    }
+                                }
+                            }
+
+                            selectBuilder.AddOption(optBuilder);
+                        }
+
+                        components.AddRow(new ActionRowBuilder().WithSelectMenu(selectBuilder));
+                    }
+                }
+
+                // Send the recreated panel message
+                var newMessage = await targetChannel.SendMessageAsync(
+                    plainText,
+                    embeds: embeds,
+                    components: components.Build());
+
+                // Update the panel's message ID in the database
+                await ctx.TicketPanels
+                    .Where(p => p.Id == panel.Id)
+                    .Set(p => p.MessageId, newMessage.Id)
+                    .UpdateAsync();
+
+                Log.Information("Successfully recreated deleted panel {PanelId} with new message ID {MessageId}",
+                    panel.Id, newMessage.Id);
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Failed to recreate deleted panel {PanelId}", panel.Id);
+
+                // If recreation fails, we could optionally notify admins
+                try
+                {
+                    var settings = await ctx.GuildTicketSettings.FirstOrDefaultAsync(s => s.GuildId == panel.GuildId);
+                    if (settings?.LogChannelId.HasValue == true)
+                    {
+                        IGuild guild = client.GetGuild(panel.GuildId);
+                        var logChannel = await guild?.GetTextChannelAsync(settings.LogChannelId.Value);
+                        if (logChannel != null)
+                        {
+                            var errorEmbed = new EmbedBuilder()
+                                .WithTitle("⚠️ Panel Recreation Failed")
+                                .WithDescription($"Failed to recreate ticket panel in <#{channel.Value.Id}>")
+                                .AddField("Panel ID", panel.Id)
+                                .AddField("Error", ex.Message)
+                                .WithColor(Color.Red)
+                                .WithCurrentTimestamp()
+                                .Build();
+
+                            await logChannel.SendMessageAsync(embed: errorEmbed);
+                        }
+                    }
+                }
+                catch (Exception logEx)
+                {
+                    Log.Error(logEx, "Failed to log panel recreation failure");
+                }
+            }
         }
     }
 
     /// <summary>
-    ///     Checks for tickets that should be auto-closed and handles them.
+    ///     Deletes a select menu and all its options from a panel
     /// </summary>
-    public async Task CheckAutoCloseTicketsAsync()
+    /// <param name="guild">The guild containing the panel</param>
+    /// <param name="menuId">The ID of the select menu to delete</param>
+    /// <returns>True if the menu was successfully deleted, false otherwise</returns>
+    public async Task<bool> DeleteSelectMenuAsync(IGuild guild, int menuId)
     {
         await using var ctx = await dbFactory.CreateConnectionAsync();
 
-        var tickets = await ctx.Tickets
-            .Include(t => t.Button)
-            .Include(t => t.SelectOption)
-            .Where(t => !t.IsArchived && !t.ClosedAt.HasValue)
-            .ToListAsync();
-
-        foreach (var ticket in tickets)
+        try
         {
-            IGuild guild = client.GetGuild(ticket.GuildId);
-            var autoCloseTime = ticket.Button?.AutoCloseTime ?? ticket.SelectOption?.AutoCloseTime;
-            if (!autoCloseTime.HasValue || !ticket.LastActivityAt.HasValue)
-                continue;
+            // Get the menu to verify it exists and belongs to this guild
+            var menu = await ctx.PanelSelectMenus
+                .LoadWithAsTable(m => m.Panel)
+                .LoadWithAsTable(m => m.SelectMenuOptions)
+                .FirstOrDefaultAsync(m => m.Id == menuId && m.Panel.GuildId == guild.Id);
 
-            if (DateTime.UtcNow - ticket.LastActivityAt.Value > autoCloseTime.Value)
-            {
-                if (await guild.GetChannelAsync(ticket.ChannelId) is ITextChannel channel)
-                {
-                    var embed = new EmbedBuilder()
-                        .WithTitle("Ticket Auto-Closed")
-                        .WithDescription("This ticket has been automatically closed due to inactivity.")
-                        .WithColor(Color.Red)
-                        .Build();
+            if (menu == null)
+                return false;
 
-                    await channel.SendMessageAsync(embed: embed);
-                }
+            // Delete all options first (due to foreign key constraints)
+            await ctx.SelectMenuOptions
+                .Where(o => o.SelectMenuId == menuId)
+                .DeleteAsync();
 
-                ticket.ClosedAt = DateTime.UtcNow;
-                await ArchiveTicketAsync(ticket);
-            }
+            // Delete the menu itself
+            await ctx.PanelSelectMenus
+                .Where(m => m.Id == menuId)
+                .DeleteAsync();
+
+            // Update the panel in Discord
+            await UpdatePanelComponentsAsync(menu.Panel);
+
+            Log.Information("Deleted select menu {MenuId} from guild {GuildId}", menuId, guild.Id);
+            return true;
         }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Failed to delete select menu {MenuId} from guild {GuildId}", menuId, guild.Id);
+            return false;
+        }
+    }
 
+    /// <summary>
+    ///     Deletes a single option from a select menu
+    /// </summary>
+    /// <param name="guild">The guild containing the panel</param>
+    /// <param name="optionId">The ID of the option to delete</param>
+    /// <returns>True if the option was successfully deleted, false otherwise</returns>
+    public async Task<bool> DeleteSelectOptionAsync(IGuild guild, int optionId)
+    {
+        await using var ctx = await dbFactory.CreateConnectionAsync();
 
+        try
+        {
+            // Get the option and verify permissions
+            var option = await ctx.SelectMenuOptions
+                .LoadWithAsTable(o => o.SelectMenu)
+                .LoadWithAsTable(m => m.SelectMenu.Panel)
+                .FirstOrDefaultAsync(o => o.Id == optionId && o.SelectMenu.Panel.GuildId == guild.Id);
+
+            if (option == null)
+                return false;
+
+            // Delete the option
+            await ctx.SelectMenuOptions
+                .Where(o => o.Id == optionId)
+                .DeleteAsync();
+
+            // Update the panel in Discord
+            await UpdatePanelComponentsAsync(option.SelectMenu.Panel);
+
+            Log.Information("Deleted select menu option {OptionId} from guild {GuildId}", optionId, guild.Id);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Failed to delete select menu option {OptionId} from guild {GuildId}", optionId, guild.Id);
+            return false;
+        }
+    }
+
+    /// <summary>
+    ///     Gets a specific select menu option by ID
+    /// </summary>
+    /// <param name="optionId">The ID of the option to retrieve</param>
+    /// <returns>The select menu option, or null if not found</returns>
+    public async Task<SelectMenuOption?> GetSelectOptionAsync(int optionId)
+    {
+        await using var ctx = await dbFactory.CreateConnectionAsync();
+
+        return await ctx.SelectMenuOptions
+            .LoadWithAsTable(o => o.SelectMenu)
+            .LoadWithAsTable(m => m.SelectMenu.Panel)
+            .FirstOrDefaultAsync(o => o.Id == optionId);
+    }
+
+    /// <summary>
+    ///     Gets the number of options in a select menu
+    /// </summary>
+    /// <param name="menuId">The ID of the select menu</param>
+    /// <returns>The count of options in the menu</returns>
+    public async Task<int> GetSelectMenuOptionCountAsync(int menuId)
+    {
+        await using var ctx = await dbFactory.CreateConnectionAsync();
+
+        return await ctx.SelectMenuOptions
+            .Where(o => o.SelectMenuId == menuId)
+            .CountAsync();
     }
 
     /// <summary>
@@ -1428,9 +2038,10 @@ public class TicketService : INService
         if (allowedPriorities.Any() && !allowedPriorities.Contains(priority))
             throw new InvalidOperationException("Invalid priority level");
 
-        ctx.Attach(ticket);
         ticket.Priority = priority;
         ticket.LastActivityAt = DateTime.UtcNow;
+        await ctx.UpdateAsync(ticket);
+
         IGuild guild = client.GetGuild(ticket.GuildId);
 
         if (await guild.GetChannelAsync(ticket.ChannelId) is ITextChannel channel)
@@ -1443,53 +2054,8 @@ public class TicketService : INService
 
             await channel.SendMessageAsync(embed: embed);
         }
-
-
     }
 
-    /// <summary>
-    ///     Adds tags to a ticket.
-    /// </summary>
-    public async Task AddTicketTagsAsync(Ticket ticket, IEnumerable<string> tags)
-    {
-        await using var ctx = await dbFactory.CreateConnectionAsync();
-
-        ctx.Attach(ticket);
-        ticket.Tags ??= [];
-        ticket.Tags.AddRange(tags);
-        ticket.LastActivityAt = DateTime.UtcNow;
-
-
-    }
-
-    /// <summary>
-    ///     Checks response times for tickets and sends notifications if needed.
-    /// </summary>
-    public async Task CheckResponseTimesAsync()
-    {
-        await using var ctx = await dbFactory.CreateConnectionAsync();
-
-        var tickets = await ctx.Tickets
-            .Include(t => t.Button)
-            .Include(t => t.SelectOption)
-            .Where(t => !t.IsArchived &&
-                        !t.ClosedAt.HasValue &&
-                        !t.ClaimedBy.HasValue)
-            .ToListAsync();
-
-        foreach (var ticket in tickets)
-        {
-            var requiredResponseTime = ticket.Button?.RequiredResponseTime ?? ticket.SelectOption?.RequiredResponseTime;
-            if (!requiredResponseTime.HasValue || !ticket.LastActivityAt.HasValue)
-                continue;
-
-            if (DateTime.UtcNow - ticket.CreatedAt > requiredResponseTime.Value)
-            {
-                // TODO: Send notifications to staff
-                Log.Warning("Ticket {TicketId} has exceeded response time threshold", ticket.Id);
-            }
-        }
-    }
 
     /// <summary>
     ///     Sets the transcript channel for a guild.
@@ -1500,11 +2066,10 @@ public class TicketService : INService
     {
         await using var ctx = await dbFactory.CreateConnectionAsync();
         var settings = await ctx.GuildTicketSettings.FirstOrDefaultAsync(x => x.GuildId == guildId) ??
-                       new GuildTicketSettings();
+                       new GuildTicketSetting();
 
         settings.TranscriptChannelId = channelId;
-        ctx.GuildTicketSettings.Update(settings);
-
+        await ctx.UpdateAsync(settings);
     }
 
     /// <summary>
@@ -1516,11 +2081,10 @@ public class TicketService : INService
     {
         await using var ctx = await dbFactory.CreateConnectionAsync();
         var settings = await ctx.GuildTicketSettings.FirstOrDefaultAsync(x => x.GuildId == guildId) ??
-                       new GuildTicketSettings();
+                       new GuildTicketSetting();
 
         settings.LogChannelId = channelId;
-        ctx.GuildTicketSettings.Update(settings);
-
+        await ctx.UpdateAsync(settings);
     }
 
 
@@ -1537,133 +2101,186 @@ public class TicketService : INService
 
         foreach (var ticket in tickets)
         {
-            ctx.Attach(ticket);
             ticket.CaseId = caseId;
         }
 
-
+        await ctx.UpdateAsync(tickets);
     }
 
     /// <summary>
-/// Gets a formatted list of all buttons on a specific ticket panel
-/// </summary>
-/// <param name="panelId">The message ID of the panel to get buttons from</param>
-/// <returns>A list of ButtonInfo objects containing button details</returns>
-public async Task<List<ButtonInfo>> GetPanelButtonsAsync(ulong panelId)
-{
-    await using var ctx = await dbFactory.CreateConnectionAsync();
-    var panel = await ctx.TicketPanels
-        .Include(p => p.Buttons)
-        .FirstOrDefaultAsync(p => p.MessageId == panelId);
-
-    if (panel == null)
-        return [];
-
-    return panel.Buttons.Select(b => new ButtonInfo
+    ///     Gets a formatted list of all buttons on a specific ticket panel
+    /// </summary>
+    /// <param name="panelId">The message ID of the panel to get buttons from</param>
+    /// <returns>A list of ButtonInfo objects containing button details</returns>
+    public async Task<List<ButtonInfo>> GetPanelButtonsAsync(ulong panelId)
     {
-        Id = b.Id,
-        CustomId = b.CustomId,
-        Label = b.Label,
-        Style = b.Style,
-        Emoji = b.Emoji,
-        CategoryId = b.CategoryId,
-        ArchiveCategoryId = b.ArchiveCategoryId,
-        SupportRoles = b.SupportRoles,
-        ViewerRoles = b.ViewerRoles,
-        HasModal = !string.IsNullOrEmpty(b.ModalJson),
-        HasCustomOpenMessage = !string.IsNullOrEmpty(b.OpenMessageJson)
-    }).ToList();
-}
+        await using var ctx = await dbFactory.CreateConnectionAsync();
+        var panel = await ctx.TicketPanels
+            .LoadWithAsTable(p => p.PanelButtons)
+            .FirstOrDefaultAsync(p => p.MessageId == panelId);
 
-/// <summary>
-/// Gets a formatted list of all select menus on a specific ticket panel
-/// </summary>
-/// <param name="panelId">The message ID of the panel to get select menus from</param>
-/// <returns>A list of SelectMenuInfo objects containing menu details</returns>
-public async Task<List<SelectMenuInfo>> GetPanelSelectMenusAsync(ulong panelId)
-{
-    await using var ctx = await dbFactory.CreateConnectionAsync();
-    var panel = await ctx.TicketPanels
-        .Include(p => p.SelectMenus)
-        .ThenInclude(m => m.Options)
-        .FirstOrDefaultAsync(p => p.MessageId == panelId);
+        if (panel == null)
+            return [];
 
-    if (panel == null)
-        return [];
-
-    return panel.SelectMenus.Select(m => new SelectMenuInfo
-    {
-        Id = m.Id,
-        CustomId = m.CustomId,
-        Placeholder = m.Placeholder,
-        Options = m.Options.Select(o => new SelectOptionInfo
-        {
-            Id = o.Id,
-            Label = o.Label,
-            Value = o.Value,
-            Description = o.Description,
-            Emoji = o.Emoji,
-            CategoryId = o.CategoryId,
-            ArchiveCategoryId = o.ArchiveCategoryId,
-            HasModal = !string.IsNullOrEmpty(o.ModalJson),
-            HasCustomOpenMessage = !string.IsNullOrEmpty(o.OpenMessageJson)
-        }).ToList()
-    }).ToList();
-}
-
-/// <summary>
-/// Gets a detailed list of all ticket panels and their components in a guild
-/// </summary>
-/// <param name="guildId">The ID of the guild to get panels from</param>
-/// <returns>A list of PanelInfo objects containing complete panel details</returns>
-public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
-{
-    await using var ctx = await dbFactory.CreateConnectionAsync();
-    var panels = await ctx.TicketPanels
-        .Include(p => p.Buttons)
-        .Include(p => p.SelectMenus)
-        .ThenInclude(m => m.Options)
-        .Where(p => p.GuildId == guildId)
-        .ToListAsync();
-
-    return panels.Select(p => new PanelInfo
-    {
-        MessageId = p.MessageId,
-        ChannelId = p.ChannelId,
-        Buttons = p.Buttons.Select(b => new ButtonInfo
+        return panel.PanelButtons.Select(b => new ButtonInfo
         {
             Id = b.Id,
             CustomId = b.CustomId,
             Label = b.Label,
-            Style = b.Style,
+            Style = (ButtonStyle)b.Style,
             Emoji = b.Emoji,
             CategoryId = b.CategoryId,
             ArchiveCategoryId = b.ArchiveCategoryId,
-            SupportRoles = b.SupportRoles,
-            ViewerRoles = b.ViewerRoles,
+            SupportRoles = b.SupportRoles.ToList(),
+            ViewerRoles = b.ViewerRoles.ToList(),
             HasModal = !string.IsNullOrEmpty(b.ModalJson),
             HasCustomOpenMessage = !string.IsNullOrEmpty(b.OpenMessageJson)
-        }).ToList(),
-        SelectMenus = p.SelectMenus.Select(m => new SelectMenuInfo
+        }).ToList();
+    }
+
+    /// <summary>
+    ///     Gets a formatted list of all select menus on a specific ticket panel
+    /// </summary>
+    /// <param name="panelId">The message ID of the panel to get select menus from</param>
+    /// <returns>A list of SelectMenuInfo objects containing menu details</returns>
+    public async Task<List<SelectMenuInfo>> GetPanelSelectMenusAsync(ulong panelId)
+    {
+        await using var ctx = await dbFactory.CreateConnectionAsync();
+        var results = await (
+            from ticketPanel in ctx.TicketPanels
+            where ticketPanel.MessageId == panelId
+            from menu in ctx.PanelSelectMenus.Where(m => m.PanelId == ticketPanel.Id).DefaultIfEmpty()
+            from option in ctx.SelectMenuOptions.Where(o => o.SelectMenuId == menu.Id).DefaultIfEmpty()
+            select new
+            {
+                Panel = ticketPanel, Menu = menu, Option = option
+            }).ToListAsync();
+
+        var panel = results.FirstOrDefault()?.Panel;
+        if (panel != null)
+        {
+            panel.PanelSelectMenus = results
+                .Where(r => r.Menu != null)
+                .GroupBy(r => r.Menu.Id)
+                .Select(g =>
+                {
+                    var menu = g.First().Menu;
+                    menu.SelectMenuOptions = g
+                        .Where(x => x.Option != null)
+                        .Select(x => x.Option)
+                        .ToList();
+                    return menu;
+                })
+                .ToList();
+        }
+
+        if (panel == null)
+            return [];
+
+        return panel.PanelSelectMenus.Select(m => new SelectMenuInfo
         {
             Id = m.Id,
             CustomId = m.CustomId,
             Placeholder = m.Placeholder,
-            Options = m.Options.Select(o => new SelectOptionInfo
+            Options = m.SelectMenuOptions.Select(o => new SelectOptionInfo
             {
                 Id = o.Id,
                 Label = o.Label,
                 Value = o.Value,
-                Description = o.Description,
-                Emoji = o.Emoji,
+                Description = o.Description ?? "",
+                Emoji = o.Emoji ?? "",
                 CategoryId = o.CategoryId,
                 ArchiveCategoryId = o.ArchiveCategoryId,
                 HasModal = !string.IsNullOrEmpty(o.ModalJson),
                 HasCustomOpenMessage = !string.IsNullOrEmpty(o.OpenMessageJson)
             }).ToList()
-        }).ToList()
-    }).ToList();
-}
+        }).ToList();
+    }
+
+    /// <summary>
+    ///     Gets a detailed list of all ticket panels and their components in a guild
+    /// </summary>
+    /// <param name="guildId">The ID of the guild to get panels from</param>
+    /// <returns>A list of PanelInfo objects containing complete panel details</returns>
+    public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
+    {
+        await using var ctx = await dbFactory.CreateConnectionAsync();
+
+        var panels = await ctx.TicketPanels
+            .Where(p => p.GuildId == guildId)
+            .ToListAsync();
+
+        if (panels.Any())
+        {
+            var panelIds = panels.Select(p => p.Id).ToArray();
+
+            var panelButtons = await ctx.PanelButtons
+                .Where(b => panelIds.Contains(b.PanelId))
+                .ToListAsync();
+
+            var selectMenus = await ctx.PanelSelectMenus
+                .Where(m => panelIds.Contains(m.PanelId))
+                .ToListAsync();
+
+            var menuIds = selectMenus.Select(m => m.Id).ToArray();
+            var options = menuIds.Any()
+                ? await ctx.SelectMenuOptions
+                    .Where(o => menuIds.Contains(o.SelectMenuId))
+                    .ToListAsync()
+                : [];
+
+            foreach (var panel in panels)
+            {
+                panel.PanelButtons = panelButtons.Where(b => b.PanelId == panel.Id).ToList();
+
+                var panelSelectMenus = selectMenus.Where(m => m.PanelId == panel.Id).ToList();
+                foreach (var menu in panelSelectMenus)
+                {
+                    menu.SelectMenuOptions = options.Where(o => o.SelectMenuId == menu.Id).ToList();
+                }
+
+                panel.PanelSelectMenus = panelSelectMenus;
+            }
+        }
+
+        return panels.Select(p => new PanelInfo
+        {
+            MessageId = p.MessageId,
+            ChannelId = p.ChannelId,
+            Buttons = p.PanelButtons.Select(b => new ButtonInfo
+            {
+                Id = b.Id,
+                CustomId = b.CustomId,
+                Label = b.Label,
+                Style = (ButtonStyle)b.Style,
+                Emoji = b.Emoji,
+                CategoryId = b.CategoryId,
+                ArchiveCategoryId = b.ArchiveCategoryId,
+                SupportRoles = b.SupportRoles.ToList(),
+                ViewerRoles = b.ViewerRoles.ToList(),
+                HasModal = !string.IsNullOrEmpty(b.ModalJson),
+                HasCustomOpenMessage = !string.IsNullOrEmpty(b.OpenMessageJson)
+            }).ToList(),
+            SelectMenus = p.PanelSelectMenus.Select(m => new SelectMenuInfo
+            {
+                Id = m.Id,
+                CustomId = m.CustomId,
+                Placeholder = m.Placeholder,
+                Options = m.SelectMenuOptions.Select(o => new SelectOptionInfo
+                {
+                    Id = o.Id,
+                    Label = o.Label,
+                    Value = o.Value,
+                    Description = o.Description,
+                    Emoji = o.Emoji,
+                    CategoryId = o.CategoryId,
+                    ArchiveCategoryId = o.ArchiveCategoryId,
+                    HasModal = !string.IsNullOrEmpty(o.ModalJson),
+                    HasCustomOpenMessage = !string.IsNullOrEmpty(o.OpenMessageJson)
+                }).ToList()
+            }).ToList()
+        }).ToList();
+    }
 
     /// <summary>
     ///     Retrieves a ticket by its ID.
@@ -1708,7 +2325,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     {
         await using var ctx = await dbFactory.CreateConnectionAsync();
         return await ctx.PanelButtons
-            .Include(b => b.Panel) // Include the related panel if needed
+            .LoadWithAsTable(b => b.Panel) // Include the related panel if needed
             .FirstOrDefaultAsync(b => b.Id == buttonId);
     }
 
@@ -1721,7 +2338,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     {
         await using var ctx = await dbFactory.CreateConnectionAsync();
         return await ctx.PanelButtons
-            .Include(b => b.Panel) // Include the related panel if needed
+            .LoadWithAsTable(b => b.Panel) // Include the related panel if needed
             .FirstOrDefaultAsync(b => b.CustomId == buttonId);
     }
 
@@ -1733,7 +2350,13 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     {
         try
         {
-            var fields = JsonSerializer.Deserialize<Dictionary<string, ModalFieldConfig>>(modalJson);
+            Log.Information(modalJson);
+            var fields = JsonSerializer.Deserialize<Dictionary<string, ModalFieldConfig>>(modalJson,
+                new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
+            Log.Information(JsonSerializer.Serialize(fields));
 
             // Validate field count
             if (fields.Count > 5)
@@ -1751,9 +2374,10 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
 
                 // Determine style
                 var style = field.Style == 2 ? TextInputStyle.Paragraph : TextInputStyle.Short;
+                Console.WriteLine(JsonSerializer.Serialize(field));
 
                 mb.AddTextInput(
-                    field.Label ?? key,
+                    field.Label,
                     key.ToLower().Replace(" ", "_"),
                     style,
                     field.Placeholder,
@@ -1768,12 +2392,12 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
         }
         catch (JsonException ex)
         {
-            Log.Error(ex, "Invalid modal configuration format");
+            Log.Error($"Invalid modal configuration format: {ex}");
             await component.RespondAsync("Invalid ticket form configuration.", ephemeral: true);
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error creating modal");
+            Log.Error("Error creating modal");
             await component.RespondAsync("Failed to create ticket form.", ephemeral: true);
         }
     }
@@ -1791,15 +2415,16 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     }
 
     /// <summary>
-    ///     Adds a select menu to an existing ticket panel.
+    ///     Adds a select menu to an existing ticket panel
     /// </summary>
-    /// <param name="panel">The panel to add the select menu to.</param>
-    /// <param name="placeholder">The placeholder text for the menu.</param>
-    /// <param name="minValues">Minimum number of selections required.</param>
-    /// <param name="maxValues">Maximum number of selections allowed.</param>
-    /// <summary>
-    ///     First service method modification needed
-    /// </summary>
+    /// <param name="panel">The panel to add the select menu to</param>
+    /// <param name="placeholder">The placeholder text for the menu</param>
+    /// <param name="firstOptionLabel">Label for the first option</param>
+    /// <param name="firstOptionDescription">Description for the first option</param>
+    /// <param name="firstOptionEmoji">Emoji for the first option</param>
+    /// <param name="minValues">Minimum number of selections required</param>
+    /// <param name="maxValues">Maximum number of selections allowed</param>
+    /// <returns>The created panel select menu</returns>
     public async Task<PanelSelectMenu> AddSelectMenuAsync(
         TicketPanel panel,
         string placeholder,
@@ -1807,73 +2432,129 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
         string firstOptionDescription = null,
         string firstOptionEmoji = null,
         int minValues = 1,
-        int maxValues = 1)
+        int maxValues = 1, bool updateComponents = true)
     {
         await using var ctx = await dbFactory.CreateConnectionAsync();
 
-        var menu = new PanelSelectMenu
+        try
         {
-            PanelId = panel.Id,
-            CustomId = $"ticket_select_{Guid.NewGuid():N}",
-            Placeholder = placeholder,
-            Options =
-            [
-                new()
+            var menu = new PanelSelectMenu
+            {
+                PanelId = panel.Id, CustomId = $"ticket_select_{Guid.NewGuid():N}", Placeholder = placeholder
+            };
+
+            menu.Id = await ctx.InsertWithInt32IdentityAsync(menu);
+
+            Log.Information("Created PanelSelectMenu with ID: {MenuId}", menu.Id);
+
+            var firstOption = new SelectMenuOption
+            {
+                SelectMenuId = menu.Id,
+                Label = firstOptionLabel,
+                Value = $"option_{Guid.NewGuid():N}",
+                Description = firstOptionDescription,
+                Emoji = firstOptionEmoji,
+                ChannelNameFormat = "ticket-{username}-{id}",
+                SaveTranscript = true,
+                DeleteOnClose = false,
+                LockOnClose = true,
+                RenameOnClose = true,
+                RemoveCreatorOnClose = true,
+                DeleteDelay = TimeSpan.FromMinutes(5),
+                LockOnArchive = true,
+                RenameOnArchive = true,
+                RemoveCreatorOnArchive = true,
+                AutoArchiveOnClose = true,
+                MaxActiveTickets = 1
+            };
+
+            Log.Information("Attempting to insert SelectMenuOption with SelectMenuId: {SelectMenuId}",
+                firstOption.SelectMenuId);
+
+            firstOption.Id = await ctx.InsertWithInt32IdentityAsync(firstOption);
+
+            Log.Information("Created SelectMenuOption with ID: {OptionId}", firstOption.Id);
+
+            var completeMenu = await ctx.PanelSelectMenus
+                .LoadWithAsTable(m => m.SelectMenuOptions)
+                .FirstOrDefaultAsync(m => m.Id == menu.Id);
+
+            if (completeMenu == null)
+            {
+                Log.Error("Failed to load complete menu after creation");
+                throw new InvalidOperationException("Failed to load created menu");
+            }
+            if (updateComponents)
+                await UpdatePanelComponentsAsync(panel);
+
+            return completeMenu;
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Failed to add select menu to panel {PanelId}", panel.Id);
+
+            try
+            {
+                if (ex.Data.Contains("MenuId"))
                 {
-                    Label = firstOptionLabel,
-                    Value = $"option_{Guid.NewGuid():N}",
-                    Description = firstOptionDescription,
-                    Emoji = firstOptionEmoji,
-                    ChannelNameFormat = "ticket-{username}-{id}", // Default format
-                    SaveTranscript = true // Default value
+                    var menuId = (int)ex.Data["MenuId"];
+                    await ctx.SelectMenuOptions.Where(o => o.SelectMenuId == menuId).DeleteAsync();
+                    await ctx.PanelSelectMenus.Where(m => m.Id == menuId).DeleteAsync();
                 }
-            ]
-        };
+            }
+            catch (Exception cleanupEx)
+            {
+                Log.Warning(cleanupEx, "Failed to cleanup partial menu creation");
+            }
 
-        ctx.Attach(panel);
-        panel.SelectMenus.Add(menu);
-
-        await UpdatePanelComponentsAsync(panel);
-
-        return menu;
+            throw;
+        }
     }
 
     /// <summary>
-    ///     Updates a select menu's properties.
+    ///     Updates a select menu's properties
     /// </summary>
-    /// <param name="menu">The menu to update.</param>
-    /// <param name="updateAction">Action containing the updates to apply.</param>
+    /// <param name="menu">The menu to update</param>
+    /// <param name="updateAction">Action containing the updates to apply</param>
     public async Task UpdateSelectMenuAsync(PanelSelectMenu menu, Action<PanelSelectMenu> updateAction)
     {
         await using var ctx = await dbFactory.CreateConnectionAsync();
 
-        ctx.Attach(menu);
         updateAction(menu);
 
-        await UpdatePanelComponentsAsync(menu.Panel);
+        await ctx.PanelSelectMenus
+            .Where(m => m.Id == menu.Id)
+            .Set(m => m.Placeholder, menu.Placeholder)
+            .Set(m => m.CustomId, menu.CustomId)
+            .UpdateAsync();
 
+        menu.Panel ??= await ctx.TicketPanels
+            .FirstOrDefaultAsync(p => p.Id == menu.PanelId);
+
+        await UpdatePanelComponentsAsync(menu.Panel);
     }
 
     /// <summary>
-    ///     Adds an option to a select menu.
+    ///     Adds an option to a select menu
     /// </summary>
-    /// <param name="menu">The menu to add the option to.</param>
-    /// <param name="label">The option label.</param>
-    /// <param name="value">The option value.</param>
-    /// <param name="description">Optional description for the option.</param>
-    /// <param name="emoji">Optional emoji for the option.</param>
-    /// <param name="openMessageJson">Optional JSON for ticket opening message.</param>
-    /// <param name="modalJson">Optional JSON for ticket creation modal.</param>
-    /// <param name="channelFormat">Format for ticket channel names.</param>
-    /// <param name="categoryId">Optional category for ticket channels.</param>
-    /// <param name="archiveCategoryId">Optional category for archived tickets.</param>
-    /// <param name="supportRoles">List of support role IDs.</param>
-    /// <param name="viewerRoles">List of viewer role IDs.</param>
-    /// <param name="autoCloseTime">Optional auto-close duration.</param>
-    /// <param name="requiredResponseTime">Optional required response time.</param>
-    /// <param name="maxActiveTickets">Maximum active tickets per user.</param>
-    /// <param name="allowedPriorities">List of allowed priority IDs.</param>
-    /// <param name="defaultPriority">Optional default priority.</param>
+    /// <param name="menu">The menu to add the option to</param>
+    /// <param name="label">The option label</param>
+    /// <param name="value">The option value</param>
+    /// <param name="description">Optional description for the option</param>
+    /// <param name="emoji">Optional emoji for the option</param>
+    /// <param name="openMessageJson">Optional JSON for ticket opening message</param>
+    /// <param name="modalJson">Optional JSON for ticket creation modal</param>
+    /// <param name="channelFormat">Format for ticket channel names</param>
+    /// <param name="categoryId">Optional category for ticket channels</param>
+    /// <param name="archiveCategoryId">Optional category for archived tickets</param>
+    /// <param name="supportRoles">List of support role IDs</param>
+    /// <param name="viewerRoles">List of viewer role IDs</param>
+    /// <param name="autoCloseTime">Optional auto-close duration</param>
+    /// <param name="requiredResponseTime">Optional required response time</param>
+    /// <param name="maxActiveTickets">Maximum active tickets per user</param>
+    /// <param name="allowedPriorities">List of allowed priority IDs</param>
+    /// <param name="defaultPriority">Optional default priority</param>
+    /// <returns>The created select menu option</returns>
     public async Task<SelectMenuOption> AddSelectOptionAsync(
         PanelSelectMenu menu,
         string label,
@@ -1891,53 +2572,58 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
         TimeSpan? requiredResponseTime = null,
         int maxActiveTickets = 1,
         List<string> allowedPriorities = null,
-        string defaultPriority = null)
+        string defaultPriority = null, bool updateComponents = true)
     {
-        await using var ctx = await dbFactory.CreateConnectionAsync();
-
-        var option = new SelectMenuOption
+        try
         {
-            SelectMenuId = menu.Id,
-            Label = label,
-            Value = value,
-            Description = description,
-            Emoji = emoji,
-            OpenMessageJson = openMessageJson,
-            ModalJson = modalJson,
-            ChannelNameFormat = channelFormat,
-            CategoryId = categoryId,
-            ArchiveCategoryId = archiveCategoryId,
-            SupportRoles = supportRoles ?? [],
-            ViewerRoles = viewerRoles ?? [],
-            AutoCloseTime = autoCloseTime,
-            RequiredResponseTime = requiredResponseTime,
-            MaxActiveTickets = maxActiveTickets,
-            AllowedPriorities = allowedPriorities ?? [],
-            DefaultPriority = defaultPriority
-        };
+            await using var ctx = await dbFactory.CreateConnectionAsync();
 
-        ctx.Attach(menu);
-        menu.Options.Add(option);
-        await UpdatePanelComponentsAsync(menu.Panel);
+            var option = new SelectMenuOption
+            {
+                SelectMenuId = menu.Id,
+                Label = label,
+                Value = value,
+                Description = description,
+                Emoji = emoji,
+                OpenMessageJson = openMessageJson,
+                ModalJson = modalJson,
+                ChannelNameFormat = channelFormat,
+                CategoryId = categoryId,
+                ArchiveCategoryId = archiveCategoryId,
+                SupportRoles = supportRoles?.ToArray() ?? [],
+                ViewerRoles = viewerRoles?.ToArray() ?? [],
+                AutoCloseTime = autoCloseTime,
+                RequiredResponseTime = requiredResponseTime,
+                MaxActiveTickets = maxActiveTickets,
+                AllowedPriorities = allowedPriorities?.ToArray() ?? [],
+                DefaultPriority = defaultPriority,
+                SaveTranscript = true,
+                RemoveCreatorOnArchive = true,
+                RemoveCreatorOnClose = true,
+                LockOnArchive = true,
+                RenameOnClose = true
+            };
+
+            Log.Information("About to save option: Label='{Label}', Value='{Value}', SelectMenuId={SelectMenuId}",
+                option.Label, option.Value, option.SelectMenuId);
+            option.Id = await ctx.InsertWithInt32IdentityAsync(option);
+            var savedOption = await ctx.SelectMenuOptions.FirstOrDefaultAsync(o => o.Id == option.Id);
+            Log.Information("Retrieved saved option: ID={Id}, Label='{Label}', Value='{Value}'",
+                savedOption?.Id, savedOption?.Label ?? "NULL", savedOption?.Value ?? "NULL");
 
 
-        return option;
-    }
+            menu.Panel ??= await ctx.TicketPanels
+                .FirstOrDefaultAsync(p => p.Id == menu.PanelId);
+            if (updateComponents)
+                await UpdatePanelComponentsAsync(menu.Panel);
 
-    /// <summary>
-    ///     Updates a select menu option's properties.
-    /// </summary>
-    /// <param name="option">The option to update.</param>
-    /// <param name="updateAction">Action containing the updates to apply.</param>
-    public async Task UpdateSelectOptionAsync(SelectMenuOption option, Action<SelectMenuOption> updateAction)
-    {
-        await using var ctx = await dbFactory.CreateConnectionAsync();
-
-        ctx.Attach(option);
-        updateAction(option);
-
-        await UpdatePanelComponentsAsync(option.SelectMenu.Panel);
-
+            return option;
+        }
+        catch (Exception e)
+        {
+            Log.Information(e, "ERRRRROR");
+            return null;
+        }
     }
 
     /// <summary>
@@ -1949,8 +2635,8 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     {
         await using var ctx = await dbFactory.CreateConnectionAsync();
         return await ctx.PanelSelectMenus
-            .Include(m => m.Panel)
-            .Include(m => m.Options)
+            .LoadWithAsTable(m => m.Panel)
+            .LoadWithAsTable(m => m.SelectMenuOptions)
             .FirstOrDefaultAsync(m => m.CustomId == menuId);
     }
 
@@ -1960,11 +2646,11 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     /// <param name="menuId">The ID of the menu containing the option.</param>
     /// <param name="value">The value of the option to retrieve.</param>
     /// <returns>The select menu option matching the specified value, if found.</returns>
-    public async Task<SelectMenuOption> GetSelectOptionAsync(int menuId, string value)
+    public async Task<SelectMenuOption?> GetSelectOptionAsync(int menuId, string value)
     {
         await using var ctx = await dbFactory.CreateConnectionAsync();
         return await ctx.SelectMenuOptions
-            .Include(o => o.SelectMenu)
+            .LoadWithAsTable(o => o.SelectMenu)
             .FirstOrDefaultAsync(o => o.SelectMenuId == menuId && o.Value == value);
     }
 
@@ -2019,18 +2705,20 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
         return html.ToString();
     }
 
+
     /// <summary>
-    ///     Closes a ticket in the specified guild.
+    ///     Closes a ticket
     /// </summary>
     /// <param name="guild">The guild containing the ticket.</param>
     /// <param name="channelId">The ID of the ticket channel to close.</param>
+    /// <param name="forceArchive">Force archive regardless of configuration</param>
     /// <returns>True if the ticket was successfully closed, false otherwise.</returns>
-    public async Task<bool> CloseTicket(IGuild guild, ulong channelId)
+    public async Task<bool> CloseTicket(IGuild guild, ulong channelId, bool forceArchive = false)
     {
         await using var ctx = await dbFactory.CreateConnectionAsync();
         var ticket = await ctx.Tickets
-            .Include(t => t.Button)
-            .Include(t => t.SelectOption)
+            .LoadWithAsTable(t => t.Button)
+            .LoadWithAsTable(t => t.SelectOption)
             .FirstOrDefaultAsync(t => t.ChannelId == channelId && t.GuildId == guild.Id);
 
         if (ticket == null || ticket.ClosedAt.HasValue)
@@ -2040,6 +2728,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
         {
             ticket.ClosedAt = DateTime.UtcNow;
             ticket.LastActivityAt = DateTime.UtcNow;
+            await ctx.UpdateAsync(ticket);
 
             var channel = await guild.GetTextChannelAsync(channelId);
             if (channel != null)
@@ -2057,57 +2746,32 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
                 // Generate transcript if enabled
                 if (ticket.Button?.SaveTranscript == true || ticket.SelectOption?.SaveTranscript == true)
                 {
-                    // Implement transcript generation
-                    var settings = await ctx.GuildTicketSettings
-                        .FirstOrDefaultAsync(s => s.GuildId == guild.Id);
-
-                    if (settings?.TranscriptChannelId != null)
-                    {
-                        var transcriptChannel = await guild.GetTextChannelAsync(settings.TranscriptChannelId.Value);
-                        if (transcriptChannel != null)
-                        {
-                            try
-                            {
-                                var tscript = await GenerateTranscriptAsync(channel, ticket);
-
-                                // Convert HTML string to byte array
-                                using var stream = new MemoryStream(Encoding.UTF8.GetBytes(tscript));
-
-                                // Create file attachment
-                                var transcriptFile = new FileAttachment(stream, $"ticket-{ticket.Id}-transcript.html");
-
-                                // Create info embed
-                                var transcriptEmbed = new EmbedBuilder()
-                                    .WithTitle($"Ticket Transcript #{ticket.Id}")
-                                    .WithDescription(
-                                        $"Ticket created by <@{ticket.CreatorId}>\n" +
-                                        $"Created: {TimestampTag.FromDateTime(ticket.CreatedAt)}\n" +
-                                        $"Closed: {TimestampTag.FromDateTime(ticket.ClosedAt ?? DateTime.UtcNow)}")
-                                    .WithColor(Mewdeko.OkColor)
-                                    .Build();
-
-                                // Send transcript with info
-                                var msg = await transcriptChannel.SendFileAsync(transcriptFile, embed: transcriptEmbed);
-
-                                // Store the transcript URL
-                                ticket.TranscriptUrl = msg.Attachments.FirstOrDefault()?.Url;
-                            }
-                            catch (Exception ex)
-                            {
-                                Log.Error(ex, "Failed to generate/save transcript for ticket {TicketId}", ticket.Id);
-                            }
-                        }
-                    }
+                    await GenerateAndSaveTranscriptAsync(guild, channel, ticket);
                 }
 
-                // Move to archive category if configured
-                var archiveCategoryId = ticket.Button?.ArchiveCategoryId ?? ticket.SelectOption?.ArchiveCategoryId;
-                if (archiveCategoryId.HasValue)
+                // Check if we should auto-archive
+                var shouldAutoArchive = forceArchive ||
+                                        ticket.Button?.AutoArchiveOnClose == true ||
+                                        ticket.SelectOption?.AutoArchiveOnClose == true;
+
+                if (shouldAutoArchive)
                 {
-                    await channel.ModifyAsync(c => c.CategoryId = archiveCategoryId.Value);
+                    // Auto-archive the ticket
+                    await ArchiveTicketAsync(ticket);
+
+                    var archiveEmbed = new EmbedBuilder()
+                        .WithDescription("📁 Ticket has been automatically archived")
+                        .WithColor(Color.LightGrey)
+                        .Build();
+
+                    await channel.SendMessageAsync(embed: archiveEmbed);
+                }
+                else
+                {
+                    // Just handle normal close cleanup
+                    await HandleChannelCleanupAsync(guild, channel, ticket);
                 }
             }
-
 
             return true;
         }
@@ -2115,6 +2779,271 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
         {
             Log.Error(ex, "Error closing ticket {TicketId}", ticket.Id);
             return false;
+        }
+    }
+
+    /// <summary>
+    ///     Cleans up channel stuffs for tickets.
+    /// </summary>
+    /// <param name="guild">The guild containing the ticket</param>
+    /// <param name="channel">The ticket channel</param>
+    /// <param name="ticket">The ticket being closed</param>
+    private async Task HandleChannelCleanupAsync(IGuild guild, ITextChannel channel, Ticket ticket)
+    {
+        try
+        {
+            await using var ctx = await dbFactory.CreateConnectionAsync();
+            var settings = await ctx.GuildTicketSettings.FirstOrDefaultAsync(s => s.GuildId == guild.Id);
+
+            // Get configuration from button/option or fall back to guild defaults
+            var deleteOnClose = ticket.Button?.DeleteOnClose ??
+                                ticket.SelectOption?.DeleteOnClose ?? settings?.DeleteTicketsOnClose ?? false;
+            var lockOnClose = ticket.Button?.LockOnClose ??
+                              ticket.SelectOption?.LockOnClose ?? settings?.LockTicketsOnClose ?? true;
+            var renameOnClose = ticket.Button?.RenameOnClose ??
+                                ticket.SelectOption?.RenameOnClose ?? settings?.RenameTicketsOnClose ?? true;
+            var removeCreatorOnClose = ticket.Button?.RemoveCreatorOnClose ??
+                                       ticket.SelectOption?.RemoveCreatorOnClose ??
+                                       settings?.RemoveCreatorOnClose ?? true;
+            var deleteDelay = ticket.Button?.DeleteDelay ??
+                              ticket.SelectOption?.DeleteDelay ?? settings?.DeleteDelay ?? TimeSpan.FromMinutes(5);
+
+            // 1. Rename channel if enabled
+            if (renameOnClose && !channel.Name.StartsWith("closed-"))
+            {
+                try
+                {
+                    var newName = $"closed-{channel.Name}";
+                    await channel.ModifyAsync(c => c.Name = newName);
+                }
+                catch (Exception ex)
+                {
+                    Log.Warning(ex, "Failed to rename closed ticket channel {ChannelId}", channel.Id);
+                }
+            }
+
+            // 2. Remove creator permissions if enabled
+            if (removeCreatorOnClose)
+            {
+                try
+                {
+                    var creator = await guild.GetUserAsync(ticket.CreatorId);
+                    if (creator != null)
+                    {
+                        await channel.RemovePermissionOverwriteAsync(creator);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Log.Warning(ex, "Failed to remove creator permissions from ticket {TicketId}", ticket.Id);
+                }
+            }
+
+            // 3. Lock channel if enabled (and not deleting)
+            if (lockOnClose && !deleteOnClose)
+            {
+                try
+                {
+                    await channel.AddPermissionOverwriteAsync(guild.EveryoneRole,
+                        new OverwritePermissions(
+                            viewChannel: PermValue.Deny,
+                            sendMessages: PermValue.Deny,
+                            addReactions: PermValue.Deny,
+                            useSlashCommands: PermValue.Deny
+                        ));
+
+                    // Keep staff access
+                    var supportRoles = ticket.Button?.SupportRoles ?? ticket.SelectOption?.SupportRoles ?? [];
+                    foreach (var roleId in supportRoles)
+                    {
+                        var role = guild.GetRole(roleId);
+                        if (role != null)
+                        {
+                            await channel.AddPermissionOverwriteAsync(role,
+                                new OverwritePermissions(
+                                    viewChannel: PermValue.Allow,
+                                    sendMessages: PermValue.Allow,
+                                    readMessageHistory: PermValue.Allow
+                                ));
+                        }
+                    }
+
+                    var lockEmbed = new EmbedBuilder()
+                        .WithDescription("🔒 This ticket has been locked")
+                        .WithColor(Color.Orange)
+                        .Build();
+
+                    await channel.SendMessageAsync(embed: lockEmbed);
+                }
+                catch (Exception ex)
+                {
+                    Log.Warning(ex, "Failed to lock ticket channel {ChannelId}", channel.Id);
+                }
+            }
+
+            // 4. Move to archive category (if not deleting and not auto-archiving)
+            if (!deleteOnClose)
+            {
+                var archiveCategoryId = ticket.Button?.ArchiveCategoryId ?? ticket.SelectOption?.ArchiveCategoryId;
+                if (archiveCategoryId.HasValue)
+                {
+                    try
+                    {
+                        await channel.ModifyAsync(c => c.CategoryId = archiveCategoryId.Value);
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Warning(ex, "Failed to move ticket to archive category");
+                    }
+                }
+            }
+
+            // 5. Schedule deletion if enabled
+            if (deleteOnClose)
+            {
+                var deleteEmbed = new EmbedBuilder()
+                    .WithTitle("⚠️ Ticket Scheduled for Deletion")
+                    .WithDescription(
+                        $"This channel will be automatically deleted in {deleteDelay.TotalMinutes} minutes.")
+                    .WithColor(Color.Red)
+                    .Build();
+
+                await channel.SendMessageAsync(embed: deleteEmbed);
+
+                // Schedule deletion using the new ScheduledTicketDeletions table
+                await ScheduleTicketDeletionAsync(ticket, deleteDelay);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Error during channel cleanup for ticket {TicketId}", ticket.Id);
+        }
+    }
+
+    private async Task ScheduleTicketDeletionAsync(Ticket ticket, TimeSpan delay)
+    {
+        try
+        {
+            await using var ctx = await dbFactory.CreateConnectionAsync();
+
+            var scheduledDeletion = new ScheduledTicketDeletion
+            {
+                TicketId = ticket.Id,
+                GuildId = ticket.GuildId,
+                ChannelId = ticket.ChannelId,
+                ScheduledAt = DateTime.UtcNow,
+                ExecuteAt = DateTime.UtcNow.Add(delay),
+                IsProcessed = false,
+                RetryCount = 0
+            };
+
+            await ctx.InsertAsync(scheduledDeletion);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Failed to schedule ticket deletion for ticket {TicketId}", ticket.Id);
+        }
+    }
+
+    /// <summary>
+    ///     Execute Order 66
+    /// </summary>
+    public async Task ProcessScheduledDeletionsAsync()
+    {
+        await using var ctx = await dbFactory.CreateConnectionAsync();
+
+        var pendingDeletions = await ctx.ScheduledTicketDeletions
+            .Where(d => !d.IsProcessed && d.ExecuteAt <= DateTime.UtcNow)
+            .OrderBy(d => d.ExecuteAt)
+            .Take(50) // Process in batches
+            .ToListAsync();
+
+        foreach (var deletion in pendingDeletions)
+        {
+            try
+            {
+                IGuild guild = client.GetGuild(deletion.GuildId);
+                var channel = await guild?.GetChannelAsync(deletion.ChannelId);
+
+                if (channel != null)
+                {
+                    await channel.DeleteAsync();
+                    Log.Information("Deleted scheduled ticket channel {ChannelId}", deletion.ChannelId);
+                }
+
+                // Mark ticket as deleted
+                await ctx.Tickets
+                    .Where(t => t.Id == deletion.TicketId)
+                    .Set(t => t.IsDeleted, true)
+                    .UpdateAsync();
+
+                // Mark deletion as processed
+                await ctx.ScheduledTicketDeletions
+                    .Where(d => d.Id == deletion.Id)
+                    .Set(d => d.IsProcessed, true)
+                    .Set(d => d.ProcessedAt, DateTime.UtcNow)
+                    .UpdateAsync();
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Failed to process scheduled deletion {DeletionId}", deletion.Id);
+
+                // Mark as failed and increment retry count
+                await ctx.ScheduledTicketDeletions
+                    .Where(d => d.Id == deletion.Id)
+                    .Set(d => d.FailureReason, ex.Message)
+                    .Set(d => d.RetryCount, d => d.RetryCount + 1)
+                    .UpdateAsync();
+            }
+        }
+    }
+
+    /// <summary>
+    ///     Generates and saves transcript for a closed ticket using existing settings
+    /// </summary>
+    /// <param name="guild">The guild containing the ticket</param>
+    /// <param name="channel">The ticket channel</param>
+    /// <param name="ticket">The ticket being closed</param>
+    private async Task GenerateAndSaveTranscriptAsync(IGuild guild, ITextChannel channel, Ticket ticket)
+    {
+        try
+        {
+            await using var ctx = await dbFactory.CreateConnectionAsync();
+            var settings = await ctx.GuildTicketSettings.FirstOrDefaultAsync(s => s.GuildId == guild.Id);
+
+            if (settings?.TranscriptChannelId == null) return;
+
+            var transcriptChannel = await guild.GetTextChannelAsync(settings.TranscriptChannelId.Value);
+            if (transcriptChannel == null) return;
+
+            var transcript = await GenerateTranscriptAsync(channel, ticket);
+
+            using var stream = new MemoryStream(Encoding.UTF8.GetBytes(transcript));
+            var transcriptFile = new FileAttachment(stream, $"ticket-{ticket.Id}-transcript.html");
+
+            var transcriptEmbed = new EmbedBuilder()
+                .WithTitle($"Ticket Transcript #{ticket.Id}")
+                .WithDescription(
+                    $"**Creator:** <@{ticket.CreatorId}>\n" +
+                    $"**Type:** {ticket.Button?.Label ?? ticket.SelectOption?.Label ?? "Unknown"}\n" +
+                    $"**Created:** {TimestampTag.FromDateTime(ticket.CreatedAt)}\n" +
+                    $"**Closed:** {TimestampTag.FromDateTime(ticket.ClosedAt ?? DateTime.UtcNow)}")
+                .AddField("Channel", channel.Name, true)
+                .AddField("Category", (await guild.GetCategoryChannelAsync(channel.CategoryId ?? 0))?.Name ?? "None",
+                    true)
+                .WithColor(Mewdeko.OkColor)
+                .WithCurrentTimestamp()
+                .Build();
+
+            var msg = await transcriptChannel.SendFileAsync(transcriptFile, embed: transcriptEmbed);
+
+            // Store transcript URL in existing field
+            ticket.TranscriptUrl = msg.Attachments.FirstOrDefault()?.Url;
+            await ctx.UpdateAsync(ticket);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Failed to generate transcript for ticket {TicketId}", ticket.Id);
         }
     }
 
@@ -2129,25 +3058,16 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     {
         await using var ctx = await dbFactory.CreateConnectionAsync();
         var ticket = await ctx.Tickets
-            .Include(t => t.Button)
-            .Include(t => t.SelectOption)
+            .LoadWithAsTable(t => t.Button)
+            .LoadWithAsTable(t => t.SelectOption)
             .FirstOrDefaultAsync(t => t.ChannelId == channelId && t.GuildId == guild.Id);
 
         if (ticket == null || ticket.ClosedAt.HasValue || ticket.ClaimedBy.HasValue)
             return false;
 
-        // Verify staff member has permission to claim
-        var hasPermission = false;
+        // Verify staff member has permission to claim using existing SupportRoles
         var supportRoles = ticket.Button?.SupportRoles ?? ticket.SelectOption?.SupportRoles ?? [];
-
-        foreach (var roleId in supportRoles)
-        {
-            if (staff.RoleIds.Contains(roleId))
-            {
-                hasPermission = true;
-                break;
-            }
-        }
+        var hasPermission = supportRoles.Any(roleId => staff.RoleIds.Contains(roleId));
 
         if (!hasPermission && !staff.GuildPermissions.Administrator)
             return false;
@@ -2156,6 +3076,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
         {
             ticket.ClaimedBy = staff.Id;
             ticket.LastActivityAt = DateTime.UtcNow;
+            await ctx.UpdateAsync(ticket);
 
             var channel = await guild.GetTextChannelAsync(channelId);
             if (channel != null)
@@ -2169,7 +3090,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
 
                 await channel.SendMessageAsync(embed: embed);
 
-                // Send DM notification to ticket creator if enabled
+                // Send DM notification to ticket creator if enabled (using existing EnableDmNotifications)
                 var settings = await ctx.GuildTicketSettings
                     .FirstOrDefaultAsync(s => s.GuildId == guild.Id);
 
@@ -2196,7 +3117,6 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
                     }
                 }
             }
-
 
             return true;
         }
@@ -2232,6 +3152,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
             var previousClaimer = ticket.ClaimedBy.Value;
             ticket.ClaimedBy = null;
             ticket.LastActivityAt = DateTime.UtcNow;
+            await ctx.UpdateAsync(ticket);
 
             var channel = await guild.GetTextChannelAsync(channelId);
             if (channel != null)
@@ -2245,7 +3166,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
 
                 await channel.SendMessageAsync(embed: embed);
 
-                // Notify previous claimer if enabled
+                // Notify previous claimer if enabled (using existing EnableDmNotifications)
                 var settings = await ctx.GuildTicketSettings
                     .FirstOrDefaultAsync(s => s.GuildId == guild.Id);
 
@@ -2273,7 +3194,6 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
                 }
             }
 
-
             return true;
         }
         catch (Exception ex)
@@ -2284,17 +3204,17 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     }
 
     /// <summary>
-    ///     Adds a note to a ticket.
+    ///     Adds a note to a ticket
     /// </summary>
-    /// <param name="channelId">The ID of the ticket channel.</param>
-    /// <param name="author">The staff member adding the note.</param>
-    /// <param name="content">The content of the note.</param>
-    /// <returns>True if the note was successfully added, false otherwise.</returns>
+    /// <param name="channelId">The ID of the ticket channel</param>
+    /// <param name="author">The staff member adding the note</param>
+    /// <param name="content">The content of the note</param>
+    /// <returns>True if the note was successfully added, false otherwise</returns>
     public async Task<bool> AddNote(ulong channelId, IGuildUser author, string content)
     {
         await using var ctx = await dbFactory.CreateConnectionAsync();
+
         var ticket = await ctx.Tickets
-            .Include(t => t.Notes)
             .FirstOrDefaultAsync(t => t.ChannelId == channelId && t.GuildId == author.GuildId);
 
         if (ticket == null || ticket.ClosedAt.HasValue)
@@ -2302,30 +3222,47 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
 
         try
         {
-            var note = new TicketNote
+            await using var transaction = await ctx.BeginTransactionAsync();
+            try
             {
-                TicketId = ticket.Id, AuthorId = author.Id, Content = content, CreatedAt = DateTime.UtcNow
-            };
+                var note = new TicketNote
+                {
+                    TicketId = ticket.Id, AuthorId = author.Id, Content = content, CreatedAt = DateTime.UtcNow
+                };
 
-            ticket.Notes.Add(note);
-            ticket.LastActivityAt = DateTime.UtcNow;
+                // Insert the note
+                note.Id = await ctx.InsertWithInt32IdentityAsync(note);
 
-            var channel = await author.Guild.GetTextChannelAsync(channelId);
-            if (channel != null)
-            {
-                var embed = new EmbedBuilder()
-                    .WithTitle("Note Added")
-                    .WithDescription(content)
-                    .WithFooter($"Added by {author}")
-                    .WithColor(Color.Blue)
-                    .WithCurrentTimestamp()
-                    .Build();
+                // Update ticket's last activity
+                await ctx.Tickets
+                    .Where(t => t.Id == ticket.Id)
+                    .Set(t => t.LastActivityAt, DateTime.UtcNow)
+                    .UpdateAsync();
 
-                await channel.SendMessageAsync(embed: embed);
+                await transaction.CommitAsync();
+
+                // Send notification message
+                var channel = await author.Guild.GetTextChannelAsync(channelId);
+                if (channel != null)
+                {
+                    var embed = new EmbedBuilder()
+                        .WithTitle("Note Added")
+                        .WithDescription(content)
+                        .WithFooter($"Added by {author}")
+                        .WithColor(Color.Blue)
+                        .WithCurrentTimestamp()
+                        .Build();
+
+                    await channel.SendMessageAsync(embed: embed);
+                }
+
+                return true;
             }
-
-
-            return true;
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
         }
         catch (Exception ex)
         {
@@ -2335,21 +3272,28 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     }
 
     /// <summary>
-    ///     Edits an existing ticket note.
+    ///     Edits an existing ticket note
     /// </summary>
-    /// <param name="noteId">The ID of the note to edit.</param>
-    /// <param name="author">The staff member editing the note.</param>
-    /// <param name="newContent">The new content for the note.</param>
-    /// <returns>True if the note was successfully edited, false otherwise.</returns>
+    /// <param name="noteId">The ID of the note to edit</param>
+    /// <param name="author">The staff member editing the note</param>
+    /// <param name="newContent">The new content for the note</param>
+    /// <returns>True if the note was successfully edited, false otherwise</returns>
     public async Task<bool> EditNote(int noteId, IGuildUser author, string newContent)
     {
         await using var ctx = await dbFactory.CreateConnectionAsync();
+
+        // Load the note
         var note = await ctx.TicketNotes
-            .Include(n => n.Ticket)
-            .Include(n => n.EditHistory)
             .FirstOrDefaultAsync(n => n.Id == noteId);
 
-        if (note == null || note.Ticket.ClosedAt.HasValue)
+        if (note == null)
+            return false;
+
+        // Load the associated ticket
+        var ticket = await ctx.Tickets
+            .FirstOrDefaultAsync(t => t.Id == note.TicketId);
+
+        if (ticket == null || ticket.ClosedAt.HasValue)
             return false;
 
         // Only allow the original author or admins to edit
@@ -2358,31 +3302,57 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
 
         try
         {
-            var edit = new NoteEdit
+            await using var transaction = await ctx.BeginTransactionAsync();
+            try
             {
-                OldContent = note.Content, NewContent = newContent, EditorId = author.Id, EditedAt = DateTime.UtcNow
-            };
+                var edit = new NoteEdit
+                {
+                    CaseNoteId = noteId,
+                    OldContent = note.Content,
+                    NewContent = newContent,
+                    EditorId = author.Id,
+                    EditedAt = DateTime.UtcNow
+                };
 
-            note.Content = newContent;
-            note.EditHistory.Add(edit);
-            note.Ticket.LastActivityAt = DateTime.UtcNow;
+                // Insert the edit history record
+                edit.Id = await ctx.InsertWithInt32IdentityAsync(edit);
 
-            var channel = await author.Guild.GetTextChannelAsync(note.Ticket.ChannelId);
-            if (channel != null)
-            {
-                var embed = new EmbedBuilder()
-                    .WithTitle("Note Edited")
-                    .WithDescription($"**Original:** {edit.OldContent}\n**New:** {newContent}")
-                    .WithFooter($"Edited by {author}")
-                    .WithColor(Color.Blue)
-                    .WithCurrentTimestamp()
-                    .Build();
+                // Update the note content
+                await ctx.TicketNotes
+                    .Where(n => n.Id == noteId)
+                    .Set(n => n.Content, newContent)
+                    .UpdateAsync();
 
-                await channel.SendMessageAsync(embed: embed);
+                // Update ticket's last activity
+                await ctx.Tickets
+                    .Where(t => t.Id == ticket.Id)
+                    .Set(t => t.LastActivityAt, DateTime.UtcNow)
+                    .UpdateAsync();
+
+                await transaction.CommitAsync();
+
+                // Send notification message
+                var channel = await author.Guild.GetTextChannelAsync(ticket.ChannelId);
+                if (channel != null)
+                {
+                    var embed = new EmbedBuilder()
+                        .WithTitle("Note Edited")
+                        .WithDescription($"**Original:** {edit.OldContent}\n**New:** {newContent}")
+                        .WithFooter($"Edited by {author}")
+                        .WithColor(Color.Blue)
+                        .WithCurrentTimestamp()
+                        .Build();
+
+                    await channel.SendMessageAsync(embed: embed);
+                }
+
+                return true;
             }
-
-
-            return true;
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
         }
         catch (Exception ex)
         {
@@ -2401,7 +3371,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     {
         await using var ctx = await dbFactory.CreateConnectionAsync();
         var note = await ctx.TicketNotes
-            .Include(n => n.Ticket)
+            .LoadWithAsTable(n => n.Ticket)
             .FirstOrDefaultAsync(n => n.Id == noteId);
 
         if (note == null || note.Ticket.ClosedAt.HasValue)
@@ -2413,7 +3383,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
 
         try
         {
-            ctx.TicketNotes.Remove(note);
+            await ctx.DeleteAsync(note);
             note.Ticket.LastActivityAt = DateTime.UtcNow;
 
             var channel = await author.Guild.GetTextChannelAsync(note.Ticket.ChannelId);
@@ -2459,28 +3429,24 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
             CreatedAt = DateTime.UtcNow
         };
 
-        ctx.TicketCases.Add(ticketCase);
+        await ctx.InsertWithInt32IdentityAsync(ticketCase);
 
 
         // Log case creation if logging is enabled
         var settings = await ctx.GuildTicketSettings.FirstOrDefaultAsync(s => s.GuildId == guild.Id);
-        if (settings?.LogChannelId != null)
-        {
-            var logChannel = await guild.GetTextChannelAsync(settings.LogChannelId.Value);
-            if (logChannel != null)
-            {
-                var embed = new EmbedBuilder()
-                    .WithTitle("Case Created")
-                    .WithDescription($"Case #{ticketCase.Id} created by {creator.Mention}")
-                    .AddField("Title", name)
-                    .AddField("Description", description)
-                    .WithColor(Color.Green)
-                    .WithCurrentTimestamp()
-                    .Build();
+        if (settings?.LogChannelId == null) return ticketCase;
+        var logChannel = await guild.GetTextChannelAsync(settings.LogChannelId.Value);
+        if (logChannel == null) return ticketCase;
+        var embed = new EmbedBuilder()
+            .WithTitle("Case Created")
+            .WithDescription($"Case #{ticketCase.Id} created by {creator.Mention}")
+            .AddField("Title", name)
+            .AddField("Description", description)
+            .WithColor(Color.Green)
+            .WithCurrentTimestamp()
+            .Build();
 
-                await logChannel.SendMessageAsync(embed: embed);
-            }
-        }
+        await logChannel.SendMessageAsync(embed: embed);
 
         return ticketCase;
     }
@@ -2496,7 +3462,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     {
         await using var ctx = await dbFactory.CreateConnectionAsync();
         var ticketCase = await ctx.TicketCases
-            .Include(c => c.LinkedTickets)
+            .LoadWithAsTable(c => c.Tickets)
             .FirstOrDefaultAsync(c => c.Id == caseId && c.GuildId == guildId);
 
         if (ticketCase == null)
@@ -2530,7 +3496,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     {
         await using var ctx = await dbFactory.CreateConnectionAsync();
         var ticket = await ctx.Tickets
-            .Include(t => t.Case)
+            .LoadWithAsTable(t => t.Case)
             .FirstOrDefaultAsync(t => t.Id == ticketId && t.GuildId == guildId);
 
         if (ticket == null || ticket.CaseId == null)
@@ -2661,8 +3627,8 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     {
         await using var ctx = await dbFactory.CreateConnectionAsync();
         var tickets = await ctx.Tickets
-            .Include(t => t.Button)
-            .Include(t => t.SelectOption)
+            .LoadWithAsTable(t => t.Button)
+            .LoadWithAsTable(t => t.SelectOption)
             .Where(t => t.GuildId == guildId)
             .ToListAsync();
 
@@ -2741,8 +3707,8 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     {
         await using var ctx = await dbFactory.CreateConnectionAsync();
         var tickets = await ctx.Tickets
-            .Include(t => t.Button)
-            .Include(t => t.SelectOption)
+            .LoadWithAsTable(t => t.Button)
+            .LoadWithAsTable(t => t.SelectOption)
             .Where(t => t.GuildId == guildId && t.CreatorId == userId)
             .ToListAsync();
 
@@ -2820,7 +3786,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     {
         await using var ctx = await dbFactory.CreateConnectionAsync();
         var tickets = await ctx.Tickets
-            .Include(t => t.Notes)
+            .LoadWithAsTable(t => t.TicketNotes)
             .Where(t => t.GuildId == guildId && t.ClaimedBy.HasValue)
             .ToListAsync();
 
@@ -2830,20 +3796,18 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
         {
             if (!ticket.ClaimedBy.HasValue) continue;
 
-            var firstResponse = ticket.Notes
+            var firstResponse = ticket.TicketNotes
                 .Where(n => n.AuthorId == ticket.ClaimedBy.Value)
                 .OrderBy(n => n.CreatedAt)
                 .FirstOrDefault();
 
-            if (firstResponse != null)
-            {
-                var responseTime = (firstResponse.CreatedAt - ticket.CreatedAt).TotalMinutes;
-                if (!metrics.ContainsKey(ticket.ClaimedBy.Value))
-                    metrics[ticket.ClaimedBy.Value] = (0, 0);
+            if (firstResponse == null) continue;
+            var responseTime = (firstResponse.CreatedAt - ticket.CreatedAt).TotalMinutes;
+            if (!metrics.ContainsKey(ticket.ClaimedBy.Value))
+                metrics[ticket.ClaimedBy.Value] = (0, 0);
 
-                var current = metrics[ticket.ClaimedBy.Value];
-                metrics[ticket.ClaimedBy.Value] = (current.totalMinutes + responseTime, current.count + 1);
-            }
+            var current = metrics[ticket.ClaimedBy.Value];
+            metrics[ticket.ClaimedBy.Value] = (current.totalMinutes + responseTime, current.count + 1);
         }
 
         return metrics.ToDictionary(
@@ -2890,7 +3854,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
                 Color = color
             };
 
-            ctx.TicketPriorities.Add(priority);
+            await ctx.InsertWithInt32IdentityAsync(priority);
 
 
             return true;
@@ -2929,7 +3893,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
                 ticket.Priority = null;
             }
 
-            ctx.TicketPriorities.Remove(priority);
+            await ctx.DeleteAsync(priority);
 
 
             return true;
@@ -2953,8 +3917,8 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     {
         await using var ctx = await dbFactory.CreateConnectionAsync();
         var ticket = await ctx.Tickets
-            .Include(t => t.Button)
-            .Include(t => t.SelectOption)
+            .LoadWithAsTable(t => t.Button)
+            .LoadWithAsTable(t => t.SelectOption)
             .FirstOrDefaultAsync(t => t.ChannelId == channelId && t.GuildId == guild.Id);
 
         if (ticket == null || ticket.ClosedAt.HasValue)
@@ -2982,7 +3946,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
                 var embed = new EmbedBuilder()
                     .WithTitle("Ticket Priority Updated")
                     .WithDescription($"Priority set to {priority.Emoji} **{priority.Name}** by {staff.Mention}")
-                    .WithColor(new Color(priority.Color))
+                    .WithColor(new Color((uint)priority.Color))
                     .WithCurrentTimestamp()
                     .Build();
 
@@ -3039,7 +4003,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
                 Color = color
             };
 
-            ctx.TicketTags.Add(tag);
+            await ctx.InsertWithInt32IdentityAsync(tag);
 
 
             return true;
@@ -3075,10 +4039,10 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
 
             foreach (var ticket in tickets)
             {
-                ticket.Tags.Remove(id);
+                ((IList)ticket.Tags).Remove(id);
             }
 
-            ctx.TicketTags.Remove(tag);
+            await ctx.DeleteAsync(tag);
 
 
             return true;
@@ -3122,7 +4086,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
             {
                 if (ticket.Tags.Contains(tag.TagId))
                 {
-                    ticket.Tags.Remove(tag.TagId);
+                    ((IList)ticket.Tags).Remove(tag.TagId);
                     removedTags.Add(tag);
                 }
             }
@@ -3215,7 +4179,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
 
             foreach (var tagId in validTagIds)
             {
-                ticket.Tags.Remove(tagId);
+                ((IList)ticket.Tags).Remove(tagId);
             }
 
             ticket.LastActivityAt = DateTime.UtcNow;
@@ -3259,11 +4223,11 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
 
         if (settings == null)
         {
-            settings = new GuildTicketSettings
+            settings = new GuildTicketSetting
             {
                 GuildId = guild.Id, BlacklistedUsers = []
             };
-            ctx.GuildTicketSettings.Add(settings);
+            await ctx.InsertAsync(settings);
         }
 
         if (settings.BlacklistedUsers.Contains(userId))
@@ -3271,7 +4235,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
 
         try
         {
-            settings.BlacklistedUsers.Add(userId);
+            ((IList)settings.BlacklistedUsers).Add(userId);
 
 
             // Log the blacklist if logging is enabled
@@ -3302,83 +4266,6 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     }
 
     /// <summary>
-    ///     Blacklists a user from creating tickets using a specific button or select option.
-    /// </summary>
-    /// <param name="guildId">The ID of the guild.</param>
-    /// <param name="userId">The ID of the user to blacklist.</param>
-    /// <param name="ticketCreatorId">The ID of the button or select option to blacklist from.</param>
-    /// <param name="reason">The optional reason for the blacklist.</param>
-    /// <returns>True if the user was successfully blacklisted from the ticket type, false otherwise.</returns>
-    public async Task<bool> BlacklistUserFromTicketType(IGuild guild, ulong userId, string ticketCreatorId,
-        string reason = null)
-    {
-        await using var ctx = await dbFactory.CreateConnectionAsync();
-        var settings = await ctx.GuildTicketSettings
-            .FirstOrDefaultAsync(s => s.GuildId == guild.Id);
-
-        if (settings == null)
-        {
-            settings = new GuildTicketSettings
-            {
-                GuildId = guild.Id, BlacklistedTypes = new Dictionary<ulong, List<string>>()
-            };
-            ctx.GuildTicketSettings.Add(settings);
-        }
-
-        try
-        {
-            // Initialize user's blacklisted types if not exists
-            if (!settings.BlacklistedTypes.ContainsKey(userId))
-            {
-                settings.BlacklistedTypes[userId] = [];
-            }
-
-            // Check if already blacklisted from this type
-            if (settings.BlacklistedTypes[userId].Contains(ticketCreatorId))
-                return false;
-
-            // Verify the ticket creator ID exists
-            var creatorExists = await ctx.PanelButtons.AnyAsync(b => b.CustomId == ticketCreatorId) ||
-                                await ctx.SelectMenuOptions.AnyAsync(o => o.Value == ticketCreatorId);
-
-            if (!creatorExists)
-                return false;
-
-            settings.BlacklistedTypes[userId].Add(ticketCreatorId);
-
-
-            // Log the type-specific blacklist if logging is enabled
-            if (settings.LogChannelId.HasValue)
-            {
-                var logChannel = await guild.GetTextChannelAsync(settings.LogChannelId.Value);
-                if (logChannel != null)
-                {
-                    // Get the label of the button or select option
-                    var creatorLabel = await GetTicketCreatorLabel(ctx, ticketCreatorId);
-
-                    var embed = new EmbedBuilder()
-                        .WithTitle("User Blacklisted from Ticket Type")
-                        .WithDescription($"<@{userId}> has been blacklisted from creating {creatorLabel} tickets.")
-                        .AddField("Reason", reason ?? "No reason provided")
-                        .WithColor(Color.Red)
-                        .WithCurrentTimestamp()
-                        .Build();
-
-                    await logChannel.SendMessageAsync(embed: embed);
-                }
-            }
-
-            return true;
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "Error blacklisting user {UserId} from ticket type {TicketType} in guild {GuildId}",
-                userId, ticketCreatorId, guild.Id);
-            return false;
-        }
-    }
-
-    /// <summary>
     ///     Removes a user from the ticket blacklist.
     /// </summary>
     /// <param name="guildId">The ID of the guild.</param>
@@ -3395,13 +4282,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
 
         try
         {
-            settings.BlacklistedUsers.Remove(userId);
-            // Also clear any type-specific blacklists
-            if (settings.BlacklistedTypes.ContainsKey(userId))
-            {
-                settings.BlacklistedTypes.Remove(userId);
-            }
-
+            ((IList)settings.BlacklistedUsers).Remove(userId);
 
 
             // Log the unblacklist if logging is enabled
@@ -3431,61 +4312,6 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     }
 
     /// <summary>
-    ///     Removes a user's blacklist from a specific button or select option.
-    /// </summary>
-    /// <param name="guildId">The ID of the guild.</param>
-    /// <param name="userId">The ID of the user to unblacklist.</param>
-    /// <param name="ticketCreatorId">The ID of the button or select option to unblacklist from.</param>
-    /// <returns>True if the user was successfully unblacklisted from the ticket type, false otherwise.</returns>
-    public async Task<bool> UnblacklistUserFromTicketType(IGuild guild, ulong userId, string ticketCreatorId)
-    {
-        await using var ctx = await dbFactory.CreateConnectionAsync();
-        var settings = await ctx.GuildTicketSettings
-            .FirstOrDefaultAsync(s => s.GuildId == guild.Id);
-
-        if (settings?.BlacklistedTypes == null ||
-            !settings.BlacklistedTypes.ContainsKey(userId) ||
-            !settings.BlacklistedTypes[userId].Contains(ticketCreatorId))
-            return false;
-
-        try
-        {
-            settings.BlacklistedTypes[userId].Remove(ticketCreatorId);
-
-            // Remove the user's entry if no more blacklisted types
-            if (settings.BlacklistedTypes[userId].Count == 0)
-            {
-                settings.BlacklistedTypes.Remove(userId);
-            }
-
-
-
-            // Log the type-specific unblacklist if logging is enabled
-            if (!settings.LogChannelId.HasValue) return true;
-            var logChannel = await guild.GetTextChannelAsync(settings.LogChannelId.Value);
-            if (logChannel == null) return true;
-            var creatorLabel = await GetTicketCreatorLabel(ctx, ticketCreatorId);
-
-            var embed = new EmbedBuilder()
-                .WithTitle("User Unblacklisted from Ticket Type")
-                .WithDescription($"<@{userId}> has been unblacklisted from creating {creatorLabel} tickets.")
-                .WithColor(Color.Green)
-                .WithCurrentTimestamp()
-                .Build();
-
-            await logChannel.SendMessageAsync(embed: embed);
-
-            return true;
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "Error unblacklisting user {UserId} from ticket type {TicketType} in guild {GuildId}",
-                userId, ticketCreatorId, guild.Id);
-            return false;
-        }
-    }
-
-    /// <summary>
     ///     Gets a list of all blacklisted users in a guild.
     /// </summary>
     /// <param name="guildId">The ID of the guild.</param>
@@ -3507,19 +4333,6 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
             result[userId] = [];
         }
 
-        // Add type-specific blacklists
-        foreach (var kvp in settings.BlacklistedTypes)
-        {
-            if (result.ContainsKey(kvp.Key))
-            {
-                result[kvp.Key].AddRange(kvp.Value);
-            }
-            else
-            {
-                result[kvp.Key] = kvp.Value;
-            }
-        }
-
         return result;
     }
 
@@ -3536,8 +4349,8 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
 
         var cutoffTime = DateTime.UtcNow - inactiveTime;
         var inactiveTickets = await ctx.Tickets
-            .Include(t => t.Button)
-            .Include(t => t.SelectOption)
+            .LoadWithAsTable(t => t.Button)
+            .LoadWithAsTable(t => t.SelectOption)
             .Where(t => t.GuildId == guild.Id
                         && !t.ClosedAt.HasValue
                         && t.LastActivityAt <= cutoffTime)
@@ -3634,7 +4447,6 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
 
         if (moved > 0)
         {
-
         }
 
         return (moved, failed);
@@ -3745,7 +4557,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     /// <param name="panelId">The ID of the panel to update.</param>
     /// <param name="embedJson">The new embed JSON configuration.</param>
     /// <returns>True if the panel was successfully updated, false otherwise.</returns>
-    public async Task<bool> UpdatePanelEmbedAsync(IGuild guild, ulong panelId, string embedJson)
+    public async Task<bool> UpdatePanelEmbedAsync(IGuild guild, int panelId, string embedJson)
     {
         await using var ctx = await dbFactory.CreateConnectionAsync();
         var panel = await ctx.TicketPanels.FindAsync(panelId);
@@ -3792,8 +4604,8 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     {
         await using var ctx = await dbFactory.CreateConnectionAsync();
         var panel = await ctx.TicketPanels
-            .Include(p => p.Buttons)
-            .Include(p => p.SelectMenus)
+            .LoadWithAsTable(p => p.PanelButtons)
+            .LoadWithAsTable(p => p.PanelSelectMenus)
             .FirstOrDefaultAsync(p => p.MessageId == panelId);
 
         if (panel == null || panel.GuildId != guild.Id)
@@ -3826,15 +4638,15 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
             var components = new ComponentBuilder();
 
             // Rebuild buttons
-            if (panel.Buttons?.Any() == true)
+            if (panel.PanelButtons?.Any() == true)
             {
                 var buttonRow = new ActionRowBuilder();
-                foreach (var button in panel.Buttons)
+                foreach (var button in panel.PanelButtons)
                 {
                     var btnBuilder = new ButtonBuilder()
                         .WithLabel(button.Label)
                         .WithCustomId(button.CustomId)
-                        .WithStyle(button.Style);
+                        .WithStyle((ButtonStyle)button.Style);
 
                     if (!string.IsNullOrEmpty(button.Emoji))
                         btnBuilder.WithEmote(Emote.Parse(button.Emoji));
@@ -3846,15 +4658,16 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
             }
 
             // Rebuild select menus
-            if (panel.SelectMenus?.Any() == true)
+            if (panel.PanelSelectMenus?.Any() == true)
             {
-                foreach (var menu in panel.SelectMenus)
+                foreach (var menu in panel.PanelSelectMenus)
                 {
                     var selectBuilder = new SelectMenuBuilder()
                         .WithCustomId(menu.CustomId)
-                        .WithPlaceholder(menu.Placeholder);
+                        .WithPlaceholder(menu.Placeholder)
+                        .WithMaxValues(1);
 
-                    foreach (var option in menu.Options)
+                    foreach (var option in menu.SelectMenuOptions)
                     {
                         var optBuilder = new SelectMenuOptionBuilder()
                             .WithLabel(option.Label)
@@ -3887,23 +4700,40 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     }
 
     /// <summary>
-    ///     Duplicates an existing panel to a new channel.
+    ///     Duplicates an existing panel to a new channel
     /// </summary>
-    /// <param name="guild">The guild containing the panel.</param>
-    /// <param name="panelId">The ID of the panel to duplicate.</param>
-    /// <param name="newChannelId">The ID of the channel to create the duplicate in.</param>
-    /// <returns>The newly created panel, or null if duplication failed.</returns>
+    /// <param name="guild">The guild containing the panel</param>
+    /// <param name="panelId">The ID of the panel to duplicate</param>
+    /// <param name="newChannelId">The ID of the channel to create the duplicate in</param>
+    /// <returns>The newly created panel, or null if duplication failed</returns>
     public async Task<TicketPanel?> DuplicatePanelAsync(IGuild guild, ulong panelId, ulong newChannelId)
     {
         await using var ctx = await dbFactory.CreateConnectionAsync();
+
+        // Load the source panel
         var sourcePanel = await ctx.TicketPanels
-            .Include(p => p.Buttons)
-            .Include(p => p.SelectMenus)
-            .ThenInclude(m => m.Options)
             .FirstOrDefaultAsync(p => p.MessageId == panelId);
 
         if (sourcePanel == null || sourcePanel.GuildId != guild.Id)
             return null;
+
+        // Load buttons for the source panel
+        var sourceButtons = await ctx.PanelButtons
+            .Where(b => b.PanelId == sourcePanel.Id)
+            .ToListAsync();
+
+        // Load select menus for the source panel
+        var sourceMenus = await ctx.PanelSelectMenus
+            .Where(m => m.PanelId == sourcePanel.Id)
+            .ToListAsync();
+
+        // Load options for all source menus
+        var sourceMenuIds = sourceMenus.Select(m => m.Id).ToArray();
+        var sourceOptions = sourceMenuIds.Any()
+            ? await ctx.SelectMenuOptions
+                .Where(o => sourceMenuIds.Contains(o.SelectMenuId))
+                .ToListAsync()
+            : new List<SelectMenuOption>();
 
         try
         {
@@ -3914,23 +4744,27 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
             SmartEmbed.TryParse(sourcePanel.EmbedJson, guild.Id, out var embeds, out var plainText, out _);
             var message = await newChannel.SendMessageAsync(plainText, embeds: embeds);
 
-            var newPanel = new TicketPanel
+            await using var transaction = await ctx.BeginTransactionAsync();
+            try
             {
-                GuildId = guild.Id,
-                ChannelId = newChannelId,
-                MessageId = message.Id,
-                EmbedJson = sourcePanel.EmbedJson,
-                Buttons = [],
-                SelectMenus = []
-            };
+                var newPanel = new TicketPanel
+                {
+                    GuildId = guild.Id,
+                    ChannelId = newChannelId,
+                    MessageId = message.Id,
+                    EmbedJson = sourcePanel.EmbedJson
+                };
 
-            // Duplicate buttons
-            if (sourcePanel.Buttons != null)
-            {
-                foreach (var sourceButton in sourcePanel.Buttons)
+                // Insert the new panel and get its ID
+                newPanel.Id = await ctx.InsertWithInt32IdentityAsync(newPanel);
+
+                // Duplicate buttons
+                var newButtons = new List<PanelButton>();
+                foreach (var sourceButton in sourceButtons)
                 {
                     var newButton = new PanelButton
                     {
+                        PanelId = newPanel.Id,
                         Label = sourceButton.Label,
                         Emoji = sourceButton.Emoji,
                         CustomId = $"ticket_btn_{Guid.NewGuid():N}",
@@ -3940,8 +4774,8 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
                         ChannelNameFormat = sourceButton.ChannelNameFormat,
                         CategoryId = sourceButton.CategoryId,
                         ArchiveCategoryId = sourceButton.ArchiveCategoryId,
-                        SupportRoles = [..sourceButton.SupportRoles],
-                        ViewerRoles = [..sourceButton.ViewerRoles],
+                        SupportRoles = [..sourceButton.SupportRoles ?? []],
+                        ViewerRoles = [..sourceButton.ViewerRoles ?? []],
                         AutoCloseTime = sourceButton.AutoCloseTime,
                         RequiredResponseTime = sourceButton.RequiredResponseTime,
                         MaxActiveTickets = sourceButton.MaxActiveTickets,
@@ -3949,62 +4783,73 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
                         DefaultPriority = sourceButton.DefaultPriority,
                         SaveTranscript = sourceButton.SaveTranscript
                     };
-                    newPanel.Buttons.Add(newButton);
+                    newButton.Id = await ctx.InsertWithInt32IdentityAsync(newButton);
+                    newButtons.Add(newButton);
                 }
-            }
 
-            // Duplicate select menus
-            if (sourcePanel.SelectMenus != null)
-            {
-                foreach (var sourceMenu in sourcePanel.SelectMenus)
+                // Duplicate select menus
+                var newMenus = new List<PanelSelectMenu>();
+                foreach (var sourceMenu in sourceMenus)
                 {
                     var newMenu = new PanelSelectMenu
                     {
+                        PanelId = newPanel.Id,
                         CustomId = $"ticket_select_{Guid.NewGuid():N}",
-                        Placeholder = sourceMenu.Placeholder,
-                        Options = []
+                        Placeholder = sourceMenu.Placeholder
                     };
+                    newMenu.Id = await ctx.InsertWithInt32IdentityAsync(newMenu);
 
                     // Duplicate menu options
-                    if (sourceMenu.Options != null)
+                    var menuSourceOptions = sourceOptions.Where(o => o.SelectMenuId == sourceMenu.Id).ToList();
+                    var newOptions = new List<SelectMenuOption>();
+
+                    foreach (var sourceOption in menuSourceOptions)
                     {
-                        foreach (var sourceOption in sourceMenu.Options)
+                        var newOption = new SelectMenuOption
                         {
-                            var newOption = new SelectMenuOption
-                            {
-                                Label = sourceOption.Label,
-                                Value = $"option_{Guid.NewGuid():N}",
-                                Description = sourceOption.Description,
-                                Emoji = sourceOption.Emoji,
-                                OpenMessageJson = sourceOption.OpenMessageJson,
-                                ModalJson = sourceOption.ModalJson,
-                                ChannelNameFormat = sourceOption.ChannelNameFormat,
-                                CategoryId = sourceOption.CategoryId,
-                                ArchiveCategoryId = sourceOption.ArchiveCategoryId,
-                                SupportRoles = [..sourceOption.SupportRoles ?? []],
-                                ViewerRoles = [..sourceOption.ViewerRoles ?? []],
-                                AutoCloseTime = sourceOption.AutoCloseTime,
-                                RequiredResponseTime = sourceOption.RequiredResponseTime,
-                                MaxActiveTickets = sourceOption.MaxActiveTickets,
-                                AllowedPriorities =
-                                    [..sourceOption.AllowedPriorities ?? []],
-                                DefaultPriority = sourceOption.DefaultPriority
-                            };
-                            newMenu.Options.Add(newOption);
-                        }
+                            SelectMenuId = newMenu.Id,
+                            Label = sourceOption.Label,
+                            Value = $"option_{Guid.NewGuid():N}",
+                            Description = sourceOption.Description,
+                            Emoji = sourceOption.Emoji,
+                            OpenMessageJson = sourceOption.OpenMessageJson,
+                            ModalJson = sourceOption.ModalJson,
+                            ChannelNameFormat = sourceOption.ChannelNameFormat,
+                            CategoryId = sourceOption.CategoryId,
+                            ArchiveCategoryId = sourceOption.ArchiveCategoryId,
+                            SupportRoles = [..sourceOption.SupportRoles ?? []],
+                            ViewerRoles = [..sourceOption.ViewerRoles ?? []],
+                            AutoCloseTime = sourceOption.AutoCloseTime,
+                            RequiredResponseTime = sourceOption.RequiredResponseTime,
+                            MaxActiveTickets = sourceOption.MaxActiveTickets,
+                            AllowedPriorities = [..sourceOption.AllowedPriorities ?? []],
+                            DefaultPriority = sourceOption.DefaultPriority,
+                            SaveTranscript = sourceOption.SaveTranscript
+                        };
+                        newOption.Id = await ctx.InsertWithInt32IdentityAsync(newOption);
+                        newOptions.Add(newOption);
                     }
 
-                    newPanel.SelectMenus.Add(newMenu);
+                    newMenu.SelectMenuOptions = newOptions;
+                    newMenus.Add(newMenu);
                 }
+
+                // Set up in-memory relationships for UpdatePanelComponentsAsync
+                newPanel.PanelButtons = newButtons;
+                newPanel.PanelSelectMenus = newMenus;
+
+                await transaction.CommitAsync();
+
+                // Update message with components
+                await UpdatePanelComponentsAsync(newPanel);
+
+                return newPanel;
             }
-
-            await ctx.InsertAsync(newPanel);
-
-
-            // Update message with components
-            await UpdatePanelComponentsAsync(newPanel);
-
-            return newPanel;
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
         }
         catch (Exception ex)
         {
@@ -4014,47 +4859,94 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     }
 
     /// <summary>
-    ///     Reorders buttons on a panel.
+    ///     Reorders buttons on a panel
     /// </summary>
-    /// <param name="guild">The guild containing the panel.</param>
-    /// <param name="panelId">The ID of the panel.</param>
-    /// <param name="buttonOrder">List of button IDs in the desired order.</param>
-    /// <returns>True if the buttons were successfully reordered, false otherwise.</returns>
+    /// <param name="guild">The guild containing the panel</param>
+    /// <param name="panelId">The ID of the panel</param>
+    /// <param name="buttonOrder">List of button IDs in the desired order</param>
+    /// <returns>True if the buttons were successfully reordered, false otherwise</returns>
     public async Task<bool> ReorderPanelButtonsAsync(IGuild guild, ulong panelId, List<int> buttonOrder)
     {
         await using var ctx = await dbFactory.CreateConnectionAsync();
+
+        // Load the panel
         var panel = await ctx.TicketPanels
-            .Include(p => p.Buttons)
             .FirstOrDefaultAsync(p => p.MessageId == panelId && p.GuildId == guild.Id);
 
-        if (panel == null || panel.Buttons == null)
+        if (panel == null)
+            return false;
+
+        // Load the panel's buttons
+        var panelButtons = await ctx.PanelButtons
+            .Where(b => b.PanelId == panel.Id)
+            .ToListAsync();
+
+        if (!panelButtons.Any())
             return false;
 
         // Validate that all buttons exist and are part of this panel
-        if (!buttonOrder.All(id => panel.Buttons.Any(b => b.Id == id)))
+        if (!buttonOrder.All(id => panelButtons.Any(b => b.Id == id)))
             return false;
 
         try
         {
-            // Create a temporary list to store the new order
-            var reorderedButtons = new List<PanelButton>();
-            foreach (var buttonId in buttonOrder)
+            await using var transaction = await ctx.BeginTransactionAsync();
+            try
             {
-                var button = panel.Buttons.First(b => b.Id == buttonId);
-                reorderedButtons.Add(button);
-            }
+                // Delete all existing buttons for this panel
+                await ctx.PanelButtons
+                    .Where(b => b.PanelId == panel.Id)
+                    .DeleteAsync();
 
-            // Clear and reassign the buttons in the new order
-            panel.Buttons.Clear();
-            foreach (var button in reorderedButtons)
+                // Re-insert buttons in the new order
+                var reorderedButtons = new List<PanelButton>();
+                for (var i = 0; i < buttonOrder.Count; i++)
+                {
+                    var buttonId = buttonOrder[i];
+                    var originalButton = panelButtons.First(b => b.Id == buttonId);
+
+                    // Create new button with same data
+                    var reorderedButton = new PanelButton
+                    {
+                        PanelId = panel.Id,
+                        Label = originalButton.Label,
+                        Emoji = originalButton.Emoji,
+                        CustomId = originalButton.CustomId, // Keep the same CustomId
+                        Style = originalButton.Style,
+                        OpenMessageJson = originalButton.OpenMessageJson,
+                        ModalJson = originalButton.ModalJson,
+                        ChannelNameFormat = originalButton.ChannelNameFormat,
+                        CategoryId = originalButton.CategoryId,
+                        ArchiveCategoryId = originalButton.ArchiveCategoryId,
+                        SupportRoles = [..originalButton.SupportRoles ?? []],
+                        ViewerRoles = [..originalButton.ViewerRoles ?? []],
+                        AutoCloseTime = originalButton.AutoCloseTime,
+                        RequiredResponseTime = originalButton.RequiredResponseTime,
+                        MaxActiveTickets = originalButton.MaxActiveTickets,
+                        AllowedPriorities = [..originalButton.AllowedPriorities ?? []],
+                        DefaultPriority = originalButton.DefaultPriority,
+                        SaveTranscript = originalButton.SaveTranscript
+                    };
+
+                    // Insert and get new ID
+                    reorderedButton.Id = await ctx.InsertWithInt32IdentityAsync(reorderedButton);
+                    reorderedButtons.Add(reorderedButton);
+                }
+
+                await transaction.CommitAsync();
+
+                // Update the in-memory collection for UpdatePanelComponentsAsync
+                panel.PanelButtons = reorderedButtons;
+
+                await UpdatePanelComponentsAsync(panel);
+
+                return true;
+            }
+            catch
             {
-                panel.Buttons.Add(button);
+                await transaction.RollbackAsync();
+                throw;
             }
-
-
-            await UpdatePanelComponentsAsync(panel);
-
-            return true;
         }
         catch (Exception ex)
         {
@@ -4062,6 +4954,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
             return false;
         }
     }
+
 
     /// <summary>
     ///     Updates the required response time for all tickets created by a button or select option.
@@ -4074,7 +4967,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     {
         await using var ctx = await dbFactory.CreateConnectionAsync();
         var button = await ctx.PanelButtons
-            .Include(b => b.Panel)
+            .LoadWithAsTable(b => b.Panel)
             .FirstOrDefaultAsync(b => b.Id == buttonId && b.Panel.GuildId == guild.Id);
 
         if (button == null)
@@ -4126,7 +5019,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
     {
         await using var ctx = await dbFactory.CreateConnectionAsync();
         var button = await ctx.PanelButtons
-            .Include(b => b.Panel)
+            .LoadWithAsTable(b => b.Panel)
             .FirstOrDefaultAsync(b => b.Id == buttonId && b.Panel.GuildId == guild.Id);
 
         if (button == null)
@@ -4145,7 +5038,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
                         button.Emoji = (string)setting.Value;
                         break;
                     case "style":
-                        button.Style = (ButtonStyle)setting.Value;
+                        button.Style = (int)setting.Value;
                         break;
                     case "categoryid":
                         button.CategoryId = (ulong?)setting.Value;
@@ -4154,10 +5047,10 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
                         button.ArchiveCategoryId = (ulong?)setting.Value;
                         break;
                     case "supportroles":
-                        button.SupportRoles = (List<ulong>)setting.Value;
+                        button.SupportRoles = (ulong[])setting.Value;
                         break;
                     case "viewerroles":
-                        button.ViewerRoles = (List<ulong>)setting.Value;
+                        button.ViewerRoles = (ulong[])setting.Value;
                         break;
                     case "autoclosetime":
                         button.AutoCloseTime = (TimeSpan?)setting.Value;
@@ -4169,7 +5062,7 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
                         button.MaxActiveTickets = (int)setting.Value;
                         break;
                     case "allowedpriorities":
-                        button.AllowedPriorities = (List<string>)setting.Value;
+                        button.AllowedPriorities = (string[])setting.Value;
                         break;
                     case "defaultpriority":
                         button.DefaultPriority = (string)setting.Value;
@@ -4177,10 +5070,44 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
                     case "savetranscript":
                         button.SaveTranscript = (bool)setting.Value;
                         break;
+                    case "deleteonclose":
+                        button.DeleteOnClose = (bool)setting.Value;
+                        break;
+                    case "lockonclose":
+                        button.LockOnClose = (bool)setting.Value;
+                        break;
+                    case "renameonclose":
+                        button.RenameOnClose = (bool)setting.Value;
+                        break;
+                    case "removecreatoronclose":
+                        button.RemoveCreatorOnClose = (bool)setting.Value;
+                        break;
+                    case "deletedelay":
+                        button.DeleteDelay = (TimeSpan)setting.Value;
+                        break;
+                    case "lockonarchive":
+                        button.LockOnArchive = (bool)setting.Value;
+                        break;
+                    case "renameonarchive":
+                        button.RenameOnArchive = (bool)setting.Value;
+                        break;
+                    case "removecreatoronarchive":
+                        button.RemoveCreatorOnArchive = (bool)setting.Value;
+                        break;
+                    case "autoarchiveonclose":
+                        button.AutoArchiveOnClose = (bool)setting.Value;
+                        break;
+
+                    default:
+                        Log.Warning("Unknown button setting: {SettingKey}", setting.Key);
+                        break;
                 }
             }
 
+            // Actually save the changes to the database
+            await ctx.UpdateAsync(button);
 
+            // Update the panel components in Discord
             await UpdatePanelComponentsAsync(button.Panel);
 
             return true;
@@ -4191,20 +5118,4 @@ public async Task<List<PanelInfo>> GetAllPanelsAsync(ulong guildId)
             return false;
         }
     }
-
-    private static async Task<string> GetTicketCreatorLabel(MewdekoContext ctx, string creatorId)
-    {
-        // Try to find as button first
-        var button = await ctx.PanelButtons
-            .FirstOrDefaultAsync(b => b.CustomId == creatorId);
-
-        if (button != null)
-            return $"{button.Label} (Button)";
-
-        // Try to find as select option
-        var option = await ctx.SelectMenuOptions
-            .FirstOrDefaultAsync(o => o.Value == creatorId);
-
-        return option != null ? $"{option.Label} (Select Option)" : "Unknown";
-    }
-}*/
+}

@@ -8,6 +8,7 @@
 using LinqToDB.Mapping;
 using System;
 using System.Collections.Generic;
+using Mewdeko.Database.L2DB;
 
 #pragma warning disable 1573, 1591
 #nullable enable
@@ -33,7 +34,8 @@ namespace DataModel
 		[Column("ModalResponses"                                                                                  )] public string?   ModalResponses { get; set; } // text
 		[Column("Priority"                                                                                        )] public string?   Priority       { get; set; } // text
 		[Column("TranscriptUrl"                                                                                   )] public string?   TranscriptUrl  { get; set; } // text
-
+        [Column("IsDeleted")]
+        public bool IsDeleted { get; set; } = false;
 		#region Associations
 		/// <summary>
 		/// FK_TicketNotes_Tickets_TicketId backreference
