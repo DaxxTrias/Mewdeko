@@ -30,13 +30,13 @@ namespace DataModel
 		/// FK_CaseNotes_TicketCases_CaseId backreference
 		/// </summary>
 		[Association(ThisKey = nameof(Id), OtherKey = nameof(CaseNote.CaseId))]
-		public IEnumerable<CaseNote> CaseNotes { get; set; } = null!;
+		public IEnumerable<CaseNote>? CaseNotes { get; set; } = null;
 
 		/// <summary>
 		/// FK_Tickets_TicketCases_CaseId backreference
 		/// </summary>
 		[Association(ThisKey = nameof(Id), OtherKey = nameof(Ticket.CaseId))]
-		public IEnumerable<Ticket> Tickets { get; set; } = null!;
+		public IEnumerable<Ticket>? Tickets { get; set; } = null;
 		#endregion
 	}
 }

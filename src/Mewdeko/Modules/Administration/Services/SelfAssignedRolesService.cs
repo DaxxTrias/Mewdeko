@@ -66,7 +66,7 @@ public class SelfAssignedRolesService(IDataConnectionFactory dbFactory, GuildSet
         ErrNotPerms // bot doesn't have perms (error)
     }
 
-   /// <summary>
+    /// <summary>
     ///     Adds a new self-assignable role to a guild.
     /// </summary>
     /// <param name="guildId">The ID of the guild to add the role to.</param>
@@ -85,7 +85,7 @@ public class SelfAssignedRolesService(IDataConnectionFactory dbFactory, GuildSet
 
         if (exists) return false;
 
-        var newSar = new SelfAssignableRole()
+        var newSar = new SelfAssignableRole
         {
             Group = group, RoleId = role.Id, GuildId = guildId
         };
@@ -130,8 +130,8 @@ public class SelfAssignedRolesService(IDataConnectionFactory dbFactory, GuildSet
 
         if (roles == null)
         {
-             Log.Warning("SelfAssignableRoles collection is null for Guild {GuildId}", guildUser.GuildId);
-             return (AssignResult.ErrNotAssignable, autoDelete, null);
+            Log.Warning("SelfAssignableRoles collection is null for Guild {GuildId}", guildUser.GuildId);
+            return (AssignResult.ErrNotAssignable, autoDelete, null);
         }
 
         var selfAssignedRoles = roles as SelfAssignableRole[] ?? roles.ToArray();
@@ -158,15 +158,16 @@ public class SelfAssignedRolesService(IDataConnectionFactory dbFactory, GuildSet
 
             if (rolesToRemove.Any())
             {
-                 try
-                 {
-                     await guildUser.RemoveRolesAsync(rolesToRemove).ConfigureAwait(false);
-                     await Task.Delay(300).ConfigureAwait(false);
-                 }
-                 catch (Exception ex)
-                 {
-                     Log.Warning(ex, "Error removing exclusive roles for SAR assignment for user {UserId}", guildUser.Id);
-                 }
+                try
+                {
+                    await guildUser.RemoveRolesAsync(rolesToRemove).ConfigureAwait(false);
+                    await Task.Delay(300).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    Log.Warning(ex, "Error removing exclusive roles for SAR assignment for user {UserId}",
+                        guildUser.Id);
+                }
             }
         }
 
@@ -221,6 +222,7 @@ public class SelfAssignedRolesService(IDataConnectionFactory dbFactory, GuildSet
             await db.UpdateAsync(toUpdate).ConfigureAwait(false);
             set = true;
         }
+
         return set;
     }
 
@@ -283,7 +285,8 @@ public class SelfAssignedRolesService(IDataConnectionFactory dbFactory, GuildSet
     ///     auto-deletion is enabled, a boolean indicating whether exclusive self-assignable roles are enabled, and a
     ///     collection of self-assignable roles. Returns null for the roles collection if config not found.
     /// </returns>
-    public async Task<(bool AutoDelete, bool Exclusive, IEnumerable<SelfAssignableRole>? Roles)> GetAdAndRoles(ulong guildId)
+    public async Task<(bool AutoDelete, bool Exclusive, IEnumerable<SelfAssignableRole>? Roles)> GetAdAndRoles(
+        ulong guildId)
     {
         var config = await gss.GetGuildConfig(guildId);
         if (config == null)
@@ -351,7 +354,10 @@ public class SelfAssignedRolesService(IDataConnectionFactory dbFactory, GuildSet
     ///     exclusive self-assignable roles are enabled, a collection of tuples containing self-assignable role models and
     ///     their corresponding roles, and a dictionary mapping group numbers to their names.
     /// </returns>
-    public async Task<(bool Exclusive, IEnumerable<(SelfAssignableRole Model, IRole Role)> Roles, IDictionary<int, string> GroupNames)> GetRoles(IGuild guild)
+    public async
+        Task<(bool Exclusive, IEnumerable<(SelfAssignableRole Model, IRole Role)> Roles, IDictionary<int, string>
+            GroupNames
+            )> GetRoles(IGuild guild)
     {
         var config = await gss.GetGuildConfig(guild.Id);
         var exclusive = config?.ExclusiveSelfAssignedRoles ?? false;
@@ -387,7 +393,8 @@ public class SelfAssignedRolesService(IDataConnectionFactory dbFactory, GuildSet
             }
             catch (Exception ex)
             {
-                 Log.Error(ex, "Failed to remove non-existent roles from SelfAssignableRoles for Guild {GuildId}", guild.Id);
+                Log.Error(ex, "Failed to remove non-existent roles from SelfAssignableRoles for Guild {GuildId}",
+                    guild.Id);
             }
         }
 

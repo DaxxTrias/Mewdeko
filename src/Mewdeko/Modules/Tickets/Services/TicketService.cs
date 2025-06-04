@@ -6,6 +6,7 @@ using LinqToDB;
 using Mewdeko.Database.L2DB;
 using Mewdeko.Modules.Tickets.Common;
 using Serilog;
+using Embed = Mewdeko.Common.Embed;
 using SelectMenuOption = DataModel.SelectMenuOption;
 
 namespace Mewdeko.Modules.Tickets.Services;
@@ -15,10 +16,10 @@ namespace Mewdeko.Modules.Tickets.Services;
 /// </summary>
 public class TicketService : INService
 {
-    private readonly IDataConnectionFactory dbFactory;
-    private readonly DiscordShardedClient client;
     private const string ClaimButtonId = "ticket_claim";
     private const string CloseButtonId = "ticket_close";
+    private readonly DiscordShardedClient client;
+    private readonly IDataConnectionFactory dbFactory;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="TicketService" /> class.
@@ -46,7 +47,7 @@ public class TicketService : INService
     /// <returns>The created ticket panel</returns>
     public async Task<TicketPanel> CreatePanelAsync(
         ITextChannel channel,
-        string embedJson = null,
+        string? embedJson = null,
         string title = "Support Tickets",
         string description = "Click a button below to create a ticket",
         Color? color = null)
@@ -56,8 +57,14 @@ public class TicketService : INService
         if (string.IsNullOrWhiteSpace(embedJson))
         {
             // Create default embed JSON
-            finalJson =
-                "{\n  \"embeds\": [\n    {\n      \"title\": \"Support Tickets\",\n      \"description\": \"Click a button below to create a ticket\",\n      \"color\": \"#00e584\"\n    }\n  ]\n}";
+            var embed = new NewEmbed
+            {
+                Embed = new Embed
+                {
+                    Title = title, Description = description, Color = Mewdeko.OkColor
+                }
+            };
+            finalJson = JsonSerializer.Serialize(embed);
         }
         else
         {
@@ -1306,7 +1313,8 @@ public class TicketService : INService
 
                     foreach (var option in menu.SelectMenuOptions)
                     {
-                        Log.Information("Processing option: ID={Id}, Label='{Label}', Value='{Value}', SelectMenuId={SelectMenuId}",
+                        Log.Information(
+                            "Processing option: ID={Id}, Label='{Label}', Value='{Value}', SelectMenuId={SelectMenuId}",
                             option.Id, option.Label ?? "NULL", option.Value ?? "NULL", option.SelectMenuId);
 
                         if (string.IsNullOrWhiteSpace(option.Label))
@@ -2484,6 +2492,7 @@ public class TicketService : INService
                 Log.Error("Failed to load complete menu after creation");
                 throw new InvalidOperationException("Failed to load created menu");
             }
+
             if (updateComponents)
                 await UpdatePanelComponentsAsync(panel);
 
@@ -3514,108 +3523,6 @@ public class TicketService : INService
             Log.Error(ex, "Error unlinking ticket {TicketId} from case", ticketId);
             return false;
         }
-    }
-
-    /// <summary>
-    ///     Represents statistics about tickets in a guild.
-    /// </summary>
-    public class GuildStatistics
-    {
-        /// <summary>
-        ///     Gets or sets the total number of tickets ever created in the guild.
-        /// </summary>
-        public int TotalTickets { get; set; }
-
-        /// <summary>
-        ///     Gets or sets the number of currently open tickets in the guild.
-        /// </summary>
-        public int OpenTickets { get; set; }
-
-        /// <summary>
-        ///     Gets or sets the number of closed tickets in the guild.
-        /// </summary>
-        public int ClosedTickets { get; set; }
-
-        /// <summary>
-        ///     Gets or sets the average time in minutes between ticket creation and first staff response.
-        /// </summary>
-        public double AverageResponseTime { get; set; }
-
-        /// <summary>
-        ///     Gets or sets the average time in hours between ticket creation and closure.
-        /// </summary>
-        public double AverageResolutionTime { get; set; }
-
-        /// <summary>
-        ///     Gets or sets the distribution of tickets by their type, where the key is the ticket type label
-        ///     and the value is the number of tickets of that type.
-        /// </summary>
-        public Dictionary<string, int> TicketsByType { get; set; }
-
-        /// <summary>
-        ///     Gets or sets the distribution of tickets by their priority level, where the key is the priority name
-        ///     and the value is the number of tickets with that priority.
-        /// </summary>
-        public Dictionary<string, int> TicketsByPriority { get; set; }
-    }
-
-    /// <summary>
-    ///     Represents a user's ticket statistics.
-    /// </summary>
-    public class UserStatistics
-    {
-        /// <summary>
-        ///     Gets or sets the total number of tickets created by the user.
-        /// </summary>
-        public int TotalTickets { get; set; }
-
-        /// <summary>
-        ///     Gets or sets the number of currently open tickets created by the user.
-        /// </summary>
-        public int OpenTickets { get; set; }
-
-        /// <summary>
-        ///     Gets or sets the number of closed tickets created by the user.
-        /// </summary>
-        public int ClosedTickets { get; set; }
-
-        /// <summary>
-        ///     Gets or sets the distribution of the user's tickets by type, where the key is the ticket type label
-        ///     and the value is the number of tickets of that type.
-        /// </summary>
-        public Dictionary<string, int> TicketsByType { get; set; }
-
-        /// <summary>
-        ///     Gets or sets a list of the user's most recent tickets.
-        /// </summary>
-        public List<UserTicketInfo> RecentTickets { get; set; }
-    }
-
-    /// <summary>
-    ///     Represents information about a specific ticket for user statistics.
-    /// </summary>
-    public class UserTicketInfo
-    {
-        /// <summary>
-        ///     Gets or sets the unique identifier of the ticket.
-        /// </summary>
-        public int TicketId { get; set; }
-
-        /// <summary>
-        ///     Gets or sets the type or category of the ticket.
-        /// </summary>
-        public string Type { get; set; }
-
-        /// <summary>
-        ///     Gets or sets the date and time when the ticket was created.
-        /// </summary>
-        public DateTime CreatedAt { get; set; }
-
-        /// <summary>
-        ///     Gets or sets the optional date and time when the ticket was closed.
-        ///     If null, the ticket is still open.
-        /// </summary>
-        public DateTime? ClosedAt { get; set; }
     }
 
     /// <summary>
@@ -5117,5 +5024,107 @@ public class TicketService : INService
             Log.Error(ex, "Failed to update settings for button {ButtonId}", buttonId);
             return false;
         }
+    }
+
+    /// <summary>
+    ///     Represents statistics about tickets in a guild.
+    /// </summary>
+    public class GuildStatistics
+    {
+        /// <summary>
+        ///     Gets or sets the total number of tickets ever created in the guild.
+        /// </summary>
+        public int TotalTickets { get; set; }
+
+        /// <summary>
+        ///     Gets or sets the number of currently open tickets in the guild.
+        /// </summary>
+        public int OpenTickets { get; set; }
+
+        /// <summary>
+        ///     Gets or sets the number of closed tickets in the guild.
+        /// </summary>
+        public int ClosedTickets { get; set; }
+
+        /// <summary>
+        ///     Gets or sets the average time in minutes between ticket creation and first staff response.
+        /// </summary>
+        public double AverageResponseTime { get; set; }
+
+        /// <summary>
+        ///     Gets or sets the average time in hours between ticket creation and closure.
+        /// </summary>
+        public double AverageResolutionTime { get; set; }
+
+        /// <summary>
+        ///     Gets or sets the distribution of tickets by their type, where the key is the ticket type label
+        ///     and the value is the number of tickets of that type.
+        /// </summary>
+        public Dictionary<string, int> TicketsByType { get; set; }
+
+        /// <summary>
+        ///     Gets or sets the distribution of tickets by their priority level, where the key is the priority name
+        ///     and the value is the number of tickets with that priority.
+        /// </summary>
+        public Dictionary<string, int> TicketsByPriority { get; set; }
+    }
+
+    /// <summary>
+    ///     Represents a user's ticket statistics.
+    /// </summary>
+    public class UserStatistics
+    {
+        /// <summary>
+        ///     Gets or sets the total number of tickets created by the user.
+        /// </summary>
+        public int TotalTickets { get; set; }
+
+        /// <summary>
+        ///     Gets or sets the number of currently open tickets created by the user.
+        /// </summary>
+        public int OpenTickets { get; set; }
+
+        /// <summary>
+        ///     Gets or sets the number of closed tickets created by the user.
+        /// </summary>
+        public int ClosedTickets { get; set; }
+
+        /// <summary>
+        ///     Gets or sets the distribution of the user's tickets by type, where the key is the ticket type label
+        ///     and the value is the number of tickets of that type.
+        /// </summary>
+        public Dictionary<string, int> TicketsByType { get; set; }
+
+        /// <summary>
+        ///     Gets or sets a list of the user's most recent tickets.
+        /// </summary>
+        public List<UserTicketInfo> RecentTickets { get; set; }
+    }
+
+    /// <summary>
+    ///     Represents information about a specific ticket for user statistics.
+    /// </summary>
+    public class UserTicketInfo
+    {
+        /// <summary>
+        ///     Gets or sets the unique identifier of the ticket.
+        /// </summary>
+        public int TicketId { get; set; }
+
+        /// <summary>
+        ///     Gets or sets the type or category of the ticket.
+        /// </summary>
+        public string Type { get; set; }
+
+        /// <summary>
+        ///     Gets or sets the date and time when the ticket was created.
+        /// </summary>
+        public DateTime CreatedAt { get; set; }
+
+        /// <summary>
+        ///     Gets or sets the optional date and time when the ticket was closed.
+        ///     If null, the ticket is still open.
+        /// </summary>
+        public DateTime? ClosedAt { get; set; }
     }
 }
