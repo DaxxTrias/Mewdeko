@@ -11,12 +11,12 @@ namespace Mewdeko.Modules.CustomVoice.Services;
 /// </summary>
 public class CustomVoiceService : INService
 {
-    private readonly IDataConnectionFactory dbFactory;
-    private readonly DiscordShardedClient client;
-    private readonly EventHandler eventHandler;
     private readonly ConcurrentDictionary<ulong, HashSet<ulong>> activeChannels = new();
+    private readonly DiscordShardedClient client;
+    private readonly IDataConnectionFactory dbFactory;
     private readonly ConcurrentDictionary<ulong, DateTime> emptyChannels = new();
     private readonly ConcurrentDictionary<ulong, Timer> emptyChannelTimers = new();
+    private readonly EventHandler eventHandler;
     private readonly SemaphoreSlim @lock = new(1, 1);
 
     /// <summary>
@@ -574,7 +574,7 @@ public class CustomVoiceService : INService
         // Also set permissions for the associated text channel
         try
         {
-            var textChannel = (ITextChannel)voiceChannel;
+            ITextChannel textChannel = voiceChannel;
             if (textChannel != null && config.AutoPermission)
             {
                 // Give the creator management permissions for the text channel
@@ -798,7 +798,7 @@ public class CustomVoiceService : INService
                     // Text channel
                     try
                     {
-                        var textChannel = (ITextChannel)channel;
+                        ITextChannel textChannel = channel;
                         if (textChannel != null)
                         {
                             await textChannel.AddPermissionOverwriteAsync(guild.EveryoneRole, new OverwritePermissions(
@@ -841,7 +841,7 @@ public class CustomVoiceService : INService
                             // Text channel
                             try
                             {
-                                var textChannel = (ITextChannel)channel;
+                                ITextChannel textChannel = channel;
                                 if (textChannel != null)
                                 {
                                     await textChannel.AddPermissionOverwriteAsync(user, new OverwritePermissions(
@@ -991,7 +991,7 @@ public class CustomVoiceService : INService
                 // Text channel
                 try
                 {
-                    var textChannel = (ITextChannel)channel;
+                    ITextChannel textChannel = channel;
                     if (textChannel != null)
                     {
                         await textChannel.AddPermissionOverwriteAsync(user, new OverwritePermissions(
@@ -1107,7 +1107,7 @@ public class CustomVoiceService : INService
             // Text channel
             try
             {
-                var textChannel = (ITextChannel)channel;
+                ITextChannel textChannel = channel;
                 if (textChannel != null)
                 {
                     await textChannel.AddPermissionOverwriteAsync(user, new OverwritePermissions(
@@ -1216,7 +1216,7 @@ public class CustomVoiceService : INService
                 // Text channel
                 try
                 {
-                    var textChannel = (ITextChannel)channel;
+                    ITextChannel textChannel = channel;
                     if (textChannel != null)
                     {
                         await textChannel.AddPermissionOverwriteAsync(oldOwner, new OverwritePermissions(
@@ -1249,7 +1249,7 @@ public class CustomVoiceService : INService
             // Text channel
             try
             {
-                var textChannel = (ITextChannel)channel;
+                ITextChannel textChannel = channel;
                 if (textChannel != null)
                 {
                     await textChannel.AddPermissionOverwriteAsync(newOwner, new OverwritePermissions(

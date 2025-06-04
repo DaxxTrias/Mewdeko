@@ -84,6 +84,7 @@ public class Program
                 Helpers.ReadErrorAndExit(6);
                 return;
             }
+
             Log.Information("Database migrations completed successfully");
         }
         else
@@ -125,12 +126,12 @@ public class Program
                     options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
                     options.JsonSerializerOptions.DefaultIgnoreCondition =
                         JsonIgnoreCondition.WhenWritingNull;
-                    options.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
                 })
                 .ConfigureApiBehaviorOptions(options =>
                 {
                     options.SuppressModelStateInvalidFilter = true;
-                });;
+                });
+            ;
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen(x =>
             {
@@ -163,15 +164,19 @@ public class Program
             auth.AddScheme<AuthenticationSchemeOptions, ApiKeyAuthHandler>("ApiKey", null);
 
             builder.Services.AddAuthorizationBuilder()
-                .AddPolicy("ApiKeyPolicy", policy => policy.RequireAuthenticatedUser().AddAuthenticationSchemes("ApiKey"))
-                .AddPolicy("TopggPolicy", policy => policy.RequireClaim(AuthHandler.TopggClaim).AddAuthenticationSchemes(AuthHandler.SchemeName));
+                .AddPolicy("ApiKeyPolicy",
+                    policy => policy.RequireAuthenticatedUser().AddAuthenticationSchemes("ApiKey"))
+                .AddPolicy("TopggPolicy",
+                    policy => policy.RequireClaim(AuthHandler.TopggClaim)
+                        .AddAuthenticationSchemes(AuthHandler.SchemeName));
 
             builder.Services.AddCors(options =>
             {
                 options.AddPolicy("BotInstancePolicy", policy =>
                 {
                     policy
-                        .WithOrigins($"http://localhost:{credentials.ApiPort}", $"https://localhost:{credentials.ApiPort}", "https://mewdeko.tech")
+                        .WithOrigins($"http://localhost:{credentials.ApiPort}",
+                            $"https://localhost:{credentials.ApiPort}", "https://mewdeko.tech")
                         .AllowAnyMethod()
                         .AllowAnyHeader()
                         .AllowCredentials();
@@ -208,10 +213,12 @@ public class Program
                         if (httpContext.Request.ContentLength > 0)
                         {
                             httpContext.Request.EnableBuffering();
-                            using var reader = new StreamReader(httpContext.Request.Body, Encoding.UTF8, false, -1, true);
+                            using var reader = new StreamReader(httpContext.Request.Body, Encoding.UTF8, false, -1,
+                                true);
                             requestBody = reader.ReadToEndAsync().Result;
                             httpContext.Request.Body.Position = 0;
                         }
+
                         diagnosticContext.Set("RequestBody", requestBody);
                         diagnosticContext.Set("QueryString", httpContext.Request.QueryString);
                     }
@@ -229,7 +236,10 @@ public class Program
                 app.UseSwaggerUI();
             }
 
-            app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.FromSeconds(120) });
+            app.UseWebSockets(new WebSocketOptions
+            {
+                KeepAliveInterval = TimeSpan.FromSeconds(120)
+            });
             app.UseAuthorization();
             app.MapControllers();
 

@@ -34,7 +34,7 @@ namespace DataModel
        /// FK_PanelSelectMenus_TicketPanels_PanelId backreference
        /// </summary>
        [Association(ThisKey = nameof(Id), OtherKey = nameof(PanelSelectMenu.PanelId))]
-       public IEnumerable<PanelSelectMenu> PanelSelectMenus { get; set; } = null!;
+       public IEnumerable<PanelSelectMenu>? PanelSelectMenus { get; set; } = null;
        #endregion
     }
 }

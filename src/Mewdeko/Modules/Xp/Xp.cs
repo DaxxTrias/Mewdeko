@@ -1,5 +1,6 @@
 using System.Text;
 using Discord.Commands;
+using Discord.Net;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
 using Humanizer;
@@ -1390,12 +1391,14 @@ public class Xp(InteractiveService serv, ICurrencyService currencyService, XpRol
                 {
                     await message.ModifyAsync(msg => msg.Embed = progressEmbed.Build());
                 }
+                catch (HttpException ex) when (ex.DiscordCode == DiscordErrorCode.ChannelWriteRatelimit)
+                {
+                    Log.Debug("Hit rate limit updating progress message for guild {GuildId}", ctx.Guild.Id);
+                }
                 catch
                 {
-                    // Ignore rate limit errors on progress updates
+                    // Ignore other errors on progress updates
                 }
-
-                await Task.Delay(5000);
             });
 
             var finalEmbed = new EmbedBuilder()

@@ -113,74 +113,75 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
         }
 
         /// <summary>
-///     Deletes a select menu from a panel.
-/// </summary>
-/// <param name="menuId">The ID of the select menu to delete.</param>
-/// <remarks>
-///     This command removes the specified select menu and all its options from the panel.
-///     The menu ID can be found using the panel info command.
-/// </remarks>
-[Cmd]
-[RequireContext(ContextType.Guild)]
-[UserPerm(GuildPermission.Administrator)]
-public async Task DeleteSelectMenu(int menuId)
-{
-    var menu = await Service.GetSelectMenuAsync(menuId.ToString());
-    if (menu == null || menu.Panel.GuildId != ctx.Guild.Id)
-    {
-        await ctx.Channel.SendErrorAsync("Select menu not found.", Config);
-        return;
-    }
+        ///     Deletes a select menu from a panel.
+        /// </summary>
+        /// <param name="menuId">The ID of the select menu to delete.</param>
+        /// <remarks>
+        ///     This command removes the specified select menu and all its options from the panel.
+        ///     The menu ID can be found using the panel info command.
+        /// </remarks>
+        [Cmd]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.Administrator)]
+        public async Task DeleteSelectMenu(int menuId)
+        {
+            var menu = await Service.GetSelectMenuAsync(menuId.ToString());
+            if (menu == null || menu.Panel.GuildId != ctx.Guild.Id)
+            {
+                await ctx.Channel.SendErrorAsync("Select menu not found.", Config);
+                return;
+            }
 
-    var success = await Service.DeleteSelectMenuAsync(ctx.Guild, menuId);
-    if (success)
-    {
-        await ctx.Channel.SendConfirmAsync($"Successfully deleted select menu '{menu.Placeholder}'");
-    }
-    else
-    {
-        await ctx.Channel.SendErrorAsync("Failed to delete select menu.", Config);
-    }
-}
+            var success = await Service.DeleteSelectMenuAsync(ctx.Guild, menuId);
+            if (success)
+            {
+                await ctx.Channel.SendConfirmAsync($"Successfully deleted select menu '{menu.Placeholder}'");
+            }
+            else
+            {
+                await ctx.Channel.SendErrorAsync("Failed to delete select menu.", Config);
+            }
+        }
 
-/// <summary>
-///     Deletes a specific option from a select menu.
-/// </summary>
-/// <param name="optionId">The ID of the option to delete.</param>
-/// <remarks>
-///     This command removes a single option from a select menu.
-///     At least one option must remain in each select menu.
-/// </remarks>
-[Cmd]
-[RequireContext(ContextType.Guild)]
-[UserPerm(GuildPermission.Administrator)]
-public async Task DeleteSelectOption(int optionId)
-{
-    var option = await Service.GetSelectOptionAsync(optionId);
-    if (option == null || option.SelectMenu.Panel.GuildId != ctx.Guild.Id)
-    {
-        await ctx.Channel.SendErrorAsync("Select menu option not found.", Config);
-        return;
-    }
+        /// <summary>
+        ///     Deletes a specific option from a select menu.
+        /// </summary>
+        /// <param name="optionId">The ID of the option to delete.</param>
+        /// <remarks>
+        ///     This command removes a single option from a select menu.
+        ///     At least one option must remain in each select menu.
+        /// </remarks>
+        [Cmd]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.Administrator)]
+        public async Task DeleteSelectOption(int optionId)
+        {
+            var option = await Service.GetSelectOptionAsync(optionId);
+            if (option == null || option.SelectMenu.Panel.GuildId != ctx.Guild.Id)
+            {
+                await ctx.Channel.SendErrorAsync("Select menu option not found.", Config);
+                return;
+            }
 
-    // Check if this is the last option
-    var optionCount = await Service.GetSelectMenuOptionCountAsync(option.SelectMenuId);
-    if (optionCount <= 1)
-    {
-        await ctx.Channel.SendErrorAsync("Cannot delete the last option from a select menu. Delete the entire menu instead.", Config);
-        return;
-    }
+            // Check if this is the last option
+            var optionCount = await Service.GetSelectMenuOptionCountAsync(option.SelectMenuId);
+            if (optionCount <= 1)
+            {
+                await ctx.Channel.SendErrorAsync(
+                    "Cannot delete the last option from a select menu. Delete the entire menu instead.", Config);
+                return;
+            }
 
-    var success = await Service.DeleteSelectOptionAsync(ctx.Guild, optionId);
-    if (success)
-    {
-        await ctx.Channel.SendConfirmAsync($"Successfully deleted option '{option.Label}'");
-    }
-    else
-    {
-        await ctx.Channel.SendErrorAsync("Failed to delete select menu option.", Config);
-    }
-}
+            var success = await Service.DeleteSelectOptionAsync(ctx.Guild, optionId);
+            if (success)
+            {
+                await ctx.Channel.SendConfirmAsync($"Successfully deleted option '{option.Label}'");
+            }
+            else
+            {
+                await ctx.Channel.SendErrorAsync("Failed to delete select menu option.", Config);
+            }
+        }
 
         /// <summary>
         ///     Enables or disables transcript saving for a panel.

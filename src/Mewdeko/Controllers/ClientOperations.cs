@@ -71,6 +71,27 @@ public class ClientOperations(DiscordShardedClient client) : Controller
     }
 
     /// <summary>
+    ///     Gets category channels from a guild
+    /// </summary>
+    /// <param name="guildId">The guild id to get category channels from</param>
+    /// <returns>Category channels or 404 if the guild is not found</returns>
+    [HttpGet("categories/{guildId}")]
+    public async Task<IActionResult> GetCategories(ulong guildId)
+    {
+        await Task.CompletedTask;
+        var guild = client.GetGuild(guildId);
+        if (guild == null)
+            return NotFound();
+
+        var categories = guild.CategoryChannels.Select(x => new NeededRoleInfo
+        {
+            Id = x.Id, Name = x.Name
+        });
+
+        return Ok(categories);
+    }
+
+    /// <summary>
     ///     Gets channels of a specific type from a guildId
     /// </summary>
     /// <param name="guildId">The guild id to get channels from</param>
