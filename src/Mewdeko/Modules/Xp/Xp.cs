@@ -1391,7 +1391,7 @@ public class Xp(InteractiveService serv, ICurrencyService currencyService, XpRol
                 {
                     await message.ModifyAsync(msg => msg.Embed = progressEmbed.Build());
                 }
-                catch (HttpException ex) when (ex.DiscordCode == DiscordErrorCode.ChannelWriteRatelimit)
+                catch (HttpException ex) when (ex.DiscordCode == DiscordErrorCode.WriteRatelimitReached)
                 {
                     Log.Debug("Hit rate limit updating progress message for guild {GuildId}", ctx.Guild.Id);
                 }

@@ -1,4 +1,5 @@
 using DataModel;
+using Discord.Net;
 using LinqToDB;
 using Mewdeko.Modules.Xp.Models;
 using Serilog;
@@ -69,6 +70,10 @@ public class XpRoleSyncService : INService
             var allMembers = await guild.GetUsersAsync();
             var memberDict = allMembers.ToDictionary(u => u.Id, u => u);
 
+            var allRoles = guild.Roles.ToDictionary(r => r.Id, r => r);
+
+            batchData.UsersWithXp = batchData.UsersWithXp.Where(u => memberDict.ContainsKey(u.UserId)).ToList();
+
             result.TotalUsers = batchData.UsersWithXp.Count;
 
             var lastProgressUpdate = DateTime.UtcNow;
@@ -80,7 +85,7 @@ public class XpRoleSyncService : INService
 
                 try
                 {
-                    var syncResult = await SyncUserRolesBatchAsync(guild, userXp, batchData, memberDict);
+                    var syncResult = await SyncUserRolesBatchAsync(guild, userXp, batchData, memberDict, allRoles);
 
                     result.ProcessedUsers++;
                     result.RolesAdded += syncResult.RolesAdded;
@@ -124,6 +129,7 @@ public class XpRoleSyncService : INService
         }
     }
 
+
     /// <summary>
     ///     Gets all data needed for role synchronization in batch operations.
     /// </summary>
@@ -156,9 +162,26 @@ public class XpRoleSyncService : INService
             userLevels[userXp.UserId] = level;
         }
 
+        var roleRewardIds = roleRewards.Select(r => r.RoleId).ToHashSet();
+
+        var rolesByLevel = new Dictionary<int, HashSet<ulong>>();
+        if (roleRewards.Count > 0)
+        {
+            var maxLevel = userLevels.Values.DefaultIfEmpty(0).Max();
+            for (var level = 0; level <= maxLevel; level++)
+            {
+                rolesByLevel[level] = roleRewards.Where(r => r.Level <= level).Select(r => r.RoleId).ToHashSet();
+            }
+        }
+
         return new BatchSyncData
         {
-            UsersWithXp = usersWithXp, RoleRewards = roleRewards, UserLevels = userLevels, XpSettings = xpSettings
+            UsersWithXp = usersWithXp,
+            RoleRewards = roleRewards,
+            UserLevels = userLevels,
+            RolesByLevel = rolesByLevel,
+            RoleRewardIds = roleRewardIds,
+            XpSettings = xpSettings
         };
     }
 
@@ -169,12 +192,14 @@ public class XpRoleSyncService : INService
     /// <param name="userXp">The user's XP data.</param>
     /// <param name="batchData">Pre-fetched batch data containing all necessary information.</param>
     /// <param name="memberDict">Pre-fetched guild members dictionary.</param>
+    /// <param name="roleDict">Pre-fetched guild roles dictionary.</param>
     /// <returns>A task representing the asynchronous operation with sync results.</returns>
     private async Task<UserRoleSyncResult> SyncUserRolesBatchAsync(
         IGuild guild,
         UserXpStat userXp,
         BatchSyncData batchData,
-        Dictionary<ulong, IGuildUser> memberDict)
+        Dictionary<ulong, IGuildUser> memberDict,
+        Dictionary<ulong, IRole> roleDict)
     {
         var result = new UserRoleSyncResult
         {
@@ -192,10 +217,9 @@ public class XpRoleSyncService : INService
 
             var currentLevel = batchData.UserLevels.GetValueOrDefault(userXp.UserId, 0);
 
-            var rolesToHave = batchData.RoleRewards.Where(r => r.Level <= currentLevel).Select(r => r.RoleId)
-                .ToHashSet();
-            var currentRoleRewardIds = user.RoleIds.Where(roleId => batchData.RoleRewards.Any(r => r.RoleId == roleId))
-                .ToHashSet();
+            var rolesToHave = batchData.RolesByLevel.GetValueOrDefault(currentLevel, new HashSet<ulong>());
+            var currentRoleRewardIds =
+                user.RoleIds.Where(roleId => batchData.RoleRewardIds.Contains(roleId)).ToHashSet();
 
             var rolesToAdd = rolesToHave.Except(currentRoleRewardIds).ToList();
             var rolesToRemove = currentRoleRewardIds.Except(rolesToHave).ToList();
@@ -204,14 +228,43 @@ public class XpRoleSyncService : INService
             {
                 try
                 {
-                    var role = guild.GetRole(roleId);
-                    if (role == null) continue;
+                    if (!roleDict.TryGetValue(roleId, out var role))
+                    {
+                        Log.Warning("Role {RoleId} not found in guild {GuildId} for user {UserId}", roleId, guild.Id,
+                            userXp.UserId);
+                        continue;
+                    }
+
                     await user.AddRoleAsync(role);
                     result.RolesAdded++;
                 }
+                catch (HttpException ex) when (ex.DiscordCode == DiscordErrorCode.MissingPermissions)
+                {
+                    Log.Warning("Missing permissions to add role {RoleId} to user {UserId} in guild {GuildId}", roleId,
+                        userXp.UserId, guild.Id);
+                    result.HasError = true;
+                    result.ErrorMessage = "Missing permissions";
+                }
+                catch (HttpException ex) when (ex.DiscordCode == DiscordErrorCode.InvalidFormBody)
+                {
+                    Log.Warning("Invalid form body adding role {RoleId} to user {UserId} in guild {GuildId}: {Message}",
+                        roleId, userXp.UserId, guild.Id, ex.Message);
+                    result.HasError = true;
+                    result.ErrorMessage = "Invalid form body";
+                }
+                catch (HttpException ex) when (ex.DiscordCode == DiscordErrorCode.WriteRatelimitReached)
+                {
+                    Log.Warning("Rate limited adding role {RoleId} to user {UserId} in guild {GuildId}", roleId,
+                        userXp.UserId, guild.Id);
+                    result.HasError = true;
+                    result.ErrorMessage = "Rate limited";
+                }
                 catch (Exception ex)
                 {
-                    Log.Warning(ex, "Failed to add role {RoleId} to user {UserId}", roleId, userXp.UserId);
+                    Log.Warning(ex, "Failed to add role {RoleId} to user {UserId} in guild {GuildId}: {Message}",
+                        roleId, userXp.UserId, guild.Id, ex.Message);
+                    result.HasError = true;
+                    result.ErrorMessage = ex.Message;
                 }
             }
 
@@ -219,14 +272,44 @@ public class XpRoleSyncService : INService
             {
                 try
                 {
-                    var role = guild.GetRole(roleId);
-                    if (role == null) continue;
+                    if (!roleDict.TryGetValue(roleId, out var role))
+                    {
+                        Log.Warning("Role {RoleId} not found in guild {GuildId} for user {UserId}", roleId, guild.Id,
+                            userXp.UserId);
+                        continue;
+                    }
+
                     await user.RemoveRoleAsync(role);
                     result.RolesRemoved++;
                 }
+                catch (HttpException ex) when (ex.DiscordCode == DiscordErrorCode.MissingPermissions)
+                {
+                    Log.Warning("Missing permissions to remove role {RoleId} from user {UserId} in guild {GuildId}",
+                        roleId, userXp.UserId, guild.Id);
+                    result.HasError = true;
+                    result.ErrorMessage = "Missing permissions";
+                }
+                catch (HttpException ex) when (ex.DiscordCode == DiscordErrorCode.InvalidFormBody)
+                {
+                    Log.Warning(
+                        "Invalid form body removing role {RoleId} from user {UserId} in guild {GuildId}: {Message}",
+                        roleId, userXp.UserId, guild.Id, ex.Message);
+                    result.HasError = true;
+                    result.ErrorMessage = "Invalid form body";
+                }
+                catch (HttpException ex) when (ex.DiscordCode == DiscordErrorCode.WriteRatelimitReached)
+                {
+                    Log.Warning("Rate limited removing role {RoleId} from user {UserId} in guild {GuildId}", roleId,
+                        userXp.UserId, guild.Id);
+                    result.HasError = true;
+                    result.ErrorMessage = "Rate limited";
+                }
                 catch (Exception ex)
                 {
-                    Log.Warning(ex, "Failed to remove role {RoleId} from user {UserId}", roleId, userXp.UserId);
+                    Log.Warning(ex, "Failed to remove role {RoleId} from user {UserId} in guild {GuildId}: {Message}",
+                        roleId, userXp.UserId, guild.Id, ex.Message);
+                    result.HasError = true;
+                    result.ErrorMessage = ex.Message;
                 }
             }
 
@@ -237,37 +320,13 @@ public class XpRoleSyncService : INService
         {
             result.HasError = true;
             result.ErrorMessage = ex.Message;
-            Log.Error(ex, "Error syncing roles for user {UserId} in guild {GuildId}", userXp.UserId, guild.Id);
+            Log.Error(ex, "Error syncing roles for user {UserId} in guild {GuildId}: {Message}", userXp.UserId,
+                guild.Id, ex.Message);
         }
 
         return result;
     }
 
-    /// <summary>
-    ///     Gets multiple user levels at once for a guild.
-    /// </summary>
-    /// <param name="guildId">The guild ID.</param>
-    /// <param name="userIds">List of user IDs to get levels for.</param>
-    /// <returns>A dictionary mapping user IDs to their levels.</returns>
-    public async Task<Dictionary<ulong, int>> GetUserLevelsBatchAsync(ulong guildId, List<ulong> userIds)
-    {
-        await using var db = await dbFactory.CreateConnectionAsync();
-
-        var guildUserXps = await db.GuildUserXps
-            .Where(x => x.GuildId == guildId && userIds.Contains(x.UserId))
-            .ToListAsync();
-
-        var settings = await cacheManager.GetGuildXpSettingsAsync(guildId);
-
-        var result = new Dictionary<ulong, int>();
-        foreach (var userXp in guildUserXps)
-        {
-            var level = XpCalculator.CalculateLevel(userXp.TotalXp, (XpCurveType)settings.XpCurveType);
-            result[userXp.UserId] = level;
-        }
-
-        return result;
-    }
 
     /// <summary>
     ///     Synchronizes roles for a specific user based on their XP level.
@@ -415,6 +474,16 @@ public class BatchSyncData
     ///     Pre-calculated user levels dictionary for fast lookups.
     /// </summary>
     public Dictionary<ulong, int> UserLevels { get; set; } = new();
+
+    /// <summary>
+    ///     Pre-calculated roles by level for instant lookup.
+    /// </summary>
+    public Dictionary<int, HashSet<ulong>> RolesByLevel { get; set; } = new();
+
+    /// <summary>
+    ///     HashSet of all role reward IDs for fast lookups.
+    /// </summary>
+    public HashSet<ulong> RoleRewardIds { get; set; } = new();
 
     /// <summary>
     ///     Guild XP settings.
