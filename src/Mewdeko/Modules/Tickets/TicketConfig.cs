@@ -108,8 +108,15 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
                 return;
             }
 
-            await Service.UpdateButtonSettingsAsync(ctx.Guild, buttonId, new Dictionary<string, object>());
-            await ctx.Channel.SendConfirmAsync($"Successfully deleted button '{button.Label}'");
+            var success = await Service.DeleteButtonAsync(ctx.Guild, buttonId);
+            if (success)
+            {
+                await ctx.Channel.SendConfirmAsync($"Successfully deleted button '{button.Label}'");
+            }
+            else
+            {
+                await ctx.Channel.SendErrorAsync("Failed to delete button.", Config);
+            }
         }
 
         /// <summary>
