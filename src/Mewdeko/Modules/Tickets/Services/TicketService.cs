@@ -5027,6 +5027,57 @@ public class TicketService : INService
     }
 
     /// <summary>
+    ///     Deletes a button from a panel
+    /// </summary>
+    /// <param name="guild">The guild containing the panel</param>
+    /// <param name="buttonId">The ID of the button to delete</param>
+    /// <returns>True if the button was successfully deleted, false otherwise</returns>
+    public async Task<bool> DeleteButtonAsync(IGuild guild, int buttonId)
+    {
+        await using var ctx = await dbFactory.CreateConnectionAsync();
+
+        try
+        {
+            // Get the button to verify it exists and belongs to this guild
+            var button = await ctx.PanelButtons
+                .LoadWithAsTable(b => b.Panel)
+                .FirstOrDefaultAsync(b => b.Id == buttonId && b.Panel.GuildId == guild.Id);
+
+            if (button == null)
+                return false;
+
+            // Check if any tickets reference this button
+            var referencingTickets = await ctx.Tickets
+                .Where(t => t.ButtonId == buttonId)
+                .ToListAsync();
+
+            if (referencingTickets.Any())
+            {
+                // Clear the button reference from all tickets
+                await ctx.Tickets
+                    .Where(t => t.ButtonId == buttonId)
+                    .Set(t => t.ButtonId, (int?)null)
+                    .UpdateAsync();
+            }
+
+            // Delete the button
+            await ctx.PanelButtons
+                .Where(b => b.Id == buttonId)
+                .DeleteAsync();
+
+            // Update the panel in Discord
+            await UpdatePanelComponentsAsync(button.Panel);
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Failed to delete button {ButtonId} from guild {GuildId}", buttonId, guild.Id);
+            return false;
+        }
+    }
+
+    /// <summary>
     ///     Represents statistics about tickets in a guild.
     /// </summary>
     public class GuildStatistics
