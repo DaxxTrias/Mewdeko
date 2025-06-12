@@ -42,21 +42,25 @@ public class ClaudeClient : IAiClient
             var filteredMessages = messages.Where(m => m.Role != "system").ToList();
 
             // Prepare the request body
-            var requestBody = new
+            var requestBody = new Dictionary<string, object>
             {
-                model,
-                max_tokens = 1024,
-                messages = filteredMessages.Select(m => new
+                ["model"] = model,
+                ["max_tokens"] = 1024,
+                ["messages"] = filteredMessages.Select(m => new
                 {
-                    role = m.Role,
-                    content = m.Content
+                    role = m.Role, content = m.Content
                 }).ToArray(),
-                system = systemMessage,
-                stream = true
+                ["stream"] = true
             };
 
+            if (!string.IsNullOrWhiteSpace(systemMessage))
+            {
+                requestBody["system"] = systemMessage;
+            }
+
             var jsonRequest = JsonSerializer.Serialize(requestBody);
-            Log.Information($"Claude request using model: {model}, message count: {filteredMessages.Count}, request size: {Encoding.UTF8.GetByteCount(jsonRequest)} bytes");
+            Log.Information(
+                $"Claude request using model: {model}, message count: {filteredMessages.Count}, request size: {Encoding.UTF8.GetByteCount(jsonRequest)} bytes");
 
             var content = new StringContent(
                 jsonRequest,
@@ -113,6 +117,7 @@ public class ClaudeClient : IAiClient
                                 eventType = null;
                                 data = null;
                             }
+
                             continue;
                         }
 

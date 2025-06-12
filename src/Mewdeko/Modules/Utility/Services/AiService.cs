@@ -10,7 +10,6 @@ using LinqToDB;
 using Mewdeko.Common.Configs;
 using Mewdeko.Modules.Utility.Services.Impl;
 using Mewdeko.Services.Strings;
-
 using Serilog;
 using Embed = Discord.Embed;
 
@@ -21,16 +20,6 @@ namespace Mewdeko.Modules.Utility.Services;
 /// </summary>
 public class AiService : INService
 {
-    private readonly IDataConnectionFactory dbFactory;
-    private readonly DiscordShardedClient client;
-    private readonly GeneratedBotStrings strings;
-    private readonly BotConfig botConfig;
-    private readonly AiClientFactory aiClientFactory;
-    private readonly IHttpClientFactory httpFactory;
-    private readonly ConcurrentDictionary<AiProvider, List<AiModel>> modelCache;
-    private readonly TimeSpan modelCacheExpiry = TimeSpan.FromHours(24);
-    private DateTime lastModelUpdate = DateTime.MinValue;
-
     /// <summary>
     ///     Defines the available AI providers.
     /// </summary>
@@ -52,59 +41,15 @@ public class AiService : INService
         Claude
     }
 
-    /// <summary>
-    ///     Represents an Ai model with its metadata.
-    /// </summary>
-    public class AiModel
-    {
-        /// <summary>
-        ///     Gets or sets the model identifier.
-        /// </summary>
-        public string Id { get; set; }
-
-        /// <summary>
-        ///     Gets or sets the display name of the model.
-        /// </summary>
-        public string Name { get; set; }
-
-        /// <summary>
-        ///     Gets or sets the provider of this model.
-        /// </summary>
-        public AiProvider Provider { get; set; }
-    }
-
-    private static readonly List<AiModel> SupportedModels =
-    [
-        new AiModel
-        {
-            Id = "gpt-4-turbo", Name = "GPT-4 Turbo", Provider = AiProvider.OpenAi
-        },
-
-        new AiModel
-        {
-            Id = "gpt-3.5-turbo", Name = "GPT-3.5 Turbo", Provider = AiProvider.OpenAi
-        },
-
-        new AiModel
-        {
-            Id = "claude-3-opus-20240229", Name = "Claude 3 Opus", Provider = AiProvider.Claude
-        },
-
-        new AiModel
-        {
-            Id = "claude-3-sonnet-20240229", Name = "Claude 3 Sonnet", Provider = AiProvider.Claude
-        },
-
-        new AiModel
-        {
-            Id = "mixtral-8x7b", Name = "Mixtral 8x7B", Provider = AiProvider.Groq
-        },
-
-        new AiModel
-        {
-            Id = "llama2-70b", Name = "Llama 2 70B", Provider = AiProvider.Groq
-        }
-    ];
+    private readonly AiClientFactory aiClientFactory;
+    private readonly BotConfig botConfig;
+    private readonly DiscordShardedClient client;
+    private readonly IDataConnectionFactory dbFactory;
+    private readonly IHttpClientFactory httpFactory;
+    private readonly ConcurrentDictionary<AiProvider, List<AiModel>> modelCache;
+    private readonly TimeSpan modelCacheExpiry = TimeSpan.FromHours(24);
+    private readonly GeneratedBotStrings strings;
+    private DateTime lastModelUpdate = DateTime.MinValue;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="AiService" /> class.
@@ -248,6 +193,12 @@ public class AiService : INService
         }
     }
 
+    /// <summary>
+    ///     Clears an AI conversation and all associated messages for a specific guild and user
+    /// </summary>
+    /// <param name="guildId">The Discord guild identifier</param>
+    /// <param name="userId">The Discord user identifier</param>
+    /// <returns>A task representing the asynchronous operation</returns>
     private async Task ClearConversation(ulong guildId, ulong userId)
     {
         await using var db = await dbFactory.CreateConnectionAsync();
@@ -257,10 +208,25 @@ public class AiService : INService
 
         if (conversation != null)
         {
-            await db.AiMessages.Intersect(conversation.AiMessages).DeleteAsync();
-            await db.AiConversations.Select(x => conversation).DeleteAsync();
+            try
+            {
+                // Delete all messages for this conversation
+                await db.AiMessages
+                    .Where(x => x.ConversationId == conversation.Id)
+                    .DeleteAsync();
+
+                // Delete the conversation itself
+                await db.AiConversations
+                    .Where(x => x.Id == conversation.Id)
+                    .DeleteAsync();
+            }
+            catch (Exception e)
+            {
+                Log.Error(e, "There was an issue deleting the conversation");
+            }
         }
     }
+
 
     private async Task StreamResponse(GuildAiConfig config, ulong? webhookMessageId, SocketMessage userMsg,
         DiscordWebhookClient? webhook)
@@ -280,21 +246,27 @@ public class AiService : INService
 
         var sysPrompt = replacer.Replace(config.SystemPrompt);
 
-        var convId = 0;
+        int convId;
         if (conversation == null)
         {
-            conversation = new AiConversation
-            {
-                GuildId = config.GuildId,
-                UserId = userMsg.Author.Id,
-                AiMessages =
-                [
-                    new AiMessage
-                    {
-                        Role = "system", Content = sysPrompt ?? ""
-                    }
-                ]
-            };
+            if (!string.IsNullOrWhiteSpace(sysPrompt))
+                conversation = new AiConversation
+                {
+                    GuildId = config.GuildId,
+                    UserId = userMsg.Author.Id,
+                    AiMessages =
+                    [
+                        new AiMessage
+                        {
+                            Role = "system", Content = sysPrompt
+                        }
+                    ]
+                };
+            else
+                conversation = new AiConversation
+                {
+                    GuildId = config.GuildId, UserId = userMsg.Author.Id, AiMessages = []
+                };
             convId = await db.InsertWithInt32IdentityAsync(conversation);
             conversation.Id = convId;
         }
@@ -303,17 +275,25 @@ public class AiService : INService
             convId = conversation.Id;
         }
 
-        await db.InsertAsync(new AiMessage
+        // Create the user message object
+        var userMessage = new AiMessage
         {
             ConversationId = convId, Role = "user", Content = userMsg.Content
-        });
+        };
+
+        // Insert to database
+        await db.InsertAsync(userMessage);
 
         // Maintain history size for all providers
         const int maxHistorySize = 5;
 
+        // Create a list of all messages including the new user message
+        var allMessages = conversation.AiMessages.ToList();
+        allMessages.Add(userMessage);
+
         // Keep system message plus most recent messages
-        var systemMessage = conversation.AiMessages.FirstOrDefault(m => m.Role == "system");
-        var nonSystemMessages = conversation.AiMessages
+        var systemMessage = allMessages.FirstOrDefault(m => m.Role == "system");
+        var nonSystemMessages = allMessages
             .Where(m => m.Role != "system")
             .OrderByDescending(m => m.Id)
             .Take(maxHistorySize)
@@ -323,7 +303,7 @@ public class AiService : INService
         if (systemMessage != null)
             messagesToKeep.Add(systemMessage.Id);
 
-        var toRemove = conversation.AiMessages
+        var toRemove = allMessages
             .Where(m => !messagesToKeep.Contains(m.Id))
             .ToList();
 
@@ -335,12 +315,13 @@ public class AiService : INService
                     m.ConversationId == conversation.Id &&
                     !messagesToKeep.Contains(m.Id))
                 .DeleteAsync();
-
-            // Make sure to refresh the conversation object after removing messages
-            conversation = await db.AiConversations
-                .LoadWithAsTable(x => x.AiMessages)
-                .FirstOrDefaultAsync(x => x.GuildId == config.GuildId && x.UserId == userMsg.Author.Id);
         }
+
+        // Create the final list of messages to send to the AI client
+        var messagesToSend = allMessages
+            .Where(m => messagesToKeep.Contains(m.Id))
+            .OrderBy(m => m.Id)
+            .ToList();
 
         var (aiClient, streamParser) = aiClientFactory.Create((AiProvider)config.Provider);
         var responseBuilder = new StringBuilder();
@@ -367,8 +348,8 @@ public class AiService : INService
             initialTemplate = config.CustomEmbed;
         }
 
-        var timeout = DateTime.UtcNow.AddMinutes(1); // 5-minute timeout as a safety
-        var stream = await aiClient.StreamResponseAsync(conversation.AiMessages, config.Model, config.ApiKey);
+        var timeout = DateTime.UtcNow.AddMinutes(1); // 1-minute timeout as a safety
+        var stream = await aiClient.StreamResponseAsync(messagesToSend, config.Model, config.ApiKey);
         await foreach (var rawJson in stream)
         {
             if (string.IsNullOrEmpty(rawJson)) continue;
@@ -394,7 +375,7 @@ public class AiService : INService
 
             // Update UI more frequently during stream
             var now = DateTime.UtcNow;
-            if ((now - lastUpdate).TotalSeconds >= 1)
+            if ((now - lastUpdate).TotalSeconds >= 1 && !string.IsNullOrWhiteSpace(contentDelta))
             {
                 lastUpdate = now;
                 await UpdateMessageEmbed(false); // false = not final update
@@ -408,24 +389,21 @@ public class AiService : INService
             }
 
             // Safety timeout
-            if (DateTime.UtcNow > timeout)
-            {
-                Log.Warning("AI stream timed out");
-                break;
-            }
+            if (DateTime.UtcNow <= timeout) continue;
+            Log.Warning("AI stream timed out");
+            break;
         }
 
         await db.InsertAsync(new AiMessage
         {
-            ConversationId = convId,
-            Role = "assistant",
-            Content = responseBuilder.ToString()
+            ConversationId = convId, Role = "assistant", Content = responseBuilder.ToString()
         });
         config.TokensUsed += tokenCount;
         await db.UpdateAsync(config);
 
         // Final update with completed response
         await UpdateMessageEmbed(true); // true = final update
+        return;
 
         async Task UpdateMessageEmbed(bool isFinalUpdate)
         {
@@ -1075,6 +1053,27 @@ public class AiService : INService
             modelId.Replace('-', ' ')
                 .Replace('/', ' ')
                 .Replace('_', ' '));
+    }
+
+    /// <summary>
+    ///     Represents an Ai model with its metadata.
+    /// </summary>
+    public class AiModel
+    {
+        /// <summary>
+        ///     Gets or sets the model identifier.
+        /// </summary>
+        public string Id { get; set; }
+
+        /// <summary>
+        ///     Gets or sets the display name of the model.
+        /// </summary>
+        public string Name { get; set; }
+
+        /// <summary>
+        ///     Gets or sets the provider of this model.
+        /// </summary>
+        public AiProvider Provider { get; set; }
     }
 
     private record class OpenAiModelsResponse(List<OpenAiModel> Data);
