@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Threading;
 using DataModel;
 using LinqToDB;
@@ -15,48 +16,44 @@ namespace Mewdeko.Modules.Xp.Services;
 /// </summary>
 public class XpBackgroundProcessor : INService, IDisposable
 {
-    private readonly IDataConnectionFactory dbFactory;
-    private readonly XpCacheManager cacheManager;
-    private readonly XpRewardManager rewardManager;
-    private readonly XpCompetitionManager competitionManager;
+    // Constants for processing configuration
+    private const int QueueCapacity = 50000;
+    private const int OptimalBatchSize = 500;
+    private const int MaxConcurrentDbOps = 16;
+    private const int DbMaxRetries = 3;
+    private const int MaxBatchingBufferSize = 10000;
 
-    // Multi-threaded queue for XP updates with bounded capacity
-    private readonly BlockingCollection<XpGainItem> xpQueue;
+    private readonly NonBlocking.ConcurrentDictionary<ulong, byte> activeUserIds = new();
 
     private readonly NonBlocking.ConcurrentDictionary<(ulong GuildId, ulong UserId), List<XpGainItem>> batchingBuffer =
         new();
 
-    private readonly NonBlocking.ConcurrentDictionary<ulong, byte> activeUserIds = new();
-    private readonly NonBlocking.ConcurrentDictionary<ulong, DateTime> recentlyActiveUsers = new();
-
-    // Constants for processing configuration
-    private const int QueueCapacity = 500000;
-    private const int OptimalBatchSize = 1000;
-    private const int MaxConcurrentDbOps = 16;
-    private const int DbMaxRetries = 3;
-
-    // Processing state
-    private long totalProcessed;
-    private readonly SemaphoreSlim dbThrottle;
-    private DateTime lastActiveUserCleanup = DateTime.UtcNow;
-
-    private volatile int isProcessing;
-
-    // Timers
-    private readonly Timer processingTimer;
-    private readonly Timer decayTimer;
+    private readonly XpCacheManager cacheManager;
     private readonly Timer cleanupTimer;
+    private readonly XpCompetitionManager competitionManager;
+    private readonly IDataConnectionFactory dbFactory;
+    private readonly SemaphoreSlim dbThrottle;
+    private readonly Timer decayTimer;
+    private readonly TimeSpan maxProcessingInterval = TimeSpan.FromSeconds(5);
+    private readonly Timer memoryMonitorTimer;
 
     // Processing parameters
     private readonly TimeSpan minProcessingInterval = TimeSpan.FromMilliseconds(200);
-    private readonly TimeSpan maxProcessingInterval = TimeSpan.FromSeconds(5);
+
+    // Timers
+    private readonly Timer processingTimer;
+    private readonly NonBlocking.ConcurrentDictionary<ulong, DateTime> recentlyActiveUsers = new();
+    private readonly XpRewardManager rewardManager;
+
+    // Multi-threaded queue for XP updates with reduced capacity
+    private readonly BlockingCollection<XpGainItem> xpQueue;
     private TimeSpan currentProcessingInterval = TimeSpan.FromSeconds(1);
 
-    // Settings cache to reduce lookups
-    private readonly NonBlocking.ConcurrentDictionary<ulong, (GuildXpSetting Settings, DateTime CacheTime)>
-        settingsCache = new();
+    private volatile int isProcessing;
+    private DateTime lastActiveUserCleanup = DateTime.UtcNow;
 
-    private readonly TimeSpan settingsCacheTtl = TimeSpan.FromMinutes(5);
+    // Processing state
+    private long totalProcessed;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="XpBackgroundProcessor" /> class.
@@ -76,16 +73,17 @@ public class XpBackgroundProcessor : INService, IDisposable
         this.rewardManager = rewardManager;
         this.competitionManager = competitionManager;
 
-        // Initialize thread-safe bounded queue with backpressure
+        // Initialize thread-safe bounded queue with reduced capacity
         xpQueue = new BlockingCollection<XpGainItem>(QueueCapacity);
 
         // Initialize database throttling with optimal concurrency
         dbThrottle = new SemaphoreSlim(MaxConcurrentDbOps, MaxConcurrentDbOps);
 
-        // Initialize single adaptive processing timer
+        // Initialize timers
         processingTimer = new Timer(ProcessXpBatches, null, TimeSpan.FromSeconds(1), currentProcessingInterval);
         decayTimer = new Timer(ProcessXpDecay, null, TimeSpan.FromHours(12), TimeSpan.FromHours(12));
         cleanupTimer = new Timer(CleanupCaches, null, TimeSpan.FromHours(2), TimeSpan.FromHours(2));
+        memoryMonitorTimer = new Timer(LogMemoryStats, null, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5));
 
         Log.Information(
             "XP Background Processor initialized with queue capacity {Capacity} and {Concurrency} concurrent DB operations",
@@ -93,6 +91,44 @@ public class XpBackgroundProcessor : INService, IDisposable
 
         // Start background consumer task
         Task.Run(BackgroundConsumer);
+    }
+
+    /// <summary>
+    ///     Disposes resources used by the XP background processor.
+    /// </summary>
+    public void Dispose()
+    {
+        try
+        {
+            // Mark queue as complete for consumer
+            xpQueue.CompleteAdding();
+
+            // Stop timers
+            processingTimer.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+            decayTimer.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+            cleanupTimer.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+            memoryMonitorTimer.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+
+            // Process remaining items
+            ProcessXpBatches(null);
+
+            // Wait briefly for processing to complete
+            Thread.Sleep(500);
+
+            // Dispose resources
+            processingTimer.Dispose();
+            decayTimer.Dispose();
+            cleanupTimer.Dispose();
+            memoryMonitorTimer.Dispose();
+            dbThrottle.Dispose();
+            xpQueue.Dispose();
+
+            Log.Information("XP Background Processor successfully disposed");
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Error during XP Background Processor disposal");
+        }
     }
 
     /// <summary>
@@ -108,6 +144,21 @@ public class XpBackgroundProcessor : INService, IDisposable
                 if (xpQueue.TryTake(out var item, 100))
                 {
                     var key = (item.GuildId, item.UserId);
+
+                    // Check for memory pressure and force cleanup
+                    if (batchingBuffer.Count > MaxBatchingBufferSize)
+                    {
+                        Log.Warning("Batching buffer exceeded max size ({MaxSize}), forcing processing",
+                            MaxBatchingBufferSize);
+                        ProcessXpBatches(null);
+
+                        // If still too large after processing, start dropping items
+                        if (batchingBuffer.Count > MaxBatchingBufferSize * 1.5)
+                        {
+                            Log.Warning("Dropping XP item due to memory pressure");
+                            continue;
+                        }
+                    }
 
                     // Add to batching buffer, grouped by guild and user
                     batchingBuffer.AddOrUpdate(
@@ -134,7 +185,7 @@ public class XpBackgroundProcessor : INService, IDisposable
                 }
 
                 // Yield to other tasks occasionally
-                await Task.Delay(1);
+                await Task.Delay(1).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -158,14 +209,6 @@ public class XpBackgroundProcessor : INService, IDisposable
 
         try
         {
-            // Check for server exclusion using local cache to avoid Redis calls for known excluded servers
-            if (settingsCache.TryGetValue(guildId, out var settingsData) &&
-                DateTime.UtcNow - settingsData.CacheTime < settingsCacheTtl)
-            {
-                if (settingsData.Settings.XpGainDisabled)
-                    return;
-            }
-
             var item = new XpGainItem
             {
                 GuildId = guildId,
@@ -222,7 +265,7 @@ public class XpBackgroundProcessor : INService, IDisposable
     public async Task ProcessFirstMessageOfDay(SocketGuildUser user, ulong channelId)
     {
         // Quick check for server exclusion
-        if (await cacheManager.IsServerExcludedAsync(user.Guild.Id))
+        if (await cacheManager.IsServerExcludedAsync(user.Guild.Id).ConfigureAwait(false))
             return;
 
         var key = $"xp:first_msg:{user.Guild.Id}:{user.Id}";
@@ -235,12 +278,12 @@ public class XpBackgroundProcessor : INService, IDisposable
             dateString,
             TimeSpan.FromDays(2),
             When.NotExists,
-            CommandFlags.FireAndForget);
+            CommandFlags.FireAndForget).ConfigureAwait(false);
 
         if (wasSet)
         {
             // Award first message bonus
-            var settings = await cacheManager.GetGuildXpSettingsAsync(user.Guild.Id);
+            var settings = await cacheManager.GetGuildXpSettingsAsync(user.Guild.Id).ConfigureAwait(false);
             if (settings.FirstMessageBonus > 0)
             {
                 QueueXpGain(
@@ -251,9 +294,6 @@ public class XpBackgroundProcessor : INService, IDisposable
                     XpSource.FirstMessage
                 );
             }
-
-            // Update local settings cache
-            settingsCache[user.Guild.Id] = (settings, DateTime.UtcNow);
         }
     }
 
@@ -309,18 +349,18 @@ public class XpBackgroundProcessor : INService, IDisposable
             await Task.WhenAll(guildGroups.Select(async group =>
             {
                 // Wait for available DB connection slot
-                await dbThrottle.WaitAsync();
+                await dbThrottle.WaitAsync().ConfigureAwait(false);
                 try
                 {
                     // Process this guild's XP updates
-                    var processed = await ProcessGuildXpBatch(group.GuildId, group.Items);
+                    var processed = await ProcessGuildXpBatch(group.GuildId, group.Items).ConfigureAwait(false);
                     Interlocked.Add(ref itemsProcessed, processed);
                 }
                 finally
                 {
                     dbThrottle.Release();
                 }
-            }));
+            })).ConfigureAwait(false);
 
             // Update statistics
             Interlocked.Add(ref totalProcessed, itemsProcessed);
@@ -397,17 +437,14 @@ public class XpBackgroundProcessor : INService, IDisposable
             await using var db = await dbFactory.CreateConnectionAsync();
 
             // Get guild settings from cache manager
-            var settings = await cacheManager.GetGuildXpSettingsAsync(guildId);
-
-            // Update local cache for quick access
-            settingsCache[guildId] = (settings, DateTime.UtcNow);
+            var settings = await cacheManager.GetGuildXpSettingsAsync(guildId).ConfigureAwait(false);
 
             // Skip if XP is disabled for this guild
             if (settings.XpGainDisabled)
                 return 0;
 
             // Get active competitions
-            var activeCompetitions = await competitionManager.GetActiveCompetitionsAsync(guildId);
+            var activeCompetitions = await competitionManager.GetActiveCompetitionsAsync(guildId).ConfigureAwait(false);
 
             // Aggregation step: Sum XP gains by user and track last items
             var userXpAggregation = new Dictionary<ulong, (int TotalXp, XpGainItem LastItem, List<XpSource> Sources)>();
@@ -448,7 +485,8 @@ public class XpBackgroundProcessor : INService, IDisposable
             var userIds = userXpAggregation.Keys.ToList();
             var existingUserXp = await db.GuildUserXps
                 .Where(x => x.GuildId == guildId && userIds.Contains(x.UserId))
-                .ToDictionaryAsync(k => k.UserId, v => v);
+                .ToDictionaryAsync(k => k.UserId, v => v)
+                .ConfigureAwait(false);
 
             // Prepare collections for DB operations
             var insertRecords = new List<GuildUserXp>();
@@ -503,7 +541,7 @@ public class XpBackgroundProcessor : INService, IDisposable
                                 newLevel,
                                 settings.ExclusiveRoleRewards,
                                 roleRewardCache,
-                                roleRewards);
+                                roleRewards).ConfigureAwait(false);
 
                             // Process currency rewards
                             await ProcessCurrencyRewards(
@@ -513,7 +551,7 @@ public class XpBackgroundProcessor : INService, IDisposable
                                 oldLevel,
                                 newLevel,
                                 currencyRewardCache,
-                                currencyRewards);
+                                currencyRewards).ConfigureAwait(false);
                         }
 
                         // Add to update collection
@@ -565,7 +603,7 @@ public class XpBackgroundProcessor : INService, IDisposable
                                 newLevel,
                                 settings.ExclusiveRoleRewards,
                                 roleRewardCache,
-                                roleRewards);
+                                roleRewards).ConfigureAwait(false);
 
                             await ProcessCurrencyRewards(
                                 db,
@@ -574,7 +612,7 @@ public class XpBackgroundProcessor : INService, IDisposable
                                 0,
                                 newLevel,
                                 currencyRewardCache,
-                                currencyRewards);
+                                currencyRewards).ConfigureAwait(false);
                         }
 
                         // Add to insert collection
@@ -595,7 +633,7 @@ public class XpBackgroundProcessor : INService, IDisposable
             }
 
             // Execute database operations with retry
-            await ExecuteDatabaseOperationsWithRetry(db, guildId, insertRecords, updateRecords);
+            await ExecuteDatabaseOperationsWithRetry(db, guildId, insertRecords, updateRecords).ConfigureAwait(false);
 
             // Process notifications and rewards
             await Task.WhenAll(
@@ -603,7 +641,7 @@ public class XpBackgroundProcessor : INService, IDisposable
                 ProcessRoleRewardsInBatches(roleRewards),
                 ProcessCurrencyRewardsInBatches(currencyRewards),
                 competitionManager.UpdateCompetitionsAsync(db, competitionUpdates)
-            );
+            ).ConfigureAwait(false);
 
             return items.Count;
         }
@@ -643,7 +681,8 @@ public class XpBackgroundProcessor : INService, IDisposable
             {
                 if (!roleRewardCache.TryGetValue(level, out var roleReward))
                 {
-                    roleReward = await rewardManager.GetRoleRewardForLevelAsync(db, guildId, level);
+                    roleReward = await rewardManager.GetRoleRewardForLevelAsync(db, guildId, level)
+                        .ConfigureAwait(false);
                     roleRewardCache[level] = roleReward;
                 }
 
@@ -664,7 +703,8 @@ public class XpBackgroundProcessor : INService, IDisposable
             {
                 if (!roleRewardCache.TryGetValue(level, out var roleReward))
                 {
-                    roleReward = await rewardManager.GetRoleRewardForLevelAsync(db, guildId, level);
+                    roleReward = await rewardManager.GetRoleRewardForLevelAsync(db, guildId, level)
+                        .ConfigureAwait(false);
                     roleRewardCache[level] = roleReward;
                 }
 
@@ -703,7 +743,8 @@ public class XpBackgroundProcessor : INService, IDisposable
         {
             if (!currencyRewardCache.TryGetValue(level, out var currencyReward))
             {
-                currencyReward = await rewardManager.GetCurrencyRewardForLevelAsync(db, guildId, level);
+                currencyReward = await rewardManager.GetCurrencyRewardForLevelAsync(db, guildId, level)
+                    .ConfigureAwait(false);
                 currencyRewardCache[level] = currencyReward;
             }
 
@@ -729,11 +770,11 @@ public class XpBackgroundProcessor : INService, IDisposable
         for (var i = 0; i < notifications.Count; i += batchSize)
         {
             var batch = notifications.Skip(i).Take(batchSize).ToList();
-            await rewardManager.SendNotificationsAsync(batch);
+            await rewardManager.SendNotificationsAsync(batch).ConfigureAwait(false);
 
             if (i + batchSize < notifications.Count)
             {
-                await Task.Delay(100);
+                await Task.Delay(100).ConfigureAwait(false);
             }
         }
     }
@@ -750,11 +791,11 @@ public class XpBackgroundProcessor : INService, IDisposable
         for (var i = 0; i < rewards.Count; i += batchSize)
         {
             var batch = rewards.Skip(i).Take(batchSize).ToList();
-            await rewardManager.GrantRoleRewardsAsync(batch);
+            await rewardManager.GrantRoleRewardsAsync(batch).ConfigureAwait(false);
 
             if (i + batchSize < rewards.Count)
             {
-                await Task.Delay(200);
+                await Task.Delay(200).ConfigureAwait(false);
             }
         }
     }
@@ -771,11 +812,11 @@ public class XpBackgroundProcessor : INService, IDisposable
         for (var i = 0; i < rewards.Count; i += batchSize)
         {
             var batch = rewards.Skip(i).Take(batchSize).ToList();
-            await rewardManager.GrantCurrencyRewardsAsync(batch);
+            await rewardManager.GrantCurrencyRewardsAsync(batch).ConfigureAwait(false);
 
             if (i + batchSize < rewards.Count)
             {
-                await Task.Delay(100);
+                await Task.Delay(100).ConfigureAwait(false);
             }
         }
     }
@@ -805,12 +846,12 @@ public class XpBackgroundProcessor : INService, IDisposable
                     for (var i = 0; i < insertRecords.Count; i += OptimalBatchSize)
                     {
                         var chunk = insertRecords.Skip(i).Take(OptimalBatchSize).ToList();
-                        await db.BulkCopyAsync(chunk);
+                        await db.BulkCopyAsync(chunk).ConfigureAwait(false);
 
                         // Update cache
                         foreach (var record in chunk)
                         {
-                            await cacheManager.UpdateUserXpCacheAsync(record);
+                            await cacheManager.UpdateUserXpCacheAsync(record).ConfigureAwait(false);
                         }
                     }
 
@@ -825,7 +866,7 @@ public class XpBackgroundProcessor : INService, IDisposable
                     }
                     else
                     {
-                        await Task.Delay(50 * (attempt + 1));
+                        await Task.Delay(50 * (attempt + 1)).ConfigureAwait(false);
                     }
                 }
             }
@@ -853,12 +894,13 @@ public class XpBackgroundProcessor : INService, IDisposable
                                 LastLevelUp = source.LastLevelUp,
                                 NotifyType = source.NotifyType
                             })
-                            .MergeAsync();
+                            .MergeAsync()
+                            .ConfigureAwait(false);
 
                         // Update cache
                         foreach (var record in chunk)
                         {
-                            await cacheManager.UpdateUserXpCacheAsync(record);
+                            await cacheManager.UpdateUserXpCacheAsync(record).ConfigureAwait(false);
                         }
                     }
 
@@ -873,7 +915,7 @@ public class XpBackgroundProcessor : INService, IDisposable
                     }
                     else
                     {
-                        await Task.Delay(50 * (attempt + 1));
+                        await Task.Delay(50 * (attempt + 1)).ConfigureAwait(false);
                     }
                 }
             }
@@ -898,7 +940,8 @@ public class XpBackgroundProcessor : INService, IDisposable
             // Get guilds with decay enabled
             var guildsWithDecay = await db.GuildXpSettings
                 .Where(g => g.EnableXpDecay)
-                .ToListAsync();
+                .ToListAsync()
+                .ConfigureAwait(false);
 
             if (guildsWithDecay.Count == 0)
                 return;
@@ -908,7 +951,7 @@ public class XpBackgroundProcessor : INService, IDisposable
             // Process guilds sequentially with throttling
             foreach (var settings in guildsWithDecay)
             {
-                await dbThrottle.WaitAsync();
+                await dbThrottle.WaitAsync().ConfigureAwait(false);
                 try
                 {
                     var inactiveThreshold = DateTime.UtcNow.AddDays(-settings.InactivityDaysBeforeDecay);
@@ -922,14 +965,16 @@ public class XpBackgroundProcessor : INService, IDisposable
                     while (hasMoreRecords)
                     {
                         // Get batch of inactive users using LinqToDB
+                        var id = lastUserId;
                         var inactiveUsers = await db.GuildUserXps
                             .Where(x =>
                                 x.GuildId == settings.GuildId &&
                                 x.LastActivity < inactiveThreshold &&
-                                x.UserId > lastUserId)
+                                x.UserId > id)
                             .OrderBy(x => x.UserId)
                             .Take(decayBatchSize)
-                            .ToListAsync();
+                            .ToListAsync()
+                            .ConfigureAwait(false);
 
                         hasMoreRecords = inactiveUsers.Count == decayBatchSize;
 
@@ -954,12 +999,12 @@ public class XpBackgroundProcessor : INService, IDisposable
                         }
 
                         // Use BulkCopy for the update
-                        await db.BulkCopyAsync(inactiveUsers);
+                        await db.BulkCopyAsync(inactiveUsers).ConfigureAwait(false);
 
                         // Update cache for each decayed user
                         foreach (var user in inactiveUsers)
                         {
-                            await cacheManager.UpdateUserXpCacheAsync(user);
+                            await cacheManager.UpdateUserXpCacheAsync(user).ConfigureAwait(false);
                         }
                     }
 
@@ -1003,7 +1048,7 @@ public class XpBackgroundProcessor : INService, IDisposable
             Log.Debug("Running cache cleanup task");
 
             // Clean up Redis caches
-            var cleanupStats = await cacheManager.CleanupCachesAsync();
+            var cleanupStats = await cacheManager.CleanupCachesAsync().ConfigureAwait(false);
 
             // Clean up active user tracking to prevent memory leaks
             var timeSinceLastCleanup = DateTime.UtcNow - lastActiveUserCleanup;
@@ -1022,21 +1067,6 @@ public class XpBackgroundProcessor : INService, IDisposable
                 {
                     activeUserIds.TryRemove(userId, out _);
                     recentlyActiveUsers.TryRemove(userId, out _);
-                }
-
-                // Clean local settings cache periodically
-                if (settingsCache.Count > 500)
-                {
-                    var oldSettings = settingsCache
-                        .Where(pair =>
-                            (currentTime - pair.Value.CacheTime).TotalMinutes > settingsCacheTtl.TotalMinutes)
-                        .Select(pair => pair.Key)
-                        .ToList();
-
-                    foreach (var guildId in oldSettings)
-                    {
-                        settingsCache.TryRemove(guildId, out _);
-                    }
                 }
 
                 lastActiveUserCleanup = DateTime.UtcNow;
@@ -1058,38 +1088,32 @@ public class XpBackgroundProcessor : INService, IDisposable
     }
 
     /// <summary>
-    ///     Disposes resources used by the XP background processor.
+    ///     Logs memory statistics and current system status.
     /// </summary>
-    public void Dispose()
+    /// <param name="state">The state object (not used).</param>
+    private void LogMemoryStats(object state)
     {
         try
         {
-            // Mark queue as complete for consumer
-            xpQueue.CompleteAdding();
+            var process = Process.GetCurrentProcess();
+            var memoryMb = process.WorkingSet64 / 1024 / 1024;
 
-            // Stop timers
-            processingTimer?.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
-            decayTimer?.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
-            cleanupTimer?.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+            Log.Information("XP Processor Memory Stats: Working Set: {MemoryMB}MB, " +
+                            "Queue: {QueueSize}, Batching Buffer: {BufferSize}, " +
+                            "Active Users: {ActiveUsers}, Processing: {IsProcessing}",
+                memoryMb, xpQueue.Count, batchingBuffer.Count,
+                activeUserIds.Count, isProcessing == 1);
 
-            // Process remaining items
-            ProcessXpBatches(null);
-
-            // Wait briefly for processing to complete
-            Thread.Sleep(500);
-
-            // Dispose resources
-            processingTimer?.Dispose();
-            decayTimer?.Dispose();
-            cleanupTimer?.Dispose();
-            dbThrottle?.Dispose();
-            xpQueue?.Dispose();
-
-            Log.Information("XP Background Processor successfully disposed");
+            // Force processing if memory is high and we have items to process
+            if (memoryMb > 4000 && batchingBuffer.Count > 0 && isProcessing != 1)
+            {
+                Log.Warning("High memory usage detected ({MemoryMB}MB), forcing XP processing", memoryMb);
+                ProcessXpBatches(null);
+            }
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error during XP Background Processor disposal");
+            Log.Error(ex, "Error logging memory stats");
         }
     }
 }
