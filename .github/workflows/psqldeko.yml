@@ -38,9 +38,9 @@ jobs:
         if: ${{ steps.commit_count.outputs.count < 20 }}
         run: echo "Build skipped because there are less than 20 commits since last build."
 
-      - name: Restore dependencies Mewdeko
+      - name: Restore dependencies
         if: ${{ steps.commit_count.outputs.count >= 20 }}
-        run: dotnet restore src/Mewdeko/Mewdeko.csproj
+        run: dotnet restore Mewdeko.sln
 
       - name: Build Mewdeko
         if: ${{ steps.commit_count.outputs.count >= 20 }}
@@ -48,7 +48,7 @@ jobs:
 
       - name: Test
         if: ${{ steps.commit_count.outputs.count >= 20 }}
-        run: dotnet test --no-restore --verbosity normal
+        run: dotnet test Mewdeko.sln --no-restore --verbosity normal
 
       - name: Copy data folder
         if: ${{ steps.commit_count.outputs.count >= 20 }}
