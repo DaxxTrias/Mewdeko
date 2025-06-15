@@ -1,5 +1,5 @@
-using LinqToDB;
 using DataModel;
+using LinqToDB;
 using LinqToDB.Data;
 using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.Xp.Models;
@@ -12,11 +12,10 @@ namespace Mewdeko.Modules.Xp.Services;
 /// </summary>
 public class XpCompetitionManager : INService, IDisposable
 {
-    private readonly DiscordShardedClient client;
-    private readonly IDataConnectionFactory dbFactory;
-
     // Active competitions
     private readonly ConcurrentDictionary<ulong, List<XpCompetition>> activeCompetitions = new();
+    private readonly DiscordShardedClient client;
+    private readonly IDataConnectionFactory dbFactory;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="XpCompetitionManager"/> class.
@@ -29,6 +28,14 @@ public class XpCompetitionManager : INService, IDisposable
     {
         this.client = client;
         this.dbFactory = dbFactory;
+    }
+
+    /// <summary>
+    ///     Disposes of resources used by the competition manager.
+    /// </summary>
+    public void Dispose()
+    {
+        activeCompetitions.Clear();
     }
 
     /// <summary>
@@ -77,7 +84,7 @@ public class XpCompetitionManager : INService, IDisposable
     /// <summary>
     ///     Updates competition entries with new XP data.
     /// </summary>
-    /// <param name="dbFactory">The database connection.</param>
+    /// <param name="db">The database connection.</param>
     /// <param name="updates">The list of competition updates.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
     public async Task UpdateCompetitionsAsync(MewdekoDb db, List<CompetitionUpdateItem> updates)
@@ -150,8 +157,8 @@ public class XpCompetitionManager : INService, IDisposable
                         // Check if this is the first user to reach the target using LinqToDB
                         var isFirst = !(await db.XpCompetitionEntries
                             .AnyAsync(e => e.CompetitionId == competitionId &&
-                                     e.UserId != update.UserId &&
-                                     e.AchievedTargetAt != null));
+                                           e.UserId != update.UserId &&
+                                           e.AchievedTargetAt != null));
 
                         if (isFirst && competition.AnnouncementChannelId.HasValue)
                         {
@@ -166,7 +173,8 @@ public class XpCompetitionManager : INService, IDisposable
                                     embed: new EmbedBuilder()
                                         .WithColor(Color.Gold)
                                         .WithTitle("Competition Milestone!")
-                                        .WithDescription($"{user.Mention} is the first to reach level {competition.TargetLevel} in the '{competition.Name}' competition!")
+                                        .WithDescription(
+                                            $"{user.Mention} is the first to reach level {competition.TargetLevel} in the '{competition.Name}' competition!")
                                         .Build()
                                 );
                             }
@@ -284,7 +292,7 @@ public class XpCompetitionManager : INService, IDisposable
             // Initialize entries for active users using LinqToDB
             var activeUsers = await db.GuildUserXps
                 .Where(u => u.GuildId == competition.GuildId &&
-                       u.LastActivity > DateTime.UtcNow.AddDays(-30))
+                            u.LastActivity > DateTime.UtcNow.AddDays(-30))
                 .ToListAsync();
 
             var entries = new List<XpCompetitionEntry>();
@@ -505,13 +513,5 @@ public class XpCompetitionManager : INService, IDisposable
         {
             Log.Error(ex, "Error finalizing competition {CompetitionId}", competitionId);
         }
-    }
-
-    /// <summary>
-    ///     Disposes of resources used by the competition manager.
-    /// </summary>
-    public void Dispose()
-    {
-        activeCompetitions.Clear();
     }
 }

@@ -100,9 +100,9 @@ public class ExportedTriggers
     public bool Eph { get; set; }
 
     /// <summary>
-    ///     Converts a <see cref="Database.EF.EFCore.ChatTriggers" /> object to an <see cref="ExportedTriggers" /> object.
+    ///     Converts a <see cref="DataModel.ChatTrigger" /> object to an <see cref="ExportedTriggers" /> object.
     /// </summary>
-    /// <param name="ct">The <see cref="Database.EF.EFCore.ChatTriggers" /> object.</param>
+    /// <param name="ct">The <see cref="DataModel.ChatTrigger" /> object.</param>
     /// <returns>The converted <see cref="ExportedTriggers" /> object.</returns>
     public static ExportedTriggers FromModel(ChatTrigger ct)
     {

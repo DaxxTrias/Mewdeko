@@ -13,11 +13,13 @@ public partial class Games
     /// <param name="cache">Redis cache</param>
     /// <param name="gamesConfig">Games service for fetching game configs</param>
     /// <param name="guildSettings">The guild settings service</param>
+    /// <param name="handler">The event handler service</param>
     [Group]
     public class TriviaCommands(
         IDataCache cache,
         GamesConfigService gamesConfig,
-        GuildSettingsService guildSettings, EventHandler handler)
+        GuildSettingsService guildSettings,
+        EventHandler handler)
         : MewdekoSubmodule<GamesService>
     {
         /// <summary>
@@ -64,7 +66,8 @@ public partial class Games
                 return;
             }
 
-            await ctx.Channel.SendErrorAsync($"{Strings.TriviaAlreadyRunning(ctx.Guild.Id)}\n{trivia.CurrentQuestion}", Config)
+            await ctx.Channel.SendErrorAsync($"{Strings.TriviaAlreadyRunning(ctx.Guild.Id)}\n{trivia.CurrentQuestion}",
+                    Config)
                 .ConfigureAwait(false);
         }
 

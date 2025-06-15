@@ -12,6 +12,7 @@ public partial class Games
     ///     A module containing Hangman commands.
     /// </summary>
     /// <param name="guildSettings">The guild settings service</param>
+    /// <param name="handler">The event handler service</param>
     [Group]
     public class HangmanCommands(GuildSettingsService guildSettings, EventHandler handler)
         : MewdekoSubmodule<GamesService>
@@ -84,8 +85,8 @@ public partial class Games
 
             async Task ClientMessageReceived(SocketMessage msg)
             {
-                    if (ctx.Channel.Id == msg.Channel.Id && !msg.Author.IsBot)
-                        await hm.Input(msg.Author.Id, msg.Author.ToString(), msg.Content);
+                if (ctx.Channel.Id == msg.Channel.Id && !msg.Author.IsBot)
+                    await hm.Input(msg.Author.Id, msg.Author.ToString(), msg.Content);
             }
         }
 

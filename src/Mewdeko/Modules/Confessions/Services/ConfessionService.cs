@@ -8,9 +8,10 @@ namespace Mewdeko.Modules.Confessions.Services;
 /// <summary>
 ///     Service for managing confessions.
 /// </summary>
-/// <param name="dbFactory"></param>
-/// <param name="client"></param>
-/// <param name="guildSettings"></param>
+/// <param name="dbFactory">The database connection factory.</param>
+/// <param name="client">The Discord client instance.</param>
+/// <param name="guildSettings">The guild settings service.</param>
+/// <param name="config">The bot configuration.</param>
 public class ConfessionService(
     IDataConnectionFactory dbFactory,
     DiscordShardedClient client,

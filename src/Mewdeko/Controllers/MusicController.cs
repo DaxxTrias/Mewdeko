@@ -251,9 +251,9 @@ public class MusicController : Controller
     /// <returns>A task that completes when the SSE connection is closed</returns>
     private async Task HandleServerSentEvents(ulong guildId, ulong userId)
     {
-        HttpContext.Response.Headers.Add("Content-Type", "text/event-stream");
-        HttpContext.Response.Headers.Add("Cache-Control", "no-cache");
-        HttpContext.Response.Headers.Add("Connection", "keep-alive");
+        HttpContext.Response.Headers["Content-Type"] = "text/event-stream";
+        HttpContext.Response.Headers["Cache-Control"] = "no-cache";
+        HttpContext.Response.Headers["Connection"] = "keep-alive";
 
         // Send initial status
         var initialStatus = await GetInitialStatus(guildId, userId);

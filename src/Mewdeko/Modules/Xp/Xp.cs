@@ -1097,8 +1097,7 @@ public class Xp(InteractiveService serv, ICurrencyService currencyService, XpRol
     /// <param name="competitionId">The ID of the competition.</param>
     /// <param name="position">The position to reward (1 for first place, etc.).</param>
     /// <param name="type">The type of reward: Role, XP, or Currency.</param>
-    /// <param name="amount">For XP or Currency rewards, the amount to award.</param>
-    /// <param name="role">For Role rewards, the role to award.</param>
+    /// <param name="reward">For Role rewards, the role to award; for XP or Currency rewards, the amount as a string.</param>
     /// <example>.addcompetitionreward 1 1 Role @Winner</example>
     /// <example>.addcompetitionreward 1 2 XP 1000</example>
     /// <example>.addcompetitionreward 1 3 Currency 500</example>

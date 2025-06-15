@@ -677,12 +677,6 @@ public class TicketService : INService
     /// <param name="ticket">The ticket being opened.</param>
     /// <param name="customMessage">Optional custom message to override the default.</param>
     /// <returns>The configured message content in SmartEmbed format.</returns>
-    /// <summary>
-    ///     Gets or creates the default ticket opening message.
-    /// </summary>
-    /// <param name="ticket">The ticket being opened.</param>
-    /// <param name="customMessage">Optional custom message to override the default.</param>
-    /// <returns>The configured message content in SmartEmbed format.</returns>
     private string GetTicketOpenMessage(Ticket ticket, string customMessage = null)
     {
         if (!string.IsNullOrWhiteSpace(customMessage))
@@ -2403,7 +2397,7 @@ public class TicketService : INService
             Log.Error($"Invalid modal configuration format: {ex}");
             await component.RespondAsync("Invalid ticket form configuration.", ephemeral: true);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             Log.Error("Error creating modal");
             await component.RespondAsync("Failed to create ticket form.", ephemeral: true);
@@ -2432,6 +2426,7 @@ public class TicketService : INService
     /// <param name="firstOptionEmoji">Emoji for the first option</param>
     /// <param name="minValues">Minimum number of selections required</param>
     /// <param name="maxValues">Maximum number of selections allowed</param>
+    /// <param name="updateComponents">Whether to update the panel components after adding the menu</param>
     /// <returns>The created panel select menu</returns>
     public async Task<PanelSelectMenu> AddSelectMenuAsync(
         TicketPanel panel,
@@ -2563,6 +2558,7 @@ public class TicketService : INService
     /// <param name="maxActiveTickets">Maximum active tickets per user</param>
     /// <param name="allowedPriorities">List of allowed priority IDs</param>
     /// <param name="defaultPriority">Optional default priority</param>
+    /// <param name="updateComponents">Whether to update the panel components after adding the option</param>
     /// <returns>The created select menu option</returns>
     public async Task<SelectMenuOption> AddSelectOptionAsync(
         PanelSelectMenu menu,
@@ -4118,7 +4114,7 @@ public class TicketService : INService
     /// <summary>
     ///     Blacklists a user from creating tickets in the guild.
     /// </summary>
-    /// <param name="guildId">The ID of the guild.</param>
+    /// <param name="guild">The guild where the user should be blacklisted.</param>
     /// <param name="userId">The ID of the user to blacklist.</param>
     /// <param name="reason">The optional reason for the blacklist.</param>
     /// <returns>True if the user was successfully blacklisted, false if they were already blacklisted.</returns>
@@ -4175,7 +4171,7 @@ public class TicketService : INService
     /// <summary>
     ///     Removes a user from the ticket blacklist.
     /// </summary>
-    /// <param name="guildId">The ID of the guild.</param>
+    /// <param name="guild">The guild object.</param>
     /// <param name="userId">The ID of the user to unblacklist.</param>
     /// <returns>True if the user was successfully unblacklisted, false if they weren't blacklisted.</returns>
     public async Task<bool> UnblacklistUser(IGuild guild, ulong userId)

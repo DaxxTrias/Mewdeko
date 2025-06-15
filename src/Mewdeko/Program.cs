@@ -269,6 +269,7 @@ public class Program
     /// <param name="services">The service collection to configure.</param>
     /// <param name="credentials">The bot credentials.</param>
     /// <param name="cache">The shared data cache instance.</param>
+    /// <param name="serverCount">The current server count for configuration scaling.</param>
     private static void ConfigureServices(IServiceCollection services, BotCredentials credentials, IDataCache cache,
         int serverCount)
     {

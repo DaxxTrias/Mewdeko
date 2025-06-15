@@ -16,7 +16,6 @@ using Mewdeko.Modules.Utility.Common;
 using Mewdeko.Modules.Utility.Services;
 using Mewdeko.Services.Impl;
 using Mewdeko.Services.Settings;
-
 using Serilog;
 using StringExtensions = Mewdeko.Extensions.StringExtensions;
 
@@ -30,10 +29,13 @@ namespace Mewdeko.Modules.Utility;
 /// <param name="stats"></param>
 /// <param name="creds"></param>
 /// <param name="tracker"></param>
+/// <param name="cmdServ"></param>
 /// <param name="serv"></param>
 /// <param name="guildSettings"></param>
 /// <param name="httpClient"></param>
 /// <param name="config"></param>
+/// <param name="dbFactory"></param>
+/// <param name="cache"></param>
 public partial class Utility(
     DiscordShardedClient client,
     IStatsService stats,
@@ -427,7 +429,8 @@ public partial class Utility(
             {
                 IconUrl = ctx.User.GetAvatarUrl(),
                 Text =
-                    Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(), (DateTime.UtcNow - msg.DateAdded).Humanize())
+                    Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(),
+                        (DateTime.UtcNow - msg.DateAdded).Humanize())
             },
             Color = Mewdeko.OkColor
         };
@@ -988,7 +991,8 @@ public partial class Utility(
             {
                 IconUrl = ctx.User.GetAvatarUrl(),
                 Text =
-                    Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(), (DateTime.UtcNow - msg.DateAdded).Humanize())
+                    Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(),
+                        (DateTime.UtcNow - msg.DateAdded).Humanize())
             },
             Color = Mewdeko.OkColor
         };
@@ -1072,7 +1076,8 @@ public partial class Utility(
             {
                 IconUrl = ctx.User.GetAvatarUrl(),
                 Text =
-                    Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(), (DateTime.UtcNow - msg.DateAdded).Humanize())
+                    Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(),
+                        (DateTime.UtcNow - msg.DateAdded).Humanize())
             },
             Color = Mewdeko.OkColor
         };
@@ -1132,7 +1137,8 @@ public partial class Utility(
                 {
                     IconUrl = ctx.User.GetAvatarUrl(),
                     Text =
-                        Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(), (DateTime.UtcNow - msg.DateAdded).Humanize())
+                        Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(),
+                            (DateTime.UtcNow - msg.DateAdded).Humanize())
                 },
                 Color = Mewdeko.OkColor
             };
@@ -1191,7 +1197,8 @@ public partial class Utility(
             {
                 IconUrl = ctx.User.GetAvatarUrl(),
                 Text =
-                    Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(), (DateTime.UtcNow - msg.DateAdded).Humanize())
+                    Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(),
+                        (DateTime.UtcNow - msg.DateAdded).Humanize())
             },
             Color = Mewdeko.OkColor
         };
@@ -1251,7 +1258,8 @@ public partial class Utility(
                 {
                     IconUrl = ctx.User.GetAvatarUrl(),
                     Text =
-                        Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(), (DateTime.UtcNow - msg.DateAdded).Humanize())
+                        Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(),
+                            (DateTime.UtcNow - msg.DateAdded).Humanize())
                 },
                 Color = Mewdeko.OkColor
             };
@@ -1312,7 +1320,8 @@ public partial class Utility(
                 {
                     IconUrl = ctx.User.GetAvatarUrl(),
                     Text =
-                        Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(), (DateTime.UtcNow - msg.DateAdded).Humanize())
+                        Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(),
+                            (DateTime.UtcNow - msg.DateAdded).Humanize())
                 },
                 Color = Mewdeko.OkColor
             };
@@ -1375,7 +1384,8 @@ public partial class Utility(
                 {
                     IconUrl = ctx.User.GetAvatarUrl(),
                     Text =
-                        Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(), (DateTime.UtcNow - msg.DateAdded).Humanize())
+                        Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(),
+                            (DateTime.UtcNow - msg.DateAdded).Humanize())
                 },
                 Color = Mewdeko.OkColor
             };
@@ -1855,8 +1865,7 @@ public partial class Utility(
             .CountAsync();
         var userTasks = new[]
         {
-            client.Rest.GetUserAsync(280835732728184843),
-            client.Rest.GetUserAsync(786375627892064257)
+            client.Rest.GetUserAsync(280835732728184843), client.Rest.GetUserAsync(786375627892064257)
         };
 
         var users = await Task.WhenAll(userTasks);
@@ -1872,7 +1881,8 @@ public partial class Utility(
                 .AddField(Strings.CommandCount(ctx.Guild.Id), cmdServ.Commands.DistinctBy(x => x.Name).Count())
                 .AddField("Library", stats.Library)
                 .AddField(Strings.OwnerIds(ctx.Guild.Id), string.Join("\n", creds.OwnerIds.Select(x => $"<@{x}>")))
-                .AddField(Strings.Shard(ctx.Guild.Id), $"#{client.GetShardFor(ctx.Guild).ShardId} / {creds.TotalShards}")
+                .AddField(Strings.Shard(ctx.Guild.Id),
+                    $"#{client.GetShardFor(ctx.Guild).ShardId} / {creds.TotalShards}")
                 .AddField(Strings.Memory(ctx.Guild.Id), $"{stats.Heap} MB")
                 .AddField(Strings.Uptime(ctx.Guild.Id), stats.GetUptimeString("\n"))
                 .AddField("Servers", $"{client.Guilds.Count} Servers"));

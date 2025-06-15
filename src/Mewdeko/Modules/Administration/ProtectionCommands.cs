@@ -366,7 +366,9 @@ public partial class Administration
                 return;
             }
 
-            await ReplyConfirmAsync(added.Value ? Strings.SpamIgnore(ctx.Guild.Id, "Anti-Spam") : Strings.SpamNotIgnore(ctx.Guild.Id, "Anti-Spam"))
+            await ReplyConfirmAsync(added.Value
+                    ? Strings.SpamIgnore(ctx.Guild.Id, "Anti-Spam")
+                    : Strings.SpamNotIgnore(ctx.Guild.Id, "Anti-Spam"))
                 .ConfigureAwait(false);
         }
 
@@ -388,7 +390,8 @@ public partial class Administration
                 return;
             }
 
-            await ReplyErrorAsync(Strings.ProtectionNotRunning(ctx.Guild.Id, "Anti-Mass-Mention")).ConfigureAwait(false);
+            await ReplyErrorAsync(Strings.ProtectionNotRunning(ctx.Guild.Id, "Anti-Mass-Mention"))
+                .ConfigureAwait(false);
         }
 
         /// <summary>
@@ -398,6 +401,7 @@ public partial class Administration
         /// <param name="mentionThreshold">The number of mentions allowed in a single message before triggering protection.</param>
         /// <param name="timeWindowSeconds">The time window (in seconds) to observe mentions.</param>
         /// <param name="maxMentionsInTimeWindow">The maximum allowed mentions in the specified time window.</param>
+        /// <param name="ignoreBots">Whether to ignore bot accounts when tracking mentions.</param>
         /// <param name="action">
         ///     The punishment action to be taken against users who exceed the mention limits.
         ///     <see cref="PunishmentAction" />
@@ -443,6 +447,7 @@ public partial class Administration
         /// <param name="mentionThreshold">The number of mentions allowed in a single message before triggering protection.</param>
         /// <param name="timeWindowSeconds">The time window (in seconds) to observe mentions.</param>
         /// <param name="maxMentionsInTimeWindow">The maximum allowed mentions in the specified time window.</param>
+        /// <param name="ignoreBots">Whether to ignore bot accounts when tracking mentions.</param>
         /// <param name="action">
         ///     The punishment action to be taken against users who exceed the mention limits.
         ///     <see cref="PunishmentAction" />

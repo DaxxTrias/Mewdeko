@@ -116,7 +116,6 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
     private readonly TypedKey<CTModel> crAdded = new("cr.added");
     private readonly IBotCredentials creds;
     private readonly TypedKey<bool> crsReloadedKey = new("crs.reloaded");
-    private readonly GeneratedBotStrings strings;
 
     private readonly IDataConnectionFactory dbFactory;
     private readonly DiscordPermOverrideService discordPermOverride;
@@ -131,6 +130,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
     private readonly PermissionService perms;
     private readonly IPubSub pubSub;
     private readonly Random rng;
+    private readonly GeneratedBotStrings strings;
 
     // it is perfectly fine to have global chattriggers as an array
     // 1. custom reactions are almost never added (compared to how many times they are being looped through)
@@ -528,7 +528,6 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
                             UserId = inter.User.Id
                         };
                         await dbContext.InsertAsync(toAdd);
-
                     }
 
                     var sentMsg = await ct.SendInteraction(inter, client, false, fakeMsg,
@@ -1166,7 +1165,8 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
     {
         // Initialize the database context
         await using var dbContext = await dbFactory.CreateConnectionAsync();
-        var count = await dbContext.ChatTriggers.Where(x => x.GuildId == guildId).DeleteAsync(); // Delete chat triggers associated with the guild
+        var count = await dbContext.ChatTriggers.Where(x => x.GuildId == guildId)
+            .DeleteAsync(); // Delete chat triggers associated with the guild
         newGuildReactions.TryRemove(guildId, out _); // Remove guild reactions from the internal representation
         return count; // Return the count of deleted chat triggers
     }
@@ -1294,7 +1294,11 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
         key = key.ToLowerInvariant();
         var cr = new CTModel
         {
-            GuildId = guildId, Trigger = key, Response = message, IsRegex = regex, ValidTriggerTypes = (int)ChatTriggerType.Message
+            GuildId = guildId,
+            Trigger = key,
+            Response = message,
+            IsRegex = regex,
+            ValidTriggerTypes = (int)ChatTriggerType.Message
         };
 
         if (cr.Response.Contains("%target", StringComparison.OrdinalIgnoreCase))
@@ -1342,7 +1346,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
         if (ct.Response.Contains("%target%", StringComparison.OrdinalIgnoreCase))
             ct.AllowTarget = true; // Enable targeting
 
-         // Save changes
+        // Save changes
         await UpdateInternalAsync(guildId.Value, ct).ConfigureAwait(false); // Update the trigger internally
 
         return ct; // Return the edited chat trigger
@@ -1359,17 +1363,18 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
     {
         // Initialize the database context
         await using var dbContext = await dbFactory.CreateConnectionAsync();
-        var toDelete = await dbContext.ChatTriggers.FirstOrDefaultAsync(x => x.Id == id); // Retrieve the chat trigger by ID
+        var toDelete =
+            await dbContext.ChatTriggers.FirstOrDefaultAsync(x => x.Id == id); // Retrieve the chat trigger by ID
 
         if (toDelete is null) // Check if the trigger exists
             return null;
 
-        if (toDelete.GuildId is not null or 0 && guildId == null && guildId != toDelete.GuildId) // Check permission to delete
+        if (toDelete.GuildId is not null or 0 && guildId == null &&
+            guildId != toDelete.GuildId) // Check permission to delete
             return null; // Return null if deletion is not permitted
         await dbContext.DeleteAsync(toDelete); // Remove the trigger from the database
         await DeleteInternalAsync(guildId, id).ConfigureAwait(false); // Delete the trigger internally
         return toDelete; // Return the deleted trigger
-
     }
 
     /// <summary>
@@ -1412,7 +1417,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
             return null;
 
         ct.ApplicationCommandType = (int)type; // Update the interaction type
-         // Save changes
+        // Save changes
         await UpdateInternalAsync(guildId, ct).ConfigureAwait(false); // Update the trigger internally
 
         return ct; // Return the updated trigger
@@ -1435,7 +1440,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
             return null;
 
         ct.ApplicationCommandName = name; // Update the interaction name
-         // Save changes
+        // Save changes
         await UpdateInternalAsync(guildId, ct).ConfigureAwait(false); // Update the trigger internally
 
         return ct; // Return the updated trigger
@@ -1459,7 +1464,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
             return null;
 
         ct.ApplicationCommandDescription = description; // Update the interaction description
-         // Save changes
+        // Save changes
         await UpdateInternalAsync(guildId, ct).ConfigureAwait(false); // Update the trigger internally
 
         return ct; // Return the updated trigger
@@ -1482,7 +1487,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
             return null;
 
         ct.EphemeralResponse = ephemeral; // Update the ephemeral response
-         // Save changes
+        // Save changes
         await UpdateInternalAsync(guildId, ct).ConfigureAwait(false); // Update the trigger internally
 
         return ct; // Return the updated trigger
@@ -1505,7 +1510,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
             return null;
 
         ct.PrefixType = (int)type; // Update the prefix type
-         // Save changes
+        // Save changes
         await UpdateInternalAsync(guildId, ct).ConfigureAwait(false); // Update the trigger internally
 
         return ct; // Return the updated trigger
@@ -1528,7 +1533,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
             return null;
 
         ct.CustomPrefix = name; // Update the custom prefix
-         // Save changes
+        // Save changes
         await UpdateInternalAsync(guildId, ct).ConfigureAwait(false); // Update the trigger internally
 
         return ct; // Return the updated trigger
@@ -1573,7 +1578,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
 
         ct.CrosspostingWebhookUrl = webhookUrl; // Update the webhook URL
         ct.CrosspostingChannelId = 0ul; // Reset the channel ID
-         // Save changes
+        // Save changes
         await UpdateInternalAsync(guildId, ct).ConfigureAwait(false); // Update the trigger internally
 
         return (ct, true); // Return the updated trigger and true
@@ -1598,7 +1603,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
 
         ct.CrosspostingWebhookUrl = ""; // Clear the webhook URL
         ct.CrosspostingChannelId = channelId; // Set the crossposting channel ID
-         // Save changes
+        // Save changes
         await UpdateInternalAsync(guildId, ct).ConfigureAwait(false); // Update the trigger internally
 
         return ct; // Return the updated trigger
@@ -1631,7 +1636,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
                 break;
         }
 
-         // Save changes
+        // Save changes
         await UpdateInternalAsync(guildId, ct).ConfigureAwait(false); // Update the trigger internally
         await dbContext.UpdateAsync(ct);
         return ct; // Return the updated trigger
@@ -1677,7 +1682,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
         await using var dbContext = await dbFactory.CreateConnectionAsync();
         ct.GrantedRoles = string.Join("@@@", roles.Select(x => x.ToString())); // Update the granted roles
         await dbContext.UpdateAsync(ct); // Update the chat trigger in the database
-         // Save changes
+        // Save changes
         await UpdateInternalAsync(ct.GuildId, ct).ConfigureAwait(false); // Update the trigger internally
     }
 
@@ -1700,7 +1705,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
         await using var dbContext = await dbFactory.CreateConnectionAsync();
         ct.RemovedRoles = string.Join("@@@", roles.Select(x => x.ToString())); // Update the removed roles
         await dbContext.UpdateAsync(ct); // Update the chat trigger in the database
-         // Save changes
+        // Save changes
         await UpdateInternalAsync(ct.GuildId, ct).ConfigureAwait(false); // Update the trigger internally
     }
 
@@ -1830,8 +1835,8 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
                                          && x.RealName().Split(' ').Length == 1)
             .Select(x => new TriggerChildGrouping(x.RealName(), x, null)).ToList();
         triggers.Where(x =>
-            x.ApplicationCommandType == (int)CtApplicationCommandType.Slash && x.RealName().Split(' ').Length == 2).ForEach(
-            x =>
+                x.ApplicationCommandType == (int)CtApplicationCommandType.Slash && x.RealName().Split(' ').Length == 2)
+            .ForEach(x =>
             {
                 if (groups.Any(y => y.Name == x.RealName().Split(' ').First()))
                     groups.First(y => y.Name == x.RealName().Split(' ').First()).Children
@@ -1917,13 +1922,8 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
     ///     Tries to retrieve the application command properties for a guild.
     /// </summary>
     /// <param name="guildId">The ID of the guild.</param>
-    /// <param name="props">
-    ///     When this method returns, contains the application command properties for the guild, if they exist;
-    ///     otherwise, null.
-    /// </param>
     /// <returns>
-    ///     <see langword="true" /> if the application command properties were successfully retrieved; otherwise,
-    ///     <see langword="false" />.
+    ///     A tuple containing a boolean indicating success and the application command properties if successful, otherwise null.
     /// </returns>
     public async Task<(bool, List<ApplicationCommandProperties>? props)> TryGetApplicationCommandProperties(
         ulong guildId)
@@ -1969,7 +1969,6 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
         cmd.SelectMany(applicationCommand =>
             applicationCommand.GetCtNames().Select(name => (cmd: applicationCommand, name))).ToList().ForEach(x =>
             cts.First(y => y.RealName() == x.name).ApplicationCommandId = x.cmd.Id);
-
     }
 
     /// <summary>

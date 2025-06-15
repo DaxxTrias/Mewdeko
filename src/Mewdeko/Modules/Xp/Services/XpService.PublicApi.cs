@@ -49,7 +49,6 @@ public partial class XpService
 
     #region User XP Management
 
-
     /// <summary>
     ///     Recomputes all user levels in a guild after changing the XP curve type.
     /// </summary>
@@ -306,7 +305,7 @@ public partial class XpService
         await db.UpdateAsync(userXp);
 
         // Update cache
-        cacheManager.UpdateUserXpCacheAsync(userXp);
+        _ = cacheManager.UpdateUserXpCacheAsync(userXp);
     }
 
     /// <summary>
@@ -330,7 +329,7 @@ public partial class XpService
         await db.UpdateAsync(userXp);
 
         // Update cache
-        cacheManager.UpdateUserXpCacheAsync(userXp);
+        _ = cacheManager.UpdateUserXpCacheAsync(userXp);
     }
 
     /// <summary>
@@ -350,7 +349,7 @@ public partial class XpService
         await db.UpdateAsync(userXp);
 
         // Update cache
-        cacheManager.UpdateUserXpCacheAsync(userXp);
+        _ = cacheManager.UpdateUserXpCacheAsync(userXp);
     }
 
     /// <summary>

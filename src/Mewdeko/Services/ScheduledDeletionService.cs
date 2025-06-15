@@ -1,10 +1,8 @@
 using System.Threading;
 using LinqToDB;
-using LinqToDB.Data;
 using Mewdeko.Modules.Tickets.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 using Serilog;
 
 namespace Mewdeko.Services;
@@ -14,14 +12,15 @@ namespace Mewdeko.Services;
 /// </summary>
 public class ScheduledDeletionService : BackgroundService
 {
-    private readonly IServiceProvider services;
-    private readonly IDataConnectionFactory dbFactory;
     private readonly TimeSpan _interval = TimeSpan.FromMinutes(1); // Check every minute
+    private readonly IDataConnectionFactory dbFactory;
+    private readonly IServiceProvider services;
 
     /// <summary>
     /// Initializes a new instance of the ScheduledDeletionService
     /// </summary>
     /// <param name="services">The service provider</param>
+    /// <param name="dbFactory">The database connection factory</param>
     public ScheduledDeletionService(IServiceProvider services, IDataConnectionFactory dbFactory)
     {
         this.services = services;

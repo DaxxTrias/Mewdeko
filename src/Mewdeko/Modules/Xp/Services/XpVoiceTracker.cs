@@ -681,14 +681,14 @@ public class XpVoiceTracker : INService, IDisposable
     /// <param name="channelId">The channel ID.</param>
     /// <param name="voiceChannel">The voice channel, if available.</param>
     /// <returns>A task representing the asynchronous operation with a boolean result.</returns>
-    private async Task<bool> IsChannelEligibleAsync(ulong guildId, ulong channelId,
+    private Task<bool> IsChannelEligibleAsync(ulong guildId, ulong channelId,
         SocketVoiceChannel? voiceChannel = null)
     {
         // Check local cache for recent results
         var cacheKey = $"{guildId}:{channelId}";
         if (channelEligibilityCache.TryGetValue(cacheKey, out bool cachedResult))
         {
-            return cachedResult;
+            return Task.FromResult(cachedResult);
         }
 
         // If we have the channel object, check it directly
@@ -699,7 +699,7 @@ public class XpVoiceTracker : INService, IDisposable
                 .SetSize(1)
                 .SetAbsoluteExpiration(eligibilityCacheTtl);
             channelEligibilityCache.Set(cacheKey, isEligible, options);
-            return isEligible;
+            return Task.FromResult(isEligible);
         }
 
         // Otherwise, get the channel and check
@@ -712,7 +712,7 @@ public class XpVoiceTracker : INService, IDisposable
                 .SetSize(1)
                 .SetAbsoluteExpiration(eligibilityCacheTtl);
             channelEligibilityCache.Set(cacheKey, false, options);
-            return false;
+            return Task.FromResult(false);
         }
 
         var eligibleCount = channel.Users.Count(u => !u.IsBot && IsParticipatingInVoice(u));
@@ -722,7 +722,7 @@ public class XpVoiceTracker : INService, IDisposable
             .SetSize(1)
             .SetAbsoluteExpiration(eligibilityCacheTtl);
         channelEligibilityCache.Set(cacheKey, eligible, cacheEntryOptions);
-        return eligible;
+        return Task.FromResult(eligible);
     }
 
     /// <summary>

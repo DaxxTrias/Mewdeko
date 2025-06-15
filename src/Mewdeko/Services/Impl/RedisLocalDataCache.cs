@@ -1,7 +1,6 @@
 ﻿using System.IO;
 using System.Text.Json;
 using Mewdeko.Modules.Games.Common.Trivia;
-
 using Serilog;
 using StackExchange.Redis;
 
@@ -21,7 +20,6 @@ public class RedisLocalDataCache : ILocalDataCache
     /// </summary>
     /// <param name="con">The connection multiplexer for Redis.</param>
     /// <param name="creds">The bot credentials.</param>
-    /// <param name="shardId">The shard ID.</param>
     public RedisLocalDataCache(ConnectionMultiplexer con, IBotCredentials creds)
     {
         this.con = con;

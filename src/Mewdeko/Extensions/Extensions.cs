@@ -434,7 +434,7 @@ public static partial class Extensions
     /// <returns>Method name of the command.</returns>
     public static string MethodName(this CommandInfo cmd)
     {
-        return ((Cmd)cmd.Attributes.FirstOrDefault(x => x is Cmd))?.MethodName
+        return ((Cmd?)cmd.Attributes.FirstOrDefault(x => x is Cmd))?.MethodName
                ?? cmd.Name;
     }
 
@@ -447,7 +447,8 @@ public static partial class Extensions
     /// <returns>Full usage of the command.</returns>
     public static string GetFullUsage(string commandName, string args, string? prefix)
     {
-        return $"{prefix}{commandName} {(prefix != null && StringExtensions.TryFormat(args, [prefix], out var output) ? output : args)}";
+        return
+            $"{prefix}{commandName} {(prefix != null && StringExtensions.TryFormat(args, [prefix], out var output) ? output : args)}";
     }
 
     /// <summary>
@@ -637,7 +638,7 @@ public static partial class Extensions
     /// <returns>Enumerable collection of roles associated with the user.</returns>
     public static IEnumerable<IRole> GetRoles(this IGuildUser? user)
     {
-        return user?.RoleIds.Select(r => user.Guild.GetRole(r)).Where(r => r != null);
+        return user?.RoleIds.Select(r => user.Guild.GetRole(r)).Where(r => r != null)!;
     }
 
     /// <summary>

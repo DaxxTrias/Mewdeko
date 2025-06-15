@@ -13,12 +13,12 @@ public static class WarnExtensions
     ///
     /// </summary>
     /// <param name="set"></param>
+    /// <param name="db"></param>
     /// <param name="guildId"></param>
     /// <param name="userId"></param>
     /// <param name="mod"></param>
     public static async Task ForgiveAll(this ITable<Warning> set, MewdekoDb db, ulong guildId, ulong userId, string mod)
     {
-
         var forgeev = set.Where(x => x.GuildId == guildId && x.UserId == userId && !x.Forgiven);
         foreach (var i in forgeev)
         {
@@ -33,13 +33,14 @@ public static class WarnExtensions
     ///
     /// </summary>
     /// <param name="set"></param>
-    /// <param name="dbFactory"></param>
+    /// <param name="db"></param>
     /// <param name="guildId"></param>
     /// <param name="userId"></param>
     /// <param name="mod"></param>
     /// <param name="index"></param>
     /// <returns></returns>
-    public static async Task<bool> Forgive(this ITable<Warning> set, MewdekoDb db, ulong guildId, ulong userId, string mod, int index)
+    public static async Task<bool> Forgive(this ITable<Warning> set, MewdekoDb db, ulong guildId, ulong userId,
+        string mod, int index)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(index);
 
@@ -61,12 +62,13 @@ public static class WarnExtensions
     ///
     /// </summary>
     /// <param name="set"></param>
+    /// <param name="db"></param>
     /// <param name="guildId"></param>
     /// <param name="userId"></param>
     /// <param name="mod"></param>
-    public static async Task ForgiveAll(this ITable<Warnings2> set, MewdekoDb db, ulong guildId, ulong userId, string mod)
+    public static async Task ForgiveAll(this ITable<Warnings2> set, MewdekoDb db, ulong guildId, ulong userId,
+        string mod)
     {
-
         var forgeev = set.Where(x => x.GuildId == guildId && x.UserId == userId && !x.Forgiven);
         foreach (var i in forgeev)
         {
@@ -81,13 +83,14 @@ public static class WarnExtensions
     ///
     /// </summary>
     /// <param name="set"></param>
-    /// <param name="dbFactory"></param>
+    /// <param name="db"></param>
     /// <param name="guildId"></param>
     /// <param name="userId"></param>
     /// <param name="mod"></param>
     /// <param name="index"></param>
     /// <returns></returns>
-    public static async Task<bool> Forgive(this ITable<Warnings2> set, MewdekoDb db, ulong guildId, ulong userId, string mod, int index)
+    public static async Task<bool> Forgive(this ITable<Warnings2> set, MewdekoDb db, ulong guildId, ulong userId,
+        string mod, int index)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(index);
 

@@ -68,6 +68,7 @@ public class SuggestionsService : INService
     /// <param name="guildSettings">Service for guild-specific settings.</param>
     /// <param name="eventHandler">Event handler for Discord client events.</param>
     /// <param name="config">The bot config service.</param>
+    /// <param name="strings">The generated bot strings service for localization.</param>
     public SuggestionsService(
         IDataConnectionFactory dbFactory,
         DiscordShardedClient client,
@@ -216,15 +217,15 @@ public class SuggestionsService : INService
             if (Equals(arg3.Emote, tup))
             {
                 maybeSuggest.EmoteCount1 =
-                    (await message.GetReactionUsersAsync(arg3.Emote, 500).FlattenAsync().ConfigureAwait(false)).Count(
-                        x => !x.IsBot);
+                    (await message.GetReactionUsersAsync(arg3.Emote, 500).FlattenAsync().ConfigureAwait(false))
+                    .Count(x => !x.IsBot);
                 await dbContext.UpdateAsync(maybeSuggest);
             }
             else if (Equals(arg3.Emote, tdown))
             {
                 maybeSuggest.EmoteCount2 =
-                    (await message.GetReactionUsersAsync(arg3.Emote, 500).FlattenAsync().ConfigureAwait(false)).Count(
-                        x => !x.IsBot);
+                    (await message.GetReactionUsersAsync(arg3.Emote, 500).FlattenAsync().ConfigureAwait(false))
+                    .Count(x => !x.IsBot);
                 await dbContext.UpdateAsync(maybeSuggest);
             }
             else
@@ -286,15 +287,15 @@ public class SuggestionsService : INService
             if (Equals(arg3.Emote, tup))
             {
                 maybeSuggest.EmoteCount1 =
-                    (await message.GetReactionUsersAsync(arg3.Emote, 500).FlattenAsync().ConfigureAwait(false)).Count(
-                        x => !x.IsBot);
+                    (await message.GetReactionUsersAsync(arg3.Emote, 500).FlattenAsync().ConfigureAwait(false))
+                    .Count(x => !x.IsBot);
                 await dbContext.UpdateAsync(maybeSuggest);
             }
             else if (Equals(arg3.Emote, tdown))
             {
                 maybeSuggest.EmoteCount2 =
-                    (await message.GetReactionUsersAsync(arg3.Emote, 500).FlattenAsync().ConfigureAwait(false)).Count(
-                        x => !x.IsBot);
+                    (await message.GetReactionUsersAsync(arg3.Emote, 500).FlattenAsync().ConfigureAwait(false))
+                    .Count(x => !x.IsBot);
                 await dbContext.UpdateAsync(maybeSuggest);
             }
             else
@@ -1481,7 +1482,6 @@ public class SuggestionsService : INService
     ///     the suggestion's thread.
     /// </summary>
     /// <param name="guild">The guild where the suggestion is made.</param>
-    /// <param name="client">The Discord client.</param>
     /// <param name="user">The user who implemented the suggestion.</param>
     /// <param name="suggestion">The ID of the suggestion being implemented.</param>
     /// <param name="channel">The channel where the implementation message will be sent.</param>

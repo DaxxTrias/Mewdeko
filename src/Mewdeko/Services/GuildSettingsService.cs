@@ -15,28 +15,13 @@ namespace Mewdeko.Services;
 /// </summary>
 public class GuildSettingsService
 {
-    private readonly IDataConnectionFactory dbFactory;
     private readonly BotConfig botSettings;
     private readonly IMemoryCache cache;
-    private readonly PerformanceMonitorService perfService;
-    private readonly ConcurrentDictionary<ulong, SemaphoreSlim> updateLocks; // Use ulong as key
+    private readonly IDataConnectionFactory dbFactory;
     private readonly TimeSpan defaultCacheExpiration = TimeSpan.FromMinutes(30);
+    private readonly PerformanceMonitorService perfService;
     private readonly TimeSpan slidingCacheExpiration = TimeSpan.FromMinutes(10);
-
-    private static string GetPrefixCacheKey(ulong guildId)
-    {
-        return $"prefix_{guildId}";
-    }
-
-    private static string GetGuildConfigCacheKey(ulong guildId)
-    {
-        return $"guildconfig_{guildId}";
-    }
-
-    private static string GetReactionRolesCacheKey(ulong guildId)
-    {
-        return $"reactionroles_{guildId}";
-    }
+    private readonly ConcurrentDictionary<ulong, SemaphoreSlim> updateLocks; // Use ulong as key
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="GuildSettingsService" /> class.
@@ -57,6 +42,21 @@ public class GuildSettingsService
         cache = memoryCache ?? throw new ArgumentNullException(nameof(memoryCache));
         this.perfService = perfService ?? throw new ArgumentNullException(nameof(perfService));
         updateLocks = new ConcurrentDictionary<ulong, SemaphoreSlim>(); // Use ulong as key
+    }
+
+    private static string GetPrefixCacheKey(ulong guildId)
+    {
+        return $"prefix_{guildId}";
+    }
+
+    private static string GetGuildConfigCacheKey(ulong guildId)
+    {
+        return $"guildconfig_{guildId}";
+    }
+
+    private static string GetReactionRolesCacheKey(ulong guildId)
+    {
+        return $"reactionroles_{guildId}";
     }
 
     /// <summary>
@@ -371,7 +371,7 @@ public class GuildSettingsService
     ///     Internal helper to get or create a guild configuration within a given DB connection.
     ///     Ensures configuration exists before returning.
     /// </summary>
-    /// <param name="dbFactory">The active LinqToDB database connection (<see cref="MewdekoDb" />).</param>
+    /// <param name="db">The active LinqToDB database connection (<see cref="MewdekoDb" />).</param>
     /// <param name="guildId">The ulong ID of the guild.</param>
     /// <returns>The existing or newly created guild configuration.</returns>
     private async Task<GuildConfig> GetOrCreateGuildConfigInternal(MewdekoDb db, ulong guildId)

@@ -10,6 +10,7 @@ namespace Mewdeko.Modules.RoleStates;
 /// </summary>
 /// <param name="bss">The BotConfigService instance.</param>
 /// <param name="interactivity">The InteractiveService instance.</param>
+/// <param name="client">The Discord client instance.</param>
 public class RoleStates(BotConfigService bss, InteractiveService interactivity, DiscordShardedClient client)
     : MewdekoModuleBase<RoleStatesService>
 {
@@ -90,7 +91,8 @@ public class RoleStates(BotConfigService bss, InteractiveService interactivity, 
                 $"{bss.Data.SuccessEmote} {Strings.RoleStatesTransferred(ctx.Guild.Id, result.TransferCount, targetGuild.Name)}");
         else
             await ctx.Channel.SendErrorAsync(
-                $"{bss.Data.ErrorEmote} {Strings.RoleStatesTransferFailed(ctx.Guild.Id)}\n{result.ErrorMessage}", Config);
+                $"{bss.Data.ErrorEmote} {Strings.RoleStatesTransferFailed(ctx.Guild.Id)}\n{result.ErrorMessage}",
+                Config);
     }
 
     /// <summary>

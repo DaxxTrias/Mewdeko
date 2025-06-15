@@ -632,7 +632,7 @@ public class UserPunishService : INService
             .Select(x => x.Id.Value)
             .ToList();
 
-        blacklistService.BlacklistUsers(found);
+        _ = blacklistService.BlacklistUsers(found);
 
         return (bans, missing);
     }
