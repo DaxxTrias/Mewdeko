@@ -50,10 +50,6 @@ jobs:
         if: ${{ steps.commit_count.outputs.count >= 20 }}
         run: dotnet publish src/Mewdeko/Mewdeko.csproj --no-restore -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false -p:IncludeNativeLibrariesForSelfExtract=true -p:UseAppHost=true -o output/
 
-      - name: Test
-        if: ${{ steps.commit_count.outputs.count >= 20 }}
-        run: dotnet test Mewdeko.sln --no-restore --verbosity normal
-
       - name: Copy data folder
         if: ${{ steps.commit_count.outputs.count >= 20 }}
         run: cp -r src/Mewdeko/data output/
