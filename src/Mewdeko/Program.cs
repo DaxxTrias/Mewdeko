@@ -95,6 +95,7 @@ public class Program
         var discordRestClient = new DiscordRestClient();
         await discordRestClient.LoginAsync(TokenType.Bot, credentials.Token);
         var botGatewayInfo = await discordRestClient.GetBotGatewayAsync();
+        var serverCount = (await discordRestClient.GetCurrentBotInfoAsync()).ApproximateGuildCount;
         await discordRestClient.LogoutAsync();
         Cache = new RedisCache(credentials, botGatewayInfo.Shards);
 
@@ -109,7 +110,7 @@ public class Program
             var builder = WebApplication.CreateBuilder(args);
             builder.Logging.ClearProviders();
 
-            ConfigureServices(builder.Services, credentials, Cache);
+            ConfigureServices(builder.Services, credentials, Cache, serverCount.GetValueOrDefault());
 
             builder.WebHost.UseUrls($"http://localhost:{credentials.ApiPort}");
             builder.Services.Configure<RouteOptions>(options =>
@@ -253,7 +254,7 @@ public class Program
                 .ConfigureLogging(logging => logging.ClearProviders())
                 .ConfigureServices((_, services) =>
                 {
-                    ConfigureServices(services, credentials, Cache);
+                    ConfigureServices(services, credentials, Cache, serverCount.GetValueOrDefault());
                 })
                 .Build();
 
@@ -268,7 +269,8 @@ public class Program
     /// <param name="services">The service collection to configure.</param>
     /// <param name="credentials">The bot credentials.</param>
     /// <param name="cache">The shared data cache instance.</param>
-    private static void ConfigureServices(IServiceCollection services, BotCredentials credentials, IDataCache cache)
+    private static void ConfigureServices(IServiceCollection services, BotCredentials credentials, IDataCache cache,
+        int serverCount)
     {
         var client = new DiscordShardedClient(new DiscordSocketConfig
         {
@@ -297,7 +299,24 @@ public class Program
         services.AddSingleton<IDataConnectionFactory>(sp =>
             new PostgreSqlConnectionFactory(credentials.PsqlConnectionString));
 
+        var options = serverCount switch
+        {
+            > 10000 => new EventHandlerOptions().CreateHighTrafficProfile(),
+            > 1000 => new EventHandlerOptions
+            {
+                MaxQueueSize = 20000,
+                PresenceUpdateRateLimit = 200,
+                TypingRateLimit = 75,
+                MessageBatchSize = 75,
+                MessageBatchInterval = TimeSpan.FromMilliseconds(75)
+            },
+            _ => new EventHandlerOptions().CreateLowTrafficProfile()
+        };
+
+        options.Validate();
+        services.AddSingleton(options);
         services.AddSingleton<EventHandler>();
+
         services.AddSingleton(new CommandService(new CommandServiceConfig
         {
             CaseSensitiveCommands = false, DefaultRunMode = RunMode.Async

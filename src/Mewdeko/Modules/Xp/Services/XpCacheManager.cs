@@ -1,8 +1,10 @@
+using System.Globalization;
 using System.Text.Json;
 using DataModel;
 using LinqToDB;
 using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.Xp.Models;
+using Microsoft.Extensions.Caching.Memory;
 using Serilog;
 using StackExchange.Redis;
 
@@ -13,16 +15,6 @@ namespace Mewdeko.Modules.Xp.Services;
 /// </summary>
 public class XpCacheManager : INService
 {
-    private readonly IDataCache dataCache;
-    private readonly IDataConnectionFactory dbFactory;
-    private readonly IDatabase redisCache;
-    private readonly DiscordShardedClient client;
-
-    // Memory caches for frequently accessed data
-    private readonly ConcurrentDictionary<ulong, GuildXpSetting> guildSettingsCache = new();
-    private readonly ConcurrentDictionary<(ulong, ulong), bool> exclusionCache = new();
-    private readonly ConcurrentDictionary<string, double> multiplierCache = new();
-
     // Constants for Redis keys and cache parameters
     private const string RedisKeyPrefix = "xp:";
     private const string GuildSettingsKey = "guild_settings";
@@ -32,14 +24,26 @@ public class XpCacheManager : INService
     private const string MultiplierKey = "multiplier";
     private const string FirstMsgKey = "first_msg";
 
-    // Cache TTLs (can be tuned for different data types)
+    // Batch operation parameters
+    private const int MaxBatchSize = 100;
+
+    // Cache TTLs
     private static readonly TimeSpan GuildSettingsTtl = TimeSpan.FromHours(2);
     private static readonly TimeSpan UserXpTtl = TimeSpan.FromMinutes(30);
     private static readonly TimeSpan ExclusionTtl = TimeSpan.FromMinutes(15);
     private static readonly TimeSpan MultiplierTtl = TimeSpan.FromMinutes(5);
+    private readonly DiscordShardedClient client;
+    private readonly IDataCache dataCache;
+    private readonly IDataConnectionFactory dbFactory;
 
-    // Batch operation parameters
-    private const int MaxBatchSize = 100;
+    private readonly MemoryCacheOptions hotCacheOptions = new()
+    {
+        SizeLimit = 100, ExpirationScanFrequency = TimeSpan.FromMinutes(5)
+    };
+
+    // Small hot cache for frequently accessed guilds only
+    private readonly MemoryCache hotGuildCache;
+    private readonly IDatabase redisCache;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="XpCacheManager" /> class.
@@ -56,6 +60,9 @@ public class XpCacheManager : INService
         this.dbFactory = dbFactory;
         this.client = client;
         redisCache = dataCache.Redis.GetDatabase();
+
+        // Initialize small hot cache for frequently accessed guilds
+        hotGuildCache = new MemoryCache(hotCacheOptions);
     }
 
     /// <summary>
@@ -76,11 +83,10 @@ public class XpCacheManager : INService
     /// <returns>The guild user XP record.</returns>
     public async Task<GuildUserXp> GetOrCreateGuildUserXpAsync(MewdekoDb db, ulong guildId, ulong userId)
     {
-        // Check memory cache first (we don't use this because we want to be distributed)
         var cacheKey = $"{RedisKeyPrefix}{GuildUserKey}:{guildId}:{userId}";
 
-        // Try to get from Redis with one operation
-        var redisData = await redisCache.StringGetAsync(cacheKey);
+        // Try to get from Redis
+        var redisData = await redisCache.StringGetAsync(cacheKey).ConfigureAwait(false);
         if (redisData.HasValue)
         {
             try
@@ -97,7 +103,8 @@ public class XpCacheManager : INService
 
         // Get from database using LinqToDB
         var userXp = await db.GuildUserXps
-            .FirstOrDefaultAsync(x => x.GuildId == guildId && x.UserId == userId);
+            .FirstOrDefaultAsync(x => x.GuildId == guildId && x.UserId == userId)
+            .ConfigureAwait(false);
 
         if (userXp == null)
         {
@@ -112,12 +119,12 @@ public class XpCacheManager : INService
             };
 
             // Insert using LinqToDB
-            await db.InsertAsync(userXp);
+            await db.InsertAsync(userXp).ConfigureAwait(false);
         }
 
-        // Update caches - only cache here, don't duplicate Redis operations
+        // Cache in Redis only
         var serializedData = JsonSerializer.Serialize(userXp);
-        await redisCache.StringSetAsync(cacheKey, serializedData, UserXpTtl);
+        await redisCache.StringSetAsync(cacheKey, serializedData, UserXpTtl).ConfigureAwait(false);
 
         return userXp;
     }
@@ -132,9 +139,8 @@ public class XpCacheManager : INService
 
         try
         {
-            // Update Redis cache
             var serializedData = JsonSerializer.Serialize(userXp);
-            await redisCache.StringSetAsync(cacheKey, serializedData, UserXpTtl);
+            await redisCache.StringSetAsync(cacheKey, serializedData, UserXpTtl).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -144,21 +150,22 @@ public class XpCacheManager : INService
     }
 
     /// <summary>
-    ///     Gets the guild XP settings with multilevel caching.
+    ///     Gets the guild XP settings with hot cache and Redis fallback.
     /// </summary>
     /// <param name="guildId">The guild ID.</param>
     /// <returns>The guild XP settings.</returns>
     public async Task<GuildXpSetting> GetGuildXpSettingsAsync(ulong guildId)
     {
-        // Try memory cache first (fastest)
-        if (guildSettingsCache.TryGetValue(guildId, out var cachedSettings))
+        // Try hot cache first (fastest)
+        var hotCacheKey = $"guild:{guildId}";
+        if (hotGuildCache.TryGetValue(hotCacheKey, out GuildXpSetting cachedSettings))
         {
             return cachedSettings;
         }
 
         // Try Redis cache
         var cacheKey = $"{RedisKeyPrefix}{GuildSettingsKey}:{guildId}";
-        var redisData = await redisCache.StringGetAsync(cacheKey);
+        var redisData = await redisCache.StringGetAsync(cacheKey).ConfigureAwait(false);
 
         GuildXpSetting settings;
         if (redisData.HasValue)
@@ -168,8 +175,11 @@ public class XpCacheManager : INService
                 settings = JsonSerializer.Deserialize<GuildXpSetting>(redisData);
                 if (settings != null)
                 {
-                    // Update memory cache
-                    guildSettingsCache[guildId] = settings;
+                    // Update hot cache
+                    var options = new MemoryCacheEntryOptions()
+                        .SetSize(1)
+                        .SetAbsoluteExpiration(TimeSpan.FromMinutes(10));
+                    hotGuildCache.Set(hotCacheKey, settings, options);
                     return settings;
                 }
             }
@@ -179,11 +189,12 @@ public class XpCacheManager : INService
             }
         }
 
-        // Get from database using a single connection
+        // Get from database
         await using var db = await dbFactory.CreateConnectionAsync();
 
         settings = await db.GuildXpSettings
-            .FirstOrDefaultAsync(x => x.GuildId == guildId);
+            .FirstOrDefaultAsync(x => x.GuildId == guildId)
+            .ConfigureAwait(false);
 
         if (settings == null)
         {
@@ -202,13 +213,17 @@ public class XpCacheManager : INService
             };
 
             // Insert using LinqToDB
-            await db.InsertAsync(settings);
+            await db.InsertAsync(settings).ConfigureAwait(false);
         }
 
         // Update both caches
         var serializedData = JsonSerializer.Serialize(settings);
-        await redisCache.StringSetAsync(cacheKey, serializedData, GuildSettingsTtl);
-        guildSettingsCache[guildId] = settings;
+        await redisCache.StringSetAsync(cacheKey, serializedData, GuildSettingsTtl).ConfigureAwait(false);
+
+        var hotOptions = new MemoryCacheEntryOptions()
+            .SetSize(1)
+            .SetAbsoluteExpiration(TimeSpan.FromMinutes(10));
+        hotGuildCache.Set(hotCacheKey, settings, hotOptions);
 
         return settings;
     }
@@ -223,34 +238,31 @@ public class XpCacheManager : INService
         await using var db = await dbFactory.CreateConnectionAsync();
 
         // Update using LinqToDB
-        await db.UpdateAsync(settings);
+        await db.UpdateAsync(settings).ConfigureAwait(false);
 
-        // Update both caches at once
+        // Update both caches
         var cacheKey = $"{RedisKeyPrefix}{GuildSettingsKey}:{settings.GuildId}";
         var serializedData = JsonSerializer.Serialize(settings);
 
-        // Update memory cache
-        guildSettingsCache[settings.GuildId] = settings;
+        // Update hot cache
+        var hotCacheKey = $"guild:{settings.GuildId}";
+        var hotOptions = new MemoryCacheEntryOptions()
+            .SetSize(1)
+            .SetAbsoluteExpiration(TimeSpan.FromMinutes(10));
+        hotGuildCache.Set(hotCacheKey, settings, hotOptions);
 
         // Update Redis cache
-        await redisCache.StringSetAsync(cacheKey, serializedData, GuildSettingsTtl);
+        await redisCache.StringSetAsync(cacheKey, serializedData, GuildSettingsTtl).ConfigureAwait(false);
     }
 
     /// <summary>
-    ///     Checks if a server is excluded from XP gain with memory caching.
+    ///     Checks if a server is excluded from XP gain.
     /// </summary>
     /// <param name="guildId">The guild ID.</param>
     /// <returns>True if the server is excluded, false otherwise.</returns>
     public async Task<bool> IsServerExcludedAsync(ulong guildId)
     {
-        // Check memory cache for frequently accessed guilds
-        if (guildSettingsCache.TryGetValue(guildId, out var settings))
-        {
-            return settings.XpGainDisabled;
-        }
-
-        // Load from database with caching
-        settings = await GetGuildXpSettingsAsync(guildId);
+        var settings = await GetGuildXpSettingsAsync(guildId).ConfigureAwait(false);
         return settings.XpGainDisabled;
     }
 
@@ -263,22 +275,12 @@ public class XpCacheManager : INService
     /// <returns>The effective XP multiplier to apply.</returns>
     public async Task<double> GetEffectiveMultiplierAsync(ulong userId, ulong guildId, ulong channelId)
     {
-        // Use composite key for multiplier cache
         var cacheKey = $"{RedisKeyPrefix}{MultiplierKey}:{guildId}:{userId}:{channelId}";
-        var memoryCacheKey = $"{guildId}:{userId}:{channelId}";
-
-        // Try memory cache first for hot multipliers
-        if (multiplierCache.TryGetValue(memoryCacheKey, out var cachedMultiplier))
-        {
-            return cachedMultiplier;
-        }
 
         // Try Redis cache
-        var redisValue = await redisCache.StringGetAsync(cacheKey);
+        var redisValue = await redisCache.StringGetAsync(cacheKey).ConfigureAwait(false);
         if (redisValue.HasValue && double.TryParse(redisValue, out var multiplier))
         {
-            // Update memory cache
-            multiplierCache[memoryCacheKey] = multiplier;
             return multiplier;
         }
 
@@ -287,12 +289,13 @@ public class XpCacheManager : INService
             await using var db = await dbFactory.CreateConnectionAsync();
 
             // Get guild settings from cache
-            var settings = await GetGuildXpSettingsAsync(guildId);
+            var settings = await GetGuildXpSettingsAsync(guildId).ConfigureAwait(false);
             multiplier = settings.XpMultiplier;
 
             // Apply channel multiplier if exists
             var channelMultiplier = await db.XpChannelMultipliers
-                .FirstOrDefaultAsync(c => c.GuildId == guildId && c.ChannelId == channelId);
+                .FirstOrDefaultAsync(c => c.GuildId == guildId && c.ChannelId == channelId)
+                .ConfigureAwait(false);
 
             if (channelMultiplier != null)
             {
@@ -313,7 +316,8 @@ public class XpCacheManager : INService
                     // Get role multipliers in a single query
                     var roleMultipliers = await db.XpRoleMultipliers
                         .Where(r => r.GuildId == guildId && userRoleIds.Contains(r.RoleId))
-                        .ToListAsync();
+                        .ToListAsync()
+                        .ConfigureAwait(false);
 
                     if (roleMultipliers.Count != 0)
                     {
@@ -326,7 +330,8 @@ public class XpCacheManager : INService
             var now = DateTime.UtcNow;
             var boostEvents = await db.XpBoostEvents
                 .Where(b => b.GuildId == guildId && b.StartTime <= now && b.EndTime >= now)
-                .ToListAsync();
+                .ToListAsync()
+                .ConfigureAwait(false);
 
             // Process all boost events
             foreach (var boost in boostEvents)
@@ -342,8 +347,6 @@ public class XpCacheManager : INService
 
                 // Check if this boost applies
                 var applyBoost = !(channelIds.Count > 0 && !channelIds.Contains(channelId));
-
-                // Channel restriction check
 
                 // Role restriction check
                 if (applyBoost && roleIds.Count > 0)
@@ -361,9 +364,9 @@ public class XpCacheManager : INService
                 }
             }
 
-            // Cache the result in both Redis and memory
-            await redisCache.StringSetAsync(cacheKey, multiplier.ToString(), MultiplierTtl);
-            multiplierCache[memoryCacheKey] = multiplier;
+            // Cache the result in Redis only
+            await redisCache.StringSetAsync(cacheKey, multiplier.ToString(CultureInfo.InvariantCulture), MultiplierTtl)
+                .ConfigureAwait(false);
 
             return multiplier;
         }
@@ -382,22 +385,12 @@ public class XpCacheManager : INService
     /// <returns>True if the user can gain XP, false otherwise.</returns>
     public async Task<bool> CanUserGainXpAsync(IGuildUser user, ulong channelId)
     {
-        // Create composite cache key
         var exclusionCacheKey = $"{RedisKeyPrefix}{ExclusionKey}:{user.GuildId}:{user.Id}:{channelId}";
-        var memoryCacheKey = (user.GuildId, user.Id);
-
-        // Check memory cache first for hot users
-        if (exclusionCache.TryGetValue(memoryCacheKey, out var isExcluded))
-        {
-            return !isExcluded;
-        }
 
         // Check Redis cache
-        var redisValue = await redisCache.StringGetAsync(exclusionCacheKey);
-        if (redisValue.HasValue && bool.TryParse(redisValue, out isExcluded))
+        var redisValue = await redisCache.StringGetAsync(exclusionCacheKey).ConfigureAwait(false);
+        if (redisValue.HasValue && bool.TryParse(redisValue, out var isExcluded))
         {
-            // Update memory cache
-            exclusionCache[memoryCacheKey] = isExcluded;
             return !isExcluded;
         }
 
@@ -408,13 +401,12 @@ public class XpCacheManager : INService
         var channelExcluded = await db.XpExcludedItems
             .AnyAsync(x => x.GuildId == user.GuildId &&
                            x.ItemId == channelId &&
-                           x.ItemType == (int)ExcludedItemType.Channel);
+                           x.ItemType == (int)ExcludedItemType.Channel)
+            .ConfigureAwait(false);
 
         if (channelExcluded)
         {
-            // Cache the result
-            await redisCache.StringSetAsync(exclusionCacheKey, "true", ExclusionTtl);
-            exclusionCache[memoryCacheKey] = true;
+            await redisCache.StringSetAsync(exclusionCacheKey, "true", ExclusionTtl).ConfigureAwait(false);
             return false;
         }
 
@@ -422,13 +414,12 @@ public class XpCacheManager : INService
         var userExcluded = await db.XpExcludedItems
             .AnyAsync(x => x.GuildId == user.GuildId &&
                            x.ItemId == user.Id &&
-                           x.ItemType == (int)ExcludedItemType.User);
+                           x.ItemType == (int)ExcludedItemType.User)
+            .ConfigureAwait(false);
 
         if (userExcluded)
         {
-            // Cache the result
-            await redisCache.StringSetAsync(exclusionCacheKey, "true", ExclusionTtl);
-            exclusionCache[memoryCacheKey] = true;
+            await redisCache.StringSetAsync(exclusionCacheKey, "true", ExclusionTtl).ConfigureAwait(false);
             return false;
         }
 
@@ -436,19 +427,17 @@ public class XpCacheManager : INService
         var excludedRoles = await db.XpExcludedItems
             .Where(x => x.GuildId == user.GuildId && x.ItemType == (int)ExcludedItemType.Role)
             .Select(x => x.ItemId)
-            .ToListAsync();
+            .ToListAsync()
+            .ConfigureAwait(false);
 
         if (user.RoleIds.Any(r => excludedRoles.Contains(r)))
         {
-            // Cache the result
-            await redisCache.StringSetAsync(exclusionCacheKey, "true", ExclusionTtl);
-            exclusionCache[memoryCacheKey] = true;
+            await redisCache.StringSetAsync(exclusionCacheKey, "true", ExclusionTtl).ConfigureAwait(false);
             return false;
         }
 
         // User is not excluded
-        await redisCache.StringSetAsync(exclusionCacheKey, "false", ExclusionTtl);
-        exclusionCache[memoryCacheKey] = false;
+        await redisCache.StringSetAsync(exclusionCacheKey, "false", ExclusionTtl).ConfigureAwait(false);
         return true;
     }
 
@@ -468,7 +457,7 @@ public class XpCacheManager : INService
             cooldownKey,
             "1",
             TimeSpan.FromSeconds(cooldownSeconds),
-            When.NotExists);
+            When.NotExists).ConfigureAwait(false);
 
         return notOnCooldown;
     }
@@ -487,31 +476,16 @@ public class XpCacheManager : INService
             // Get a Redis server for scanning
             var server = dataCache.Redis.GetServer(dataCache.Redis.GetEndPoints().First());
 
-            // Clear memory caches periodically to prevent unbounded growth
-            var memoryKeyCount = guildSettingsCache.Count;
-            if (memoryKeyCount > 500)
+            // Clear hot cache periodically to prevent unbounded growth
+            if (hotGuildCache.Count > 80)
             {
-                guildSettingsCache.Clear();
-                Log.Debug("Cleared {Count} items from guild settings memory cache", memoryKeyCount);
-            }
-
-            memoryKeyCount = exclusionCache.Count;
-            if (memoryKeyCount > 1000)
-            {
-                exclusionCache.Clear();
-                Log.Debug("Cleared {Count} items from exclusion memory cache", memoryKeyCount);
-            }
-
-            memoryKeyCount = multiplierCache.Count;
-            if (memoryKeyCount > 2000)
-            {
-                multiplierCache.Clear();
-                Log.Debug("Cleared {Count} items from multiplier memory cache", memoryKeyCount);
+                hotGuildCache.Clear();
+                Log.Debug("Cleared hot guild cache");
             }
 
             // Process Redis keys in batches to prevent long-running operations
-            var disconnectedStats = await ProcessDisconnectedGuildsAsync(server);
-            var multiplierStats = await RefreshMultiplierCachesAsync(server);
+            var disconnectedStats = await ProcessDisconnectedGuildsAsync(server).ConfigureAwait(false);
+            var multiplierStats = await RefreshMultiplierCachesAsync(server).ConfigureAwait(false);
 
             keysRemoved = disconnectedStats.keysRemoved + multiplierStats.keysRemoved;
             keysExamined = disconnectedStats.keysExamined + multiplierStats.keysExamined;
@@ -559,12 +533,12 @@ public class XpCacheManager : INService
             if (connectedGuildIds.Contains(guildId)) continue;
             keysToDelete.Add(key);
 
-            // Remove from memory cache too
-            guildSettingsCache.TryRemove(guildId, out _);
+            // Remove from hot cache too
+            hotGuildCache.Remove($"guild:{guildId}");
 
             // Process in batches
             if (keysToDelete.Count < MaxBatchSize) continue;
-            await redisCache.KeyDeleteAsync(keysToDelete.ToArray());
+            await redisCache.KeyDeleteAsync(keysToDelete.ToArray()).ConfigureAwait(false);
             keysRemoved += keysToDelete.Count;
             Log.Debug("Deleted {Count} Redis keys for disconnected guilds", keysToDelete.Count);
             keysToDelete.Clear();
@@ -572,7 +546,7 @@ public class XpCacheManager : INService
 
         // Delete any remaining keys
         if (keysToDelete.Count <= 0) return (keysRemoved, keysExamined);
-        await redisCache.KeyDeleteAsync(keysToDelete.ToArray());
+        await redisCache.KeyDeleteAsync(keysToDelete.ToArray()).ConfigureAwait(false);
         keysRemoved += keysToDelete.Count;
         Log.Debug("Deleted {Count} Redis keys for disconnected guilds", keysToDelete.Count);
 
@@ -599,21 +573,19 @@ public class XpCacheManager : INService
             keysToRefresh.Add(key);
 
             // Process in batches
-            if (keysToRefresh.Count >= MaxBatchSize)
-            {
-                var tasks = keysToRefresh.Select(key => redisCache.KeyExpireAsync(key, MultiplierTtl)).ToArray();
-                await Task.WhenAll(tasks);
-                keysRefreshed += keysToRefresh.Count;
+            if (keysToRefresh.Count < MaxBatchSize) continue;
+            var tasks = keysToRefresh.Select(redisKey => redisCache.KeyExpireAsync(redisKey, MultiplierTtl)).ToArray();
+            await Task.WhenAll(tasks).ConfigureAwait(false);
+            keysRefreshed += keysToRefresh.Count;
 
-                keysToRefresh.Clear();
-            }
+            keysToRefresh.Clear();
         }
 
         // Process any remaining keys
         if (keysToRefresh.Count <= 0) return (keysRefreshed, keysExamined);
         {
             var tasks = keysToRefresh.Select(key => redisCache.KeyExpireAsync(key, MultiplierTtl)).ToArray();
-            await Task.WhenAll(tasks);
+            await Task.WhenAll(tasks).ConfigureAwait(false);
             keysRefreshed += keysToRefresh.Count;
         }
 
@@ -629,28 +601,8 @@ public class XpCacheManager : INService
     {
         try
         {
-            // Clear memory caches first
-            guildSettingsCache.TryRemove(guildId, out _);
-
-            // Clear relevant exclusion entries
-            var exclusionKeysToRemove = exclusionCache.Keys
-                .Where(k => k.Item1 == guildId)
-                .ToList();
-
-            foreach (var key in exclusionKeysToRemove)
-            {
-                exclusionCache.TryRemove(key, out _);
-            }
-
-            // Clear relevant multiplier entries
-            var multiplierKeysToRemove = multiplierCache.Keys
-                .Where(k => k.StartsWith($"{guildId}:"))
-                .ToList();
-
-            foreach (var key in multiplierKeysToRemove)
-            {
-                multiplierCache.TryRemove(key, out _);
-            }
+            // Clear hot cache
+            hotGuildCache.Remove($"guild:{guildId}");
 
             // Get the Redis server instance
             var server = dataCache.Redis.GetServer(dataCache.Redis.GetEndPoints().First());
@@ -675,7 +627,7 @@ public class XpCacheManager : INService
                     // Delete in batches to avoid large operations
                     if (redisKeysToDelete.Count >= MaxBatchSize)
                     {
-                        await redisCache.KeyDeleteAsync(redisKeysToDelete.ToArray());
+                        await redisCache.KeyDeleteAsync(redisKeysToDelete.ToArray()).ConfigureAwait(false);
                         Log.Debug("Deleted {Count} Redis keys for guild {GuildId}",
                             redisKeysToDelete.Count, guildId);
                         redisKeysToDelete.Clear();
@@ -686,7 +638,7 @@ public class XpCacheManager : INService
             // Delete any remaining keys
             if (redisKeysToDelete.Count > 0)
             {
-                await redisCache.KeyDeleteAsync(redisKeysToDelete.ToArray());
+                await redisCache.KeyDeleteAsync(redisKeysToDelete.ToArray()).ConfigureAwait(false);
                 Log.Debug("Deleted {Count} remaining Redis keys for guild {GuildId}",
                     redisKeysToDelete.Count, guildId);
             }
@@ -709,7 +661,7 @@ public class XpCacheManager : INService
 
             await using var db = await dbFactory.CreateConnectionAsync();
 
-            var allRoleRewards = await db.XpRoleRewards.ToListAsync();
+            var allRoleRewards = await db.XpRoleRewards.ToListAsync().ConfigureAwait(false);
 
             if (allRoleRewards.Count == 0)
             {
@@ -718,7 +670,6 @@ public class XpCacheManager : INService
             }
 
             Log.Information("Preloading {Count} role rewards into cache", allRoleRewards.Count);
-            Log.Information(string.Join(",", allRoleRewards.Select(x => $"{x.GuildId}|{x.RoleId}|{x.Level}")));
 
             var redis = GetRedisDatabase();
             var cacheOperations = new List<Task>();
@@ -727,14 +678,17 @@ public class XpCacheManager : INService
             for (var i = 0; i < allRoleRewards.Count; i += batchSize)
             {
                 var batch = allRoleRewards.Skip(i).Take(batchSize);
-                cacheOperations.AddRange((from roleReward in batch let cacheKey = $"{RedisKeyPrefix}rewards:{roleReward.GuildId}:role:{roleReward.Level}" let serializedReward = JsonSerializer.Serialize(roleReward) select redis.StringSetAsync(cacheKey, serializedReward, TimeSpan.FromMinutes(30), When.Always)));
+                cacheOperations.AddRange(from roleReward in batch
+                    let cacheKey = $"{RedisKeyPrefix}rewards:{roleReward.GuildId}:role:{roleReward.Level}"
+                    let serializedReward = JsonSerializer.Serialize(roleReward)
+                    select redis.StringSetAsync(cacheKey, serializedReward, TimeSpan.FromMinutes(30), When.Always));
 
-                await Task.WhenAll(cacheOperations);
+                await Task.WhenAll(cacheOperations).ConfigureAwait(false);
                 cacheOperations.Clear();
 
                 if (i + batchSize < allRoleRewards.Count)
                 {
-                    await Task.Delay(10);
+                    await Task.Delay(10).ConfigureAwait(false);
                 }
             }
 
@@ -761,7 +715,7 @@ public class XpCacheManager : INService
             await using var db = await dbFactory.CreateConnectionAsync();
 
             // Get all currency rewards from database
-            var allCurrencyRewards = await db.XpCurrencyRewards.ToListAsync();
+            var allCurrencyRewards = await db.XpCurrencyRewards.ToListAsync().ConfigureAwait(false);
 
             if (allCurrencyRewards.Count == 0)
             {
@@ -779,14 +733,17 @@ public class XpCacheManager : INService
             {
                 var batch = allCurrencyRewards.Skip(i).Take(batchSize);
 
-                cacheOperations.AddRange((from currencyReward in batch let cacheKey = $"{RedisKeyPrefix}rewards:{currencyReward.GuildId}:currency:{currencyReward.Level}" let serializedReward = JsonSerializer.Serialize(currencyReward) select redis.StringSetAsync(cacheKey, serializedReward, TimeSpan.FromMinutes(30), When.Always)));
+                cacheOperations.AddRange(from currencyReward in batch
+                    let cacheKey = $"{RedisKeyPrefix}rewards:{currencyReward.GuildId}:currency:{currencyReward.Level}"
+                    let serializedReward = JsonSerializer.Serialize(currencyReward)
+                    select redis.StringSetAsync(cacheKey, serializedReward, TimeSpan.FromMinutes(30), When.Always));
 
-                await Task.WhenAll(cacheOperations);
+                await Task.WhenAll(cacheOperations).ConfigureAwait(false);
                 cacheOperations.Clear();
 
                 if (i + batchSize < allCurrencyRewards.Count)
                 {
-                    await Task.Delay(10);
+                    await Task.Delay(10).ConfigureAwait(false);
                 }
             }
 
@@ -811,7 +768,7 @@ public class XpCacheManager : INService
         await Task.WhenAll(
             PreloadRoleRewardsAsync(),
             PreloadCurrencyRewardsAsync()
-        );
+        ).ConfigureAwait(false);
 
         var elapsedTime = DateTime.UtcNow - startTime;
         Log.Information("Completed reward cache preload in {ElapsedMs}ms", elapsedTime.TotalMilliseconds);
