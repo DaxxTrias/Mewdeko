@@ -1,7 +1,8 @@
-using Discord.Commands;
 using DataModel;
-using Microsoft.Extensions.DependencyInjection;
+using Discord.Commands;
 using LinqToDB;
+using Microsoft.Extensions.DependencyInjection;
+using Serilog;
 
 namespace Mewdeko.Common.Attributes.TextCommands;
 
@@ -17,7 +18,7 @@ public class RequireDragonAttribute : PreconditionAttribute
     /// <param name="context">The command context, containing user and guild information.</param>
     /// <param name="command">The command being executed.</param>
     /// <param name="services">The service provider used to resolve dependencies like the database factory and settings service.</param>
-    /// <returns>A task that represents the asynchronous operation. The task result contains the precondition result (<see cref="PreconditionResult.FromSuccess"/> if the user is a dragon, <see cref="PreconditionResult.FromError"/> otherwise).</returns>
+    /// <returns>A task that represents the asynchronous operation. The task result contains the precondition result (<see cref="PreconditionResult.FromSuccess"/> if the user is a dragon, <see cref="PreconditionResult.FromError(string)"/> otherwise).</returns>
     public override async Task<PreconditionResult> CheckPermissionsAsync(ICommandContext context, CommandInfo command,
         IServiceProvider services)
     {
@@ -53,7 +54,7 @@ public class RequireDragonAttribute : PreconditionAttribute
         }
         catch (Exception ex)
         {
-            Serilog.Log.Error(ex, "Failed to insert new DiscordUser for UserId {UserId} in RequireDragonAttribute", userId);
+            Log.Error(ex, "Failed to insert new DiscordUser for UserId {UserId} in RequireDragonAttribute", userId);
             return PreconditionResult.FromError("Database error checking permissions.");
         }
 

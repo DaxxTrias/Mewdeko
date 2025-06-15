@@ -29,7 +29,7 @@ namespace Mewdeko.Modules.Searches;
 ///     The Searches module provides commands for searching and retrieving various types of information. It includes
 ///     commands for searching memes, Reddit posts, weather, and more.
 /// </summary>
-/// <param name="creds">The bot credentials.</param>
+/// <param name="_creds">The bot credentials.</param>
 /// <param name="google">The Google API service.</param>
 /// <param name="factory">The HTTP client factory.</param>
 /// <param name="cache">The memory cache service.</param>
@@ -39,7 +39,7 @@ namespace Mewdeko.Modules.Searches;
 /// <param name="toneTagService">The ToneTag service.</param>
 /// <param name="config">The bot configuration service.</param>
 public partial class Searches(
-    IBotCredentials creds,
+    IBotCredentials _creds,
     IGoogleApiService google,
     IHttpClientFactory factory,
     IMemoryCache cache,
@@ -798,8 +798,7 @@ public partial class Searches(
                     var item = items.List[page];
                     return new PageBuilder().WithOkColor()
                         .WithUrl(item.Permalink)
-                        .WithAuthor(
-                            eab => eab.WithIconUrl("https://i.imgur.com/nwERwQE.jpg").WithName(item.Word))
+                        .WithAuthor(eab => eab.WithIconUrl("https://i.imgur.com/nwERwQE.jpg").WithName(item.Word))
                         .WithDescription(item.Definition);
                 }
             }

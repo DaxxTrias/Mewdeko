@@ -383,7 +383,7 @@ public sealed class EventHandler : IDisposable
             Interlocked.Increment(ref createModuleMetrics.EventsProcessed);
             Interlocked.Add(ref createModuleMetrics.TotalExecutionTime, sw.ElapsedMilliseconds);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             sw.Stop();
             Interlocked.Increment(ref createModuleMetrics.Errors);
@@ -622,12 +622,13 @@ public sealed class EventHandler : IDisposable
         return ProcessDirectEvent("SocketModal", arg);
     }
 
-    private async Task ProcessDirectEvent<T>(string eventType, T args)
+    private Task ProcessDirectEvent<T>(string eventType, T args)
     {
         if (disposed || !this.subscriptions.TryGetValue(eventType, out var subscriptions))
-            return;
+            return Task.CompletedTask;
 
         _ = Task.Run(async () => await ProcessSingleEvent(eventType, args, subscriptions).ConfigureAwait(false));
+        return Task.CompletedTask;
     }
 
     #endregion

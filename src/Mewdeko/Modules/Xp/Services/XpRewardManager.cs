@@ -1,10 +1,9 @@
 using System.Text.Json;
-using LinqToDB;
 using DataModel;
+using LinqToDB;
 using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.Currency.Services;
 using Mewdeko.Modules.Xp.Models;
-
 using Serilog;
 
 namespace Mewdeko.Modules.Xp.Services;
@@ -14,16 +13,16 @@ namespace Mewdeko.Modules.Xp.Services;
 /// </summary>
 public class XpRewardManager : INService
 {
-    private readonly DiscordShardedClient client;
-    private readonly IDataConnectionFactory dbFactory;
-    private readonly ICurrencyService currencyService;
     private readonly XpCacheManager cacheManager;
+    private readonly DiscordShardedClient client;
+    private readonly ICurrencyService currencyService;
+    private readonly IDataConnectionFactory dbFactory;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="XpRewardManager"/> class.
     /// </summary>
     /// <param name="client">The Discord client.</param>
-    /// <param name="dbFactory">The database context provider.</param>
+    /// <param name="dbFactory">The database factory.</param>
     /// <param name="currencyService">The currency service.</param>
     /// <param name="cacheManager">The cache manager.</param>
     public XpRewardManager(
@@ -41,7 +40,7 @@ public class XpRewardManager : INService
     /// <summary>
     ///     Gets the role reward for a specific level.
     /// </summary>
-    /// <param name="dbFactory">The database connection.</param>
+    /// <param name="db">The database connection.</param>
     /// <param name="guildId">The guild ID.</param>
     /// <param name="level">The level.</param>
     /// <returns>The role reward for the specified level, or null if none exists.</returns>
@@ -78,7 +77,7 @@ public class XpRewardManager : INService
     /// <summary>
     ///     Gets the currency reward for a specific level.
     /// </summary>
-    /// <param name="dbFactory">The database connection.</param>
+    /// <param name="db">The database connection.</param>
     /// <param name="guildId">The guild ID.</param>
     /// <param name="level">The level.</param>
     /// <returns>The currency reward for the specified level, or null if none exists.</returns>
@@ -139,9 +138,7 @@ public class XpRewardManager : INService
             {
                 var newReward = new XpRoleReward
                 {
-                    GuildId = guildId,
-                    Level = level,
-                    RoleId = roleId.Value
+                    GuildId = guildId, Level = level, RoleId = roleId.Value
                 };
                 await db.InsertAsync(newReward);
                 rewardToCache = newReward;
@@ -196,9 +193,7 @@ public class XpRewardManager : INService
             {
                 var newReward = new XpCurrencyReward
                 {
-                    GuildId = guildId,
-                    Level = level,
-                    Amount = amount
+                    GuildId = guildId, Level = level, Amount = amount
                 };
                 // Insert using LinqToDB
                 await db.InsertAsync(newReward);
@@ -401,7 +396,7 @@ public class XpRewardManager : INService
     /// <summary>
     ///     Gets the highest level reward for a user from a group of rewards.
     /// </summary>
-    /// <param name="dbFactory">The database connection.</param>
+    /// <param name="db">The database connection.</param>
     /// <param name="guildId">The guild ID.</param>
     /// <param name="userRewards">The user's rewards.</param>
     /// <returns>The highest level reward.</returns>

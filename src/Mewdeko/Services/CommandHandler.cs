@@ -42,6 +42,7 @@ public class CommandHandler : INService
     private readonly IDataConnectionFactory dbFactory;
     private readonly GuildSettingsService gss;
     private readonly InteractionService interactionService;
+
     /// <summary>
     /// Services stuffs
     /// </summary>
@@ -51,7 +52,7 @@ public class CommandHandler : INService
     ///     Initializes a new instance of the <see cref="CommandHandler" /> class.
     /// </summary>
     /// <param name="client">The Discord client.</param>
-    /// <param name="dbProvider">The database service.</param>
+    /// <param name="dbFactory">The database connection factory.</param>
     /// <param name="commandService">The service for handling commands.</param>
     /// <param name="bss">The bot configuration service.</param>
     /// <param name="bot">The bot instance.</param>
@@ -269,7 +270,6 @@ public class CommandHandler : INService
                             Module = slashInfo.Module.Name
                         };
                         await dbContext.InsertAsync(comStats);
-
                     }
                 }
             }
@@ -669,7 +669,8 @@ public class CommandHandler : INService
 
         foreach (var i in lateBlockers)
         {
-            var blocked = await i.TryBlockLate(client, context, chosenOverload.match.Command.Module.Name, chosenOverload.match.Command);
+            var blocked = await i.TryBlockLate(client, context, chosenOverload.match.Command.Module.Name,
+                chosenOverload.match.Command);
             if (blocked)
                 return (false, "lateblocker", null);
         }

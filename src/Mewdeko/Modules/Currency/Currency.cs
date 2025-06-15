@@ -1,5 +1,4 @@
 using System.IO;
-using DataModel;
 using Discord.Commands;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
@@ -13,7 +12,8 @@ namespace Mewdeko.Modules.Currency;
 /// <summary>
 ///     Module for managing currency.
 /// </summary>
-/// <param name="interactive"></param>
+/// <param name="interactive">The interactive service for handling user interactions.</param>
+/// <param name="blackjackService">The blackjack game service.</param>
 public partial class Currency(InteractiveService interactive, BlackjackService blackjackService)
     : MewdekoModuleBase<ICurrencyService>
 {

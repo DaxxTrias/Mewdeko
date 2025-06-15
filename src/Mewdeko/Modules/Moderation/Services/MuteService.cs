@@ -60,18 +60,17 @@ public class MuteService : INService, IReadyExecutor, IDisposable
         new(addReactions: PermValue.Deny, sendMessages: PermValue.Deny,
             attachFiles: PermValue.Deny, sendMessagesInThreads: PermValue.Deny, createPublicThreads: PermValue.Deny);
 
+    private readonly TimeSpan _checkInterval = TimeSpan.FromSeconds(30);
+
+    private readonly ConcurrentDictionary<TimerKey, TimerQueueItem> _scheduledItems = new();
+    private readonly object _timerLock = new();
+
     private readonly DiscordShardedClient client;
     private readonly IDataConnectionFactory dbFactory;
 
     private readonly GuildSettingsService guildSettings;
-
-    private readonly ConcurrentDictionary<TimerKey, TimerQueueItem> _scheduledItems = new();
-    private Timer _processingTimer;
-    private readonly object _timerLock = new();
-    private readonly TimeSpan _checkInterval = TimeSpan.FromSeconds(30);
     private bool _isProcessing;
-
-    private record struct TimerKey(ulong GuildId, ulong UserId, TimerType Type, ulong? RoleId = null);
+    private Timer? _processingTimer;
 
 
     /// <summary>
@@ -87,7 +86,8 @@ public class MuteService : INService, IReadyExecutor, IDisposable
     /// <param name="guildSettings">Service for retrieving guildconfigs</param>
     /// <param name="eventHandler">Handler for async events (Hear that dnet? ASYNC, not GATEWAY THREAD)</param>
     /// <param name="bot">The bot</param>
-    public MuteService(DiscordShardedClient client, IDataConnectionFactory dbFactory, GuildSettingsService guildSettings,
+    public MuteService(DiscordShardedClient client, IDataConnectionFactory dbFactory,
+        GuildSettingsService guildSettings,
         EventHandler eventHandler, Mewdeko bot)
     {
         this.client = client;
@@ -113,6 +113,15 @@ public class MuteService : INService, IReadyExecutor, IDisposable
     /// </summary>
     public ConcurrentDictionary<ulong, ConcurrentDictionary<(ulong, TimerType), Timer>> UnTimers { get; }
         = new();
+
+    /// <summary>
+    ///     Dispose
+    /// </summary>
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
 
     /// <inheritdoc />
     public async Task OnReadyAsync()
@@ -433,7 +442,7 @@ public class MuteService : INService, IReadyExecutor, IDisposable
 
     private async Task ProcessRoleItems(List<TimerQueueItem> items)
     {
-         await using var dbContext = await dbFactory.CreateConnectionAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
         var successfulItems = new List<TimerQueueItem>();
 
         try
@@ -584,9 +593,9 @@ public class MuteService : INService, IReadyExecutor, IDisposable
     /// <param name="name">The name of the role (What in your right fucking mind possessed you to make it this way kwoth???)</param>
     public async Task SetMuteRoleAsync(ulong guildId, string name)
     {
-         await using var dbContext = await dbFactory.CreateConnectionAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
-         var config = await guildSettings.GetGuildConfig(guildId);
+        var config = await guildSettings.GetGuildConfig(guildId);
         config.MuteRoleName = name;
         GuildMuteRoles.AddOrUpdate(guildId, name, (_, _) => name);
         await guildSettings.UpdateGuildConfig(guildId, config);
@@ -615,7 +624,7 @@ public class MuteService : INService, IReadyExecutor, IDisposable
                     // ignored
                 }
 
-                 await using var dbContext = await dbFactory.CreateConnectionAsync();
+                await using var dbContext = await dbFactory.CreateConnectionAsync();
 
                 // Get user roles if needed for persistence
                 var roles = usr.GetRoles().Where(p => p.Tags == null).Except([
@@ -729,87 +738,87 @@ public class MuteService : INService, IReadyExecutor, IDisposable
         var usr = client.GetGuild(guildId)?.GetUser(usrId);
         switch (type)
         {
-           case MuteType.All:
-        {
-            StopTimer(guildId, usrId, TimerType.Mute);
-
-             await using var dbContext = await dbFactory.CreateConnectionAsync();
-
-            // Find the muted user directly
-            var mutedUser = await dbContext.MutedUserIds
-                .FirstOrDefaultAsync(x => x.GuildId == guildId && x.UserId == usrId);
-
-            if (usr != null && await GetRemoveOnMute(usr.Guild.Id) == 1 && mutedUser?.Roles != null)
+            case MuteType.All:
             {
-                try
-                {
-                    Uroles = mutedUser.Roles.Split(' ');
+                StopTimer(guildId, usrId, TimerType.Mute);
 
-                    // Restore roles
-                    if (Uroles != null)
+                await using var dbContext = await dbFactory.CreateConnectionAsync();
+
+                // Find the muted user directly
+                var mutedUser = await dbContext.MutedUserIds
+                    .FirstOrDefaultAsync(x => x.GuildId == guildId && x.UserId == usrId);
+
+                if (usr != null && await GetRemoveOnMute(usr.Guild.Id) == 1 && mutedUser?.Roles != null)
+                {
+                    try
                     {
-                        foreach (var i in Uroles)
-                            if (ulong.TryParse(i, out var roleId))
-                                try
-                                {
-                                    await usr.AddRoleAsync(usr.Guild.GetRole(roleId)).ConfigureAwait(false);
-                                }
-                                catch
-                                {
-                                    // ignored
-                                }
+                        Uroles = mutedUser.Roles.Split(' ');
+
+                        // Restore roles
+                        if (Uroles != null)
+                        {
+                            foreach (var i in Uroles)
+                                if (ulong.TryParse(i, out var roleId))
+                                    try
+                                    {
+                                        await usr.AddRoleAsync(usr.Guild.GetRole(roleId)).ConfigureAwait(false);
+                                    }
+                                    catch
+                                    {
+                                        // ignored
+                                    }
+                        }
+                    }
+                    catch (Exception)
+                    {
+                        // ignored
                     }
                 }
-                catch (Exception)
+
+                // Remove muted user entry
+                if (mutedUser != null)
+                    await dbContext.MutedUserIds.Select(x => mutedUser).DeleteAsync();
+
+                if (MutedUsers.TryGetValue(guildId, out var muted))
+                    muted.TryRemove(usrId);
+
+                // Remove unmute timers by ID
+                var timersToRemove = await dbContext.UnmuteTimers
+                    .Where(x => x.GuildId == guildId && x.UserId == usrId)
+                    .Select(x => x.Id)
+                    .ToListAsync();
+
+                foreach (var id in timersToRemove)
                 {
-                    // ignored
+                    await dbContext.UnmuteTimers.Select(x => x.Id == id).DeleteAsync();
                 }
+
+                if (usr != null)
+                {
+                    try
+                    {
+                        await usr.ModifyAsync(x => x.Mute = false).ConfigureAwait(false);
+                    }
+                    catch
+                    {
+                        // ignored
+                    }
+
+                    try
+                    {
+                        await usr.RemoveRoleAsync(await GetMuteRole(usr.Guild).ConfigureAwait(false))
+                            .ConfigureAwait(false);
+                    }
+                    catch
+                    {
+                        /*ignore*/
+                    }
+
+                    await UserUnmuted(usr, mod, MuteType.All, reason);
+                }
+
+                break;
             }
-
-            // Remove muted user entry
-            if (mutedUser != null)
-                await dbContext.MutedUserIds.Select(x => mutedUser).DeleteAsync();
-
-            if (MutedUsers.TryGetValue(guildId, out var muted))
-                muted.TryRemove(usrId);
-
-            // Remove unmute timers by ID
-            var timersToRemove = await dbContext.UnmuteTimers
-                .Where(x => x.GuildId == guildId && x.UserId == usrId)
-                .Select(x => x.Id)
-                .ToListAsync();
-
-            foreach (var id in timersToRemove)
-            {
-                await dbContext.UnmuteTimers.Select(x => x.Id == id).DeleteAsync();
-            }
-
-            if (usr != null)
-            {
-                try
-                {
-                    await usr.ModifyAsync(x => x.Mute = false).ConfigureAwait(false);
-                }
-                catch
-                {
-                    // ignored
-                }
-
-                try
-                {
-                    await usr.RemoveRoleAsync(await GetMuteRole(usr.Guild).ConfigureAwait(false))
-                        .ConfigureAwait(false);
-                }
-                catch
-                {
-                    /*ignore*/
-                }
-
-                await UserUnmuted(usr, mod, MuteType.All, reason);
-            }
-
-            break;
-        }
             case MuteType.Voice when usr == null:
                 return;
             case MuteType.Voice:
@@ -903,14 +912,12 @@ public class MuteService : INService, IReadyExecutor, IDisposable
     {
         await MuteUser(user, mod, muteType, reason).ConfigureAwait(false);
 
-         await using var dbContext = await dbFactory.CreateConnectionAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
         // Add unmute timer directly
         var unmuteTimer = new UnmuteTimer
         {
-            GuildId = user.GuildId,
-            UserId = user.Id,
-            UnmuteAt = DateTime.UtcNow + after
+            GuildId = user.GuildId, UserId = user.Id, UnmuteAt = DateTime.UtcNow + after
         };
 
         await dbContext.InsertAsync(unmuteTimer);
@@ -933,14 +940,12 @@ public class MuteService : INService, IReadyExecutor, IDisposable
             AuditLogReason = reason
         }).ConfigureAwait(false);
 
-         await using var dbContext = await dbFactory.CreateConnectionAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
         // Add unban timer directly
         var unbanTimer = new UnbanTimer
         {
-            GuildId = guild.Id,
-            UserId = user.Id,
-            UnbanAt = DateTime.UtcNow + after
+            GuildId = guild.Id, UserId = user.Id, UnbanAt = DateTime.UtcNow + after
         };
 
         await dbContext.InsertAsync(unbanTimer);
@@ -958,15 +963,12 @@ public class MuteService : INService, IReadyExecutor, IDisposable
     {
         await user.AddRoleAsync(role).ConfigureAwait(false);
 
-         await using var dbContext = await dbFactory.CreateConnectionAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
         // Add unrole timer directly
         var unroleTimer = new UnroleTimer
         {
-            GuildId = user.GuildId,
-            UserId = user.Id,
-            UnbanAt = DateTime.UtcNow + after,
-            RoleId = role.Id
+            GuildId = user.GuildId, UserId = user.Id, UnbanAt = DateTime.UtcNow + after, RoleId = role.Id
         };
 
         await dbContext.InsertAsync(unroleTimer);
@@ -999,6 +1001,7 @@ public class MuteService : INService, IReadyExecutor, IDisposable
     /// <param name="guildId">The guildId where the timer is stopped</param>
     /// <param name="userId">The user to stop the timer for</param>
     /// <param name="type">The type of timer</param>
+    /// <param name="roleId">Optional role ID for role-specific timers</param>
     public void StopTimer(ulong guildId, ulong userId, TimerType type, ulong? roleId = null)
     {
         var key = new TimerKey(guildId, userId, type, roleId);
@@ -1017,27 +1020,20 @@ public class MuteService : INService, IReadyExecutor, IDisposable
         }
     }
 
-    /// <summary>
-    /// Dispose
-    /// </summary>
-    public void Dispose()
-    {
-        Dispose(true);
-        GC.SuppressFinalize(this);
-    }
+    private record struct TimerKey(ulong GuildId, ulong UserId, TimerType Type, ulong? RoleId = null);
 
 
     private class TimerQueueItem
     {
-        public TimerKey Key { get; }
-        public DateTime ExecuteAt { get; }
-        public bool IsProcessing { get; set; }
-
         public TimerQueueItem(TimerKey key, DateTime executeAt)
         {
             Key = key;
             ExecuteAt = executeAt;
             IsProcessing = false;
         }
+
+        public TimerKey Key { get; }
+        public DateTime ExecuteAt { get; }
+        public bool IsProcessing { get; set; }
     }
 }

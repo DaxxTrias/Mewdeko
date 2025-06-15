@@ -12,13 +12,13 @@ public class GreetSettingsService : INService
     private readonly DiscordShardedClient client;
     private readonly IDataConnectionFactory dbFactory;
 
-    private readonly GuildSettingsService gss;
-
     private readonly Channel<(GreetSettings, IGuildUser, TaskCompletionSource<bool>)> greetDmQueue =
         Channel.CreateBounded<(GreetSettings, IGuildUser, TaskCompletionSource<bool>)>(new BoundedChannelOptions(60)
         {
             FullMode = BoundedChannelFullMode.DropNewest
         });
+
+    private readonly GuildSettingsService gss;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="GreetSettingsService" /> class, setting up event handlers for user
@@ -26,7 +26,7 @@ public class GreetSettingsService : INService
     /// </summary>
     /// <param name="client">The Discord client instance to interact with the Discord API.</param>
     /// <param name="gss">The service managing guild settings.</param>
-    /// <param name="dbProvider">The db provider</param>
+    /// <param name="dbFactory">The database connection factory.</param>
     /// <param name="eventHandler">The handler managing Discord events.</param>
     /// <remarks>
     ///     Event handlers are set up to listen for specific Discord events, allowing the service to respond to user and guild
@@ -68,6 +68,7 @@ public class GreetSettingsService : INService
         await greetDmQueue.Writer.WriteAsync((conf, user, completionSource));
         return await completionSource.Task;
     }
+
     private async Task<GreetSettings> GetGreetSettings(ulong guildId)
     {
         var guildConfig = await gss.GetGuildConfig(guildId);
@@ -657,6 +658,7 @@ public class GreetSettings
     ///     Gets or sets the direct message greeting text.
     /// </summary>
     public string? DmGreetMessageText { get; set; }
+
     /// <summary>
     ///     Gets or sets a value indicating whether channel farewell messages are enabled for the guild.
     /// </summary>

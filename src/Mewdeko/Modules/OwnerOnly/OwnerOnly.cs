@@ -41,6 +41,9 @@ namespace Mewdeko.Modules.OwnerOnly;
 /// <param name="services">The service provider for dependency injection.</param>
 /// <param name="guildSettings">Service for accessing and modifying guild-specific settings.</param>
 /// <param name="commandHandler">Handler for processing and executing commands received from users.</param>
+/// <param name="botConfig">Configuration settings for the bot.</param>
+/// <param name="httpClient">HTTP client for making web requests.</param>
+/// <param name="localization">Service for handling localization and translations.</param>
 [OwnerOnly]
 public class OwnerOnly(
     DiscordShardedClient client,
@@ -226,6 +229,7 @@ public class OwnerOnly(
         _ = Task.Run(() => commandHandler.ExecuteCommandsInChannelAsync(ctx.Channel.Id))
             .ConfigureAwait(false);
     }
+
     /// <summary>
     /// Generates command documentation YML files
     /// </summary>
@@ -734,7 +738,7 @@ public class OwnerOnly(
             VoiceChannelName = guser.VoiceChannel?.Name,
             Interval = 0
         };
-        Service.AddNewAutoCommand(cmd);
+        _ = Service.AddNewAutoCommand(cmd);
 
         await ctx.Channel.EmbedAsync(new EmbedBuilder().WithOkColor()
             .WithTitle(Strings.Scadd(ctx.Guild.Id))
@@ -795,7 +799,7 @@ public class OwnerOnly(
             VoiceChannelName = guser.VoiceChannel?.Name,
             Interval = interval
         };
-        await Service.AddNewAutoCommand(cmd);
+        _ = Service.AddNewAutoCommand(cmd);
 
         await ReplyConfirmAsync(Strings.AutocmdAdd(ctx.Guild.Id, Format.Code(Format.Sanitize(cmdText)), cmd.Interval))
             .ConfigureAwait(false);
@@ -988,7 +992,7 @@ public class OwnerOnly(
     [OwnerOnly]
     public async Task StartupCommandsClear()
     {
-        Service.ClearStartupCommands();
+        _ = Service.ClearStartupCommands();
 
         await ReplyConfirmAsync(Strings.StartcmdsCleared(ctx.Guild.Id)).ConfigureAwait(false);
     }
@@ -1102,7 +1106,9 @@ public class OwnerOnly(
         return status switch
         {
             ConnectionState.Connected => "✅",
-            ConnectionState.Disconnected => "🔻"
+            ConnectionState.Disconnected => "🔻",
+            ConnectionState.Connecting => "🔄",
+            _ => "❓"
         };
     }
 

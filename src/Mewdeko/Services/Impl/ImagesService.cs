@@ -67,8 +67,9 @@ public sealed class FusionImagesCache : IImageCache, IReadyExecutor, INService
     private const string CoinPath = BasePath + "coin/";
     private const string EmojiPath = BasePath + "emoji/";
     private readonly IFusionCache cache;
+
     private readonly HttpClient http;
-    private readonly string imagesPath;
+    // private readonly string imagesPath; // Currently unused
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="FusionImagesCache" /> class.

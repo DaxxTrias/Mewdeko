@@ -209,6 +209,7 @@ public partial class Administration
         ///     This command allows administrators to manage reaction roles in the server while making all roles exclusive.
         ///     It requires the Manage Roles permission for the user and the Manage Roles permission for the bot.
         /// </remarks>
+        /// <param name="_">The exclusion parameter to make roles exclusive.</param>
         /// <param name="input">The roles and emojis to be associated with reactions.</param>
         /// <returns>A task representing the asynchronous operation.</returns>
         [Cmd]

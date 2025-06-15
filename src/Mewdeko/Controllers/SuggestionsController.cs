@@ -1,7 +1,7 @@
-﻿using Mewdeko.Modules.Suggestions.Services;
+﻿using LinqToDB;
+using Mewdeko.Modules.Suggestions.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using LinqToDB;
 
 namespace Mewdeko.Controllers;
 
@@ -9,6 +9,8 @@ namespace Mewdeko.Controllers;
 ///     Service for managing suggestions for guilds
 /// </summary>
 /// <param name="service"></param>
+/// <param name="client"></param>
+/// <param name="dbFactory"></param>
 [ApiController]
 [Route("botapi/[controller]/{guildId}")]
 [Authorize("ApiKeyPolicy")]

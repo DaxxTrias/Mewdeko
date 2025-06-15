@@ -17,7 +17,7 @@ public partial class Music
     public class MusicEffects(
         IAudioService service,
         IDataCache cache,
-        InteractiveService interactiveService,
+        InteractiveService _interactiveService,
         GuildSettingsService guildSettingsService) : MewdekoSubmodule
     {
         /// <summary>

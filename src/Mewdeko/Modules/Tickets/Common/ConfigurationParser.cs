@@ -24,8 +24,7 @@ public static class ConfigurationParser
         var fieldsOnly = config.Fields;
         var json = JsonSerializer.Serialize(fieldsOnly, new JsonSerializerOptions
         {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            WriteIndented = true // For debugging
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase, WriteIndented = true // For debugging
         });
 
         // Add logging to see what we're actually generating
@@ -120,10 +119,10 @@ public static class ConfigurationParser
     /// <param name="roleInput">The role input text containing mentions or names</param>
     /// <param name="guild">The guild to search for roles</param>
     /// <returns>List of role IDs</returns>
-    public static async Task<List<ulong>> ParseRoles(string roleInput, IGuild guild)
+    public static Task<List<ulong>> ParseRoles(string roleInput, IGuild guild)
     {
         var roleIds = new List<ulong>();
-        if (string.IsNullOrEmpty(roleInput)) return roleIds;
+        if (string.IsNullOrEmpty(roleInput)) return Task.FromResult(roleIds);
 
         var roles = guild.Roles;
         var roleParts = roleInput.Split(',', StringSplitOptions.TrimEntries);
@@ -152,7 +151,7 @@ public static class ConfigurationParser
             }
         }
 
-        return roleIds;
+        return Task.FromResult(roleIds);
     }
 
     /// <summary>

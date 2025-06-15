@@ -1,10 +1,9 @@
 ﻿using System.Text.RegularExpressions;
 using System.Threading;
-using LinqToDB;
 using DataModel;
+using LinqToDB;
 using Mewdeko.Modules.Administration.Services;
 using Mewdeko.Services.Strings;
-
 using Serilog;
 using Swan;
 
@@ -17,11 +16,11 @@ public partial class RemindService : INService
 {
     private readonly DiscordShardedClient client;
     private readonly IDataConnectionFactory dbFactory;
-    private readonly GuildTimezoneService tz;
-    private readonly GeneratedBotStrings Strings;
 
     private readonly Regex regex = MyRegex();
     private readonly ConcurrentDictionary<int, Timer> reminderTimers;
+    private readonly GeneratedBotStrings Strings;
+    private readonly GuildTimezoneService tz;
 
     /// <summary>
     ///     Initializes the reminder service, starting the background task to check for and execute reminders.
@@ -29,7 +28,9 @@ public partial class RemindService : INService
     /// <param name="client">The Discord client used for sending reminder notifications.</param>
     /// <param name="dbFactory">The database service for managing reminders.</param>
     /// <param name="tz">The timezone service for guild timezones.</param>
-    public RemindService(DiscordShardedClient client, IDataConnectionFactory dbFactory, GuildTimezoneService tz, GeneratedBotStrings strings)
+    /// <param name="strings">The bot strings service for localized messages.</param>
+    public RemindService(DiscordShardedClient client, IDataConnectionFactory dbFactory, GuildTimezoneService tz,
+        GeneratedBotStrings strings)
     {
         this.client = client;
         this.dbFactory = dbFactory;
@@ -50,12 +51,12 @@ public partial class RemindService : INService
             // Only schedule reminders that haven't occurred yet
             if (reminder.When > DateTime.UtcNow)
             {
-                ScheduleReminder(reminder);
+                _ = ScheduleReminder(reminder);
             }
             else
             {
                 // For past reminders, either execute them immediately or clean them up
-                await ExecuteReminderAsync(reminder);
+                _ = ExecuteReminderAsync(reminder);
             }
         }
     }

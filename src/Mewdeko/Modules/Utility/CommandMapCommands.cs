@@ -6,7 +6,6 @@ using LinqToDB;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Modules.Utility.Services;
 
-
 namespace Mewdeko.Modules.Utility;
 
 public partial class Utility
@@ -16,8 +15,12 @@ public partial class Utility
     /// </summary>
     /// <param name="dbFactory">The database service.</param>
     /// <param name="serv">The interactive service.</param>
+    /// <param name="service">The guild settings service.</param>
     [Group]
-    public class CommandMapCommands(IDataConnectionFactory dbFactory, InteractiveService serv, GuildSettingsService service)
+    public class CommandMapCommands(
+        IDataConnectionFactory dbFactory,
+        InteractiveService serv,
+        GuildSettingsService service)
         : MewdekoSubmodule<CommandMapService>
     {
         /// <summary>
@@ -78,9 +81,7 @@ public partial class Utility
             // Add new command alias with GuildId
             await dbContext.InsertAsync(new CommandAlias
             {
-                GuildId = guildId,
-                Mapping = mapping,
-                Trigger = trigger
+                GuildId = guildId, Mapping = mapping, Trigger = trigger
             });
 
 

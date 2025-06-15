@@ -32,14 +32,12 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
     private readonly DiscordShardedClient client;
     private readonly CommandHandler cmdHandler;
     private readonly IBotCredentials creds;
+    private readonly string dataDirectory;
     private readonly IDataConnectionFactory dbFactory;
     private readonly GuildSettingsService guildSettings;
     private readonly IHttpClientFactory httpFactory;
     private readonly Replacer rep;
     private readonly GeneratedBotStrings strings;
-    private string sourceDirectory;
-    private readonly string dataDirectory;
-    private int totalCommands;
 
 #pragma warning disable CS8714
     private ConcurrentDictionary<ulong?, ConcurrentDictionary<int, Timer>> autoCommands =
@@ -50,6 +48,9 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
 
     private ImmutableDictionary<ulong, IDMChannel> ownerChannels =
         new Dictionary<ulong, IDMChannel>().ToImmutableDictionary();
+
+    private string sourceDirectory;
+    private int totalCommands;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="OwnerOnlyService" /> class.
@@ -763,7 +764,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
             throw new DirectoryNotFoundException($"Source directory not found: {sourceDirectory}");
         }
 
-        sourceDirectory = sourceDirectory;
+        this.sourceDirectory = sourceDirectory;
         Log.Information("Source directory set to: {SourceDirectory}", sourceDirectory);
     }
 

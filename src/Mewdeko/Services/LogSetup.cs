@@ -34,6 +34,7 @@ public static class LogSetup
             .MinimumLevel.Override("Npgsql", LogEventLevel.Debug)
             .MinimumLevel.Override("Npgsql.Command", LogEventLevel.Debug)
             .MinimumLevel.Override("Npgsql.Connection", LogEventLevel.Debug)
+            .MinimumLevel.Override("ZiggyCreatures.Caching.Fusion", LogEventLevel.Warning)
 
             // Enrichers
             .Enrich.FromLogContext()
@@ -42,10 +43,9 @@ public static class LogSetup
             // Output configuration
             .WriteTo.Console(
                 restrictedToMinimumLevel: LogEventLevel.Information,
-                theme: AnsiConsoleTheme.Literate,
-                outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] | #{LogSource} | " +
-                                "{Message:lj}{NewLine}{Exception:lj}")
-                                    .CreateBootstrapLogger();
+                theme: AnsiConsoleTheme.Code,
+                outputTemplate: "{Timestamp:HH:mm:ss} [{Level:u3}] {Message:lj}{NewLine}{Exception}")
+            .CreateBootstrapLogger();
 
         Console.OutputEncoding = Encoding.UTF8;
 

@@ -5,7 +5,6 @@ using Mewdeko.Modules.Administration.Common;
 using Mewdeko.Modules.Moderation.Services;
 using Mewdeko.Services.Settings;
 
-
 namespace Mewdeko.Modules.Server_Management.Services;
 
 /// <summary>
@@ -30,6 +29,9 @@ public class RoleMonitorService : INService, IReadyExecutor
     /// <param name="handler">The event handler.</param>
     /// <param name="dbFactory">The database context provider.</param>
     /// <param name="dataCache">The data cache for accessing Redis.</param>
+    /// <param name="userPunishService">The user punishment service.</param>
+    /// <param name="botConfigService">The bot configuration service.</param>
+    /// <param name="muteService">The mute service for handling user mutes.</param>
     public RoleMonitorService(DiscordShardedClient client, EventHandler handler, IDataConnectionFactory dbFactory,
         IDataCache dataCache, UserPunishService userPunishService, BotConfigService botConfigService,
         MuteService muteService)
@@ -51,7 +53,7 @@ public class RoleMonitorService : INService, IReadyExecutor
     {
         var redisDb = dataCache.Redis.GetDatabase();
 
-         await using var context = await dbFactory.CreateConnectionAsync();
+        await using var context = await dbFactory.CreateConnectionAsync();
 
         var guilds = client.Guilds;
 
@@ -447,7 +449,7 @@ public class RoleMonitorService : INService, IReadyExecutor
     /// </summary>
     public async Task AddWhitelistedUserAsync(IGuild guild, IGuildUser user)
     {
-         await using var context = await dbFactory.CreateConnectionAsync();
+        await using var context = await dbFactory.CreateConnectionAsync();
         var existing = await context.WhitelistedUsers
             .FirstOrDefaultAsync(u => u.GuildId == guild.Id && u.UserId == user.Id);
 
@@ -468,7 +470,7 @@ public class RoleMonitorService : INService, IReadyExecutor
     /// </summary>
     public async Task RemoveWhitelistedUserAsync(IGuild guild, IGuildUser user)
     {
-         await using var context = await dbFactory.CreateConnectionAsync();
+        await using var context = await dbFactory.CreateConnectionAsync();
         var existing = await context.WhitelistedUsers
             .FirstOrDefaultAsync(u => u.GuildId == guild.Id && u.UserId == user.Id);
 
@@ -486,7 +488,7 @@ public class RoleMonitorService : INService, IReadyExecutor
     /// </summary>
     public async Task AddWhitelistedRoleAsync(IGuild guild, IRole role)
     {
-         await using var context = await dbFactory.CreateConnectionAsync();
+        await using var context = await dbFactory.CreateConnectionAsync();
         var existing = await context.WhitelistedRoles
             .FirstOrDefaultAsync(r => r.GuildId == guild.Id && r.RoleId == role.Id);
 
@@ -496,7 +498,6 @@ public class RoleMonitorService : INService, IReadyExecutor
             {
                 GuildId = guild.Id, RoleId = role.Id
             });
-
 
 
             var redisDb = dataCache.Redis.GetDatabase();
@@ -509,7 +510,7 @@ public class RoleMonitorService : INService, IReadyExecutor
     /// </summary>
     public async Task RemoveWhitelistedRoleAsync(IGuild guild, IRole role)
     {
-         await using var context = await dbFactory.CreateConnectionAsync();
+        await using var context = await dbFactory.CreateConnectionAsync();
         var existing = await context.WhitelistedRoles
             .FirstOrDefaultAsync(r => r.GuildId == guild.Id && r.RoleId == role.Id);
 
@@ -531,7 +532,7 @@ public class RoleMonitorService : INService, IReadyExecutor
     /// <returns>A task that represents the asynchronous operation.</returns>
     public async Task SetDefaultPunishmentAsync(IGuild guild, PunishmentAction punishmentAction)
     {
-         await using var context = await dbFactory.CreateConnectionAsync();
+        await using var context = await dbFactory.CreateConnectionAsync();
         var existing = await context.RoleMonitoringSettings
             .FirstOrDefaultAsync(s => s.GuildId == guild.Id);
 
@@ -546,7 +547,6 @@ public class RoleMonitorService : INService, IReadyExecutor
                 GuildId = guild.Id, DefaultPunishmentAction = (int)punishmentAction
             });
         }
-
 
 
         var redisDb = dataCache.Redis.GetDatabase();
@@ -570,7 +570,7 @@ public class RoleMonitorService : INService, IReadyExecutor
     /// </summary>
     public async Task AddBlacklistedRoleAsync(IGuild guild, IRole role, PunishmentAction? punishmentAction)
     {
-         await using var context = await dbFactory.CreateConnectionAsync();
+        await using var context = await dbFactory.CreateConnectionAsync();
         var existing = await context.BlacklistedRoles
             .FirstOrDefaultAsync(r => r.GuildId == guild.Id && r.RoleId == role.Id);
 
@@ -592,7 +592,6 @@ public class RoleMonitorService : INService, IReadyExecutor
         {
             GuildId = guild.Id, RoleId = role.Id, PunishmentAction = (int?)punishmentAction
         });
-
 
 
         var redisDb = dataCache.Redis.GetDatabase();
@@ -622,7 +621,7 @@ public class RoleMonitorService : INService, IReadyExecutor
     /// </summary>
     public async Task RemoveBlacklistedRoleAsync(IGuild guild, IRole role)
     {
-         await using var context = await dbFactory.CreateConnectionAsync();
+        await using var context = await dbFactory.CreateConnectionAsync();
         var existing = await context.BlacklistedRoles
             .FirstOrDefaultAsync(r => r.GuildId == guild.Id && r.RoleId == role.Id);
 
@@ -652,7 +651,7 @@ public class RoleMonitorService : INService, IReadyExecutor
     public async Task AddBlacklistedPermissionAsync(IGuild guild, GuildPermission permission,
         PunishmentAction? punishmentAction)
     {
-         await using var context = await dbFactory.CreateConnectionAsync();
+        await using var context = await dbFactory.CreateConnectionAsync();
         var existing = await context.BlacklistedPermissions
             .FirstOrDefaultAsync(p => p.GuildId == guild.Id && p.Permission == (ulong)permission);
 
@@ -674,7 +673,6 @@ public class RoleMonitorService : INService, IReadyExecutor
         {
             GuildId = guild.Id, Permission = (ulong)permission, PunishmentAction = (int?)punishmentAction
         });
-
 
 
         var redisDb = dataCache.Redis.GetDatabase();
@@ -705,7 +703,7 @@ public class RoleMonitorService : INService, IReadyExecutor
     /// </summary>
     public async Task RemoveBlacklistedPermissionAsync(IGuild guild, GuildPermission permission)
     {
-         await using var context = await dbFactory.CreateConnectionAsync();
+        await using var context = await dbFactory.CreateConnectionAsync();
         var existing = await context.BlacklistedPermissions
             .FirstOrDefaultAsync(p => p.GuildId == guild.Id && p.Permission == (ulong)permission);
 
@@ -730,7 +728,7 @@ public class RoleMonitorService : INService, IReadyExecutor
 
     private async Task<PunishmentAction?> GetDefaultPunishmentAsync(ulong guildId)
     {
-         await using var context = await dbFactory.CreateConnectionAsync();
+        await using var context = await dbFactory.CreateConnectionAsync();
 
         var existing = await context.RoleMonitoringSettings
             .FirstOrDefaultAsync(s => s.GuildId == guildId);

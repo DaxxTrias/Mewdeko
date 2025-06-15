@@ -329,7 +329,9 @@ public class SlashOwnerOnly(
         return status switch
         {
             ConnectionState.Connected => "✅",
-            ConnectionState.Disconnected => "🔻"
+            ConnectionState.Disconnected => "🔻",
+            ConnectionState.Connecting => "🔄",
+            _ => "❓"
         };
     }
 
@@ -732,6 +734,7 @@ public class SlashOwnerOnly(
     /// <param name="services">Service provider for accessing various services.</param>
     /// <param name="client">The Discord client used to interact with the Discord API.</param>
     /// <param name="settingServices">Collection of services for managing bot settings.</param>
+    /// <param name="localization">Service for handling localization and translations.</param>
     [Discord.Interactions.Group("config", "Commands to manage various bot things")]
     public class ConfigCommands(
         GuildSettingsService guildSettings,

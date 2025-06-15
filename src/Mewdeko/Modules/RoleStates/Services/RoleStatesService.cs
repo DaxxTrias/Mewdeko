@@ -1,5 +1,5 @@
-using LinqToDB;
 using DataModel;
+using LinqToDB;
 using Serilog;
 
 namespace Mewdeko.Modules.RoleStates.Services;
@@ -152,8 +152,7 @@ public class RoleStatesService : INService
         {
             var toAdd = new RoleStateSetting
             {
-                GuildId = guildId,
-                Enabled = true
+                GuildId = guildId, Enabled = true
             };
             await db.InsertAsync(toAdd);
             return true;
@@ -169,7 +168,7 @@ public class RoleStatesService : INService
     /// </summary>
     /// <param name="guildId">The unique identifier of the guild.</param>
     /// <returns>
-    ///     A task that represents the asynchronous operation, containing the <see cref="RoleStateSettings" /> or null if
+    ///     A task that represents the asynchronous operation, containing the <see cref="RoleStateSetting" /> or null if
     ///     not found.
     /// </returns>
     public async Task<RoleStateSetting?> GetRoleStateSettings(ulong guildId)
@@ -186,7 +185,7 @@ public class RoleStatesService : INService
     /// <param name="guildId">The unique identifier of the guild.</param>
     /// <param name="userId">The unique identifier of the user.</param>
     /// <returns>
-    ///     A task that represents the asynchronous operation, containing the <see cref="UserRoleStates" /> or null if not
+    ///     A task that represents the asynchronous operation, containing the <see cref="UserRoleState" /> or null if not
     ///     found.
     /// </returns>
     public async Task<UserRoleState?> GetUserRoleState(ulong guildId, ulong userId)
@@ -201,7 +200,7 @@ public class RoleStatesService : INService
     ///     Retrieves all user role states within a guild.
     /// </summary>
     /// <param name="guildId">The unique identifier of the guild.</param>
-    /// <returns>A task that represents the asynchronous operation, containing a list of <see cref="UserRoleStates" />.</returns>
+    /// <returns>A task that represents the asynchronous operation, containing a list of <see cref="UserRoleState" />.</returns>
     public async Task<List<UserRoleState>> GetAllUserRoleStates(ulong guildId)
     {
         await using var db = await dbFactory.CreateConnectionAsync();
@@ -214,7 +213,7 @@ public class RoleStatesService : INService
     /// <summary>
     ///     Updates the role state settings for a guild.
     /// </summary>
-    /// <param name="roleStateSettings">The <see cref="RoleStateSettings" /> to be updated.</param>
+    /// <param name="roleStateSettings">The <see cref="RoleStateSetting" /> to be updated.</param>
     /// <returns>A task that represents the asynchronous operation.</returns>
     public async Task UpdateRoleStateSettings(RoleStateSetting roleStateSettings)
     {
@@ -226,7 +225,7 @@ public class RoleStatesService : INService
     /// <summary>
     ///     Toggles the option to ignore bots when saving and restoring roles.
     /// </summary>
-    /// <param name="roleStateSettings">The <see cref="RoleStateSettings" /> to be updated.</param>
+    /// <param name="roleStateSettings">The <see cref="RoleStateSetting" /> to be updated.</param>
     /// <returns>A task that represents the asynchronous operation, containing a boolean indicating if bots are now ignored.</returns>
     public async Task<bool> ToggleIgnoreBots(RoleStateSetting roleStateSettings)
     {
@@ -241,7 +240,7 @@ public class RoleStatesService : INService
     /// <summary>
     ///     Toggles the option to clear saved roles upon a user's ban.
     /// </summary>
-    /// <param name="roleStateSettings">The <see cref="RoleStateSettings" /> to be updated.</param>
+    /// <param name="roleStateSettings">The <see cref="RoleStateSetting" /> to be updated.</param>
     /// <returns>
     ///     A task that represents the asynchronous operation, containing a boolean indicating if roles are cleared on
     ///     ban.
@@ -419,10 +418,7 @@ public class RoleStatesService : INService
         {
             var newRoleState = new UserRoleState
             {
-                GuildId = guildId,
-                UserId = user.Id,
-                UserName = user.ToString(),
-                SavedRoles = string.Join(",", roles)
+                GuildId = guildId, UserId = user.Id, UserName = user.ToString(), SavedRoles = string.Join(",", roles)
             };
             await db.InsertAsync(newRoleState);
         }

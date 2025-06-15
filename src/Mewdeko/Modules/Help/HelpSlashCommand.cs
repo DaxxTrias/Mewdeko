@@ -22,6 +22,7 @@ namespace Mewdeko.Modules.Help;
 /// <param name="ch">The command handler (yes they are different now shut up)</param>
 /// <param name="guildSettings">The service to retrieve guildconfigs</param>
 /// <param name="config">Service to retrieve yml based configs</param>
+/// <param name="perms">The global permission service</param>
 [Discord.Interactions.Group("help", "Help Commands, what else is there to say?")]
 public class HelpSlashCommand(
     InteractiveService interactivity,
@@ -29,7 +30,8 @@ public class HelpSlashCommand(
     CommandService cmds,
     CommandHandler ch,
     GuildSettingsService guildSettings,
-    BotConfigService config, GlobalPermissionService perms)
+    BotConfigService config,
+    GlobalPermissionService perms)
     : MewdekoSlashModuleBase<HelpService>
 {
     private static readonly ConcurrentDictionary<ulong, ulong> HelpMessages = new();
@@ -135,7 +137,8 @@ public class HelpSlashCommand(
             .WithActionOnCancellation(ActionOnStop.DeleteMessage)
             .Build();
 
-        await interactivity.SendPaginatorAsync(paginator, ctx.Interaction, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
+        await interactivity.SendPaginatorAsync(paginator, ctx.Interaction, TimeSpan.FromMinutes(60))
+            .ConfigureAwait(false);
 
         Task<PageBuilder> PageFactory(int page)
         {

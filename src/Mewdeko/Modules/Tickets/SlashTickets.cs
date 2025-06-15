@@ -16,8 +16,8 @@ namespace Mewdeko.Modules.Tickets;
 [Group("tickets", "Manage the ticket system.")]
 public partial class TicketsSlash : MewdekoSlashModuleBase<TicketService>
 {
-    private readonly InteractiveService interactivity;
     private readonly IDataCache cache;
+    private readonly InteractiveService interactivity;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="TicketsSlash" /> class.
@@ -492,6 +492,72 @@ public partial class TicketsSlash : MewdekoSlashModuleBase<TicketService>
     {
         return RespondWithModalAsync<TicketPriorityModal>($"ticket_priority:{ticket}");
     }
+
+    #region Select Menu Interaction Handlers
+
+    /// <summary>
+    ///     Handles ticket creation through select menu interactions using wildcard pattern matching.
+    /// </summary>
+    /// <param name="menuId">The unique identifier portion of the select menu's custom ID.</param>
+    /// <param name="values">Array of selected option values from the select menu.</param>
+    /// <remarks>
+    ///     This method handles all ticket creation select menus using a wildcard pattern.
+    ///     If the selected option has a modal configuration, it will display the modal.
+    ///     Otherwise, it creates the ticket immediately.
+    /// </remarks>
+    [ComponentInteraction("ticket_select_*", true)]
+    public async Task HandleTicketSelectMenu(string menuId, string[] values)
+    {
+        try
+        {
+            var selectedValue = values.FirstOrDefault();
+            if (string.IsNullOrEmpty(selectedValue))
+            {
+                await RespondAsync("No option was selected.", ephemeral: true);
+                return;
+            }
+
+            var menu = await Service.GetSelectMenuAsync($"ticket_select_{menuId}");
+            if (menu == null)
+            {
+                await RespondAsync("This ticket menu is no longer available.", ephemeral: true);
+                return;
+            }
+
+            var option = menu.SelectMenuOptions.FirstOrDefault(o => o.Value == selectedValue);
+            if (option == null)
+            {
+                await RespondAsync("The selected option is no longer available.", ephemeral: true);
+                return;
+            }
+
+            if (!string.IsNullOrEmpty(option.ModalJson))
+            {
+                await Service.HandleModalCreation(
+                    ctx.User as IGuildUser,
+                    option.ModalJson,
+                    $"ticket_modal_select:{option.Id}",
+                    ctx.Interaction
+                );
+            }
+            else
+            {
+                await Service.CreateTicketAsync(ctx.Guild, ctx.User, option: option);
+                await RespondAsync("Ticket created successfully!", ephemeral: true);
+            }
+        }
+        catch (InvalidOperationException ex)
+        {
+            await RespondAsync(ex.Message, ephemeral: true);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Error handling select menu interaction for menuId {MenuId}", menuId);
+            await RespondAsync("An error occurred while creating your ticket.", ephemeral: true);
+        }
+    }
+
+    #endregion
 
     /// <summary>
     ///     Group for managing ticket panels.
@@ -1562,72 +1628,6 @@ public partial class TicketsSlash : MewdekoSlashModuleBase<TicketService>
 
     #endregion
 
-    #region Select Menu Interaction Handlers
-
-    /// <summary>
-    ///     Handles ticket creation through select menu interactions using wildcard pattern matching.
-    /// </summary>
-    /// <param name="menuId">The unique identifier portion of the select menu's custom ID.</param>
-    /// <param name="values">Array of selected option values from the select menu.</param>
-    /// <remarks>
-    ///     This method handles all ticket creation select menus using a wildcard pattern.
-    ///     If the selected option has a modal configuration, it will display the modal.
-    ///     Otherwise, it creates the ticket immediately.
-    /// </remarks>
-    [ComponentInteraction("ticket_select_*", true)]
-    public async Task HandleTicketSelectMenu(string menuId, string[] values)
-    {
-        try
-        {
-            var selectedValue = values.FirstOrDefault();
-            if (string.IsNullOrEmpty(selectedValue))
-            {
-                await RespondAsync("No option was selected.", ephemeral: true);
-                return;
-            }
-
-            var menu = await Service.GetSelectMenuAsync($"ticket_select_{menuId}");
-            if (menu == null)
-            {
-                await RespondAsync("This ticket menu is no longer available.", ephemeral: true);
-                return;
-            }
-
-            var option = menu.SelectMenuOptions.FirstOrDefault(o => o.Value == selectedValue);
-            if (option == null)
-            {
-                await RespondAsync("The selected option is no longer available.", ephemeral: true);
-                return;
-            }
-
-            if (!string.IsNullOrEmpty(option.ModalJson))
-            {
-                await Service.HandleModalCreation(
-                    ctx.User as IGuildUser,
-                    option.ModalJson,
-                    $"ticket_modal_select:{option.Id}",
-                    ctx.Interaction
-                );
-            }
-            else
-            {
-                await Service.CreateTicketAsync(ctx.Guild, ctx.User, option: option);
-                await RespondAsync("Ticket created successfully!", ephemeral: true);
-            }
-        }
-        catch (InvalidOperationException ex)
-        {
-            await RespondAsync(ex.Message, ephemeral: true);
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "Error handling select menu interaction for menuId {MenuId}", menuId);
-            await RespondAsync("An error occurred while creating your ticket.", ephemeral: true);
-        }
-    }
-
-    #endregion
-
     #region Modal Interaction Handlers
 
     /// <summary>
@@ -1782,6 +1782,7 @@ public partial class TicketsSlash : MewdekoSlashModuleBase<TicketService>
     /// Handles custom modals for ticket creation.
     /// </summary>
     /// <param name="buttonId">The buttons db ID</param>
+    /// <param name="unused">Unused modal parameter</param>
     [ModalInteraction("ticket_modal:*", true)]
     public async Task HandleTicketModalSubmission(string buttonId, SimpleInputModal unused)
     {
@@ -1839,7 +1840,8 @@ public partial class TicketsSlash : MewdekoSlashModuleBase<TicketService>
     /// </summary>
     /// <param name="components">The submitted modal components</param>
     /// <returns>Dictionary with field IDs as keys and user responses as values</returns>
-    private static Dictionary<string, string> ExtractModalResponses(IReadOnlyCollection<IComponentInteractionData> components)
+    private static Dictionary<string, string> ExtractModalResponses(
+        IReadOnlyCollection<IComponentInteractionData> components)
     {
         var responses = new Dictionary<string, string>();
 

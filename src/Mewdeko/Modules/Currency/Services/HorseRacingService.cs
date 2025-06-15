@@ -192,6 +192,7 @@ public class HorseRacingService : INService
         /// <param name="userId">The ID of the user participating in the race.</param>
         /// <param name="betAmount">The amount of currency the user bet on the race.</param>
         /// <param name="animal">The animal emoji representing the racer.</param>
+        /// <param name="username">The username of the user participating in the race.</param>
         public Racer(ulong userId, int betAmount, string animal, string username)
         {
             UserId = userId;
@@ -235,6 +236,7 @@ public record RacerProgress
     /// <param name="userId">The ID of the user.</param>
     /// <param name="animal">The animal emoji representing the racer.</param>
     /// <param name="progress">The current progress of the racer.</param>
+    /// <param name="username">The username of the user.</param>
     public RacerProgress(ulong userId, string animal, int progress, string username)
     {
         UserId = userId;
@@ -274,6 +276,7 @@ public record RaceWinner
     /// </summary>
     /// <param name="userId">The ID of the winning user.</param>
     /// <param name="winnings">The amount of currency won.</param>
+    /// <param name="username">The username of the winning user.</param>
     public RaceWinner(ulong userId, int winnings, string username)
     {
         UserId = userId;
@@ -309,6 +312,7 @@ public record FinalPosition
     /// <param name="userId">The ID of the user.</param>
     /// <param name="animal">The animal emoji representing the racer.</param>
     /// <param name="winnings">The amount of currency won (or lost if negative).</param>
+    /// <param name="username">The username of the user.</param>
     public FinalPosition(int position, ulong userId, string animal, int winnings, string username)
     {
         Position = position;

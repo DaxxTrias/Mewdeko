@@ -84,7 +84,8 @@ public class SlashGiveaways(
         var gc = await guildSettings.GetGuildConfig(Context.Guild.Id);
         if (!Uri.IsWellFormedUriString(banner, UriKind.Absolute) && banner != "none")
         {
-            await ctx.Interaction.SendErrorAsync(Strings.GiveawayInvalidUrl(ctx.Guild.Id), Config).ConfigureAwait(false);
+            await ctx.Interaction.SendErrorAsync(Strings.GiveawayInvalidUrl(ctx.Guild.Id), Config)
+                .ConfigureAwait(false);
             return;
         }
 
@@ -147,7 +148,7 @@ public class SlashGiveaways(
             gc.GiveawayEmbedColor = colorVal;
             await guildSettings.UpdateGuildConfig(Context.Guild.Id, gc);
             await ctx.Interaction.SendConfirmAsync(
-                Strings.GiveawayEmbedColorSet(ctx.Guild.Id))
+                    Strings.GiveawayEmbedColorSet(ctx.Guild.Id))
                 .ConfigureAwait(false);
         }
         else
@@ -170,7 +171,7 @@ public class SlashGiveaways(
         gc.DmOnGiveawayWin = !gc.DmOnGiveawayWin;
         await guildSettings.UpdateGuildConfig(Context.Guild.Id, gc);
         await ctx.Interaction.SendConfirmAsync(
-            Strings.GiveawayDmStatus(ctx.Guild.Id, gc.DmOnGiveawayWin))
+                Strings.GiveawayDmStatus(ctx.Guild.Id, gc.DmOnGiveawayWin))
             .ConfigureAwait(false);
     }
 
@@ -186,7 +187,7 @@ public class SlashGiveaways(
         await using var dbContext = await dbFactory.CreateConnectionAsync();
 
         var gway = dbContext.Giveaways
-            .Where(x =>x.ServerId == ctx.Guild.Id).ToList().Find(x => x.MessageId == messageid);
+            .Where(x => x.ServerId == ctx.Guild.Id).ToList().Find(x => x.MessageId == messageid);
         if (gway is null)
         {
             await ctx.Interaction.SendErrorAsync(Strings.GiveawayNotFound(ctx.Guild.Id), Config).ConfigureAwait(false);
@@ -216,7 +217,8 @@ public class SlashGiveaways(
         var gways = dbContext.Giveaways.Where(x => x.ServerId == ctx.Guild.Id);
         if (!gways.Any())
         {
-            await ctx.Interaction.SendErrorAsync(Strings.GiveawayNoStatsAvailable(ctx.Guild.Id), Config).ConfigureAwait(false);
+            await ctx.Interaction.SendErrorAsync(Strings.GiveawayNoStatsAvailable(ctx.Guild.Id), Config)
+                .ConfigureAwait(false);
         }
         else
         {
@@ -253,70 +255,74 @@ public class SlashGiveaways(
     /// <param name="pingRole">The role to ping when starting the giveaway</param>
     /// <param name="attachment">The banner to use for the giveaway</param>
     /// <param name="host">The host of the giveaway</param>
+    /// <param name="useButton">Whether to use a button for joining the giveaway</param>
+    /// <param name="useCaptcha">Whether to require captcha verification for joining</param>
+    /// <param name="requiredRoles">Array of roles required to join the giveaway</param>
+    /// <param name="requiredMessages">Number of messages required to join the giveaway</param>
     [SlashCommand("start", "Start a giveaway!")]
     [SlashUserPerm(GuildPermission.ManageMessages)]
     [CheckPermissions]
     public async Task GStart(ITextChannel chan, TimeSpan time, int winners, string what, IRole pingRole = null,
-    IAttachment attachment = null, IUser host = null, bool useButton = false, bool useCaptcha = false,
-    IRole[] requiredRoles = null, ulong requiredMessages = 0)
-{
-    host ??= ctx.User;
-    await ctx.Interaction.DeferAsync().ConfigureAwait(false);
-    if (useButton && useCaptcha)
+        IAttachment attachment = null, IUser host = null, bool useButton = false, bool useCaptcha = false,
+        IRole[] requiredRoles = null, ulong requiredMessages = 0)
     {
-        await ReplyAsync(Strings.GiveawayButtonCaptchaError(ctx.Guild.Id));
-        return;
-    }
-
-    string reqs;
-    if (requiredRoles is null || requiredRoles.Length == 0)
-        reqs = "";
-    else
-        reqs = string.Join("\n", requiredRoles.Select(x => x.Id));
-
-    var emote = (await Service.GetGiveawayEmote(ctx.Guild.Id)).ToIEmote();
-    if (!useButton && !useCaptcha)
-    {
-        try
+        host ??= ctx.User;
+        await ctx.Interaction.DeferAsync().ConfigureAwait(false);
+        if (useButton && useCaptcha)
         {
-            var message = await ctx.Interaction.SendConfirmFollowupAsync(
-                Strings.GiveawayCheckingEmote(ctx.Guild.Id)).ConfigureAwait(false);
-            await message.AddReactionAsync(emote).ConfigureAwait(false);
+            await ReplyAsync(Strings.GiveawayButtonCaptchaError(ctx.Guild.Id));
+            return;
         }
-        catch
+
+        string reqs;
+        if (requiredRoles is null || requiredRoles.Length == 0)
+            reqs = "";
+        else
+            reqs = string.Join("\n", requiredRoles.Select(x => x.Id));
+
+        var emote = (await Service.GetGiveawayEmote(ctx.Guild.Id)).ToIEmote();
+        if (!useButton && !useCaptcha)
+        {
+            try
+            {
+                var message = await ctx.Interaction.SendConfirmFollowupAsync(
+                    Strings.GiveawayCheckingEmote(ctx.Guild.Id)).ConfigureAwait(false);
+                await message.AddReactionAsync(emote).ConfigureAwait(false);
+            }
+            catch
+            {
+                await ctx.Interaction.SendErrorFollowupAsync(
+                        Strings.GiveawayEmoteInvalidInteraction(ctx.Guild.Id), Config)
+                    .ConfigureAwait(false);
+                return;
+            }
+        }
+
+        var user = await ctx.Guild.GetUserAsync(ctx.Client.CurrentUser.Id).ConfigureAwait(false);
+        var perms = user.GetPermissions(chan);
+        if (!useButton && !useCaptcha)
+        {
+            if (!perms.Has(ChannelPermission.AddReactions))
+            {
+                await ctx.Interaction.SendErrorFollowupAsync(
+                        Strings.GiveawayNoReactionPermissionInteraction(ctx.Guild.Id), Config)
+                    .ConfigureAwait(false);
+                return;
+            }
+        }
+
+        if (!perms.Has(ChannelPermission.UseExternalEmojis) && !ctx.Guild.Emotes.Contains(emote))
         {
             await ctx.Interaction.SendErrorFollowupAsync(
-                Strings.GiveawayEmoteInvalidInteraction(ctx.Guild.Id), Config)
+                    Strings.GiveawayNoExternalEmotesInteraction(ctx.Guild.Id), Config)
                 .ConfigureAwait(false);
             return;
         }
-    }
 
-    var user = await ctx.Guild.GetUserAsync(ctx.Client.CurrentUser.Id).ConfigureAwait(false);
-    var perms = user.GetPermissions(chan);
-    if (!useButton && !useCaptcha)
-    {
-        if (!perms.Has(ChannelPermission.AddReactions))
-        {
-            await ctx.Interaction.SendErrorFollowupAsync(
-                Strings.GiveawayNoReactionPermissionInteraction(ctx.Guild.Id), Config)
-                .ConfigureAwait(false);
-            return;
-        }
+        await Service.GiveawaysInternal(chan, time, what, winners, host.Id, ctx.Guild.Id,
+            ctx.Channel as ITextChannel, ctx.Guild, banner: attachment?.Url, pingRole: pingRole, useButton: useButton,
+            useCaptcha: useCaptcha, reqroles: reqs, messageCount: requiredMessages).ConfigureAwait(false);
     }
-
-    if (!perms.Has(ChannelPermission.UseExternalEmojis) && !ctx.Guild.Emotes.Contains(emote))
-    {
-        await ctx.Interaction.SendErrorFollowupAsync(
-            Strings.GiveawayNoExternalEmotesInteraction(ctx.Guild.Id), Config)
-            .ConfigureAwait(false);
-        return;
-    }
-
-    await Service.GiveawaysInternal(chan, time, what, winners, host.Id, ctx.Guild.Id,
-        ctx.Channel as ITextChannel, ctx.Guild, banner: attachment?.Url, pingRole: pingRole, useButton: useButton,
-        useCaptcha: useCaptcha, reqroles: reqs, messageCount: requiredMessages).ConfigureAwait(false);
-}
 
     /// <summary>
     ///     View current giveaways
@@ -384,7 +390,6 @@ public class SlashGiveaways(
         if (gway is null)
         {
             await ctx.Interaction.SendErrorAsync(Strings.GiveawayNotFound(ctx.Guild.Id), Config).ConfigureAwait(false);
-
         }
 
         if (gway.Ended == 1)
