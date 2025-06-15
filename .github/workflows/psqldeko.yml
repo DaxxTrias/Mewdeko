@@ -50,6 +50,10 @@ jobs:
         if: ${{ steps.commit_count.outputs.count >= 20 }}
         run: dotnet test --no-restore --verbosity normal
 
+      - name: Copy data folder
+        if: ${{ steps.commit_count.outputs.count >= 20 }}
+        run: cp -r src/Mewdeko/data output/
+
       - name: Zip artifacts
         if: ${{ steps.commit_count.outputs.count >= 20 }}
         run: |
