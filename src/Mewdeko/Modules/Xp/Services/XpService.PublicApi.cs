@@ -60,7 +60,7 @@ public partial class XpService
         Log.Information("Recomputing levels for all users in guild {GuildId} with curve type {CurveType}",
             guildId, newCurveType);
 
-        await using var db = await dbFactory.CreateConnectionAsync();
+        await using var db = await DbFactory.CreateConnectionAsync();
 
         // Update the guild settings with the new curve type
         var settings = await cacheManager.GetGuildXpSettingsAsync(guildId);
@@ -126,7 +126,7 @@ public partial class XpService
     /// <returns>The user's XP statistics.</returns>
     public async Task<UserXpStats?> GetUserXpStatsAsync(ulong guildId, ulong userId)
     {
-        await using var db = await dbFactory.CreateConnectionAsync();
+        await using var db = await DbFactory.CreateConnectionAsync();
 
         var userXp = await cacheManager.GetOrCreateGuildUserXpAsync(db, guildId, userId);
         var settings = await cacheManager.GetGuildXpSettingsAsync(guildId);
@@ -157,7 +157,7 @@ public partial class XpService
     /// <returns>The user's rank.</returns>
     public async Task<int> GetUserRankAsync(ulong guildId, ulong userId)
     {
-        await using var db = await dbFactory.CreateConnectionAsync();
+        await using var db = await DbFactory.CreateConnectionAsync();
 
         var userXp = await db.GuildUserXps
             .FirstOrDefaultAsync(x => x.GuildId == guildId && x.UserId == userId);
@@ -222,7 +222,7 @@ public partial class XpService
 
         // If either the leaderboard or count isn't in cache, get from database
         if (result != null && totalCount != 0) return (result, totalCount);
-        await using var db = await dbFactory.CreateConnectionAsync();
+        await using var db = await DbFactory.CreateConnectionAsync();
 
         // Get the total count if needed
         if (totalCount == 0)
@@ -290,7 +290,7 @@ public partial class XpService
     /// <returns>A task representing the asynchronous operation.</returns>
     public async Task ResetUserXpAsync(ulong guildId, ulong userId, bool resetBonusXp = false)
     {
-        await using var db = await dbFactory.CreateConnectionAsync();
+        await using var db = await DbFactory.CreateConnectionAsync();
 
         var userXp = await cacheManager.GetOrCreateGuildUserXpAsync(db, guildId, userId);
 
@@ -320,7 +320,7 @@ public partial class XpService
         if (xpAmount < 0)
             throw new ArgumentException("XP amount cannot be negative", nameof(xpAmount));
 
-        await using var db = await dbFactory.CreateConnectionAsync();
+        await using var db = await DbFactory.CreateConnectionAsync();
 
         var userXp = await cacheManager.GetOrCreateGuildUserXpAsync(db, guildId, userId);
 
@@ -341,7 +341,7 @@ public partial class XpService
     /// <returns>A task representing the asynchronous operation.</returns>
     public async Task SetUserNotificationPreferenceAsync(ulong guildId, ulong userId, XpNotificationType type)
     {
-        await using var db = await dbFactory.CreateConnectionAsync();
+        await using var db = await DbFactory.CreateConnectionAsync();
 
         var userXp = await cacheManager.GetOrCreateGuildUserXpAsync(db, guildId, userId);
 
@@ -360,7 +360,7 @@ public partial class XpService
     /// <returns>A tuple with total days, hours, and minutes on the current level.</returns>
     public async Task<(int Days, int Hours, int Minutes)> GetTimeOnCurrentLevelAsync(ulong guildId, ulong userId)
     {
-        await using var db = await dbFactory.CreateConnectionAsync();
+        await using var db = await DbFactory.CreateConnectionAsync();
 
         var userXp = await cacheManager.GetOrCreateGuildUserXpAsync(db, guildId, userId);
 
@@ -418,7 +418,7 @@ public partial class XpService
     {
         Log.Information("Resetting XP for all users in guild {GuildId}", guildId);
 
-        await using var db = await dbFactory.CreateConnectionAsync();
+        await using var db = await DbFactory.CreateConnectionAsync();
 
         var now = DateTime.UtcNow;
 
@@ -499,7 +499,7 @@ public partial class XpService
     /// <returns>A list of role rewards.</returns>
     public async Task<List<XpRoleReward>> GetRoleRewardsAsync(ulong guildId)
     {
-        await using var db = await dbFactory.CreateConnectionAsync();
+        await using var db = await DbFactory.CreateConnectionAsync();
 
         var rewards = await db.XpRoleRewards
             .Where(r => r.GuildId == guildId)
@@ -515,7 +515,7 @@ public partial class XpService
     /// <returns>A list of currency rewards.</returns>
     public async Task<List<XpCurrencyReward>> GetCurrencyRewardsAsync(ulong guildId)
     {
-        await using var db = await dbFactory.CreateConnectionAsync();
+        await using var db = await DbFactory.CreateConnectionAsync();
 
         var rewards = await db.XpCurrencyRewards
             .Where(r => r.GuildId == guildId)
@@ -537,7 +537,7 @@ public partial class XpService
     /// <returns>A task representing the asynchronous operation.</returns>
     public async Task SetChannelMultiplierAsync(ulong guildId, ulong channelId, double multiplier)
     {
-        await using var db = await dbFactory.CreateConnectionAsync();
+        await using var db = await DbFactory.CreateConnectionAsync();
 
         var existingMultiplier = await db.XpChannelMultipliers
             .FirstOrDefaultAsync(x => x.GuildId == guildId && x.ChannelId == channelId);
@@ -573,7 +573,7 @@ public partial class XpService
     /// <returns>A task representing the asynchronous operation.</returns>
     public async Task SetRoleMultiplierAsync(ulong guildId, ulong roleId, double multiplier)
     {
-        await using var db = await dbFactory.CreateConnectionAsync();
+        await using var db = await DbFactory.CreateConnectionAsync();
 
         var existingMultiplier = await db.XpRoleMultipliers
             .FirstOrDefaultAsync(x => x.GuildId == guildId && x.RoleId == roleId);
@@ -629,7 +629,7 @@ public partial class XpService
         if (startTime >= endTime)
             throw new ArgumentException("End time must be after start time", nameof(endTime));
 
-        await using var db = await dbFactory.CreateConnectionAsync();
+        await using var db = await DbFactory.CreateConnectionAsync();
 
         var channelsString = applicableChannels != null && applicableChannels.Any()
             ? string.Join(",", applicableChannels)
@@ -661,7 +661,7 @@ public partial class XpService
     /// <returns>True if the event was found and canceled, false otherwise.</returns>
     public async Task<bool> CancelXpBoostEventAsync(int eventId)
     {
-        await using var db = await dbFactory.CreateConnectionAsync();
+        await using var db = await DbFactory.CreateConnectionAsync();
 
         var boostEvent = await db.XpBoostEvents
             .FirstOrDefaultAsync(x => x.Id == eventId);
@@ -680,7 +680,7 @@ public partial class XpService
     /// <returns>A list of active boost events.</returns>
     public async Task<List<XpBoostEvent>> GetActiveBoostEventsAsync(ulong guildId)
     {
-        await using var db = await dbFactory.CreateConnectionAsync();
+        await using var db = await DbFactory.CreateConnectionAsync();
 
         var now = DateTime.UtcNow;
 
@@ -696,7 +696,7 @@ public partial class XpService
     /// <returns>A list of all boost events.</returns>
     public async Task<List<XpBoostEvent>> GetAllBoostEventsAsync(ulong guildId)
     {
-        await using var db = await dbFactory.CreateConnectionAsync();
+        await using var db = await DbFactory.CreateConnectionAsync();
 
         return await db.XpBoostEvents
             .Where(x => x.GuildId == guildId)
@@ -717,7 +717,7 @@ public partial class XpService
     /// <returns>A task representing the asynchronous operation.</returns>
     public async Task ExcludeItemAsync(ulong guildId, ulong itemId, ExcludedItemType itemType)
     {
-        await using var db = await dbFactory.CreateConnectionAsync();
+        await using var db = await DbFactory.CreateConnectionAsync();
 
         var exists = await db.XpExcludedItems
             .AnyAsync(x => x.GuildId == guildId && x.ItemId == itemId && x.ItemType == (int)itemType);
@@ -741,7 +741,7 @@ public partial class XpService
     /// <returns>A task representing the asynchronous operation.</returns>
     public async Task IncludeItemAsync(ulong guildId, ulong itemId, ExcludedItemType itemType)
     {
-        await using var db = await dbFactory.CreateConnectionAsync();
+        await using var db = await DbFactory.CreateConnectionAsync();
 
         var excludedItem = await db.XpExcludedItems
             .FirstOrDefaultAsync(x => x.GuildId == guildId && x.ItemId == itemId && x.ItemType == (int)itemType);
@@ -760,7 +760,7 @@ public partial class XpService
     /// <returns>A list of excluded item IDs.</returns>
     public async Task<List<ulong>> GetExcludedItemsAsync(ulong guildId, ExcludedItemType itemType)
     {
-        await using var db = await dbFactory.CreateConnectionAsync();
+        await using var db = await DbFactory.CreateConnectionAsync();
 
         var excludedItems = await db.XpExcludedItems
             .Where(x => x.GuildId == guildId && x.ItemType == (int)itemType)
@@ -816,7 +816,7 @@ public partial class XpService
     /// <returns>A list of competition entries.</returns>
     public async Task<List<XpCompetitionEntry>> GetCompetitionEntriesAsync(int competitionId)
     {
-        await using var db = await dbFactory.CreateConnectionAsync();
+        await using var db = await DbFactory.CreateConnectionAsync();
 
         var entries = await db.XpCompetitionEntries
             .Where(e => e.CompetitionId == competitionId)
@@ -832,7 +832,7 @@ public partial class XpService
     /// <returns>The competition, or null if not found.</returns>
     public async Task<XpCompetition> GetCompetitionAsync(int competitionId)
     {
-        await using var db = await dbFactory.CreateConnectionAsync();
+        await using var db = await DbFactory.CreateConnectionAsync();
 
         var competition = await db.XpCompetitions
             .FirstOrDefaultAsync(c => c.Id == competitionId);
@@ -904,7 +904,7 @@ public partial class XpService
                 throw new ArgumentException($"User {userId} not found in guild {guildId}");
 
             // Generate XP card using the specialized service
-            var cardGenerator = new XpCardGenerator(dbFactory, this);
+            var cardGenerator = new XpCardGenerator(DbFactory, this, HttpClientFactory);
             var cardStream = await cardGenerator.GenerateXpImageAsync(user);
 
             // Reset the stream position so it can be read
@@ -935,7 +935,7 @@ public partial class XpService
     /// </summary>
     public async Task<int> GetUserLevelAsync(ulong guildId, ulong userId)
     {
-        await using var db = await dbFactory.CreateConnectionAsync();
+        await using var db = await DbFactory.CreateConnectionAsync();
 
         var userXp = await db.GuildUserXps
             .FirstOrDefaultAsync(x => x.GuildId == guildId && x.UserId == userId);
@@ -955,7 +955,7 @@ public partial class XpService
     /// <returns>A dictionary mapping user IDs to their levels.</returns>
     public async Task<Dictionary<ulong, int>> GetUserLevelsAsync(ulong guildId, IEnumerable<ulong> userIds)
     {
-        await using var db = await dbFactory.CreateConnectionAsync();
+        await using var db = await DbFactory.CreateConnectionAsync();
 
         var userIdList = userIds.ToList();
         var userXpData = await db.GuildUserXps

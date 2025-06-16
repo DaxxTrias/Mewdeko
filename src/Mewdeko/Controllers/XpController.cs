@@ -1,3 +1,4 @@
+using System.Net.Http;
 using DataModel;
 using LinqToDB;
 using Mewdeko.Modules.Xp.Models;
@@ -14,7 +15,11 @@ namespace Mewdeko.Controllers;
 [ApiController]
 [Route("botapi/[controller]/{guildId}")]
 [Authorize("ApiKeyPolicy")]
-public class XpController(XpService xp, DiscordShardedClient client, IDataConnectionFactory dbFactory) : Controller
+public class XpController(
+    XpService xp,
+    DiscordShardedClient client,
+    IDataConnectionFactory dbFactory,
+    IHttpClientFactory httpClientFactory) : Controller
 {
     /// <summary>
     ///     Gets the XP settings for a guild
@@ -431,7 +436,7 @@ public class XpController(XpService xp, DiscordShardedClient client, IDataConnec
     [HttpGet("template")]
     public async Task<IActionResult> GetTemplate(ulong guildId)
     {
-        var cardGenerator = new XpCardGenerator(dbFactory, xp);
+        var cardGenerator = new XpCardGenerator(dbFactory, xp, httpClientFactory);
         var template = await cardGenerator.GetTemplateAsync(guildId);
         return Ok(template);
     }

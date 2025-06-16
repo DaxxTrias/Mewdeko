@@ -1,3 +1,4 @@
+using System.Net.Http;
 using Mewdeko.Modules.Currency.Services;
 using Mewdeko.Modules.Xp.Models;
 using Serilog;
@@ -51,8 +52,9 @@ public partial class XpService : INService, IUnloadableService
     #region Fields
 
     internal readonly DiscordShardedClient Client;
-    internal readonly IDataConnectionFactory dbFactory;
+    internal readonly IDataConnectionFactory DbFactory;
     internal readonly EventHandler EventHandler;
+    internal readonly IHttpClientFactory HttpClientFactory;
 
 
     // Core components
@@ -74,16 +76,18 @@ public partial class XpService : INService, IUnloadableService
     /// <param name="dataCache">The data cache service.</param>
     /// <param name="eventHandler">The Discord event handler.</param>
     /// <param name="currencyService">The currency service.</param>
+    /// <param name="httpClientFactory">The http client factory</param>
     public XpService(
         DiscordShardedClient client,
         IDataConnectionFactory dbFactory,
         IDataCache dataCache,
         EventHandler eventHandler,
-        ICurrencyService currencyService)
+        ICurrencyService currencyService, IHttpClientFactory httpClientFactory)
     {
         Client = client;
-        this.dbFactory = dbFactory;
+        DbFactory = dbFactory;
         EventHandler = eventHandler;
+        HttpClientFactory = httpClientFactory;
 
         // Initialize sub-components
         cacheManager = new XpCacheManager(dataCache, dbFactory, client);
@@ -94,7 +98,7 @@ public partial class XpService : INService, IUnloadableService
             dbFactory,
             cacheManager,
             rewardManager,
-            competitionManager);
+            competitionManager, client);
 
         // Register event handlers
         EventHandler.MessageReceived += HandleMessageXp;
