@@ -30,6 +30,7 @@ public class XpBackgroundProcessor : INService, IDisposable
 
     private readonly XpCacheManager cacheManager;
     private readonly Timer cleanupTimer;
+    private readonly DiscordShardedClient client;
     private readonly XpCompetitionManager competitionManager;
     private readonly IDataConnectionFactory dbFactory;
     private readonly SemaphoreSlim dbThrottle;
@@ -66,12 +67,13 @@ public class XpBackgroundProcessor : INService, IDisposable
         IDataConnectionFactory dbFactory,
         XpCacheManager cacheManager,
         XpRewardManager rewardManager,
-        XpCompetitionManager competitionManager)
+        XpCompetitionManager competitionManager, DiscordShardedClient client)
     {
         this.dbFactory = dbFactory;
         this.cacheManager = cacheManager;
         this.rewardManager = rewardManager;
         this.competitionManager = competitionManager;
+        this.client = client;
 
         // Initialize thread-safe bounded queue with reduced capacity
         xpQueue = new BlockingCollection<XpGainItem>(QueueCapacity);
@@ -83,7 +85,7 @@ public class XpBackgroundProcessor : INService, IDisposable
         processingTimer = new Timer(ProcessXpBatches, null, TimeSpan.FromSeconds(1), currentProcessingInterval);
         decayTimer = new Timer(ProcessXpDecay, null, TimeSpan.FromHours(12), TimeSpan.FromHours(12));
         cleanupTimer = new Timer(CleanupCaches, null, TimeSpan.FromHours(2), TimeSpan.FromHours(2));
-        memoryMonitorTimer = new Timer(LogMemoryStats, null, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5));
+        memoryMonitorTimer = new Timer(LogMemoryStats, null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
 
         Log.Information(
             "XP Background Processor initialized with queue capacity {Capacity} and {Concurrency} concurrent DB operations",
@@ -1097,18 +1099,48 @@ public class XpBackgroundProcessor : INService, IDisposable
         {
             var process = Process.GetCurrentProcess();
             var memoryMb = process.WorkingSet64 / 1024 / 1024;
+            var gen0 = GC.CollectionCount(0);
+            var gen1 = GC.CollectionCount(1);
+            var gen2 = GC.CollectionCount(2);
+
+            // Get Discord cache stats
+            var cachedUsers = 0;
+            var cachedMessages = 0;
+            var cachedChannels = 0;
+
+            foreach (var guild in client.Guilds)
+            {
+                cachedUsers += guild.Users.Count;
+                cachedChannels += guild.Channels.Count;
+
+                foreach (var channel in guild.TextChannels)
+                {
+                    if (channel is { } textChannel)
+                    {
+                        cachedMessages += textChannel.CachedMessages.Count;
+                    }
+                }
+            }
+
+            var bufferItemCount = batchingBuffer.Sum(kvp => kvp.Value.Count);
 
             Log.Information("XP Processor Memory Stats: Working Set: {MemoryMB}MB, " +
-                            "Queue: {QueueSize}, Batching Buffer: {BufferSize}, " +
-                            "Active Users: {ActiveUsers}, Processing: {IsProcessing}",
-                memoryMb, xpQueue.Count, batchingBuffer.Count,
-                activeUserIds.Count, isProcessing == 1);
+                            "Queue: {QueueSize}, Batching Buffer Items: {BufferItems} (Keys: {BufferKeys}), " +
+                            "Active Users: {ActiveUsers}, Processing: {IsProcessing}, " +
+                            "GC Gen0: {Gen0}, Gen1: {Gen1}, Gen2: {Gen2}",
+                memoryMb, xpQueue.Count, bufferItemCount, batchingBuffer.Count,
+                activeUserIds.Count, isProcessing == 1,
+                gen0, gen1, gen2);
 
-            // Force processing if memory is high and we have items to process
-            if (memoryMb > 4000 && batchingBuffer.Count > 0 && isProcessing != 1)
+            Log.Information(
+                "Discord Cache: Guilds: {Guilds}, Users: {Users}, Channels: {Channels}, Messages: {Messages}",
+                client.Guilds.Count, cachedUsers, cachedChannels, cachedMessages);
+
+            // Force a Gen0 collection to see if memory can be reclaimed
+            if (memoryMb > 600)
             {
-                Log.Warning("High memory usage detected ({MemoryMB}MB), forcing XP processing", memoryMb);
-                ProcessXpBatches(null);
+                Log.Warning("High memory usage detected, forcing GC");
+                GC.Collect(0, GCCollectionMode.Forced);
             }
         }
         catch (Exception ex)

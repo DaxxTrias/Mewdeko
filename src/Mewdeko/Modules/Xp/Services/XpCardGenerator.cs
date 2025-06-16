@@ -15,20 +15,24 @@ namespace Mewdeko.Modules.Xp.Services;
 public class XpCardGenerator : INService
 {
     private readonly IDataConnectionFactory dbFactory;
-    private readonly XpService xpService;
     private readonly byte[] defaultBackground;
+    private readonly IHttpClientFactory httpClientFactory;
+    private readonly XpService xpService;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="XpCardGenerator" /> class.
     /// </summary>
     /// <param name="dbFactory">The database context provider.</param>
     /// <param name="xpService">The XP service.</param>
+    /// <param name="httpClientFactory">The HTTP client factory.</param>
     public XpCardGenerator(
         IDataConnectionFactory dbFactory,
-        XpService xpService)
+        XpService xpService,
+        IHttpClientFactory httpClientFactory)
     {
         this.dbFactory = dbFactory ?? throw new ArgumentNullException(nameof(dbFactory));
         this.xpService = xpService ?? throw new ArgumentNullException(nameof(xpService));
+        this.httpClientFactory = httpClientFactory ?? throw new ArgumentNullException(nameof(httpClientFactory));
         defaultBackground = xpService.GetDefaultBackgroundImage();
     }
 
@@ -91,7 +95,7 @@ public class XpCardGenerator : INService
         var xpImage = await GetXpImageAsync(stats.FullGuildStats.GuildId);
         if (xpImage is not null)
         {
-            using var httpClient = new HttpClient();
+            using var httpClient = httpClientFactory.CreateClient();
             var httpResponse = await httpClient.GetAsync(xpImage);
             if (httpResponse.IsSuccessStatusCode)
             {
@@ -234,7 +238,7 @@ public class XpCardGenerator : INService
             {
                 var avatarUrl = GetAvatarUrl(stats.User);
 
-                using var httpClient = new HttpClient();
+                using var httpClient = httpClientFactory.CreateClient();
                 var httpResponse = await httpClient.GetAsync(avatarUrl);
                 if (httpResponse.IsSuccessStatusCode)
                 {
