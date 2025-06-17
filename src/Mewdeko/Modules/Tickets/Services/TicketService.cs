@@ -5000,7 +5000,7 @@ public class TicketService : INService
                     case "autoarchiveonclose":
                         button.AutoArchiveOnClose = (bool)setting.Value;
                         break;
-                    case "modalJson":
+                    case "modaljson":
                         button.ModalJson = (string)setting.Value;
                         break;
 
