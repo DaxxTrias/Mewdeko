@@ -1225,7 +1225,7 @@ public class TicketService : INService
 
 
     /// <summary>
-    /// Update all components related to a panel.
+    ///     Update all components related to a panel.
     /// </summary>
     /// <param name="panel">The panel who's message components to update</param>
     public async Task UpdatePanelComponentsAsync(TicketPanel panel)
@@ -2345,7 +2345,7 @@ public class TicketService : INService
     }
 
     /// <summary>
-    ///     Validates and creates modal for ticket creation with full field configuration
+    ///     Validates and creates modal for ticket creation
     /// </summary>
     public async Task HandleModalCreation(IGuildUser user, string modalJson, string customId,
         IDiscordInteraction component)
@@ -2353,11 +2353,32 @@ public class TicketService : INService
         try
         {
             Log.Information(modalJson);
-            var fields = JsonSerializer.Deserialize<Dictionary<string, ModalFieldConfig>>(modalJson,
-                new JsonSerializerOptions
+
+            ModalConfiguration modalConfig;
+            Dictionary<string, ModalFieldConfig> fields;
+
+            try
+            {
+                modalConfig = JsonSerializer.Deserialize<ModalConfiguration>(modalJson,
+                    new JsonSerializerOptions
+                    {
+                        PropertyNameCaseInsensitive = true
+                    });
+                fields = modalConfig.Fields;
+            }
+            catch
+            {
+                fields = JsonSerializer.Deserialize<Dictionary<string, ModalFieldConfig>>(modalJson,
+                    new JsonSerializerOptions
+                    {
+                        PropertyNameCaseInsensitive = true
+                    });
+                modalConfig = new ModalConfiguration
                 {
-                    PropertyNameCaseInsensitive = true
-                });
+                    Fields = fields
+                };
+            }
+
             Log.Information(JsonSerializer.Serialize(fields));
 
             // Validate field count
@@ -2366,7 +2387,7 @@ public class TicketService : INService
 
             var mb = new ModalBuilder()
                 .WithCustomId(customId)
-                .WithTitle("Create Ticket");
+                .WithTitle(modalConfig.Title ?? "Create Ticket");
 
             foreach (var (key, field) in fields)
             {
