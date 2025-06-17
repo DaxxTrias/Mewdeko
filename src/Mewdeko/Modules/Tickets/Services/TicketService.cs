@@ -5000,6 +5000,9 @@ public class TicketService : INService
                     case "autoarchiveonclose":
                         button.AutoArchiveOnClose = (bool)setting.Value;
                         break;
+                    case "modalJson":
+                        button.ModalJson = (string)setting.Value;
+                        break;
 
                     default:
                         Log.Warning("Unknown button setting: {SettingKey}", setting.Key);
