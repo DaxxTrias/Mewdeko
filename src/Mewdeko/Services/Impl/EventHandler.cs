@@ -141,6 +141,21 @@ public sealed class EventHandler : IDisposable
                 break;
 
             // Two parameter events
+            case "AuditLogCreated":
+                if (args is ValueTuple<SocketAuditLogEntry, SocketGuild> auditLogCreatedArgs)
+                {
+                    switch (handler)
+                    {
+                        case AsyncEventHandler<SocketAuditLogEntry, SocketGuild> auditLogCreatedHandler:
+                            await auditLogCreatedHandler(auditLogCreatedArgs.Item1, auditLogCreatedArgs.Item2);
+                            break;
+                        case Func<SocketAuditLogEntry, SocketGuild, Task> auditLogCreatedFunc:
+                            await auditLogCreatedFunc(auditLogCreatedArgs.Item1, auditLogCreatedArgs.Item2);
+                            break;
+                    }
+                }
+
+                break;
             case "AutoModRuleUpdated":
                 if (args is ValueTuple<Cacheable<SocketAutoModRule, ulong>, SocketAutoModRule> autoModRuleUpdatedArgs)
                 {
