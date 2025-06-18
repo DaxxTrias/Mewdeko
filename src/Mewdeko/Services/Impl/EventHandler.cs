@@ -1,5 +1,6 @@
 ﻿using System.Diagnostics;
 using System.Threading;
+using Discord.Rest;
 using Microsoft.Extensions.Logging;
 using Serilog;
 
@@ -15,10 +16,6 @@ public sealed class EventHandler : IDisposable
 
     // Metrics tracking
     private readonly ConcurrentDictionary<string, EventMetrics> eventMetrics = new();
-
-    // Multi-parameter handler storage for proper unsubscription
-    private readonly ConcurrentDictionary<object, object> handlerMappings = new();
-    private readonly ILogger<EventHandler> logger;
     private readonly BatchedEventProcessor<SocketMessage> messageProcessor;
     private readonly Timer metricsResetTimer;
     private readonly ConcurrentDictionary<string, ModuleMetrics> moduleMetrics = new();
@@ -29,13 +26,14 @@ public sealed class EventHandler : IDisposable
     // Rate limiting
     private readonly ConcurrentDictionary<string, RateLimiter> rateLimiters = new();
 
+    // String-based event subscription tracking for proper disposal
+    private readonly ConcurrentDictionary<string, List<(string ModuleName, Delegate Handler)>>
+        stringEventSubscriptions = new();
+
     // Event subscription management
-    private readonly ConcurrentDictionary<string, List<IEventSubscription>> subscriptions = new();
 
     private readonly BatchedEventProcessor<(Cacheable<IUser, ulong>, Cacheable<IMessageChannel, ulong>)>
         typingProcessor;
-
-    private readonly ConcurrentDictionary<string, WeakEventManager> weakEventManagers = new();
 
     private volatile bool disposed;
 
@@ -55,7 +53,6 @@ public sealed class EventHandler : IDisposable
     {
         this.client = client ?? throw new ArgumentNullException(nameof(client));
         this.perfService = perfService ?? throw new ArgumentNullException(nameof(perfService));
-        this.logger = logger ?? throw new ArgumentNullException(nameof(logger));
         this.options = options ?? throw new ArgumentNullException(nameof(options));
 
         // Initialize rate limiters
@@ -77,159 +74,682 @@ public sealed class EventHandler : IDisposable
         RegisterEvents();
         StartBatchProcessors();
 
-        this.logger.LogInformation("EventHandler initialized with {Options}", this.options);
+        Log.Information("EventHandler initialized with {Options}", this.options);
     }
+
+    #region Event Execution
+
+    private async Task ExecuteHandlerByEventType<T>(string eventType, Delegate handler, T args)
+    {
+        switch (eventType)
+        {
+            // Single parameter events
+            case "ApplicationCommandCreated":
+            case "ApplicationCommandDeleted":
+            case "ApplicationCommandUpdated":
+            case "AutoModRuleCreated":
+            case "AutoModRuleDeleted":
+            case "AutocompleteExecuted":
+            case "ButtonExecuted":
+            case "ChannelCreated":
+            case "ChannelDestroyed":
+            case "EntitlementCreated":
+            case "GuildAvailable":
+            case "GuildScheduledEventCancelled":
+            case "GuildScheduledEventCompleted":
+            case "GuildScheduledEventCreated":
+            case "GuildScheduledEventStarted":
+            case "GuildStickerCreated":
+            case "GuildStickerDeleted":
+            case "GuildUnavailable":
+            case "IntegrationCreated":
+            case "IntegrationUpdated":
+            case "InteractionCreated":
+            case "InviteCreated":
+            case "JoinedGuild":
+            case "LeftGuild":
+            case "MessageCommandExecuted":
+            case "MessageReceived":
+            case "ModalSubmitted":
+            case "Ready":
+            case "RecipientAdded":
+            case "RecipientRemoved":
+            case "RoleCreated":
+            case "RoleDeleted":
+            case "SelectMenuExecuted":
+            case "SlashCommandExecuted":
+            case "StageEnded":
+            case "StageStarted":
+            case "SubscriptionCreated":
+            case "ThreadCreated":
+            case "ThreadMemberJoined":
+            case "ThreadMemberLeft":
+            case "UserCommandExecuted":
+            case "UserJoined":
+            case "VoiceServerUpdated":
+            case "GuildMembersDownloaded":
+                switch (handler)
+                {
+                    case AsyncEventHandler<T> singleHandler:
+                        await singleHandler(args);
+                        break;
+                    case Func<T, Task> funcHandler:
+                        await funcHandler(args);
+                        break;
+                }
+
+                break;
+
+            // Two parameter events
+            case "AutoModRuleUpdated":
+                if (args is ValueTuple<Cacheable<SocketAutoModRule, ulong>, SocketAutoModRule> autoModRuleUpdatedArgs)
+                {
+                    switch (handler)
+                    {
+                        case AsyncEventHandler<Cacheable<SocketAutoModRule, ulong>, SocketAutoModRule>
+                            autoModRuleUpdatedHandler:
+                            await autoModRuleUpdatedHandler(autoModRuleUpdatedArgs.Item1, autoModRuleUpdatedArgs.Item2);
+                            break;
+                        case Func<Cacheable<SocketAutoModRule, ulong>, SocketAutoModRule, Task> autoModRuleUpdatedFunc:
+                            await autoModRuleUpdatedFunc(autoModRuleUpdatedArgs.Item1, autoModRuleUpdatedArgs.Item2);
+                            break;
+                    }
+                }
+
+                break;
+
+            case "ChannelUpdated":
+                if (args is ValueTuple<SocketChannel, SocketChannel> channelUpdatedArgs)
+                {
+                    switch (handler)
+                    {
+                        case AsyncEventHandler<SocketChannel, SocketChannel> channelUpdatedHandler:
+                            await channelUpdatedHandler(channelUpdatedArgs.Item1, channelUpdatedArgs.Item2);
+                            break;
+                        case Func<SocketChannel, SocketChannel, Task> channelUpdatedFunc:
+                            await channelUpdatedFunc(channelUpdatedArgs.Item1, channelUpdatedArgs.Item2);
+                            break;
+                    }
+                }
+
+                break;
+
+            case "CurrentUserUpdated":
+                if (args is ValueTuple<SocketSelfUser, SocketSelfUser> currentUserUpdatedArgs)
+                {
+                    switch (handler)
+                    {
+                        case AsyncEventHandler<SocketSelfUser, SocketSelfUser> currentUserUpdatedHandler:
+                            await currentUserUpdatedHandler(currentUserUpdatedArgs.Item1, currentUserUpdatedArgs.Item2);
+                            break;
+                        case Func<SocketSelfUser, SocketSelfUser, Task> currentUserUpdatedFunc:
+                            await currentUserUpdatedFunc(currentUserUpdatedArgs.Item1, currentUserUpdatedArgs.Item2);
+                            break;
+                    }
+                }
+
+                break;
+
+            case "EntitlementDeleted":
+                if (args is ValueTuple<Cacheable<SocketEntitlement, ulong>, SocketEntitlement?> entitlementDeletedArgs)
+                {
+                    switch (handler)
+                    {
+                        case AsyncEventHandler<Cacheable<SocketEntitlement, ulong>, SocketEntitlement?>
+                            entitlementDeletedHandler:
+                            await entitlementDeletedHandler(entitlementDeletedArgs.Item1, entitlementDeletedArgs.Item2);
+                            break;
+                        case Func<Cacheable<SocketEntitlement, ulong>, SocketEntitlement?, Task> entitlementDeletedFunc:
+                            await entitlementDeletedFunc(entitlementDeletedArgs.Item1, entitlementDeletedArgs.Item2);
+                            break;
+                    }
+                }
+
+                break;
+
+            case "EntitlementUpdated":
+                if (args is ValueTuple<Cacheable<SocketEntitlement, ulong>, SocketEntitlement> entitlementUpdatedArgs)
+                {
+                    switch (handler)
+                    {
+                        case AsyncEventHandler<Cacheable<SocketEntitlement, ulong>, SocketEntitlement>
+                            entitlementUpdatedHandler:
+                            await entitlementUpdatedHandler(entitlementUpdatedArgs.Item1, entitlementUpdatedArgs.Item2);
+                            break;
+                        case Func<Cacheable<SocketEntitlement, ulong>, SocketEntitlement, Task> entitlementUpdatedFunc:
+                            await entitlementUpdatedFunc(entitlementUpdatedArgs.Item1, entitlementUpdatedArgs.Item2);
+                            break;
+                    }
+                }
+
+                break;
+
+            case "GuildJoinRequestDeleted":
+                if (args is ValueTuple<Cacheable<SocketGuildUser, ulong>, SocketGuild> guildJoinRequestDeletedArgs)
+                {
+                    switch (handler)
+                    {
+                        case AsyncEventHandler<Cacheable<SocketGuildUser, ulong>, SocketGuild>
+                            guildJoinRequestDeletedHandler:
+                            await guildJoinRequestDeletedHandler(guildJoinRequestDeletedArgs.Item1,
+                                guildJoinRequestDeletedArgs.Item2);
+                            break;
+                        case Func<Cacheable<SocketGuildUser, ulong>, SocketGuild, Task> guildJoinRequestDeletedFunc:
+                            await guildJoinRequestDeletedFunc(guildJoinRequestDeletedArgs.Item1,
+                                guildJoinRequestDeletedArgs.Item2);
+                            break;
+                    }
+                }
+
+                break;
+
+            case "GuildMemberUpdated":
+                if (args is ValueTuple<Cacheable<SocketGuildUser, ulong>, SocketGuildUser> guildMemberUpdatedArgs)
+                {
+                    switch (handler)
+                    {
+                        case AsyncEventHandler<Cacheable<SocketGuildUser, ulong>, SocketGuildUser>
+                            guildMemberUpdatedHandler:
+                            await guildMemberUpdatedHandler(guildMemberUpdatedArgs.Item1, guildMemberUpdatedArgs.Item2);
+                            break;
+                        case Func<Cacheable<SocketGuildUser, ulong>, SocketGuildUser, Task> guildMemberUpdatedFunc:
+                            await guildMemberUpdatedFunc(guildMemberUpdatedArgs.Item1, guildMemberUpdatedArgs.Item2);
+                            break;
+                    }
+                }
+
+                break;
+
+            case "GuildScheduledEventUpdated":
+                if (args is ValueTuple<Cacheable<SocketGuildEvent, ulong>, SocketGuildEvent>
+                    guildScheduledEventUpdatedArgs)
+                {
+                    switch (handler)
+                    {
+                        case AsyncEventHandler<Cacheable<SocketGuildEvent, ulong>, SocketGuildEvent>
+                            guildScheduledEventUpdatedHandler:
+                            await guildScheduledEventUpdatedHandler(guildScheduledEventUpdatedArgs.Item1,
+                                guildScheduledEventUpdatedArgs.Item2);
+                            break;
+                        case Func<Cacheable<SocketGuildEvent, ulong>, SocketGuildEvent, Task>
+                            guildScheduledEventUpdatedFunc:
+                            await guildScheduledEventUpdatedFunc(guildScheduledEventUpdatedArgs.Item1,
+                                guildScheduledEventUpdatedArgs.Item2);
+                            break;
+                    }
+                }
+
+                break;
+
+            case "GuildScheduledEventUserAdd":
+            case "GuildScheduledEventUserRemove":
+                if (args is ValueTuple<Cacheable<SocketUser, RestUser, IUser, ulong>, SocketGuildEvent>
+                    guildScheduledEventUserArgs)
+                {
+                    switch (handler)
+                    {
+                        case AsyncEventHandler<Cacheable<SocketUser, RestUser, IUser, ulong>, SocketGuildEvent>
+                            guildScheduledEventUserHandler:
+                            await guildScheduledEventUserHandler(guildScheduledEventUserArgs.Item1,
+                                guildScheduledEventUserArgs.Item2);
+                            break;
+                        case Func<Cacheable<SocketUser, RestUser, IUser, ulong>, SocketGuildEvent, Task>
+                            guildScheduledEventUserFunc:
+                            await guildScheduledEventUserFunc(guildScheduledEventUserArgs.Item1,
+                                guildScheduledEventUserArgs.Item2);
+                            break;
+                    }
+                }
+
+                break;
+
+            case "GuildStickerUpdated":
+                if (args is ValueTuple<SocketCustomSticker, SocketCustomSticker> guildStickerUpdatedArgs)
+                {
+                    switch (handler)
+                    {
+                        case AsyncEventHandler<SocketCustomSticker, SocketCustomSticker> guildStickerUpdatedHandler:
+                            await guildStickerUpdatedHandler(guildStickerUpdatedArgs.Item1,
+                                guildStickerUpdatedArgs.Item2);
+                            break;
+                        case Func<SocketCustomSticker, SocketCustomSticker, Task> guildStickerUpdatedFunc:
+                            await guildStickerUpdatedFunc(guildStickerUpdatedArgs.Item1, guildStickerUpdatedArgs.Item2);
+                            break;
+                    }
+                }
+
+                break;
+
+            case "GuildUpdated":
+                if (args is ValueTuple<SocketGuild, SocketGuild> guildUpdatedArgs)
+                {
+                    switch (handler)
+                    {
+                        case AsyncEventHandler<SocketGuild, SocketGuild> guildUpdatedHandler:
+                            await guildUpdatedHandler(guildUpdatedArgs.Item1, guildUpdatedArgs.Item2);
+                            break;
+                        case Func<SocketGuild, SocketGuild, Task> guildUpdatedFunc:
+                            await guildUpdatedFunc(guildUpdatedArgs.Item1, guildUpdatedArgs.Item2);
+                            break;
+                    }
+                }
+
+                break;
+
+            case "InviteDeleted":
+                if (args is ValueTuple<SocketGuildChannel, string> inviteDeletedArgs)
+                {
+                    switch (handler)
+                    {
+                        case AsyncEventHandler<SocketGuildChannel, string> inviteDeletedHandler:
+                            await inviteDeletedHandler(inviteDeletedArgs.Item1, inviteDeletedArgs.Item2);
+                            break;
+                        case Func<SocketGuildChannel, string, Task> inviteDeletedFunc:
+                            await inviteDeletedFunc(inviteDeletedArgs.Item1, inviteDeletedArgs.Item2);
+                            break;
+                    }
+                }
+
+                break;
+
+            case "MessageDeleted":
+                if (args is ValueTuple<Cacheable<IMessage, ulong>, Cacheable<IMessageChannel, ulong>>
+                    messageDeletedArgs)
+                {
+                    switch (handler)
+                    {
+                        case AsyncEventHandler<Cacheable<IMessage, ulong>, Cacheable<IMessageChannel, ulong>>
+                            messageDeletedHandler:
+                            await messageDeletedHandler(messageDeletedArgs.Item1, messageDeletedArgs.Item2);
+                            break;
+                        case Func<Cacheable<IMessage, ulong>, Cacheable<IMessageChannel, ulong>, Task>
+                            messageDeletedFunc:
+                            await messageDeletedFunc(messageDeletedArgs.Item1, messageDeletedArgs.Item2);
+                            break;
+                    }
+                }
+
+                break;
+
+            case "MessagesBulkDeleted":
+                if (args is ValueTuple<IReadOnlyCollection<Cacheable<IMessage, ulong>>,
+                        Cacheable<IMessageChannel, ulong>> messagesBulkDeletedArgs)
+                {
+                    switch (handler)
+                    {
+                        case AsyncEventHandler<IReadOnlyCollection<Cacheable<IMessage, ulong>>,
+                            Cacheable<IMessageChannel, ulong>> messagesBulkDeletedHandler:
+                            await messagesBulkDeletedHandler(messagesBulkDeletedArgs.Item1,
+                                messagesBulkDeletedArgs.Item2);
+                            break;
+                        case Func<IReadOnlyCollection<Cacheable<IMessage, ulong>>, Cacheable<IMessageChannel, ulong>,
+                            Task> messagesBulkDeletedFunc:
+                            await messagesBulkDeletedFunc(messagesBulkDeletedArgs.Item1, messagesBulkDeletedArgs.Item2);
+                            break;
+                    }
+                }
+
+                break;
+
+            case "ReactionsCleared":
+                if (args is ValueTuple<Cacheable<IUserMessage, ulong>, Cacheable<IMessageChannel, ulong>>
+                    reactionsClearedArgs)
+                {
+                    switch (handler)
+                    {
+                        case AsyncEventHandler<Cacheable<IUserMessage, ulong>, Cacheable<IMessageChannel, ulong>>
+                            reactionsClearedHandler:
+                            await reactionsClearedHandler(reactionsClearedArgs.Item1, reactionsClearedArgs.Item2);
+                            break;
+                        case Func<Cacheable<IUserMessage, ulong>, Cacheable<IMessageChannel, ulong>, Task>
+                            reactionsClearedFunc:
+                            await reactionsClearedFunc(reactionsClearedArgs.Item1, reactionsClearedArgs.Item2);
+                            break;
+                    }
+                }
+
+                break;
+
+            case "RequestToSpeak":
+            case "SpeakerAdded":
+            case "SpeakerRemoved":
+                if (args is ValueTuple<SocketStageChannel, SocketGuildUser> stageArgs)
+                {
+                    switch (handler)
+                    {
+                        case AsyncEventHandler<SocketStageChannel, SocketGuildUser> stageHandler:
+                            await stageHandler(stageArgs.Item1, stageArgs.Item2);
+                            break;
+                        case Func<SocketStageChannel, SocketGuildUser, Task> stageFunc:
+                            await stageFunc(stageArgs.Item1, stageArgs.Item2);
+                            break;
+                    }
+                }
+
+                break;
+
+            case "RoleUpdated":
+                if (args is ValueTuple<SocketRole, SocketRole> roleUpdatedArgs)
+                {
+                    switch (handler)
+                    {
+                        case AsyncEventHandler<SocketRole, SocketRole> roleUpdatedHandler:
+                            await roleUpdatedHandler(roleUpdatedArgs.Item1, roleUpdatedArgs.Item2);
+                            break;
+                        case Func<SocketRole, SocketRole, Task> roleUpdatedFunc:
+                            await roleUpdatedFunc(roleUpdatedArgs.Item1, roleUpdatedArgs.Item2);
+                            break;
+                    }
+                }
+
+                break;
+
+            case "StageUpdated":
+                if (args is ValueTuple<SocketStageChannel, SocketStageChannel> stageUpdatedArgs)
+                {
+                    switch (handler)
+                    {
+                        case AsyncEventHandler<SocketStageChannel, SocketStageChannel> stageUpdatedHandler:
+                            await stageUpdatedHandler(stageUpdatedArgs.Item1, stageUpdatedArgs.Item2);
+                            break;
+                        case Func<SocketStageChannel, SocketStageChannel, Task> stageUpdatedFunc:
+                            await stageUpdatedFunc(stageUpdatedArgs.Item1, stageUpdatedArgs.Item2);
+                            break;
+                    }
+                }
+
+                break;
+
+            case "SubscriptionDeleted":
+                if (args is ValueTuple<Cacheable<SocketSubscription, ulong>, SocketSubscription?>
+                    subscriptionDeletedArgs)
+                {
+                    switch (handler)
+                    {
+                        case AsyncEventHandler<Cacheable<SocketSubscription, ulong>, SocketSubscription?>
+                            subscriptionDeletedHandler:
+                            await subscriptionDeletedHandler(subscriptionDeletedArgs.Item1,
+                                subscriptionDeletedArgs.Item2);
+                            break;
+                        case Func<Cacheable<SocketSubscription, ulong>, SocketSubscription?, Task>
+                            subscriptionDeletedFunc:
+                            await subscriptionDeletedFunc(subscriptionDeletedArgs.Item1, subscriptionDeletedArgs.Item2);
+                            break;
+                    }
+                }
+
+                break;
+
+            case "SubscriptionUpdated":
+                if (args is ValueTuple<Cacheable<SocketSubscription, ulong>, SocketSubscription>
+                    subscriptionUpdatedArgs)
+                {
+                    switch (handler)
+                    {
+                        case AsyncEventHandler<Cacheable<SocketSubscription, ulong>, SocketSubscription>
+                            subscriptionUpdatedHandler:
+                            await subscriptionUpdatedHandler(subscriptionUpdatedArgs.Item1,
+                                subscriptionUpdatedArgs.Item2);
+                            break;
+                        case Func<Cacheable<SocketSubscription, ulong>, SocketSubscription, Task>
+                            subscriptionUpdatedFunc:
+                            await subscriptionUpdatedFunc(subscriptionUpdatedArgs.Item1, subscriptionUpdatedArgs.Item2);
+                            break;
+                    }
+                }
+
+                break;
+
+            case "ThreadDeleted":
+                if (args is ValueTuple<Cacheable<SocketThreadChannel, ulong>, SocketThreadChannel?> threadDeletedArgs)
+                {
+                    switch (handler)
+                    {
+                        case AsyncEventHandler<Cacheable<SocketThreadChannel, ulong>, SocketThreadChannel?>
+                            threadDeletedHandler:
+                            await threadDeletedHandler(threadDeletedArgs.Item1, threadDeletedArgs.Item2);
+                            break;
+                        case Func<Cacheable<SocketThreadChannel, ulong>, SocketThreadChannel?, Task> threadDeletedFunc:
+                            await threadDeletedFunc(threadDeletedArgs.Item1, threadDeletedArgs.Item2);
+                            break;
+                    }
+                }
+
+                break;
+
+            case "ThreadUpdated":
+                if (args is ValueTuple<Cacheable<SocketThreadChannel, ulong>, SocketThreadChannel> threadUpdatedArgs)
+                {
+                    switch (handler)
+                    {
+                        case AsyncEventHandler<Cacheable<SocketThreadChannel, ulong>, SocketThreadChannel>
+                            threadUpdatedHandler:
+                            await threadUpdatedHandler(threadUpdatedArgs.Item1, threadUpdatedArgs.Item2);
+                            break;
+                        case Func<Cacheable<SocketThreadChannel, ulong>, SocketThreadChannel, Task> threadUpdatedFunc:
+                            await threadUpdatedFunc(threadUpdatedArgs.Item1, threadUpdatedArgs.Item2);
+                            break;
+                    }
+                }
+
+                break;
+
+            case "UserBanned":
+            case "UserUnbanned":
+                if (args is ValueTuple<SocketUser, SocketGuild> userBannedArgs)
+                {
+                    switch (handler)
+                    {
+                        case AsyncEventHandler<SocketUser, SocketGuild> userBannedHandler:
+                            await userBannedHandler(userBannedArgs.Item1, userBannedArgs.Item2);
+                            break;
+                        case Func<SocketUser, SocketGuild, Task> userBannedFunc:
+                            await userBannedFunc(userBannedArgs.Item1, userBannedArgs.Item2);
+                            break;
+                    }
+                }
+
+                break;
+
+            case "UserIsTyping":
+                if (args is ValueTuple<Cacheable<IUser, ulong>, Cacheable<IMessageChannel, ulong>> userIsTypingArgs)
+                {
+                    switch (handler)
+                    {
+                        case AsyncEventHandler<Cacheable<IUser, ulong>, Cacheable<IMessageChannel, ulong>>
+                            userIsTypingHandler:
+                            await userIsTypingHandler(userIsTypingArgs.Item1, userIsTypingArgs.Item2);
+                            break;
+                        case Func<Cacheable<IUser, ulong>, Cacheable<IMessageChannel, ulong>, Task> userIsTypingFunc:
+                            await userIsTypingFunc(userIsTypingArgs.Item1, userIsTypingArgs.Item2);
+                            break;
+                    }
+                }
+
+                break;
+
+            case "UserLeft":
+                if (args is ValueTuple<SocketGuild, SocketUser> userLeftArgs)
+                {
+                    switch (handler)
+                    {
+                        case AsyncEventHandler<SocketGuild, SocketUser> userLeftHandler:
+                            await userLeftHandler(userLeftArgs.Item1, userLeftArgs.Item2);
+                            break;
+                        case Func<SocketGuild, SocketUser, Task> userLeftFunc:
+                            await userLeftFunc(userLeftArgs.Item1, userLeftArgs.Item2);
+                            break;
+                    }
+                }
+
+                break;
+
+            case "UserUpdated":
+                if (args is ValueTuple<SocketUser, SocketUser> userUpdatedArgs)
+                {
+                    switch (handler)
+                    {
+                        case AsyncEventHandler<SocketUser, SocketUser> userUpdatedHandler:
+                            await userUpdatedHandler(userUpdatedArgs.Item1, userUpdatedArgs.Item2);
+                            break;
+                        case Func<SocketUser, SocketUser, Task> userUpdatedFunc:
+                            await userUpdatedFunc(userUpdatedArgs.Item1, userUpdatedArgs.Item2);
+                            break;
+                    }
+                }
+
+                break;
+
+            case "WebhooksUpdated":
+                if (args is ValueTuple<SocketGuild, SocketChannel> webhooksUpdatedArgs)
+                {
+                    switch (handler)
+                    {
+                        case AsyncEventHandler<SocketGuild, SocketChannel> webhooksUpdatedHandler:
+                            await webhooksUpdatedHandler(webhooksUpdatedArgs.Item1, webhooksUpdatedArgs.Item2);
+                            break;
+                        case Func<SocketGuild, SocketChannel, Task> webhooksUpdatedFunc:
+                            await webhooksUpdatedFunc(webhooksUpdatedArgs.Item1, webhooksUpdatedArgs.Item2);
+                            break;
+                    }
+                }
+
+                break;
+
+            // Three parameter events
+            case "MessageUpdated":
+                if (args is ValueTuple<Cacheable<IMessage, ulong>, SocketMessage, ISocketMessageChannel> msgUpdatedArgs)
+                {
+                    switch (handler)
+                    {
+                        case AsyncEventHandler<Cacheable<IMessage, ulong>, SocketMessage, ISocketMessageChannel>
+                            msgUpdatedHandler:
+                            await msgUpdatedHandler(msgUpdatedArgs.Item1, msgUpdatedArgs.Item2, msgUpdatedArgs.Item3);
+                            break;
+                        case Func<Cacheable<IMessage, ulong>, SocketMessage, ISocketMessageChannel, Task> msgUpdatedFunc
+                            :
+                            await msgUpdatedFunc(msgUpdatedArgs.Item1, msgUpdatedArgs.Item2, msgUpdatedArgs.Item3);
+                            break;
+                    }
+                }
+
+                break;
+
+            case "UserVoiceStateUpdated":
+                if (args is ValueTuple<SocketUser, SocketVoiceState, SocketVoiceState> voiceStateArgs)
+                {
+                    switch (handler)
+                    {
+                        case AsyncEventHandler<SocketUser, SocketVoiceState, SocketVoiceState> voiceStateHandler:
+                            await voiceStateHandler(voiceStateArgs.Item1, voiceStateArgs.Item2, voiceStateArgs.Item3);
+                            break;
+                        case Func<SocketUser, SocketVoiceState, SocketVoiceState, Task> voiceStateFunc:
+                            await voiceStateFunc(voiceStateArgs.Item1, voiceStateArgs.Item2, voiceStateArgs.Item3);
+                            break;
+                    }
+                }
+
+                break;
+
+            case "PresenceUpdated":
+                if (args is ValueTuple<SocketUser, SocketPresence, SocketPresence> presenceArgs)
+                {
+                    switch (handler)
+                    {
+                        case AsyncEventHandler<SocketUser, SocketPresence, SocketPresence> presenceHandler:
+                            await presenceHandler(presenceArgs.Item1, presenceArgs.Item2, presenceArgs.Item3);
+                            break;
+                        case Func<SocketUser, SocketPresence, SocketPresence, Task> presenceFunc:
+                            await presenceFunc(presenceArgs.Item1, presenceArgs.Item2, presenceArgs.Item3);
+                            break;
+                    }
+                }
+
+                break;
+
+            case "ReactionAdded":
+            case "ReactionRemoved":
+                if (args is ValueTuple<Cacheable<IUserMessage, ulong>, Cacheable<IMessageChannel, ulong>,
+                        SocketReaction> reactionArgs)
+                {
+                    switch (handler)
+                    {
+                        case AsyncEventHandler<Cacheable<IUserMessage, ulong>, Cacheable<IMessageChannel, ulong>,
+                            SocketReaction> reactionHandler:
+                            await reactionHandler(reactionArgs.Item1, reactionArgs.Item2, reactionArgs.Item3);
+                            break;
+                        case Func<Cacheable<IUserMessage, ulong>, Cacheable<IMessageChannel, ulong>, SocketReaction,
+                            Task> reactionFunc:
+                            await reactionFunc(reactionArgs.Item1, reactionArgs.Item2, reactionArgs.Item3);
+                            break;
+                    }
+                }
+
+                break;
+
+            default:
+                Log.Warning("Unknown event type for execution: {EventType}", eventType);
+                break;
+        }
+    }
+
+    #endregion
 
     #region Public API
 
     /// <summary>
-    ///     Subscribes a module to a specific event type with optional filtering and priority.
+    ///     Subscribes to an event using its string name (matches ProcessDirectEvent event names).
     /// </summary>
-    /// <typeparam name="T">The event argument type.</typeparam>
+    /// <param name="eventName">The exact event name used in ProcessDirectEvent calls.</param>
     /// <param name="moduleName">The name of the module subscribing to the event.</param>
     /// <param name="handler">The event handler delegate.</param>
     /// <param name="filter">Optional filter to determine which events to process.</param>
     /// <param name="priority">Event handler priority (higher values execute first).</param>
-    /// <exception cref="ArgumentNullException">Thrown when moduleName or handler is null.</exception>
-    /// <exception cref="ArgumentException">Thrown when moduleName is empty or whitespace.</exception>
-    public void Subscribe<T>(string moduleName, AsyncEventHandler<T> handler, IEventFilter? filter = null,
+    public void Subscribe(string eventName, string moduleName, Delegate? handler, IEventFilter? filter = null,
         int priority = 0)
     {
+        if (string.IsNullOrWhiteSpace(eventName))
+            throw new ArgumentException("Event name cannot be null or empty", nameof(eventName));
         if (string.IsNullOrWhiteSpace(moduleName))
             throw new ArgumentException("Module name cannot be null or empty", nameof(moduleName));
         if (handler == null)
             throw new ArgumentNullException(nameof(handler));
 
-        var eventType = typeof(T).Name;
-        var subscription = new EventSubscription<T>
-        {
-            Handler = handler, Filter = filter, Priority = priority, ModuleName = moduleName
-        };
-
-        subscriptions.AddOrUpdate(eventType,
-            [subscription],
+        // Store directly in string event subscriptions
+        stringEventSubscriptions.AddOrUpdate(eventName,
+            [(moduleName, handler)],
             (_, existing) =>
             {
-                var newList = new List<IEventSubscription>(existing)
+                var newList = new List<(string, Delegate)>(existing)
                 {
-                    subscription
+                    (moduleName, handler)
                 };
-                return newList.OrderByDescending(s => s.Priority).ToList();
+                return newList;
             });
 
-        // Initialize circuit breaker for this module if enabled
-        if (options.EnableCircuitBreaker)
-        {
-            var breakerKey = $"{moduleName}_{eventType}";
-            circuitBreakers.TryAdd(breakerKey, new CircuitBreaker(
-                options.CircuitBreakerThreshold,
-                options.CircuitBreakerTimeout));
-        }
-
-        // Initialize weak event manager if enabled
-        if (options.EnableWeakReferences)
-        {
-            weakEventManagers.TryAdd(eventType, new WeakEventManager());
-        }
-
-        logger.LogDebug("Module {ModuleName} subscribed to {EventType} with priority {Priority}",
-            moduleName, eventType, priority);
+        Log.Warning("Module {ModuleName} subscribed to string event {EventName} with priority {Priority}",
+            moduleName, eventName, priority);
     }
 
     /// <summary>
-    ///     Unsubscribes a module's handler from a specific event type.
+    ///     Unsubscribes from an event using its string name.
     /// </summary>
-    /// <typeparam name="T">The event argument type.</typeparam>
-    /// <param name="moduleName">The name of the module to unsubscribe.</param>
-    /// <param name="handler">The event handler delegate to remove.</param>
-    public void Unsubscribe<T>(string moduleName, AsyncEventHandler<T> handler)
+    /// <param name="eventName">The event name to unsubscribe from.</param>
+    /// <param name="moduleName">The module name.</param>
+    /// <param name="handler">The handler to remove.</param>
+    public void Unsubscribe(string eventName, string moduleName, object? handler)
     {
-        if (string.IsNullOrWhiteSpace(moduleName) || handler == null)
+        if (string.IsNullOrWhiteSpace(eventName) || string.IsNullOrWhiteSpace(moduleName) || handler == null)
             return;
 
-        var eventType = typeof(T).Name;
-        if (!subscriptions.TryGetValue(eventType, out var existing))
-            return;
-
-        var updated = existing
-            .Where(s => !(s is EventSubscription<T> typed &&
-                          typed.ModuleName == moduleName &&
-                          ReferenceEquals(typed.Handler, handler)))
+        if (!stringEventSubscriptions.TryGetValue(eventName, out var existing)) return;
+        var updated = existing.Where(s => !(s.ModuleName == moduleName && ReferenceEquals(s.Handler, handler)))
             .ToList();
-
-        if (updated.Count != existing.Count)
-        {
-            subscriptions.TryUpdate(eventType, updated, existing);
-            logger.LogDebug("Module {ModuleName} unsubscribed from {EventType}", moduleName, eventType);
-        }
-    }
-
-    /// <summary>
-    ///     Subscribes a module to a specific event type with two parameters.
-    /// </summary>
-    /// <typeparam name="T1">The first event argument type.</typeparam>
-    /// <typeparam name="T2">The second event argument type.</typeparam>
-    /// <param name="moduleName">The name of the module subscribing to the event.</param>
-    /// <param name="handler">The event handler delegate.</param>
-    /// <param name="filter">Optional filter to determine which events to process.</param>
-    /// <param name="priority">Event handler priority (higher values execute first).</param>
-    public void Subscribe<T1, T2>(string moduleName, AsyncEventHandler<T1, T2> handler, IEventFilter? filter = null,
-        int priority = 0)
-    {
-        var wrappedHandler = new AsyncEventHandler<(T1, T2)>(args => handler(args.Item1, args.Item2));
-        handlerMappings[handler] = wrappedHandler;
-        Subscribe(moduleName, wrappedHandler, filter, priority);
-    }
-
-    /// <summary>
-    ///     Unsubscribes a module's handler from a specific event type with two parameters.
-    /// </summary>
-    /// <typeparam name="T1">The first event argument type.</typeparam>
-    /// <typeparam name="T2">The second event argument type.</typeparam>
-    /// <param name="moduleName">The name of the module to unsubscribe.</param>
-    /// <param name="handler">The event handler delegate to remove.</param>
-    public void Unsubscribe<T1, T2>(string moduleName, AsyncEventHandler<T1, T2> handler)
-    {
-        if (handlerMappings.TryRemove(handler, out var wrappedHandler) &&
-            wrappedHandler is AsyncEventHandler<(T1, T2)> typedWrapper)
-        {
-            Unsubscribe(moduleName, typedWrapper);
-        }
-    }
-
-    /// <summary>
-    ///     Subscribes a module to a specific event type with three parameters.
-    /// </summary>
-    /// <typeparam name="T1">The first event argument type.</typeparam>
-    /// <typeparam name="T2">The second event argument type.</typeparam>
-    /// <typeparam name="T3">The third event argument type.</typeparam>
-    /// <param name="moduleName">The name of the module subscribing to the event.</param>
-    /// <param name="handler">The event handler delegate.</param>
-    /// <param name="filter">Optional filter to determine which events to process.</param>
-    /// <param name="priority">Event handler priority (higher values execute first).</param>
-    public void Subscribe<T1, T2, T3>(string moduleName, AsyncEventHandler<T1, T2, T3> handler,
-        IEventFilter? filter = null, int priority = 0)
-    {
-        var wrappedHandler = new AsyncEventHandler<(T1, T2, T3)>(args => handler(args.Item1, args.Item2, args.Item3));
-        handlerMappings[handler] = wrappedHandler;
-        Subscribe(moduleName, wrappedHandler, filter, priority);
-    }
-
-    /// <summary>
-    ///     Unsubscribes a module's handler from a specific event type with three parameters.
-    /// </summary>
-    /// <typeparam name="T1">The first event argument type.</typeparam>
-    /// <typeparam name="T2">The second event argument type.</typeparam>
-    /// <typeparam name="T3">The third event argument type.</typeparam>
-    /// <param name="moduleName">The name of the module to unsubscribe.</param>
-    /// <param name="handler">The event handler delegate to remove.</param>
-    public void Unsubscribe<T1, T2, T3>(string moduleName, AsyncEventHandler<T1, T2, T3> handler)
-    {
-        if (handlerMappings.TryRemove(handler, out var wrappedHandler) &&
-            wrappedHandler is AsyncEventHandler<(T1, T2, T3)> typedWrapper)
-        {
-            Unsubscribe(moduleName, typedWrapper);
-        }
+        if (updated.Count == existing.Count) return;
+        if (updated.Count == 0)
+            stringEventSubscriptions.TryRemove(eventName, out _);
+        else
+            stringEventSubscriptions[eventName] = updated;
     }
 
     /// <summary>
@@ -299,7 +819,7 @@ public sealed class EventHandler : IDisposable
     private void StartBatchProcessors()
     {
         messageProcessor.BatchReady +=
-            async batch => await ProcessEventBatch("SocketMessage", batch).ConfigureAwait(false);
+            async batch => await ProcessEventBatch("MessageReceived", batch).ConfigureAwait(false);
         presenceProcessor.BatchReady += async batch =>
             await ProcessEventBatch("PresenceUpdated", batch).ConfigureAwait(false);
         typingProcessor.BatchReady +=
@@ -308,7 +828,7 @@ public sealed class EventHandler : IDisposable
 
     private async Task ProcessEventBatch<T>(string eventType, IReadOnlyList<T> batch)
     {
-        if (disposed || !this.subscriptions.TryGetValue(eventType, out var subscriptions))
+        if (disposed || !stringEventSubscriptions.TryGetValue(eventType, out var handlers))
             return;
 
         var metrics = GetOrCreateEventMetrics(eventType);
@@ -318,7 +838,7 @@ public sealed class EventHandler : IDisposable
         {
             foreach (var item in batch)
             {
-                await ProcessSingleEvent(eventType, item, subscriptions).ConfigureAwait(false);
+                await ProcessSingleEventBatch(eventType, item, handlers).ConfigureAwait(false);
             }
 
             sw.Stop();
@@ -328,41 +848,42 @@ public sealed class EventHandler : IDisposable
         catch (Exception ex)
         {
             Interlocked.Increment(ref metrics.TotalErrors);
-            logger.LogError(ex, "Error processing batch for {EventType}", eventType);
+            Log.Error(ex, "Error processing batch for {EventType}", eventType);
         }
     }
 
-    private async Task ProcessSingleEvent<T>(string eventType, T args, List<IEventSubscription> subscriptions)
+    private async Task ProcessSingleEventBatch<T>(string eventType, T args,
+        List<(string ModuleName, Delegate Handler)> handlers)
     {
-        var guildId = ExtractGuildId(args);
-        var channelId = ExtractChannelId(args);
-        var userId = ExtractUserId(args);
-
-        foreach (var subscription in subscriptions)
+        foreach (var (moduleName, handler) in handlers)
         {
-            if (subscription is not EventSubscription<T> typedSubscription)
-                continue;
-
             try
             {
-                // Apply filtering
-                if (typedSubscription.Filter != null &&
-                    !typedSubscription.Filter.ShouldProcess(guildId, channelId, userId))
-                    continue;
+                var orCreateModuleMetrics = GetOrCreateModuleMetrics(moduleName);
+                var sw = Stopwatch.StartNew();
 
-                // Check circuit breaker
-                var breakerKey = $"{typedSubscription.ModuleName}_{eventType}";
-                if (options.EnableCircuitBreaker &&
-                    circuitBreakers.TryGetValue(breakerKey, out var breaker) &&
-                    breaker.IsOpen)
-                    continue;
+                try
+                {
+                    using (perfService.Measure($"Event_{eventType}_{moduleName}"))
+                    {
+                        await ExecuteHandlerByEventType(eventType, handler, args).ConfigureAwait(false);
+                    }
 
-                // Execute handler with metrics tracking
-                await ExecuteHandlerWithMetrics(typedSubscription, args, eventType).ConfigureAwait(false);
+                    sw.Stop();
+                    Interlocked.Increment(ref orCreateModuleMetrics.EventsProcessed);
+                    Interlocked.Add(ref orCreateModuleMetrics.TotalExecutionTime, sw.ElapsedMilliseconds);
+                }
+                catch (Exception)
+                {
+                    sw.Stop();
+                    Interlocked.Increment(ref orCreateModuleMetrics.Errors);
+                    throw;
+                }
             }
             catch (Exception ex)
             {
-                HandleSubscriptionError(typedSubscription, eventType, ex);
+                Log.Error(ex, "Error executing batch handler for {EventType} in module {ModuleName}", eventType,
+                    moduleName);
             }
         }
     }
@@ -389,13 +910,11 @@ public sealed class EventHandler : IDisposable
             Interlocked.Increment(ref createModuleMetrics.Errors);
 
             // Update circuit breaker
-            if (options.EnableCircuitBreaker)
+            if (!options.EnableCircuitBreaker) throw;
+            var breakerKey = $"{subscription.ModuleName}_{eventType}";
+            if (circuitBreakers.TryGetValue(breakerKey, out var breaker))
             {
-                var breakerKey = $"{subscription.ModuleName}_{eventType}";
-                if (circuitBreakers.TryGetValue(breakerKey, out var breaker))
-                {
-                    breaker.RecordFailure();
-                }
+                breaker.RecordFailure();
             }
 
             throw;
@@ -407,7 +926,7 @@ public sealed class EventHandler : IDisposable
         var moduleMetrics = GetOrCreateModuleMetrics(subscription.ModuleName);
         Interlocked.Increment(ref moduleMetrics.Errors);
 
-        logger.LogError(ex,
+        Log.Error(ex,
             "Error in {ModuleName} handler for {EventType}: {ErrorMessage}",
             subscription.ModuleName, eventType, ex.Message);
     }
@@ -624,10 +1143,38 @@ public sealed class EventHandler : IDisposable
 
     private Task ProcessDirectEvent<T>(string eventType, T args)
     {
-        if (disposed || !this.subscriptions.TryGetValue(eventType, out var subscriptions))
-            return Task.CompletedTask;
+        Log.Warning("ProcessDirectEvent called for {EventType}, disposed: {Disposed}", eventType, disposed);
 
-        _ = Task.Run(async () => await ProcessSingleEvent(eventType, args, subscriptions).ConfigureAwait(false));
+        if (disposed)
+        {
+            Log.Warning("EventHandler is disposed, skipping event {EventType}", eventType);
+            return Task.CompletedTask;
+        }
+
+        if (!stringEventSubscriptions.TryGetValue(eventType, out var handlers))
+        {
+            Log.Warning("No subscriptions found for event type {EventType}. Available event types: {EventTypes}",
+                eventType, string.Join(", ", stringEventSubscriptions.Keys));
+            return Task.CompletedTask;
+        }
+
+        Log.Warning("Found {SubscriptionCount} string-based subscriptions for event {EventType}", handlers.Count,
+            eventType);
+        _ = Task.Run(async () =>
+        {
+            foreach (var (moduleName, handler) in handlers)
+            {
+                try
+                {
+                    await ExecuteHandlerByEventType(eventType, handler, args);
+                }
+                catch (Exception ex)
+                {
+                    Log.Error(ex, "Error executing subscription for {EventType} in module {ModuleName}", eventType,
+                        moduleName);
+                }
+            }
+        });
         return Task.CompletedTask;
     }
 
@@ -694,7 +1241,7 @@ public sealed class EventHandler : IDisposable
             Interlocked.Exchange(ref metric.TotalExecutionTime, 0);
         }
 
-        logger.LogDebug("Event and module metrics reset");
+        Log.Warning("Event and module metrics reset");
     }
 
     #endregion
@@ -710,12 +1257,12 @@ public sealed class EventHandler : IDisposable
         add
         {
             if (value != null)
-                Subscribe("Legacy", value);
+                Subscribe("MessageReceived", "Legacy", value);
         }
         remove
         {
             if (value != null)
-                Unsubscribe("Legacy", value);
+                Unsubscribe("MessageReceived", "Legacy", value);
         }
     }
 
@@ -726,11 +1273,11 @@ public sealed class EventHandler : IDisposable
     {
         add
         {
-            Subscribe("Legacy", value);
+            Subscribe("ModalSubmitted", "Legacy", value);
         }
         remove
         {
-            Unsubscribe("Legacy", value);
+            Unsubscribe("ModalSubmitted", "Legacy", value);
         }
     }
 
@@ -741,11 +1288,11 @@ public sealed class EventHandler : IDisposable
     {
         add
         {
-            Subscribe("Legacy", value);
+            Subscribe("InviteCreated", "Legacy", value);
         }
         remove
         {
-            Unsubscribe("Legacy", value);
+            Unsubscribe("InviteCreated", "Legacy", value);
         }
     }
 
@@ -757,12 +1304,13 @@ public sealed class EventHandler : IDisposable
         add
         {
             if (value != null)
-                Subscribe<(IGuildChannel, string)>("Legacy", args => value(args.Item1, args.Item2));
+                Subscribe("InviteDeleted", "Legacy",
+                    new Func<IGuildChannel, string, Task>((arg1, arg2) => value(arg1, arg2)));
         }
         remove
         {
             if (value != null)
-                Unsubscribe("Legacy", value);
+                Unsubscribe("InviteDeleted", "Legacy", value);
         }
     }
 
@@ -773,11 +1321,11 @@ public sealed class EventHandler : IDisposable
     {
         add
         {
-            Subscribe("Legacy", value);
+            Subscribe("GuildScheduledEventCreated", "Legacy", value);
         }
         remove
         {
-            Unsubscribe("Legacy", value);
+            Unsubscribe("GuildScheduledEventCreated", "Legacy", value);
         }
     }
 
@@ -788,11 +1336,11 @@ public sealed class EventHandler : IDisposable
     {
         add
         {
-            Subscribe("Legacy", value);
+            Subscribe("RoleCreated", "Legacy", value);
         }
         remove
         {
-            Unsubscribe("Legacy", value);
+            Unsubscribe("RoleCreated", "Legacy", value);
         }
     }
 
@@ -804,12 +1352,13 @@ public sealed class EventHandler : IDisposable
         add
         {
             if (value != null)
-                Subscribe("Legacy", value);
+                Subscribe("GuildUpdated", "Legacy",
+                    new Func<SocketGuild, SocketGuild, Task>((arg1, arg2) => value(arg1, arg2)));
         }
         remove
         {
             if (value != null)
-                Unsubscribe("Legacy", value);
+                Unsubscribe("GuildUpdated", "Legacy", value);
         }
     }
 
@@ -820,11 +1369,11 @@ public sealed class EventHandler : IDisposable
     {
         add
         {
-            Subscribe("Legacy", value);
+            Subscribe("UserJoined", "Legacy", value);
         }
         remove
         {
-            Unsubscribe("Legacy", value);
+            Unsubscribe("UserJoined", "Legacy", value);
         }
     }
 
@@ -836,12 +1385,13 @@ public sealed class EventHandler : IDisposable
         add
         {
             if (value != null)
-                Subscribe("Legacy", value);
+                Subscribe("RoleUpdated", "Legacy",
+                    new Func<SocketRole, SocketRole, Task>((arg1, arg2) => value(arg1, arg2)));
         }
         remove
         {
             if (value != null)
-                Unsubscribe("Legacy", value);
+                Unsubscribe("RoleUpdated", "Legacy", value);
         }
     }
 
@@ -853,12 +1403,12 @@ public sealed class EventHandler : IDisposable
         add
         {
             if (value != null)
-                Subscribe("Legacy", value);
+                Subscribe("UserLeft", "Legacy", new Func<IGuild, IUser, Task>((arg1, arg2) => value(arg1, arg2)));
         }
         remove
         {
             if (value != null)
-                Unsubscribe("Legacy", value);
+                Unsubscribe("UserLeft", "Legacy", value);
         }
     }
 
@@ -870,12 +1420,14 @@ public sealed class EventHandler : IDisposable
         add
         {
             if (value != null)
-                Subscribe("Legacy", value);
+                Subscribe("MessageDeleted", "Legacy",
+                    new Func<Cacheable<IMessage, ulong>, Cacheable<IMessageChannel, ulong>, Task>((arg1, arg2) =>
+                        value(arg1, arg2)));
         }
         remove
         {
             if (value != null)
-                Unsubscribe("Legacy", value);
+                Unsubscribe("MessageDeleted", "Legacy", value);
         }
     }
 
@@ -887,12 +1439,14 @@ public sealed class EventHandler : IDisposable
         add
         {
             if (value != null)
-                Subscribe("Legacy", value);
+                Subscribe("GuildMemberUpdated", "Legacy",
+                    new Func<Cacheable<SocketGuildUser, ulong>, SocketGuildUser, Task>((arg1, arg2) =>
+                        value(arg1, arg2)));
         }
         remove
         {
             if (value != null)
-                Unsubscribe("Legacy", value);
+                Unsubscribe("GuildMemberUpdated", "Legacy", value);
         }
     }
 
@@ -904,12 +1458,14 @@ public sealed class EventHandler : IDisposable
         add
         {
             if (value != null)
-                Subscribe("Legacy", value);
+                Subscribe("MessageUpdated", "Legacy",
+                    new Func<Cacheable<IMessage, ulong>, SocketMessage, ISocketMessageChannel, Task>((arg1, arg2,
+                        arg3) => value(arg1, arg2, arg3)));
         }
         remove
         {
             if (value != null)
-                Unsubscribe("Legacy", value);
+                Unsubscribe("MessageUpdated", "Legacy", value);
         }
     }
 
@@ -922,12 +1478,12 @@ public sealed class EventHandler : IDisposable
             add
             {
                 if (value != null)
-                    Subscribe("Legacy", value);
+                    Subscribe("MessagesBulkDeleted", "Legacy", value);
             }
             remove
             {
                 if (value != null)
-                    Unsubscribe("Legacy", value);
+                    Unsubscribe("MessagesBulkDeleted", "Legacy", value);
             }
         }
 
@@ -939,12 +1495,12 @@ public sealed class EventHandler : IDisposable
         add
         {
             if (value != null)
-                Subscribe("Legacy", value);
+                Subscribe("UserBanned", "Legacy", value);
         }
         remove
         {
             if (value != null)
-                Unsubscribe("Legacy", value);
+                Unsubscribe("UserBanned", "Legacy", value);
         }
     }
 
@@ -956,12 +1512,12 @@ public sealed class EventHandler : IDisposable
         add
         {
             if (value != null)
-                Subscribe("Legacy", value);
+                Subscribe("UserUnbanned", "Legacy", value);
         }
         remove
         {
             if (value != null)
-                Unsubscribe("Legacy", value);
+                Unsubscribe("UserUnbanned", "Legacy", value);
         }
     }
 
@@ -973,12 +1529,12 @@ public sealed class EventHandler : IDisposable
         add
         {
             if (value != null)
-                Subscribe("Legacy", value);
+                Subscribe("UserUpdated", "Legacy", value);
         }
         remove
         {
             if (value != null)
-                Unsubscribe("Legacy", value);
+                Unsubscribe("UserUpdated", "Legacy", value);
         }
     }
 
@@ -990,12 +1546,12 @@ public sealed class EventHandler : IDisposable
         add
         {
             if (value != null)
-                Subscribe("Legacy", value);
+                Subscribe("UserVoiceStateUpdated", "Legacy", value);
         }
         remove
         {
             if (value != null)
-                Unsubscribe("Legacy", value);
+                Unsubscribe("UserVoiceStateUpdated", "Legacy", value);
         }
     }
 
@@ -1006,11 +1562,11 @@ public sealed class EventHandler : IDisposable
     {
         add
         {
-            Subscribe("Legacy", value);
+            Subscribe("ChannelCreated", "Legacy", value);
         }
         remove
         {
-            Unsubscribe("Legacy", value);
+            Unsubscribe("ChannelCreated", "Legacy", value);
         }
     }
 
@@ -1021,11 +1577,11 @@ public sealed class EventHandler : IDisposable
     {
         add
         {
-            Subscribe("Legacy", value);
+            Subscribe("ChannelDestroyed", "Legacy", value);
         }
         remove
         {
-            Unsubscribe("Legacy", value);
+            Unsubscribe("ChannelDestroyed", "Legacy", value);
         }
     }
 
@@ -1037,12 +1593,12 @@ public sealed class EventHandler : IDisposable
         add
         {
             if (value != null)
-                Subscribe("Legacy", value);
+                Subscribe("ChannelUpdated", "Legacy", value);
         }
         remove
         {
             if (value != null)
-                Unsubscribe("Legacy", value);
+                Unsubscribe("ChannelUpdated", "Legacy", value);
         }
     }
 
@@ -1053,11 +1609,11 @@ public sealed class EventHandler : IDisposable
     {
         add
         {
-            Subscribe("Legacy", value);
+            Subscribe("RoleDeleted", "Legacy", value);
         }
         remove
         {
-            Unsubscribe("Legacy", value);
+            Unsubscribe("RoleDeleted", "Legacy", value);
         }
     }
 
@@ -1070,12 +1626,12 @@ public sealed class EventHandler : IDisposable
             add
             {
                 if (value != null)
-                    Subscribe("Legacy", value);
+                    Subscribe("ReactionAdded", "Legacy", value);
             }
             remove
             {
                 if (value != null)
-                    Unsubscribe("Legacy", value);
+                    Unsubscribe("ReactionAdded", "Legacy", value);
             }
         }
 
@@ -1088,12 +1644,12 @@ public sealed class EventHandler : IDisposable
             add
             {
                 if (value != null)
-                    Subscribe("Legacy", value);
+                    Subscribe("ReactionRemoved", "Legacy", value);
             }
             remove
             {
                 if (value != null)
-                    Unsubscribe("Legacy", value);
+                    Unsubscribe("ReactionRemoved", "Legacy", value);
             }
         }
 
@@ -1105,12 +1661,12 @@ public sealed class EventHandler : IDisposable
         add
         {
             if (value != null)
-                Subscribe("Legacy", value);
+                Subscribe("ReactionsCleared", "Legacy", value);
         }
         remove
         {
             if (value != null)
-                Unsubscribe("Legacy", value);
+                Unsubscribe("ReactionsCleared", "Legacy", value);
         }
     }
 
@@ -1121,11 +1677,11 @@ public sealed class EventHandler : IDisposable
     {
         add
         {
-            Subscribe("Legacy", value);
+            Subscribe("InteractionCreated", "Legacy", value);
         }
         remove
         {
-            Unsubscribe("Legacy", value);
+            Unsubscribe("InteractionCreated", "Legacy", value);
         }
     }
 
@@ -1136,11 +1692,11 @@ public sealed class EventHandler : IDisposable
     {
         add
         {
-            Subscribe("Legacy", value);
+            Subscribe("UserIsTyping", "Legacy", value);
         }
         remove
         {
-            Unsubscribe("Legacy", value);
+            Unsubscribe("UserIsTyping", "Legacy", value);
         }
     }
 
@@ -1151,11 +1707,11 @@ public sealed class EventHandler : IDisposable
     {
         add
         {
-            Subscribe("Legacy", value);
+            Subscribe("PresenceUpdated", "Legacy", value);
         }
         remove
         {
-            Unsubscribe("Legacy", value);
+            Unsubscribe("PresenceUpdated", "Legacy", value);
         }
     }
 
@@ -1166,11 +1722,11 @@ public sealed class EventHandler : IDisposable
     {
         add
         {
-            Subscribe("Legacy", value);
+            Subscribe("JoinedGuild", "Legacy", value);
         }
         remove
         {
-            Unsubscribe("Legacy", value);
+            Unsubscribe("JoinedGuild", "Legacy", value);
         }
     }
 
@@ -1181,11 +1737,11 @@ public sealed class EventHandler : IDisposable
     {
         add
         {
-            Subscribe("Legacy", value);
+            Subscribe("ThreadCreated", "Legacy", value);
         }
         remove
         {
-            Unsubscribe("Legacy", value);
+            Unsubscribe("ThreadCreated", "Legacy", value);
         }
     }
 
@@ -1196,11 +1752,11 @@ public sealed class EventHandler : IDisposable
     {
         add
         {
-            Subscribe("Legacy", value);
+            Subscribe("ThreadUpdated", "Legacy", value);
         }
         remove
         {
-            Unsubscribe("Legacy", value);
+            Unsubscribe("ThreadUpdated", "Legacy", value);
         }
     }
 
@@ -1211,11 +1767,11 @@ public sealed class EventHandler : IDisposable
     {
         add
         {
-            Subscribe("Legacy", value);
+            Subscribe("ThreadDeleted", "Legacy", value);
         }
         remove
         {
-            Unsubscribe("Legacy", value);
+            Unsubscribe("ThreadDeleted", "Legacy", value);
         }
     }
 
@@ -1226,11 +1782,11 @@ public sealed class EventHandler : IDisposable
     {
         add
         {
-            Subscribe("Legacy", value);
+            Subscribe("ThreadMemberJoined", "Legacy", value);
         }
         remove
         {
-            Unsubscribe("Legacy", value);
+            Unsubscribe("ThreadMemberJoined", "Legacy", value);
         }
     }
 
@@ -1241,11 +1797,11 @@ public sealed class EventHandler : IDisposable
     {
         add
         {
-            Subscribe("Legacy", value);
+            Subscribe("ThreadMemberLeft", "Legacy", value);
         }
         remove
         {
-            Unsubscribe("Legacy", value);
+            Unsubscribe("ThreadMemberLeft", "Legacy", value);
         }
     }
 
@@ -1256,11 +1812,11 @@ public sealed class EventHandler : IDisposable
     {
         add
         {
-            Subscribe("Legacy", value);
+            Subscribe("AuditLogCreated", "Legacy", value);
         }
         remove
         {
-            Unsubscribe("Legacy", value);
+            Unsubscribe("AuditLogCreated", "Legacy", value);
         }
     }
 
@@ -1271,11 +1827,11 @@ public sealed class EventHandler : IDisposable
     {
         add
         {
-            Subscribe("Legacy", value);
+            Subscribe("Ready", "Legacy", value);
         }
         remove
         {
-            Unsubscribe("Legacy", value);
+            Unsubscribe("Ready", "Legacy", value);
         }
     }
 
@@ -1286,11 +1842,11 @@ public sealed class EventHandler : IDisposable
     {
         add
         {
-            Subscribe("Legacy", value);
+            Subscribe("GuildAvailable", "Legacy", value);
         }
         remove
         {
-            Unsubscribe("Legacy", value);
+            Unsubscribe("GuildAvailable", "Legacy", value);
         }
     }
 
@@ -1301,11 +1857,11 @@ public sealed class EventHandler : IDisposable
     {
         add
         {
-            Subscribe("Legacy", value);
+            Subscribe("GuildUnavailable", "Legacy", value);
         }
         remove
         {
-            Unsubscribe("Legacy", value);
+            Unsubscribe("GuildUnavailable", "Legacy", value);
         }
     }
 
@@ -1316,11 +1872,11 @@ public sealed class EventHandler : IDisposable
     {
         add
         {
-            Subscribe("Legacy", value);
+            Subscribe("LeftGuild", "Legacy", value);
         }
         remove
         {
-            Unsubscribe("Legacy", value);
+            Unsubscribe("LeftGuild", "Legacy", value);
         }
     }
 
@@ -1341,21 +1897,41 @@ public sealed class EventHandler : IDisposable
         try
         {
             // Stop timers
-            metricsResetTimer?.Dispose();
+            metricsResetTimer.Dispose();
 
             // Dispose processors
-            messageProcessor?.Dispose();
-            presenceProcessor?.Dispose();
-            typingProcessor?.Dispose();
+            messageProcessor.Dispose();
+            presenceProcessor.Dispose();
+            typingProcessor.Dispose();
 
             // Unregister Discord events
             UnregisterEvents();
 
-            logger.LogInformation("EventHandler disposed successfully");
+            // Clean up string-based subscriptions
+            foreach (var kvp in stringEventSubscriptions)
+            {
+                var eventName = kvp.Key;
+                var handlers = kvp.Value;
+                foreach (var (moduleName, handler) in handlers)
+                {
+                    try
+                    {
+                        Unsubscribe(eventName, moduleName, handler);
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Error(ex, "Error unsubscribing {ModuleName} from {EventName}", moduleName, eventName);
+                    }
+                }
+            }
+
+            stringEventSubscriptions.Clear();
+
+            Log.Information("EventHandler disposed successfully");
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error occurred while disposing EventHandler");
+            Log.Error(ex, "Error occurred while disposing EventHandler");
         }
     }
 
@@ -1700,7 +2276,7 @@ public class BatchedEventProcessor<T> : IDisposable
         disposed = true;
 
         channel.Writer.Complete();
-        batchTimer?.Dispose();
+        batchTimer.Dispose();
 
         // Process any remaining items
         ProcessBatch(null);
