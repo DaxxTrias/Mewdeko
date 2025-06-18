@@ -980,7 +980,7 @@ public sealed class EventHandler : IDisposable
     // Direct processing for lower-frequency events
     private Task ClientOnUserJoined(SocketGuildUser arg)
     {
-        return ProcessDirectEvent("IGuildUser", arg);
+        return ProcessDirectEvent("UserJoined", arg);
     }
 
     private Task ClientOnUserLeft(SocketGuild arg1, SocketUser arg2)
@@ -1031,7 +1031,7 @@ public sealed class EventHandler : IDisposable
 
     private Task ClientOnChannelCreated(SocketChannel arg)
     {
-        return ProcessDirectEvent("SocketChannel", arg);
+        return ProcessDirectEvent("ChannelCreated", arg);
     }
 
     private Task ClientOnChannelDestroyed(SocketChannel arg)
@@ -1046,7 +1046,7 @@ public sealed class EventHandler : IDisposable
 
     private Task ClientOnRoleDeleted(SocketRole arg)
     {
-        return ProcessDirectEvent("SocketRole", arg);
+        return ProcessDirectEvent("RoleDeleted", arg);
     }
 
     private Task ClientOnReactionAdded(Cacheable<IUserMessage, ulong> arg1, Cacheable<IMessageChannel, ulong> arg2,
@@ -1068,17 +1068,17 @@ public sealed class EventHandler : IDisposable
 
     private Task ClientOnInteractionCreated(SocketInteraction arg)
     {
-        return ProcessDirectEvent("SocketInteraction", arg);
+        return ProcessDirectEvent("InteractionCreated", arg);
     }
 
     private Task ClientOnJoinedGuild(SocketGuild arg)
     {
-        return ProcessDirectEvent("IGuild", arg);
+        return ProcessDirectEvent("JoinedGuild", arg);
     }
 
     private Task ClientOnEventCreated(SocketGuildEvent arg)
     {
-        return ProcessDirectEvent("SocketGuildEvent", arg);
+        return ProcessDirectEvent("EventCreated", arg);
     }
 
     private Task ClientOnRoleUpdated(SocketRole arg1, SocketRole arg2)
@@ -1098,7 +1098,7 @@ public sealed class EventHandler : IDisposable
 
     private Task ClientOnThreadCreated(SocketThreadChannel arg)
     {
-        return ProcessDirectEvent("SocketThreadChannel", arg);
+        return ProcessDirectEvent("ThreadCreated", arg);
     }
 
     private Task ClientOnThreadUpdated(Cacheable<SocketThreadChannel, ulong> arg1, SocketThreadChannel arg2)
@@ -1113,7 +1113,7 @@ public sealed class EventHandler : IDisposable
 
     private Task ClientOnThreadMemberJoined(SocketThreadUser arg)
     {
-        return ProcessDirectEvent("SocketThreadUser", arg);
+        return ProcessDirectEvent("ThreadMemberJoined", arg);
     }
 
     private Task ClientOnThreadMemberLeft(SocketThreadUser arg)
@@ -1143,7 +1143,7 @@ public sealed class EventHandler : IDisposable
 
     private Task ClientOnInviteCreated(SocketInvite arg)
     {
-        return ProcessDirectEvent("IInvite", arg);
+        return ProcessDirectEvent("InviteCreated", arg);
     }
 
     private Task ClientOnInviteDeleted(SocketGuildChannel arg1, string arg2)
@@ -1153,7 +1153,7 @@ public sealed class EventHandler : IDisposable
 
     private Task ClientOnModalSubmitted(SocketModal arg)
     {
-        return ProcessDirectEvent("SocketModal", arg);
+        return ProcessDirectEvent("ModalSubmitted", arg);
     }
 
     private Task ProcessDirectEvent<T>(string eventType, T args)
