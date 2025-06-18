@@ -1158,7 +1158,7 @@ public sealed class EventHandler : IDisposable
 
     private Task ProcessDirectEvent<T>(string eventType, T args)
     {
-        Log.Warning("ProcessDirectEvent called for {EventType}, disposed: {Disposed}", eventType, disposed);
+        Log.Debug("ProcessDirectEvent called for {EventType}, disposed: {Disposed}", eventType, disposed);
 
         if (disposed)
         {
@@ -1168,12 +1168,12 @@ public sealed class EventHandler : IDisposable
 
         if (!stringEventSubscriptions.TryGetValue(eventType, out var handlers))
         {
-            Log.Warning("No subscriptions found for event type {EventType}. Available event types: {EventTypes}",
+            Log.Debug("No subscriptions found for event type {EventType}. Available event types: {EventTypes}",
                 eventType, string.Join(", ", stringEventSubscriptions.Keys));
             return Task.CompletedTask;
         }
 
-        Log.Warning("Found {SubscriptionCount} string-based subscriptions for event {EventType}", handlers.Count,
+        Log.Debug("Found {SubscriptionCount} string-based subscriptions for event {EventType}", handlers.Count,
             eventType);
         _ = Task.Run(async () =>
         {
