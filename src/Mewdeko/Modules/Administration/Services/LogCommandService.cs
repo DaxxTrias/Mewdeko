@@ -149,29 +149,28 @@ public class LogCommandService : INService, IReadyExecutor
         this.dbFactory = dbFactory;
         this.client = client;
 
-        handler.EventCreated += OnEventCreated;
-        handler.RoleUpdated += OnRoleUpdated;
-        handler.RoleCreated += OnRoleCreated;
-        handler.RoleDeleted += OnRoleDeleted;
-        handler.GuildUpdated += OnGuildUpdated;
-        handler.ThreadCreated += OnThreadCreated;
-        handler.GuildMemberUpdated += OnUserRoleAdded;
-        handler.GuildMemberUpdated += OnUserRoleRemoved;
-        handler.UserUpdated += OnUsernameUpdated;
-        handler.GuildMemberUpdated += OnNicknameUpdated;
-        handler.ThreadDeleted += OnThreadDeleted;
-        handler.ThreadUpdated += OnThreadUpdated;
-        handler.MessageUpdated += OnMessageUpdated;
-        handler.MessageDeleted += OnMessageDeleted;
-        handler.UserJoined += OnUserJoined;
-        handler.UserLeft += OnUserLeft;
-        handler.UserUpdated += OnUserUpdated;
-        handler.ChannelCreated += OnChannelCreated;
-        handler.ChannelDestroyed += OnChannelDestroyed;
-        handler.ChannelUpdated += OnChannelUpdated;
-        handler.UserVoiceStateUpdated += OnVoicePresence;
-        handler.UserVoiceStateUpdated += OnVoicePresenceTts;
-        handler.AuditLogCreated += OnAuditLogCreated;
+        handler.Subscribe("SocketGuildEvent", "LogCommandService", OnEventCreated);
+        handler.Subscribe("RoleUpdated", "LogCommandService", OnRoleUpdated);
+        handler.Subscribe("SocketRole", "LogCommandService", OnRoleCreated);
+        handler.Subscribe("SocketRole", "LogCommandService", OnRoleDeleted);
+        handler.Subscribe("GuildUpdated", "LogCommandService", OnGuildUpdated);
+        handler.Subscribe("SocketThreadChannel", "LogCommandService", OnThreadCreated);
+        handler.Subscribe("GuildMemberUpdated", "LogCommandService", OnUserRoleAdded);
+        handler.Subscribe("GuildMemberUpdated", "LogCommandService", OnUserRoleRemoved);
+        handler.Subscribe("UserUpdated", "LogCommandService", OnUsernameUpdated);
+        handler.Subscribe("GuildMemberUpdated", "LogCommandService", OnNicknameUpdated);
+        handler.Subscribe("ThreadDeleted", "LogCommandService", OnThreadDeleted);
+        handler.Subscribe("ThreadUpdated", "LogCommandService", OnThreadUpdated);
+        handler.Subscribe("MessageUpdated", "LogCommandService", OnMessageUpdated);
+        handler.Subscribe("MessageDeleted", "LogCommandService", OnMessageDeleted);
+        handler.Subscribe("IGuildUser", "LogCommandService", OnUserJoined);
+        handler.Subscribe("UserLeft", "LogCommandService", OnUserLeft);
+        handler.Subscribe("SocketChannel", "LogCommandService", OnChannelCreated);
+        handler.Subscribe("ChannelDestroyed", "LogCommandService", OnChannelDestroyed);
+        handler.Subscribe("ChannelUpdated", "LogCommandService", OnChannelUpdated);
+        handler.Subscribe("UserVoiceStateUpdated", "LogCommandService", OnVoicePresence);
+        handler.Subscribe("UserVoiceStateUpdated", "LogCommandService", OnVoicePresenceTts);
+        handler.Subscribe("AuditLogCreated", "LogCommandService", OnAuditLogCreated);
         muteService.UserMuted += OnUserMuted;
         muteService.UserUnmuted += OnUserUnmuted;
     }
@@ -225,6 +224,8 @@ public class LogCommandService : INService, IReadyExecutor
     /// <returns>A task that represents the asynchronous operation.</returns>
     private async Task OnRoleCreated(SocketRole args)
     {
+        Log.Debug("LogCommandService.OnRoleCreated called for role {RoleName} in guild {GuildId}", args.Name,
+            args.Guild.Id);
         if (GuildLogSettings.TryGetValue(args.Guild.Id, out var logSetting))
         {
             if (logSetting.RoleCreatedId is null or 0)
@@ -839,6 +840,8 @@ public class LogCommandService : INService, IReadyExecutor
     /// <param name="guildUser">The user that joined the guild.</param>
     private async Task OnUserJoined(IGuildUser guildUser)
     {
+        Log.Debug("LogCommandService.OnUserJoined called for user {UserId} in guild {GuildId}", guildUser.Id,
+            guildUser.Guild.Id);
         if (GuildLogSettings.TryGetValue(guildUser.Guild.Id, out var logSetting))
         {
             if (logSetting.UserJoinedId is null or 0)
