@@ -11,7 +11,15 @@ namespace Mewdeko.Modules.Administration.Services;
 /// <summary>
 ///     Service for managing log commands.
 /// </summary>
-public class LogCommandService : INService, IReadyExecutor
+/// <param name="dbFactory">The database service.</param>
+/// <param name="client">The Discord client.</param>
+/// <param name="handler">The event handler.</param>
+/// <param name="muteService">The mute service.</param>
+public class LogCommandService(
+    IDataConnectionFactory dbFactory,
+    DiscordShardedClient client,
+    EventHandler handler,
+    MuteService muteService) : INService, IReadyExecutor
 {
     /// <summary>
     ///     Log category types.
@@ -130,25 +138,28 @@ public class LogCommandService : INService, IReadyExecutor
         UserMuted
     }
 
-    private readonly DiscordShardedClient client;
-    private readonly IDataConnectionFactory dbFactory;
-
-
     /// <summary>
-    ///     Constructs a new instance of the NewLogCommandService.
+    ///     Dictionary of log settings for each guild.
     /// </summary>
-    /// <param name="dbFactory">The database service.</param>
-    /// <param name="cache">The data cache.</param>
-    /// <param name="client">The Discord client.</param>
-    /// <param name="handler">The event handler.</param>
-    /// <param name="muteService">The mute service.</param>
-    public LogCommandService(IDataConnectionFactory dbFactory, IDataCache cache, DiscordShardedClient client,
-        EventHandler handler,
-        MuteService muteService)
-    {
-        this.dbFactory = dbFactory;
-        this.client = client;
+    public ConcurrentDictionary<ulong, LoggingV2> GuildLogSettings { get; set; }
 
+    /// <inheritdoc />
+    public async Task OnReadyAsync()
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+        try
+        {
+            var logSettingsList = await db.LoggingV2.ToListAsync().ConfigureAwait(false);
+            var dict = logSettingsList.ToDictionary(g => g.GuildId, g => g);
+            GuildLogSettings = new ConcurrentDictionary<ulong, LoggingV2>(dict);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Failed to load LoggingV2 settings on ready.");
+            GuildLogSettings = new ConcurrentDictionary<ulong, LoggingV2>();
+        }
+
+        // yeaaaa would be a good idea to add events AFTER we get all guild settings.
         handler.Subscribe("SocketGuildEvent", "LogCommandService", OnEventCreated);
         handler.Subscribe("RoleUpdated", "LogCommandService", OnRoleUpdated);
         handler.Subscribe("SocketRole", "LogCommandService", OnRoleCreated);
@@ -173,28 +184,6 @@ public class LogCommandService : INService, IReadyExecutor
         handler.Subscribe("AuditLogCreated", "LogCommandService", OnAuditLogCreated);
         muteService.UserMuted += OnUserMuted;
         muteService.UserUnmuted += OnUserUnmuted;
-    }
-
-    /// <summary>
-    ///     Dictionary of log settings for each guild.
-    /// </summary>
-    public ConcurrentDictionary<ulong, LoggingV2> GuildLogSettings { get; set; }
-
-    /// <inheritdoc />
-    public async Task OnReadyAsync()
-    {
-        await using var db = await dbFactory.CreateConnectionAsync();
-        try
-        {
-            var logSettingsList = await db.LoggingV2.ToListAsync().ConfigureAwait(false);
-            var dict = logSettingsList.ToDictionary(g => g.GuildId, g => g);
-            GuildLogSettings = new ConcurrentDictionary<ulong, LoggingV2>(dict);
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "Failed to load LoggingV2 settings on ready.");
-            GuildLogSettings = new ConcurrentDictionary<ulong, LoggingV2>();
-        }
     }
 
     /// <summary>
