@@ -1,12 +1,11 @@
 ﻿using System.Net;
+using DataModel;
 using Discord.Net;
 using LinqToDB;
-using DataModel;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Common.TypeReaders;
 using Mewdeko.Modules.Utility.Common;
 using Mewdeko.Modules.Utility.Common.Exceptions;
-
 using Serilog;
 
 namespace Mewdeko.Modules.Utility.Services;
@@ -65,15 +64,17 @@ public class StreamRoleService : INService, IUnloadableService, IReadyExecutor
         return Task.CompletedTask;
     }
 
+
     private async Task Client_GuildMemberUpdated(Cacheable<SocketGuildUser, ulong> cacheable, SocketGuildUser after)
     {
         await using var db = await dbFactory.CreateConnectionAsync();
 
-        // Get StreamRole settings directly with LinqToDB
         var streamRole = await db.StreamRoleSettings
+            .LoadWithAsTable(srs => srs.StreamRoleWhitelistedUsers)
+            .LoadWithAsTable(srs => srs.StreamRoleBlacklistedUsers)
             .FirstOrDefaultAsync(srs => srs.GuildId == after.Guild.Id);
 
-        if (streamRole != null && streamRole.Enabled)
+        if (streamRole is not { Enabled: true })
             return;
 
         await RescanUser(after, streamRole);
@@ -106,7 +107,10 @@ public class StreamRoleService : INService, IUnloadableService, IReadyExecutor
 
         if (StreamRoleSetting == null)
         {
-            StreamRoleSetting = new StreamRoleSetting { GuildId = guildId };
+            StreamRoleSetting = new StreamRoleSetting
+            {
+                GuildId = guildId
+            };
             await db.InsertAsync(StreamRoleSetting);
 
             // After inserting the new settings, reload it with relationships
@@ -135,9 +139,7 @@ public class StreamRoleService : INService, IUnloadableService, IReadyExecutor
             {
                 var newUser = new StreamRoleWhitelistedUser
                 {
-                    UserId = userId,
-                    Username = userName,
-                    StreamRoleSettingsId = StreamRoleSetting.Id
+                    UserId = userId, Username = userName, StreamRoleSettingsId = StreamRoleSetting.Id
                 };
 
                 // Insert using LinqToDB
@@ -164,9 +166,7 @@ public class StreamRoleService : INService, IUnloadableService, IReadyExecutor
             {
                 var newUser = new StreamRoleBlacklistedUser
                 {
-                    UserId = userId,
-                    Username = userName,
-                    StreamRoleSettingsId = StreamRoleSetting.Id
+                    UserId = userId, Username = userName, StreamRoleSettingsId = StreamRoleSetting.Id
                 };
 
                 // Insert using LinqToDB
@@ -204,7 +204,10 @@ public class StreamRoleService : INService, IUnloadableService, IReadyExecutor
 
         if (StreamRoleSetting == null)
         {
-            StreamRoleSetting = new StreamRoleSetting { GuildId = guildId };
+            StreamRoleSetting = new StreamRoleSetting
+            {
+                GuildId = guildId
+            };
             await db.InsertAsync(StreamRoleSetting);
 
             // Reload the newly created settings
@@ -242,7 +245,10 @@ public class StreamRoleService : INService, IUnloadableService, IReadyExecutor
 
         if (StreamRoleSetting == null)
         {
-            StreamRoleSetting = new StreamRoleSetting { GuildId = guildId };
+            StreamRoleSetting = new StreamRoleSetting
+            {
+                GuildId = guildId
+            };
             await db.InsertAsync(StreamRoleSetting);
 
             // Reload the newly created settings
@@ -282,7 +288,10 @@ public class StreamRoleService : INService, IUnloadableService, IReadyExecutor
 
         if (StreamRoleSetting == null)
         {
-            StreamRoleSetting = new StreamRoleSetting { GuildId = guildId };
+            StreamRoleSetting = new StreamRoleSetting
+            {
+                GuildId = guildId
+            };
             await db.InsertAsync(StreamRoleSetting);
 
             // Reload the newly created settings
