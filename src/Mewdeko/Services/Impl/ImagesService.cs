@@ -1,5 +1,4 @@
 ﻿using System.IO;
-using System.Net.Http;
 using Mewdeko.Common.ModuleBehaviors;
 using Serilog;
 using ZiggyCreatures.Caching.Fusion;
@@ -66,9 +65,8 @@ public sealed class FusionImagesCache : IImageCache, IReadyExecutor, INService
     private const string CardsPath = BasePath + "cards/";
     private const string CoinPath = BasePath + "coin/";
     private const string EmojiPath = BasePath + "emoji/";
-    private readonly IFusionCache cache;
 
-    private readonly HttpClient http;
+    private readonly IFusionCache cache;
     // private readonly string imagesPath; // Currently unused
 
     /// <summary>
@@ -79,7 +77,6 @@ public sealed class FusionImagesCache : IImageCache, IReadyExecutor, INService
     public FusionImagesCache(IFusionCache cache, IBotCredentials creds)
     {
         this.cache = cache;
-        http = new HttpClient();
     }
 
     /// <summary>

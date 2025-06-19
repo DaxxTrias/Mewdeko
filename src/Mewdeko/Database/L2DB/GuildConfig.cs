@@ -156,5 +156,17 @@ namespace DataModel
 		[Column("DateAdded"                                                                                                           )] public DateTime? DateAdded                          { get; set; } // timestamp (6) without time zone
 		[Column("UseMessageCount"                                                                                                     )] public bool      UseMessageCount                    { get; set; } // boolean
 		[Column("MinMessageLength"                                                                                                    )] public int       MinMessageLength                   { get; set; } // integer
+		[Column("PatreonChannelId"                                                                                                    )] public ulong     PatreonChannelId                   { get; set; } // numeric(20,0)
+		[Column("PatreonMessage"                                                                                                      )] public string?   PatreonMessage                     { get; set; } // text
+		[Column("PatreonAnnouncementDay"                                                                                              )] public int       PatreonAnnouncementDay             { get; set; } // integer
+		[Column("PatreonEnabled"                                                                                                      )] public bool      PatreonEnabled                     { get; set; } // boolean
+		[Column("PatreonLastAnnouncement"                                                                                             )] public DateTime? PatreonLastAnnouncement            { get; set; } // timestamp (6) without time zone
+		[Column("PatreonCampaignId"                                                                                                   )] public string?   PatreonCampaignId                  { get; set; } // text
+		[Column("PatreonAccessToken"                                                                                                  )] public string?   PatreonAccessToken                 { get; set; } // text
+		[Column("PatreonRefreshToken"                                                                                                 )] public string?   PatreonRefreshToken                { get; set; } // text
+		[Column("PatreonTokenExpiry"                                                                                                  )] public DateTime? PatreonTokenExpiry                 { get; set; } // timestamp (6) without time zone
+		[Column("PatreonRoleSync"                                                                                                     )] public bool      PatreonRoleSync                    { get; set; } // boolean
+		[Column("PatreonGoalChannel"                                                                                                  )] public ulong     PatreonGoalChannel                 { get; set; } // numeric(20,0)
+		[Column("PatreonStatsChannel"                                                                                                 )] public ulong     PatreonStatsChannel                { get; set; } // numeric(20,0)
 	}
 }

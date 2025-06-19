@@ -12,10 +12,7 @@ using JikanDotNet;
 using MartineApiNet;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Modules.Searches.Services;
-using Mewdeko.Services.Settings;
 using NekosBestApiNet;
-
-
 
 namespace Mewdeko.Modules.Searches;
 
@@ -29,8 +26,7 @@ public partial class Searches
         InteractiveService service,
         MartineApi martineApi,
         NekosBestApi nekosBestApi,
-        HttpClient httpClient,
-        BotConfigService config)
+        HttpClient httpClient)
         : MewdekoSubmodule<SearchesService>
     {
         /// <summary>
@@ -123,8 +119,8 @@ public partial class Searches
             var req = await nekosBestApi.CategoryApi.Neko().ConfigureAwait(false);
             var em = new EmbedBuilder
             {
-                Description = Strings.NekoSource(ctx.Guild.Id, req.Results.FirstOrDefault().SourceUrl),
-                ImageUrl = req.Results.FirstOrDefault().Url,
+                Description = Strings.NekoSource(ctx.Guild.Id, req.Results.FirstOrDefault()?.SourceUrl),
+                ImageUrl = req.Results.FirstOrDefault()?.Url,
                 Color = Mewdeko.OkColor
             };
             await ctx.Channel.SendMessageAsync(embed: em.Build()).ConfigureAwait(false);
@@ -146,8 +142,8 @@ public partial class Searches
             var req = await nekosBestApi.CategoryApi.Kitsune().ConfigureAwait(false);
             var em = new EmbedBuilder
             {
-                Description = Strings.KitsuneSource(ctx.Guild.Id, req.Results.FirstOrDefault().SourceUrl),
-                ImageUrl = req.Results.FirstOrDefault().Url,
+                Description = Strings.KitsuneSource(ctx.Guild.Id, req.Results.FirstOrDefault()?.SourceUrl),
+                ImageUrl = req.Results.FirstOrDefault()?.Url,
                 Color = Mewdeko.OkColor
             };
             await ctx.Channel.SendMessageAsync(embed: em.Build()).ConfigureAwait(false);
@@ -169,8 +165,8 @@ public partial class Searches
             var req = await nekosBestApi.CategoryApi.Waifu().ConfigureAwait(false);
             var em = new EmbedBuilder
             {
-                Description = Strings.WaifuSource(ctx.Guild.Id, req.Results.FirstOrDefault().SourceUrl),
-                ImageUrl = req.Results.FirstOrDefault().Url,
+                Description = Strings.WaifuSource(ctx.Guild.Id, req.Results.FirstOrDefault()?.SourceUrl),
+                ImageUrl = req.Results.FirstOrDefault()?.Url,
                 Color = Mewdeko.OkColor
             };
             await ctx.Channel.SendMessageAsync(embed: em.Build()).ConfigureAwait(false);
@@ -201,7 +197,7 @@ public partial class Searches
             using var document = await BrowsingContext.New(malConfig).OpenAsync(fullQueryLink).ConfigureAwait(false);
             var imageElem = document.QuerySelector(
                 "body > div#myanimelist > div.wrapper > div#contentWrapper > div#content > div.content-container > div.container-left > div.user-profile > div.user-image > img");
-            var imageUrl = ((IHtmlImageElement)imageElem).Source ??
+            var imageUrl = ((IHtmlImageElement?)imageElem)?.Source ??
                            "https://icecream.me/uploads/870b03f36b59cc16ebfe314ef2dde781.png";
 
             var stats = document
@@ -235,17 +231,22 @@ public partial class Searches
             var embed = new EmbedBuilder()
                 .WithOkColor()
                 .WithTitle(Strings.MalProfile(ctx.Guild.Id, name))
-                .AddField(efb => efb.WithName("💚 " + Strings.Watching(ctx.Guild.Id)).WithValue(stats[0]).WithIsInline(true))
-                .AddField(efb => efb.WithName("💙 " + Strings.Completed(ctx.Guild.Id)).WithValue(stats[1]).WithIsInline(true));
+                .AddField(efb =>
+                    efb.WithName("💚 " + Strings.Watching(ctx.Guild.Id)).WithValue(stats[0]).WithIsInline(true))
+                .AddField(efb =>
+                    efb.WithName("💙 " + Strings.Completed(ctx.Guild.Id)).WithValue(stats[1]).WithIsInline(true));
             if (info.Count < 3)
-                embed.AddField(efb => efb.WithName("💛 " + Strings.OnHold(ctx.Guild.Id)).WithValue(stats[2]).WithIsInline(true));
+                embed.AddField(efb =>
+                    efb.WithName("💛 " + Strings.OnHold(ctx.Guild.Id)).WithValue(stats[2]).WithIsInline(true));
             embed
-                .AddField(efb => efb.WithName("💔 " + Strings.Dropped(ctx.Guild.Id)).WithValue(stats[3]).WithIsInline(true))
-                .AddField(efb => efb.WithName("⚪ " + Strings.PlanToWatch(ctx.Guild.Id)).WithValue(stats[4]).WithIsInline(true))
-                .AddField(
-                    efb => efb.WithName("🕐 " + daysAndMean[0][0]).WithValue(daysAndMean[0][1]).WithIsInline(true))
-                .AddField(
-                    efb => efb.WithName("📊 " + daysAndMean[1][0]).WithValue(daysAndMean[1][1]).WithIsInline(true))
+                .AddField(efb =>
+                    efb.WithName("💔 " + Strings.Dropped(ctx.Guild.Id)).WithValue(stats[3]).WithIsInline(true))
+                .AddField(efb =>
+                    efb.WithName("⚪ " + Strings.PlanToWatch(ctx.Guild.Id)).WithValue(stats[4]).WithIsInline(true))
+                .AddField(efb =>
+                    efb.WithName("🕐 " + daysAndMean[0][0]).WithValue(daysAndMean[0][1]).WithIsInline(true))
+                .AddField(efb =>
+                    efb.WithName("📊 " + daysAndMean[1][0]).WithValue(daysAndMean[1][1]).WithIsInline(true))
                 .AddField(efb =>
                     efb.WithName(MalInfoToEmoji(info[0].Item1) + " " + info[0].Item1)
                         .WithValue(info[0].Item2.TrimTo(20)).WithIsInline(true))
@@ -347,15 +348,15 @@ public partial class Searches
                 {
                     RespectNullableAnnotations = true
                 });
-            if (!string.IsNullOrWhiteSpace(stuff.Error))
+            if (!string.IsNullOrWhiteSpace(stuff?.Error))
             {
                 await ctx.Channel.SendErrorAsync(
-                            Strings.FindAnimeError(ctx.Guild.Id, stuff.Error), Config)
+                        Strings.FindAnimeError(ctx.Guild.Id, stuff.Error), Config)
                     .ConfigureAwait(false);
                 return;
             }
 
-            var ert = stuff.Result.FirstOrDefault();
+            var ert = stuff?.Result?.FirstOrDefault();
             if (ert?.Filename is null)
             {
                 await ctx.Channel.SendErrorAsync(
@@ -479,33 +480,41 @@ public partial class Searches
                     await Task.CompletedTask;
                     var data = newResult.Skip(page).FirstOrDefault();
                     return new PageBuilder()
-                        .WithTitle(data.Titles.FirstOrDefault().Title)
-                        .WithUrl(data.Url)
-                        .WithDescription(data.Synopsis)
-                        .AddField("Genres", string.Join(", ", data.Genres), true)
-                        .AddField("Episodes", data.Episodes.HasValue ? data.Episodes : "Unknown", true)
-                        .AddField("Score", data.Score.HasValue ? data.Score : "Unknown", true)
-                        .AddField("Status", data.Status, true)
-                        .AddField("Type", data.Type, true)
+                        .WithTitle(data?.Titles?.FirstOrDefault()?.Title ?? "Unknown")
+                        .WithUrl(data?.Url ?? "")
+                        .WithDescription(data?.Synopsis ?? "No description available")
+                        .AddField("Genres", data?.Genres != null ? string.Join(", ", data.Genres) : "Unknown", true)
+                        .AddField("Episodes", data?.Episodes.HasValue == true ? data.Episodes : "Unknown", true)
+                        .AddField("Score", data?.Score.HasValue == true ? data.Score : "Unknown", true)
+                        .AddField("Status", data?.Status ?? "Unknown", true)
+                        .AddField("Type", data?.Type ?? "Unknown", true)
                         .AddField("Start Date",
-                            data.Aired.From.HasValue ? TimestampTag.FromDateTime(data.Aired.From.Value) : "Unknown",
+                            data?.Aired?.From.HasValue == true
+                                ? TimestampTag.FromDateTime(data.Aired.From.Value)
+                                : "Unknown",
                             true)
                         .AddField("End Date",
-                            data.Aired.To.HasValue ? TimestampTag.FromDateTime(data.Aired.To.Value) : "Unknown", true)
-                        .AddField("Rating", data.Rating, true)
-                        .AddField("Rank", data.Rank.HasValue ? data.Rank : "Unknown", true)
-                        .AddField("Popularity", data.Popularity.HasValue ? data.Popularity : "Unknown", true)
-                        .AddField("Members", data.Members.HasValue ? data.Members : "Unknown", true)
-                        .AddField("Favorites", data.Favorites.HasValue ? data.Favorites : "Unknown", true)
-                        .AddField("Source", data.Source, true)
-                        .AddField("Duration", data.Duration, true)
+                            data?.Aired?.To.HasValue == true
+                                ? TimestampTag.FromDateTime(data.Aired.To.Value)
+                                : "Unknown", true)
+                        .AddField("Rating", data?.Rating ?? "Unknown", true)
+                        .AddField("Rank", data?.Rank.HasValue == true ? data.Rank : "Unknown", true)
+                        .AddField("Popularity", data?.Popularity.HasValue == true ? data.Popularity : "Unknown", true)
+                        .AddField("Members", data?.Members.HasValue == true ? data.Members : "Unknown", true)
+                        .AddField("Favorites", data?.Favorites.HasValue == true ? data.Favorites : "Unknown", true)
+                        .AddField("Source", data?.Source ?? "Unknown", true)
+                        .AddField("Duration", data?.Duration ?? "Unknown", true)
                         .AddField("Studios",
-                            data.Studios.Any() ? string.Join(", ", data.Studios.Select(x => x.Name)) : "Unknown", true)
+                            data?.Studios?.Any() == true
+                                ? string.Join(", ", data.Studios.Select(x => x.Name))
+                                : "Unknown", true)
                         .AddField("Producers",
-                            data.Producers.Any() ? string.Join(", ", data.Producers.Select(x => x.Name)) : "Unknown",
+                            data?.Producers?.Any() == true
+                                ? string.Join(", ", data.Producers.Select(x => x.Name))
+                                : "Unknown",
                             true)
                         .WithOkColor()
-                        .WithImageUrl(data.Images.JPG.LargeImageUrl);
+                        .WithImageUrl(data?.Images?.JPG?.LargeImageUrl ?? "");
                 }
                 catch (Exception e)
                 {
@@ -553,14 +562,14 @@ public partial class Searches
                 var data = result.Data.Skip(page).FirstOrDefault();
                 await Task.CompletedTask.ConfigureAwait(false);
                 return new PageBuilder()
-                    .WithTitle(Format.Bold($"{data.Titles.First()}"))
-                    .AddField("First Publish Date", data.Published)
-                    .AddField("Volumes", data.Volumes)
-                    .AddField("Is Still Active", data.Publishing)
-                    .AddField("Score", data.Score)
-                    .AddField("Url", data.Url)
-                    .WithDescription(data.Background)
-                    .WithImageUrl(data.Images.WebP.MaximumImageUrl!).WithColor(Mewdeko.OkColor);
+                    .WithTitle(Format.Bold($"{data?.Titles?.First()?.Title ?? "Unknown"}"))
+                    .AddField("First Publish Date", data?.Published?.ToString() ?? "Unknown")
+                    .AddField("Volumes", data?.Volumes?.ToString() ?? "Unknown")
+                    .AddField("Is Still Active", data?.Publishing ?? false)
+                    .AddField("Score", data?.Score?.ToString() ?? "Unknown")
+                    .AddField("Url", data?.Url ?? "")
+                    .WithDescription(data?.Background ?? "No description available")
+                    .WithImageUrl(data?.Images?.WebP?.MaximumImageUrl ?? "").WithColor(Mewdeko.OkColor);
             }
         }
     }

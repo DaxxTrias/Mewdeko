@@ -66,13 +66,12 @@ public enum ChatTriggerType
     /// <summary>
     ///     Triggered by a button press.
     /// </summary>
-    Button = 0b0100
+    Button = 0b0100,
 
-    // Commented out as not yet developed
-    // /// <summary>
-    // /// Triggered by reactions.
-    // /// </summary>
-    // Reactions = 0b10000,
+    /// <summary>
+    ///     Triggered by reactions.
+    /// </summary>
+    Reactions = 0b1000
 }
 
 /// <summary>

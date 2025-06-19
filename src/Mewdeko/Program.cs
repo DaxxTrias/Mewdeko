@@ -17,6 +17,7 @@ using Mewdeko.Database.Impl;
 using Mewdeko.Modules.Currency.Services;
 using Mewdeko.Modules.Currency.Services.Impl;
 using Mewdeko.Modules.Nsfw;
+using Mewdeko.Modules.Patreon.Services;
 using Mewdeko.Modules.Searches.Services;
 using Mewdeko.Services.Impl;
 using Mewdeko.Services.Settings;
@@ -283,7 +284,7 @@ public class Program
             FormatUsersInBidirectionalUnicode = false,
             LogGatewayIntentWarnings = false,
             DefaultRetryMode = RetryMode.RetryRatelimit,
-            TotalShards = credentials.TotalShards
+            TotalShards = credentials.TotalShards,
         });
 
         services.AddSerilog(LogSetup.SetupLogger("Mewdeko"));
@@ -372,7 +373,9 @@ public class Program
         );
 
         services.AddSingleton<Mewdeko>();
+        services.AddSingleton<PatreonApiClient>();
         services.AddHostedService<MewdekoService>();
         services.AddHostedService<ScheduledDeletionService>();
+        services.AddHostedService<PatreonService>();
     }
 }

@@ -1,11 +1,10 @@
 #nullable enable
 using System.Net.Http;
 using System.Text.Json;
+using Mewdeko.Database.Common;
 using Mewdeko.Modules.Searches.Common.StreamNotifications.Models;
 using Mewdeko.Modules.Searches.Common.StreamNotifications.Providers;
 using Serilog;
-using Mewdeko.Database.Common;
-
 
 namespace Mewdeko.Modules.Searches.Common.StreamNotifications;
 
@@ -15,8 +14,8 @@ namespace Mewdeko.Modules.Searches.Common.StreamNotifications;
 public class NotifChecker
 {
     private readonly string key;
-    private readonly ConcurrentDictionary<string, StreamData?> streamCache = new();
     private readonly HashSet<(FType, string)> offlineBuffer;
+    private readonly ConcurrentDictionary<string, StreamData?> streamCache = new();
     private readonly Dictionary<FType, Provider> streamProviders;
 
     /// <summary>
@@ -106,7 +105,7 @@ public class NotifChecker
                         .GroupBy(entry => entry.Key.Type)
                         .ToDictionary(entry => entry.Key,
                             entry => entry.AsEnumerable()
-                                .ToDictionary(x => x.Key.Name, x => x.Value));
+                                .ToDictionary(x => x.Key.Name ?? string.Empty, x => x.Value));
 
                     var newStreamData = await oldStreamDataDict
                         .Select(x =>
@@ -116,6 +115,7 @@ public class NotifChecker
                                     out var provider))
                             {
                                 return provider.GetStreamDataAsync(x.Value
+                                    .Where(entry => !string.IsNullOrEmpty(entry.Key))
                                     .Select(entry => entry.Key)
                                     .ToList());
                             }
@@ -136,7 +136,7 @@ public class NotifChecker
 
                         // compare old data with new data
                         if (!oldStreamDataDict.TryGetValue(cachekey.Type, out var typeDict)
-                            || !typeDict.TryGetValue(cachekey.Name, out var oldData)
+                            || !typeDict.TryGetValue(cachekey.Name ?? string.Empty, out var oldData)
                             || oldData is null)
                         {
                             await CacheAddData(cachekey, newData, true);
@@ -158,7 +158,7 @@ public class NotifChecker
                         //       (stream is online -> stream is offline -> stream is online again (and stays online))
                         //       This offlineBuffer will make it so that the stream has to be marked as offline TWICE
                         //       before it sends an offline notification to the subscribers.
-                        var streamId = (cachekey.Type, cachekey.Name);
+                        var streamId = (cachekey.Type, cachekey.Name ?? string.Empty);
                         if (!newData.IsLive && offlineBuffer.Remove(streamId))
                         {
                             newlyOffline.Add(newData);

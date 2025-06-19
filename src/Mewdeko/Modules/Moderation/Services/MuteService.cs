@@ -70,7 +70,7 @@ public class MuteService : INService, IReadyExecutor, IDisposable
 
     private readonly GuildSettingsService guildSettings;
     private bool _isProcessing;
-    private Timer? _processingTimer;
+    private Timer? _processingTimer = null;
 
 
     /// <summary>

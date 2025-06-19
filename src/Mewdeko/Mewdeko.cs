@@ -381,7 +381,7 @@ public class Mewdeko
                     PropertyNameCaseInsensitive = true
                 };
 
-                var status = JsonSerializer.Deserialize<GameStatus>(game, options);
+                var status = JsonSerializer.Deserialize<GameStatus>((string)game, options);
                 await Client.SetGameAsync(status?.Name, type: status?.Activity ?? ActivityType.Playing)
                     .ConfigureAwait(false);
             }
@@ -400,7 +400,7 @@ public class Mewdeko
                     PropertyNameCaseInsensitive = true
                 };
 
-                var stream = JsonSerializer.Deserialize<StreamStatus>(streamData, options);
+                var stream = JsonSerializer.Deserialize<StreamStatus>((string)streamData, options);
                 await Client.SetGameAsync(stream?.Name, stream?.Url, ActivityType.Streaming)
                     .ConfigureAwait(false);
             }

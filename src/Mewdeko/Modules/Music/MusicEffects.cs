@@ -1,5 +1,4 @@
 ﻿using Discord.Commands;
-using Fergun.Interactive;
 using Lavalink4NET;
 using Lavalink4NET.DiscordNet;
 using Lavalink4NET.Filters;
@@ -16,8 +15,6 @@ public partial class Music
     /// </summary>
     public class MusicEffects(
         IAudioService service,
-        IDataCache cache,
-        InteractiveService _interactiveService,
         GuildSettingsService guildSettingsService) : MewdekoSubmodule
     {
         /// <summary>

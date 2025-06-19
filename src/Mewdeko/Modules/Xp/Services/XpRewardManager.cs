@@ -58,7 +58,7 @@ public class XpRewardManager : INService
         if (cachedValue.HasValue)
         {
             // Deserialize the JSON string back to XpRoleReward object
-            return JsonSerializer.Deserialize<XpRoleReward>(cachedValue);
+            return JsonSerializer.Deserialize<XpRoleReward>((string)cachedValue);
         }
 
         // Get from database if not in cache using LinqToDB
@@ -93,7 +93,7 @@ public class XpRewardManager : INService
         if (cachedValue.HasValue)
         {
             // Deserialize the JSON string back to XpCurrencyReward object
-            return JsonSerializer.Deserialize<XpCurrencyReward>(cachedValue);
+            return JsonSerializer.Deserialize<XpCurrencyReward>((string)cachedValue);
         }
 
         // Get from database if not in cache using LinqToDB

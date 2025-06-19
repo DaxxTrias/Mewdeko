@@ -9,7 +9,7 @@ namespace Mewdeko.Modules.CustomVoice.Services;
 /// <summary>
 ///     Service for managing custom voice channels.
 /// </summary>
-public class CustomVoiceService : INService
+public class CustomVoiceService : INService, IUnloadableService
 {
     private readonly ConcurrentDictionary<ulong, HashSet<ulong>> activeChannels = new();
     private readonly DiscordShardedClient client;
@@ -41,6 +41,27 @@ public class CustomVoiceService : INService
 
         // Load all active custom voice channels on startup
         _ = LoadActiveChannelsOnStartup();
+    }
+
+    /// <summary>
+    ///     Unloads the service and unsubscribes from events.
+    /// </summary>
+    public Task Unload()
+    {
+        eventHandler.UserVoiceStateUpdated -= OnUserVoiceStateUpdated;
+        eventHandler.ChannelDestroyed -= OnChannelDestroyed;
+        eventHandler.JoinedGuild -= OnJoinedGuild;
+        eventHandler.LeftGuild -= OnLeftGuild;
+
+        // Dispose all empty channel timers
+        foreach (var timer in emptyChannelTimers.Values)
+        {
+            timer.Dispose();
+        }
+
+        emptyChannelTimers.Clear();
+
+        return Task.CompletedTask;
     }
 
     /// <summary>

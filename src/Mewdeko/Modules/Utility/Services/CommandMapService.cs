@@ -2,13 +2,12 @@
 using LinqToDB;
 using Mewdeko.Common.ModuleBehaviors;
 
-
 namespace Mewdeko.Modules.Utility.Services;
 
 /// <summary>
 ///     Manages the transformation of input commands based on alias mappings, allowing customization of command triggers.
 /// </summary>
-public class CommandMapService(IDataConnectionFactory dbFactory, GuildSettingsService gss) : IInputTransformer, INService
+public class CommandMapService(IDataConnectionFactory dbFactory) : IInputTransformer, INService
 {
     /// <summary>
     ///     Transforms an input command based on alias mappings for the specific guild.

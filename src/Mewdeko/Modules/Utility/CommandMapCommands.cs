@@ -15,12 +15,10 @@ public partial class Utility
     /// </summary>
     /// <param name="dbFactory">The database service.</param>
     /// <param name="serv">The interactive service.</param>
-    /// <param name="service">The guild settings service.</param>
     [Group]
     public class CommandMapCommands(
         IDataConnectionFactory dbFactory,
-        InteractiveService serv,
-        GuildSettingsService service)
+        InteractiveService serv)
         : MewdekoSubmodule<CommandMapService>
     {
         /// <summary>

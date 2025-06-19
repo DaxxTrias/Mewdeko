@@ -15,10 +15,10 @@ namespace Mewdeko.Modules.OwnerOnly.Services;
 /// </summary>
 public class InstanceManagementService : INService, IReadyExecutor
 {
+    private readonly string apiKey;
+    private readonly DiscordShardedClient client;
     private readonly IDataConnectionFactory dbFactory;
     private readonly IHttpClientFactory factory;
-    private readonly DiscordShardedClient client;
-    private readonly string apiKey;
 
     /// <summary>
     /// Initializes a new instance of the BotInstanceService.
@@ -35,13 +35,6 @@ public class InstanceManagementService : INService, IReadyExecutor
         this.dbFactory = dbFactory;
         this.factory = factory;
         this.client = client;
-    }
-
-    private HttpClient CreateAuthenticatedClient()
-    {
-        var httpClient = factory.CreateClient();
-        httpClient.DefaultRequestHeaders.Add("X-Api-Key", apiKey);
-        return httpClient;
     }
 
     /// <summary>
@@ -89,7 +82,13 @@ public class InstanceManagementService : INService, IReadyExecutor
         {
             Log.Information("Not registering self as instance. Not marked as master instance");
         }
+    }
 
+    private HttpClient CreateAuthenticatedClient()
+    {
+        var httpClient = factory.CreateClient();
+        httpClient.DefaultRequestHeaders.Add("X-Api-Key", apiKey);
+        return httpClient;
     }
 
     /// <summary>
@@ -174,28 +173,27 @@ public class InstanceManagementService : INService, IReadyExecutor
     /// <returns>A task that completes when monitoring is stopped.</returns>
     private async Task MonitorInstancesAsync()
     {
-        var timer = new PeriodicTimer(TimeSpan.FromMinutes(30));
-        do
+        try
         {
-            try
-            {
-                await using var db = await dbFactory.CreateConnectionAsync();
-                var instances = db.BotInstances;
+            await using var db = await dbFactory.CreateConnectionAsync();
 
-                foreach (var instance in instances)
-                {
-                    var status = await GetInstanceStatusAsync(instance.Port);
-                    instance.IsActive = status != null;
-                    instance.LastStatusUpdate = DateTime.UtcNow;
-                }
+            // Actually retrieve the instances from the database
+            var instances = await db.BotInstances.ToListAsync();
 
-                await db.UpdateAsync(instances);
-            }
-            catch (Exception ex)
+            foreach (var instance in instances)
             {
-                Log.Error(ex, "Error during instance monitoring");
+                var status = await GetInstanceStatusAsync(instance.Port);
+                instance.IsActive = status != null;
+                instance.LastStatusUpdate = DateTime.UtcNow;
+
+                // Update each instance individually
+                await db.UpdateAsync(instance);
             }
-        } while (await timer.WaitForNextTickAsync());
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Error during instance monitoring");
+        }
     }
 
     /// <summary>

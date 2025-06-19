@@ -203,7 +203,7 @@ public partial class XpService
         {
             try
             {
-                var possibleDeserialize = JsonSerializer.Deserialize<List<UserXpStats>>(possibleData);
+                var possibleDeserialize = JsonSerializer.Deserialize<List<UserXpStats>>((string)possibleData);
                 if (possibleDeserialize != null)
                     result = possibleDeserialize;
             }
@@ -216,7 +216,7 @@ public partial class XpService
         // Try to get count from cache
         if (possibleCount.HasValue)
         {
-            if (int.TryParse(possibleCount, out var count))
+            if (int.TryParse((string)possibleCount, out var count))
                 totalCount = count;
         }
 

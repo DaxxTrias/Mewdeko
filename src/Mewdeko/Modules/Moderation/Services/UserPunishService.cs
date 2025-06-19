@@ -16,7 +16,7 @@ namespace Mewdeko.Modules.Moderation.Services;
 /// <summary>
 ///     Service for user punishments.
 /// </summary>
-public class UserPunishService : INService
+public class UserPunishService : INService, IDisposable
 {
     private readonly BlacklistService blacklistService;
     private readonly DiscordShardedClient client;
@@ -24,6 +24,7 @@ public class UserPunishService : INService
     private readonly GuildSettingsService guildSettings;
     private readonly Dictionary<ulong, MassNick> massNicks = new();
     private readonly MuteService mute;
+    private Timer? warnExpirationTimer;
 
     /// <summary>
     ///     Constructs a new instance of the UserPunishService class.
@@ -43,8 +44,17 @@ public class UserPunishService : INService
         this.client = client;
         this.guildSettings = guildSettings;
         // Initializes a new Timer that checks all warning expirations every 12 hours
-        _ = new Timer(async _ => await CheckAllWarnExpiresAsync().ConfigureAwait(false), null,
+        warnExpirationTimer = new Timer(async _ => await CheckAllWarnExpiresAsync().ConfigureAwait(false), null,
             TimeSpan.FromSeconds(0), TimeSpan.FromHours(12));
+    }
+
+    /// <summary>
+    /// Disposes the user punish service and cleans up resources.
+    /// </summary>
+    public void Dispose()
+    {
+        warnExpirationTimer?.Dispose();
+        warnExpirationTimer = null;
     }
 
     /// <summary>

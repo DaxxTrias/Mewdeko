@@ -338,7 +338,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
                     }
                     else
                     {
-                        var release = JsonSerializer.Deserialize<Release>(list);
+                        var release = JsonSerializer.Deserialize<Release>((string)list);
                         if (release.TagName != latestRelease.TagName)
                         {
                             Log.Information("New release found: {ReleaseTag}", latestRelease.TagName);
@@ -797,10 +797,12 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
             // Define output paths
             var commandsPath = Path.Combine(dataDirectory, "strings", "commands", "commands.en-US.yml");
             var enumsPath = Path.Combine(dataDirectory, "strings", "enums", "enums.en-US.yml");
+            var aliasesPath = Path.Combine(dataDirectory, "aliases.yml");
 
             // Ensure the directories exist
             Directory.CreateDirectory(Path.GetDirectoryName(commandsPath));
             Directory.CreateDirectory(Path.GetDirectoryName(enumsPath));
+            Directory.CreateDirectory(Path.GetDirectoryName(aliasesPath));
 
             // Process source files
             var commands = new Dictionary<string, CommandInfo>();
@@ -810,15 +812,20 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
             totalCommands = 0;
             await Task.Run(() => ProcessSourceDirectory(sourceDir, commands, aliases, enums));
 
+            // Deduplicate aliases before writing
+            var deduplicatedAliases = DeduplicateAliases(aliases);
+
             // Write output files
             await WriteYamlFileAsync(commands, commandsPath);
             await WriteEnumsYamlFileAsync(enums, enumsPath);
+            await WriteAliasesYamlFileAsync(deduplicatedAliases, aliasesPath);
 
             Log.Information(
-                "Documentation generated successfully. Found {TotalCommands} commands and {TotalEnums} enums.",
-                totalCommands, enums.Count);
+                "Documentation generated successfully. Found {TotalCommands} commands, {TotalEnums} enums, and {TotalAliases} alias entries.",
+                totalCommands, enums.Count, deduplicatedAliases.Count);
             Log.Information("Commands: {CommandsPath}", Path.GetFullPath(commandsPath));
             Log.Information("Enums: {EnumsPath}", Path.GetFullPath(enumsPath));
+            Log.Information("Aliases: {AliasesPath}", Path.GetFullPath(aliasesPath));
         }
         catch (Exception ex)
         {
@@ -896,36 +903,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
             return;
         }
 
-        // Handle Xp.cs specifically with the combined [Cmd, Aliases] format
-        if (filename == "Xp.cs")
-        {
-            // Pattern for [Cmd, Aliases] format on the same line
-            var xpCommandMatches = Regex.Matches(content,
-                @"\[Cmd,\s*Aliases\][\s\S]*?public\s+(?:async\s+)?Task(?:<.*?>)?\s+(\w+)\s*\(([\s\S]*?)\)(?=\s*\{)");
-
-            if (xpCommandMatches.Count > 0)
-            {
-                Log.Debug("Found {Count} commands via XP-specific pattern in {FileName}",
-                    xpCommandMatches.Count, filename);
-
-                foreach (Match match in xpCommandMatches)
-                {
-                    var methodName = match.Groups[1].Value;
-                    var parameters = match.Groups[2].Value;
-
-                    // Find nearby summary and extract parameter descriptions
-                    var summary = FindNearbyXmlSummary(content, match.Index);
-                    var paramDescriptions = ExtractParamDescriptions(content, match.Index);
-
-                    // Call the updated AddCommand with parameter descriptions
-                    AddCommand(methodName, summary, "", parameters, commands, aliases, paramDescriptions, enums);
-                }
-
-                Log.Information("Successfully processed {Count} commands from {FileName}",
-                    xpCommandMatches.Count, filename);
-                return; // Skip further processing
-            }
-        }
+        // General processing for all files (removed hardcoded Xp.cs special case)
 
         var moduleClassesCount = ExtractCommandsFromModuleClasses(content, commands, aliases, enums);
         var cmdMethodsCount = ExtractCommandMethods(content, commands, aliases, enums);
@@ -940,19 +918,33 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
 
     private string FindNearbyXmlSummary(string content, int methodIndex)
     {
-        // Look for nearby XML summary before the method
-        var searchStart = Math.Max(0, methodIndex - 500);
-        var searchLength = Math.Min(500, methodIndex - searchStart);
+        // Look for nearby XML summary before the method with larger search window
+        var searchStart = Math.Max(0, methodIndex - 1000);
+        var searchLength = Math.Min(1000, methodIndex - searchStart);
 
         if (searchLength <= 0)
             return "";
 
         var searchArea = content.Substring(searchStart, searchLength);
 
-        var summaryMatch = Regex.Match(searchArea, @"\/\/\/\s*<summary>([\s\S]*?)<\/summary>");
+        // Look for summary tag with improved regex
+        var summaryMatch = Regex.Match(searchArea, @"///\s*<summary>([\s\S]*?)<\/summary>", RegexOptions.Multiline);
         if (summaryMatch.Success)
         {
-            return CleanSummary(summaryMatch.Groups[1].Value);
+            var summary = CleanSummary(summaryMatch.Groups[1].Value);
+
+            // Also look for example tags to append to summary
+            var exampleMatch = Regex.Match(searchArea, @"///\s*<example>([\s\S]*?)<\/example>", RegexOptions.Multiline);
+            if (exampleMatch.Success)
+            {
+                var example = CleanSummary(exampleMatch.Groups[1].Value);
+                if (!string.IsNullOrWhiteSpace(example))
+                {
+                    summary += $" Example: {example}";
+                }
+            }
+
+            return summary;
         }
 
         return "";
@@ -1059,18 +1051,22 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         Dictionary<string, List<string>> aliases, Dictionary<string, EnumInfo> enums)
     {
         var count = 0;
+        var processedMethods = new HashSet<string>(); // Track processed methods to avoid duplicates
 
-        // Improved patterns for better matching
+        // Comprehensive patterns for better matching of various attribute combinations
         var methodPatterns = new[]
         {
-            // Standard pattern with XML docs - capture summary, aliases, method name, and parameters
-            @"(?:\/\/\/\s*<summary>([\s\S]*?)<\/summary>[\s\S]*?)(?:\[Cmd\][\s\S]*?)(?:\[Aliases(?:\((.*?)\))?\][\s\S]*?)?public\s+(?:async\s+)?Task(?:<.*?>)?\s+(\w+)\s*\(([\s\S]*?)\)(?=\s*\{)",
+            // Pattern 1: XML docs + [Cmd] + separate [Aliases]
+            @"(?:\/\/\/\s*<summary>([\s\S]*?)<\/summary>[\s\S]*?)?(?:\[Cmd\][\s\S]*?)?(?:\[Aliases(?:\((.*?)\))?\][\s\S]*?)?public\s+(?:async\s+)?Task(?:<.*?>)?\s+(\w+)\s*\(([\s\S]*?)\)(?=\s*\{)",
 
-            // Pattern for combined attributes [Cmd, Aliases] - capture summary, method name, and parameters
-            @"(?:\/\/\/\s*<summary>([\s\S]*?)<\/summary>[\s\S]*?)?\[Cmd,\s*Aliases(?:\((.*?)\))?\][\s\S]*?public\s+(?:async\s+)?Task(?:<.*?>)?\s+(\w+)\s*\(([\s\S]*?)\)(?=\s*\{)",
+            // Pattern 2: XML docs + [Cmd, Aliases] combined format
+            @"(?:\/\/\/\s*<summary>([\s\S]*?)<\/summary>[\s\S]*?)?\[Cmd\s*,\s*Aliases(?:\((.*?)\))?\][\s\S]*?public\s+(?:async\s+)?Task(?:<.*?>)?\s+(\w+)\s*\(([\s\S]*?)\)(?=\s*\{)",
 
-            // Simplified pattern - capture method name and parameters
-            @"\[Cmd\][\s\S]*?public\s+(?:async\s+)?Task(?:<.*?>)?\s+(\w+)\s*\(([\s\S]*?)\)(?=\s*\{)"
+            // Pattern 3: Just [Cmd] without explicit aliases (might have separate [Aliases])
+            @"(?:\/\/\/\s*<summary>([\s\S]*?)<\/summary>[\s\S]*?)?\[Cmd\][\s\S]*?public\s+(?:async\s+)?Task(?:<.*?>)?\s+(\w+)\s*\(([\s\S]*?)\)(?=\s*\{)",
+
+            // Pattern 4: Catch-all for any method with command attributes (with proper capture groups)
+            @"(?:\[(?:Cmd|Command)\]|\[Cmd\s*,\s*Aliases.*?\])[\s\S]*?public\s+(?:async\s+)?Task(?:<.*?>)?\s+(\w+)\s*\(([\s\S]*?)\)(?=\s*\{)"
         };
 
         foreach (var pattern in methodPatterns)
@@ -1087,34 +1083,60 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
                     var methodName = "";
                     var parameters = "";
 
-                    if (pattern.Contains("summary") && match.Groups.Count >= 4)
+                    // Process groups based on the specific pattern being matched
+                    if (pattern.Contains("summary") && pattern.Contains("Aliases") && match.Groups.Count >= 5)
                     {
-                        // First or second pattern with XML docs
+                        // Patterns 1, 2: summary, aliases, methodName, parameters
                         summary = match.Groups[1].Success ? CleanSummary(match.Groups[1].Value) : "";
-
-                        if (pattern.Contains("Aliases") && match.Groups.Count >= 5)
-                        {
-                            aliasesAttr = match.Groups[2].Success ? match.Groups[2].Value : "";
-                            methodName = match.Groups[3].Value;
-                            parameters = CleanParametersString(match.Groups[4].Value);
-                        }
-                        else
-                        {
-                            methodName = match.Groups[2].Value;
-                            parameters = CleanParametersString(match.Groups[3].Value);
-                            aliasesAttr = FindNearbyAliases(content, match.Index);
-                        }
+                        aliasesAttr = match.Groups[2].Success ? match.Groups[2].Value : "";
+                        methodName = match.Groups[3].Value;
+                        parameters = CleanParametersString(match.Groups[4].Value);
                     }
-                    else if (match.Groups.Count >= 2)
+                    else if (pattern.Contains("summary") && match.Groups.Count >= 4)
                     {
-                        // Simplified pattern without XML docs
+                        // Pattern 3: summary, methodName, parameters
+                        summary = match.Groups[1].Success ? CleanSummary(match.Groups[1].Value) : "";
+                        methodName = match.Groups[2].Value;
+                        parameters = CleanParametersString(match.Groups[3].Value);
+                        aliasesAttr = FindNearbyAliases(content, match.Index);
+                    }
+                    else if (match.Groups.Count >= 3)
+                    {
+                        // Pattern 4: methodName, parameters (catch-all)
                         methodName = match.Groups[1].Value;
                         parameters = CleanParametersString(match.Groups[2].Value);
-
-                        // Try to find the summary from nearby XML docs
                         summary = FindNearbyXmlSummary(content, match.Index);
                         aliasesAttr = FindNearbyAliases(content, match.Index);
                     }
+                    else
+                    {
+                        // Fallback: use first group as method name
+                        methodName = match.Groups[1].Success ? match.Groups[1].Value : "";
+                        parameters = "";
+                        summary = FindNearbyXmlSummary(content, match.Index);
+                        aliasesAttr = FindNearbyAliases(content, match.Index);
+                    }
+
+                    // Validate method name - prevent using parameter signatures as command names
+                    if (string.IsNullOrWhiteSpace(methodName) ||
+                        methodName.Contains("[") ||
+                        methodName.Contains(",") ||
+                        methodName.Contains("(") ||
+                        methodName.Contains(" "))
+                    {
+                        Log.Warning("Skipping invalid method name: '{MethodName}' from pattern: {Pattern}", methodName,
+                            pattern);
+                        continue;
+                    }
+
+                    // Skip if this method was already processed
+                    var methodSignature = $"{methodName}({parameters})";
+                    if (processedMethods.Contains(methodSignature))
+                    {
+                        continue;
+                    }
+
+                    processedMethods.Add(methodSignature);
 
                     // Extract parameter descriptions with larger search window
                     var paramDescriptions = ExtractParamDescriptions(content, match.Index);
@@ -1242,7 +1264,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         return parameters;
     }
 
-// Improved method for extracting parameter descriptions with a larger window
+    // Improved method for extracting parameter descriptions with a larger window
     /// <summary>
     ///     Extracts parameter descriptions from XML documentation in the source code.
     /// </summary>
@@ -1262,8 +1284,8 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
 
         var searchArea = content.Substring(searchStart, searchLength);
 
-        // Find all param tags
-        var paramMatches = Regex.Matches(searchArea, @"<param\s+name=""([^""]+)"">([\s\S]*?)<\/param>");
+        // Find all param tags with improved regex
+        var paramMatches = Regex.Matches(searchArea, @"///\s*<param\s+name=[""']([^""']+)[""']>([\s\S]*?)<\/param>");
 
         foreach (Match match in paramMatches)
         {
@@ -1305,23 +1327,31 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         // Parse parameters with descriptions
         var paramInfoList = ParseParameters(parameters, paramDescriptions, enums);
 
-        // Create command key with better handling for overloads
+        // Validate method name and prevent malformed command keys
+        if (string.IsNullOrWhiteSpace(methodName) ||
+            methodName.Contains("[") ||
+            methodName.Contains(",") ||
+            methodName.Contains(" ") ||
+            methodName.Contains("(") ||
+            methodName.Length > 50)
+        {
+            Log.Warning("Refusing to create command with invalid method name: '{MethodName}'", methodName);
+            return;
+        }
+
+        // Create clean command key using only method name
         var commandKey = methodName.ToLower();
+
+        // For overloads, use a simple numeric suffix
         if (commands.ContainsKey(commandKey))
         {
-            // Create a unique key for overloads by adding parameter types
-            var paramSignature = string.Join("_", paramInfoList.Select(p => p.Type.Replace(".", "_")));
-            if (string.IsNullOrEmpty(paramSignature))
-                paramSignature = "noparams";
-            commandKey = $"{commandKey}_{paramSignature}";
-
-            // If it's still a duplicate, add an index
             var overloadCount = 1;
-            var baseKey = commandKey;
-            while (commands.ContainsKey(commandKey))
+            while (commands.ContainsKey($"{commandKey}_{overloadCount}"))
             {
-                commandKey = $"{baseKey}_{overloadCount++}";
+                overloadCount++;
             }
+
+            commandKey = $"{commandKey}_{overloadCount}";
         }
 
         // Create command info
@@ -1366,49 +1396,119 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         {
             if (string.IsNullOrWhiteSpace(param)) continue;
 
-            // More robust parameter parsing using regex
-            var match = Regex.Match(param.Trim(), @"^(?:.*?\s+)?(\S+)\s+(\S+?)(?:\s*=\s*(.+))?$");
+            // Enhanced parameter parsing to properly handle C# syntax
+            // Pattern: [attributes] type name = defaultValue
+            var match = Regex.Match(param.Trim(),
+                @"^(?:\[[^\]]+\]\s+)?([A-Za-z_]\w*[?]?)(?:<[^>]*>)?\s+([A-Za-z_]\w*)(?:\s*=\s*(.+?))?(?:,\s*|$)");
 
-            if (!match.Success) continue;
+            if (!match.Success)
+            {
+                // Fallback: try simpler pattern without attributes or generics
+                match = Regex.Match(param.Trim(), @"([A-Za-z_]\w*[?]?)\s+([A-Za-z_]\w*)(?:\s*=\s*(.+?))?");
+                if (!match.Success)
+                {
+                    Log.Warning("Failed to parse parameter: {Parameter}", param);
+                    continue;
+                }
+            }
 
-            var type = match.Groups[1].Value.Trim();
-            var name = match.Groups[2].Value.Trim().TrimEnd('?', ',', ';', ')');
+            var rawType = match.Groups[1].Value.Trim();
+            var name = match.Groups[2].Value.Trim();
             var defaultValueCapture = match.Groups[3].Success ? match.Groups[3].Value.Trim() : null;
 
-            // Determine if parameter is optional
-            var isOptional = defaultValueCapture != null || type.EndsWith("?") || param.Contains("= null") ||
-                             param.Contains("=null");
+            // Clean the type using our normalization method
+            var type = CleanParameterType(rawType);
 
-            // Handle nullable types
-            if (type.EndsWith("?"))
-            {
-                type = type.Substring(0, type.Length - 1);
-                isOptional = true;
-            }
-
-            // Get description from param descriptions dictionary
-            var description = paramDescriptions.TryGetValue(name, out var desc) ? desc : "";
-
-            // Check if this is an enum type and add values to description
-            if (enums.TryGetValue(type, out var enumInfo))
-            {
-                var enumValuesList = string.Join(", ", enumInfo.Values.Select(v => v.Name));
-                if (!string.IsNullOrEmpty(description))
-                    description += " ";
-                description += $"Possible values: {enumValuesList}";
-            }
-
-            result.Add(new ParameterInfo
-            {
-                Name = name,
-                Type = type,
-                Description = description,
-                IsOptional = isOptional,
-                DefaultValue = defaultValueCapture
-            });
+            result.Add(CreateParameterInfo(type, name, defaultValueCapture, paramDescriptions, enums));
         }
 
         return result;
+    }
+
+    /// <summary>
+    ///     Creates a ParameterInfo object from parsed parameter data.
+    /// </summary>
+    private ParameterInfo CreateParameterInfo(string type, string name, string defaultValueCapture,
+        Dictionary<string, string> paramDescriptions, Dictionary<string, EnumInfo> enums)
+    {
+        // Determine if parameter is optional
+        var isOptional = defaultValueCapture != null || type.Contains("?") || defaultValueCapture == "null";
+
+        // Get description from param descriptions dictionary
+        var description = paramDescriptions.TryGetValue(name, out var desc) ? desc : "";
+
+        // Check if this is an enum type and add values to description
+        // Also check for common enum patterns in the original type
+        var originalType = type;
+        var cleanedType = type.Replace("?", "").Trim();
+
+        EnumInfo enumInfo = null;
+
+        // Try exact match first
+        if (enums.TryGetValue(cleanedType, out enumInfo) ||
+            enums.TryGetValue(originalType, out enumInfo))
+        {
+            // Found exact match
+        }
+        else
+        {
+            // Try common enum naming patterns
+            enumInfo = enums.Values.FirstOrDefault(e =>
+                string.Equals(e.Name, cleanedType, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (enumInfo?.Values?.Any() == true)
+        {
+            var enumValuesList = string.Join(", ", enumInfo.Values.Select(v => v.Name));
+            if (!string.IsNullOrEmpty(description))
+                description += " ";
+            description += $"Possible values: {enumValuesList}";
+        }
+
+        return new ParameterInfo
+        {
+            Name = name,
+            Type = type,
+            Description = description,
+            IsOptional = isOptional,
+            DefaultValue = defaultValueCapture == "null" ? null : defaultValueCapture
+        };
+    }
+
+    /// <summary>
+    ///     Cleans and normalizes parameter types for documentation.
+    /// </summary>
+    private string CleanParameterType(string rawType)
+    {
+        if (string.IsNullOrWhiteSpace(rawType)) return "object";
+
+        // Remove common prefixes and normalize types
+        var cleanType = rawType
+            .Replace("[", "")
+            .Replace("]remainder", "")
+            .Replace("remainder", "")
+            .Trim()
+            .TrimEnd('?');
+
+        // Handle common Discord.NET types, but preserve potential enum names
+        var lowerType = cleanType.ToLower();
+        return lowerType switch
+        {
+            "irole" => "@role",
+            "iguilduser" => "@user",
+            "iuser" => "@user",
+            "itextchannel" => "#channel",
+            "socketguildchannel" => "#channel",
+            "iguildchannel" => "#channel",
+            "ulong" => "number",
+            "long" => "number",
+            "int" => "number",
+            "string" => "text",
+            "bool" => "true/false",
+            "=" => "default",
+            // If it's not a common type, preserve the original case for potential enum matching
+            _ => cleanType
+        };
     }
 
     /// <summary>
@@ -1515,50 +1615,68 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
     /// <returns>A formatted argument pattern string</returns>
     private string BuildArgPattern(List<string> parameters, Dictionary<string, EnumInfo> enums)
     {
-        var sb = new StringBuilder();
+        var argParts = new List<string>();
 
         foreach (var param in parameters)
         {
-            var match = Regex.Match(param.Trim(), @"^(?:.*?\s+)?(\S+)\s+(\S+?)(?:\s*=\s*(.+))?$");
+            var match = Regex.Match(param.Trim(), @"^(?:\[[^\]]+\]\s+)?(\S+?)\??\s+(\w+)(?:\s*=\s*(.+?))?(?:,|$)");
             if (!match.Success) continue;
 
-            var type = match.Groups[1].Value.Trim();
-            var name = match.Groups[2].Value.Trim().TrimEnd('?', ',', ';', ')');
+            var rawType = match.Groups[1].Value.Trim();
+            var name = match.Groups[2].Value.Trim();
+            var hasDefault = match.Groups[3].Success;
+
+            // Clean the type using our normalization method
+            var cleanType = CleanParameterType(rawType);
 
             // Check if this is an enum and use its values
-            if (enums.TryGetValue(type, out var enumInfo) && enumInfo.Values.Count > 0)
+            var cleanedEnumType = rawType.Replace("?", "").Trim();
+            EnumInfo enumInfo = null;
+
+            if (enums.TryGetValue(cleanedEnumType, out enumInfo) ||
+                enums.TryGetValue(rawType, out enumInfo))
             {
-                // Include top 3 enum values as examples
-                var enumValues = enumInfo.Values.Take(3).Select(v => v.Name.ToLower());
-                sb.Append($"{string.Join("|", enumValues)} ");
+                // Found exact match
             }
             else
             {
-                // Default parameter formatting based on type
-                if (type.Contains("IUser") || type.Contains("IGuildUser"))
-                    sb.Append("@user ");
-                else if (type.Contains("IChannel"))
-                    sb.Append("#channel ");
-                else if (type.Contains("IRole"))
-                    sb.Append("@role ");
-                else if (Regex.IsMatch(type, @"\bint\b|\bdouble\b|\bfloat\b|\bdecimal\b|\blong\b"))
-                    sb.Append("number ");
-                else if (Regex.IsMatch(type, @"\bbool\b"))
-                    sb.Append("true|false ");
-                else if (Regex.IsMatch(type, @"\bstring\b"))
-                    sb.Append("text ");
-                else if (name.ToLower().Contains("time") || name.ToLower().Contains("date"))
-                    sb.Append("time ");
-                else if (name.ToLower().Contains("role"))
-                    sb.Append("role ");
-                else if (name.ToLower().Contains("amount") || name.ToLower().Contains("count"))
-                    sb.Append("number ");
-                else
-                    sb.Append($"{name.ToLower()} ");
+                // Try common enum naming patterns
+                enumInfo = enums.Values.FirstOrDefault(e =>
+                    string.Equals(e.Name, cleanedEnumType, StringComparison.OrdinalIgnoreCase));
+            }
+
+            if (enumInfo?.Values?.Count > 0)
+            {
+                // Include top 3 enum values as examples, or all if 3 or fewer
+                var enumValues = enumInfo.Values.Take(3).Select(v => v.Name.ToLower());
+                argParts.Add(string.Join("|", enumValues));
+            }
+            else
+            {
+                // Use the cleaned type for args
+                switch (cleanType)
+                {
+                    case "@role":
+                    case "@user":
+                    case "#channel":
+                    case "number":
+                    case "text":
+                    case "true/false":
+                        argParts.Add(cleanType);
+                        break;
+                    case "default":
+                        // For default values, use the parameter name or "null"
+                        argParts.Add(hasDefault ? "null" : name.ToLower());
+                        break;
+                    default:
+                        // For other types, use the parameter name
+                        argParts.Add(name.ToLower());
+                        break;
+                }
             }
         }
 
-        return sb.ToString().Trim();
+        return string.Join(" ", argParts);
     }
 
     /// <summary>
@@ -1634,32 +1752,49 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         // Normalize and deduplicate commands
         var normalizedCommands = NormalizeCommands(commands);
 
-        // Use better serialization settings to avoid formatting issues
+        // Use serialization settings that disable anchors and make output more readable
         var serializer = new SerializerBuilder()
             .WithNamingConvention(CamelCaseNamingConvention.Instance)
-            .ConfigureDefaultValuesHandling(DefaultValuesHandling.OmitNull)
+            .ConfigureDefaultValuesHandling(DefaultValuesHandling.OmitDefaults)
             .WithIndentedSequences()
+            .DisableAliases() // This prevents the *o519 anchor references
             .Build();
 
+        // Create a clean structure without complex nested objects that cause anchors
         var yamlCommands = normalizedCommands.ToDictionary(
             kvp => kvp.Key,
             kvp => new
             {
-                kvp.Value.Desc,
-                kvp.Value.Args,
-                Params = kvp.Value.Parameters.Select(p => new
+                desc = kvp.Value.Desc,
+                args = kvp.Value.Args,
+                @params = kvp.Value.Parameters.Select((p, index) => new Dictionary<string, object>
                 {
-                    p.Name,
-                    Desc = p.Description,
-                    p.Type,
-                    Optional = p.IsOptional,
-                    Default = p.DefaultValue
+                    ["name"] = p.Name, ["desc"] = p.Description ?? "", ["type"] = p.Type, ["optional"] = p.IsOptional
                 }).ToList()
             }
         );
 
         await using var writer = new StreamWriter(filePath);
         await writer.WriteAsync(serializer.Serialize(yamlCommands));
+    }
+
+    /// <summary>
+    ///     Writes command aliases to a YAML file.
+    /// </summary>
+    /// <param name="aliases">Dictionary of command aliases</param>
+    /// <param name="filePath">Path to the output file</param>
+    /// <returns>A task representing the asynchronous operation</returns>
+    private async Task WriteAliasesYamlFileAsync(Dictionary<string, List<string>> aliases, string filePath)
+    {
+        var serializer = new SerializerBuilder()
+            .WithNamingConvention(CamelCaseNamingConvention.Instance)
+            .ConfigureDefaultValuesHandling(DefaultValuesHandling.OmitDefaults)
+            .WithIndentedSequences()
+            .DisableAliases()
+            .Build();
+
+        await using var writer = new StreamWriter(filePath);
+        await writer.WriteAsync(serializer.Serialize(aliases));
     }
 
     /// <summary>
@@ -1695,7 +1830,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         await writer.WriteAsync(serializer.Serialize(yamlEnums));
     }
 
-// Helper methods that need to be kept unchanged
+    // Helper methods that need to be kept unchanged
     /// <summary>
     ///     Cleans an XML description by removing tags and normalizing whitespace.
     /// </summary>
@@ -1703,10 +1838,22 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
     /// <returns>A cleaned description string</returns>
     private string CleanXmlDescription(string description)
     {
-        // Remove extra whitespace
-        description = Regex.Replace(description, @"\s+", " ").Trim();
-        // Remove common XML formatting
+        if (string.IsNullOrEmpty(description))
+            return string.Empty;
+
+        // Remove XML documentation comment delimiters
+        description = description.Replace("///", "").Replace("/*", "").Replace("*/", "");
+
+        // Handle common XML references
+        description = Regex.Replace(description, @"<see\s+cref=[""']([^""']+)[""']\s*/>", m =>
+            m.Groups[1].Value.Split('.').Last());
+
+        // Remove other XML tags but preserve content
         description = Regex.Replace(description, @"<[^>]+>", "");
+
+        // Clean up whitespace and normalize
+        description = Regex.Replace(description, @"\s+", " ").Trim();
+
         return description;
     }
 
@@ -1760,7 +1907,338 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
             aliasList.AddRange(explicitAliases);
         }
 
+        // Generate Windows chkdsk-style abbreviations
+        var autoAbbreviations = GenerateCommandAbbreviations(methodName);
+        aliasList.AddRange(autoAbbreviations);
+
         return aliasList.Distinct().ToList();
+    }
+
+    /// <summary>
+    ///     Generates Windows chkdsk-style abbreviations for command names.
+    ///     Examples: listchattriggers -> lct, showchattrigger -> sct, modules -> cmds
+    /// </summary>
+    private List<string> GenerateCommandAbbreviations(string commandName)
+    {
+        var abbreviations = new List<string>();
+
+        // Split command into words using camelCase and common patterns
+        var words = SplitCommandIntoWords(commandName);
+
+        if (words.Count < 2)
+        {
+            // Single word commands - check for common synonyms/abbreviations
+            var singleWordAbbrev = GetSingleWordAbbreviation(commandName.ToLower());
+            if (!string.IsNullOrEmpty(singleWordAbbrev))
+            {
+                abbreviations.Add(singleWordAbbrev);
+            }
+
+            return abbreviations;
+        }
+
+        // Generate first-letter abbreviation (main chkdsk style)
+        var firstLetters = string.Join("", words.Select(w => w[0]));
+        if (firstLetters.Length >= 2 && firstLetters.Length <= 5) // Reasonable length
+        {
+            abbreviations.Add(firstLetters);
+        }
+
+        // Generate partial abbreviations for longer commands
+        if (words.Count >= 3)
+        {
+            // Take first 2 words + first letter of rest: listchattriggers -> lct, listchatmessages -> lcm
+            var partialAbbrev = string.Join("", words.Take(2).Select(w => w[0])) +
+                                string.Join("", words.Skip(2).Select(w => w[0]));
+            if (partialAbbrev != firstLetters && partialAbbrev.Length >= 2)
+            {
+                abbreviations.Add(partialAbbrev);
+            }
+        }
+
+        // Generate meaningful shortened versions
+        var meaningfulShort = GenerateMeaningfulShortening(words);
+        if (!string.IsNullOrEmpty(meaningfulShort))
+        {
+            abbreviations.Add(meaningfulShort);
+        }
+
+        return abbreviations.Where(a => a.Length >= 2).Distinct().ToList();
+    }
+
+    /// <summary>
+    ///     Splits a command name into individual words for abbreviation generation.
+    /// </summary>
+    private List<string> SplitCommandIntoWords(string commandName)
+    {
+        var words = new List<string>();
+
+        // Handle camelCase and PascalCase
+        var camelCaseWords = Regex.Split(commandName, @"(?<!^)(?=[A-Z])")
+            .Where(w => !string.IsNullOrWhiteSpace(w))
+            .ToList();
+
+        foreach (var word in camelCaseWords)
+        {
+            // Further split on numbers and special characters
+            var subWords = Regex.Split(word, @"[\d_\-]+")
+                .Where(w => !string.IsNullOrWhiteSpace(w) && w.Length > 0)
+                .Select(w => w.ToLower())
+                .ToList();
+
+            words.AddRange(subWords);
+        }
+
+        return words.Where(w => w.Length > 0).ToList();
+    }
+
+    /// <summary>
+    ///     Gets common abbreviations for single-word commands.
+    /// </summary>
+    private string GetSingleWordAbbreviation(string word)
+    {
+        var commonAbbreviations = new Dictionary<string, string>
+        {
+            {
+                "commands", "cmds"
+            },
+            {
+                "modules", "mods"
+            },
+            {
+                "permissions", "perms"
+            },
+            {
+                "configuration", "config"
+            },
+            {
+                "settings", "opts"
+            },
+            {
+                "messages", "msgs"
+            },
+            {
+                "channels", "chans"
+            },
+            {
+                "servers", "srvs"
+            },
+            {
+                "database", "db"
+            },
+            {
+                "statistics", "stats"
+            },
+            {
+                "information", "info"
+            },
+            {
+                "administration", "admin"
+            },
+            {
+                "moderation", "mod"
+            },
+            {
+                "automoderation", "automod"
+            },
+            {
+                "verification", "verify"
+            },
+            {
+                "welcome", "wel"
+            },
+            {
+                "goodbye", "bye"
+            },
+            {
+                "punishment", "punish"
+            },
+            {
+                "warning", "warn"
+            },
+            {
+                "reputation", "rep"
+            },
+            {
+                "experience", "xp"
+            },
+            {
+                "currency", "cur"
+            },
+            {
+                "gambling", "gamble"
+            },
+            {
+                "entertainment", "fun"
+            },
+            {
+                "utility", "util"
+            },
+            {
+                "searches", "search"
+            },
+            {
+                "music", "mus"
+            },
+            {
+                "playlist", "pl"
+            },
+            {
+                "volume", "vol"
+            },
+            {
+                "queue", "q"
+            }
+        };
+
+        return commonAbbreviations.TryGetValue(word, out var abbrev) ? abbrev : null;
+    }
+
+    /// <summary>
+    ///     Generates meaningful shortened versions of compound commands.
+    /// </summary>
+    private string GenerateMeaningfulShortening(List<string> words)
+    {
+        if (words.Count < 2) return null;
+
+        // Handle common command patterns
+        var firstWord = words[0];
+        var remainingWords = words.Skip(1).ToList();
+
+        // Shorten common action words but keep them recognizable
+        var actionAbbreviations = new Dictionary<string, string>
+        {
+            {
+                "list", "ls"
+            },
+            {
+                "show", "sh"
+            },
+            {
+                "display", "disp"
+            },
+            {
+                "create", "cr"
+            },
+            {
+                "add", "add"
+            },
+            {
+                "remove", "rm"
+            },
+            {
+                "delete", "del"
+            },
+            {
+                "update", "upd"
+            },
+            {
+                "set", "set"
+            },
+            {
+                "get", "get"
+            },
+            {
+                "toggle", "tgl"
+            },
+            {
+                "enable", "en"
+            },
+            {
+                "disable", "dis"
+            },
+            {
+                "configure", "cfg"
+            },
+            {
+                "reset", "rst"
+            }
+        };
+
+        var actionAbbrev = actionAbbreviations.TryGetValue(firstWord, out var abbrev) ? abbrev : firstWord;
+
+        // For the object being acted upon, take first letters or meaningful abbreviation
+        var objectPart = "";
+        foreach (var word in remainingWords)
+        {
+            var wordAbbrev = GetSingleWordAbbreviation(word);
+            if (!string.IsNullOrEmpty(wordAbbrev))
+            {
+                objectPart += wordAbbrev[0]; // Take first letter of abbreviation
+            }
+            else
+            {
+                objectPart += word[0]; // Take first letter of word
+            }
+        }
+
+        var result = actionAbbrev + objectPart;
+        return result.Length >= 2 && result.Length <= 6 ? result : null;
+    }
+
+    /// <summary>
+    /// Removes duplicate aliases that would conflict across different commands
+    /// </summary>
+    private Dictionary<string, List<string>> DeduplicateAliases(Dictionary<string, List<string>> aliases)
+    {
+        // Build reverse mapping: alias -> list of commands that use it
+        var aliasToCommands = new Dictionary<string, List<string>>();
+
+        foreach (var kvp in aliases)
+        {
+            var commandKey = kvp.Key;
+            var commandAliases = kvp.Value;
+
+            foreach (var alias in commandAliases)
+            {
+                if (!aliasToCommands.ContainsKey(alias))
+                    aliasToCommands[alias] = new List<string>();
+
+                aliasToCommands[alias].Add(commandKey);
+            }
+        }
+
+        // Find aliases that are used by multiple commands
+        var duplicateAliases = aliasToCommands
+            .Where(kvp => kvp.Value.Count > 1)
+            .Select(kvp => kvp.Key)
+            .ToHashSet();
+
+        if (duplicateAliases.Count > 0)
+        {
+            Log.Information("Found {DuplicateCount} duplicate aliases that will be removed: {Duplicates}",
+                duplicateAliases.Count, string.Join(", ", duplicateAliases));
+
+            // Log which commands are affected
+            foreach (var duplicateAlias in duplicateAliases)
+            {
+                var affectedCommands = aliasToCommands[duplicateAlias];
+                Log.Debug("Alias '{Alias}' used by commands: {Commands}",
+                    duplicateAlias, string.Join(", ", affectedCommands));
+            }
+        }
+
+        // Remove duplicate aliases from all commands
+        var deduplicatedAliases = new Dictionary<string, List<string>>();
+
+        foreach (var kvp in aliases)
+        {
+            var commandKey = kvp.Key;
+            var commandAliases = kvp.Value;
+
+            // Filter out duplicate aliases, but keep the original command name
+            var filteredAliases = commandAliases
+                .Where((alias, index) => index == 0 || !duplicateAliases.Contains(alias))
+                .ToList();
+
+            // Ensure we always have at least the original command name
+            if (filteredAliases.Count == 0 && commandAliases.Count > 0)
+                filteredAliases.Add(commandAliases[0]);
+
+            deduplicatedAliases[commandKey] = filteredAliases;
+        }
+
+        return deduplicatedAliases;
     }
 
     /// <summary>
@@ -1828,51 +2306,63 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
     }
 
     /// <summary>
+    ///     Represents information about a command parameter including its name, type, and documentation.
     /// </summary>
     public class ParameterInfo
     {
         /// <summary>
+        ///     The name of the parameter.
         /// </summary>
         public string Name { get; set; } = string.Empty;
 
         /// <summary>
+        ///     The description of the parameter from XML documentation.
         /// </summary>
         public string Description { get; set; } = string.Empty;
 
         /// <summary>
+        ///     The data type of the parameter.
         /// </summary>
         public string Type { get; set; } = string.Empty;
 
         /// <summary>
+        ///     Whether the parameter is optional.
         /// </summary>
         public bool IsOptional { get; set; }
 
         /// <summary>
+        ///     The default value of the parameter if it's optional.
         /// </summary>
         public string? DefaultValue { get; set; }
     }
 
     /// <summary>
+    ///     Represents information about a command including its aliases, description, and parameters.
     /// </summary>
     public class CommandInfo
     {
         /// <summary>
+        ///     List of command aliases and the primary command name.
         /// </summary>
         public List<string> Args { get; set; } = new();
 
         /// <summary>
+        ///     The description of the command from XML documentation.
         /// </summary>
         public string Desc { get; set; } = string.Empty;
 
         /// <summary>
+        ///     List of parameters that the command accepts.
         /// </summary>
         public List<ParameterInfo> Parameters { get; set; } = new();
 
         /// <summary>
+        ///     The method signature used for overload identification.
         /// </summary>
-        public string MethodSignature { get; set; } = string.Empty; // For overload identification
+        public string MethodSignature { get; set; } = string.Empty;
 
         /// <summary>
+        ///     Whether this command is an overload of another command.
         /// </summary>
         public bool IsOverload { get; set; }
     }

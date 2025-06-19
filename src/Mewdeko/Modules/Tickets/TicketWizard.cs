@@ -12,13 +12,49 @@ namespace Mewdeko.Modules.Tickets;
 public partial class TicketsSlash
 {
     /// <summary>
+    ///     Wizard step enumeration
+    /// </summary>
+    public enum WizardStep
+    {
+        /// <summary>
+        ///     Selecting setup method
+        /// </summary>
+        SelectMethod,
+
+        /// <summary>
+        ///     Template selection
+        /// </summary>
+        TemplateSelection,
+
+        /// <summary>
+        ///     Custom panel design
+        /// </summary>
+        PanelDesign,
+
+        /// <summary>
+        ///     Component setup
+        /// </summary>
+        ComponentSetup,
+
+        /// <summary>
+        ///     Permission configuration
+        /// </summary>
+        PermissionSetup,
+
+        /// <summary>
+        ///     Final review
+        /// </summary>
+        FinalReview
+    }
+
+    /// <summary>
     ///     Improved ticket setup commands with wizard-style interface
     /// </summary>
     [Group("setup", "Setup your ticket system with guided wizards")]
     public class TicketSetupWizard : MewdekoSlashModuleBase<TicketService>
     {
-        private readonly InteractiveService interactivity;
         private readonly IDataCache cache;
+        private readonly InteractiveService interactivity;
 
         /// <summary>
         ///     Initializes a new instance of the <see cref="TicketSetupWizard" /> class
@@ -188,7 +224,8 @@ public partial class TicketsSlash
                 // Add select menus from template
                 foreach (var menuTemplate in template.SelectMenus)
                 {
-                    var menu = await Service.AddSelectMenuAsync(panel, menuTemplate.Placeholder, "", updateComponents: false);
+                    var menu = await Service.AddSelectMenuAsync(panel, menuTemplate.Placeholder, "",
+                        updateComponents: false);
 
                     var optionLines = menuTemplate.Options.Split('\n', StringSplitOptions.RemoveEmptyEntries);
                     foreach (var optionLine in optionLines)
@@ -223,7 +260,8 @@ public partial class TicketsSlash
             catch (Exception ex)
             {
                 Log.Error(ex, "Error creating panel from template {TemplateId}", templateId);
-                await FollowupAsync($"{Config.ErrorEmote} An error occurred while creating the panel from template.", ephemeral: true);
+                await FollowupAsync($"{Config.ErrorEmote} An error occurred while creating the panel from template.",
+                    ephemeral: true);
             }
         }
 
@@ -340,7 +378,7 @@ public partial class TicketsSlash
                 return;
             }
 
-            var state = JsonSerializer.Deserialize<WizardState>(wizardData);
+            var state = JsonSerializer.Deserialize<WizardState>((string)wizardData);
             var selectedTemplate = values.FirstOrDefault();
             var template = TicketTemplates.GetAllTemplates().FirstOrDefault(t => t.Id == selectedTemplate);
 
@@ -386,7 +424,8 @@ public partial class TicketsSlash
             embed.AddField("📍 Target Channel", channel?.Mention ?? "Unknown");
 
             var components = new ComponentBuilder()
-                .WithButton($"{Config.SuccessEmote} Create Panel", $"wizard_confirm_template:{wizardId}", ButtonStyle.Success)
+                .WithButton($"{Config.SuccessEmote} Create Panel", $"wizard_confirm_template:{wizardId}",
+                    ButtonStyle.Success)
                 .WithButton("🔄 Customize First", $"wizard_customize_template:{wizardId}")
                 .WithButton("⬅️ Back", $"wizard_templates:{wizardId}", ButtonStyle.Secondary)
                 .Build();
@@ -410,7 +449,7 @@ public partial class TicketsSlash
                 return;
             }
 
-            var state = JsonSerializer.Deserialize<WizardState>(wizardData);
+            var state = JsonSerializer.Deserialize<WizardState>((string)wizardData);
             var templateId = state.Data.GetValueOrDefault("selectedTemplate")?.ToString();
 
             if (string.IsNullOrEmpty(templateId))
@@ -442,7 +481,8 @@ public partial class TicketsSlash
                 // CRITICAL: Verify the panel has a valid ID before proceeding
                 if (panel == null || panel.Id == 0)
                 {
-                    await FollowupAsync($"{Config.ErrorEmote} Failed to create panel - invalid panel ID", ephemeral: true);
+                    await FollowupAsync($"{Config.ErrorEmote} Failed to create panel - invalid panel ID",
+                        ephemeral: true);
                     return;
                 }
 
@@ -450,7 +490,8 @@ public partial class TicketsSlash
                 panel = await Service.GetPanelAsync(panel.MessageId);
                 if (panel == null)
                 {
-                    await FollowupAsync($"{Config.ErrorEmote} Failed to retrieve created panel from database", ephemeral: true);
+                    await FollowupAsync($"{Config.ErrorEmote} Failed to retrieve created panel from database",
+                        ephemeral: true);
                     return;
                 }
 
@@ -569,7 +610,8 @@ public partial class TicketsSlash
             catch (Exception ex)
             {
                 Log.Error(ex, "Error creating panel from template in wizard");
-                await FollowupAsync($"{Config.ErrorEmote} An error occurred while creating the panel.", ephemeral: true);
+                await FollowupAsync($"{Config.ErrorEmote} An error occurred while creating the panel.",
+                    ephemeral: true);
             }
         }
 
@@ -667,8 +709,10 @@ public partial class TicketsSlash
                     panelId, TimeSpan.FromMinutes(10));
 
                 var components = new ComponentBuilder()
-                    .WithButton($"{Config.SuccessEmote} Create Button", $"confirm_button_creation:{confirmId}", ButtonStyle.Success)
-                    .WithButton($"{Config.ErrorEmote} Cancel", $"cancel_button_creation:{confirmId}", ButtonStyle.Danger)
+                    .WithButton($"{Config.SuccessEmote} Create Button", $"confirm_button_creation:{confirmId}",
+                        ButtonStyle.Success)
+                    .WithButton($"{Config.ErrorEmote} Cancel", $"cancel_button_creation:{confirmId}",
+                        ButtonStyle.Danger)
                     .Build();
 
                 await FollowupAsync(embed: preview.Build(), components: components, ephemeral: true);
@@ -676,7 +720,9 @@ public partial class TicketsSlash
             catch (Exception ex)
             {
                 Log.Error(ex, "Error processing quick button modal for panel {PanelId}", panelId);
-                await FollowupAsync($"{Config.ErrorEmote} An error occurred while processing your button configuration.", ephemeral: true);
+                await FollowupAsync(
+                    $"{Config.ErrorEmote} An error occurred while processing your button configuration.",
+                    ephemeral: true);
             }
         }
 
@@ -737,7 +783,8 @@ public partial class TicketsSlash
                     panelId, TimeSpan.FromMinutes(10));
 
                 var components = new ComponentBuilder()
-                    .WithButton($"{Config.SuccessEmote} Create Select Menu", $"confirm_menu_creation:{confirmId}", ButtonStyle.Success)
+                    .WithButton($"{Config.SuccessEmote} Create Select Menu", $"confirm_menu_creation:{confirmId}",
+                        ButtonStyle.Success)
                     .WithButton($"{Config.ErrorEmote} Cancel", $"cancel_menu_creation:{confirmId}", ButtonStyle.Danger)
                     .Build();
 
@@ -746,7 +793,8 @@ public partial class TicketsSlash
             catch (Exception ex)
             {
                 Log.Error(ex, "Error processing quick select menu modal for panel {PanelId}", panelId);
-                await FollowupAsync($"{Config.ErrorEmote} An error occurred while processing your select menu configuration.",
+                await FollowupAsync(
+                    $"{Config.ErrorEmote} An error occurred while processing your select menu configuration.",
                     ephemeral: true);
             }
         }
@@ -768,7 +816,7 @@ public partial class TicketsSlash
                 return;
             }
 
-            var state = JsonSerializer.Deserialize<WizardState>(wizardData);
+            var state = JsonSerializer.Deserialize<WizardState>((string)wizardData);
 
             try
             {
@@ -847,7 +895,8 @@ public partial class TicketsSlash
             catch (Exception ex)
             {
                 Log.Error(ex, "Error creating panel from quick wizard");
-                await FollowupAsync($"{Config.ErrorEmote} An error occurred while creating the panel.", ephemeral: true);
+                await FollowupAsync($"{Config.ErrorEmote} An error occurred while creating the panel.",
+                    ephemeral: true);
             }
         }
 
@@ -871,11 +920,12 @@ public partial class TicketsSlash
 
                 if (!modalData.HasValue || !panelData.HasValue)
                 {
-                    await FollowupAsync($"{Config.ErrorEmote} Confirmation expired. Please try again.", ephemeral: true);
+                    await FollowupAsync($"{Config.ErrorEmote} Confirmation expired. Please try again.",
+                        ephemeral: true);
                     return;
                 }
 
-                var modal = JsonSerializer.Deserialize<QuickButtonSetupModal>(modalData);
+                var modal = JsonSerializer.Deserialize<QuickButtonSetupModal>((string)modalData);
                 var panelId = ulong.Parse(panelData);
 
                 var panel = await Service.GetPanelAsync(panelId);
@@ -968,7 +1018,8 @@ public partial class TicketsSlash
                     null // Can be set later
                 );
 
-                await FollowupAsync($"{Config.SuccessEmote} Button '{label}' added successfully to panel {panelId}!", ephemeral: true);
+                await FollowupAsync($"{Config.SuccessEmote} Button '{label}' added successfully to panel {panelId}!",
+                    ephemeral: true);
 
                 // Clean up
                 await cache.Redis.GetDatabase().KeyDeleteAsync($"button_confirm:{confirmId}");
@@ -977,7 +1028,8 @@ public partial class TicketsSlash
             catch (Exception ex)
             {
                 Log.Error(ex, "Error confirming button creation");
-                await FollowupAsync($"{Config.ErrorEmote} An error occurred while creating the button.", ephemeral: true);
+                await FollowupAsync($"{Config.ErrorEmote} An error occurred while creating the button.",
+                    ephemeral: true);
             }
         }
 
@@ -997,11 +1049,12 @@ public partial class TicketsSlash
 
                 if (!modalData.HasValue || !panelData.HasValue)
                 {
-                    await FollowupAsync($"{Config.ErrorEmote} Confirmation expired. Please try again.", ephemeral: true);
+                    await FollowupAsync($"{Config.ErrorEmote} Confirmation expired. Please try again.",
+                        ephemeral: true);
                     return;
                 }
 
-                var modal = JsonSerializer.Deserialize<QuickSelectMenuSetupModal>(modalData);
+                var modal = JsonSerializer.Deserialize<QuickSelectMenuSetupModal>((string)modalData);
                 var panelId = ulong.Parse(panelData);
 
                 var panel = await Service.GetPanelAsync(panelId);
@@ -1033,7 +1086,8 @@ public partial class TicketsSlash
                     }
                 }
 
-                await FollowupAsync($"{Config.SuccessEmote} Select menu '{placeholder}' added successfully to panel {panelId}!",
+                await FollowupAsync(
+                    $"{Config.SuccessEmote} Select menu '{placeholder}' added successfully to panel {panelId}!",
                     ephemeral: true);
 
                 // Clean up
@@ -1043,7 +1097,8 @@ public partial class TicketsSlash
             catch (Exception ex)
             {
                 Log.Error(ex, "Error confirming menu creation");
-                await FollowupAsync($"{Config.ErrorEmote} An error occurred while creating the select menu.", ephemeral: true);
+                await FollowupAsync($"{Config.ErrorEmote} An error occurred while creating the select menu.",
+                    ephemeral: true);
             }
         }
 
@@ -1103,41 +1158,5 @@ public partial class TicketsSlash
         ///     Gets or sets the wizard data
         /// </summary>
         public Dictionary<string, object> Data { get; set; } = new();
-    }
-
-    /// <summary>
-    ///     Wizard step enumeration
-    /// </summary>
-    public enum WizardStep
-    {
-        /// <summary>
-        ///     Selecting setup method
-        /// </summary>
-        SelectMethod,
-
-        /// <summary>
-        ///     Template selection
-        /// </summary>
-        TemplateSelection,
-
-        /// <summary>
-        ///     Custom panel design
-        /// </summary>
-        PanelDesign,
-
-        /// <summary>
-        ///     Component setup
-        /// </summary>
-        ComponentSetup,
-
-        /// <summary>
-        ///     Permission configuration
-        /// </summary>
-        PermissionSetup,
-
-        /// <summary>
-        ///     Final review
-        /// </summary>
-        FinalReview
     }
 }
