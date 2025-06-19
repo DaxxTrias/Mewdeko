@@ -8,13 +8,14 @@ namespace Mewdeko.Modules.Starboard.Services;
 /// <summary>
 ///     Service responsible for managing multiple starboards in Discord servers.
 /// </summary>
-public class StarboardService : INService, IReadyExecutor
+public class StarboardService : INService, IReadyExecutor, IUnloadableService
 {
     private readonly DiscordShardedClient client;
     private readonly IDataConnectionFactory dbFactory;
+    private readonly EventHandler eventHandler;
+    private List<DataModel.Starboard> starboardConfigs = [];
 
     private List<StarboardPost> starboardPosts = [];
-    private List<DataModel.Starboard> starboardConfigs = [];
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="StarboardService" /> class.
@@ -23,10 +24,11 @@ public class StarboardService : INService, IReadyExecutor
     /// <param name="dbFactory">The database context provider.</param>
     /// <param name="eventHandler">The event handler.</param>
     public StarboardService(DiscordShardedClient client, IDataConnectionFactory dbFactory,
-       EventHandler eventHandler)
+        EventHandler eventHandler)
     {
         this.client = client;
         this.dbFactory = dbFactory;
+        this.eventHandler = eventHandler;
         eventHandler.ReactionAdded += OnReactionAddedAsync;
         eventHandler.MessageDeleted += OnMessageDeletedAsync;
         eventHandler.ReactionRemoved += OnReactionRemoveAsync;
@@ -42,6 +44,18 @@ public class StarboardService : INService, IReadyExecutor
         starboardPosts = await dbContext.StarboardPosts.ToListAsync();
         starboardConfigs = await dbContext.Starboards.ToListAsync();
         Log.Information("Starboard Cache Ready");
+    }
+
+    /// <summary>
+    ///     Unloads the service and unsubscribes from events.
+    /// </summary>
+    public Task Unload()
+    {
+        eventHandler.ReactionAdded -= OnReactionAddedAsync;
+        eventHandler.MessageDeleted -= OnMessageDeletedAsync;
+        eventHandler.ReactionRemoved -= OnReactionRemoveAsync;
+        eventHandler.ReactionsCleared -= OnAllReactionsClearedAsync;
+        return Task.CompletedTask;
     }
 
     /// <summary>
@@ -249,7 +263,8 @@ public class StarboardService : INService, IReadyExecutor
     /// <param name="starboardId">The ID of the starboard configuration.</param>
     /// <param name="channelId">The channel ID to toggle.</param>
     /// <returns>A tuple containing whether the channel was added and the starboard configuration.</returns>
-    public async Task<(bool WasAdded, DataModel.Starboard Config)> ToggleChannel(IGuild guild, int starboardId, string channelId)
+    public async Task<(bool WasAdded, DataModel.Starboard Config)> ToggleChannel(IGuild guild, int starboardId,
+        string channelId)
     {
         var config = starboardConfigs.FirstOrDefault(x => x.Id == starboardId && x.GuildId == guild.Id);
         if (config == null)
@@ -284,9 +299,7 @@ public class StarboardService : INService, IReadyExecutor
         {
             var toAdd = new StarboardPost
             {
-                MessageId = messageId,
-                PostId = postId,
-                StarboardConfigId = starboardId
+                MessageId = messageId, PostId = postId, StarboardConfigId = starboardId
             };
             starboardPosts.Add(toAdd);
             await dbContext.InsertAsync(toAdd);
@@ -301,7 +314,6 @@ public class StarboardService : INService, IReadyExecutor
         post.PostId = postId;
         await dbContext.UpdateAsync(post);
         starboardPosts.Add(post);
-
     }
 
     private async Task RemoveStarboardPost(ulong messageId, int starboardId)
@@ -313,7 +325,6 @@ public class StarboardService : INService, IReadyExecutor
         await using var dbContext = await dbFactory.CreateConnectionAsync();
         await dbContext.DeleteAsync(toRemove);
         starboardPosts.Remove(toRemove);
-
     }
 
     private async Task OnReactionAddedAsync(Cacheable<IUserMessage, ulong> message,
@@ -336,7 +347,7 @@ public class StarboardService : INService, IReadyExecutor
         }
     }
 
-   private async Task OnReactionRemoveAsync(Cacheable<IUserMessage, ulong> message,
+    private async Task OnReactionRemoveAsync(Cacheable<IUserMessage, ulong> message,
         Cacheable<IMessageChannel, ulong> channel,
         SocketReaction reaction)
     {
@@ -389,12 +400,14 @@ public class StarboardService : INService, IReadyExecutor
 
         if (starboard.UseBlacklist)
         {
-            if (!starboard.CheckedChannels.IsNullOrWhiteSpace() && starboard.CheckedChannels.Split(" ").Contains(newMessage.Channel.Id.ToString()))
+            if (!starboard.CheckedChannels.IsNullOrWhiteSpace() &&
+                starboard.CheckedChannels.Split(" ").Contains(newMessage.Channel.Id.ToString()))
                 return;
         }
         else
         {
-            if (!starboard.CheckedChannels.IsNullOrWhiteSpace() && !starboard.CheckedChannels.Split(" ").Contains(newMessage.Channel.ToString()))
+            if (!starboard.CheckedChannels.IsNullOrWhiteSpace() &&
+                !starboard.CheckedChannels.Split(" ").Contains(newMessage.Channel.ToString()))
                 return;
         }
 
@@ -446,6 +459,7 @@ public class StarboardService : INService, IReadyExecutor
                     // ignored
                 }
             }
+
             return;
         }
 
@@ -609,7 +623,8 @@ public class StarboardService : INService, IReadyExecutor
         }
     }
 
-    private async Task OnAllReactionsClearedAsync(Cacheable<IUserMessage, ulong> arg1, Cacheable<IMessageChannel, ulong> arg2)
+    private async Task OnAllReactionsClearedAsync(Cacheable<IUserMessage, ulong> arg1,
+        Cacheable<IMessageChannel, ulong> arg2)
     {
         if (!arg2.HasValue || arg2.Value is not ITextChannel channel)
             return;

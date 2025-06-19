@@ -127,6 +127,27 @@ public class ChatTriggers(IHttpClientFactory clientFactory, InteractiveService s
     }
 
     /// <summary>
+    ///     Adds a new reaction-based chat trigger.
+    /// </summary>
+    /// <param name="reaction">The emoji/emote that will trigger this response.</param>
+    /// <param name="message">The message associated with the chat trigger.</param>
+    /// <example>.artrig 👍 You reacted with thumbs up!</example>
+    /// <example>.artrig :custom_emote: Custom emote reaction!</example>
+    [Cmd]
+    [Aliases]
+    [UserPerm(GuildPermission.Administrator)]
+    public async Task AddReactionTrigger(string reaction, [Remainder] string? message)
+    {
+        if (string.IsNullOrWhiteSpace(message) || string.IsNullOrWhiteSpace(reaction))
+            return;
+
+        var cr = await Service.AddReactionTriggerAsync(ctx.Guild?.Id, reaction, message).ConfigureAwait(false);
+
+        await ctx.Channel.EmbedAsync(Service.GetEmbed(cr, ctx.Guild?.Id, "New Reaction Trigger"))
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
     ///     Edits an existing chat trigger.
     /// </summary>
     /// <param name="id">The ID of the chat trigger to edit.</param>
@@ -532,10 +553,17 @@ public class ChatTriggers(IHttpClientFactory clientFactory, InteractiveService s
 
         await Service.ToggleGrantedRole(ct, role.Id).ConfigureAwait(false);
 
-        var text = toggleDisabled ? Strings.CtRoleToggleDisabled(ctx.Guild.Id, Format.Bold(role.Name), Format.Code(id.ToString())) :
-            ct.IsToggled(role.Id) ? Strings.CtRoleToggleEnabled(ctx.Guild.Id, Format.Bold(role.Name), Format.Code(id.ToString())) :
-            ct.IsGranted(role.Id) ? Strings.CtRoleAddEnabled(ctx.Guild.Id, Format.Bold(role.Name), Format.Code(id.ToString())) :
-            Strings.CtRoleAddDisabled(ctx.Guild.Id, Format.Bold(role.Name), Format.Code(id.ToString()));
+        var text = toggleDisabled
+            ?
+            Strings.CtRoleToggleDisabled(ctx.Guild.Id, Format.Bold(role.Name), Format.Code(id.ToString()))
+            :
+            ct.IsToggled(role.Id)
+                ? Strings.CtRoleToggleEnabled(ctx.Guild.Id, Format.Bold(role.Name), Format.Code(id.ToString()))
+                :
+                ct.IsGranted(role.Id)
+                    ? Strings.CtRoleAddEnabled(ctx.Guild.Id, Format.Bold(role.Name), Format.Code(id.ToString()))
+                    :
+                    Strings.CtRoleAddDisabled(ctx.Guild.Id, Format.Bold(role.Name), Format.Code(id.ToString()));
 
         await ReplyConfirmAsync(text).ConfigureAwait(false);
     }
@@ -571,10 +599,17 @@ public class ChatTriggers(IHttpClientFactory clientFactory, InteractiveService s
 
         await Service.ToggleRemovedRole(ct, role.Id).ConfigureAwait(false);
 
-        var text = toggleDisabled ? Strings.CtRoleToggleDisabled(ctx.Guild.Id, Format.Bold(role.Name), Format.Code(id.ToString())) :
-            ct.IsToggled(role.Id) ? Strings.CtRoleToggleEnabled(ctx.Guild.Id, Format.Bold(role.Name), Format.Code(id.ToString())) :
-            ct.IsRemoved(role.Id) ? Strings.CtRoleRemoveEnabled(ctx.Guild.Id, Format.Bold(role.Name), Format.Code(id.ToString())) :
-            Strings.CtRoleRemoveDisabled(ctx.Guild.Id, Format.Bold(role.Name), Format.Code(id.ToString()));
+        var text = toggleDisabled
+            ?
+            Strings.CtRoleToggleDisabled(ctx.Guild.Id, Format.Bold(role.Name), Format.Code(id.ToString()))
+            :
+            ct.IsToggled(role.Id)
+                ? Strings.CtRoleToggleEnabled(ctx.Guild.Id, Format.Bold(role.Name), Format.Code(id.ToString()))
+                :
+                ct.IsRemoved(role.Id)
+                    ? Strings.CtRoleRemoveEnabled(ctx.Guild.Id, Format.Bold(role.Name), Format.Code(id.ToString()))
+                    :
+                    Strings.CtRoleRemoveDisabled(ctx.Guild.Id, Format.Bold(role.Name), Format.Code(id.ToString()));
 
         await ReplyConfirmAsync(text).ConfigureAwait(false);
     }

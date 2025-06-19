@@ -1492,13 +1492,13 @@ public partial class TicketsSlash : MewdekoSlashModuleBase<TicketService>
             }
 
             ulong? categoryId = null;
-            if (category.HasValue && ulong.TryParse(category, out var parsedCategory))
+            if (category.HasValue && ulong.TryParse((string)category, out var parsedCategory))
             {
                 categoryId = parsedCategory;
             }
 
             ulong? archiveCategoryId = null;
-            if (archiveCategory.HasValue && ulong.TryParse(archiveCategory, out var parsedArchiveCategory))
+            if (archiveCategory.HasValue && ulong.TryParse((string)archiveCategory, out var parsedArchiveCategory))
             {
                 archiveCategoryId = parsedArchiveCategory;
             }
@@ -1508,7 +1508,7 @@ public partial class TicketsSlash : MewdekoSlashModuleBase<TicketService>
             {
                 try
                 {
-                    var rolesArray = JsonSerializer.Deserialize<string[]>(roles);
+                    var rolesArray = JsonSerializer.Deserialize<string[]>((string)roles);
                     supportRoles = rolesArray.Select(ulong.Parse).ToList();
                 }
                 catch (Exception ex)
@@ -1522,7 +1522,8 @@ public partial class TicketsSlash : MewdekoSlashModuleBase<TicketService>
             {
                 try
                 {
-                    viewerRolesList = JsonSerializer.Deserialize<string[]>(viewerRoles).Select(ulong.Parse).ToList();
+                    viewerRolesList = JsonSerializer.Deserialize<string[]>((string)viewerRoles).Select(ulong.Parse)
+                        .ToList();
                 }
                 catch (Exception ex)
                 {
@@ -1535,7 +1536,7 @@ public partial class TicketsSlash : MewdekoSlashModuleBase<TicketService>
             {
                 try
                 {
-                    allowedPriorities = JsonSerializer.Deserialize<List<string>>(priorities);
+                    allowedPriorities = JsonSerializer.Deserialize<List<string>>((string)priorities);
                 }
                 catch (Exception ex)
                 {
@@ -1544,13 +1545,13 @@ public partial class TicketsSlash : MewdekoSlashModuleBase<TicketService>
             }
 
             TimeSpan? autoCloseTime = null;
-            if (autoClose.HasValue && int.TryParse(autoClose, out var autoCloseHours))
+            if (autoClose.HasValue && int.TryParse((string)autoClose, out var autoCloseHours))
             {
                 autoCloseTime = TimeSpan.FromHours(autoCloseHours);
             }
 
             TimeSpan? requiredResponseTime = null;
-            if (responseTime.HasValue && int.TryParse(responseTime, out var responseHours))
+            if (responseTime.HasValue && int.TryParse((string)responseTime, out var responseHours))
             {
                 requiredResponseTime = TimeSpan.FromHours(responseHours);
             }

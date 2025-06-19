@@ -10,10 +10,11 @@ namespace Mewdeko.Services.Impl;
 /// <summary>
 /// Service that automatically monitors performance across entire namespaces and assemblies.
 /// </summary>
-public class PerformanceMonitorService : INService
+public class PerformanceMonitorService : INService, IDisposable
 {
     private readonly ConcurrentDictionary<string, MethodPerformanceData> methodPerformanceData = new();
     private bool initialized;
+    private Timer? performanceTimer;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="PerformanceMonitorService"/> class.
@@ -23,7 +24,16 @@ public class PerformanceMonitorService : INService
         Process.GetCurrentProcess();
 
         // Log performance data every 5 minutes
-        var timer = new Timer(LogPerformanceData, null, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5));
+        performanceTimer = new Timer(LogPerformanceData, null, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5));
+    }
+
+    /// <summary>
+    /// Disposes the performance monitor service and cleans up resources.
+    /// </summary>
+    public void Dispose()
+    {
+        performanceTimer?.Dispose();
+        performanceTimer = null;
     }
 
     /// <summary>
@@ -36,7 +46,8 @@ public class PerformanceMonitorService : INService
         if (initialized)
             return;
 
-        Log.Information($"Initializing performance monitoring for namespace {namespaceToMonitor} in assembly {assembly.GetName().Name}");
+        Log.Information(
+            $"Initializing performance monitoring for namespace {namespaceToMonitor} in assembly {assembly.GetName().Name}");
 
         try
         {
@@ -188,6 +199,30 @@ public class PerformanceMonitorService : INService
     public class MethodPerformanceData
     {
         /// <summary>
+        /// Initializes a new instance of the <see cref="MethodPerformanceData"/> class.
+        /// </summary>
+        /// <param name="methodName">The name of the method.</param>
+        public MethodPerformanceData(string methodName)
+        {
+            MethodName = methodName;
+            CallCount = 0;
+            TotalExecutionTime = TimeSpan.Zero;
+            MaxExecutionTime = TimeSpan.Zero;
+            MinExecutionTime = TimeSpan.MaxValue;
+            LastExecuted = DateTime.MinValue;
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="MethodPerformanceData"/> class with an initial execution.
+        /// </summary>
+        /// <param name="methodName">The name of the method.</param>
+        /// <param name="initialExecutionTime">The execution time of the first call.</param>
+        public MethodPerformanceData(string methodName, TimeSpan initialExecutionTime) : this(methodName)
+        {
+            AddExecution(initialExecutionTime);
+        }
+
+        /// <summary>
         /// Gets the name of the method being tracked.
         /// </summary>
         public string MethodName { get; }
@@ -220,32 +255,7 @@ public class PerformanceMonitorService : INService
         /// <summary>
         /// Gets the average execution time per call in milliseconds.
         /// </summary>
-        public double AvgExecutionTime => CallCount > 0 ?
-            TotalExecutionTime.TotalMilliseconds / CallCount : 0;
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="MethodPerformanceData"/> class.
-        /// </summary>
-        /// <param name="methodName">The name of the method.</param>
-        public MethodPerformanceData(string methodName)
-        {
-            MethodName = methodName;
-            CallCount = 0;
-            TotalExecutionTime = TimeSpan.Zero;
-            MaxExecutionTime = TimeSpan.Zero;
-            MinExecutionTime = TimeSpan.MaxValue;
-            LastExecuted = DateTime.MinValue;
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="MethodPerformanceData"/> class with an initial execution.
-        /// </summary>
-        /// <param name="methodName">The name of the method.</param>
-        /// <param name="initialExecutionTime">The execution time of the first call.</param>
-        public MethodPerformanceData(string methodName, TimeSpan initialExecutionTime) : this(methodName)
-        {
-            AddExecution(initialExecutionTime);
-        }
+        public double AvgExecutionTime => CallCount > 0 ? TotalExecutionTime.TotalMilliseconds / CallCount : 0;
 
         /// <summary>
         /// Records an additional execution of this method.
@@ -284,8 +294,8 @@ public class PerformanceMonitorService : INService
     /// </summary>
     private class MethodPerformanceTracker : IDisposable
     {
-        private readonly PerformanceMonitorService service;
         private readonly string methodName;
+        private readonly PerformanceMonitorService service;
         private readonly Stopwatch stopwatch;
 
         /// <summary>

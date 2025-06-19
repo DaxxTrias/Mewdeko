@@ -119,6 +119,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
 
     private readonly IDataConnectionFactory dbFactory;
     private readonly DiscordPermOverrideService discordPermOverride;
+    private readonly EventHandler eventHandler;
 
     private readonly TypedKey<CTModel> gcrAddedKey = new("gcr.added");
     private readonly TypedKey<int> gcrDeletedkey = new("gcr.deleted");
@@ -146,7 +147,6 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
     /// </summary>
     /// <param name="perms">The permission service.</param>
     /// <param name="dbFactory">The database service.</param>
-    /// <param name="strings">The bot strings.</param>
     /// <param name="bot">The bot instance.</param>
     /// <param name="client">The Discord socket client.</param>
     /// <param name="gperm">The global permission service.</param>
@@ -156,6 +156,8 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
     /// <param name="guildSettings">The guild settings service.</param>
     /// <param name="configService">The bot configuration service.</param>
     /// <param name="creds">The bot credentials.</param>
+    /// <param name="strings">The bot strings.</param>
+    /// <param name="eventHandler">The event handler.</param>
     public ChatTriggersService(
         PermissionService perms,
         IDataConnectionFactory dbFactory,
@@ -167,7 +169,8 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
         DiscordPermOverrideService discordPermOverride,
         GuildSettingsService guildSettings,
         BotConfigService configService,
-        IBotCredentials creds, GeneratedBotStrings strings)
+        IBotCredentials creds, GeneratedBotStrings strings,
+        EventHandler eventHandler)
     {
         this.dbFactory = dbFactory;
         this.client = client;
@@ -180,6 +183,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
         this.configService = configService;
         this.creds = creds;
         this.strings = strings;
+        this.eventHandler = eventHandler;
         rng = new MewdekoRandom();
 
         pubSub.Sub(crsReloadedKey, OnCrsShouldReload);
@@ -190,6 +194,9 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
 
         bot.JoinedGuild += OnJoinedGuild;
         this.client.LeftGuild += OnLeftGuild;
+
+        // Subscribe to reaction events for reaction triggers
+        eventHandler.ReactionAdded += OnReactionAdded;
     }
 
     /// <summary>
@@ -1313,6 +1320,53 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
     }
 
     /// <summary>
+    ///     Adds a reaction-based chat trigger asynchronously.
+    /// </summary>
+    /// <param name="guildId">The ID of the guild where the trigger should be added.</param>
+    /// <param name="reaction">The emoji/emote that triggers the response.</param>
+    /// <param name="message">The trigger message.</param>
+    /// <returns>The added reaction trigger.</returns>
+    public async Task<CTModel?> AddReactionTriggerAsync(ulong? guildId, string reaction, string? message)
+    {
+        // Clean up the reaction input
+        reaction = reaction.Trim();
+
+        // Convert potential emote formats to consistent format
+        if (reaction.StartsWith('<') && reaction.EndsWith('>'))
+        {
+            // Custom emote format like <:name:id> - extract just the name
+            var parts = reaction.Trim('<', '>').Split(':');
+            if (parts.Length >= 2)
+                reaction = parts[1]; // Get the emote name
+        }
+        else if (reaction.StartsWith(':') && reaction.EndsWith(':'))
+        {
+            // :emote_name: format - remove colons
+            reaction = reaction.Trim(':');
+        }
+
+        var cr = new CTModel
+        {
+            GuildId = guildId,
+            Trigger = reaction,
+            Response = message,
+            IsRegex = false, // Reaction triggers don't use regex
+            ValidTriggerTypes = (int)ChatTriggerType.Reactions
+        };
+
+        // Check for target placeholder (though less common in reaction triggers)
+        if (cr.Response.Contains("%target", StringComparison.OrdinalIgnoreCase))
+            cr.AllowTarget = true;
+
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
+
+        cr.Id = await dbContext.InsertWithInt32IdentityAsync(cr);
+
+        await AddInternalAsync(guildId, cr).ConfigureAwait(false);
+        return cr;
+    }
+
+    /// <summary>
     ///     Edits an existing chat trigger asynchronously.
     /// </summary>
     /// <param name="guildId">The ID of the guild where the trigger belongs.</param>
@@ -2085,6 +2139,289 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
             x.Value.Select(y => y.Id).ToArray(), x.Value.Select(y => y.Name).ToArray())));
 
         return errors.Any() ? errors : null;
+    }
+
+    /// <summary>
+    ///     Handles reaction events for reaction-based chat triggers.
+    /// </summary>
+    /// <param name="message">The cached message that was reacted to.</param>
+    /// <param name="channel">The cached channel where the reaction occurred.</param>
+    /// <param name="reaction">The reaction that was added.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    private async Task OnReactionAdded(Cacheable<IUserMessage, ulong> message,
+        Cacheable<IMessageChannel, ulong> channel, SocketReaction reaction)
+    {
+        if (!ready)
+            return;
+
+        // Don't process reactions from bots
+        if (reaction.User.Value?.IsBot == true)
+            return;
+
+        // Get the message and channel
+        var msg = await message.GetOrDownloadAsync().ConfigureAwait(false);
+        var ch = await channel.GetOrDownloadAsync().ConfigureAwait(false);
+
+        if (msg is null || ch is null)
+            return;
+
+        // Only process guild messages
+        if (ch is not IGuildChannel guildChannel)
+            return;
+
+        var guild = guildChannel.Guild;
+        var user = reaction.User.Value;
+
+        if (user is null)
+            return;
+
+        // Get reaction triggers for this guild
+        var triggers = await GetChatTriggersFor(guild.Id).ConfigureAwait(false);
+
+        // Find matching reaction triggers
+        var reactionTriggers = triggers.Where(ct =>
+            ((ChatTriggerType)ct.ValidTriggerTypes).HasFlag(ChatTriggerType.Reactions) &&
+            IsReactionMatch(ct, reaction.Emote)).ToArray();
+
+        foreach (var ct in reactionTriggers)
+        {
+            try
+            {
+                // Check cooldowns
+                if (await cmdCds.TryBlock(guild, user, ct.Trigger).ConfigureAwait(false))
+                    continue;
+
+                // Check permissions (similar to message triggers)
+                if (gperm.BlockedModules.Contains("ActualChatTriggers"))
+                    continue;
+
+                if (guild is SocketGuild sg)
+                {
+                    var sgUser = sg.GetUser(user.Id);
+                    if (sgUser is null)
+                        continue;
+
+                    var pc = await perms.GetCacheFor(guild.Id);
+
+                    // Create a fake message for permission checking
+                    var fakeMsg = new MewdekoUserMessage
+                    {
+                        Author = user, Content = ct.Trigger, Channel = ch
+                    };
+
+                    if (!pc.Permissions.CheckPermissions(fakeMsg, ct.Trigger, "ActualChatTriggers", out var index))
+                        continue;
+                }
+
+                // Check if trigger is owner-only
+                if (ct.OwnerOnly && !creds.IsOwner(user))
+                    continue;
+
+                // Execute the trigger
+                await TryExecuteReactionTrigger(ct, guild, ch, user, msg, reaction).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Error in reaction trigger {TriggerId} for guild {GuildId}", ct.Id, guild.Id);
+            }
+        }
+    }
+
+    /// <summary>
+    ///     Checks if a reaction matches a trigger pattern.
+    /// </summary>
+    /// <param name="trigger">The trigger to check against.</param>
+    /// <param name="emote">The emote that was reacted with.</param>
+    /// <returns>True if the reaction matches the trigger pattern.</returns>
+    private static bool IsReactionMatch(CTModel trigger, IEmote emote)
+    {
+        // For reaction triggers, the Trigger field contains the emoji/emote to match
+        if (string.IsNullOrWhiteSpace(trigger.Trigger))
+            return false;
+
+        var triggerEmote = trigger.Trigger.Trim();
+
+        // Handle different emote types
+        return emote switch
+        {
+            Emoji emoji => triggerEmote.Equals(emoji.Name, StringComparison.OrdinalIgnoreCase),
+            Emote customEmote => triggerEmote.Equals(customEmote.Name, StringComparison.OrdinalIgnoreCase) ||
+                                 triggerEmote.Equals(customEmote.ToString(), StringComparison.OrdinalIgnoreCase),
+            _ => false
+        };
+    }
+
+    /// <summary>
+    ///     Executes a reaction-based trigger.
+    /// </summary>
+    /// <param name="ct">The trigger to execute.</param>
+    /// <param name="guild">The guild where the reaction occurred.</param>
+    /// <param name="channel">The channel where the reaction occurred.</param>
+    /// <param name="user">The user who reacted.</param>
+    /// <param name="message">The message that was reacted to.</param>
+    /// <param name="reaction">The reaction that was added.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    private async Task TryExecuteReactionTrigger(CTModel ct, IGuild guild, IMessageChannel channel, IUser user,
+        IUserMessage message, SocketReaction reaction)
+    {
+        // Update usage count
+        await IncrementTriggerUsage(ct).ConfigureAwait(false);
+
+        // Handle role operations
+        if (!string.IsNullOrWhiteSpace(ct.GrantedRoles) || !string.IsNullOrWhiteSpace(ct.RemovedRoles))
+        {
+            await HandleRoleOperations(ct, guild, user, message, channel).ConfigureAwait(false);
+        }
+
+        // Create a fake message for the reaction trigger (similar to button/interaction triggers)
+        var fakeMsg = new MewdekoUserMessage
+        {
+            Author = user,
+            Content =
+                $"{reaction.Emote} reaction on: {(message.Content?.Length > 50 ? message.Content[..50] + "..." : message.Content ?? "")}",
+            Channel = channel
+        };
+
+        // Send the response using the same method as regular triggers
+        var sentMsg = await ct.Send(fakeMsg, client, false, dbFactory).ConfigureAwait(false);
+
+        // Add reactions (following same pattern as regular triggers)
+        foreach (var reactionStr in ct.GetReactions())
+        {
+            try
+            {
+                if (!ct.ReactToTrigger && !ct.NoRespond)
+                    await sentMsg.AddReactionAsync(reactionStr.ToIEmote()).ConfigureAwait(false);
+                else
+                    await message.AddReactionAsync(reactionStr.ToIEmote()).ConfigureAwait(false);
+            }
+            catch
+            {
+                Log.Warning("Unable to add reactions to message {Message} in server {GuildId}", sentMsg?.Id,
+                    ct.GuildId);
+                break;
+            }
+
+            await Task.Delay(1000).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    ///     Increments the usage count for a trigger.
+    /// </summary>
+    /// <param name="ct">The trigger to increment usage for.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    private async Task IncrementTriggerUsage(CTModel ct)
+    {
+        try
+        {
+            await using var dbContext = await dbFactory.CreateConnectionAsync();
+            await dbContext.ChatTriggers
+                .Where(x => x.Id == ct.Id)
+                .Set(x => x.UseCount, x => x.UseCount + 1)
+                .UpdateAsync().ConfigureAwait(false);
+
+            ct.UseCount++;
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Failed to increment usage count for trigger {TriggerId}", ct.Id);
+        }
+    }
+
+    /// <summary>
+    ///     Handles role grant/remove operations for triggers.
+    /// </summary>
+    /// <param name="ct">The trigger containing role operations.</param>
+    /// <param name="guild">The guild to perform operations in.</param>
+    /// <param name="user">The user who triggered the action.</param>
+    /// <param name="message">The message that was reacted to.</param>
+    /// <param name="channel">The channel where the reaction occurred.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    private async Task HandleRoleOperations(CTModel ct, IGuild guild, IUser user, IUserMessage message,
+        IMessageChannel channel)
+    {
+        try
+        {
+            var guildUser = await guild.GetUserAsync(user.Id).ConfigureAwait(false) as IGuildUser;
+            if (guildUser is null)
+                return;
+
+            var targetUsers = new List<IGuildUser>();
+
+            // Determine target users based on RoleGrantType
+            switch ((CtRoleGrantType)ct.RoleGrantType)
+            {
+                case CtRoleGrantType.Sender:
+                    targetUsers.Add(guildUser);
+                    break;
+                case CtRoleGrantType.Mentioned:
+                    // For reaction triggers, we can't get mentioned users from the reaction itself
+                    // So we'll get mentions from the original message that was reacted to
+                    var mentionedUserIds = message.Content?.GetUserMentions() ?? Enumerable.Empty<ulong>();
+                    foreach (var userId in mentionedUserIds)
+                    {
+                        var mentionedGuildUser = await guild.GetUserAsync(userId).ConfigureAwait(false) as IGuildUser;
+                        if (mentionedGuildUser is not null)
+                            targetUsers.Add(mentionedGuildUser);
+                    }
+
+                    break;
+                case CtRoleGrantType.Both:
+                    targetUsers.Add(guildUser);
+                    var mentionedUserIds2 = message.Content?.GetUserMentions() ?? Enumerable.Empty<ulong>();
+                    foreach (var userId in mentionedUserIds2)
+                    {
+                        var mentionedGuildUser = await guild.GetUserAsync(userId).ConfigureAwait(false) as IGuildUser;
+                        if (mentionedGuildUser is not null && !targetUsers.Contains(mentionedGuildUser))
+                            targetUsers.Add(mentionedGuildUser);
+                    }
+
+                    break;
+            }
+
+            // Process role operations for each target user
+            foreach (var targetUser in targetUsers)
+            {
+                // Grant roles
+                if (!string.IsNullOrWhiteSpace(ct.GrantedRoles))
+                {
+                    var roleIds = ct.GrantedRoles.Split(',', StringSplitOptions.RemoveEmptyEntries);
+                    foreach (var roleIdStr in roleIds)
+                    {
+                        if (ulong.TryParse(roleIdStr.Trim(), out var roleId))
+                        {
+                            var role = guild.GetRole(roleId);
+                            if (role is not null && !targetUser.RoleIds.Contains(roleId))
+                            {
+                                await targetUser.AddRoleAsync(role).ConfigureAwait(false);
+                            }
+                        }
+                    }
+                }
+
+                // Remove roles
+                if (!string.IsNullOrWhiteSpace(ct.RemovedRoles))
+                {
+                    var roleIds = ct.RemovedRoles.Split(',', StringSplitOptions.RemoveEmptyEntries);
+                    foreach (var roleIdStr in roleIds)
+                    {
+                        if (ulong.TryParse(roleIdStr.Trim(), out var roleId))
+                        {
+                            var role = guild.GetRole(roleId);
+                            if (role is not null && targetUser.RoleIds.Contains(roleId))
+                            {
+                                await targetUser.RemoveRoleAsync(role).ConfigureAwait(false);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Failed to handle role operations for trigger {TriggerId}", ct.Id);
+        }
     }
 
 

@@ -10,7 +10,6 @@ using Lavalink4NET.Players;
 using Lavalink4NET.Rest.Entities.Tracks;
 using Lavalink4NET.Tracks;
 using Mewdeko.Common.Attributes.InteractionCommands;
-
 using Mewdeko.Modules.Music.Common;
 using Mewdeko.Modules.Music.CustomPlayer;
 using Serilog;
@@ -667,7 +666,7 @@ public class SlashMusic(
         var tracks = await cache.Redis.GetDatabase()
             .StringGetAsync($"{ctx.User.Id}_{componentInteraction.Message.Id}_tracks");
 
-        var trackList = JsonSerializer.Deserialize<List<LavalinkTrack>>(tracks);
+        var trackList = JsonSerializer.Deserialize<List<LavalinkTrack>>((string)tracks);
 
         var queue = await cache.GetMusicQueue(ctx.Guild.Id);
 
@@ -1157,11 +1156,13 @@ public class SlashMusic(
                     if (player.CurrentItem != null)
                     {
                         await player.SeekAsync(player.CurrentItem.Track.Duration);
-                        await ctx.Interaction.SendEphemeralFollowupConfirmAsync(Strings.MusicSkippedTrack(ctx.Guild.Id));
+                        await ctx.Interaction.SendEphemeralFollowupConfirmAsync(
+                            Strings.MusicSkippedTrack(ctx.Guild.Id));
                     }
                     else
                     {
-                        await ctx.Interaction.SendEphemeralFollowupConfirmAsync(Strings.MusicNoCurrentTrack(ctx.Guild.Id));
+                        await ctx.Interaction.SendEphemeralFollowupConfirmAsync(
+                            Strings.MusicNoCurrentTrack(ctx.Guild.Id));
                     }
 
                     break;
@@ -1176,12 +1177,14 @@ public class SlashMusic(
                         {
                             await player.PlayAsync(prevTrack.Track);
                             await cache.SetCurrentTrack(ctx.Guild.Id, prevTrack);
-                            await ctx.Interaction.SendEphemeralFollowupConfirmAsync(Strings.MusicPlayingPrevious(ctx.Guild.Id));
+                            await ctx.Interaction.SendEphemeralFollowupConfirmAsync(
+                                Strings.MusicPlayingPrevious(ctx.Guild.Id));
                         }
                     }
                     else
                     {
-                        await ctx.Interaction.SendEphemeralFollowupConfirmAsync(Strings.MusicNoPreviousTrack(ctx.Guild.Id));
+                        await ctx.Interaction.SendEphemeralFollowupConfirmAsync(
+                            Strings.MusicNoPreviousTrack(ctx.Guild.Id));
                     }
 
                     break;
@@ -1202,7 +1205,8 @@ public class SlashMusic(
                         _ => PlayerRepeatType.None
                     };
                     await player.SetRepeatTypeAsync(newRepeatType);
-                    await ctx.Interaction.SendEphemeralFollowupConfirmAsync(Strings.MusicRepeatType(ctx.Guild.Id, newRepeatType));
+                    await ctx.Interaction.SendEphemeralFollowupConfirmAsync(
+                        Strings.MusicRepeatType(ctx.Guild.Id, newRepeatType));
                     break;
 
                 case "volume_up":
@@ -1212,11 +1216,13 @@ public class SlashMusic(
                         var newVolumeUp = Math.Min(currentVolumeUp + 10, 100);
                         await player.SetVolumeAsync(newVolumeUp / 100f);
                         await player.SetGuildVolumeAsync(newVolumeUp);
-                        await ctx.Interaction.SendEphemeralFollowupConfirmAsync(Strings.MusicVolumeSet(ctx.Guild.Id, newVolumeUp));
+                        await ctx.Interaction.SendEphemeralFollowupConfirmAsync(
+                            Strings.MusicVolumeSet(ctx.Guild.Id, newVolumeUp));
                     }
                     else
                     {
-                        await ctx.Interaction.SendEphemeralFollowupConfirmAsync(Strings.MusicVolumeMaximum(ctx.Guild.Id));
+                        await ctx.Interaction.SendEphemeralFollowupConfirmAsync(
+                            Strings.MusicVolumeMaximum(ctx.Guild.Id));
                     }
 
                     break;
@@ -1228,11 +1234,13 @@ public class SlashMusic(
                         var newVolumeDown = Math.Max(currentVolumeDown - 10, 0);
                         await player.SetVolumeAsync(newVolumeDown / 100f);
                         await player.SetGuildVolumeAsync(newVolumeDown);
-                        await ctx.Interaction.SendEphemeralFollowupConfirmAsync(Strings.MusicVolumeSet(ctx.Guild.Id, newVolumeDown));
+                        await ctx.Interaction.SendEphemeralFollowupConfirmAsync(
+                            Strings.MusicVolumeSet(ctx.Guild.Id, newVolumeDown));
                     }
                     else
                     {
-                        await ctx.Interaction.SendEphemeralFollowupConfirmAsync(Strings.MusicVolumeMinimum(ctx.Guild.Id));
+                        await ctx.Interaction.SendEphemeralFollowupConfirmAsync(
+                            Strings.MusicVolumeMinimum(ctx.Guild.Id));
                     }
 
                     break;

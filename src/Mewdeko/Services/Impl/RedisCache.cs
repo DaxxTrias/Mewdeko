@@ -1,9 +1,9 @@
 ﻿using System.Text.Json;
 using System.Text.Json.Serialization;
+using DataModel;
 using Mewdeko.Modules.Music.Common;
 using Mewdeko.Modules.Searches.Services;
 using Mewdeko.Modules.Utility.Common;
-using DataModel;
 using Serilog;
 using StackExchange.Redis;
 
@@ -109,7 +109,7 @@ public class RedisCache : IDataCache
     {
         var db = Redis.GetDatabase();
         var afkJson = await db.StringGetAsync($"{redisKey}_{guildId}_{userId}_afk");
-        return afkJson.HasValue ? JsonSerializer.Deserialize<Afk>(afkJson) : null;
+        return afkJson.HasValue ? JsonSerializer.Deserialize<Afk>((string)afkJson) : null;
     }
 
     /// <summary>
@@ -144,7 +144,7 @@ public class RedisCache : IDataCache
     {
         var db = Redis.GetDatabase();
         var result = await db.StringGetAsync($"{redisKey}_guildconfig_{id}");
-        return result.HasValue ? JsonSerializer.Deserialize<GuildConfig>(result, options) : null;
+        return result.HasValue ? JsonSerializer.Deserialize<GuildConfig>((string)result, options) : null;
     }
 
     /// <summary>
@@ -166,7 +166,7 @@ public class RedisCache : IDataCache
         var db = Redis.GetDatabase();
         var result = await db.StringGetAsync($"{redisKey}_statusroles");
         return result.HasValue
-            ? JsonSerializer.Deserialize<List<StatusRole>>(result)
+            ? JsonSerializer.Deserialize<List<StatusRole>>((string)result)
             : [];
     }
 
@@ -222,7 +222,7 @@ public class RedisCache : IDataCache
         await db.StringSetAsync($"{redisKey}_musicqueue_{id}", JsonSerializer.Serialize(tracks, options));
     }
 
-      /// <summary>
+    /// <summary>
     ///     Saves a playlist for a guild.
     /// </summary>
     public async Task SavePlaylist(ulong userId, MusicPlaylist playlist)
@@ -266,7 +266,7 @@ public class RedisCache : IDataCache
         if (result.IsNull)
             return null;
 
-        return JsonSerializer.Deserialize<MusicPlayerState>(result);
+        return JsonSerializer.Deserialize<MusicPlayerState>((string)result);
     }
 
     /// <summary>
@@ -286,7 +286,7 @@ public class RedisCache : IDataCache
     {
         var db = Redis.GetDatabase();
         var result = await db.StringGetAsync($"{redisKey}_playlist_{userId}_{name.ToLower()}");
-        return result.HasValue ? JsonSerializer.Deserialize<MusicPlaylist>(result, options) : null;
+        return result.HasValue ? JsonSerializer.Deserialize<MusicPlaylist>((string)result, options) : null;
     }
 
     /// <summary>
@@ -333,7 +333,7 @@ public class RedisCache : IDataCache
     {
         var db = Redis.GetDatabase();
         var result = await db.StringGetAsync($"{redisKey}_musicqueue_{id}");
-        return result.HasValue ? JsonSerializer.Deserialize<List<MewdekoTrack>>(result, options) : [];
+        return result.HasValue ? JsonSerializer.Deserialize<List<MewdekoTrack>>((string)result, options) : [];
     }
 
     /// <summary>
@@ -360,7 +360,7 @@ public class RedisCache : IDataCache
     {
         var db = Redis.GetDatabase();
         var result = await db.StringGetAsync($"{redisKey}_currenttrack_{id}");
-        return result.HasValue ? JsonSerializer.Deserialize<MewdekoTrack>(result, options) : null;
+        return result.HasValue ? JsonSerializer.Deserialize<MewdekoTrack>((string)result, options) : null;
     }
 
     /// <summary>
@@ -372,7 +372,7 @@ public class RedisCache : IDataCache
     {
         var db = Redis.GetDatabase();
         var result = await db.StringGetAsync($"{redisKey}_musicSettings_{id}");
-        return result.HasValue ? JsonSerializer.Deserialize<MusicPlayerSetting>(result, options) : null;
+        return result.HasValue ? JsonSerializer.Deserialize<MusicPlayerSetting>((string)result, options) : null;
     }
 
     /// <summary>
@@ -397,7 +397,7 @@ public class RedisCache : IDataCache
     {
         var db = Redis.GetDatabase();
         var result = await db.StringGetAsync($"{redisKey}_voteSkip_{id}");
-        return result.HasValue ? JsonSerializer.Deserialize<HashSet<ulong>>(result, options) : null;
+        return result.HasValue ? JsonSerializer.Deserialize<HashSet<ulong>>((string)result, options) : null;
     }
 
     /// <summary>
@@ -629,7 +629,7 @@ public class RedisCache : IDataCache
     {
         var db = Redis.GetDatabase();
         var result = await db.StringGetAsync($"{redisKey}_shipcache:{user1}:{user2}");
-        return !result.HasValue ? null : JsonSerializer.Deserialize<ShipCache>(result);
+        return !result.HasValue ? null : JsonSerializer.Deserialize<ShipCache>((string)result);
     }
 
     /// <summary>
@@ -648,7 +648,7 @@ public class RedisCache : IDataCache
         var db = Redis.GetDatabase();
 
         var data = await db.StringGetAsync($"{redisKey}_{key}").ConfigureAwait(false);
-        if (data.HasValue) return (TOut)JsonSerializer.Deserialize(data, typeof(TOut));
+        if (data.HasValue) return (TOut)JsonSerializer.Deserialize((string)data, typeof(TOut));
         var obj = await factory(param).ConfigureAwait(false);
 
         if (obj == null)

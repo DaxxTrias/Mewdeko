@@ -133,6 +133,21 @@ public interface IBotCredentials
     string LastFmApiSecret { get; }
 
     /// <summary>
+    ///     Gets the bot's Patreon client ID.
+    /// </summary>
+    string PatreonClientId { get; }
+
+    /// <summary>
+    ///     Gets the bot's Patreon client secret.
+    /// </summary>
+    string PatreonClientSecret { get; }
+
+    /// <summary>
+    ///     Gets the base URL for Patreon OAuth callbacks.
+    /// </summary>
+    string PatreonBaseUrl { get; }
+
+    /// <summary>
     ///     Checks if the given user is an owner of the bot.
     /// </summary>
     /// <param name="u">The user to check.</param>

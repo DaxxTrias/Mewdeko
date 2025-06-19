@@ -5,7 +5,6 @@ using System.Text.Json.Serialization;
 using LinqToDB;
 using LinqToDB.Data;
 using Microsoft.Extensions.Configuration;
-
 using Serilog;
 
 namespace Mewdeko.Services.Impl;
@@ -139,6 +138,7 @@ public class BotCredentials : IBotCredentials
     /// Sets the port used for grafana metrics.
     /// </summary>
     public int MetricsPort { get; set; } = 9090;
+
     /// <summary>
     ///     Gets or sets the ID of the channel where pronoun abuse reports are sent.
     /// </summary>
@@ -243,6 +243,21 @@ public class BotCredentials : IBotCredentials
     ///     Gets or sets the Last.fm API secret.
     /// </summary>
     public string LastFmApiSecret { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the Patreon client ID.
+    /// </summary>
+    public string PatreonClientId { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the Patreon client secret.
+    /// </summary>
+    public string PatreonClientSecret { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the base URL for Patreon OAuth callbacks.
+    /// </summary>
+    public string PatreonBaseUrl { get; set; }
 
     /// <summary>
     ///     Gets or sets the list of owner IDs.
@@ -395,7 +410,8 @@ public class BotCredentials : IBotCredentials
             var data = configBuilder.Build();
 
             Token = data[nameof(Token)];
-            OwnerIds = [
+            OwnerIds =
+            [
                 ..data.GetSection(nameof(OwnerIds)).GetChildren()
                     .Select(c => ulong.Parse(c.Value))
             ];
@@ -411,6 +427,9 @@ public class BotCredentials : IBotCredentials
             ApiPort = int.TryParse(data[nameof(ApiPort)], out var port) ? port : 5001;
             LastFmApiKey = data[nameof(LastFmApiKey)];
             LastFmApiSecret = data[nameof(LastFmApiSecret)];
+            PatreonClientId = data[nameof(PatreonClientId)];
+            PatreonClientSecret = data[nameof(PatreonClientSecret)];
+            PatreonBaseUrl = data[nameof(PatreonBaseUrl)];
             MashapeKey = data[nameof(MashapeKey)];
             OsuApiKey = data[nameof(OsuApiKey)];
             TwitchClientId = data[nameof(TwitchClientId)];
@@ -578,10 +597,14 @@ public class BotCredentials : IBotCredentials
         public int ApiPort { get; set; } = 5001;
         public bool SkipApiKey { get; set; } = false;
         public bool IsMasterInstance { get; set; } = false;
+        public string LibreTranslateUrl { get; } = "http://localhost:5000";
         public RestartConfig RestartCommand { get; } = null;
         public string RedisConnections { get; } = "127.0.0.1:6379";
         public string LastFmApiKey { get; } = "";
         public string LastFmApiSecret { get; } = "";
+        public string PatreonClientId { get; } = "";
+        public string PatreonClientSecret { get; } = "";
+        public string PatreonBaseUrl { get; } = "https://yourdomain.com";
         public string Token { get; set; } = "";
         public string ClientSecret { get; } = "";
         public string CfClearance { get; } = "";
@@ -591,7 +614,6 @@ public class BotCredentials : IBotCredentials
         public string SpotifyClientSecret { get; } = "";
         public string StatcordKey { get; } = "";
         public string GoogleApiKey { get; } = "";
-        public string LibreTranslateUrl { get; } = "http://localhost:5000";
         public string MashapeKey { get; } = "";
         public string OsuApiKey { get; } = "";
         public string TrovoClientId { get; } = "";

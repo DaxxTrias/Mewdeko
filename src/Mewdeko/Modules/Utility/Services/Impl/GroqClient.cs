@@ -14,21 +14,44 @@ namespace Mewdeko.Modules.Utility.Services.Impl;
 /// </summary>
 public class GroqClient : IAiClient
 {
+    // Define Groq model context windows from the documentation
+    private static readonly Dictionary<string, int> ModelContextLimits = new()
+    {
+        {
+            "mixtral-8x7b-32768", 32768
+        },
+        {
+            "llama3-70b-8192", 8192
+        },
+        {
+            "llama3-8b-8192", 8192
+        },
+        {
+            "llama-3.1-70b-versatile", 32768
+        },
+        {
+            "llama-3.1-8b-instant", 131072
+        },
+        {
+            "default", 4096
+        } // Default fallback limit
+    };
+
+    private readonly IHttpClientFactory httpClientFactory;
+
+    /// <summary>
+    ///     Initializes a new instance of the <see cref="GroqClient"/> class.
+    /// </summary>
+    /// <param name="httpClientFactory">The HTTP client factory.</param>
+    public GroqClient(IHttpClientFactory httpClientFactory)
+    {
+        this.httpClientFactory = httpClientFactory ?? throw new ArgumentNullException(nameof(httpClientFactory));
+    }
+
     /// <summary>
     ///     Gets the AI provider type for this client.
     /// </summary>
     public AiService.AiProvider Provider => AiService.AiProvider.Groq;
-
-    // Define Groq model context windows from the documentation
-    private static readonly Dictionary<string, int> ModelContextLimits = new()
-    {
-        { "mixtral-8x7b-32768", 32768 },
-        { "llama3-70b-8192", 8192 },
-        { "llama3-8b-8192", 8192 },
-        { "llama-3.1-70b-versatile", 32768 },
-        { "llama-3.1-8b-instant", 131072 },
-        { "default", 4096 } // Default fallback limit
-    };
 
     /// <summary>
     ///     Streams a response from the Groq AI model.
@@ -43,12 +66,13 @@ public class GroqClient : IAiClient
     {
         try
         {
-            var httpClient = new HttpClient();
+            var httpClient = httpClientFactory.CreateClient();
             httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
             httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
 
             // Set a lower max_tokens value for Groq to ensure responses aren't too large
-            var maxTokens = 512; // This will help prevent Discord embed limit issues
+            // Note: max_tokens is currently not used in the request but kept for future implementation
+            // const int maxTokens = 512; // This will help prevent Discord embed limit issues
 
             // Prepare the request body
             var requestBody = new
@@ -56,14 +80,14 @@ public class GroqClient : IAiClient
                 model,
                 messages = messages.Select(m => new
                 {
-                    role = m.Role,
-                    content = m.Content
+                    role = m.Role, content = m.Content
                 }).ToArray(),
                 stream = true
             };
 
             var jsonRequest = JsonSerializer.Serialize(requestBody);
-            Log.Information($"Groq request using model: {model}, message count: {messages.Count()}, request size: {Encoding.UTF8.GetByteCount(jsonRequest)} bytes");
+            Log.Information(
+                $"Groq request using model: {model}, message count: {messages.Count()}, request size: {Encoding.UTF8.GetByteCount(jsonRequest)} bytes");
 
             var content = new StringContent(
                 jsonRequest,
@@ -126,7 +150,6 @@ public class GroqClient : IAiClient
                 finally
                 {
                     channel.Writer.Complete();
-                    httpClient.Dispose();
                 }
             }, cancellationToken);
 

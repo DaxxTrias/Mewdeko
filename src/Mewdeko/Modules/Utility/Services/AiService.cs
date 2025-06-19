@@ -62,7 +62,7 @@ public class AiService : INService
         this.strings = strings;
         botConfig = config;
         this.client = client;
-        aiClientFactory = new AiClientFactory();
+        aiClientFactory = new AiClientFactory(httpFactory);
         handler.MessageReceived += HandleMessage;
         modelCache = new ConcurrentDictionary<AiProvider, List<AiModel>>();
     }

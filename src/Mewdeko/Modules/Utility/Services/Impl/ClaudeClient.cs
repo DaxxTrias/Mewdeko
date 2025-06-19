@@ -14,6 +14,17 @@ namespace Mewdeko.Modules.Utility.Services.Impl;
 /// </summary>
 public class ClaudeClient : IAiClient
 {
+    private readonly IHttpClientFactory httpClientFactory;
+
+    /// <summary>
+    ///     Initializes a new instance of the <see cref="ClaudeClient"/> class.
+    /// </summary>
+    /// <param name="httpClientFactory">The HTTP client factory.</param>
+    public ClaudeClient(IHttpClientFactory httpClientFactory)
+    {
+        this.httpClientFactory = httpClientFactory ?? throw new ArgumentNullException(nameof(httpClientFactory));
+    }
+
     /// <summary>
     ///     Gets the AI provider type for this client.
     /// </summary>
@@ -32,7 +43,7 @@ public class ClaudeClient : IAiClient
     {
         try
         {
-            var httpClient = new HttpClient();
+            var httpClient = httpClientFactory.CreateClient();
             httpClient.DefaultRequestHeaders.Add("x-api-key", apiKey);
             httpClient.DefaultRequestHeaders.Add("anthropic-version", "2023-06-01");
             httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
@@ -138,7 +149,6 @@ public class ClaudeClient : IAiClient
                 finally
                 {
                     channel.Writer.Complete();
-                    httpClient.Dispose();
                 }
             }, cancellationToken);
 

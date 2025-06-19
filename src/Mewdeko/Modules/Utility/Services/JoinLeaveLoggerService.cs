@@ -141,7 +141,7 @@ public class JoinLeaveLoggerService : INService, IDisposable
         var allEvents = await redisDatabase.ListRangeAsync(redisKey);
 
         var joinEventsCount = allEvents
-            .Select(log => JsonSerializer.Deserialize<JoinLeaveLog>(log))
+            .Select(log => JsonSerializer.Deserialize<JoinLeaveLog>((string)log))
             .Count(log => log?.IsJoin == true);
 
         var totalEvents = allEvents.Length;
@@ -184,7 +184,7 @@ public class JoinLeaveLoggerService : INService, IDisposable
         var allEvents = await redisDatabase.ListRangeAsync(redisKey);
 
         var filteredLogs = allEvents
-            .Select(log => JsonSerializer.Deserialize<JoinLeaveLog>(log))
+            .Select(log => JsonSerializer.Deserialize<JoinLeaveLog>((string)log))
             .Where(log => log?.IsJoin == isJoin && log.DateAdded.HasValue)
             .Select(log => log!.DateAdded!.Value.Date)
             .GroupBy(date => date)
@@ -435,7 +435,7 @@ public class JoinLeaveLoggerService : INService, IDisposable
                     if (serializedEvent.IsNullOrEmpty)
                         break;
 
-                    var log = JsonSerializer.Deserialize<JoinLeaveLog>(serializedEvent!);
+                    var log = JsonSerializer.Deserialize<JoinLeaveLog>((string)serializedEvent!);
                     if (log != null)
                     {
                         logsToInsert.Add(log);

@@ -1,6 +1,6 @@
+using DataModel;
 using LinqToDB;
 using LinqToDB.Data;
-using DataModel;
 using Mewdeko.Database.L2DB;
 using Embed = DataModel.Embed;
 using Poll = DataModel.Poll;
@@ -612,6 +612,11 @@ public class MewdekoDb : DataConnection
     public ITable<TransactionHistory> TransactionHistories => this.GetTable<TransactionHistory>();
 
     /// <summary>
+    /// Gets the daily challenges table.
+    /// </summary>
+    public ITable<DailyChallenge> DailyChallenges => this.GetTable<DailyChallenge>();
+
+    /// <summary>
     /// Gets the unban timers table.
     /// </summary>
     public ITable<UnbanTimer> UnbanTimers => this.GetTable<UnbanTimer>();
@@ -715,4 +720,19 @@ public class MewdekoDb : DataConnection
     /// Gets the EF migrations history table.
     /// </summary>
     public ITable<EfMigrationsHistory> EfMigrationsHistories => this.GetTable<EfMigrationsHistory>();
+
+    /// <summary>
+    /// Gets the Patreon supporters table.
+    /// </summary>
+    public ITable<PatreonSupporter> PatreonSupporters => this.GetTable<PatreonSupporter>();
+
+    /// <summary>
+    /// Gets the Patreon tiers table.
+    /// </summary>
+    public ITable<PatreonTier> PatreonTiers => this.GetTable<PatreonTier>();
+
+    /// <summary>
+    /// Gets the Patreon goals table.
+    /// </summary>
+    public ITable<PatreonGoal> PatreonGoals => this.GetTable<PatreonGoal>();
 }

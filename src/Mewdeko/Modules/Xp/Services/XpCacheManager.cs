@@ -91,7 +91,7 @@ public class XpCacheManager : INService
         {
             try
             {
-                var userData = JsonSerializer.Deserialize<GuildUserXp>(redisData);
+                var userData = JsonSerializer.Deserialize<GuildUserXp>((string)redisData);
                 if (userData is not null)
                     return userData;
             }
@@ -172,7 +172,7 @@ public class XpCacheManager : INService
         {
             try
             {
-                settings = JsonSerializer.Deserialize<GuildXpSetting>(redisData);
+                settings = JsonSerializer.Deserialize<GuildXpSetting>((string)redisData);
                 if (settings != null)
                 {
                     // Update hot cache
@@ -279,7 +279,7 @@ public class XpCacheManager : INService
 
         // Try Redis cache
         var redisValue = await redisCache.StringGetAsync(cacheKey).ConfigureAwait(false);
-        if (redisValue.HasValue && double.TryParse(redisValue, out var multiplier))
+        if (redisValue.HasValue && double.TryParse((string)redisValue, out var multiplier))
         {
             return multiplier;
         }

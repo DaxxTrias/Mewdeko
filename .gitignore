@@ -383,5 +383,7 @@ __cottage_test/
 _site/*
 api/*
 /api
+/src/Mewdeko/Generated/System.Text.RegularExpressions.Generator/System.Text.RegularExpressions.Generator.RegexGenerator/RegexGenerator.g.cs
+/src/Mewdeko/Generated/
 src/Mewdeko/gcreds.json
 src/Mewdeko/application.yml
