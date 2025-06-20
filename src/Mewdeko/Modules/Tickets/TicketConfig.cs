@@ -42,6 +42,7 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
         ///     and the number of components (buttons/select menus) they contain.
         /// </remarks>
         [Cmd]
+        [Aliases]
         [RequireContext(ContextType.Guild)]
         [UserPerm(GuildPermission.Administrator)]
         public async Task PanelList()
@@ -49,7 +50,7 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
             var panels = await Service.GetPanelsAsync(ctx.Guild.Id);
             if (!panels.Any())
             {
-                await ctx.Channel.SendErrorAsync("No ticket panels found in this server.", Config);
+                await ctx.Channel.SendErrorAsync(Strings.NoTicketPanels(ctx.Guild.Id), Config);
                 return;
             }
 
@@ -97,6 +98,7 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
         ///     The button ID can be found using the panel info command.
         /// </remarks>
         [Cmd]
+        [Aliases]
         [RequireContext(ContextType.Guild)]
         [UserPerm(GuildPermission.Administrator)]
         public async Task DeleteButton(int buttonId)
@@ -128,6 +130,7 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
         ///     The menu ID can be found using the panel info command.
         /// </remarks>
         [Cmd]
+        [Aliases]
         [RequireContext(ContextType.Guild)]
         [UserPerm(GuildPermission.Administrator)]
         public async Task DeleteSelectMenu(int menuId)
@@ -159,6 +162,7 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
         ///     At least one option must remain in each select menu.
         /// </remarks>
         [Cmd]
+        [Aliases]
         [RequireContext(ContextType.Guild)]
         [UserPerm(GuildPermission.Administrator)]
         public async Task DeleteSelectOption(int optionId)
@@ -200,6 +204,7 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
         ///     will automatically save transcripts when closed.
         /// </remarks>
         [Cmd]
+        [Aliases]
         [RequireContext(ContextType.Guild)]
         [UserPerm(GuildPermission.Administrator)]
         public async Task SetPanelTranscripts(ulong panelId, bool enable)
@@ -234,6 +239,7 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
         /// </summary>
         /// <param name="panelId">The ID of the panel to add the menu to</param>
         [Cmd]
+        [Aliases]
         [RequireContext(ContextType.Guild)]
         [UserPerm(GuildPermission.Administrator)]
         public async Task AddSelectMenu(ulong panelId)
@@ -328,6 +334,7 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
         /// <param name="description">Optional description shown under the label</param>
         /// <param name="emoji">Optional emoji shown next to the label</param>
         [Cmd]
+        [Aliases]
         [RequireContext(ContextType.Guild)]
         [UserPerm(GuildPermission.Administrator)]
         public async Task AddOption(
@@ -375,6 +382,7 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
         /// </summary>
         /// <param name="menuId">The ID of the menu to view</param>
         [Cmd]
+        [Aliases]
         [RequireContext(ContextType.Guild)]
         [UserPerm(GuildPermission.Administrator)]
         public async Task ListOptions(string menuId)
@@ -408,6 +416,7 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
         /// <param name="menuId">The ID of the menu</param>
         /// <param name="optionValue">The value of the option to remove</param>
         [Cmd]
+        [Aliases]
         [RequireContext(ContextType.Guild)]
         [UserPerm(GuildPermission.Administrator)]
         public async Task RemoveOption(string menuId, string optionValue)
@@ -444,6 +453,7 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
         /// <param name="menuId">The ID of the menu</param>
         /// <param name="placeholder">The new placeholder text</param>
         [Cmd]
+        [Aliases]
         [RequireContext(ContextType.Guild)]
         [UserPerm(GuildPermission.Administrator)]
         public async Task SetPlaceholder(string menuId, [Remainder] string placeholder)
@@ -469,6 +479,7 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
         ///     within the specified time. Set to null to disable the requirement.
         /// </remarks>
         [Cmd]
+        [Aliases]
         [RequireContext(ContextType.Guild)]
         [UserPerm(GuildPermission.Administrator)]
         public async Task SetResponseTime(int buttonId, int? minutes)
@@ -498,6 +509,7 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
         ///     select menus, and their configurations.
         /// </remarks>
         [Cmd]
+        [Aliases]
         [RequireContext(ContextType.Guild)]
         [UserPerm(GuildPermission.Administrator)]
         public async Task PanelInfo(ulong panelId)
@@ -548,6 +560,7 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
         ///     of hours of inactivity. Set to null to disable auto-closing.
         /// </remarks>
         [Cmd]
+        [Aliases]
         [RequireContext(ContextType.Guild)]
         [UserPerm(GuildPermission.Administrator)]
         public async Task SetAutoClose(int buttonId, int? hours)
@@ -582,6 +595,7 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
         ///     transcript settings, categories, and role permissions.
         /// </remarks>
         [Cmd]
+        [Aliases]
         [RequireContext(ContextType.Guild)]
         [UserPerm(GuildPermission.Administrator)]
         public async Task ButtonInfo(int buttonId)
@@ -649,6 +663,7 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
         ///     The default title is "Create Ticket" if none is set.
         /// </remarks>
         [Cmd]
+        [Aliases]
         [RequireContext(ContextType.Guild)]
         [UserPerm(GuildPermission.Administrator)]
         public async Task SetModalTitle(int buttonId, [Remainder] string title)
@@ -711,6 +726,7 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
         ///     - max:X: Sets maximum length (0-4000)
         /// </remarks>
         [Cmd]
+        [Aliases]
         [RequireContext(ContextType.Guild)]
         [UserPerm(GuildPermission.Administrator)]
         public async Task AddModalField(int buttonId, string label, [Remainder] string fieldConfig = null)
@@ -804,6 +820,7 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
         ///     Removes a field from a ticket creation modal
         /// </summary>
         [Cmd]
+        [Aliases]
         [RequireContext(ContextType.Guild)]
         [UserPerm(GuildPermission.Administrator)]
         public async Task RemoveModalField(int buttonId, string fieldId)
@@ -845,6 +862,7 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
         ///     Lists all fields in a ticket creation modal
         /// </summary>
         [Cmd]
+        [Aliases]
         [RequireContext(ContextType.Guild)]
         [UserPerm(GuildPermission.Administrator)]
         public async Task ListModalFields(int buttonId)
@@ -884,6 +902,7 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
         ///     Updates the modal help command to include title configuration
         /// </summary>
         [Cmd]
+        [Aliases]
         [RequireContext(ContextType.Guild)]
         [UserPerm(GuildPermission.Administrator)]
         public async Task ModalHelp()
@@ -922,6 +941,7 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
         ///     - Category and role settings
         /// </remarks>
         [Cmd]
+        [Aliases]
         [RequireContext(ContextType.Guild)]
         [UserPerm(GuildPermission.ManageChannels)]
         public async Task TicketListPanel(ulong panelId)
@@ -1016,6 +1036,7 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
         ///     - Associated categories and roles
         /// </remarks>
         [Cmd]
+        [Aliases]
         [RequireContext(ContextType.Guild)]
         [UserPerm(GuildPermission.ManageChannels)]
         public async Task TicketListPanels()
@@ -1026,7 +1047,7 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
 
                 if (!panels.Any())
                 {
-                    await ctx.Channel.SendErrorAsync("No ticket panels found in this server.", Config);
+                    await ctx.Channel.SendErrorAsync(Strings.NoTicketPanels(ctx.Guild.Id), Config);
                     return;
                 }
 

@@ -4,6 +4,7 @@
       <TargetFramework>net9.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
+      <EnablePreviewFeatures>True</EnablePreviewFeatures>
 
         <IsPackable>false</IsPackable>
         <IsTestProject>true</IsTestProject>
@@ -26,10 +27,16 @@
       <PackageReference Include="NUnit3TestAdapter" Version="5.0.0"/>
       <PackageReference Include="SkiaSharp" Version="3.119.0"/>
       <PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="3.119.0"/>
+      <PackageReference Include="YamlDotNet" Version="16.3.0"/>
     </ItemGroup>
 
     <ItemGroup>
         <Using Include="NUnit.Framework"/>
     </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../src/Mewdeko/Mewdeko.csproj"/>
+  </ItemGroup>
+
 
 </Project>

@@ -23,9 +23,9 @@ public class RoleStates(BotConfigService bss, InteractiveService interactivity, 
     public async Task ToggleRoleStates()
     {
         if (await Service.ToggleRoleStates(ctx.Guild.Id))
-            await ctx.Channel.SendConfirmAsync($"{bss.Data.SuccessEmote} Role States are now enabled!");
+            await ctx.Channel.SendConfirmAsync(Strings.RoleStatesEnabled(ctx.Guild.Id, bss.Data.SuccessEmote));
         else
-            await ctx.Channel.SendConfirmAsync($"{bss.Data.SuccessEmote} Role States are now disabled!");
+            await ctx.Channel.SendConfirmAsync(Strings.RoleStatesDisabled(ctx.Guild.Id, bss.Data.SuccessEmote));
     }
 
     /// <summary>
@@ -40,7 +40,7 @@ public class RoleStates(BotConfigService bss, InteractiveService interactivity, 
         if (roleStateSettings is null || !roleStateSettings.Enabled)
         {
             await ctx.Channel.SendErrorAsync(
-                $"{bss.Data.ErrorEmote} {Strings.RoleStatesNotEnabled(ctx.Guild.Id)}", Config);
+                Strings.RoleStatesNotEnabled(ctx.Guild.Id, bss.Data.ErrorEmote), Config);
             return;
         }
 
@@ -77,7 +77,7 @@ public class RoleStates(BotConfigService bss, InteractiveService interactivity, 
         if (roleStateSettings is null || !roleStateSettings.Enabled)
         {
             await ctx.Channel.SendErrorAsync(
-                $"{bss.Data.ErrorEmote} {Strings.RoleStatesNotEnabled(ctx.Guild.Id)}", Config);
+                Strings.RoleStatesNotEnabled(ctx.Guild.Id, bss.Data.ErrorEmote), Config);
             return;
         }
 
@@ -107,14 +107,14 @@ public class RoleStates(BotConfigService bss, InteractiveService interactivity, 
         if (roleStateSettings is null)
         {
             await ctx.Channel.SendErrorAsync(
-                $"{bss.Data.ErrorEmote} Role States are not enabled and have not been configured!", Config);
+                Strings.RoleStatesNotEnabled(ctx.Guild.Id, bss.Data.ErrorEmote), Config);
             return;
         }
 
         if (await Service.ToggleIgnoreBots(roleStateSettings))
-            await ctx.Channel.SendConfirmAsync($"{bss.Data.SuccessEmote} Role States will ignore bots!");
+            await ctx.Channel.SendConfirmAsync(Strings.RoleStatesIgnoreBots(ctx.Guild.Id, bss.Data.SuccessEmote));
         else
-            await ctx.Channel.SendConfirmAsync($"{bss.Data.SuccessEmote} Role States will not ignore bots!");
+            await ctx.Channel.SendConfirmAsync(Strings.RoleStatesNotIgnoreBots(ctx.Guild.Id, bss.Data.SuccessEmote));
     }
 
 
@@ -130,14 +130,16 @@ public class RoleStates(BotConfigService bss, InteractiveService interactivity, 
         if (roleStateSettings is null)
         {
             await ctx.Channel.SendErrorAsync(
-                $"{bss.Data.ErrorEmote} Role States are not enabled and have not been configured!", Config);
+                Strings.RoleStatesNotEnabled(ctx.Guild.Id, bss.Data.ErrorEmote), Config);
             return;
         }
 
         if (await Service.ToggleClearOnBan(roleStateSettings))
-            await ctx.Channel.SendConfirmAsync($"{bss.Data.SuccessEmote} Role states will clear on ban!");
+            await ctx.Channel.SendConfirmAsync(
+                $"{bss.Data.SuccessEmote} {Strings.RoleStatesWillClearOnBan(ctx.Guild.Id)}");
         else
-            await ctx.Channel.SendConfirmAsync($"{bss.Data.SuccessEmote} Role states will not clear on ban!");
+            await ctx.Channel.SendConfirmAsync(
+                $"{bss.Data.SuccessEmote} {Strings.RoleStatesWillNotClearOnBan(ctx.Guild.Id)}");
     }
 
     /// <summary>
@@ -151,7 +153,7 @@ public class RoleStates(BotConfigService bss, InteractiveService interactivity, 
         var roleStateSettings = await Service.GetRoleStateSettings(ctx.Guild.Id);
         if (roleStateSettings is null)
             await ctx.Channel.SendErrorAsync(
-                $"{bss.Data.ErrorEmote} Role States are not enabled and have not been configured!", Config);
+                Strings.RoleStatesNotEnabled(ctx.Guild.Id, bss.Data.ErrorEmote), Config);
         else
         {
             var deniedUsers = string.IsNullOrWhiteSpace(roleStateSettings.DeniedUsers)
@@ -164,9 +166,9 @@ public class RoleStates(BotConfigService bss, InteractiveService interactivity, 
 
 
             var eb = new EmbedBuilder()
-                .WithTitle("Role States Settings")
+                .WithTitle(Strings.RoleStatesSettingsTitle(ctx.Guild.Id))
                 .WithOkColor()
-                .WithDescription($"`Enabled:` {roleStateSettings.Enabled}\n" +
+                .WithDescription(Strings.RoleStatesConfigEnabled(ctx.Guild.Id, roleStateSettings.Enabled) + "\n" +
                                  $"`Clear on ban:` {roleStateSettings.ClearOnBan}\n" +
                                  $"`Ignore bots:` {roleStateSettings.IgnoreBots}\n" +
                                  $"`Denied roles:` {(deniedRoles.Any() ? string.Join("|", deniedRoles.Select(x => $"<@&{x}>")) : "None")}\n" +
@@ -187,7 +189,8 @@ public class RoleStates(BotConfigService bss, InteractiveService interactivity, 
 
         if (!userRoleStates.Any())
         {
-            await ctx.Channel.SendErrorAsync($"{bss.Data.ErrorEmote} No user role states have been saved!", Config);
+            await ctx.Channel.SendErrorAsync($"{bss.Data.ErrorEmote} {Strings.RoleStatesNoSaved(ctx.Guild.Id)}",
+                Config);
         }
         else
         {
@@ -208,7 +211,7 @@ public class RoleStates(BotConfigService bss, InteractiveService interactivity, 
                 await Task.CompletedTask.ConfigureAwait(false);
 
                 var eb = new PageBuilder()
-                    .WithTitle("User Role States")
+                    .WithTitle(Strings.RoleStatesUserTitle(ctx.Guild.Id))
                     .WithOkColor();
 
                 var roleStatesToShow = userRoleStates.Skip(5 * page).Take(3).ToList();
@@ -239,10 +242,12 @@ public class RoleStates(BotConfigService bss, InteractiveService interactivity, 
     {
         var userRoleStates = await Service.DeleteUserRoleState(ctx.Guild.Id, user.Id);
         if (!userRoleStates)
-            await ctx.Channel.SendErrorAsync($"{bss.Data.ErrorEmote} There is no role state for {user}!", Config);
+            await ctx.Channel.SendErrorAsync(
+                $"{bss.Data.ErrorEmote} {Strings.RoleStatesNoStateForUser(ctx.Guild.Id, user)}!", Config);
         else
         {
-            await ctx.Channel.SendConfirmAsync($"{bss.Data.SuccessEmote} User role state for {user} has been deleted!");
+            await ctx.Channel.SendConfirmAsync(
+                $"{bss.Data.SuccessEmote} {Strings.RoleStatesUserDeleted(ctx.Guild.Id, user)}");
         }
     }
 
@@ -260,7 +265,7 @@ public class RoleStates(BotConfigService bss, InteractiveService interactivity, 
         if (roleStateSettings is null)
         {
             await ctx.Channel.SendErrorAsync(
-                $"{bss.Data.ErrorEmote} Role States are not enabled and have not been configured!", Config);
+                Strings.RoleStatesNotEnabled(ctx.Guild.Id, bss.Data.ErrorEmote), Config);
             return;
         }
 
@@ -281,7 +286,7 @@ public class RoleStates(BotConfigService bss, InteractiveService interactivity, 
         await Service.UpdateRoleStateSettings(roleStateSettings);
 
         await ctx.Channel.SendConfirmAsync(
-            $"{bss.Data.SuccessEmote} Successfully added {addedCount} role(s) to the deny list.");
+            $"{bss.Data.SuccessEmote} {Strings.RoleStatesRolesAddedToDeny(ctx.Guild.Id, addedCount)}");
     }
 
     /// <summary>
@@ -298,7 +303,7 @@ public class RoleStates(BotConfigService bss, InteractiveService interactivity, 
         if (roleStateSettings is null)
         {
             await ctx.Channel.SendErrorAsync(
-                $"{bss.Data.ErrorEmote} Role States are not enabled and have not been configured!", Config);
+                Strings.RoleStatesNotEnabled(ctx.Guild.Id, bss.Data.ErrorEmote), Config);
             return;
         }
 
@@ -319,7 +324,7 @@ public class RoleStates(BotConfigService bss, InteractiveService interactivity, 
         await Service.UpdateRoleStateSettings(roleStateSettings);
 
         await ctx.Channel.SendConfirmAsync(
-            $"{bss.Data.SuccessEmote} Successfully removed {removedCount} role(s) from the deny list.");
+            $"{bss.Data.SuccessEmote} {Strings.RoleStatesRolesRemovedFromDeny(ctx.Guild.Id, removedCount)}");
     }
 
     /// <summary>
@@ -336,7 +341,7 @@ public class RoleStates(BotConfigService bss, InteractiveService interactivity, 
         if (roleStateSettings is null)
         {
             await ctx.Channel.SendErrorAsync(
-                $"{bss.Data.ErrorEmote} Role States are not enabled and have not been configured!", Config);
+                Strings.RoleStatesNotEnabled(ctx.Guild.Id, bss.Data.ErrorEmote), Config);
             return;
         }
 
@@ -357,7 +362,7 @@ public class RoleStates(BotConfigService bss, InteractiveService interactivity, 
         await Service.UpdateRoleStateSettings(roleStateSettings);
 
         await ctx.Channel.SendConfirmAsync(
-            $"{bss.Data.SuccessEmote} Successfully added {addedCount} user(s) to the deny list.");
+            $"{bss.Data.SuccessEmote} {Strings.RoleStatesUsersAddedToDeny(ctx.Guild.Id, addedCount)}");
     }
 
     /// <summary>
@@ -374,7 +379,7 @@ public class RoleStates(BotConfigService bss, InteractiveService interactivity, 
         if (roleStateSettings is null)
         {
             await ctx.Channel.SendErrorAsync(
-                $"{bss.Data.ErrorEmote} Role States are not enabled and have not been configured!", Config);
+                Strings.RoleStatesNotEnabled(ctx.Guild.Id, bss.Data.ErrorEmote), Config);
             return;
         }
 
@@ -395,7 +400,7 @@ public class RoleStates(BotConfigService bss, InteractiveService interactivity, 
         await Service.UpdateRoleStateSettings(roleStateSettings);
 
         await ctx.Channel.SendConfirmAsync(
-            $"{bss.Data.SuccessEmote} Successfully removed {removedCount} user(s) from the deny list.");
+            $"{bss.Data.SuccessEmote} {Strings.RoleStatesUsersRemovedFromDeny(ctx.Guild.Id, removedCount)}");
     }
 
     /// <summary>
@@ -410,10 +415,11 @@ public class RoleStates(BotConfigService bss, InteractiveService interactivity, 
     {
         var roleIds = roles.Where(x => x.Id != ctx.Guild.Id && !x.IsManaged).Select(x => x.Id);
         if (!roleIds.Any())
-            await ctx.Channel.SendErrorAsync($"{bss.Data.ErrorEmote} There are no valid roles specified!", Config);
+            await ctx.Channel.SendErrorAsync($"{bss.Data.ErrorEmote} {Strings.RoleStatesNoValidRoles(ctx.Guild.Id)}",
+                Config);
         await Service.SetRoleStateManually(user, ctx.Guild.Id, roleIds);
         await ctx.Channel.SendConfirmAsync(
-            $"{bss.Data.SuccessEmote} Successfully set the role state for user {user.Mention} with the specified roles.");
+            $"{bss.Data.SuccessEmote} {Strings.RoleStatesSetSuccess(ctx.Guild.Id, user.Mention)}");
     }
 
     /// <summary>
@@ -428,10 +434,11 @@ public class RoleStates(BotConfigService bss, InteractiveService interactivity, 
     {
         var removed = await Service.RemoveRolesFromUserRoleState(ctx.Guild.Id, user.Id, roles.Select(x => x.Id));
         if (!removed.Item1)
-            await ctx.Channel.SendErrorAsync($"{bss.Data.ErrorEmote} Remove failed because:\n{removed.Item2}", Config);
+            await ctx.Channel.SendErrorAsync(
+                $"{bss.Data.ErrorEmote} {Strings.RoleStatesRemoveFailed(ctx.Guild.Id, removed.Item2)}", Config);
         else
             await ctx.Channel.SendConfirmAsync(
-                $"{bss.Data.SuccessEmote} Successfully removed those roles from {user}'s Role State!.");
+                $"{bss.Data.SuccessEmote} {Strings.RoleStatesRolesRemovedSuccess(ctx.Guild.Id, user)}");
     }
 
     /// <summary>
@@ -446,10 +453,11 @@ public class RoleStates(BotConfigService bss, InteractiveService interactivity, 
     {
         var removed = await Service.AddRolesToUserRoleState(ctx.Guild.Id, user.Id, roles.Select(x => x.Id));
         if (!removed.Item1)
-            await ctx.Channel.SendErrorAsync($"{bss.Data.ErrorEmote} Remove failed because:\n{removed.Item2}", Config);
+            await ctx.Channel.SendErrorAsync(
+                $"{bss.Data.ErrorEmote} {Strings.RoleStatesRemoveFailed(ctx.Guild.Id, removed.Item2)}", Config);
         else
             await ctx.Channel.SendConfirmAsync(
-                $"{bss.Data.SuccessEmote} Successfully removed those roles from {user}'s Role State!.");
+                $"{bss.Data.SuccessEmote} {Strings.RoleStatesRolesRemovedSuccess(ctx.Guild.Id, user)}");
     }
 
     /// <summary>
@@ -463,8 +471,10 @@ public class RoleStates(BotConfigService bss, InteractiveService interactivity, 
     {
         var deleted = await Service.DeleteUserRoleState(user.Id, ctx.Guild.Id);
         if (!deleted)
-            await ctx.Channel.SendErrorAsync($"{bss.Data.ErrorEmote} No Role State to delete!", Config);
+            await ctx.Channel.SendErrorAsync($"{bss.Data.ErrorEmote} {Strings.RoleStatesNoStateToDelete(ctx.Guild.Id)}",
+                Config);
         else
-            await ctx.Channel.SendConfirmAsync($"{bss.Data.SuccessEmote} Successfully deleted {user}'s Role State!");
+            await ctx.Channel.SendConfirmAsync(
+                Strings.RoleStatesDeletedSuccessFinal(ctx.Guild.Id, bss.Data.SuccessEmote, user));
     }
 }

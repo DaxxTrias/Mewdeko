@@ -68,7 +68,7 @@ public partial class TicketsSlash : MewdekoSlashModuleBase<TicketService>
             var menus = await Service.GetPanelSelectMenusAsync(panelId);
 
             var embed = new EmbedBuilder()
-                .WithTitle("Panel Components")
+                .WithTitle(Strings.PanelComponents(ctx.Guild.Id))
                 .WithOkColor();
 
             if (buttons.Any())

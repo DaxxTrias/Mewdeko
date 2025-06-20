@@ -554,16 +554,12 @@ public class ChatTriggers(IHttpClientFactory clientFactory, InteractiveService s
         await Service.ToggleGrantedRole(ct, role.Id).ConfigureAwait(false);
 
         var text = toggleDisabled
-            ?
-            Strings.CtRoleToggleDisabled(ctx.Guild.Id, Format.Bold(role.Name), Format.Code(id.ToString()))
-            :
-            ct.IsToggled(role.Id)
+            ? Strings.CtRoleToggleDisabled(ctx.Guild.Id, Format.Bold(role.Name), Format.Code(id.ToString()))
+            : ct.IsToggled(role.Id)
                 ? Strings.CtRoleToggleEnabled(ctx.Guild.Id, Format.Bold(role.Name), Format.Code(id.ToString()))
-                :
-                ct.IsGranted(role.Id)
+                : ct.IsGranted(role.Id)
                     ? Strings.CtRoleAddEnabled(ctx.Guild.Id, Format.Bold(role.Name), Format.Code(id.ToString()))
-                    :
-                    Strings.CtRoleAddDisabled(ctx.Guild.Id, Format.Bold(role.Name), Format.Code(id.ToString()));
+                    : Strings.CtRoleAddDisabled(ctx.Guild.Id, Format.Bold(role.Name), Format.Code(id.ToString()));
 
         await ReplyConfirmAsync(text).ConfigureAwait(false);
     }
@@ -600,16 +596,12 @@ public class ChatTriggers(IHttpClientFactory clientFactory, InteractiveService s
         await Service.ToggleRemovedRole(ct, role.Id).ConfigureAwait(false);
 
         var text = toggleDisabled
-            ?
-            Strings.CtRoleToggleDisabled(ctx.Guild.Id, Format.Bold(role.Name), Format.Code(id.ToString()))
-            :
-            ct.IsToggled(role.Id)
+            ? Strings.CtRoleToggleDisabled(ctx.Guild.Id, Format.Bold(role.Name), Format.Code(id.ToString()))
+            : ct.IsToggled(role.Id)
                 ? Strings.CtRoleToggleEnabled(ctx.Guild.Id, Format.Bold(role.Name), Format.Code(id.ToString()))
-                :
-                ct.IsRemoved(role.Id)
+                : ct.IsRemoved(role.Id)
                     ? Strings.CtRoleRemoveEnabled(ctx.Guild.Id, Format.Bold(role.Name), Format.Code(id.ToString()))
-                    :
-                    Strings.CtRoleRemoveDisabled(ctx.Guild.Id, Format.Bold(role.Name), Format.Code(id.ToString()));
+                    : Strings.CtRoleRemoveDisabled(ctx.Guild.Id, Format.Bold(role.Name), Format.Code(id.ToString()));
 
         await ReplyConfirmAsync(text).ConfigureAwait(false);
     }
@@ -622,7 +614,7 @@ public class ChatTriggers(IHttpClientFactory clientFactory, InteractiveService s
     /// <param name="enabled">Whether the trigger type should be enabled or disabled.</param>
     /// <example>.chattriggervalidtype 9987 Slash true</example>
     [Cmd]
-    [Alias]
+    [Aliases]
     [UserPerm(GuildPermission.Administrator)]
     public async Task ChatTriggerValidType(int id, ChatTriggerType type, bool enabled)
     {
@@ -650,7 +642,7 @@ public class ChatTriggers(IHttpClientFactory clientFactory, InteractiveService s
     /// <param name="webhookUrl">The webhook URL to set.</param>
     /// <example>.chattriggerscrosspostwebhook 9987 webhookurl</example>
     [Cmd]
-    [Alias]
+    [Aliases]
     [UserPerm(GuildPermission.Administrator)]
     public async Task CtCpSetWebhook(int id, string webhookUrl)
     {
@@ -680,7 +672,7 @@ public class ChatTriggers(IHttpClientFactory clientFactory, InteractiveService s
     /// <param name="channel">The channel to set for crossposting.</param>
     /// <example>.chattriggerscrosspostchannel 9987 #channel</example>
     [Cmd]
-    [Alias]
+    [Aliases]
     [UserPerm(GuildPermission.Administrator)]
     public async Task CtCpSetChannel(int id, ITextChannel channel)
     {
@@ -705,7 +697,7 @@ public class ChatTriggers(IHttpClientFactory clientFactory, InteractiveService s
     /// <param name="type">The interaction type to set. <see cref="CtApplicationCommandType" /></param>
     /// <example>.setctintertype 9987 Slash</example>
     [Cmd]
-    [Alias]
+    [Aliases]
     [UserPerm(GuildPermission.Administrator)]
     public async Task SetCtInterType(int id, CtApplicationCommandType type)
     {
@@ -747,7 +739,7 @@ public class ChatTriggers(IHttpClientFactory clientFactory, InteractiveService s
     /// <param name="name">The name to set for the interaction.</param>
     /// <example>.setctintername 9987 ihatedocumentation</example>
     [Cmd]
-    [Alias]
+    [Aliases]
     [UserPerm(GuildPermission.Administrator)]
     public async Task SetCtInterName(int id, string name)
     {
@@ -773,7 +765,7 @@ public class ChatTriggers(IHttpClientFactory clientFactory, InteractiveService s
     /// <param name="description">The description to set for the interaction.</param>
     /// <example>.setctinterdesc 9987 3591 things to continue documenting....</example>
     [Cmd]
-    [Alias]
+    [Aliases]
     [UserPerm(GuildPermission.Administrator)]
     public async Task SetCtInterDesc(int id, string description)
     {
@@ -801,7 +793,7 @@ public class ChatTriggers(IHttpClientFactory clientFactory, InteractiveService s
     /// <param name="ephemeral">True if the response should be ephemeral, false otherwise.</param>
     /// <example>.ctca 9987 true/false</example>
     [Cmd]
-    [Alias]
+    [Aliases]
     [UserPerm(GuildPermission.Administrator)]
     public async Task CtInterEphemeral(int id, bool ephemeral)
     {
@@ -825,7 +817,7 @@ public class ChatTriggers(IHttpClientFactory clientFactory, InteractiveService s
     /// </summary>
     /// <example>.ctintererrors</example>
     [Cmd]
-    [Alias]
+    [Aliases]
     [UserPerm(GuildPermission.Administrator)]
     public async Task CtInterErrors()
     {

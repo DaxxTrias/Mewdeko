@@ -1,6 +1,7 @@
 using System.Net.Http;
 using Mewdeko.Modules.Currency.Services;
 using Mewdeko.Modules.Xp.Models;
+using Mewdeko.Services.Strings;
 using Serilog;
 
 namespace Mewdeko.Modules.Xp.Services;
@@ -82,7 +83,7 @@ public partial class XpService : INService, IUnloadableService
         IDataConnectionFactory dbFactory,
         IDataCache dataCache,
         EventHandler eventHandler,
-        ICurrencyService currencyService, IHttpClientFactory httpClientFactory)
+        ICurrencyService currencyService, IHttpClientFactory httpClientFactory, GeneratedBotStrings strings)
     {
         Client = client;
         DbFactory = dbFactory;
@@ -91,8 +92,8 @@ public partial class XpService : INService, IUnloadableService
 
         // Initialize sub-components
         cacheManager = new XpCacheManager(dataCache, dbFactory, client);
-        rewardManager = new XpRewardManager(client, dbFactory, currencyService, cacheManager);
-        competitionManager = new XpCompetitionManager(client, dbFactory);
+        rewardManager = new XpRewardManager(client, dbFactory, currencyService, cacheManager, strings);
+        competitionManager = new XpCompetitionManager(client, dbFactory, strings);
         voiceTracker = new XpVoiceTracker(client, dbFactory, cacheManager);
         backgroundProcessor = new XpBackgroundProcessor(
             dbFactory,

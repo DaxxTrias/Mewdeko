@@ -27322,3 +27322,938 @@ voiceprefsreset_noparams_2:
   args:
     - ''
   params: []
+config:
+  desc: Changes yml based config for the bot.
+  args:
+    - ''
+  params: [ ]
+config_string:
+  desc: Changes yml based config for the bot.
+  args:
+    - name
+  params:
+    - name: name
+      desc: The name of the config to change.
+      type: string
+      optional: true
+config_string_string:
+  desc: Changes yml based config for the bot.
+  args:
+    - name prop
+  params:
+    - name: name
+      desc: The name of the config to change.
+      type: string
+      optional: true
+    - name: prop
+      desc: The property of the config to change.
+      type: string
+      optional: true
+config_string_string_string:
+  desc: Changes yml based config for the bot.
+  args:
+    - name prop value
+  params:
+    - name: name
+      desc: The name of the config to change.
+      type: string
+      optional: true
+    - name: prop
+      desc: The property of the config to change.
+      type: string
+      optional: true
+    - name: value
+      desc: The new value to set for the property.
+      type: string
+      optional: true
+steal:
+  desc: Steals emotes from other servers.
+  args:
+    - emotes
+  params:
+    - name: e
+      desc: Space-separated list of emote URLs or emote names.
+      type: string
+      optional: false
+sfr:
+  desc: Steals emotes for a specific role.
+  args:
+    - role emotes
+  params:
+    - name: role
+      desc: The role to steal emotes for.
+      type: IRole
+      optional: false
+    - name: e
+      desc: Space-separated list of emote URLs or emote names.
+      type: string
+      optional: false
+viewrolestates:
+  desc: Views all user role states in the server.
+  args:
+    - ''
+  params: [ ]
+rolestatesremoveadduser:
+  desc: Removes or denies a user from role states.
+  args:
+    - user
+  params:
+    - name: user
+      desc: The user to remove/deny from role states.
+      type: IUser
+      optional: false
+langsetdefault:
+  desc: Sets the default language for the server.
+  args:
+    - language
+  params:
+    - name: language
+      desc: The language code to set as default.
+      type: string
+      optional: false
+scadd:
+  desc: Adds a command to run at startup.
+  args:
+    - command
+  params:
+    - name: command
+      desc: The command to add to startup.
+      type: string
+      optional: false
+acadd:
+  desc: Adds an automatic command.
+  args:
+    - command
+  params:
+    - name: command
+      desc: The command to add as automatic.
+      type: string
+      optional: false
+sclist:
+  desc: Lists all startup commands.
+  args:
+    - ''
+  params: [ ]
+aclist:
+  desc: Lists all automatic commands.
+  args:
+    - ''
+  params: [ ]
+acrm:
+  desc: Removes an automatic command.
+  args:
+    - index
+  params:
+    - name: index
+      desc: The index of the command to remove.
+      type: int
+      optional: false
+scrm:
+  desc: Removes a startup command.
+  args:
+    - index
+  params:
+    - name: index
+      desc: The index of the command to remove.
+      type: int
+      optional: false
+scclear:
+  desc: Clears all startup commands.
+  args:
+    - ''
+  params: [ ]
+nsfwtagbl:
+  desc: Manages NSFW tag blacklist.
+  args:
+    - action tag
+  params:
+    - name: action
+      desc: The action to perform (add/remove).
+      type: string
+      optional: false
+    - name: tag
+      desc: The tag to blacklist.
+      type: string
+      optional: false
+highlights:
+  desc: Manages user highlights.
+  args:
+    - action word
+  params:
+    - name: action
+      desc: The action to perform with highlights.
+      type: string
+      optional: false
+    - name: word
+      desc: The word to highlight.
+      type: string
+      optional: true
+help:
+  desc: Shows help information for commands.
+  args:
+    - command
+  params:
+    - name: command
+      desc: The command to get help for.
+      type: string
+      optional: true
+confesschannel:
+  desc: Sets the confession channel.
+  args:
+    - channel
+  params:
+    - name: channel
+      desc: The channel to set for confessions.
+      type: ITextChannel
+      optional: true
+confesslogchannel:
+  desc: Sets the confession log channel.
+  args:
+    - channel
+  params:
+    - name: channel
+      desc: The channel to log confessions to.
+      type: ITextChannel
+      optional: true
+confessblacklist:
+  desc: Adds a user to the confession blacklist.
+  args:
+    - user
+  params:
+    - name: user
+      desc: The user to blacklist from confessions.
+      type: IUser
+      optional: false
+confessunblacklist:
+  desc: Removes a user from the confession blacklist.
+  args:
+    - user
+  params:
+    - name: user
+      desc: The user to unblacklist from confessions.
+      type: IUser
+      optional: false
+chattriggerscrosspostwebhook:
+  desc: Sets webhook for chat trigger cross-posting.
+  args:
+    - webhook
+  params:
+    - name: webhook
+      desc: The webhook URL for cross-posting.
+      type: string
+      optional: false
+chattriggerscrosspostchannel:
+  desc: Sets channel for chat trigger cross-posting.
+  args:
+    - channel
+  params:
+    - name: channel
+      desc: The channel for cross-posting.
+      type: ITextChannel
+      optional: false
+afk:
+  desc: Sets your AFK status.
+  args:
+    - message
+  params:
+    - name: message
+      desc: The AFK message to display.
+      type: string
+      optional: true
+afkrm:
+  desc: Removes your AFK status.
+  args:
+    - ''
+  params: [ ]
+plot:
+  desc: Creates a graph plot.
+  args:
+    - expression
+  params:
+    - name: expression
+      desc: The mathematical expression to plot.
+      type: string
+      optional: false
+sym:
+  desc: Performs symbolic calculations.
+  args:
+    - expression
+  params:
+    - name: expression
+      desc: The expression to calculate symbolically.
+      type: string
+      optional: false
+minmsglength:
+  desc: Sets minimum message count length.
+  args:
+    - length
+  params:
+    - name: length
+      desc: The minimum message length.
+      type: int
+      optional: false
+togglemsgcount:
+  desc: Toggles message count tracking.
+  args:
+    - ''
+  params: [ ]
+repeatredun:
+  desc: Manages repeat redundancy.
+  args:
+    - action
+  params:
+    - name: action
+      desc: The action to perform.
+      type: string
+      optional: false
+ccatc:
+  desc: Creates category and text channels.
+  args:
+    - name count
+  params:
+    - name: name
+      desc: The category name.
+      type: string
+      optional: false
+    - name: count
+      desc: Number of text channels to create.
+      type: int
+      optional: false
+ccavc:
+  desc: Creates category and voice channels.
+  args:
+    - name count
+  params:
+    - name: name
+      desc: The category name.
+      type: string
+      optional: false
+    - name: count
+      desc: Number of voice channels to create.
+      type: int
+      optional: false
+ccvc:
+  desc: Creates category voice channels.
+  args:
+    - category count
+  params:
+    - name: category
+      desc: The category to add channels to.
+      type: ICategoryChannel
+      optional: false
+    - name: count
+      desc: Number of voice channels to create.
+      type: int
+      optional: false
+cctc:
+  desc: Creates category text channels.
+  args:
+    - category count
+  params:
+    - name: category
+      desc: The category to add channels to.
+      type: ICategoryChannel
+      optional: false
+    - name: count
+      desc: Number of text channels to create.
+      type: int
+      optional: false
+sj:
+  desc: Stops a running job.
+  args:
+    - job
+  params:
+    - name: job
+      desc: The job to stop.
+      type: string
+      optional: false
+rj:
+  desc: Manages role jobs.
+  args:
+    - action
+  params:
+    - name: action
+      desc: The action to perform on role jobs.
+      type: string
+      optional: false
+atuo:
+  desc: Adds role to users over a threshold.
+  args:
+    - role threshold
+  params:
+    - name: role
+      desc: The role to add.
+      type: IRole
+      optional: false
+    - name: threshold
+      desc: The threshold value.
+      type: int
+      optional: false
+atuu:
+  desc: Adds role to users under a threshold.
+  args:
+    - role threshold
+  params:
+    - name: role
+      desc: The role to add.
+      type: IRole
+      optional: false
+    - name: threshold
+      desc: The threshold value.
+      type: int
+      optional: false
+banmsgtest:
+  desc: Tests ban message functionality.
+  args:
+    - user
+  params:
+    - name: user
+      desc: The user to test ban message with.
+      type: IUser
+      optional: false
+dpo:
+  desc: Overrides Discord permissions.
+  args:
+    - permission action
+  params:
+    - name: permission
+      desc: The permission to override.
+      type: string
+      optional: false
+    - name: action
+      desc: The action to take.
+      type: string
+      optional: false
+dpor:
+  desc: Resets Discord permission overrides.
+  args:
+    - ''
+  params: [ ]
+dpol:
+  desc: Lists Discord permission overrides.
+  args:
+    - ''
+  params: [ ]
+prefix:
+  desc: Manages command prefixes.
+  args:
+    - prefix
+  params:
+    - name: prefix
+      desc: The prefix to set.
+      type: string
+      optional: true
+syncallxproles:
+  desc: Synchronizes XP roles for all users in the server.
+  args:
+    - ''
+  params: [ ]
+syncmyxproles:
+  desc: Synchronizes your XP roles.
+  args:
+    - ''
+  params: [ ]
+syncuserxproles:
+  desc: Synchronizes XP roles for a specific user.
+  args:
+    - '@user'
+  params:
+    - name: user
+      desc: The user to synchronize XP roles for.
+      type: IGuildUser
+      optional: false
+ticketautoarchive:
+  desc: Sets auto-archive behavior for a button
+  args:
+    - number boolean
+  params:
+    - &t1
+      name: buttonId
+      desc: The button ID to configure auto-archive for
+      type: int
+      optional: false
+    - &t2
+      name: enabled
+      desc: Whether to enable auto-archive on close
+      type: bool
+      optional: true
+ticketclosebehavior:
+  desc: Sets multiple close behaviors for a button at once
+  args:
+    - number bool bool bool bool number
+  params:
+    - &t3
+      name: buttonId
+      desc: The button ID to configure close behavior for
+      type: int
+      optional: false
+    - &t4
+      name: autoArchive
+      desc: Whether to auto-archive on close
+      type: bool?
+      optional: true
+    - &t5
+      name: deleteOnClose
+      desc: Whether to delete ticket on close
+      type: bool?
+      optional: true
+    - &t6
+      name: lockOnClose
+      desc: Whether to lock ticket on close
+      type: bool?
+      optional: true
+    - &t7
+      name: renameOnClose
+      desc: Whether to rename ticket on close
+      type: bool?
+      optional: true
+    - &t8
+      name: deleteDelayMinutes
+      desc: Delay in minutes before deletion
+      type: int?
+      optional: true
+recreatepanel:
+  desc: Recreates a deleted ticket panel in its original channel.
+  args:
+    - number
+  params:
+    - &t9
+      name: panelId
+      desc: The message ID of the panel to recreate
+      type: ulong
+      optional: false
+checkpanels:
+  desc: Checks all panels in the guild for missing messages.
+  args:
+    - ''
+  params: [ ]
+recreateallpanels:
+  desc: Recreates all panels with missing messages.
+  args:
+    - ''
+  params: [ ]
+patreonch:
+  desc: Sets or shows the Patreon announcement channel.
+  args:
+    - '#channel'
+  params:
+    - &p1
+      name: channel
+      desc: The channel to set for Patreon announcements. If null, shows current channel.
+      type: ITextChannel?
+      optional: true
+patreondisable:
+  desc: Disables Patreon announcements for this server.
+  args:
+    - ''
+  params: [ ]
+patreonmsg:
+  desc: Sets a custom message for Patreon announcements.
+  args:
+    - text
+  params:
+    - &p2
+      name: message
+      desc: The custom message. Use placeholders like %server.name%, %month%, etc. Use "-" to reset to default.
+      type: string?
+      optional: true
+patreonday:
+  desc: Sets the day of the month for Patreon announcements.
+  args:
+    - number
+  params:
+    - &p3
+      name: day
+      desc: The day of the month (1-28) for announcements. If null, shows current day.
+      type: int?
+      optional: true
+patreontoggle:
+  desc: Toggle Patreon announcements on or off.
+  args:
+    - ''
+  params: [ ]
+patreonconfig:
+  desc: Show current Patreon configuration.
+  args:
+    - ''
+  params: [ ]
+patreonannounce:
+  desc: Manually trigger a Patreon announcement.
+  args:
+    - ''
+  params: [ ]
+patreonhelp:
+  desc: Shows Patreon command help.
+  args:
+    - ''
+  params: [ ]
+patreonsync:
+  desc: Synchronizes Patreon supporters.
+  args:
+    - ''
+  params: [ ]
+patreonsupporters:
+  desc: Lists Patreon supporters.
+  args:
+    - ''
+  params: [ ]
+patreonlink:
+  desc: Link a Discord user to a Patreon supporter.
+  args:
+    - '@user text'
+  params:
+    - &p10
+      name: user
+      desc: The Discord user to link.
+      type: IGuildUser
+      optional: false
+    - &p11
+      name: patreonUserId
+      desc: The Patreon user ID to link to.
+      type: string
+      optional: false
+patreonrolesync:
+  desc: Toggle automatic role synchronization.
+  args:
+    - ''
+  params: [ ]
+patreontiermap:
+  desc: Map a Patreon tier to a Discord role.
+  args:
+    - text @role
+  params:
+    - &p12
+      name: tierId
+      desc: The Patreon tier ID.
+      type: string
+      optional: false
+    - &p13
+      name: role
+      desc: The Discord role to map to the tier.
+      type: IRole
+      optional: false
+patreonsyncall:
+  desc: Sync roles for all linked supporters.
+  args:
+    - ''
+  params: [ ]
+patreonstats:
+  desc: Show Patreon supporter statistics.
+  args:
+    - ''
+  params: [ ]
+patreongoals:
+  desc: Show current Patreon goals.
+  args:
+    - ''
+  params: [ ]
+patreontop:
+  desc: Show top Patreon supporters.
+  args:
+    - number
+  params:
+    - &p14
+      name: count
+      desc: Number of top supporters to show (1-20).
+      type: int
+      optional: true
+patreonroles:
+  desc: List Patreon tier-role mappings.
+  args:
+    - ''
+  params: [ ]
+patreonanalytics:
+  desc: Show detailed Patreon analytics.
+  args:
+    - ''
+  params: [ ]
+patreonrecognize:
+  desc: Send recognition messages for new supporters.
+  args:
+    - '#channel'
+  params:
+    - &p15
+      name: channel
+      desc: The channel to send recognition messages to.
+      type: ITextChannel?
+      optional: true
+transactions:
+  desc: Display recent currency transactions for a user.
+  args:
+    - '@user'
+  params:
+    - &c1
+      name: user
+      desc: The user whose transactions are to be displayed. Defaults to the current user.
+      type: IUser?
+      optional: true
+war:
+  desc: Play a card game of War against the bot.
+  args:
+    - number
+  params:
+    - &c2
+      name: betAmount
+      desc: The amount to bet.
+      type: long
+      optional: false
+craps:
+  desc: Play a game of Craps with customizable bet types.
+  args:
+    - number text
+  params:
+    - &c3
+      name: betAmount
+      desc: The amount to bet.
+      type: long
+      optional: false
+    - &c4
+      name: betType
+      desc: The type of bet (pass, dontpass, field, any).
+      type: string
+      optional: true
+scratchcard:
+  desc: Buy and play a scratch card lottery game.
+  args:
+    - text
+  params:
+    - &c5
+      name: cardType
+      desc: The type of card to buy (bronze, silver, gold, diamond).
+      type: string
+      optional: true
+russianroulette:
+  desc: Play Russian Roulette with customizable bullet count.
+  args:
+    - number number
+  params:
+    - &c6
+      name: betAmount
+      desc: The amount to bet.
+      type: long
+      optional: false
+    - &c7
+      name: bullets
+      desc: Number of bullets (1-5).
+      type: int
+      optional: true
+baccarat:
+  desc: Play Baccarat with player, banker, or tie bets.
+  args:
+    - number text
+  params:
+    - &c8
+      name: betAmount
+      desc: The amount to bet.
+      type: long
+      optional: false
+    - &c9
+      name: betType
+      desc: The type of bet (player, banker, tie).
+      type: string
+      optional: true
+minesweeper:
+  desc: Play a Minesweeper-style gambling game.
+  args:
+    - number text
+  params:
+    - &c10
+      name: betAmount
+      desc: The amount to bet.
+      type: long
+      optional: false
+    - &c11
+      name: size
+      desc: Grid size (small, medium, large).
+      type: string
+      optional: true
+lottery:
+  desc: Buy lottery tickets for a chance to win big.
+  args:
+    - number
+  params:
+    - &c12
+      name: ticketCount
+      desc: Number of tickets to buy (1-10).
+      type: int
+      optional: true
+crash:
+  desc: Play Crash - bet on when the multiplier will crash.
+  args:
+    - number number
+  params:
+    - &c13
+      name: betAmount
+      desc: The amount to bet.
+      type: long
+      optional: false
+    - &c14
+      name: targetMultiplier
+      desc: The multiplier to cash out at (1.1x - 10.0x).
+      type: double
+      optional: true
+keno:
+  desc: Play Keno - pick numbers and hope they match.
+  args:
+    - number text
+  params:
+    - &c15
+      name: betAmount
+      desc: The amount to bet.
+      type: long
+      optional: false
+    - &c16
+      name: numbers
+      desc: Up to 10 numbers between 1-80, separated by spaces.
+      type: string
+      optional: false
+plinko:
+  desc: Play Plinko - drop a ball down pegs for prizes.
+  args:
+    - number number
+  params:
+    - &c17
+      name: betAmount
+      desc: The amount to bet.
+      type: long
+      optional: false
+    - &c18
+      name: rows
+      desc: Number of peg rows (5-10).
+      type: int
+      optional: true
+wheelfortune:
+  desc: Spin the Wheel of Fortune for prizes.
+  args:
+    - number text
+  params:
+    - &c19
+      name: betAmount
+      desc: The amount to bet.
+      type: long
+      optional: false
+    - &c20
+      name: wheelType
+      desc: The type of wheel (classic, risky, balanced).
+      type: string
+      optional: true
+duckrace:
+  desc: Bet on a duck race and watch them compete.
+  args:
+    - number
+  params:
+    - &c21
+      name: betAmount
+      desc: The amount to bet on the duck race.
+      type: long
+      optional: false
+bingo:
+  desc: Play Bingo with customizable card sizes.
+  args:
+    - number text
+  params:
+    - &c22
+      name: betAmount
+      desc: The amount to bet.
+      type: long
+      optional: false
+    - &c23
+      name: cardType
+      desc: The type of bingo card (small, large).
+      type: string
+      optional: true
+diceduel:
+  desc: Challenge another player to a dice duel.
+  args:
+    - '@user number'
+  params:
+    - &c24
+      name: opponent
+      desc: The user to challenge.
+      type: IUser
+      optional: false
+    - &c25
+      name: betAmount
+      desc: The amount each player bets.
+      type: long
+      optional: false
+memory:
+  desc: Play a memory game for currency rewards.
+  args:
+    - number text
+  params:
+    - &c26
+      name: betAmount
+      desc: The amount to bet.
+      type: long
+      optional: false
+    - &c27
+      name: difficulty
+      desc: The difficulty level (easy, medium, hard).
+      type: string
+      optional: true
+dailychallenge:
+  desc: Check your current daily challenge.
+  args:
+    - ''
+  params: [ ]
+claimchallenge:
+  desc: Claim your completed daily challenge reward.
+  args:
+    - ''
+  params: [ ]
+challengeleaderboard:
+  desc: View the daily challenge leaderboard.
+  args:
+    - ''
+  params: [ ]
+triviachain:
+  desc: Play Trivia Chain - answer questions to build winnings.
+  args:
+    - number text
+  params:
+    - &t10
+      name: betAmount
+      desc: The amount to bet.
+      type: long
+      optional: false
+    - &t11
+      name: category
+      desc: The trivia category.
+      type: string
+      optional: true
+addreactiontrigger:
+  desc: Add an automatic reaction trigger when someone reacts.
+  args:
+    - text text
+  params:
+    - &r1
+      name: reaction
+      desc: The reaction emoji to trigger on.
+      type: string
+      optional: false
+    - &r2
+      name: message
+      desc: The message to send when triggered.
+      type: string?
+      optional: true
+deleteselectmenu:
+  desc: Delete a ticket select menu by ID.
+  args:
+    - number
+  params:
+    - &sm1
+      name: menuId
+      desc: The ID of the select menu to delete.
+      type: int
+      optional: false
+deleteselectoption:
+  desc: Delete a ticket select menu option by ID.
+  args:
+    - number
+  params:
+    - &sm2
+      name: optionId
+      desc: The ID of the select menu option to delete.
+      type: int
+      optional: false

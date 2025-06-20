@@ -513,7 +513,7 @@ public class SlashMusic(
             }
 
             return new PageBuilder()
-                .WithTitle($"Queue - {queue.Count} tracks")
+                .WithTitle(Strings.MusicQueueTitle(ctx.Guild.Id, queue.Count))
                 .WithDescription(sb.ToString())
                 .WithOkColor();
         }
@@ -712,7 +712,7 @@ public class SlashMusic(
                 }
 
                 return new PageBuilder()
-                    .WithTitle($"Queue - {queue.Count} tracks")
+                    .WithTitle(Strings.MusicQueueTitle(ctx.Guild.Id, queue.Count))
                     .WithDescription(sb.ToString())
                     .WithOkColor();
             }
@@ -892,12 +892,12 @@ public class SlashMusic(
                     await ModifyOriginalResponseAsync(x =>
                     {
                         x.Embed = new EmbedBuilder()
-                            .WithTitle($"{album.Name}")
+                            .WithTitle(Strings.MusicAlbumTitle(ctx.Guild.Id, album.Name))
                             .WithDescription(
                                 $"Loading {album.Tracks.Total} tracks...\n{album.Artists.FirstOrDefault()?.Name ?? "Unknown"}")
                             .WithColor(new Color(30, 215, 96))
                             .WithThumbnailUrl(album.Images.FirstOrDefault()?.Url)
-                            .WithFooter($"Processing tracks {tracks.Count}/{album.Tracks.Total}")
+                            .WithFooter(Strings.MusicProcessingTracks(ctx.Guild.Id, tracks.Count, album.Tracks.Total))
                             .Build();
                     });
                 }
@@ -938,7 +938,8 @@ public class SlashMusic(
                         await ModifyOriginalResponseAsync(x =>
                         {
                             x.Embed = x.Embed.GetValueOrDefault().ToEmbedBuilder()
-                                .WithFooter($"Processing tracks {tracks.Count}/{album.Tracks.Total}")
+                                .WithFooter(Strings.MusicProcessingTracks(ctx.Guild.Id, tracks.Count,
+                                    album.Tracks.Total))
                                 .Build();
                         });
                     }
@@ -957,10 +958,12 @@ public class SlashMusic(
                         x.Embed = new EmbedBuilder()
                             .WithTitle($"{playlist.Name}")
                             .WithDescription(
-                                $"Loading {playlist.Tracks.Total} tracks...\nPlaylist by {playlist.Owner.DisplayName}")
+                                Strings.LoadingPlaylist(ctx.Guild.Id, playlist.Tracks.Total,
+                                    playlist.Owner.DisplayName))
                             .WithColor(new Color(30, 215, 96))
                             .WithThumbnailUrl(playlist.Images.FirstOrDefault()?.Url)
-                            .WithFooter($"Processing tracks {tracks.Count}/{playlist.Tracks.Total}")
+                            .WithFooter(
+                                Strings.MusicProcessingTracks(ctx.Guild.Id, tracks.Count, playlist.Tracks.Total))
                             .Build();
                     });
                 }
@@ -991,8 +994,8 @@ public class SlashMusic(
                         {
                             x.Embed = x.Embed.GetValueOrDefault().ToEmbedBuilder()
                                 .WithDescription(
-                                    $"Loading {playlist.Tracks.Total} tracks...\nPlaylist by {playlist.Owner.DisplayName}\n\n" +
-                                    $"▶️ Now Playing: {ytTrack.Title}")
+                                    Strings.LoadingPlaylistWithTrack(ctx.Guild.Id, playlist.Tracks.Total,
+                                        playlist.Owner.DisplayName, ytTrack.Title))
                                 .Build();
                         });
                     }
@@ -1003,7 +1006,8 @@ public class SlashMusic(
                         await ModifyOriginalResponseAsync(x =>
                         {
                             x.Embed = x.Embed.GetValueOrDefault().ToEmbedBuilder()
-                                .WithFooter($"Processing tracks {tracks.Count}/{playlist.Tracks.Total}")
+                                .WithFooter(Strings.MusicProcessingTracks(ctx.Guild.Id, tracks.Count,
+                                    playlist.Tracks.Total))
                                 .Build();
                         });
                     }

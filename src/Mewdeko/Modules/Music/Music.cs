@@ -899,7 +899,7 @@ public partial class Music(
             }
 
             return new PageBuilder()
-                .WithTitle($"Queue - {queue.Count} tracks")
+                .WithTitle(Strings.MusicQueueTitle(ctx.Guild.Id, queue.Count))
                 .WithDescription(sb.ToString())
                 .WithOkColor();
         }
@@ -1159,7 +1159,7 @@ public partial class Music(
 
         // Create response embed
         var embed = new EmbedBuilder()
-            .WithTitle("Added to Queue")
+            .WithTitle(Strings.MusicAddedTitle(ctx.Guild.Id))
             .WithDescription(CreateAddedTracksDescription(addedTracks))
             .WithOkColor()
             .Build();
@@ -1186,7 +1186,7 @@ public partial class Music(
         else
         {
             var totalDuration = TimeSpan.FromMilliseconds(tracks.Sum(t => t.Track.Duration.TotalMilliseconds));
-            sb.AppendLine($"**Added to Queue:** {tracks.Count} tracks");
+            sb.AppendLine($"**Added to Queue: {tracks.Count} tracks**");
             sb.AppendLine($"⏱️ Total Duration: `{totalDuration:hh\\:mm\\:ss}`\n");
 
             // Show first few tracks as preview
@@ -1253,17 +1253,18 @@ public partial class Music(
                 if (album.Tracks.Total > 10)
                 {
                     var loadingEmbed = new EmbedBuilder()
-                        .WithTitle($"{album.Name}")
+                        .WithTitle(Strings.MusicAlbumTitle(ctx.Guild.Id, album.Name))
                         .WithDescription(
                             $"Loading {album.Tracks.Total} tracks...\n{album.Artists.FirstOrDefault()?.Name ?? "Unknown"}")
                         .WithColor(new Color(30, 215, 96))
                         .WithThumbnailUrl(album.Images.FirstOrDefault()?.Url)
-                        .WithFooter($"Processing tracks {tracks.Count}/{album.Tracks.Total}")
+                        .WithFooter(Strings.MusicProcessingTracks(ctx.Guild.Id, tracks.Count, album.Tracks.Total))
                         .Build();
                     loadingMsg = await ctx.Channel.SendMessageAsync(embed: loadingEmbed);
                 }
 
-                foreach (var searchQuery in album.Tracks.Items.Select(track => $"{track.Name} {string.Join(" ", track.Artists.Select(a => a.Name))}"))
+                foreach (var searchQuery in album.Tracks.Items.Select(track =>
+                             $"{track.Name} {string.Join(" ", track.Artists.Select(a => a.Name))}"))
                 {
                     var ytTrack = await service.Tracks.LoadTrackAsync(searchQuery, TrackSearchMode.YouTube);
                     if (ytTrack == null) continue;
@@ -1296,7 +1297,7 @@ public partial class Music(
                     if (loadingMsg == null || tracks.Count % 5 != 0) continue;
                     {
                         var updatedEmbed = loadingMsg.Embeds.First().ToEmbedBuilder()
-                            .WithFooter($"Processing tracks {tracks.Count}/{album.Tracks.Total}")
+                            .WithFooter(Strings.MusicProcessingTracks(ctx.Guild.Id, tracks.Count, album.Tracks.Total))
                             .Build();
                         await loadingMsg.ModifyAsync(x => x.Embed = updatedEmbed);
                     }
@@ -1316,10 +1317,10 @@ public partial class Music(
                     var loadingEmbed = new EmbedBuilder()
                         .WithTitle($"{playlist.Name}")
                         .WithDescription(
-                            $"Loading {playlist.Tracks.Total} tracks...\nPlaylist by {playlist.Owner.DisplayName}")
+                            Strings.LoadingPlaylist(ctx.Guild.Id, playlist.Tracks.Total, playlist.Owner.DisplayName))
                         .WithColor(new Color(30, 215, 96))
                         .WithThumbnailUrl(playlist.Images.FirstOrDefault()?.Url)
-                        .WithFooter($"Processing tracks {tracks.Count}/{playlist.Tracks.Total}")
+                        .WithFooter(Strings.MusicProcessingTracks(ctx.Guild.Id, tracks.Count, playlist.Tracks.Total))
                         .Build();
                     loadingMsg = await ctx.Channel.SendMessageAsync(embed: loadingEmbed);
                 }
@@ -1361,7 +1362,8 @@ public partial class Music(
                         if (loadingMsg != null && tracks.Count % 5 == 0)
                         {
                             var updatedEmbed = loadingMsg.Embeds.First().ToEmbedBuilder()
-                                .WithFooter($"Processing tracks {tracks.Count}/{playlist.Tracks.Total}")
+                                .WithFooter(Strings.MusicProcessingTracks(ctx.Guild.Id, tracks.Count,
+                                    playlist.Tracks.Total))
                                 .Build();
                             await loadingMsg.ModifyAsync(x => x.Embed = updatedEmbed);
                         }

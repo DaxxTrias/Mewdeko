@@ -109,7 +109,7 @@ public partial class RemindService : INService
 
             await ch.EmbedAsync(new EmbedBuilder()
                     .WithOkColor()
-                    .WithTitle("Reminder")
+                    .WithTitle(Strings.ReminderTitle(reminder.ServerId))
                     .AddField("Created At",
                         reminder.DateAdded.HasValue ? reminder.DateAdded.Value.ToLongDateString() : "?")
                     .AddField("By",

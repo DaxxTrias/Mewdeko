@@ -223,7 +223,8 @@ public partial class ServerManagement
             }
 
             await user.ModifyAsync(x => x.Channel = new Optional<IVoiceChannel>(channel)).ConfigureAwait(false);
-            await ctx.Channel.SendConfirmAsync(Strings.MoveuserSuccess(ctx.Guild.Id, user.Mention, Format.Bold(channel.Name)))
+            await ctx.Channel
+                .SendConfirmAsync(Strings.MoveuserSuccess(ctx.Guild.Id, user.Mention, Format.Bold(channel.Name)))
                 .ConfigureAwait(false);
         }
 
@@ -251,7 +252,7 @@ public partial class ServerManagement
             }
 
             await user.ModifyAsync(x => x.Channel = new Optional<IVoiceChannel>(vc)).ConfigureAwait(false);
-await ctx.Channel.SendConfirmAsync(Strings.GrabSuccess(ctx.Guild.Id, user.Mention, user.VoiceChannel.Name))
+            await ctx.Channel.SendConfirmAsync(Strings.GrabSuccess(ctx.Guild.Id, user.Mention, user.VoiceChannel.Name))
                 .ConfigureAwait(false);
         }
 
@@ -289,8 +290,7 @@ await ctx.Channel.SendConfirmAsync(Strings.GrabSuccess(ctx.Guild.Id, user.Mentio
         {
             var embed = new EmbedBuilder
             {
-                Color = Mewdeko.ErrorColor,
-                Description = Strings.NukeConfirm(ctx.Guild.Id)
+                Color = Mewdeko.ErrorColor, Description = Strings.NukeConfirm(ctx.Guild.Id)
             };
             if (!await PromptUserConfirmAsync(embed, ctx.User.Id).ConfigureAwait(false)) return;
             ITextChannel chan;
@@ -345,7 +345,8 @@ await ctx.Channel.SendConfirmAsync(Strings.GrabSuccess(ctx.Guild.Id, user.Mentio
                                    new OverwritePermissions();
                 await tch.AddPermissionOverwriteAsync(ctx.Guild.EveryoneRole,
                     currentPerms.Modify(sendMessages: PermValue.Deny)).ConfigureAwait(false);
-                await ctx.Channel.SendMessageAsync(Strings.LockSuccess(ctx.Guild.Id, config.Data.SuccessEmote, tch.Mention))
+                await ctx.Channel
+                    .SendMessageAsync(Strings.LockSuccess(ctx.Guild.Id, config.Data.SuccessEmote, tch.Mention))
                     .ConfigureAwait(false);
             }
             else
@@ -356,7 +357,6 @@ await ctx.Channel.SendConfirmAsync(Strings.GrabSuccess(ctx.Guild.Id, user.Mentio
                     currentPerms.Modify(sendMessages: PermValue.Deny)).ConfigureAwait(false);
                 await ctx.Channel.SendMessageAsync(Strings.LockSuccess(ctx.Guild.Id, config.Data.SuccessEmote,
                     channel.Mention));
-
             }
         }
 
@@ -398,7 +398,8 @@ await ctx.Channel.SendConfirmAsync(Strings.GrabSuccess(ctx.Guild.Id, user.Mentio
             var eb = new EmbedBuilder();
             eb.WithOkColor()
                 .WithDescription(Strings.CreatingCategory(ctx.Guild.Id, config.Data.LoadingEmote, catName,
-                    channels.Length, "Voice"));            var msg = await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
+                    channels.Length, "Voice"));
+            var msg = await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
             var cat = await ctx.Guild.CreateCategoryAsync(catName).ConfigureAwait(false);
             foreach (var i in channels)
                 await ctx.Guild.CreateVoiceChannelAsync(i, x => x.CategoryId = cat.Id).ConfigureAwait(false);
@@ -422,13 +423,13 @@ await ctx.Channel.SendConfirmAsync(Strings.GrabSuccess(ctx.Guild.Id, user.Mentio
             var eb = new EmbedBuilder();
             eb.WithOkColor();
             eb.WithDescription(
-                $"{config.Data.LoadingEmote} Adding {channels.Length} Voice Channels to {chan.Name}");
+                Strings.AddingVoiceChannels(ctx.Guild.Id, config.Data.LoadingEmote, channels.Length, chan.Name));
             var msg = await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
             foreach (var i in channels)
                 await ctx.Guild.CreateVoiceChannelAsync(i, x => x.CategoryId = chan.Id).ConfigureAwait(false);
 
             var eb2 = new EmbedBuilder();
-            eb2.WithDescription($"Added {channels.Length} Voice Channels to {chan.Name}!");
+            eb2.WithDescription(Strings.ChannelsAddedVoice(ctx.Guild.Id, channels.Length, chan.Name));
             eb2.WithOkColor();
             await msg.ModifyAsync(x => x.Embed = eb2.Build()).ConfigureAwait(false);
         }

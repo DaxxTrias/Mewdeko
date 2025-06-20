@@ -700,7 +700,7 @@ public partial class TicketsSlash
                 // Show preview and confirmation
                 var preview = ConfigurationPreview.GenerateButtonPreview(basicSettings, modal.ModalConfig,
                     behaviorSettings,
-                    permissionSettings);
+                    permissionSettings, Strings.ButtonPreview(ctx.Guild.Id));
 
                 var confirmId = Guid.NewGuid().ToString();
                 await cache.Redis.GetDatabase().StringSetAsync($"button_confirm:{confirmId}",

@@ -11,7 +11,8 @@ namespace Mewdeko.Modules.Starboard;
 ///     Class for managing starboard commands via slash commands.
 /// </summary>
 [Group("starboard", "Manage the starboard!")]
-public class StarboardSlash(GuildSettingsService guildSettings, InteractiveService interactiveService) : MewdekoSlashSubmodule<StarboardService>
+public class StarboardSlash(GuildSettingsService guildSettings, InteractiveService interactiveService)
+    : MewdekoSlashSubmodule<StarboardService>
 {
     /// <summary>
     ///     Creates a new starboard configuration.
@@ -34,7 +35,7 @@ public class StarboardSlash(GuildSettingsService guildSettings, InteractiveServi
         catch
         {
             await msg.DeleteAsync();
-            await ctx.Interaction.SendErrorAsync("This emote cannot be used! Please use a different one.", Config);
+            await ctx.Interaction.SendErrorAsync(Strings.EmoteCannotBeUsed(ctx.Guild.Id), Config);
             return;
         }
 
@@ -48,7 +49,8 @@ public class StarboardSlash(GuildSettingsService guildSettings, InteractiveServi
 
         await Service.CreateStarboard(ctx.Guild, channel.Id, emote.ToString(), threshold);
         await msg.DeleteAsync();
-        await ctx.Interaction.SendConfirmAsync(Strings.StarboardCreated(ctx.Guild.Id, channel.Mention, emote.ToString(), threshold));
+        await ctx.Interaction.SendConfirmAsync(Strings.StarboardCreated(ctx.Guild.Id, channel.Mention, emote.ToString(),
+            threshold));
     }
 
     /// <summary>
@@ -59,8 +61,7 @@ public class StarboardSlash(GuildSettingsService guildSettings, InteractiveServi
     [SlashUserPerm(GuildPermission.ManageChannels)]
     [CheckPermissions]
     public async Task DeleteStarboard(
-        [Summary("starboard", "The starboard to delete")]
-        [Autocomplete(typeof(StarboardAutocompleter))]
+        [Summary("starboard", "The starboard to delete")] [Autocomplete(typeof(StarboardAutocompleter))]
         int starboardId)
     {
         if (await Service.DeleteStarboard(ctx.Guild, starboardId))
@@ -72,7 +73,7 @@ public class StarboardSlash(GuildSettingsService guildSettings, InteractiveServi
     /// <summary>
     ///     Lists all starboard configurations in the guild.
     /// </summary>
-     /// <summary>
+    /// <summary>
     ///     Lists all starboard configurations in the guild.
     /// </summary>
     [SlashCommand("list", "List all starboard configurations")]
@@ -81,7 +82,8 @@ public class StarboardSlash(GuildSettingsService guildSettings, InteractiveServi
         var starboards = Service.GetStarboards(ctx.Guild.Id);
         if (!starboards.Any())
         {
-            await ctx.Interaction.SendErrorAsync(Strings.NoStarboardsConfigured(ctx.Guild.Id), Config).ConfigureAwait(false);
+            await ctx.Interaction.SendErrorAsync(Strings.NoStarboardsConfigured(ctx.Guild.Id), Config)
+                .ConfigureAwait(false);
             return;
         }
 
@@ -97,7 +99,8 @@ public class StarboardSlash(GuildSettingsService guildSettings, InteractiveServi
             .Build();
 
         await ctx.Interaction.DeleteOriginalResponseAsync().ConfigureAwait(false);
-        await interactiveService.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
+        await interactiveService.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60))
+            .ConfigureAwait(false);
 
         async Task<PageBuilder> PageFactory(int page)
         {
@@ -130,8 +133,7 @@ public class StarboardSlash(GuildSettingsService guildSettings, InteractiveServi
     [SlashUserPerm(GuildPermission.ManageChannels)]
     [CheckPermissions]
     public async Task SetRepostThreshold(
-        [Summary("starboard", "The starboard to modify")]
-        [Autocomplete(typeof(StarboardAutocompleter))]
+        [Summary("starboard", "The starboard to modify")] [Autocomplete(typeof(StarboardAutocompleter))]
         int starboardId,
         [Summary("threshold", "The number of messages before reposting")]
         int threshold)
@@ -141,7 +143,8 @@ public class StarboardSlash(GuildSettingsService guildSettings, InteractiveServi
             if (threshold == 0)
                 await ctx.Interaction.SendConfirmAsync(Strings.StarboardRepostingDisabled(ctx.Guild.Id, starboardId));
             else
-                await ctx.Interaction.SendConfirmAsync(Strings.StarboardRepostThresholdSet(ctx.Guild.Id, starboardId, threshold));
+                await ctx.Interaction.SendConfirmAsync(
+                    Strings.StarboardRepostThresholdSet(ctx.Guild.Id, starboardId, threshold));
         }
         else
             await ctx.Interaction.SendErrorAsync(Strings.StarboardNotFound(ctx.Guild.Id, starboardId), Config);
@@ -156,8 +159,7 @@ public class StarboardSlash(GuildSettingsService guildSettings, InteractiveServi
     [SlashUserPerm(GuildPermission.ManageChannels)]
     [CheckPermissions]
     public async Task SetStarThreshold(
-        [Summary("starboard", "The starboard to modify")]
-        [Autocomplete(typeof(StarboardAutocompleter))]
+        [Summary("starboard", "The starboard to modify")] [Autocomplete(typeof(StarboardAutocompleter))]
         int starboardId,
         [Summary("threshold", "The number of stars required")]
         int threshold)
@@ -177,8 +179,7 @@ public class StarboardSlash(GuildSettingsService guildSettings, InteractiveServi
     [SlashUserPerm(GuildPermission.ManageChannels)]
     [CheckPermissions]
     public async Task StarboardChToggle(
-        [Summary("starboard", "The starboard to modify")]
-        [Autocomplete(typeof(StarboardAutocompleter))]
+        [Summary("starboard", "The starboard to modify")] [Autocomplete(typeof(StarboardAutocompleter))]
         int starboardId,
         ITextChannel channel)
     {
@@ -225,8 +226,7 @@ public class StarboardSlash(GuildSettingsService guildSettings, InteractiveServi
     [SlashUserPerm(GuildPermission.ManageChannels)]
     [CheckPermissions]
     public async Task StarboardWlMode(
-        [Summary("starboard", "The starboard to modify")]
-        [Autocomplete(typeof(StarboardAutocompleter))]
+        [Summary("starboard", "The starboard to modify")] [Autocomplete(typeof(StarboardAutocompleter))]
         int starboardId,
         Starboard.WhitelistMode mode)
     {
@@ -250,17 +250,18 @@ public class StarboardSlash(GuildSettingsService guildSettings, InteractiveServi
     [SlashUserPerm(GuildPermission.ManageChannels)]
     [CheckPermissions]
     public async Task StarboardRemoveOnReactionsClear(
-        [Summary("starboard", "The starboard to modify")]
-        [Autocomplete(typeof(StarboardAutocompleter))]
+        [Summary("starboard", "The starboard to modify")] [Autocomplete(typeof(StarboardAutocompleter))]
         int starboardId,
         bool enabled)
     {
         if (await Service.SetRemoveOnClear(ctx.Guild, starboardId, enabled))
         {
             if (enabled)
-                await ctx.Interaction.SendConfirmAsync(Strings.StarboardReactionsClearRemoveEnabled(ctx.Guild.Id, starboardId));
+                await ctx.Interaction.SendConfirmAsync(
+                    Strings.StarboardReactionsClearRemoveEnabled(ctx.Guild.Id, starboardId));
             else
-                await ctx.Interaction.SendConfirmAsync(Strings.StarboardReactionsClearRemoveDisabled(ctx.Guild.Id, starboardId));
+                await ctx.Interaction.SendConfirmAsync(
+                    Strings.StarboardReactionsClearRemoveDisabled(ctx.Guild.Id, starboardId));
         }
         else
             await ctx.Interaction.SendErrorAsync(Strings.StarboardNotFound(ctx.Guild.Id, starboardId), Config);
@@ -275,8 +276,7 @@ public class StarboardSlash(GuildSettingsService guildSettings, InteractiveServi
     [SlashUserPerm(GuildPermission.ManageChannels)]
     [CheckPermissions]
     public async Task StarboardRemoveOnDelete(
-        [Summary("starboard", "The starboard to modify")]
-        [Autocomplete(typeof(StarboardAutocompleter))]
+        [Summary("starboard", "The starboard to modify")] [Autocomplete(typeof(StarboardAutocompleter))]
         int starboardId,
         bool enabled)
     {
@@ -285,7 +285,8 @@ public class StarboardSlash(GuildSettingsService guildSettings, InteractiveServi
             if (enabled)
                 await ctx.Interaction.SendConfirmAsync(Strings.StarboardDeleteRemoveEnabled(ctx.Guild.Id, starboardId));
             else
-                await ctx.Interaction.SendConfirmAsync(Strings.StarboardDeleteRemoveDisabled(ctx.Guild.Id, starboardId));
+                await ctx.Interaction.SendConfirmAsync(
+                    Strings.StarboardDeleteRemoveDisabled(ctx.Guild.Id, starboardId));
         }
         else
             await ctx.Interaction.SendErrorAsync(Strings.StarboardNotFound(ctx.Guild.Id, starboardId), Config);
@@ -300,17 +301,18 @@ public class StarboardSlash(GuildSettingsService guildSettings, InteractiveServi
     [SlashUserPerm(GuildPermission.ManageChannels)]
     [CheckPermissions]
     public async Task StarboardRemoveOnBelowThreshold(
-        [Summary("starboard", "The starboard to modify")]
-        [Autocomplete(typeof(StarboardAutocompleter))]
+        [Summary("starboard", "The starboard to modify")] [Autocomplete(typeof(StarboardAutocompleter))]
         int starboardId,
         bool enabled)
     {
         if (await Service.SetRemoveBelowThreshold(ctx.Guild, starboardId, enabled))
         {
             if (enabled)
-                await ctx.Interaction.SendConfirmAsync(Strings.StarboardBelowThresholdRemoveEnabled(ctx.Guild.Id, starboardId));
+                await ctx.Interaction.SendConfirmAsync(
+                    Strings.StarboardBelowThresholdRemoveEnabled(ctx.Guild.Id, starboardId));
             else
-                await ctx.Interaction.SendConfirmAsync(Strings.StarboardBelowThresholdRemoveDisabled(ctx.Guild.Id, starboardId));
+                await ctx.Interaction.SendConfirmAsync(
+                    Strings.StarboardBelowThresholdRemoveDisabled(ctx.Guild.Id, starboardId));
         }
         else
             await ctx.Interaction.SendErrorAsync(Strings.StarboardNotFound(ctx.Guild.Id, starboardId), Config);
@@ -325,8 +327,7 @@ public class StarboardSlash(GuildSettingsService guildSettings, InteractiveServi
     [SlashUserPerm(GuildPermission.ManageChannels)]
     [CheckPermissions]
     public async Task StarboardAllowBots(
-        [Summary("starboard", "The starboard to modify")]
-        [Autocomplete(typeof(StarboardAutocompleter))]
+        [Summary("starboard", "The starboard to modify")] [Autocomplete(typeof(StarboardAutocompleter))]
         int starboardId,
         bool enabled)
     {

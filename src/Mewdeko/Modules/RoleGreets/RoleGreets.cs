@@ -78,13 +78,14 @@ public class RoleGreets(InteractiveService interactivity, HttpClient http) : Mew
         var greet = (await Service.GetListGreets(ctx.Guild.Id)).Where(x => x.RoleId == role.Id);
         if (!greet.Any())
         {
-            await ctx.Channel.SendErrorAsync(Strings.RolegreetNoGreetsForRole(ctx.Guild.Id), Config).ConfigureAwait(false);
+            await ctx.Channel.SendErrorAsync(Strings.RolegreetNoGreetsForRole(ctx.Guild.Id), Config)
+                .ConfigureAwait(false);
             return;
         }
 
         if (await PromptUserConfirmAsync(
                 new EmbedBuilder().WithOkColor()
-                    .WithDescription(Strings.RolegreetConfirmRemove(ctx.Guild.Id)), ctx.User.Id)                .ConfigureAwait(false))
+                    .WithDescription(Strings.RolegreetConfirmRemove(ctx.Guild.Id)), ctx.User.Id).ConfigureAwait(false))
         {
             await Service.MultiRemoveRoleGreetInternal(greet.ToArray()).ConfigureAwait(false);
             await ctx.Channel.SendConfirmAsync(Strings.RolegreetConfirmRemoved(ctx.Guild.Id)).ConfigureAwait(false);
@@ -147,7 +148,7 @@ public class RoleGreets(InteractiveService interactivity, HttpClient http) : Mew
         }
         else
         {
-            await ctx.Channel.SendConfirmAsync($"RoleGreet #{id} will no longer delete.").ConfigureAwait(false);
+            await ctx.Channel.SendConfirmAsync(Strings.RolegreetNoDelete(ctx.Guild.Id, id)).ConfigureAwait(false);
         }
     }
 
@@ -165,12 +166,14 @@ public class RoleGreets(InteractiveService interactivity, HttpClient http) : Mew
         var greet = (await Service.GetListGreets(ctx.Guild.Id))?.ElementAt(num - 1);
         if (greet is null)
         {
-            await ctx.Channel.SendConfirmAsync(Strings.RolegreetGreetbotsSet(ctx.Guild.Id, num, enabled)).ConfigureAwait(false);
+            await ctx.Channel.SendConfirmAsync(Strings.RolegreetGreetbotsSet(ctx.Guild.Id, num, enabled))
+                .ConfigureAwait(false);
             return;
         }
 
         await Service.ChangeRgGb(greet, enabled).ConfigureAwait(false);
-        await ctx.Channel.SendConfirmAsync(Strings.RolegreetGreetbotsSet(ctx.Guild.Id, num, enabled)).ConfigureAwait(false);
+        await ctx.Channel.SendConfirmAsync(Strings.RolegreetGreetbotsSet(ctx.Guild.Id, num, enabled))
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -187,12 +190,16 @@ public class RoleGreets(InteractiveService interactivity, HttpClient http) : Mew
         var greet = (await Service.GetListGreets(ctx.Guild.Id))?.ElementAt(num - 1);
         if (greet is null)
         {
-            await ctx.Channel.SendConfirmAsync(Strings.RolegreetDisableStatus(ctx.Guild.Id, num, enabled ? "Enabled" : "Disabled")).ConfigureAwait(false);
+            await ctx.Channel
+                .SendConfirmAsync(Strings.RolegreetDisableStatus(ctx.Guild.Id, num, enabled ? "Enabled" : "Disabled"))
+                .ConfigureAwait(false);
             return;
         }
 
         await Service.RoleGreetDisable(greet, enabled).ConfigureAwait(false);
-        await ctx.Channel.SendConfirmAsync(Strings.RolegreetDisableStatus(ctx.Guild.Id, num, enabled ? "Enabled" : "Disabled")).ConfigureAwait(false);
+        await ctx.Channel
+            .SendConfirmAsync(Strings.RolegreetDisableStatus(ctx.Guild.Id, num, enabled ? "Enabled" : "Disabled"))
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -222,7 +229,8 @@ public class RoleGreets(InteractiveService interactivity, HttpClient http) : Mew
         if (name is null)
         {
             await Service.ChangeMgWebhook(greet, null).ConfigureAwait(false);
-            await ctx.Channel.SendConfirmAsync(Strings.RolegreetWebhookDisabled(ctx.Guild.Id, id)).ConfigureAwait(false);
+            await ctx.Channel.SendConfirmAsync(Strings.RolegreetWebhookDisabled(ctx.Guild.Id, id))
+                .ConfigureAwait(false);
             return;
         }
 
@@ -231,7 +239,8 @@ public class RoleGreets(InteractiveService interactivity, HttpClient http) : Mew
         {
             if (!Uri.IsWellFormedUriString(avatar, UriKind.Absolute))
             {
-                await ctx.Channel.SendErrorAsync(Strings.RolegreetWebhookInvalidAvatar(ctx.Guild.Id), Config).ConfigureAwait(false);
+                await ctx.Channel.SendErrorAsync(Strings.RolegreetWebhookInvalidAvatar(ctx.Guild.Id), Config)
+                    .ConfigureAwait(false);
 
                 return;
             }

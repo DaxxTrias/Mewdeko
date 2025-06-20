@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using LinqToDB;
 using Mewdeko.Modules.UserProfile.Common;
 using Mewdeko.Modules.Utility.Common;
+using Mewdeko.Services.Strings;
 using Embed = Discord.Embed;
 
 namespace Mewdeko.Modules.UserProfile.Services;
@@ -18,7 +19,9 @@ public partial class UserProfileService : INService
     private readonly IDataConnectionFactory dbFactory;
     private readonly Regex fcRegex = MyRegex();
     private readonly HttpClient http;
+    private readonly GeneratedBotStrings Strings;
     private readonly List<string> zodiacList;
+
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="UserProfileService" /> class with specified database and HTTP
@@ -26,10 +29,11 @@ public partial class UserProfileService : INService
     /// </summary>
     /// <param name="dbFactory">The database service for accessing user data.</param>
     /// <param name="http">The HTTP client used for making external API calls.</param>
-    public UserProfileService(IDataConnectionFactory dbFactory, HttpClient http)
+    public UserProfileService(IDataConnectionFactory dbFactory, HttpClient http, GeneratedBotStrings strings)
     {
         this.dbFactory = dbFactory;
         this.http = http;
+        Strings = strings;
         zodiacList =
         [
             "Aries",
@@ -353,7 +357,7 @@ public partial class UserProfileService : INService
     /// </remarks>
     public async Task<Embed?> GetProfileEmbed(IUser? user, IUser profileCaller)
     {
-        var eb = new EmbedBuilder().WithTitle($"Profile for {user}");
+        var eb = new EmbedBuilder().WithTitle(Strings.ProfileForUser(0, user));
         await using var dbContext = await dbFactory.CreateConnectionAsync();
 
         var dbUser = await dbContext.GetOrCreateUser(user);

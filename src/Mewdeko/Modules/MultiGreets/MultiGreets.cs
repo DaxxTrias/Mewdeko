@@ -251,7 +251,7 @@ public class MultiGreets(InteractiveService interactivity) : MewdekoModuleBase<M
     /// <param name="num">The id of the MultiGreet to change</param>
     /// <param name="enabled">Whether to greet bots</param>
     [Cmd]
-    [Alias]
+    [Aliases]
     [RequireContext(ContextType.Guild)]
     [UserPerm(GuildPermission.Administrator)]
     public async Task MultiGreetGreetBots(int num, bool enabled)
