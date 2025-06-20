@@ -1,9 +1,9 @@
+using DataModel;
 using Discord.Interactions;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
 using Mewdeko.Common.Attributes.InteractionCommands;
 using Mewdeko.Common.Autocompleters;
-
 using Mewdeko.Modules.StatusRoles.Services;
 using Mewdeko.Services.Settings;
 
@@ -27,16 +27,16 @@ public class SlashStatusRoles(BotConfigService bss, InteractiveService interacti
         if (status.Length > 128)
         {
             await ctx.Interaction.SendErrorAsync(
-                $"{bss.Data.ErrorEmote} That's too long to even fit in a normal status. Try again.", Config);
+                Strings.StatusTooLong(ctx.Guild.Id, bss.Data.ErrorEmote), Config);
             return;
         }
 
         var added = await Service.AddStatusRoleConfig(status, ctx.Guild.Id);
         if (added)
             await ctx.Interaction.SendConfirmAsync(
-                "Added StatusRole config! Please configure it with the other commands.");
+                Strings.StatusRoleConfigAdded(ctx.Guild.Id));
         else
-            await ctx.Interaction.SendErrorAsync($"{bss.Data.ErrorEmote} That StatusRole already exists!", Config);
+            await ctx.Interaction.SendErrorAsync(Strings.StatusRoleExists(ctx.Guild.Id, bss.Data.ErrorEmote), Config);
     }
 
     /// <summary>
@@ -47,7 +47,7 @@ public class SlashStatusRoles(BotConfigService bss, InteractiveService interacti
     [SlashUserPerm(GuildPermission.ManageGuild)]
     public async Task RemoveStatusRole(
         [Autocomplete(typeof(StatusRoleAutocompleter))]
-        DataModel.StatusRole potentialStatusRole)
+        StatusRole potentialStatusRole)
     {
         await Service.RemoveStatusRoleConfig(potentialStatusRole);
         await ctx.Interaction.SendConfirmAsync(Strings.StatusroleRemoved(ctx.Guild.Id));
@@ -62,7 +62,7 @@ public class SlashStatusRoles(BotConfigService bss, InteractiveService interacti
     [SlashUserPerm(GuildPermission.ManageGuild)]
     public async Task SetStatusRoleEmbed(
         [Autocomplete(typeof(StatusRoleAutocompleter))]
-        DataModel.StatusRole potentialStatusRole, string embedText = null)
+        StatusRole potentialStatusRole, string embedText = null)
     {
         if (string.IsNullOrWhiteSpace(embedText))
         {
@@ -122,7 +122,7 @@ public class SlashStatusRoles(BotConfigService bss, InteractiveService interacti
     [SlashUserPerm(GuildPermission.ManageGuild)]
     public async Task SetStatusRoleChannel(
         [Autocomplete(typeof(StatusRoleAutocompleter))]
-        DataModel.StatusRole potentialStatusRole, ITextChannel channel)
+        StatusRole potentialStatusRole, ITextChannel channel)
     {
         if (potentialStatusRole.StatusChannelId == channel.Id)
         {
@@ -143,7 +143,7 @@ public class SlashStatusRoles(BotConfigService bss, InteractiveService interacti
     /// <param name="roles">The roles to add.</param>
     [SlashCommand("set-add-roles", "Sets the roles to add when a user has the selected status")]
     [SlashUserPerm(GuildPermission.ManageGuild)]
-    public async Task SetAddRoles([Autocomplete(typeof(StatusRoleAutocompleter))] DataModel.StatusRole potentialStatusRole,
+    public async Task SetAddRoles([Autocomplete(typeof(StatusRoleAutocompleter))] StatusRole potentialStatusRole,
         IRole[] roles)
     {
         if (string.IsNullOrWhiteSpace(potentialStatusRole.ToAdd))
@@ -172,7 +172,7 @@ public class SlashStatusRoles(BotConfigService bss, InteractiveService interacti
     [SlashUserPerm(GuildPermission.ManageGuild)]
     public async Task SetRemoveRoles(
         [Autocomplete(typeof(StatusRoleAutocompleter))]
-        DataModel.StatusRole potentialStatusRole, IRole[] roles)
+        StatusRole potentialStatusRole, IRole[] roles)
     {
         if (string.IsNullOrWhiteSpace(potentialStatusRole.ToRemove))
         {
@@ -200,7 +200,7 @@ public class SlashStatusRoles(BotConfigService bss, InteractiveService interacti
     [SlashUserPerm(GuildPermission.ManageGuild)]
     public async Task RemoveAddRoles(
         [Autocomplete(typeof(StatusRoleAutocompleter))]
-        DataModel.StatusRole potentialStatusRole, IRole[] roles)
+        StatusRole potentialStatusRole, IRole[] roles)
     {
         var addRoles = potentialStatusRole.ToAdd.Split(" ");
         var newList = addRoles.Except(roles.Select(x => $"{x.Id}")).ToList();
@@ -226,7 +226,7 @@ public class SlashStatusRoles(BotConfigService bss, InteractiveService interacti
     [SlashUserPerm(GuildPermission.ManageGuild)]
     public async Task RemoveRemoveRoles(
         [Autocomplete(typeof(StatusRoleAutocompleter))]
-        DataModel.StatusRole potentialStatusRole, params IRole[] roles)
+        StatusRole potentialStatusRole, params IRole[] roles)
     {
         var removeRoles = potentialStatusRole.ToRemove.Split(" ");
         var newList = removeRoles.Except(roles.Select(x => $"{x.Id}")).ToList();
@@ -250,7 +250,7 @@ public class SlashStatusRoles(BotConfigService bss, InteractiveService interacti
     [SlashUserPerm(GuildPermission.ManageGuild)]
     public async Task ToggleRemoveAdded(
         [Autocomplete(typeof(StatusRoleAutocompleter))]
-        DataModel.StatusRole potentialStatusRole)
+        StatusRole potentialStatusRole)
     {
         var returned = await Service.ToggleRemoveAdded(potentialStatusRole);
         await ctx.Interaction.SendConfirmAsync($"{bss.Data.SuccessEmote} RemoveAdded is now `{returned}`");
@@ -264,7 +264,7 @@ public class SlashStatusRoles(BotConfigService bss, InteractiveService interacti
     [SlashUserPerm(GuildPermission.ManageGuild)]
     public async Task ToggleReaddRemoved(
         [Autocomplete(typeof(StatusRoleAutocompleter))]
-        DataModel.StatusRole potentialStatusRole)
+        StatusRole potentialStatusRole)
     {
         var returned = await Service.ToggleAddRemoved(potentialStatusRole);
         await ctx.Interaction.SendConfirmAsync($"{bss.Data.SuccessEmote} ReaddRemoved is now `{returned}`");

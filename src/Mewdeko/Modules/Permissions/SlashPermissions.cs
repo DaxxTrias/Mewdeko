@@ -72,7 +72,8 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
     ///     Each service parameter provided plays a crucial role in the operation and customization
     ///     of the bot's functionality, especially in the context of permissions and settings management.
     /// </remarks>
-    public SlashPermissions(IDataConnectionFactory dbFactory, InteractiveService inter, GuildSettingsService guildSettings,
+    public SlashPermissions(IDataConnectionFactory dbFactory, InteractiveService inter,
+        GuildSettingsService guildSettings,
         DiscordPermOverrideService dpoS, CommandService cmdServe)
     {
         interactivity = inter;
@@ -113,7 +114,7 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
     [PermRoleCheck]
     public async Task Verbose(PermissionSlash? action = null)
     {
-         await using var dbContext = await dbFactory.CreateConnectionAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
         // Get GuildConfig directly
         var config = await guildSettings.GetGuildConfig(ctx.Guild.Id);
@@ -154,7 +155,7 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
         if (role != null && role == role.Guild.EveryoneRole)
             return;
 
-         await using var dbContext = await dbFactory.CreateConnectionAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
         // Get GuildConfig directly
         var config = await dbContext.GuildConfigs
@@ -186,7 +187,8 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
 
             Service.UpdateCache(ctx.Guild.Id, permissions, config);
 
-            await ReplyConfirmAsync(Strings.PermroleChanged(ctx.Guild.Id, Format.Bold(role.Name))).ConfigureAwait(false);
+            await ReplyConfirmAsync(Strings.PermroleChanged(ctx.Guild.Id, Format.Bold(role.Name)))
+                .ConfigureAwait(false);
         }
     }
 
@@ -258,13 +260,14 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
         var index = int.Parse(perm);
         if (index == 0)
         {
-            await ctx.Interaction.SendErrorAsync(Strings.CannotRemovePermission(ctx.Guild.Id), Config).ConfigureAwait(false);
+            await ctx.Interaction.SendErrorAsync(Strings.CannotRemovePermission(ctx.Guild.Id), Config)
+                .ConfigureAwait(false);
             return;
         }
 
         try
         {
-             await using var dbContext = await dbFactory.CreateConnectionAsync();
+            await using var dbContext = await dbFactory.CreateConnectionAsync();
 
             // Get permissions directly
             var permissions = await dbContext.Permissions1
@@ -973,7 +976,7 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
                 emote: "<:perms_back_arrow:1290522013861023848>".ToIEmote());
 
         var quickEmbeds = (Context.Interaction as SocketMessageComponent).Message.Embeds
-            .Where(x => x.Footer.GetValueOrDefault().Text != "$$mdk_redperm$$").ToArray();
+            .Where(x => x.Footer.GetValueOrDefault().Text != Strings.PermFooterMarker(ctx.Guild.Id)).ToArray();
 
         // check effecting for redundant permissions
         var redundant = effecting.Where(x => effecting.Any(y =>
@@ -993,7 +996,7 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
                 .WithColor(0xe52d00)
                 .WithDescription(Strings.PermQuickOptionsRedundantExplainer(ctx.Guild.Id))
                 .AddField(Strings.PermQuickOptionsRedundantCount(ctx.Guild.Id), redundant.Count)
-                .WithFooter("$$mdk_redperm$$");
+                .WithFooter(Strings.PermFooterMarker(ctx.Guild.Id));
 
             cb.WithButton(Strings.PermQuickOptionsRedundantResolve(ctx.Guild.Id), $"credperms.{commandName}",
                 ButtonStyle.Success);
@@ -1007,7 +1010,8 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
         }
 
         if (effecting.Any(x => (PrimaryPermissionType)x.PrimaryTarget == PrimaryPermissionType.Server && !x.State))
-            cb.WithButton(Strings.PermQuickOptionsDisableDisabled(ctx.Guild.Id), $"command_toggle_disable.{commandName}",
+            cb.WithButton(Strings.PermQuickOptionsDisableDisabled(ctx.Guild.Id),
+                $"command_toggle_disable.{commandName}",
                 ButtonStyle.Success,
                 "<:perms_check:1290520193839140884>".ToIEmote());
         else
@@ -1067,7 +1071,7 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
             perms = PermissionExtensions.GetDefaultPermlist;
 
         var quickEmbeds = (Context.Interaction as SocketMessageComponent).Message.Embeds
-            .Where(x => x.Footer.GetValueOrDefault().Text != "$$mdk_redperm$$").ToArray();
+            .Where(x => x.Footer.GetValueOrDefault().Text != Strings.PermFooterMarker(ctx.Guild.Id)).ToArray();
 
         var redundant = perms
             .Where(x => x.SecondaryTargetName == commandName)
@@ -1115,7 +1119,7 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
             .AddField(Strings.PermQuickOptionsRedundantToolCustom(ctx.Guild.Id), perm.IsCustomCommand)
             .AddField(Strings.PermQuickOptionsRedundantToolStar(ctx.Guild.Id), perm.SecondaryTarget.ToString(), true)
             .AddField(Strings.PermQuickOptionsRedundantToolStarid(ctx.Guild.Id), $"{perm.SecondaryTargetName}", true)
-            .WithFooter("$$mdk_redperm$$")
+            .WithFooter(Strings.PermFooterMarker(ctx.Guild.Id))
             .WithColor(0xe52d00);
 
         await (Context.Interaction as SocketMessageComponent).UpdateAsync(x =>
@@ -1204,43 +1208,10 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
     [Discord.Interactions.RequireUserPermission(GuildPermission.Administrator)]
     [Discord.Interactions.RequireContext(ContextType.Guild)]
     public async Task ToggleCommanddisabled(string commandName)
-{
-    IList<Permission1> perms;
-
-    if (Service.Cache.TryGetValue(ctx.Guild.Id, out var permCache))
-        perms = permCache.Permissions.ToList();
-    else
-        perms = PermissionExtensions.GetDefaultPermlist;
-
-    perms = perms
-        .Where(x => x.SecondaryTargetName == commandName)
-        .ToList();
-
-    var sc = perms
-        .FirstOrDefault(x => (PrimaryPermissionType)x.PrimaryTarget == PrimaryPermissionType.Server, null);
-
-    if (sc is not null && sc.State)
     {
-        await Service.RemovePerm(ctx.Guild.Id, sc.Index);
-        sc = null;
-    }
+        IList<Permission1> perms;
 
-    if (sc is null)
-    {
-         await using var dbContext = await dbFactory.CreateConnectionAsync();
-
-        await Service.AddPermissions(ctx.Guild.Id, new Permission1
-        {
-            GuildId = ctx.Guild.Id,
-            PrimaryTarget = (int)PrimaryPermissionType.Server,
-            PrimaryTargetId = 0,
-            SecondaryTarget = (int)SecondaryPermissionType.Command,
-            SecondaryTargetName = commandName,
-            State = false
-        });
-
-        // reset local cache
-        if (Service.Cache.TryGetValue(ctx.Guild.Id, out permCache))
+        if (Service.Cache.TryGetValue(ctx.Guild.Id, out var permCache))
             perms = permCache.Permissions.ToList();
         else
             perms = PermissionExtensions.GetDefaultPermlist;
@@ -1249,17 +1220,50 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
             .Where(x => x.SecondaryTargetName == commandName)
             .ToList();
 
-        var index = perms.First(x => (PrimaryPermissionType)x.PrimaryTarget == PrimaryPermissionType.Server).Index;
+        var sc = perms
+            .FirstOrDefault(x => (PrimaryPermissionType)x.PrimaryTarget == PrimaryPermissionType.Server, null);
 
-        await Service.UnsafeMovePerm(ctx.Guild.Id, index, 1);
+        if (sc is not null && sc.State)
+        {
+            await Service.RemovePerm(ctx.Guild.Id, sc.Index);
+            sc = null;
+        }
 
+        if (sc is null)
+        {
+            await using var dbContext = await dbFactory.CreateConnectionAsync();
+
+            await Service.AddPermissions(ctx.Guild.Id, new Permission1
+            {
+                GuildId = ctx.Guild.Id,
+                PrimaryTarget = (int)PrimaryPermissionType.Server,
+                PrimaryTargetId = 0,
+                SecondaryTarget = (int)SecondaryPermissionType.Command,
+                SecondaryTargetName = commandName,
+                State = false
+            });
+
+            // reset local cache
+            if (Service.Cache.TryGetValue(ctx.Guild.Id, out permCache))
+                perms = permCache.Permissions.ToList();
+            else
+                perms = PermissionExtensions.GetDefaultPermlist;
+
+            perms = perms
+                .Where(x => x.SecondaryTargetName == commandName)
+                .ToList();
+
+            var index = perms.First(x => (PrimaryPermissionType)x.PrimaryTarget == PrimaryPermissionType.Server).Index;
+
+            await Service.UnsafeMovePerm(ctx.Guild.Id, index, 1);
+
+            await UpdateMessageWithPermenu(commandName);
+            return;
+        }
+
+        await Service.RemovePerm(ctx.Guild.Id, sc.Index);
         await UpdateMessageWithPermenu(commandName);
-        return;
     }
-
-    await Service.RemovePerm(ctx.Guild.Id, sc.Index);
-    await UpdateMessageWithPermenu(commandName);
-}
 
     /// <summary>
     ///     Resets local permissions for a specific command within the guild.
@@ -1490,7 +1494,8 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
                 .Select(async x => (x, user: await TryGetUser(x.PrimaryTargetId)))
                 .Select(x => x.Result)
                 .Select(x => new SelectMenuOptionBuilder(x.user?.ToString() ?? "Unknown#0000", x.x.Id.ToString(),
-                    allow ? Strings.PermsQuickOptionsUserRemoveAllow(ctx.Guild.Id, x.x.PrimaryTargetId)
+                    allow
+                        ? Strings.PermsQuickOptionsUserRemoveAllow(ctx.Guild.Id, x.x.PrimaryTargetId)
                         : Strings.PermsQuickOptionsUserRemoveDeny(ctx.Guild.Id, x.x.PrimaryTargetId),
                     "<:perms_user_perms:1085426466818359367>".ToIEmote(), true));
             var sb = new SelectMenuBuilder($"perm_quick_options_user_remove.{commandName}.{overwrite}.{allow}${i}",
@@ -1716,7 +1721,8 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
             var options = splitGroups[i]
                 .Select(x => (x, role: TryGetRole(x.PrimaryTargetId)))
                 .Select(x => new SelectMenuOptionBuilder(x.role?.ToString() ?? "Deleted Role", x.x.Id.ToString(),
-                    allow ? Strings.PermsQuickOptionsRoleRemoveAllow(ctx.Guild.Id, x.x.PrimaryTargetId)
+                    allow
+                        ? Strings.PermsQuickOptionsRoleRemoveAllow(ctx.Guild.Id, x.x.PrimaryTargetId)
                         : Strings.PermsQuickOptionsRoleRemoveDeny(ctx.Guild.Id, x.x.PrimaryTargetId),
                     "<:role:808826577785716756>".ToIEmote(), true));
             var sb = new SelectMenuBuilder($"perm_quick_options_role_remove.{commandName}.{overwrite}.{allow}${i}",
@@ -1920,7 +1926,8 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
                 .Select(async x => (x, channel: await TryGetChannel(x.PrimaryTargetId)))
                 .Select(x => x.Result)
                 .Select(x => new SelectMenuOptionBuilder(x.channel?.ToString() ?? "Deleted Channel", x.x.Id.ToString(),
-                    allow ? Strings.PermsQuickOptionsChannelRemoveAllow(ctx.Guild.Id, x.x.PrimaryTargetId)
+                    allow
+                        ? Strings.PermsQuickOptionsChannelRemoveAllow(ctx.Guild.Id, x.x.PrimaryTargetId)
                         : Strings.PermsQuickOptionsChannelRemoveDeny(ctx.Guild.Id, x.x.PrimaryTargetId),
                     GetChannelEmote(x.channel), true));
             var sb = new SelectMenuBuilder($"perm_quick_options_channel_remove.{commandName}.{overwrite}.{allow}${i}",
@@ -2141,7 +2148,8 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
                 .Select(async x => (x, channel: await TryGetChannel(x.PrimaryTargetId)))
                 .Select(x => x.Result)
                 .Select(x => new SelectMenuOptionBuilder(x.channel?.ToString() ?? "Deleted Channel", x.x.Id.ToString(),
-                    allow ? Strings.PermsQuickOptionsCategoryRemoveAllow(ctx.Guild.Id, x.x.PrimaryTargetId)
+                    allow
+                        ? Strings.PermsQuickOptionsCategoryRemoveAllow(ctx.Guild.Id, x.x.PrimaryTargetId)
                         : Strings.PermsQuickOptionsCategoryRemoveDeny(ctx.Guild.Id, x.x.PrimaryTargetId),
                     GetChannelEmote(x.channel), true));
             var sb = new SelectMenuBuilder($"perm_quick_options_category_remove.{commandName}.{overwrite}.{allow}${i}",

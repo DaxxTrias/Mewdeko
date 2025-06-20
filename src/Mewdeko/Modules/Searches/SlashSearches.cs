@@ -35,7 +35,7 @@ public class SlashSearches(MartineApi martineApi) : MewdekoSlashModuleBase<Searc
 
             var em = new EmbedBuilder()
                 .WithOkColor()
-                .WithAuthor($"u/{image.Data.Author.Name}")
+                .WithAuthor(Strings.SearchAuthorReddit(ctx.Guild.Id, image.Data.Author.Name))
                 .WithDescription($"Title: {image.Data.Title}\n[Source]({image.Data.PostUrl})")
                 .WithFooter($"{image.Data.Upvotes} Upvotes! | r/{image.Data.Subreddit.Name} Powered by martineAPI")
                 .WithImageUrl(image.Data.ImageUrl);

@@ -5,6 +5,7 @@ using Mewdeko.Modules.Permissions.Common;
 using Mewdeko.Modules.Permissions.Services;
 using Mewdeko.Services.Settings;
 using Mewdeko.Services.strings;
+using Mewdeko.Services.Strings;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Mewdeko.Modules.Utility.Services;
@@ -20,6 +21,8 @@ public class VerboseErrorsService : INService, IUnloadableService
     private readonly GuildSettingsService guildSettings;
     private readonly IServiceProvider services;
     private readonly IBotStrings strings;
+    private readonly GeneratedBotStrings Strings;
+
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="VerboseErrorsService" /> class.
@@ -34,12 +37,13 @@ public class VerboseErrorsService : INService, IUnloadableService
     public VerboseErrorsService(IDataConnectionFactory dbFactory, CommandHandler ch,
         IBotStrings strings,
         GuildSettingsService guildSettings,
-        IServiceProvider services, BotConfigService botConfigService, Mewdeko bot)
+        IServiceProvider services, BotConfigService botConfigService, Mewdeko bot, GeneratedBotStrings strings1)
     {
         this.strings = strings;
         this.guildSettings = guildSettings;
         this.services = services;
         this.botConfigService = botConfigService;
+        Strings = strings1;
         this.dbFactory = dbFactory;
         this.ch = ch;
         this.ch.CommandErrored += LogVerboseError;
@@ -80,7 +84,7 @@ public class VerboseErrorsService : INService, IUnloadableService
         try
         {
             var embed = new EmbedBuilder()
-                .WithTitle("Command Error")
+                .WithTitle(Strings.CommandErrorTitle(channel.Guild.Id))
                 .WithDescription(reason)
                 .AddField("Usages",
                     string.Join("\n",

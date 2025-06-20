@@ -18,6 +18,9 @@ transferrolestates:
   - moverolestates
 baninrole:
   - baninrole
+rolepermlist:
+  - rolepermlist
+  - roleperms
 banbyhash:
   - banbyhash
   - bbh
@@ -33,7 +36,6 @@ createstarboard:
   - createstarboard
   - addstarboard
   - newstarboard
-
 deletestarboard:
   - deletestarboard
   - removestarboard
@@ -46,10 +48,6 @@ setrepostthreshold:
   - setrepostthreshold
   - starboardrepost
   - repostthreshold
-setstarboardthreshold:
-  - setstarboardthreshold
-  - starthreshold
-  - starcount
 starboardchtoggle:
   - starboardchtoggle
   - starboardchannel
@@ -238,12 +236,6 @@ voiceprefsbitrate:
   - vpbitrate
   - prefbitrate
   - bitratepref
-voicepreflock:
-  - voicepreflock
-  - vcpreflock
-  - vplock
-  - preflock
-  - lockpref
 voiceprefskeepalive:
   - voiceprefskeepalive
   - vcprefskeepalive
@@ -256,11 +248,6 @@ voiceprefsreset:
   - vprefsreset
   - resetprefs
   - clearprefs
-antimassmentionignorebots:
-  - antimassmentionignorebots
-  - ammignorebots
-  - ignorebotsmassmention
-  - massmentionignorebots
 setdefaultpunishment:
   - setdefaultpunishment
   - sdp
@@ -347,12 +334,6 @@ minmessagecountlength:
 togglemessagecount:
   - togglemsgcount
   - togglemessagecount
-gpingrole:
-  - gpingrole
-  - giveawaypingrole
-gdmmmessage:
-  - gdmmmessage
-  - giveawaydmmessage
 update:
   - update
   - upd
@@ -415,8 +396,6 @@ leavestats:
 leavestatscolor:
   - leavestatscolor
   - lstatscolor
-clearusedtokens:
-  - clearusedtokens
 masskick:
   - masskick
   - mkick
@@ -541,9 +520,6 @@ createroles:
   - createroles
   - croles
   - crs
-syncrewards:
-  - syncrewards
-  - rsync
 addemote:
   - addemote
   - emoteadd
@@ -606,9 +582,6 @@ adduserstorole:
   - autr
 adsarm:
   - adsarm
-affinity:
-  - affinity
-  - waifuaff
 afkdel:
   - afkdel
   - afkdelete
@@ -665,15 +638,10 @@ anime:
   - aq
 antialt:
   - antialt
-antilist:
-  - antilist
-  - antilst
 antiraid:
   - antiraid
 antispam:
   - antispam
-antispamignore:
-  - antispamignore
 archiveonaccept:
   - archiveonaccept
 archiveonconsider:
@@ -684,10 +652,6 @@ archiveonimplement:
   - archiveonimplement
 asar:
   - asar
-authorize:
-  - authorize
-  - auth
-  - authroles
 autoassignbotrole:
   - autoassignbotrole
   - aabr
@@ -715,9 +679,6 @@ autocommandslist:
   - autolist
   - autocommands
   - autocmdlist
-autodisconnect:
-  - autodisconnect
-  - autodc
 autohentai:
   - autohentai
 autoplay:
@@ -733,8 +694,6 @@ autotranslate:
 avatar:
   - avatar
   - av
-award:
-  - award
 baka:
   - baka
 ban:
@@ -756,12 +715,6 @@ bash:
   - zfs
   - pacman
   - shell
-betflip:
-  - betflip
-  - bf
-betroll:
-  - betroll
-  - br
 bible:
   - bible
 bite:
@@ -790,8 +743,6 @@ butts:
   - butts
   - ass
   - butt
-buy:
-  - buy
 bye:
   - bye
 byedel:
@@ -866,42 +817,6 @@ chucknorris:
 clearqueue:
   - clearqueue
   - cq
-cleverbot:
-  - cleverbot
-clubaccept:
-  - clubaccept
-clubadmin:
-  - clubadmin
-clubapply:
-  - clubapply
-clubapps:
-  - clubapps
-clubban:
-  - clubban
-clubbans:
-  - clubbans
-clubcreate:
-  - clubcreate
-clubdescription:
-  - clubdesc
-clubdisband:
-  - clubdisband
-clubicon:
-  - clubicon
-clubinformation:
-  - clubinfo
-clubkick:
-  - clubkick
-clubleaderboard:
-  - clublb
-clubleave:
-  - clubleave
-clublevelreq:
-  - clublevelreq
-clubtransfer:
-  - clubtransfer
-clubunban:
-  - clubunban
 cmdcooldown:
   - cmdcooldown
   - cmdcd
@@ -935,9 +850,6 @@ confessionunblacklist:
 config:
   - config
   - conf
-connect4:
-  - connect4
-  - con4
 consider:
   - consider
   - suggestconsider
@@ -1010,8 +922,6 @@ ctsreload:
   - ctsreload
 cuddle:
   - cuddle
-currencytransactions:
-  - curtrs
 customafkmessage:
   - customafkmessage
   - afkmessage
@@ -1022,9 +932,6 @@ dance:
 deafen:
   - deafen
   - deaf
-deckshuffle:
-  - deckshuffle
-  - dsh
 define:
   - define
   - def
@@ -1076,22 +983,12 @@ discordpermoverridelist:
   - dpoli
 discordpermoverridereset:
   - dpor
-divorce:
-  - divorce
 donate:
   - donate
-double:
-  - double
 dragon:
   - dragon
-draw:
-  - draw
-drawnew:
-  - drawnew
 e621:
   - e621
-economy:
-  - economy
 edit:
   - edit
 editchattrigger:
@@ -1111,13 +1008,6 @@ emotelist:
 evaluate:
   - evaluate
   - eval
-eventstart:
-  - eventstart
-experience:
-  - experience
-  - xp
-  - rank
-  - lvl
 facepalm:
   - facepalm
 recentfeed:
@@ -1146,8 +1036,6 @@ filterword:
 findanime:
   - findanime
   - whatanime
-flip:
-  - flip
 forwardmessages:
   - forwardmessages
   - fwmsgs
@@ -1169,12 +1057,6 @@ gelbooru:
 gemote:
   - gemote
   - giveawayemote
-gencurlist:
-  - gencurlist
-  - gclist
-gencurrency:
-  - gencurrency
-  - gc
 gend:
   - gend
   - giveawayend
@@ -1184,8 +1066,6 @@ getactiveafks:
 pronouns:
   - pronouns
   - getpronouns
-give:
-  - give
 glist:
   - glist
   - giveaways
@@ -1208,25 +1088,12 @@ google:
 grab:
   - grab
   - getoverhere
-greet:
-  - greet
-greetdel:
-  - greetdel
-  - grdel
 greetdm:
   - greetdm
 greetdmmsg:
   - greetdmmsg
 greetdmtest:
   - greetdmtest
-greethook:
-  - greethook
-  - webgreet
-  - webhookgreet
-greetmsg:
-  - greetmsg
-greettest:
-  - greettest
 greroll:
   - greroll
   - giveawayreroll
@@ -1251,9 +1118,6 @@ hangmanstop:
   - hangmanstop
 happy:
   - happy
-hearthstone:
-  - hearthstone
-  - hs
 hentai:
   - hentai
 hentaibomb:
@@ -1295,20 +1159,6 @@ inroles:
   - inroles
 invite:
   - invite
-invitecreate:
-  - invitecreate
-  - invcr
-invitedelete:
-  - invitedelete
-  - invrm
-  - invdel
-inviteinfo:
-  - inviteinfo
-  - invinfo
-invitelist:
-  - invitelist
-  - invlist
-  - invlst
 invwarn:
   - invwarn
   - invitewarn
@@ -1316,9 +1166,6 @@ join:
   - join
   - j
   - mv
-joinrace:
-  - joinrace
-  - jr
 kick:
   - kick
   - k
@@ -1371,26 +1218,17 @@ listquotes:
   - liqu
 listservers:
   - listservers
-lmgtfy:
-  - lmgtfy
 lock:
   - lock
   - channellock
   - lockchannel
-lockcheck:
-  - lockcheck
 log:
   - log
 logcategory:
   - logcategory
   - logcat
-#logserver:
-#  - logserver
-#  - logs
 logevents:
   - logevents
-logignore:
-  - logignore
 loop:
   - loop
   - queuerepeat
@@ -1404,9 +1242,6 @@ lstfilterwords:
 magicitem:
   - magicitem
   - mi
-magicthegathering:
-  - magicthegathering
-  - mtg
 mal:
   - mal
 manga:
@@ -1519,8 +1354,6 @@ nhentaisearch:
 nowplaying:
   - nowplaying
   - np
-nroll:
-  - nroll
 nsfwtagblacklist:
   - nsfwtagbl
   - nsfwtbl
@@ -1555,19 +1388,12 @@ permrole:
 permview:
   - permview
   - pview
-pick:
-  - pick
 ping:
   - ping
-plant:
-  - plant
 play:
   - play
   - p
   - start
-playlist:
-  - playlist
-  - playlistmanage
 playlists:
   - playlists
   - playlistshow
@@ -1626,14 +1452,6 @@ quotesearch:
 quoteshow:
   - quoteshow
   - qshow
-race:
-  - race
-raffle:
-  - raffle
-raffleany:
-  - raffleany
-rafflecur:
-  - rafflecur
 randjoke:
   - randjoke
 randombird:
@@ -1663,8 +1481,6 @@ randomwaifu:
   - waifu
 rategirl:
   - rategirl
-reactchannel:
-  - reactchannel
 reactionroles:
   - reactionroles
   - rero
@@ -1730,9 +1546,6 @@ removeusersfromrole:
 renamechannel:
   - renamechannel
   - channelrename
-lyrics:
-  - lyrics
-  - ly
 renameemote:
   - renameemote
   - emoterename
@@ -1770,10 +1583,6 @@ resolvetonetags:
   - tonetag
   - resolvetonetag
   - tonetags
-restart:
-  - restart
-restartshard:
-  - restartshard
 revav:
   - revav
 revimg:
@@ -1842,10 +1651,6 @@ roles:
   - roles
 roll:
   - roll
-rollduel:
-  - rollduel
-rolluo:
-  - rolluo
 realbooru:
   - realbooru
   - rb
@@ -1940,15 +1745,6 @@ setsplash:
   - setsplash
   - setserversplash
   - setsplashimage
-setstar:
-  - setstar
-  - starboardstar
-setstarboard:
-  - setstarboard
-  - starboardchannel
-setstars:
-  - setstars
-  - starcount
 setstatus:
   - setstatus
 setstream:
@@ -1974,25 +1770,6 @@ ship:
   - ship
 shoot:
   - shoot
-shop:
-  - shop
-shopadd:
-  - shopadd
-shopchangename:
-  - shopchangename
-  - shopname
-shopchangeprice:
-  - shopchangeprice
-  - shopprice
-shoplistadd:
-  - shoplistadd
-shopmove:
-  - shopmove
-shopremove:
-  - shopremove
-  - shoprm
-shopswap:
-  - shopswap
 shorten:
   - shorten
 showchattrigger:
@@ -2018,10 +1795,6 @@ sleep:
 slot:
   - slot
   - slots
-slotstats:
-  - slotstats
-slottest:
-  - slottest
 slowmode:
   - slowmode
 smile:
@@ -2072,9 +1845,6 @@ staffroledisable:
   - staffroledisable
 stand:
   - stand
-starboardremoveonreactionscleared:
-  - starboardremoveonreactionscleared
-  - srrc
 stare:
   - stare
 startupcommandadd:
@@ -2102,9 +1872,6 @@ stfu:
   - stfu
   - cmute
   - channelmute
-stop:
-  - stop
-  - s
 stopjob:
   - sj
   - stopjob
@@ -2196,13 +1963,6 @@ syncroletoallchannels:
   - syncroletoallchannels
   - srtch
   - srtach
-take:
-  - take
-testlocalize:
-  - testlocalize
-  - testloc
-testsite:
-  - testsite
 think:
   - think
 thumbsup:
@@ -2217,12 +1977,6 @@ time:
 timedafk:
   - timedafk
   - tafk
-timely:
-  - timely
-timelyreset:
-  - timelyreset
-timelyset:
-  - timelyset
 timeout:
   - timeout
 timezone:
@@ -2321,26 +2075,6 @@ volume:
   - vol
 vote:
   - vote
-voteclaim:
-  - voteclaim
-  - vclaim
-waifuclaim:
-  - waifuclaim
-  - claim
-waifugift:
-  - waifugift
-  - gift
-  - gifts
-waifuinfo:
-  - waifuinfo
-  - waifustats
-waifulb:
-  - waifulb
-  - waifus
-waifureset:
-  - waifureset
-waifutransfer:
-  - waifutransfer
 wait:
   - wait
 warn:
@@ -2366,9 +2100,6 @@ wave:
 weather:
   - weather
   - we
-wheeloffortune:
-  - wheeloffortune
-  - wheel
 whosplaying:
   - whosplaying
   - whpl
@@ -2384,41 +2115,6 @@ wowjoke:
   - wowjoke
 xkcd:
   - xkcd
-xpadd:
-  - xpadd
-xpcurrencyreward:
-  - xpcurreward
-  - xpcr
-xpexclude:
-  - xpexclude
-  - xpex
-xpexclusionlist:
-  - xpexclusionlist
-  - xpexl
-xpleaderboard:
-  - xpleaderboard
-  - xplb
-xpleveluprewards:
-  - xplvluprewards
-  - xprews
-  - xpcrs
-  - xprrs
-  - xprolerewards
-  - xpcurrewards
-xpnotify:
-  - xpnotify
-  - xpn
-xpreset:
-  - xpreset
-xprolereward:
-  - xprolereward
-  - xprr
-xpsetting:
-  - xpsetting
-  - xpsettings
-xptemplatereload:
-  - xptempreload
-  - xptr
 yandere:
   - yandere
 yomama:
@@ -2516,3 +2212,480 @@ handhold:
   - handhold
 punch:
   - punch
+rank:
+  - rank
+textrank:
+  - textrank
+addxp:
+  - addxp
+setxp:
+  - setxp
+resetxp:
+  - resetxp
+levelnotif:
+  - levelnotif
+  - lvlnotif
+xpsettings:
+  - xpsettings
+  - xpconfig
+setmessagexp:
+  - setmessagexp
+  - setmsgxp
+setxpcooldown:
+  - setxpcooldown
+  - xpcd
+setvoicexp:
+  - setvoicexp
+setvoicetimeout:
+  - setvoicetimeout
+setxpmultiplier:
+  - setxpmultiplier
+  - xpmult
+setxpcurve:
+  - setxpcurve
+setchannelxp:
+  - setchannelxp
+setrolexp:
+  - setrolexp
+xpboost:
+  - xpboost
+xpboosts:
+  - xpboosts
+cancelboost:
+  - cancelboost
+xpexclude:
+  - xpexclude
+xpinclude:
+  - xpinclude
+xpexcludelist:
+  - xpexcludelist
+rolereward:
+  - rolereward
+  - rr
+removerolereward:
+  - removerolereward
+  - removerr
+rolerewards:
+  - rolerewards
+currencyreward:
+  - currencyreward
+  - cr
+removecurrencyreward:
+  - removecurrencyreward
+  - removecr
+currencyrewards:
+  - currencyrewards
+xpcompetition:
+  - xpcompetition
+addcompetitionreward:
+  - addcompetitionreward
+xpcompetitions:
+  - xpcompetitions
+competitionleaderboard:
+  - competitionleaderboard
+  - complb
+endcompetition:
+  - endcompetition
+syncallxproles:
+  - syncallxproles
+syncmyxproles:
+  - syncmyxproles
+syncuserxproles:
+  - syncuserxproles
+ticketpanel:
+  - ticketpanel
+  - tpanel
+ticketaddbutton:
+  - ticketaddbutton
+  - taddbtn
+ticketpaneldelete:
+  - ticketpaneldelete
+  - tpaneldelete
+ticketcategory:
+  - ticketcategory
+  - tcat
+ticketarchivecategory:
+  - ticketarchivecategory
+  - tarchivecat
+ticketclaim:
+  - ticketclaim
+  - tclaim
+ticketunclaim:
+  - ticketunclaim
+  - tunclaim
+ticketclose:
+  - ticketclose
+  - tclose
+ticketautoarchive:
+  - ticketautoarchive
+  - tautoarchive
+ticketclosebehavior:
+  - ticketclosebehavior
+  - tclosebehavior
+ticketarchive:
+  - ticketarchive
+  - tarchive
+ticketcreatecase:
+  - ticketcreatecase
+  - tcreatecase
+ticketlinkcase:
+  - ticketlinkcase
+  - tlinkcase
+ticketunlinkcase:
+  - ticketunlinkcase
+  - tunlinkcase
+ticketpriority:
+  - ticketpriority
+  - tpriority
+ticketaddpriority:
+  - ticketaddpriority
+  - taddpriority
+ticketremovepriority:
+  - ticketremovepriority
+  - tremovepriority
+ticketaddtag:
+  - ticketaddtag
+  - taddtag
+ticketremovetag:
+  - ticketremovetag
+  - tremovetag
+ticketaddtags:
+  - ticketaddtags
+  - taddtags
+ticketremovetags:
+  - ticketremovetags
+  - tremovetags
+ticketblock:
+  - ticketblock
+  - tblock
+ticketunblock:
+  - ticketunblock
+  - tunblock
+recreatepanel:
+  - recreatepanel
+  - trecreate
+checkpanels:
+  - checkpanels
+  - tcheckpanels
+recreateallpanels:
+  - recreateallpanels
+  - trecreateall
+ticketstats:
+  - ticketstats
+  - tstats
+ticketuserstats:
+  - ticketuserstats
+  - tuserstats
+tickettranscriptchannel:
+  - tickettranscriptchannel
+  - ttranscriptch
+ticketlogchannel:
+  - ticketlogchannel
+  - tlogch
+ticketmoveall:
+  - ticketmoveall
+  - tmoveall
+ticketcloseinactive:
+  - ticketcloseinactive
+  - tcloseinactive
+ticketresponsetime:
+  - ticketresponsetime
+  - tresponsetime
+ticketduplicatepanel:
+  - ticketduplicatepanel
+  - tduplicatepanel
+ticketupdatepanel:
+  - ticketupdatepanel
+  - tupdatepanel
+ticketmovepanel:
+  - ticketmovepanel
+  - tmovepanel
+ticketautoclose:
+  - ticketautoclose
+  - tautoclose
+ticketnote:
+  - ticketnote
+  - tnote
+setstarthreshold:
+  - setstarthreshold
+  - starthreshold
+patreonchannel:
+  - patreonch
+  - ptch
+patreondisable:
+  - patreondisable
+  - ptdisable
+patreonmessage:
+  - patreonmsg
+  - ptmsg
+patreonday:
+  - patreonday
+  - ptday
+patreontoggle:
+  - patreontoggle
+  - pttoggle
+patreonconfig:
+  - patreonconfig
+  - ptconfig
+patreonannounce:
+  - patreonannounce
+  - ptannounce
+patreonhelp:
+  - patreonhelp
+  - pthelp
+patreonsync:
+  - patreonsync
+  - ptsync
+patreonsupporters:
+  - patreonsupporters
+  - ptsupporters
+patreonlink:
+  - patreonlink
+  - ptlink
+patreonrolesync:
+  - patreonrolesync
+  - ptrolesync
+patreontiermap:
+  - patreontiermap
+  - pttiermap
+patreonsyncall:
+  - patreonsyncall
+  - ptsyncall
+patreonstats:
+  - patreonstats
+  - ptstats
+patreongoals:
+  - patreongoals
+  - ptgoals
+patreontop:
+  - patreontop
+  - pttop
+patreonroles:
+  - patreonroles
+  - ptroles
+patreonanalytics:
+  - patreonanalytics
+  - ptanalytics
+patreonrecognize:
+  - patreonrecognize
+  - ptrecognize
+addinstance:
+  - addinstance
+  - addins
+listinstances:
+  - listinstances
+  - listins
+removeinstance:
+  - removeinstance
+  - removeins
+instancestatus:
+  - instancestatus
+  - instatus
+generatedocs:
+  - generatedocs
+  - gendocs
+voteskip:
+  - voteskip
+  - vskip
+setdjrole:
+  - setdjrole
+  - djrole
+saveplaylist:
+  - saveplaylist
+  - saveplist
+loadplaylist:
+  - loadplaylist
+  - loadplist
+deleteplaylist:
+  - deleteplaylist
+  - delplist
+search:
+  - search
+  - find
+musicsettings:
+  - musicsettings
+  - msettings
+gdmmessage:
+  - gdmmessage
+  - gdmmsg
+voicecontrols:
+  - voicecontrols
+  - vcontrols
+voiceprefslock:
+  - voiceprefslock
+  - vprefslock
+coinflip:
+  - coinflip
+  - flip
+modifybalance:
+  - modifybalance
+  - modbal
+dailyreward:
+  - dailyreward
+  - daily
+highlow:
+  - highlow
+  - hl
+setdaily:
+  - setdaily
+spinwheel:
+  - spinwheel
+  - wheel
+roulette:
+  - roulette
+transactions:
+  - transactions
+  - trans
+war:
+  - war
+craps:
+  - craps
+scratchcard:
+  - scratchcard
+  - scratch
+russianroulette:
+  - russianroulette
+  - rr
+baccarat:
+  - baccarat
+minesweeper:
+  - minesweeper
+  - mines
+lottery:
+  - lottery
+crash:
+  - crash
+keno:
+  - keno
+plinko:
+  - plinko
+wheelfortune:
+  - wheelfortune
+  - wof
+duckrace:
+  - duckrace
+  - dr
+bingo:
+  - bingo
+diceduel:
+  - diceduel
+  - dd
+memory:
+  - memory
+dailychallenge:
+  - dailychallenge
+  - dc
+claimchallenge:
+  - claimchallenge
+  - cc
+challengeleaderboard:
+  - challengeleaderboard
+  - clb
+triviachain:
+  - triviachain
+  - tc
+addreactiontrigger:
+  - addreactiontrigger
+  - addrt
+topusers:
+  - topusers
+  - topu
+activitygraph:
+  - activitygraph
+  - actgraph
+panellist:
+  - panellist
+  - plist
+deletebutton:
+  - deletebutton
+  - delbtn
+deleteselectmenu:
+  - deleteselectmenu
+  - delselectmenu
+deleteselectoption:
+  - deleteselectoption
+  - delselectoption
+setpaneltranscripts:
+  - setpaneltranscripts
+  - sptranscripts
+addselectmenu:
+  - addselectmenu
+  - addsmenu
+addoption:
+  - addoption
+  - addopt
+listoptions:
+  - listoptions
+  - listopts
+removeoption:
+  - removeoption
+  - removeopt
+setplaceholder:
+  - setplaceholder
+  - splaceholder
+setresponsetime:
+  - setresponsetime
+  - sresponsetime
+panelinfo:
+  - panelinfo
+  - pinfo
+setautoclose:
+  - setautoclose
+  - sautoclose
+buttoninfo:
+  - buttoninfo
+  - binfo
+setmodaltitle:
+  - setmodaltitle
+  - smodaltitle
+addmodalfield:
+  - addmodalfield
+  - addmfield
+removemodalfield:
+  - removemodalfield
+  - removemfield
+listmodalfields:
+  - listmodalfields
+  - listmfields
+modalhelp:
+  - modalhelp
+  - mhelp
+ticketlistpanel:
+  - ticketlistpanel
+  - tlistpanel
+ticketlistpanels:
+  - ticketlistpanels
+  - tlistpanels
+bass:
+  - bass
+nightcore:
+  - nightcore
+  - nc
+vaporwave:
+  - vaporwave
+  - vw
+karaoke:
+  - karaoke
+tremolo:
+  - tremolo
+vibrato:
+  - vibrato
+eightd:
+  - eightd
+  - 8d
+distortion:
+  - distortion
+stereowiden:
+  - stereowiden
+  - swiden
+resetfilters:
+  - resetfilters
+  - resetfx
+activefilters:
+  - activefilters
+  - activefx
+horserace:
+  - horserace
+  - hr
+
+

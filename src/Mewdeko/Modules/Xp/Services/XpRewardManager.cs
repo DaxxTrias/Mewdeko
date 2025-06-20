@@ -4,6 +4,7 @@ using LinqToDB;
 using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.Currency.Services;
 using Mewdeko.Modules.Xp.Models;
+using Mewdeko.Services.Strings;
 using Serilog;
 
 namespace Mewdeko.Modules.Xp.Services;
@@ -17,6 +18,7 @@ public class XpRewardManager : INService
     private readonly DiscordShardedClient client;
     private readonly ICurrencyService currencyService;
     private readonly IDataConnectionFactory dbFactory;
+    private readonly GeneratedBotStrings Strings;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="XpRewardManager"/> class.
@@ -29,12 +31,13 @@ public class XpRewardManager : INService
         DiscordShardedClient client,
         IDataConnectionFactory dbFactory,
         ICurrencyService currencyService,
-        XpCacheManager cacheManager)
+        XpCacheManager cacheManager, GeneratedBotStrings strings)
     {
         this.client = client;
         this.dbFactory = dbFactory;
         this.currencyService = currencyService;
         this.cacheManager = cacheManager;
+        Strings = strings;
     }
 
     /// <summary>
@@ -258,7 +261,7 @@ public class XpRewardManager : INService
                             embed: new EmbedBuilder()
                                 .WithColor(Color.Green)
                                 .WithDescription(formattedMessage)
-                                .WithTitle("Level Up!")
+                                .WithTitle(Strings.LevelUpTitle(guild.Id))
                                 .Build()
                         );
                     }

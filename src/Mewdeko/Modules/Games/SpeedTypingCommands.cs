@@ -121,7 +121,7 @@ public partial class Games
 
             if (articles.Length == 0)
             {
-                await channel.SendErrorAsync($"{ctx.User.Mention} `No articles found on that page.`", Config)
+                await channel.SendErrorAsync(Strings.NoArticlesFound(ctx.Guild.Id, ctx.User.Mention), Config)
                     .ConfigureAwait(false);
                 return;
             }

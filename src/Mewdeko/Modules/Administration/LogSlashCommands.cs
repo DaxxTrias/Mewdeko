@@ -2,7 +2,6 @@ using System.Text;
 using DataModel;
 using Discord.Interactions;
 using Mewdeko.Common.Attributes.InteractionCommands;
-
 using Mewdeko.Modules.Administration.Services;
 using Serilog;
 using LogType = Mewdeko.Modules.Administration.Services.LogCommandService.LogType;
@@ -368,7 +367,7 @@ public class LogSlashCommands : MewdekoSlashModuleBase<LogCommandService>
 
         var eb = new EmbedBuilder()
             .WithOkColor()
-            .WithDescription($"Select which events to log in {channel.Mention}\n" +
+            .WithDescription($"{Strings.LogEventsSelect(ctx.Guild.Id, channel.Mention)}\n" +
                              (selectedTypes.Any()
                                  ? $"\n\nCurrently enabled types: {string.Join(", ", selectedTypes)}"
                                  : ""))

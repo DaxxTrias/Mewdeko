@@ -23,7 +23,7 @@ public partial class ServerManagement(IHttpClientFactory factory, BotConfigServi
     {
         var perms = ((IGuildUser)ctx.User).GuildPermissions;
         var eb = new EmbedBuilder();
-        eb.WithTitle("List of allowed perms");
+        eb.WithTitle(Strings.ListAllowedPerms(ctx.Guild.Id));
         eb.WithOkColor();
         var allowed = perms.ToList().Select(i => $"**{i}**").ToList();
 
@@ -43,7 +43,7 @@ public partial class ServerManagement(IHttpClientFactory factory, BotConfigServi
     {
         var perms = user.GuildPermissions;
         var eb = new EmbedBuilder();
-        eb.WithTitle($"List of allowed perms for {user}");
+        eb.WithTitle($"{Strings.ListAllowedPerms(ctx.Guild.Id)} for {user}");
         eb.WithOkColor();
         var allowed = perms.ToList().Select(i => $"**{i}**").ToList();
 
@@ -63,7 +63,7 @@ public partial class ServerManagement(IHttpClientFactory factory, BotConfigServi
     {
         var perms = user.Permissions;
         var eb = new EmbedBuilder();
-        eb.WithTitle($"List of allowed perms for {user}");
+        eb.WithTitle($"{Strings.ListAllowedPerms(ctx.Guild.Id)} for {user}");
         eb.WithOkColor();
         var allowed = perms.ToList().Select(i => $"**{i}**").ToList();
 
@@ -146,7 +146,7 @@ public partial class ServerManagement(IHttpClientFactory factory, BotConfigServi
     {
         var guild = ctx.Guild;
         await guild.ModifyAsync(x => x.Name = name).ConfigureAwait(false);
-        await ctx.Channel.SendConfirmAsync($"Succesfuly set server name to {name}").ConfigureAwait(false);
+        await ctx.Channel.SendConfirmAsync(Strings.ServerNameSet(ctx.Guild.Id, name)).ConfigureAwait(false);
     }
 
     /// <summary>

@@ -35,9 +35,9 @@ public class SlashRoleStates(BotConfigService bss, InteractiveService interactiv
     public async Task ToggleRoleStates()
     {
         if (await Service.ToggleRoleStates(ctx.Guild.Id))
-            await ctx.Interaction.SendConfirmAsync($"{bss.Data.SuccessEmote} Role States are now enabled!");
+            await ctx.Interaction.SendConfirmAsync(Strings.RoleStatesEnabled(ctx.Guild.Id, bss.Data.SuccessEmote));
         else
-            await ctx.Interaction.SendConfirmAsync($"{bss.Data.SuccessEmote} Role States are now disabled!");
+            await ctx.Interaction.SendConfirmAsync(Strings.RoleStatesDisabled(ctx.Guild.Id, bss.Data.SuccessEmote));
     }
 
     /// <summary>
@@ -56,12 +56,12 @@ public class SlashRoleStates(BotConfigService bss, InteractiveService interactiv
         if (roleStateSettings is null)
         {
             await ctx.Interaction.SendErrorAsync(
-                $"{bss.Data.ErrorEmote} Role States are not enabled and have not been configured!", Config);
+                Strings.RoleStatesNotEnabledSlash(ctx.Guild.Id, bss.Data.ErrorEmote), Config);
             return;
         }
 
         if (await Service.ToggleIgnoreBots(roleStateSettings))
-            await ctx.Interaction.SendConfirmAsync($"{bss.Data.SuccessEmote} Role States will ignore bots!");
+            await ctx.Interaction.SendConfirmAsync(Strings.RoleStatesIgnoreBots(ctx.Guild.Id, bss.Data.SuccessEmote));
         else
             await ctx.Interaction.SendConfirmAsync($"{bss.Data.SuccessEmote} Role States will not ignore bots!");
     }
@@ -82,7 +82,7 @@ public class SlashRoleStates(BotConfigService bss, InteractiveService interactiv
         if (roleStateSettings is null)
         {
             await ctx.Interaction.SendErrorAsync(
-                $"{bss.Data.ErrorEmote} Role States are not enabled and have not been configured!", Config);
+                Strings.RoleStatesNotEnabledSlash(ctx.Guild.Id, bss.Data.ErrorEmote), Config);
             return;
         }
 
@@ -108,7 +108,7 @@ public class SlashRoleStates(BotConfigService bss, InteractiveService interactiv
         var roleStateSettings = await Service.GetRoleStateSettings(ctx.Guild.Id);
         if (roleStateSettings is null)
             await ctx.Interaction.SendErrorAsync(
-                $"{bss.Data.ErrorEmote} Role States are not enabled and have not been configured!", Config);
+                Strings.RoleStatesNotEnabledSlash(ctx.Guild.Id, bss.Data.ErrorEmote), Config);
         else
         {
             var deniedUsers = string.IsNullOrWhiteSpace(roleStateSettings.DeniedUsers)
@@ -205,7 +205,7 @@ public class SlashRoleStates(BotConfigService bss, InteractiveService interactiv
         if (roleStateSettings is null)
         {
             await ctx.Interaction.SendErrorAsync(
-                $"{bss.Data.ErrorEmote} Role States are not enabled and have not been configured!", Config);
+                Strings.RoleStatesNotEnabledSlash(ctx.Guild.Id, bss.Data.ErrorEmote), Config);
             return;
         }
 
@@ -245,7 +245,7 @@ public class SlashRoleStates(BotConfigService bss, InteractiveService interactiv
         if (roleStateSettings is null)
         {
             await ctx.Interaction.SendErrorAsync(
-                $"{bss.Data.ErrorEmote} Role States are not enabled and have not been configured!", Config);
+                Strings.RoleStatesNotEnabledSlash(ctx.Guild.Id, bss.Data.ErrorEmote), Config);
             return;
         }
 
@@ -285,7 +285,7 @@ public class SlashRoleStates(BotConfigService bss, InteractiveService interactiv
         if (roleStateSettings is null)
         {
             await ctx.Interaction.SendErrorAsync(
-                $"{bss.Data.ErrorEmote} Role States are not enabled and have not been configured!", Config);
+                Strings.RoleStatesNotEnabledSlash(ctx.Guild.Id, bss.Data.ErrorEmote), Config);
             return;
         }
 
@@ -325,7 +325,7 @@ public class SlashRoleStates(BotConfigService bss, InteractiveService interactiv
         if (roleStateSettings is null)
         {
             await ctx.Interaction.SendErrorAsync(
-                $"{bss.Data.ErrorEmote} Role States are not enabled and have not been configured!", Config);
+                Strings.RoleStatesNotEnabledSlash(ctx.Guild.Id, bss.Data.ErrorEmote), Config);
             return;
         }
 

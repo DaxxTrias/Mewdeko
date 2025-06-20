@@ -92,7 +92,8 @@ public class Help(
 
             var jsonVersion = JsonSerializer.Serialize(newList.Select(x => new Module(x.Value, x.Key)), options);
             await using var stream = new MemoryStream(Encoding.UTF8.GetBytes(jsonVersion));
-            await ctx.Channel.SendFileAsync(stream, $"Commands-{DateTime.UtcNow:u}.json");
+            await ctx.Channel.SendFileAsync(stream,
+                Strings.CommandsExport(ctx.Guild.Id, DateTime.UtcNow.ToString("u")));
             await msg.DeleteAsync();
             await stream.DisposeAsync();
         }

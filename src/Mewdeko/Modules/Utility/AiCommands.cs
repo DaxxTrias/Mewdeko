@@ -17,6 +17,7 @@ public partial class Utility
         /// <param name="channel">Channel to configure AI for</param>
         /// <param name="enabled">Whether to enable or disable AI</param>
         [Cmd]
+        [Aliases]
         [RequireContext(ContextType.Guild)]
         [UserPerm(GuildPermission.ManageGuild)]
         public async Task AiChannel(ITextChannel? channel = null, bool enabled = true)
@@ -37,6 +38,7 @@ public partial class Utility
         /// <param name="provider">AI provider to use</param>
         /// <param name="model">Model name</param>
         [Cmd]
+        [Aliases]
         [RequireContext(ContextType.Guild)]
         [UserPerm(GuildPermission.ManageGuild)]
         public async Task AiModel(AiService.AiProvider provider, string? model = null)
@@ -47,6 +49,7 @@ public partial class Utility
                 await ctx.Channel.SendErrorAsync(Strings.AiNoApiKey(ctx.Guild.Id, provider), Config);
                 return;
             }
+
             var models = await Service.GetSupportedModels(provider, config.ApiKey);
 
             if (model == null)
@@ -58,7 +61,8 @@ public partial class Utility
 
             if (!models.Any(m => m.Id.Equals(model, StringComparison.OrdinalIgnoreCase)))
             {
-                await ctx.Channel.SendErrorAsync(Strings.AiInvalidModel(ctx.Guild.Id, model, provider.ToString()), Config);
+                await ctx.Channel.SendErrorAsync(Strings.AiInvalidModel(ctx.Guild.Id, model, provider.ToString()),
+                    Config);
                 return;
             }
 
@@ -111,12 +115,14 @@ public partial class Utility
                 var imgStream = imgData.ToStream();
                 await using var _ = imgStream;
                 var webhook = await channel.CreateWebhookAsync(name, imgStream);
-                await Service.SetWebhook(ctx.Guild.Id, $"https://discord.com/api/webhooks/{webhook.Id}/{webhook.Token}");
+                await Service.SetWebhook(ctx.Guild.Id,
+                    $"https://discord.com/api/webhooks/{webhook.Id}/{webhook.Token}");
             }
             else
             {
                 var webhook = await channel.CreateWebhookAsync(name);
-                await Service.SetWebhook(ctx.Guild.Id, $"https://discord.com/api/webhooks/{webhook.Id}/{webhook.Token}");
+                await Service.SetWebhook(ctx.Guild.Id,
+                    $"https://discord.com/api/webhooks/{webhook.Id}/{webhook.Token}");
             }
 
             await ctx.Channel.SendConfirmAsync(Strings.AiWebhookSet(ctx.Guild.Id));
@@ -142,6 +148,7 @@ public partial class Utility
                     await ctx.Channel.SendErrorAsync(Strings.AiNoCustomEmbed(ctx.Guild.Id), Config);
                     return;
                 }
+
                 await ctx.Channel.SendConfirmAsync(config.CustomEmbed);
                 return;
             }
@@ -154,6 +161,7 @@ public partial class Utility
         ///     Sets the API key for the AI service
         /// </summary>
         [Cmd]
+        [Aliases]
         [RequireContext(ContextType.Guild)]
         [UserPerm(GuildPermission.Administrator)]
         public async Task AiKey()
@@ -169,6 +177,7 @@ public partial class Utility
         /// </summary>
         /// <param name="prompt">System prompt to use</param>
         [Cmd]
+        [Aliases]
         [RequireContext(ContextType.Guild)]
         [UserPerm(GuildPermission.ManageGuild)]
         public async Task AiPrompt([Remainder] string prompt)
@@ -184,6 +193,7 @@ public partial class Utility
         ///     Shows current AI configuration
         /// </summary>
         [Cmd]
+        [Aliases]
         [RequireContext(ContextType.Guild)]
         public async Task AiConfig()
         {

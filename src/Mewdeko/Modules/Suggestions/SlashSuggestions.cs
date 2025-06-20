@@ -37,7 +37,7 @@ public partial class SlashSuggestions : MewdekoSlashModuleBase<SuggestionsServic
             await Service.SetSuggestionChannelId(ctx.Guild, channel.Id).ConfigureAwait(false);
             var chn2 = await ctx.Guild.GetTextChannelAsync(await Service.GetSuggestionChannel(ctx.Guild.Id))
                 .ConfigureAwait(false);
-            await ctx.Interaction.SendConfirmAsync($"Your Suggestion channel has been set to {chn2.Mention}")
+            await ctx.Interaction.SendConfirmAsync(Strings.SuggestionChannelSet(ctx.Guild.Id, chn2.Mention))
                 .ConfigureAwait(false);
         }
     }

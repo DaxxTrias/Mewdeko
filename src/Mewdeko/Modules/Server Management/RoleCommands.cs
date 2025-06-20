@@ -38,7 +38,7 @@ public partial class ServerManagement
                     ctx.User.Id))
             {
                 var msg = await ctx.Channel.SendConfirmAsync(
-                    $"{config.Data.LoadingEmote} Creating {roleList.Length} roles...");
+                    Strings.CreatingRoles(ctx.Guild.Id, config.Data.LoadingEmote, roleList.Length));
                 foreach (var i in roleList)
                 {
                     await ctx.Guild.CreateRoleAsync(i, null, null, false, false);
@@ -48,7 +48,8 @@ public partial class ServerManagement
                 {
                     x.Embed = new EmbedBuilder()
                         .WithOkColor()
-                        .WithDescription($"{config.Data.SuccessEmote} Created {roleList.Length} roles!").Build();
+                        .WithDescription(Strings.RolesCreated(ctx.Guild.Id, config.Data.SuccessEmote, roleList.Length))
+                        .Build();
                 });
             }
         }

@@ -158,7 +158,7 @@ public partial class Suggestions
             }
 
             await Service.SetMinLength(ctx.Guild, length).ConfigureAwait(false);
-            await ctx.Channel.SendConfirmAsync($"Minimum length set to {length} characters!").ConfigureAwait(false);
+            await ctx.Channel.SendConfirmAsync(Strings.MinLengthSet(ctx.Guild.Id, length)).ConfigureAwait(false);
         }
 
         /// <summary>

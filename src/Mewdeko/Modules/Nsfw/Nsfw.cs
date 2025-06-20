@@ -72,7 +72,6 @@ public class Nsfw(
                     Strings.NsfwApiFetchError(ctx.Guild.Id),
                     Config
                 );
-
             }
 
             var eb = new EmbedBuilder
@@ -183,7 +182,7 @@ public class Nsfw(
         {
             await Task.CompletedTask.ConfigureAwait(false);
             return new PageBuilder()
-                .WithTitle($"{Format.Bold($"{title}")} - {book.Images.Pages.Count} pages")
+                .WithTitle(Strings.NsfwTitleFormat(ctx.Guild.Id, Format.Bold($"{title}"), book.Images.Pages.Count))
                 .WithImageUrl(nHentaiClient.GetPictureUrl(book, page + 1))
                 .WithOkColor();
         }
@@ -891,106 +890,110 @@ public class Nsfw(
     }
 
     private async Task InternalDapiCommand(string[] tags,
-    bool forceExplicit,
-    Func<ulong?, bool, string[], Task<UrlReply?>> func)
-{
-    var data = await func(ctx.Guild?.Id, forceExplicit, tags).ConfigureAwait(false);
-
-    if (data is null || !string.IsNullOrWhiteSpace(data.Error))
+        bool forceExplicit,
+        Func<ulong?, bool, string[], Task<UrlReply?>> func)
     {
-        await ReplyErrorAsync(Strings.NoResults(ctx.Guild.Id)).ConfigureAwait(false);
-        return;
-    }
+        var data = await func(ctx.Guild?.Id, forceExplicit, tags).ConfigureAwait(false);
 
-    if (data.Url.IsImage())
-    {
-        await ctx.Channel.SendMessageAsync(embed: new EmbedBuilder().WithOkColor().WithImageUrl(data.Url)
-                .WithDescription($"[link]({data.Url})")
-                .WithFooter(
-                    $"{data.Rating} ({data.Provider}) | {string.Join(" | ", data.Tags.Where(x => !string.IsNullOrWhiteSpace(x)).Take(5))}")
-                .Build(),
-            components: Config.ShowInviteButton
-                ? new ComponentBuilder()
-                    //.WithButton(style: ButtonStyle.Link,
-                        //url:
-                        //"https://discord.com/oauth2/authorize?client_id=752236274261426212&permissions=8&response_type=code&redirect_uri=https%3A%2F%2Fmewdeko.tech&scope=bot%20applications.commands",
-                        //label: "Invite Me!",
-                        //emote: "<a:HaneMeow:968564817784877066>".ToIEmote())
-                    //.WithButton("Support Us!", style: ButtonStyle.Link, url: "https://ko-fi.com/Mewdeko")
-                        .Build()
-                : null).ConfigureAwait(false);
-    }
-    else
-    {
-        using var sr = await client.GetAsync(data.Url, HttpCompletionOption.ResponseHeadersRead)
-            .ConfigureAwait(false);
-
-        var fileSize = sr.Content.Headers.ContentLength ?? -1;
-
-        var maxUploadSize = ctx.Guild?.MaxUploadLimit ?? 26214400;
-
-        if (fileSize > (long)maxUploadSize)
+        if (data is null || !string.IsNullOrWhiteSpace(data.Error))
         {
-            await ctx.Channel.SendMessageAsync(
-                embed: new EmbedBuilder().WithErrorColor()
-                    .WithTitle("File Too Large")
-                    .WithDescription($"The file is too large to be uploaded ({fileSize / 1048576.0:F2}MB). [View it here instead]({data.Url})")
+            await ReplyErrorAsync(Strings.NoResults(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
+        if (data.Url.IsImage())
+        {
+            await ctx.Channel.SendMessageAsync(embed: new EmbedBuilder().WithOkColor().WithImageUrl(data.Url)
+                    .WithDescription($"[link]({data.Url})")
                     .WithFooter(
                         $"{data.Rating} ({data.Provider}) | {string.Join(" | ", data.Tags.Where(x => !string.IsNullOrWhiteSpace(x)).Take(5))}")
                     .Build(),
                 components: Config.ShowInviteButton
                     ? new ComponentBuilder()
-                        .WithButton(style: ButtonStyle.Link,
-                            url:
-                            "https://discord.com/oauth2/authorize?client_id=752236274261426212&permissions=8&response_type=code&redirect_uri=https%3A%2F%2Fmewdeko.tech&scope=bot%20applications.commands",
-                            label: "Invite Me!",
-                            emote: "<a:HaneMeow:968564817784877066>".ToIEmote())
-                        .WithButton("Support Us!", style: ButtonStyle.Link, url: "https://ko-fi.com/Mewdeko").Build()
+                        //.WithButton(style: ButtonStyle.Link,
+                            //url:
+                            //"https://discord.com/oauth2/authorize?client_id=752236274261426212&permissions=8&response_type=code&redirect_uri=https%3A%2F%2Fmewdeko.tech&scope=bot%20applications.commands",
+                            //label: "Invite Me!",
+                            //emote: "<a:HaneMeow:968564817784877066>".ToIEmote())
+                        //.WithButton("Support Us!", style: ButtonStyle.Link, url: "https://ko-fi.com/Mewdeko")
+                        .Build()
                     : null).ConfigureAwait(false);
-            return;
         }
-
-        var imgData = await sr.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
-
-        if (imgData.Length > (int)maxUploadSize)
+        else
         {
-            await ctx.Channel.SendMessageAsync(
-                embed: new EmbedBuilder().WithErrorColor()
-                    .WithTitle("File Too Large")
-                    .WithDescription($"The file is too large to be uploaded ({imgData.Length / 1048576.0:F2}MB). [View it here instead]({data.Url})")
+            using var sr = await client.GetAsync(data.Url, HttpCompletionOption.ResponseHeadersRead)
+                .ConfigureAwait(false);
+
+            var fileSize = sr.Content.Headers.ContentLength ?? -1;
+
+            var maxUploadSize = ctx.Guild?.MaxUploadLimit ?? 26214400;
+
+            if (fileSize > (long)maxUploadSize)
+            {
+                await ctx.Channel.SendMessageAsync(
+                    embed: new EmbedBuilder().WithErrorColor()
+                        .WithTitle(Strings.NsfwFileTooLarge(ctx.Guild.Id))
+                        .WithDescription(
+                            $"The file is too large to be uploaded ({fileSize / 1048576.0:F2}MB). [View it here instead]({data.Url})")
+                        .WithFooter(
+                            $"{data.Rating} ({data.Provider}) | {string.Join(" | ", data.Tags.Where(x => !string.IsNullOrWhiteSpace(x)).Take(5))}")
+                        .Build(),
+                    components: Config.ShowInviteButton
+                        ? new ComponentBuilder()
+                            .WithButton(style: ButtonStyle.Link,
+                                url:
+                                "https://discord.com/oauth2/authorize?client_id=752236274261426212&permissions=8&response_type=code&redirect_uri=https%3A%2F%2Fmewdeko.tech&scope=bot%20applications.commands",
+                                label: "Invite Me!",
+                                emote: "<a:HaneMeow:968564817784877066>".ToIEmote())
+                            .WithButton("Support Us!", style: ButtonStyle.Link, url: "https://ko-fi.com/Mewdeko")
+                            .Build()
+                        : null).ConfigureAwait(false);
+                return;
+            }
+
+            var imgData = await sr.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
+
+            if (imgData.Length > (int)maxUploadSize)
+            {
+                await ctx.Channel.SendMessageAsync(
+                    embed: new EmbedBuilder().WithErrorColor()
+                        .WithTitle(Strings.NsfwFileTooLarge(ctx.Guild.Id))
+                        .WithDescription(
+                            $"The file is too large to be uploaded ({imgData.Length / 1048576.0:F2}MB). [View it here instead]({data.Url})")
+                        .WithFooter(
+                            $"{data.Rating} ({data.Provider}) | {string.Join(" | ", data.Tags.Where(x => !string.IsNullOrWhiteSpace(x)).Take(5))}")
+                        .Build(),
+                    components: Config.ShowInviteButton
+                        ? new ComponentBuilder()
+                            .WithButton(style: ButtonStyle.Link,
+                                url:
+                                "https://discord.com/oauth2/authorize?client_id=752236274261426212&permissions=8&response_type=code&redirect_uri=https%3A%2F%2Fmewdeko.tech&scope=bot%20applications.commands",
+                                label: "Invite Me!",
+                                emote: "<a:HaneMeow:968564817784877066>".ToIEmote())
+                            .WithButton("Support Us!", style: ButtonStyle.Link, url: "https://ko-fi.com/Mewdeko")
+                            .Build()
+                        : null).ConfigureAwait(false);
+                return;
+            }
+
+            var imgStream = imgData.ToStream();
+            await using var _ = imgStream.ConfigureAwait(false);
+            await ctx.Channel.SendFileAsync(imgStream, "video.mp4",
+                embed: new EmbedBuilder().WithOkColor()
+                    .WithDescription($"[link]({data.Url})")
                     .WithFooter(
                         $"{data.Rating} ({data.Provider}) | {string.Join(" | ", data.Tags.Where(x => !string.IsNullOrWhiteSpace(x)).Take(5))}")
                     .Build(),
                 components: Config.ShowInviteButton
                     ? new ComponentBuilder()
-                        .WithButton(style: ButtonStyle.Link,
-                            url:
-                            "https://discord.com/oauth2/authorize?client_id=752236274261426212&permissions=8&response_type=code&redirect_uri=https%3A%2F%2Fmewdeko.tech&scope=bot%20applications.commands",
-                            label: "Invite Me!",
-                            emote: "<a:HaneMeow:968564817784877066>".ToIEmote())
-                        .WithButton("Support Us!", style: ButtonStyle.Link, url: "https://ko-fi.com/Mewdeko").Build()
-                    : null).ConfigureAwait(false);
-            return;
-        }
-
-        var imgStream = imgData.ToStream();
-        await using var _ = imgStream.ConfigureAwait(false);
-        await ctx.Channel.SendFileAsync(imgStream, "video.mp4",
-            embed: new EmbedBuilder().WithOkColor()
-                .WithDescription($"[link]({data.Url})")
-                .WithFooter(
-                    $"{data.Rating} ({data.Provider}) | {string.Join(" | ", data.Tags.Where(x => !string.IsNullOrWhiteSpace(x)).Take(5))}")
-                .Build(),
-            components: Config.ShowInviteButton
-                ? new ComponentBuilder()
-                    //.WithButton(style: ButtonStyle.Link,
-                        //url:
-                        //"https://discord.com/oauth2/authorize?client_id=752236274261426212&permissions=8&response_type=code&redirect_uri=https%3A%2F%2Fmewdeko.tech&scope=bot%20applications.commands",
-                        //label: "Invite Me!",
-                        //emote: "<a:HaneMeow:968564817784877066>".ToIEmote())
-                    //.WithButton("Support Us!", style: ButtonStyle.Link, url: "https://ko-fi.com/Mewdeko")
+                        //.WithButton(style: ButtonStyle.Link,
+                            //url:
+                            //"https://discord.com/oauth2/authorize?client_id=752236274261426212&permissions=8&response_type=code&redirect_uri=https%3A%2F%2Fmewdeko.tech&scope=bot%20applications.commands",
+                            //label: "Invite Me!",
+                            //emote: "<a:HaneMeow:968564817784877066>".ToIEmote())
+                        //.WithButton("Support Us!", style: ButtonStyle.Link, url: "https://ko-fi.com/Mewdeko")
                         .Build()
-                : null).ConfigureAwait(false);
+                    : null).ConfigureAwait(false);
+        }
     }
-}
 }

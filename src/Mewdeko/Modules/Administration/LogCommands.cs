@@ -369,7 +369,7 @@ public partial class Administration
 
             var eb = new EmbedBuilder()
                 .WithOkColor()
-                .WithDescription($"Select which events to log in {channel.Mention}\n" +
+                .WithDescription($"{Strings.LogEventsSelect(ctx.Guild.Id, channel.Mention)}\n" +
                                  (selectedTypes.Any()
                                      ? $"\n\nCurrently enabled types: {string.Join(", ", selectedTypes)}"
                                      : ""))

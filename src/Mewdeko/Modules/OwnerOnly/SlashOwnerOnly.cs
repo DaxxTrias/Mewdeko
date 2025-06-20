@@ -164,7 +164,7 @@ public class SlashOwnerOnly(
         {
             await Task.CompletedTask;
             var newGuilds = guilds.Skip(10 * page);
-            var eb = new PageBuilder().WithOkColor().WithTitle("Servers List");
+            var eb = new PageBuilder().WithOkColor().WithTitle(Strings.ServersList(ctx.Guild?.Id ?? 0));
             foreach (var i in newGuilds)
             {
                 eb.AddField($"{i.Name} | {i.Id}", $"Members: {i.Users.Count}"
@@ -405,13 +405,15 @@ public class SlashOwnerOnly(
             {
                 await potentialUser.SendMessageAsync(plainText, embeds: embed, components: components.Build())
                     .ConfigureAwait(false);
-                await ctx.Interaction.SendConfirmAsync($"Message sent to {potentialUser.Mention}!")
+                await ctx.Interaction
+                    .SendConfirmAsync(Strings.MessageSentToUser(ctx.Guild?.Id ?? 0, potentialUser.Mention))
                     .ConfigureAwait(false);
                 return;
             }
 
             await potentialUser.SendMessageAsync(rep.Replace(msg)).ConfigureAwait(false);
-            await ctx.Interaction.SendConfirmAsync($"Message sent to {potentialUser.Mention}!").ConfigureAwait(false);
+            await ctx.Interaction.SendConfirmAsync(Strings.MessageSentToUser(ctx.Guild?.Id ?? 0, potentialUser.Mention))
+                .ConfigureAwait(false);
             return;
         }
 
@@ -430,7 +432,8 @@ public class SlashOwnerOnly(
             {
                 await channel.SendMessageAsync(plainText, embeds: embed, components: components?.Build())
                     .ConfigureAwait(false);
-                await ctx.Interaction.SendConfirmAsync($"Message sent to {potentialServer} in {channel.Mention}")
+                await ctx.Interaction
+                    .SendConfirmAsync(Strings.MessageSentToServer(ctx.Guild.Id, potentialServer, channel.Mention))
                     .ConfigureAwait(false);
                 return;
             }
@@ -593,7 +596,7 @@ public class SlashOwnerOnly(
 
                     return new PageBuilder()
                         .WithOkColor()
-                        .WithAuthor("Bash Output")
+                        .WithAuthor(Strings.BashOutput(ctx.Guild.Id))
                         .AddField("Input", message)
                         .WithDescription($"```{(isLinux ? "bash" : "powershell")}\n{stringList[page]}```");
                 }

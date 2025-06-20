@@ -24,7 +24,7 @@ public class StatusRoles(BotConfigService bss, InteractiveService interactivity)
         if (status.Length > 128)
         {
             await ctx.Channel.SendErrorAsync(
-                $"{bss.Data.ErrorEmote} That's too long to even fit in a normal status. Try again.", Config);
+                Strings.StatusTooLong(ctx.Guild.Id, bss.Data.ErrorEmote), Config);
             return;
         }
 

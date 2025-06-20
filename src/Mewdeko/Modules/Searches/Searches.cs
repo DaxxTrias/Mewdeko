@@ -64,7 +64,7 @@ public partial class Searches(
     [Aliases]
     public async Task Meme()
     {
-        var msg = await ctx.Channel.SendConfirmAsync($"{config.Data.LoadingEmote} Fetching random meme...")
+        var msg = await ctx.Channel.SendConfirmAsync(Strings.LoadingMemeFetch(ctx.Guild.Id, config.Data.LoadingEmote))
             .ConfigureAwait(false);
         var image = await martineApi.RedditApi.GetRandomMeme(Toptype.year).ConfigureAwait(false);
 

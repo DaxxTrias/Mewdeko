@@ -27,12 +27,12 @@ public class HelpService : INService
     private readonly DiscordShardedClient client;
     private readonly CommandService cmds;
     private readonly DiscordPermOverrideService dpos;
+    private readonly GeneratedBotStrings genStrings;
     private readonly GuildSettingsService guildSettings;
     private readonly InteractionService interactionService;
     private readonly PermissionService nPerms;
     private readonly GlobalPermissionService perms;
     private readonly IBotStrings strings;
-    private readonly GeneratedBotStrings genStrings;
 
 
     /// <summary>
@@ -306,7 +306,8 @@ public class HelpService : INService
     {
         var actualUrl = GenerateDocumentationUrl(com);
         if (com.Attributes.Any(x => x is HelpDisabled))
-            return (new EmbedBuilder().WithDescription("Help is disabled for this command."), new ComponentBuilder());
+            return (new EmbedBuilder().WithDescription(genStrings.HelpDisabled(guild?.Id ?? 0)),
+                new ComponentBuilder());
 
         var prefix = await guildSettings.GetPrefix(guild);
         var potentialCommand = interactionService.SlashCommands.FirstOrDefault(x =>

@@ -62,7 +62,7 @@ public partial class Moderation : MewdekoModule
             else
             {
                 var eb = new EmbedBuilder()
-                    .WithTitle($"{massNick.OperationType} Progress")
+                    .WithTitle(Strings.MassNickProgress(ctx.Guild.Id, massNick.OperationType))
                     .WithDescription(Strings.MassNickDesc(ctx.Guild.Id,
                         massNick.StartedBy.Mention,
                         massNick.StartedBy.Id,
@@ -318,7 +318,7 @@ public partial class Moderation : MewdekoModule
             if (warnlogChannel == 0)
             {
                 await Service.SetWarnlogChannelId(ctx.Guild, channel).ConfigureAwait(false);
-                await ctx.Channel.SendConfirmAsync($"Your warnlog channel has been set to {channel.Mention}")
+                await ctx.Channel.SendConfirmAsync(Strings.WarnlogChannelSet(ctx.Guild.Id, channel.Mention))
                     .ConfigureAwait(false);
                 return;
             }
@@ -327,7 +327,7 @@ public partial class Moderation : MewdekoModule
             await Service.SetWarnlogChannelId(ctx.Guild, channel).ConfigureAwait(false);
             await ctx.Channel
                 .SendConfirmAsync(
-                    $"Your warnlog channel has been changed from {oldWarnChannel.Mention} to {channel.Mention}")
+                    Strings.WarnlogChannelChanged(ctx.Guild.Id, oldWarnChannel.Mention, channel.Mention))
                 .ConfigureAwait(false);
         }
 
@@ -460,7 +460,7 @@ public partial class Moderation : MewdekoModule
                 var channel = await ctx.Guild.GetTextChannelAsync(await Service.GetWarnlogChannel(ctx.Guild.Id));
                 await channel.EmbedAsync(new EmbedBuilder().WithErrorColor()
                     .WithThumbnailUrl(user.RealAvatarUrl().ToString())
-                    .WithTitle($"Warned by: {ctx.User}")
+                    .WithTitle(Strings.WarnedBy(ctx.Guild.Id, ctx.User))
                     .WithCurrentTimestamp()
                     .WithDescription(
                         $"Username: {user.Username}#{user.Discriminator}\nID of Warned User: {user.Id}\nWarn Number: {warnings}\nPunishment: {punishaction} {punishtime}\n\nReason: {reason}\n\n[Click Here For Context](https://discord.com/channels/{ctx.Message.GetJumpUrl()})"));

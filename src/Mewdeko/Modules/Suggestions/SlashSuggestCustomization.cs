@@ -60,7 +60,7 @@ public partial class SlashSuggestions
             }
 
             await Service.SetMinLength(ctx.Guild, length).ConfigureAwait(false);
-            await ctx.Interaction.SendConfirmAsync($"Minimum length set to {length} characters!").ConfigureAwait(false);
+            await ctx.Interaction.SendConfirmAsync(Strings.MinLengthSet(ctx.Guild.Id, length)).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -82,7 +82,7 @@ public partial class SlashSuggestions
             }
 
             await Service.SetMaxLength(ctx.Guild, length).ConfigureAwait(false);
-            await ctx.Interaction.SendConfirmAsync($"Max length set to {length} characters!").ConfigureAwait(false);
+            await ctx.Interaction.SendConfirmAsync(Strings.MaxLengthSet(ctx.Guild.Id, length)).ConfigureAwait(false);
         }
 
         /// <summary>

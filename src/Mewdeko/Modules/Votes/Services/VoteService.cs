@@ -1,7 +1,8 @@
-﻿using LinqToDB;
-using DataModel;
+﻿using DataModel;
+using LinqToDB;
 using Mewdeko.Common.PubSub;
 using Mewdeko.Modules.Moderation.Services;
+using Mewdeko.Services.Strings;
 
 namespace Mewdeko.Modules.Votes.Services;
 
@@ -13,6 +14,7 @@ public class VoteService : INService
     private readonly DiscordShardedClient client;
     private readonly IDataConnectionFactory dbFactory;
     private readonly MuteService muteService;
+    private readonly GeneratedBotStrings Strings;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="VoteService" /> class, setting up dependencies and subscribing to
@@ -23,11 +25,12 @@ public class VoteService : INService
     /// <param name="client">The Discord client for interacting with the Discord API.</param>
     /// <param name="muteService">The service for managing mutes within the bot.</param>
     public VoteService(IPubSub pubSub, IDataConnectionFactory dbFactory, DiscordShardedClient client,
-        MuteService muteService)
+        MuteService muteService, GeneratedBotStrings strings)
     {
         this.dbFactory = dbFactory;
         this.client = client;
         this.muteService = muteService;
+        Strings = strings;
     }
 
     /// <summary>
@@ -52,8 +55,7 @@ public class VoteService : INService
         var user = guild.GetUser(ulong.Parse(voteModal.VoteModel.User));
         var newVote = new DataModel.Vote
         {
-            UserId = user.Id,
-            GuildId = guild.Id
+            UserId = user.Id, GuildId = guild.Id
         };
 
         // Insert new vote using LinqToDB
@@ -72,7 +74,7 @@ public class VoteService : INService
                 .CountAsync(x => x.UserId == user.Id && x.GuildId == guild.Id);
 
             var eb = new EmbedBuilder()
-                .WithTitle($"Thanks for voting for {guild.Name}")
+                .WithTitle(Strings.VoteThanks(guild.Id, guild.Name))
                 .WithDescription($"You have voted a total of {votes} times!")
                 .WithThumbnailUrl(user.RealAvatarUrl().AbsoluteUri)
                 .WithOkColor();
@@ -199,9 +201,7 @@ public class VoteService : INService
 
         var voteRole = new VoteRole
         {
-            RoleId = roleId,
-            GuildId = guildId,
-            Timer = seconds
+            RoleId = roleId, GuildId = guildId, Timer = seconds
         };
 
         // Insert vote role using LinqToDB
@@ -339,7 +339,10 @@ public class VoteService : INService
         if (config == null)
         {
             // Create new guild config if it doesn't exist
-            config = new GuildConfig { GuildId = guildId };
+            config = new GuildConfig
+            {
+                GuildId = guildId
+            };
             config.VoteEmbed = message;
             await db.InsertAsync(config);
         }
@@ -368,7 +371,10 @@ public class VoteService : INService
         if (config == null)
         {
             // Create new guild config if it doesn't exist
-            config = new GuildConfig { GuildId = guildId };
+            config = new GuildConfig
+            {
+                GuildId = guildId
+            };
             config.VotesPassword = password;
             await db.InsertAsync(config);
         }
@@ -397,8 +403,9 @@ public class VoteService : INService
         if (config == null)
         {
             // Create new guild config if it doesn't exist
-            config = new GuildConfig { GuildId = guildId,
-                VotesChannel = channel
+            config = new GuildConfig
+            {
+                GuildId = guildId, VotesChannel = channel
             };
             await db.InsertAsync(config);
         }
@@ -454,8 +461,8 @@ public class VoteService : INService
         // Count votes for this month using LinqToDB
         var thisMonth = await db.Votes
             .CountAsync(x => x.DateAdded.Value.Month == DateTime.UtcNow.Month &&
-                          x.UserId == user.Id &&
-                          x.GuildId == guild.Id);
+                             x.UserId == user.Id &&
+                             x.GuildId == guild.Id);
 
         // Count total votes using LinqToDB
         var total = await db.Votes

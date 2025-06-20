@@ -107,7 +107,8 @@ public partial class Searches
 
             var item = Service.MagicItems[new MewdekoRandom().Next(0, Service.MagicItems.Count)];
 
-            await ctx.Channel.SendConfirmAsync($"✨{item.Name}", item.Description).ConfigureAwait(false);
+            await ctx.Channel.SendConfirmAsync(Strings.JokeSparkle(ctx.Guild.Id, item.Name), item.Description)
+                .ConfigureAwait(false);
         }
     }
 }

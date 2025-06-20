@@ -34,7 +34,7 @@ public partial class Suggestions : MewdekoModuleBase<SuggestionsService>
             await Service.SetSuggestionChannelId(ctx.Guild, channel.Id).ConfigureAwait(false);
             var chn2 = await ctx.Guild.GetTextChannelAsync(await Service.GetSuggestionChannel(ctx.Guild.Id))
                 .ConfigureAwait(false);
-            await ctx.Channel.SendConfirmAsync($"Your Suggestion channel has been set to {chn2.Mention}")
+            await ctx.Channel.SendConfirmAsync(Strings.SuggestionChannelSet(ctx.Guild.Id, chn2.Mention))
                 .ConfigureAwait(false);
         }
     }

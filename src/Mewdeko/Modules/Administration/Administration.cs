@@ -183,6 +183,7 @@ public partial class Administration(InteractiveService serv)
     /// <param name="newNick">The new nickname. Provide none to reset.</param>
     /// <example>.setnick @user newNick</example>
     [Cmd]
+    [Aliases]
     [BotPerm(GuildPermission.ManageNicknames)]
     [UserPerm(GuildPermission.ManageNicknames)]
     [Priority(1)]
@@ -219,7 +220,8 @@ public partial class Administration(InteractiveService serv)
             return;
         }
 
-        if (!await PromptUserConfirmAsync(Strings.BanInRoleConfirm(ctx.Guild.Id, usersToBan.Count, role.Mention), ctx.User.Id))
+        if (!await PromptUserConfirmAsync(Strings.BanInRoleConfirm(ctx.Guild.Id, usersToBan.Count, role.Mention),
+                ctx.User.Id))
         {
             await ctx.Channel.SendErrorAsync(Strings.BanInRoleCancelled(ctx.Guild.Id), Config).ConfigureAwait(false);
             return;
@@ -244,11 +246,13 @@ public partial class Administration(InteractiveService serv)
             await ctx.Channel.SendConfirmAsync(Strings.BanInRoleSuccess(ctx.Guild.Id, usersToBan.Count, role.Mention))
                 .ConfigureAwait(false);
         else if (failedUsers == usersToBan.Count)
-            await ctx.Channel.SendErrorAsync(Strings.BanInRoleAllFailed(ctx.Guild.Id, users.Count, role.Mention), Config)
+            await ctx.Channel
+                .SendErrorAsync(Strings.BanInRoleAllFailed(ctx.Guild.Id, users.Count, role.Mention), Config)
                 .ConfigureAwait(false);
         else
             await ctx.Channel
-                .SendConfirmAsync(Strings.BanInRolePartialSuccess(ctx.Guild.Id, usersToBan.Count - failedUsers, role.Mention,
+                .SendConfirmAsync(Strings.BanInRolePartialSuccess(ctx.Guild.Id, usersToBan.Count - failedUsers,
+                    role.Mention,
                     failedUsers)).ConfigureAwait(false);
     }
 
@@ -340,7 +344,8 @@ public partial class Administration(InteractiveService serv)
                 async Task<PageBuilder> PageFactory(int page)
                 {
                     await Task.CompletedTask.ConfigureAwait(false);
-                    return new PageBuilder().WithTitle(Strings.NamebanPreviewCount(ctx.Guild.Id, users.Count, name.ToLower()))
+                    return new PageBuilder()
+                        .WithTitle(Strings.NamebanPreviewCount(ctx.Guild.Id, users.Count, name.ToLower()))
                         .WithDescription(string.Join("\n", users.Skip(page * 20).Take(20)));
                 }
             case "executeorder66":
@@ -442,7 +447,8 @@ public partial class Administration(InteractiveService serv)
             await msg.DeleteAsync();
             if (!text.ToLower().Contains("yes"))
                 return;
-            var message = await ConfirmAsync(Strings.BanunderBanning(ctx.Guild.Id, users.Count())).ConfigureAwait(false);
+            var message = await ConfirmAsync(Strings.BanunderBanning(ctx.Guild.Id, users.Count()))
+                .ConfigureAwait(false);
             foreach (var i in users)
             {
                 try
@@ -851,6 +857,7 @@ public partial class Administration(InteractiveService serv)
     /// <example>.delmsgoncmd enable #channel</example>
     /// <example>.delmsgoncmd disable #channel</example>
     [Cmd]
+    [Aliases]
     [RequireContext(ContextType.Guild)]
     [UserPerm(GuildPermission.Administrator)]
     [BotPerm(GuildPermission.ManageMessages)]

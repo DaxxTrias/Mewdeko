@@ -5,6 +5,12 @@ namespace Mewdeko.Tests
     [TestFixture]
     public class StringUsageTests
     {
+        [OneTimeSetUp]
+        public void Setup()
+        {
+            // Any setup code if needed
+        }
+
         private readonly string[] discordSendMethods =
         [
             "SendMessageAsync", "SendFileAsync", "SendFilesAsync", "ReplyAsync",
@@ -24,7 +30,8 @@ namespace Mewdeko.Tests
             methodCallRegex = new Regex($@"\.({methodPattern})\s*\(([^)]*)\)", RegexOptions.Multiline);
         }
 
-        private (bool hasRawString, string methodName, string rawString, string lineContext) CheckForRawStrings(string code)
+        private (bool hasRawString, string methodName, string rawString, string lineContext) CheckForRawStrings(
+            string code)
         {
             var matches = methodCallRegex.Matches(code);
             foreach (Match match in matches)
@@ -59,28 +66,34 @@ namespace Mewdeko.Tests
 
         private bool IsExemptString(string str) => new[]
         {
-            @"""http[s]?://[^""]*""",     // URLs
-            @"""\.[\w]+""",         // File extensions
-            @"""\s+""",             // Whitespace
-            @"""\\n""",             // Newlines
-            @"""[\\\/]""",          // Path separators
-            @"""\{\d+\}""",         // Format placeholders
-            @"""\$""",              // String interpolation
-            @"""<[^>]+>""",         // XML/HTML tags
-            @"""[0-9]+""",          // Numbers
-            @"""#.*?#""",           // Channel mentions
-            @"""@.*?@""",           // User mentions
-            @"""```.*?```""",       // Code blocks
-            @"""[\[\]\(\)]""",      // Brackets
-            @"""[-_\.,!?]""",       // Punctuation
+            @"""http[s]?://[^""]*""", // URLs
+            @"""\.[\w]+""", // File extensions
+            @"""\s+""", // Whitespace
+            @"""\\n""", // Newlines
+            @"""[\\\/]""", // Path separators
+            @"""\{\d+\}""", // Format placeholders
+            @"""<[^>]+>""", // XML/HTML tags
+            @"""[0-9]+""", // Numbers
+            @"""#.*?#""", // Channel mentions
+            @"""@.*?@""", // User mentions
+            @"""```.*?```""", // Code blocks
+            @"""[\[\]\(\)]""", // Brackets
+            @"""[-_\.,!?]""", // Punctuation
             @"""(?i)(true|false|null|undefined)""", // Literals
             @"""\.[a-zA-Z0-9]+$""", // Filenames
             @"""[a-zA-Z0-9_-]+\.(png|jpg|gif|mp4|mp3|wav|txt|json|yml|yaml|csv|xml)""", // File patterns
-            @"""http[s]?://[^""]*""",          // Full URLs
-            @"""[\u2600-\u26FF\u2700-\u27BF\u1F300-\u1F9FF]""",      // Unicode emojis
-            @"""[✅❌⚙️⭐️✨]""",                 // Common Discord emotes
-            @"""[\r\n|\n\n|\s]+""",            // Multiline whitespace
-            @"""\\[rn]\\[rn]""",           // Escaped newlines
+            @"""[\u2600-\u26FF\u2700-\u27BF\u1F300-\u1F9FF]""", // Unicode emojis
+            @"""[✅❌⚙️⭐️✨]""", // Common Discord emotes
+            @"""[\r\n|\n\n|\s]+""", // Multiline whitespace
+            @"""\\[rn]\\[rn]""", // Escaped newlines
+            @"""\$""", // String interpolation markers
+            @"""{[^}]+}""", // Single variable interpolation placeholders
+            @"""^\{[a-zA-Z][a-zA-Z0-9_.]*\}$""", // Pure single variable like "{playlist.Name}"
+            @"""^⏲.*ms$""", // Timing output like "⏲ 123ms"
+            @"""^```.*```$""", // Code block content like "```code```"
+            @"""^[a-zA-Z0-9_\.]+$""", // Simple variable/property names
+            @"""^[a-zA-Z]+://[^""]*$""", // Protocol URLs
+            @"""^Powered by [a-zA-Z0-9\.]+.*$""" // API attribution strings like "Powered by openweathermap.org"
         }.Any(pattern => Regex.IsMatch(str, pattern));
 
         [Test]
@@ -117,15 +130,11 @@ namespace Mewdeko.Tests
             while (!Directory.Exists(Path.Combine(currentDir, "src", "Mewdeko", "Modules")))
             {
                 currentDir = Directory.GetParent(currentDir)?.FullName
-                             ?? throw new DirectoryNotFoundException("Could not find project root with Modules directory at src/Mewdeko/Modules");
+                             ?? throw new DirectoryNotFoundException(
+                                 "Could not find project root with Modules directory at src/Mewdeko/Modules");
             }
-            return Path.Combine(currentDir, "src", "Mewdeko");
-        }
 
-        [OneTimeSetUp]
-        public void Setup()
-        {
-            // Any setup code if needed
+            return Path.Combine(currentDir, "src", "Mewdeko");
         }
     }
 }

@@ -100,7 +100,7 @@ public partial class Games
             if (winner == null)
             {
                 var loseEmbed = new EmbedBuilder().WithTitle($"Hangman Game ({game.TermType}) - Ended")
-                    .WithDescription(Format.Bold("You lose."))
+                    .WithDescription(Format.Bold(Strings.HangmanLose(ctx.Guild.Id)))
                     .AddField(efb => efb.WithName("It was").WithValue(game.Term.GetWord()))
                     .WithFooter(efb => efb.WithText(string.Join(" ", game.PreviousGuesses)))
                     .WithErrorColor();
@@ -112,7 +112,7 @@ public partial class Games
             }
 
             var winEmbed = new EmbedBuilder().WithTitle($"Hangman Game ({game.TermType}) - Ended")
-                .WithDescription(Format.Bold($"{winner} Won."))
+                .WithDescription(Format.Bold(Strings.HangmanWin(ctx.Guild.Id, winner)))
                 .AddField(efb => efb.WithName("It was").WithValue(game.Term.GetWord()))
                 .WithFooter(efb => efb.WithText(string.Join(" ", game.PreviousGuesses)))
                 .WithOkColor();

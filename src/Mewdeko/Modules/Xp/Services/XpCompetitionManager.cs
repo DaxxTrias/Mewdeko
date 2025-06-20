@@ -3,6 +3,7 @@ using LinqToDB;
 using LinqToDB.Data;
 using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.Xp.Models;
+using Mewdeko.Services.Strings;
 using Serilog;
 
 namespace Mewdeko.Modules.Xp.Services;
@@ -16,6 +17,7 @@ public class XpCompetitionManager : INService, IDisposable
     private readonly ConcurrentDictionary<ulong, List<XpCompetition>> activeCompetitions = new();
     private readonly DiscordShardedClient client;
     private readonly IDataConnectionFactory dbFactory;
+    private readonly GeneratedBotStrings Strings;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="XpCompetitionManager"/> class.
@@ -24,10 +26,11 @@ public class XpCompetitionManager : INService, IDisposable
     /// <param name="dbFactory">The database context provider.</param>
     public XpCompetitionManager(
         DiscordShardedClient client,
-        IDataConnectionFactory dbFactory)
+        IDataConnectionFactory dbFactory, GeneratedBotStrings strings)
     {
         this.client = client;
         this.dbFactory = dbFactory;
+        Strings = strings;
     }
 
     /// <summary>
@@ -172,7 +175,7 @@ public class XpCompetitionManager : INService, IDisposable
                                 await channel.SendMessageAsync(
                                     embed: new EmbedBuilder()
                                         .WithColor(Color.Gold)
-                                        .WithTitle("Competition Milestone!")
+                                        .WithTitle(Strings.CompetitionMilestone(guild.Id))
                                         .WithDescription(
                                             $"{user.Mention} is the first to reach level {competition.TargetLevel} in the '{competition.Name}' competition!")
                                         .Build()

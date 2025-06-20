@@ -11,12 +11,14 @@ namespace Mewdeko.Modules.CustomVoice;
 /// <summary>
 ///     Commands for managing custom voice channels.
 /// </summary>
-public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService settingsService) : MewdekoModuleBase<CustomVoiceService>
+public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService settingsService)
+    : MewdekoModuleBase<CustomVoiceService>
 {
-     /// <summary>
+    /// <summary>
     ///     Shows interactive controls for managing your custom voice channel.
     /// </summary>
     [Cmd]
+    [Aliases]
     [RequireContext(ContextType.Guild)]
     public async Task VoiceControls()
     {
@@ -43,7 +45,8 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
         if (!isOwner)
         {
             var config = await Service.GetOrCreateConfigAsync(Context.Guild.Id);
-            hasAdminRole = config.CustomVoiceAdminRoleId.HasValue && user.RoleIds.Contains(config.CustomVoiceAdminRoleId.Value);
+            hasAdminRole = config.CustomVoiceAdminRoleId.HasValue &&
+                           user.RoleIds.Contains(config.CustomVoiceAdminRoleId.Value);
 
             if (!hasAdminRole)
             {
@@ -70,20 +73,28 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
             .WithTitle(Strings.CustomVoiceControlsTitle(Context.Guild.Id, channel.Name))
             .WithOkColor()
             .WithDescription(Strings.CustomVoiceControlsDesc(Context.Guild.Id))
-            .AddField(Strings.CustomVoiceControlsOwner(Context.Guild.Id), MentionUtils.MentionUser(customChannel.OwnerId), true)
+            .AddField(Strings.CustomVoiceControlsOwner(Context.Guild.Id),
+                MentionUtils.MentionUser(customChannel.OwnerId), true)
             .AddField(Strings.CustomVoiceControlsCreated(Context.Guild.Id),
-                Strings.CustomVoiceControlsTimeAgo(Context.Guild.Id, (DateTime.UtcNow - customChannel.CreatedAt).TotalHours.ToString("F1")), true)
+                Strings.CustomVoiceControlsTimeAgo(Context.Guild.Id,
+                    (DateTime.UtcNow - customChannel.CreatedAt).TotalHours.ToString("F1")), true)
             .AddField(Strings.CustomVoiceControlsUserLimit(Context.Guild.Id),
-                channel.UserLimit == 0 ? Strings.CustomVoiceConfigUnlimited(Context.Guild.Id) : channel.UserLimit.ToString(), true)
+                channel.UserLimit == 0
+                    ? Strings.CustomVoiceConfigUnlimited(Context.Guild.Id)
+                    : channel.UserLimit.ToString(), true)
             .AddField(Strings.CustomVoiceControlsBitrate(Context.Guild.Id), $"{channel.Bitrate / 1000} kbps", true)
             .AddField(Strings.CustomVoiceControlsLocked(Context.Guild.Id),
-                customChannel.IsLocked ? Strings.CustomVoiceConfigYes(Context.Guild.Id) : Strings.CustomVoiceConfigNo(Context.Guild.Id), true)
+                customChannel.IsLocked
+                    ? Strings.CustomVoiceConfigYes(Context.Guild.Id)
+                    : Strings.CustomVoiceConfigNo(Context.Guild.Id), true)
             .AddField(Strings.CustomVoiceControlsKeepAlive(Context.Guild.Id),
-                customChannel.KeepAlive ? Strings.CustomVoiceConfigYes(Context.Guild.Id) : Strings.CustomVoiceConfigNo(Context.Guild.Id), true)
+                customChannel.KeepAlive
+                    ? Strings.CustomVoiceConfigYes(Context.Guild.Id)
+                    : Strings.CustomVoiceConfigNo(Context.Guild.Id), true)
             .AddField(Strings.CustomVoiceControlsUsers(Context.Guild.Id),
-                !users.Any() ?
-                    Strings.CustomVoiceControlsNoUsers(Context.Guild.Id) :
-                    string.Join(", ", users.Select(u => u.Mention)));
+                !users.Any()
+                    ? Strings.CustomVoiceControlsNoUsers(Context.Guild.Id)
+                    : string.Join(", ", users.Select(u => u.Mention)));
 
         // Create the components for quick actions
         var components = new ComponentBuilder();
@@ -116,9 +127,9 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
         // Row 2: Lock/Keep Alive toggles
         components.WithButton(
             customId: $"voice:{(customChannel.IsLocked ? "unlock" : "lock")}:{channel.Id}",
-            label: customChannel.IsLocked ?
-                Strings.CustomVoiceControlsUnlockButton(Context.Guild.Id) :
-                Strings.CustomVoiceControlsLockButton(Context.Guild.Id),
+            label: customChannel.IsLocked
+                ? Strings.CustomVoiceControlsUnlockButton(Context.Guild.Id)
+                : Strings.CustomVoiceControlsLockButton(Context.Guild.Id),
             style: customChannel.IsLocked ? ButtonStyle.Success : ButtonStyle.Danger,
             disabled: !guildConfig.AllowLocking,
             row: 1
@@ -126,9 +137,9 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
 
         components.WithButton(
             customId: $"voice:keepalive:{channel.Id}:{!customChannel.KeepAlive}",
-            label: customChannel.KeepAlive ?
-                Strings.CustomVoiceControlsDisableKeepAliveButton(Context.Guild.Id) :
-                Strings.CustomVoiceControlsEnableKeepAliveButton(Context.Guild.Id),
+            label: customChannel.KeepAlive
+                ? Strings.CustomVoiceControlsDisableKeepAliveButton(Context.Guild.Id)
+                : Strings.CustomVoiceControlsEnableKeepAliveButton(Context.Guild.Id),
             style: customChannel.KeepAlive ? ButtonStyle.Danger : ButtonStyle.Success,
             row: 1
         );
@@ -247,13 +258,15 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
     ///     Sets up a voice channel as a hub for creating custom voice channels.
     /// </summary>
     [Cmd]
+    [Aliases]
     [RequireContext(ContextType.Guild)]
     [UserPerm(GuildPermission.ManageChannels)]
     public async Task SetupVoiceHub()
     {
         // Create the join-to-create channel
         var channel = await Context.Guild.CreateVoiceChannelAsync(Strings.CustomVoiceHubDefaultName(Context.Guild.Id));
-        var category = await Context.Guild.CreateCategoryAsync(Strings.CustomVoiceCategoryDefaultName(Context.Guild.Id));
+        var category =
+            await Context.Guild.CreateCategoryAsync(Strings.CustomVoiceCategoryDefaultName(Context.Guild.Id));
 
         // Set permissions for the hub channel
         await channel.AddPermissionOverwriteAsync(Context.Guild.EveryoneRole, new OverwritePermissions(
@@ -274,6 +287,7 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
     ///     Sets a specific voice channel as the hub for creating custom voice channels.
     /// </summary>
     [Cmd]
+    [Aliases]
     [RequireContext(ContextType.Guild)]
     [UserPerm(GuildPermission.ManageChannels)]
     public async Task SetVoiceHub(IVoiceChannel channel, ICategoryChannel category = null)
@@ -283,7 +297,8 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
 
         if (category != null)
         {
-            await ReplyConfirmAsync(Strings.CustomVoiceHubSetWithCategory(Context.Guild.Id, channel.Name, category.Name));
+            await ReplyConfirmAsync(
+                Strings.CustomVoiceHubSetWithCategory(Context.Guild.Id, channel.Name, category.Name));
         }
         else
         {
@@ -295,6 +310,7 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
     ///     Configures the custom voice settings.
     /// </summary>
     [Cmd]
+    [Aliases]
     [RequireContext(ContextType.Guild)]
     [UserPerm(GuildPermission.ManageChannels)]
     public async Task VoiceConfig(string setting = null, string value = null)
@@ -308,23 +324,63 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
                 .WithTitle(Strings.CustomVoiceConfigTitle(Context.Guild.Id))
                 .WithOkColor()
                 .AddField(Strings.CustomVoiceConfigHubChannel(Context.Guild.Id), $"<#{config.HubVoiceChannelId}>", true)
-                .AddField(Strings.CustomVoiceConfigCategory(Context.Guild.Id), config.ChannelCategoryId.HasValue ? $"<#{config.ChannelCategoryId}>" : Strings.CustomVoiceConfigNone(Context.Guild.Id), true)
+                .AddField(Strings.CustomVoiceConfigCategory(Context.Guild.Id),
+                    config.ChannelCategoryId.HasValue
+                        ? $"<#{config.ChannelCategoryId}>"
+                        : Strings.CustomVoiceConfigNone(Context.Guild.Id), true)
                 .AddField(Strings.CustomVoiceConfigNameFormat(Context.Guild.Id), config.DefaultNameFormat, true)
-                .AddField(Strings.CustomVoiceConfigUserLimit(Context.Guild.Id), config.DefaultUserLimit == 0 ? Strings.CustomVoiceConfigUnlimited(Context.Guild.Id) : config.DefaultUserLimit.ToString(), true)
+                .AddField(Strings.CustomVoiceConfigUserLimit(Context.Guild.Id),
+                    config.DefaultUserLimit == 0
+                        ? Strings.CustomVoiceConfigUnlimited(Context.Guild.Id)
+                        : config.DefaultUserLimit.ToString(), true)
                 .AddField(Strings.CustomVoiceConfigBitrate(Context.Guild.Id), $"{config.DefaultBitrate} kbps", true)
-                .AddField(Strings.CustomVoiceConfigDeleteEmpty(Context.Guild.Id), config.DeleteWhenEmpty ? Strings.CustomVoiceConfigYes(Context.Guild.Id) : Strings.CustomVoiceConfigNo(Context.Guild.Id), true)
-                .AddField(Strings.CustomVoiceConfigEmptyTimeout(Context.Guild.Id), Strings.CustomVoiceConfigMinutes(Context.Guild.Id, config.EmptyChannelTimeout), true)
-                .AddField(Strings.CustomVoiceConfigMultipleChannels(Context.Guild.Id), config.AllowMultipleChannels ? Strings.CustomVoiceConfigYes(Context.Guild.Id) : Strings.CustomVoiceConfigNo(Context.Guild.Id), true)
-                .AddField(Strings.CustomVoiceConfigNameCustomization(Context.Guild.Id), config.AllowNameCustomization ? Strings.CustomVoiceConfigYes(Context.Guild.Id) : Strings.CustomVoiceConfigNo(Context.Guild.Id), true)
-                .AddField(Strings.CustomVoiceConfigLimitCustomization(Context.Guild.Id), config.AllowUserLimitCustomization ? Strings.CustomVoiceConfigYes(Context.Guild.Id) : Strings.CustomVoiceConfigNo(Context.Guild.Id), true)
-                .AddField(Strings.CustomVoiceConfigBitrateCustomization(Context.Guild.Id), config.AllowBitrateCustomization ? Strings.CustomVoiceConfigYes(Context.Guild.Id) : Strings.CustomVoiceConfigNo(Context.Guild.Id), true)
-                .AddField(Strings.CustomVoiceConfigLocking(Context.Guild.Id), config.AllowLocking ? Strings.CustomVoiceConfigYes(Context.Guild.Id) : Strings.CustomVoiceConfigNo(Context.Guild.Id), true)
-                .AddField(Strings.CustomVoiceConfigUserManagement(Context.Guild.Id), config.AllowUserManagement ? Strings.CustomVoiceConfigYes(Context.Guild.Id) : Strings.CustomVoiceConfigNo(Context.Guild.Id), true)
-                .AddField(Strings.CustomVoiceConfigMaxUserLimit(Context.Guild.Id), config.MaxUserLimit == 0 ? Strings.CustomVoiceConfigNoMaximum(Context.Guild.Id) : config.MaxUserLimit.ToString(), true)
+                .AddField(Strings.CustomVoiceConfigDeleteEmpty(Context.Guild.Id),
+                    config.DeleteWhenEmpty
+                        ? Strings.CustomVoiceConfigYes(Context.Guild.Id)
+                        : Strings.CustomVoiceConfigNo(Context.Guild.Id), true)
+                .AddField(Strings.CustomVoiceConfigEmptyTimeout(Context.Guild.Id),
+                    Strings.CustomVoiceConfigMinutes(Context.Guild.Id, config.EmptyChannelTimeout), true)
+                .AddField(Strings.CustomVoiceConfigMultipleChannels(Context.Guild.Id),
+                    config.AllowMultipleChannels
+                        ? Strings.CustomVoiceConfigYes(Context.Guild.Id)
+                        : Strings.CustomVoiceConfigNo(Context.Guild.Id), true)
+                .AddField(Strings.CustomVoiceConfigNameCustomization(Context.Guild.Id),
+                    config.AllowNameCustomization
+                        ? Strings.CustomVoiceConfigYes(Context.Guild.Id)
+                        : Strings.CustomVoiceConfigNo(Context.Guild.Id), true)
+                .AddField(Strings.CustomVoiceConfigLimitCustomization(Context.Guild.Id),
+                    config.AllowUserLimitCustomization
+                        ? Strings.CustomVoiceConfigYes(Context.Guild.Id)
+                        : Strings.CustomVoiceConfigNo(Context.Guild.Id), true)
+                .AddField(Strings.CustomVoiceConfigBitrateCustomization(Context.Guild.Id),
+                    config.AllowBitrateCustomization
+                        ? Strings.CustomVoiceConfigYes(Context.Guild.Id)
+                        : Strings.CustomVoiceConfigNo(Context.Guild.Id), true)
+                .AddField(Strings.CustomVoiceConfigLocking(Context.Guild.Id),
+                    config.AllowLocking
+                        ? Strings.CustomVoiceConfigYes(Context.Guild.Id)
+                        : Strings.CustomVoiceConfigNo(Context.Guild.Id), true)
+                .AddField(Strings.CustomVoiceConfigUserManagement(Context.Guild.Id),
+                    config.AllowUserManagement
+                        ? Strings.CustomVoiceConfigYes(Context.Guild.Id)
+                        : Strings.CustomVoiceConfigNo(Context.Guild.Id), true)
+                .AddField(Strings.CustomVoiceConfigMaxUserLimit(Context.Guild.Id),
+                    config.MaxUserLimit == 0
+                        ? Strings.CustomVoiceConfigNoMaximum(Context.Guild.Id)
+                        : config.MaxUserLimit.ToString(), true)
                 .AddField(Strings.CustomVoiceConfigMaxBitrate(Context.Guild.Id), $"{config.MaxBitrate} kbps", true)
-                .AddField(Strings.CustomVoiceConfigPersistPreferences(Context.Guild.Id), config.PersistUserPreferences ? Strings.CustomVoiceConfigYes(Context.Guild.Id) : Strings.CustomVoiceConfigNo(Context.Guild.Id), true)
-                .AddField(Strings.CustomVoiceConfigAutoPermission(Context.Guild.Id), config.AutoPermission ? Strings.CustomVoiceConfigYes(Context.Guild.Id) : Strings.CustomVoiceConfigNo(Context.Guild.Id), true)
-                .AddField(Strings.CustomVoiceConfigAdminRole(Context.Guild.Id), config.CustomVoiceAdminRoleId.HasValue ? $"<@&{config.CustomVoiceAdminRoleId}>" : Strings.CustomVoiceConfigNone(Context.Guild.Id), true);
+                .AddField(Strings.CustomVoiceConfigPersistPreferences(Context.Guild.Id),
+                    config.PersistUserPreferences
+                        ? Strings.CustomVoiceConfigYes(Context.Guild.Id)
+                        : Strings.CustomVoiceConfigNo(Context.Guild.Id), true)
+                .AddField(Strings.CustomVoiceConfigAutoPermission(Context.Guild.Id),
+                    config.AutoPermission
+                        ? Strings.CustomVoiceConfigYes(Context.Guild.Id)
+                        : Strings.CustomVoiceConfigNo(Context.Guild.Id), true)
+                .AddField(Strings.CustomVoiceConfigAdminRole(Context.Guild.Id),
+                    config.CustomVoiceAdminRoleId.HasValue
+                        ? $"<@&{config.CustomVoiceAdminRoleId}>"
+                        : Strings.CustomVoiceConfigNone(Context.Guild.Id), true);
 
             await ReplyAsync(embed: embed.Build());
             return;
@@ -350,7 +406,8 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
                 "maxbitrate" => config.MaxBitrate.ToString(),
                 "persistpreferences" => config.PersistUserPreferences.ToString(),
                 "autopermission" => config.AutoPermission.ToString(),
-                "adminrole" => config.CustomVoiceAdminRoleId?.ToString() ?? Strings.CustomVoiceConfigNone(Context.Guild.Id),
+                "adminrole" => config.CustomVoiceAdminRoleId?.ToString() ??
+                               Strings.CustomVoiceConfigNone(Context.Guild.Id),
                 _ => null
             };
 
@@ -385,6 +442,7 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
                     await ReplyErrorAsync(Strings.CustomVoiceConfigUserLimitInvalid(Context.Guild.Id));
                     return;
                 }
+
                 break;
 
             case "bitrate":
@@ -397,6 +455,7 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
                     await ReplyErrorAsync(Strings.CustomVoiceConfigBitrateInvalid(Context.Guild.Id));
                     return;
                 }
+
                 break;
 
             case "deleteempty":
@@ -409,6 +468,7 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
                     await ReplyErrorAsync(Strings.CustomVoiceConfigBooleanRequired(Context.Guild.Id));
                     return;
                 }
+
                 break;
 
             case "emptytimeout":
@@ -421,6 +481,7 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
                     await ReplyErrorAsync(Strings.CustomVoiceConfigTimeoutInvalid(Context.Guild.Id));
                     return;
                 }
+
                 break;
 
             case "multiplechannels":
@@ -433,6 +494,7 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
                     await ReplyErrorAsync(Strings.CustomVoiceConfigBooleanRequired(Context.Guild.Id));
                     return;
                 }
+
                 break;
 
             case "namechange":
@@ -445,6 +507,7 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
                     await ReplyErrorAsync(Strings.CustomVoiceConfigBooleanRequired(Context.Guild.Id));
                     return;
                 }
+
                 break;
 
             case "limitchange":
@@ -457,6 +520,7 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
                     await ReplyErrorAsync(Strings.CustomVoiceConfigBooleanRequired(Context.Guild.Id));
                     return;
                 }
+
                 break;
 
             case "bitratechange":
@@ -469,6 +533,7 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
                     await ReplyErrorAsync(Strings.CustomVoiceConfigBooleanRequired(Context.Guild.Id));
                     return;
                 }
+
                 break;
 
             case "locking":
@@ -481,6 +546,7 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
                     await ReplyErrorAsync(Strings.CustomVoiceConfigBooleanRequired(Context.Guild.Id));
                     return;
                 }
+
                 break;
 
             case "usermanagement":
@@ -493,6 +559,7 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
                     await ReplyErrorAsync(Strings.CustomVoiceConfigBooleanRequired(Context.Guild.Id));
                     return;
                 }
+
                 break;
 
             case "maxuserlimit":
@@ -505,6 +572,7 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
                     await ReplyErrorAsync(Strings.CustomVoiceConfigMaxUserLimitInvalid(Context.Guild.Id));
                     return;
                 }
+
                 break;
 
             case "maxbitrate":
@@ -517,6 +585,7 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
                     await ReplyErrorAsync(Strings.CustomVoiceConfigMaxBitrateInvalid(Context.Guild.Id));
                     return;
                 }
+
                 break;
 
             case "persistpreferences":
@@ -529,6 +598,7 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
                     await ReplyErrorAsync(Strings.CustomVoiceConfigBooleanRequired(Context.Guild.Id));
                     return;
                 }
+
                 break;
 
             case "autopermission":
@@ -541,6 +611,7 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
                     await ReplyErrorAsync(Strings.CustomVoiceConfigBooleanRequired(Context.Guild.Id));
                     return;
                 }
+
                 break;
 
             case "adminrole":
@@ -554,7 +625,8 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
                 }
                 else
                 {
-                    var role = Context.Guild.Roles.FirstOrDefault(r => r.Name.Equals(value, StringComparison.OrdinalIgnoreCase));
+                    var role = Context.Guild.Roles.FirstOrDefault(r =>
+                        r.Name.Equals(value, StringComparison.OrdinalIgnoreCase));
                     if (role != null)
                     {
                         config.CustomVoiceAdminRoleId = role.Id;
@@ -565,6 +637,7 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
                         return;
                     }
                 }
+
                 break;
 
             default:
@@ -585,6 +658,7 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
     ///     Lists active custom voice channels.
     /// </summary>
     [Cmd]
+    [Aliases]
     [RequireContext(ContextType.Guild)]
     public async Task VoiceChannels()
     {
@@ -616,8 +690,12 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
             sb.AppendLine($"**{voiceChannel.Name}** ({channel.ChannelId})");
             sb.AppendLine(Strings.CustomVoiceChannelOwner(Context.Guild.Id, ownerMention));
             sb.AppendLine(Strings.CustomVoiceChannelUsers(Context.Guild.Id, userCount));
-            sb.AppendLine(Strings.CustomVoiceChannelLocked(Context.Guild.Id, channel.IsLocked ? Strings.CustomVoiceConfigYes(Context.Guild.Id) : Strings.CustomVoiceConfigNo(Context.Guild.Id)));
-            sb.AppendLine(Strings.CustomVoiceChannelCreated(Context.Guild.Id, (DateTime.UtcNow - channel.CreatedAt).TotalHours.ToString("F1")));
+            sb.AppendLine(Strings.CustomVoiceChannelLocked(Context.Guild.Id,
+                channel.IsLocked
+                    ? Strings.CustomVoiceConfigYes(Context.Guild.Id)
+                    : Strings.CustomVoiceConfigNo(Context.Guild.Id)));
+            sb.AppendLine(Strings.CustomVoiceChannelCreated(Context.Guild.Id,
+                (DateTime.UtcNow - channel.CreatedAt).TotalHours.ToString("F1")));
             sb.AppendLine();
         }
 
@@ -630,6 +708,7 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
     ///     Renames your custom voice channel.
     /// </summary>
     [Cmd]
+    [Aliases]
     [RequireContext(ContextType.Guild)]
     public async Task VoiceRename([Remainder] string name)
     {
@@ -684,6 +763,7 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
     ///     Sets the user limit for your custom voice channel.
     /// </summary>
     [Cmd]
+    [Aliases]
     [RequireContext(ContextType.Guild)]
     public async Task VoiceLimit(int limit)
     {
@@ -746,6 +826,7 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
     ///     Sets the bitrate for your custom voice channel.
     /// </summary>
     [Cmd]
+    [Aliases]
     [RequireContext(ContextType.Guild)]
     public async Task VoiceBitrate(int bitrate)
     {
@@ -807,6 +888,7 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
     ///     Locks or unlocks your custom voice channel.
     /// </summary>
     [Cmd]
+    [Aliases]
     [RequireContext(ContextType.Guild)]
     public async Task VoiceLock(bool locked = true)
     {
@@ -880,6 +962,7 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
     ///     Unlocks your custom voice channel.
     /// </summary>
     [Cmd]
+    [Aliases]
     [RequireContext(ContextType.Guild)]
     public async Task VoiceUnlock()
     {
@@ -890,6 +973,7 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
     ///     Allows a specific user to join your locked voice channel.
     /// </summary>
     [Cmd]
+    [Aliases]
     [RequireContext(ContextType.Guild)]
     public async Task VoiceAllow(IGuildUser target)
     {
@@ -944,6 +1028,7 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
     ///     Denies a specific user from joining your voice channel.
     /// </summary>
     [Cmd]
+    [Aliases]
     [RequireContext(ContextType.Guild)]
     public async Task VoiceDeny(IGuildUser target)
     {
@@ -1005,6 +1090,7 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
     ///     Claims ownership of a custom voice channel if the owner is not present.
     /// </summary>
     [Cmd]
+    [Aliases]
     [RequireContext(ContextType.Guild)]
     public async Task VoiceClaim()
     {
@@ -1035,7 +1121,8 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
         var voiceChannel = await ctx.Guild.GetVoiceChannelAsync(user.VoiceChannel.Id);
         var originalOwner = await Context.Guild.GetUserAsync(customChannel.OwnerId);
 
-        if (originalOwner != null && (await voiceChannel.GetUsersAsync().FlattenAsync()).Any(u => u.Id == originalOwner.Id))
+        if (originalOwner != null &&
+            (await voiceChannel.GetUsersAsync().FlattenAsync()).Any(u => u.Id == originalOwner.Id))
         {
             await ReplyErrorAsync(Strings.CustomVoiceOwnerPresent(Context.Guild.Id));
             return;
@@ -1056,6 +1143,7 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
     ///     Transfers ownership of your custom voice channel to another user.
     /// </summary>
     [Cmd]
+    [Aliases]
     [RequireContext(ContextType.Guild)]
     public async Task VoiceTransfer(IGuildUser target)
     {
@@ -1110,6 +1198,7 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
     ///     Sets the channel to be kept alive even when empty.
     /// </summary>
     [Cmd]
+    [Aliases]
     [RequireContext(ContextType.Guild)]
     public async Task VoiceKeepAlive(bool keepAlive = true)
     {
@@ -1153,7 +1242,7 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
         }
 
         // Update the keep-alive status
-         await using var dbContext = await dbFactory.CreateConnectionAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
         customChannel.KeepAlive = keepAlive;
         await dbContext.UpdateAsync(customChannel);
         var actionText = keepAlive
@@ -1167,6 +1256,7 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
     ///     Sets your voice channel preferences.
     /// </summary>
     [Cmd]
+    [Aliases]
     [RequireContext(ContextType.Guild)]
     public async Task VoicePreferences()
     {
@@ -1199,7 +1289,9 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
 
             embed.AddField(
                 Strings.CustomVoicePrefsBitrate(Context.Guild.Id),
-                prefs.Bitrate.HasValue ? Strings.CustomVoicePrefsBitrateValue(Context.Guild.Id, prefs.Bitrate.Value) : Strings.CustomVoicePrefsDefault(Context.Guild.Id),
+                prefs.Bitrate.HasValue
+                    ? Strings.CustomVoicePrefsBitrateValue(Context.Guild.Id, prefs.Bitrate.Value)
+                    : Strings.CustomVoicePrefsDefault(Context.Guild.Id),
                 true);
 
             embed.AddField(
@@ -1237,13 +1329,15 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
             if (whitelist?.Count > 0)
             {
                 var whitelistUsers = whitelist.Select(uid => MentionUtils.MentionUser(uid));
-                embed.AddField(Strings.CustomVoicePrefsAllowedUsers(Context.Guild.Id), string.Join(", ", whitelistUsers));
+                embed.AddField(Strings.CustomVoicePrefsAllowedUsers(Context.Guild.Id),
+                    string.Join(", ", whitelistUsers));
             }
 
             if (blacklist?.Count > 0)
             {
                 var blacklistUsers = blacklist.Select(uid => MentionUtils.MentionUser(uid));
-                embed.AddField(Strings.CustomVoicePrefsDeniedUsers(Context.Guild.Id), string.Join(", ", blacklistUsers));
+                embed.AddField(Strings.CustomVoicePrefsDeniedUsers(Context.Guild.Id),
+                    string.Join(", ", blacklistUsers));
             }
         }
         else
@@ -1266,6 +1360,7 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
     ///     Sets your preferred name format for custom voice channels.
     /// </summary>
     [Cmd]
+    [Aliases]
     [RequireContext(ContextType.Guild)]
     public async Task VoicePrefsName([Remainder] string format = null)
     {
@@ -1282,8 +1377,7 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
         {
             prefs = new UserVoicePreference
             {
-                GuildId = Context.Guild.Id,
-                UserId = Context.User.Id
+                GuildId = Context.Guild.Id, UserId = Context.User.Id
             };
         }
 
@@ -1306,6 +1400,7 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
     ///     Sets your preferred user limit for custom voice channels.
     /// </summary>
     [Cmd]
+    [Aliases]
     [RequireContext(ContextType.Guild)]
     public async Task VoicePrefsLimit(int? limit = null)
     {
@@ -1322,8 +1417,7 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
         {
             prefs = new UserVoicePreference
             {
-                GuildId = Context.Guild.Id,
-                UserId = Context.User.Id
+                GuildId = Context.Guild.Id, UserId = Context.User.Id
             };
         }
 
@@ -1355,6 +1449,7 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
     ///     Sets your preferred bitrate for custom voice channels.
     /// </summary>
     [Cmd]
+    [Aliases]
     [RequireContext(ContextType.Guild)]
     public async Task VoicePrefsBitrate(int? bitrate = null)
     {
@@ -1371,8 +1466,7 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
         {
             prefs = new UserVoicePreference
             {
-                GuildId = Context.Guild.Id,
-                UserId = Context.User.Id
+                GuildId = Context.Guild.Id, UserId = Context.User.Id
             };
         }
 
@@ -1402,6 +1496,7 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
     ///     Sets your preferred lock status for custom voice channels.
     /// </summary>
     [Cmd]
+    [Aliases]
     [RequireContext(ContextType.Guild)]
     public async Task VoicePrefsLock(bool? locked = null)
     {
@@ -1418,8 +1513,7 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
         {
             prefs = new UserVoicePreference
             {
-                GuildId = Context.Guild.Id,
-                UserId = Context.User.Id
+                GuildId = Context.Guild.Id, UserId = Context.User.Id
             };
         }
 
@@ -1436,7 +1530,9 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
         prefs.PreferLocked = locked;
         await Service.SetUserPreferencesAsync(prefs);
 
-        var lockStatus = locked.Value ? Strings.CustomVoicePrefsLocked(Context.Guild.Id) : Strings.CustomVoicePrefsUnlocked(Context.Guild.Id);
+        var lockStatus = locked.Value
+            ? Strings.CustomVoicePrefsLocked(Context.Guild.Id)
+            : Strings.CustomVoicePrefsUnlocked(Context.Guild.Id);
         await ReplyConfirmAsync(Strings.CustomVoicePrefsLockSet(Context.Guild.Id, lockStatus));
     }
 
@@ -1444,6 +1540,7 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
     ///     Sets your preferred keep-alive status for custom voice channels.
     /// </summary>
     [Cmd]
+    [Aliases]
     [RequireContext(ContextType.Guild)]
     public async Task VoicePrefsKeepAlive(bool? keepAlive = null)
     {
@@ -1460,8 +1557,7 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
         {
             prefs = new UserVoicePreference
             {
-                GuildId = Context.Guild.Id,
-                UserId = Context.User.Id
+                GuildId = Context.Guild.Id, UserId = Context.User.Id
             };
         }
 
@@ -1478,7 +1574,9 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
         prefs.KeepAlive = keepAlive;
         await Service.SetUserPreferencesAsync(prefs);
 
-        var keepAliveStatus = keepAlive.Value ? Strings.CustomVoicePrefsKeptAlive(Context.Guild.Id) : Strings.CustomVoicePrefsNotKeptAlive(Context.Guild.Id);
+        var keepAliveStatus = keepAlive.Value
+            ? Strings.CustomVoicePrefsKeptAlive(Context.Guild.Id)
+            : Strings.CustomVoicePrefsNotKeptAlive(Context.Guild.Id);
         await ReplyConfirmAsync(Strings.CustomVoicePrefsKeepAliveSet(Context.Guild.Id, keepAliveStatus));
     }
 
@@ -1486,11 +1584,12 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
     ///     Resets all your voice channel preferences.
     /// </summary>
     [Cmd]
+    [Aliases]
     [RequireContext(ContextType.Guild)]
     public async Task VoicePrefsReset()
     {
         // Delete preferences from database
-         await using var dbContext = await dbFactory.CreateConnectionAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
         var prefs = await dbContext.UserVoicePreferences
             .FirstOrDefaultAsync(p => p.GuildId == Context.Guild.Id && p.UserId == Context.User.Id);
 

@@ -1917,6 +1917,7 @@ public partial class Utility(
     ///     Shows the bot's ping.
     /// </summary>
     [Cmd]
+    [Aliases]
     [Ratelimit(30)]
     public async Task Ping()
     {

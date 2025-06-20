@@ -146,7 +146,7 @@ public class SlashChatTriggers(IHttpClientFactory clientFactory, InteractiveServ
         var trigger = await Service.GetChatTriggers(ctx.Guild?.Id, id);
         await ctx.Interaction.RespondWithModalAsync<ChatTriggerModal>($"chat_trigger_edit:{id},{regex}", null,
                 x => x
-                    .WithTitle("Chat Trigger Edit")
+                    .WithTitle(Strings.ChatTriggerEdit(ctx.Guild.Id))
                     .UpdateTextInput("key", textInputBuilder => textInputBuilder.Value = trigger.Trigger)
                     .UpdateTextInput("message", textInputBuilder => textInputBuilder.Value = trigger.Response))
             .ConfigureAwait(false);
@@ -175,7 +175,7 @@ public class SlashChatTriggers(IHttpClientFactory clientFactory, InteractiveServ
         {
             await RespondAsync(embed: new EmbedBuilder().WithOkColor()
                 .WithTitle(Strings.EditedChatTrig(ctx.Guild.Id))
-                .WithDescription($"#{id}")
+                .WithDescription(Strings.ChatTriggerId(ctx.Guild.Id, id))
                 .AddField(efb => efb.WithName(Strings.Trigger(ctx.Guild.Id)).WithValue(cr.Trigger))
                 .AddField(efb =>
                     efb.WithName(Strings.Response(ctx.Guild.Id))
@@ -395,7 +395,7 @@ public class SlashChatTriggers(IHttpClientFactory clientFactory, InteractiveServ
         {
             await ctx.Interaction.RespondAsync(embed: new EmbedBuilder().WithOkColor()
                 .WithTitle(Strings.Deleted(ctx.Guild.Id))
-                .WithDescription($"#{ct.Id}")
+                .WithDescription(Strings.ChatTriggerId(ctx.Guild.Id, ct.Id))
                 .AddField(efb => efb.WithName(Strings.Trigger(ctx.Guild.Id)).WithValue(ct.Trigger.TrimTo(1024)))
                 .AddField(efb => efb.WithName(Strings.Response(ctx.Guild.Id)).WithValue(ct.Response.TrimTo(1024)))
                 .Build()).ConfigureAwait(false);
@@ -764,16 +764,12 @@ public class SlashChatTriggers(IHttpClientFactory clientFactory, InteractiveServ
             await Service.ToggleGrantedRole(ct, role.Id).ConfigureAwait(false);
 
             var text = toggleDisabled
-                ?
-                Strings.CtRoleToggleDisabled(ctx.Guild.Id, Format.Bold(role.Name), Format.Code(id.ToString()))
-                :
-                ct.IsToggled(role.Id)
+                ? Strings.CtRoleToggleDisabled(ctx.Guild.Id, Format.Bold(role.Name), Format.Code(id.ToString()))
+                : ct.IsToggled(role.Id)
                     ? Strings.CtRoleToggleEnabled(ctx.Guild.Id, Format.Bold(role.Name), Format.Code(id.ToString()))
-                    :
-                    ct.IsGranted(role.Id)
+                    : ct.IsGranted(role.Id)
                         ? Strings.CtRoleAddEnabled(ctx.Guild.Id, Format.Bold(role.Name), Format.Code(id.ToString()))
-                        :
-                        Strings.CtRoleAddDisabled(ctx.Guild.Id, Format.Bold(role.Name), Format.Code(id.ToString()));
+                        : Strings.CtRoleAddDisabled(ctx.Guild.Id, Format.Bold(role.Name), Format.Code(id.ToString()));
 
             await ReplyConfirmAsync(text).ConfigureAwait(false);
             await FollowupWithTriggerStatus().ConfigureAwait(false);
@@ -819,16 +815,13 @@ public class SlashChatTriggers(IHttpClientFactory clientFactory, InteractiveServ
             await Service.ToggleRemovedRole(ct, role.Id).ConfigureAwait(false);
 
             var text = toggleDisabled
-                ?
-                Strings.CtRoleToggleDisabled(ctx.Guild.Id, Format.Bold(role.Name), Format.Code(id.ToString()))
-                :
-                ct.IsToggled(role.Id)
+                ? Strings.CtRoleToggleDisabled(ctx.Guild.Id, Format.Bold(role.Name), Format.Code(id.ToString()))
+                : ct.IsToggled(role.Id)
                     ? Strings.CtRoleToggleEnabled(ctx.Guild.Id, Format.Bold(role.Name), Format.Code(id.ToString()))
-                    :
-                    ct.IsRemoved(role.Id)
+                    : ct.IsRemoved(role.Id)
                         ? Strings.CtRoleRemoveEnabled(ctx.Guild.Id, Format.Bold(role.Name), Format.Code(id.ToString()))
-                        :
-                        Strings.CtRoleRemoveDisabled(ctx.Guild.Id, Format.Bold(role.Name), Format.Code(id.ToString()));
+                        : Strings.CtRoleRemoveDisabled(ctx.Guild.Id, Format.Bold(role.Name),
+                            Format.Code(id.ToString()));
 
             await ReplyConfirmAsync(text).ConfigureAwait(false);
             await FollowupWithTriggerStatus().ConfigureAwait(false);

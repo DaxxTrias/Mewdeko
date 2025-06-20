@@ -238,17 +238,17 @@ public class OwnerOnly(
     [OwnerOnly]
     public async Task GenerateDocs()
     {
-        await ctx.Channel.SendMessageAsync("⏱ Generating command documentation...");
+        await ctx.Channel.SendMessageAsync(Strings.GeneratingDocs(ctx.Guild.Id));
 
         try
         {
             await Service.GenerateDocumentationAsync("/home/sylv/RiderProjects/mewdeko/src/Mewdeko/Modules");
-            await ctx.Channel.SendMessageAsync("✅ Command documentation successfully generated!");
+            await ctx.Channel.SendMessageAsync(Strings.DocsGenerated(ctx.Guild.Id));
         }
         catch (Exception ex)
         {
             Log.Error(ex, "Error generating command documentation");
-            await ctx.Channel.SendMessageAsync("❌ Error generating documentation. Check logs for details.");
+            await ctx.Channel.SendMessageAsync(Strings.DocsError(ctx.Guild.Id));
         }
     }
 
@@ -482,7 +482,7 @@ public class OwnerOnly(
                 var propStrings = GetPropsAndValuesString(setting, propNames);
                 var embed = new EmbedBuilder()
                     .WithOkColor()
-                    .WithTitle($"⚙️ {setting.Name}")
+                    .WithTitle(Strings.OwnerSettingTitle(ctx.Guild.Id, setting.Name))
                     .WithDescription(propStrings);
 
                 await ctx.Channel.EmbedAsync(embed).ConfigureAwait(false);
@@ -498,7 +498,7 @@ public class OwnerOnly(
                 var propErrorEmbed = new EmbedBuilder()
                     .WithErrorColor()
                     .WithDescription(Strings.ConfigPropNotFound(ctx.Guild.Id, Format.Code(prop), Format.Code(name)))
-                    .AddField($"⚙️ {setting.Name}", propStrings);
+                    .AddField(Strings.OwnerSettingTitle(ctx.Guild.Id, setting.Name), propStrings);
 
                 await ctx.Channel.EmbedAsync(propErrorEmbed).ConfigureAwait(false);
                 return;
@@ -544,7 +544,7 @@ public class OwnerOnly(
         {
             Console.WriteLine(e);
             await ctx.Channel.SendErrorAsync(
-                "There was an error setting or printing the config, please check the logs.", botConfig);
+                Strings.OwnerConfigError(ctx.Guild.Id), botConfig);
         }
     }
 
@@ -919,7 +919,7 @@ public class OwnerOnly(
         ctx.Message.DeleteAfter(0);
         try
         {
-            var msg = await ctx.Channel.SendConfirmAsync($"⏲ {miliseconds}ms")
+            var msg = await ctx.Channel.SendConfirmAsync(Strings.TimingMs(ctx.Guild.Id, miliseconds))
                 .ConfigureAwait(false);
             msg.DeleteAfter(miliseconds / 1000);
         }

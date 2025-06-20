@@ -591,6 +591,7 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
     /// </summary>
     /// <param name="panelId">The message ID of the panel to recreate.</param>
     [Cmd]
+    [Aliases]
     [RequireContext(ContextType.Guild)]
     [UserPerm(GuildPermission.Administrator)]
     public async Task RecreatePanel(ulong panelId)
