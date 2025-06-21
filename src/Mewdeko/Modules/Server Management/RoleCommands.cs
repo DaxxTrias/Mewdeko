@@ -865,11 +865,13 @@ public partial class ServerManagement
                 return;
             }
 
-            foreach (var i in toProcess.ToList())
+            // Remove items more efficiently by iterating backwards
+            for (var index = toProcess.Count - 1; index >= 0; index--)
             {
+                var i = toProcess[index];
                 if (i.Value.RoleIds.Any() && i.Value.RoleIds.Contains(i.Key.Id))
                 {
-                    toProcess.Remove(i);
+                    toProcess.RemoveAt(index);
                 }
             }
 
@@ -965,7 +967,10 @@ public partial class ServerManagement
 
             foreach (var i in stringUsers)
             {
-                var user = guildUsers.FirstOrDefault(x => x.ToString() == i);
+                var user = guildUsers.FirstOrDefault(x =>
+                    x.Username.Equals(i, StringComparison.OrdinalIgnoreCase) ||
+                    x.DisplayName.Equals(i, StringComparison.OrdinalIgnoreCase) ||
+                    (x.Nickname != null && x.Nickname.Equals(i, StringComparison.OrdinalIgnoreCase)));
                 if (user is null)
                     continue;
                 actualUsers.Add(user);

@@ -288,14 +288,14 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
             await setupMsg.ModifyAsync(x => x.Embed = embed.Build());
 
             var description = await NextMessageAsync(ctx.Channel.Id, ctx.User.Id);
-            description = description?.ToLower() == "skip" ? null : description;
+            description = description?.Equals("skip", StringComparison.OrdinalIgnoreCase) == true ? null : description;
 
             embed.Fields[2].Value += description == null ? " ✓ Skipped" : $" ✓ {description}";
             embed.Footer.Text = "Type your response for #4 (Emoji) or type 'skip'";
             await setupMsg.ModifyAsync(x => x.Embed = embed.Build());
 
             var emoji = await NextMessageAsync(ctx.Channel.Id, ctx.User.Id);
-            emoji = emoji?.ToLower() == "skip" ? null : emoji;
+            emoji = emoji?.Equals("skip", StringComparison.OrdinalIgnoreCase) == true ? null : emoji;
 
             try
             {

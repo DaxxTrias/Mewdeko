@@ -15,6 +15,12 @@ namespace Mewdeko.Modules.OwnerOnly.Services;
 /// </summary>
 public class InstanceManagementService : INService, IReadyExecutor
 {
+    // Cached JsonSerializerOptions for performance
+    private static readonly JsonSerializerOptions CachedJsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
+
     private readonly string apiKey;
     private readonly DiscordShardedClient client;
     private readonly IDataConnectionFactory dbFactory;
@@ -152,12 +158,7 @@ public class InstanceManagementService : INService, IReadyExecutor
                 return null;
 
             var actuResponse = await response.Content.ReadAsStringAsync();
-            return JsonSerializer.Deserialize<BotStatus.BotStatusModel>(
-                actuResponse, new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                }
-            );
+            return JsonSerializer.Deserialize<BotStatus.BotStatusModel>(actuResponse, CachedJsonOptions);
         }
         catch (Exception ex)
         {

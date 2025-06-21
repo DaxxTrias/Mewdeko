@@ -615,7 +615,7 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
                 break;
 
             case "adminrole":
-                if (value.ToLower() == "none")
+                if (value.Equals("none", StringComparison.OrdinalIgnoreCase))
                 {
                     config.CustomVoiceAdminRoleId = null;
                 }

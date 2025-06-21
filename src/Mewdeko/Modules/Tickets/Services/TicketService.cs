@@ -3615,14 +3615,12 @@ public class TicketService : INService
             else
                 type = "Unknown";
 
-            if (!stats.TicketsByType.ContainsKey(type))
-                stats.TicketsByType[type] = 0;
+            stats.TicketsByType.TryAdd(type, 0);
             stats.TicketsByType[type]++;
 
             if (!string.IsNullOrEmpty(ticket.Priority))
             {
-                if (!stats.TicketsByPriority.ContainsKey(ticket.Priority))
-                    stats.TicketsByPriority[ticket.Priority] = 0;
+                stats.TicketsByPriority.TryAdd(ticket.Priority, 0);
                 stats.TicketsByPriority[ticket.Priority]++;
             }
         }
@@ -3665,8 +3663,7 @@ public class TicketService : INService
             else
                 type = "Unknown";
 
-            if (!stats.TicketsByType.ContainsKey(type))
-                stats.TicketsByType[type] = 0;
+            stats.TicketsByType.TryAdd(type, 0);
             stats.TicketsByType[type]++;
         }
 

@@ -50,7 +50,7 @@ public sealed class CheckPermissions : PreconditionAttribute
         };
 
         // If the group name is "snipe", set it to "utility".
-        if (executingCommand.Module.SlashGroupName?.ToLower() == "snipe")
+        if (executingCommand.Module.SlashGroupName?.Equals("snipe", StringComparison.OrdinalIgnoreCase) == true)
             groupname = "utility";
 
         // Get the permission cache for the guild.
@@ -62,7 +62,7 @@ public sealed class CheckPermissions : PreconditionAttribute
             pc.Permissions != null &&
             pc.Permissions.CheckSlashPermissions(groupname, commandname, context.User, context.Channel, out index)
                 ? PreconditionResult.FromSuccess()
-                : PreconditionResult.FromError(perms.Strings.PermPrevent( context.Guild.Id, index + 1,
+                : PreconditionResult.FromError(perms.Strings.PermPrevent(context.Guild.Id, index + 1,
                     Format.Bold(pc.Permissions[index].GetCommand(await guildSettingsService.GetPrefix(context.Guild),
                         context.Guild as SocketGuild))));
     }

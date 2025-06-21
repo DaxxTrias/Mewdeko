@@ -679,7 +679,11 @@ public class HelpService : INService
                 var methodParams = method.GetParameters();
                 if (methodParams.Length != parameterTypes.Length) continue;
                 var parametersMatch =
-                    !parameterTypes.Where((t, i) => !t.IsAssignableFrom(methodParams[i].ParameterType)).Any();
+                    !parameterTypes.Select((t, i) => new
+                        {
+                            Type = t, Index = i
+                        })
+                        .Any(x => !x.Type.IsAssignableFrom(methodParams[x.Index].ParameterType));
                 if (!parametersMatch) continue;
                 methodInfo = method;
                 break;

@@ -1,8 +1,8 @@
 #nullable enable
 using System.Net.Http;
 using System.Threading;
-using LinqToDB;
 using DataModel;
+using LinqToDB;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Database.Common;
 using Mewdeko.Modules.Searches.Common.StreamNotifications;
@@ -25,9 +25,8 @@ public class StreamNotificationService : IReadyExecutor, INService
     private readonly NotifChecker streamTracker;
     private readonly IBotStrings strings;
 
-    private Dictionary<StreamDataKey, Dictionary<ulong, HashSet<FollowedStream>>> shardTrackedStreams = new ();
+    private Dictionary<StreamDataKey, Dictionary<ulong, HashSet<FollowedStream>>> shardTrackedStreams = new();
     private Dictionary<StreamDataKey, HashSet<ulong>> trackCounter = new();
-    private List<ulong> OfflineNotificationServers { get; set; } = new();
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="StreamNotificationService" /> class.
@@ -67,14 +66,14 @@ public class StreamNotificationService : IReadyExecutor, INService
             // Load followed streams
             var followedStreams = await db.FollowedStreams.ToListAsync();
 
-            // Group streams by type and name
+            // Group streams by type and name using efficient string comparison
             shardTrackedStreams = followedStreams.GroupBy(x => new
                 {
-                    x.Type, Name = x.Username?.ToLower()
+                    x.Type, Name = x.Username?.ToLowerInvariant()
                 })
                 .ToList()
                 .ToDictionary(
-                    x => new StreamDataKey((FType)x.Key.Type, x.Key.Name?.ToLower()),
+                    x => new StreamDataKey((FType)x.Key.Type, x.Key.Name?.ToLowerInvariant()),
                     x => x.GroupBy(y => y.GuildId)
                         .ToDictionary(y => y.Key,
                             y => y.AsEnumerable().ToHashSet()));
@@ -83,10 +82,10 @@ public class StreamNotificationService : IReadyExecutor, INService
             foreach (var fs in followedStreams)
                 await streamTracker.CacheAddData(fs.CreateKey(), null, false);
 
-            // Create counter dictionary for tracking
+            // Create counter dictionary for tracking using efficient string comparison
             trackCounter = followedStreams.GroupBy(x => new
                 {
-                    x.Type, Name = x.Username?.ToLower()
+                    x.Type, Name = x.Username?.ToLowerInvariant()
                 })
                 .ToDictionary(x => new StreamDataKey((FType)x.Key.Type, x.Key.Name),
                     x => x.Select(fs => fs.GuildId).ToHashSet());
@@ -103,6 +102,8 @@ public class StreamNotificationService : IReadyExecutor, INService
         bot.JoinedGuild += ClientOnJoinedGuild;
         eventHandler.LeftGuild += ClientOnLeftGuild;
     }
+
+    private List<ulong> OfflineNotificationServers { get; set; } = new();
 
     /// <inheritdoc />
     public Task OnReadyAsync()
@@ -401,10 +402,7 @@ public class StreamNotificationService : IReadyExecutor, INService
         // Create new stream with guild data
         var fs = new FollowedStream
         {
-            Type = (int)data.StreamType,
-            Username = data.UniqueName,
-            ChannelId = channelId,
-            GuildId = guildId
+            Type = (int)data.StreamType, Username = data.UniqueName, ChannelId = channelId, GuildId = guildId
         };
 
         // Insert the new stream

@@ -52,7 +52,7 @@ public class SlashUserPermAttribute : PreconditionAttribute
             permService.TryGetOverrides(context.Guild?.Id ?? 0, command.Name.ToUpperInvariant(), out var perm);
 
         // If the module name is "chattriggers", check if the user is a bot owner or has the required permissions.
-        if (command.Module.Name.ToLower() == "chattriggers")
+        if (command.Module.Name.Equals("chattriggers", StringComparison.OrdinalIgnoreCase))
         {
             var creds = services.GetService<IBotCredentials>();
             if (context.Channel is IDMChannel)

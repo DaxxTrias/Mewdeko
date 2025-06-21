@@ -15,6 +15,13 @@ public class PatreonApiClient : INService
     private const string BaseUrl = "https://www.patreon.com/api/oauth2/v2";
     private const string OAuthUrl = "https://www.patreon.com/oauth2";
     private const string OAuthTokenUrl = "https://www.patreon.com/api/oauth2/token";
+
+    // Cached JsonSerializerOptions for performance
+    private static readonly JsonSerializerOptions CachedJsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
+
     private readonly IHttpClientFactory httpClientFactory;
 
     /// <summary>
@@ -83,10 +90,7 @@ public class PatreonApiClient : INService
             }
 
             var responseContent = await response.Content.ReadAsStringAsync();
-            return JsonSerializer.Deserialize<PatreonTokenResponse>(responseContent, new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true
-            });
+            return JsonSerializer.Deserialize<PatreonTokenResponse>(responseContent, CachedJsonOptions);
         }
         catch (Exception ex)
         {
@@ -129,10 +133,7 @@ public class PatreonApiClient : INService
             }
 
             var responseContent = await response.Content.ReadAsStringAsync();
-            return JsonSerializer.Deserialize<PatreonTokenResponse>(responseContent, new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true
-            });
+            return JsonSerializer.Deserialize<PatreonTokenResponse>(responseContent, CachedJsonOptions);
         }
         catch (Exception ex)
         {
@@ -171,11 +172,9 @@ public class PatreonApiClient : INService
             }
 
             var responseContent = await response.Content.ReadAsStringAsync();
-            var apiResponse = JsonSerializer.Deserialize<PatreonApiResponse<List<PatreonCampaign>>>(responseContent,
-                new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                });
+            var apiResponse =
+                JsonSerializer.Deserialize<PatreonApiResponse<List<PatreonCampaign>>>(responseContent,
+                    CachedJsonOptions);
 
             return apiResponse?.Data;
         }
@@ -228,11 +227,8 @@ public class PatreonApiClient : INService
             }
 
             var responseContent = await response.Content.ReadAsStringAsync();
-            var apiResponse = JsonSerializer.Deserialize<PatreonApiResponse<List<PatreonMember>>>(responseContent,
-                new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                });
+            var apiResponse =
+                JsonSerializer.Deserialize<PatreonApiResponse<List<PatreonMember>>>(responseContent, CachedJsonOptions);
 
             return apiResponse;
         }
@@ -272,11 +268,9 @@ public class PatreonApiClient : INService
             }
 
             var responseContent = await response.Content.ReadAsStringAsync();
-            var apiResponse = JsonSerializer.Deserialize<PatreonApiResponse<List<PatreonTierData>>>(responseContent,
-                new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                });
+            var apiResponse =
+                JsonSerializer.Deserialize<PatreonApiResponse<List<PatreonTierData>>>(responseContent,
+                    CachedJsonOptions);
 
             return apiResponse?.Data;
         }
@@ -315,11 +309,9 @@ public class PatreonApiClient : INService
             }
 
             var responseContent = await response.Content.ReadAsStringAsync();
-            var apiResponse = JsonSerializer.Deserialize<PatreonApiResponse<List<PatreonGoalData>>>(responseContent,
-                new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                });
+            var apiResponse =
+                JsonSerializer.Deserialize<PatreonApiResponse<List<PatreonGoalData>>>(responseContent,
+                    CachedJsonOptions);
 
             return apiResponse?.Data;
         }
@@ -361,11 +353,8 @@ public class PatreonApiClient : INService
             }
 
             var responseContent = await response.Content.ReadAsStringAsync();
-            var apiResponse = JsonSerializer.Deserialize<PatreonApiResponse<PatreonCampaign>>(responseContent,
-                new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                });
+            var apiResponse =
+                JsonSerializer.Deserialize<PatreonApiResponse<PatreonCampaign>>(responseContent, CachedJsonOptions);
 
             return apiResponse?.Data;
         }
@@ -402,11 +391,7 @@ public class PatreonApiClient : INService
             }
 
             var responseContent = await response.Content.ReadAsStringAsync();
-            return JsonSerializer.Deserialize<PatreonApiResponse<PatreonUser>>(responseContent,
-                new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                });
+            return JsonSerializer.Deserialize<PatreonApiResponse<PatreonUser>>(responseContent, CachedJsonOptions);
         }
         catch (Exception ex)
         {
@@ -446,10 +431,7 @@ public class PatreonApiClient : INService
 
             var responseContent = await response.Content.ReadAsStringAsync();
             return JsonSerializer.Deserialize<PatreonApiResponse<List<PatreonCampaign>>>(responseContent,
-                new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                });
+                CachedJsonOptions);
         }
         catch (Exception ex)
         {
