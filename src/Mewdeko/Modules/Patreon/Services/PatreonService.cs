@@ -3,6 +3,7 @@ using DataModel;
 using LinqToDB;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Modules.Patreon.Common;
+using Mewdeko.Modules.Patreon.Extensions;
 using Mewdeko.Services.Strings;
 using Microsoft.Extensions.Hosting;
 using Serilog;
@@ -305,26 +306,42 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
                 return;
             }
 
+            // Get Patreon analytics for placeholders
+            PatreonAnalytics? analytics = null;
+            try
+            {
+                analytics = await GetAnalyticsAsync(guild.Id);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Failed to get Patreon analytics for announcement in guild {GuildId}", guild.Id);
+            }
+
             // Prepare the message
             string message;
             if (!string.IsNullOrWhiteSpace(config.PatreonMessage))
             {
-                // Use custom message with replacements
+                // Use custom message with replacements including Patreon data
                 var replacer = new ReplacementBuilder()
                     .WithServer(client, guild as SocketGuild)
                     .WithChannel(channel)
                     .WithOverride("%month%", () => DateTime.UtcNow.ToString("MMMM"))
                     .WithOverride("%year%", () => DateTime.UtcNow.Year.ToString())
                     .WithOverride("%patreon.link%", () => "https://patreon.com")
+                    .WithPatreonData(analytics)
                     .Build();
 
                 message = replacer.Replace(config.PatreonMessage);
             }
             else
             {
-                // Use default message
-                message =
-                    $"🎉 It's a new month on Patreon! Thank you to all our amazing supporters for making this community possible. Check out the latest rewards and consider supporting us!";
+                // Use enhanced default message with supporter data
+                var supporterCount = analytics?.ActiveSupporters ?? 0;
+                var monthlyRevenue = analytics?.TotalMonthlyRevenue ?? 0;
+
+                message = supporterCount > 0
+                    ? $"🎉 It's a new month on Patreon! Thank you to our {supporterCount} amazing supporters who help us raise ${monthlyRevenue:F0}/month! Your support makes this community possible. 💖"
+                    : "🎉 It's a new month on Patreon! Thank you to all our amazing supporters for making this community possible. Check out the latest rewards and consider supporting us!";
             }
 
             // Send the message
