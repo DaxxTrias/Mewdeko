@@ -1792,7 +1792,7 @@ public class SuggestionsService : INService
             {
                 var msg = await channel
                     .SendErrorAsync(
-                        "There is no suggestion channel set! Have an admin set it using `setsuggestchannel` and try again!",
+                        Strings.NoSuggestionChannelSet(guild.Id),
                         config)
                     .ConfigureAwait(false);
                 msg.DeleteAfter(3);
@@ -1801,7 +1801,7 @@ public class SuggestionsService : INService
 
             await interaction
                 .SendEphemeralErrorAsync(
-                    "There is no suggestion channel set! Have an admin set it using `setsuggestchannel` then try again!",
+                    Strings.NoSuggestionChannelSet(guild.Id),
                     config)
                 .ConfigureAwait(false);
             return;
@@ -1861,7 +1861,8 @@ public class SuggestionsService : INService
             var sugnum1 = await GetSNum(guild.Id);
             var t = await (await guild.GetTextChannelAsync(await GetSuggestionChannel(guild.Id)).ConfigureAwait(false))
                 .SendMessageAsync(
-                    embed: new EmbedBuilder().WithAuthor(user).WithTitle($"Suggestion #{sugnum1}")
+                    embed: new EmbedBuilder().WithAuthor(user)
+                        .WithTitle(Strings.SuggestionNumber(channel.Guild.Id, sugnum1))
                         .WithDescription(suggestion).WithOkColor().Build(),
                     components: builder.Build()).ConfigureAwait(false);
             if (await GetEmoteMode(guild) == 0)

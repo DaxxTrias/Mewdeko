@@ -16,7 +16,7 @@ public class ModalConfiguration
     /// Defaults to "Create Ticket" if not explicitly set.
     /// This title is shown to users when they interact with a ticket button.
     /// </remarks>
-    public string Title { get; set; } = "Create Ticket";
+    public string? Title { get; set; } = "Create Ticket";
 
     /// <summary>
     /// Gets or sets the dictionary of fields in the modal.

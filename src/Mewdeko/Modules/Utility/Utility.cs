@@ -269,7 +269,8 @@ public partial class Utility(
         }
         catch (Exception ex)
         {
-            await ctx.Channel.SendErrorAsync($"Failed to create directory. {ex.Message}", Config).ConfigureAwait(false);
+            await ctx.Channel.SendErrorAsync(Strings.FailedToCreateDirectory(ctx.Guild.Id, ex.Message), Config)
+                .ConfigureAwait(false);
             return;
         }
 
@@ -293,17 +294,21 @@ public partial class Utility(
         {
             process.Start();
             await ctx.Channel.SendConfirmAsync(
-                $"{config.Data.LoadingEmote} Saving chat log, this may take some time...");
+                Strings.SavingChatLog(ctx.Guild.Id, config.Data.LoadingEmote));
         }
 
         await process.WaitForExitAsync().ConfigureAwait(false);
         if (creds.ChatSavePath.Contains("/usr/share/nginx/cdn"))
+        {
+            var fileName =
+                $"{ctx.Guild.Name.Replace(" ", "-")}-{(channel?.Name ?? ctx.Channel.Name).Replace(" ", "-")}-{curTime:yyyy-MM-ddTHH-mm-ssZ}.html";
             await ctx.User.SendConfirmAsync(
-                    $"Your chat log is here: https://cdn.mewdeko.tech/chatlogs/{ctx.Guild.Id}/{secureString}/{ctx.Guild.Name.Replace(" ", "-")}-{(channel?.Name ?? ctx.Channel.Name).Replace(" ", "-")}-{curTime:yyyy-MM-ddTHH-mm-ssZ}.html")
+                    Strings.ChatLogUrlCdn(ctx.Guild.Id, ctx.Guild.Id, secureString, fileName))
                 .ConfigureAwait(false);
+        }
         else
             await ctx.Channel
-                .SendConfirmAsync($"Your chat log is here: {creds.ChatSavePath}/{ctx.Guild.Id}/{secureString}")
+                .SendConfirmAsync(Strings.ChatLogUrlLocal(ctx.Guild.Id, creds.ChatSavePath, ctx.Guild.Id, secureString))
                 .ConfigureAwait(false);
     }
 
@@ -1554,7 +1559,7 @@ public partial class Utility(
             await Task.CompletedTask.ConfigureAwait(false);
             return new PageBuilder().WithOkColor()
                 .WithTitle(Format.Bold(
-                    $"Users in the roles: {role.Name} | {role2.Name} - {roleUsers.Length}"))
+                    Strings.UsersInRoles(ctx.Guild.Id, role.Name, role2.Name, roleUsers.Length)))
                 .WithDescription(string.Join("\n",
                     roleUsers.Skip(page * 20).Take(20)));
         }
@@ -1647,7 +1652,7 @@ public partial class Utility(
                 async Task<PageBuilder> PageFactory(int page)
                 {
                     await Task.CompletedTask;
-                    return new PageBuilder().WithOkColor().WithTitle($"Roles List for {target}")
+                    return new PageBuilder().WithOkColor().WithTitle(Strings.RolesListFor(ctx.Guild.Id, target))
                         .WithDescription(string.Join("\n",
                             roles.Skip(page * 10).Take(10).Select(x =>
                                 $"{x.Mention} | {x.Id} | {x.GetMembersAsync().GetAwaiter().GetResult().Count()} Members")));
@@ -1679,7 +1684,7 @@ public partial class Utility(
                 async Task<PageBuilder> PageFactory(int page)
                 {
                     await Task.CompletedTask;
-                    return new PageBuilder().WithOkColor().WithTitle("Guild Roles List")
+                    return new PageBuilder().WithOkColor().WithTitle(Strings.GuildRolesList(ctx.Guild.Id))
                         .WithDescription(string.Join("\n",
                             roles.Skip(page * 10).Take(10).Select(x => x as SocketRole)
                                 .Select(x =>
@@ -1873,7 +1878,8 @@ public partial class Utility(
 
         await ctx.Channel.EmbedAsync(
             new EmbedBuilder().WithOkColor()
-                .WithAuthor($"{client.CurrentUser.Username} v{StatsService.BotVersion}",
+                .WithAuthor(
+                    Strings.BotVersionAuthor(ctx.Guild.Id, client.CurrentUser.Username, StatsService.BotVersion),
                     client.CurrentUser.GetAvatarUrl(), config.Data.SupportServer)
                 .AddField(Strings.Authors(ctx.Guild.Id),
                     $"[{users[0]}](https://github.com/SylveonDeko)\n[{users[1]}](https://github.com/CottageDwellingCat)")
@@ -1920,7 +1926,7 @@ public partial class Utility(
             var redisPing = await cache.Redis.GetDatabase().PingAsync();
 
             var sw = Stopwatch.StartNew();
-            var msg = await ctx.Channel.SendMessageAsync("🏓").ConfigureAwait(false);
+            var msg = await ctx.Channel.SendMessageAsync(Strings.PingResponse(ctx.Guild.Id)).ConfigureAwait(false);
             sw.Stop();
             msg.DeleteAfter(0);
 

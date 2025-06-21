@@ -202,14 +202,12 @@ public class SlashUserProfile : MewdekoSlashModuleBase<UserProfileService>
     {
         if (!url.IsImage())
         {
-            await ctx.Interaction.SendErrorAsync(
-                "The image url you provided is invalid. Please make sure it ends with `.gif`, `.png` or `.jpg`",
-                Config);
+            await ctx.Interaction.SendErrorAsync(Strings.InvalidImageUrl(ctx.Guild.Id), Config);
             return;
         }
 
         await Service.SetProfileImage(ctx.User, url);
-        var eb = new EmbedBuilder().WithOkColor().WithDescription("Sucesffully set the profile image to:")
+        var eb = new EmbedBuilder().WithOkColor().WithDescription(Strings.SuccessfullySetProfileImage(ctx.Guild.Id))
             .WithImageUrl(url);
         await ctx.Interaction.RespondAsync(embed: eb.Build());
     }
@@ -285,14 +283,14 @@ public class SlashUserProfile : MewdekoSlashModuleBase<UserProfileService>
 
         var channel = await ctx.Client.GetChannelAsync(bot.Credentials.PronounAbuseReportChannelId)
             .ConfigureAwait(false);
-        var eb = new EmbedBuilder().WithAuthor(ctx.User).WithTitle("Pronoun abuse report")
+        var eb = new EmbedBuilder().WithAuthor(ctx.User).WithTitle(Strings.PronounAbuseReport(ctx.Guild.Id))
             .AddField("Reported User", $"{user.Username} ({user.UserId}, <@{user.UserId}>)")
             .AddField("Reporter", $"{reporter.Username} ({reporter.UserId}, <@{reporter.UserId}>)")
             .AddField("Pronouns Cleared Reason",
                 string.IsNullOrWhiteSpace(user.PronounsClearedReason) ? "Never Cleared" : user.PronounsClearedReason)
             .AddField("Pronouns", user.Pronouns)
             .WithFooter(
-                $"reported in the guild {ctx.Guild?.Id ?? 0}")
+                Strings.ReportedInGuild(ctx.Guild.Id, ctx.Guild?.Id ?? 0))
             .WithErrorColor();
         var cb = new ComponentBuilder()
             .WithButton("Reported User", "reported_row", ButtonStyle.Secondary, disabled: true)
@@ -326,7 +324,7 @@ public class SlashUserProfile : MewdekoSlashModuleBase<UserProfileService>
     public Task ClearPronouns(string sId, string sDisable)
     {
         return Context.Interaction.RespondWithModalAsync<PronounsFcbModal>($"pronouns_fc_action:{sId},{sDisable},false",
-            null, x => x.WithTitle("Clear Pronouns"));
+            null, x => x.WithTitle(Strings.ClearPronouns(ctx.Guild.Id)));
     }
 
     /// <summary>
@@ -339,7 +337,7 @@ public class SlashUserProfile : MewdekoSlashModuleBase<UserProfileService>
     public Task BlacklistPronouns(string sId)
     {
         return ctx.Interaction.RespondWithModalAsync<PronounsFcbModal>($"pronouns_fc_action:{sId},true,true", null,
-            x => x.WithTitle("Blacklist User and Clear Pronouns"));
+            x => x.WithTitle(Strings.BlacklistUserClearPronouns(ctx.Guild.Id)));
     }
 
     /// <summary>
@@ -353,7 +351,7 @@ public class SlashUserProfile : MewdekoSlashModuleBase<UserProfileService>
     {
         return ctx.Interaction
             .RespondWithModalAsync<PronounsFcbModal>($"pronouns_fcb_g:{sId}", null,
-                x => x.WithTitle("Blacklist Guild"));
+                x => x.WithTitle(Strings.BlacklistGuild(ctx.Guild.Id)));
     }
 
     /// <summary>
@@ -480,7 +478,8 @@ public class SlashUserProfile : MewdekoSlashModuleBase<UserProfileService>
     public Task DmUser(string uIdStr)
     {
         return ctx.Interaction
-            .RespondWithModalAsync<DmUserModal>($"pronouns_reportdm_modal:{uIdStr}", null, x => x.WithTitle("dm user"));
+            .RespondWithModalAsync<DmUserModal>($"pronouns_reportdm_modal:{uIdStr}", null,
+                x => x.WithTitle(Strings.DmUserModalTitle(ctx.Guild.Id)));
     }
 
     /// <summary>

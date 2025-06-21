@@ -186,18 +186,18 @@ public class VoteService : INService
     public async Task<(bool, string)> AddVoteRole(ulong guildId, ulong roleId, int seconds = 0)
     {
         if (roleId == guildId)
-            return (false, "Unable to add the everyone role you dumdum");
+            return (false, Strings.UnableToAddEveryoneRole(guildId));
 
         await using var db = await dbFactory.CreateConnectionAsync();
 
         // Count vote roles using LinqToDB
         if (await db.VoteRoles.CountAsync(x => x.GuildId == guildId) >= 10)
-            return (false, "Reached maximum of 10 VoteRoles");
+            return (false, Strings.ReachedMaximumVoteRoles(guildId));
 
         // Check if role already exists as vote role using LinqToDB
         if (await db.VoteRoles
                 .AnyAsync(x => x.GuildId == guildId && x.RoleId == roleId))
-            return (false, "Role is already set as a VoteRole.");
+            return (false, Strings.RoleAlreadyVoteRole(guildId));
 
         var voteRole = new VoteRole
         {
@@ -219,20 +219,20 @@ public class VoteService : INService
     public async Task<(bool, string)> RemoveVoteRole(ulong guildId, ulong roleId)
     {
         if (roleId == guildId)
-            return (false, "Unable to add the everyone role you dumdum");
+            return (false, Strings.UnableToAddEveryoneRole(guildId));
 
         await using var db = await dbFactory.CreateConnectionAsync();
 
         // Check if any vote roles exist using LinqToDB
         if (!await db.VoteRoles.AnyAsync(x => x.GuildId == guildId))
-            return (false, "You don't have any VoteRoles");
+            return (false, Strings.NoVoteRolesSet(guildId));
 
         // Find the vote role using LinqToDB
         var voteRole = await db.VoteRoles
             .FirstOrDefaultAsync(x => x.RoleId == roleId && x.GuildId == guildId);
 
         if (voteRole is null)
-            return (false, "Role is not a VoteRole.");
+            return (false, Strings.RoleNotVoteRole(guildId));
 
         // Delete vote role using LinqToDB
         await db.VoteRoles
@@ -248,7 +248,7 @@ public class VoteService : INService
     /// <param name="roleId">The ID of the role whose timer is to be updated.</param>
     /// <param name="seconds">The new duration in seconds after which the role should be automatically removed.</param>
     /// <returns>A tuple indicating success status and an optional error message.</returns>
-    public async Task<(bool, string)> UpdateTimer(ulong roleId, int seconds)
+    public async Task<(bool, string)> UpdateTimer(ulong guildId, ulong roleId, int seconds)
     {
         await using var db = await dbFactory.CreateConnectionAsync();
 
@@ -257,10 +257,10 @@ public class VoteService : INService
             .FirstOrDefaultAsync(x => x.RoleId == roleId);
 
         if (voteRole is null)
-            return (false, "Role to update is not added as a VoteRole.");
+            return (false, Strings.RoleNotAddedAsVoteRole(guildId));
 
         if (voteRole.Timer == seconds)
-            return (false, "VoteRole timer is already set to that value.");
+            return (false, Strings.VoteRoleTimerAlreadySet(voteRole.GuildId));
 
         voteRole.Timer = seconds;
 
@@ -312,7 +312,7 @@ public class VoteService : INService
 
         // Check if vote roles exist using LinqToDB
         if (!await db.VoteRoles.AnyAsync(x => x.GuildId == guildId))
-            return (false, "There are no VoteRoles set.");
+            return (false, Strings.NoVoteRolesConfigured(guildId));
 
         // Delete all vote roles for guild using LinqToDB
         await db.VoteRoles
@@ -469,13 +469,13 @@ public class VoteService : INService
             .CountAsync(x => x.GuildId == guild.Id && x.UserId == user.Id);
 
         if (total is 0)
-            return new EmbedBuilder().WithErrorColor().WithDescription("You do not have any votes.");
+            return new EmbedBuilder().WithErrorColor().WithDescription(Strings.YouDoNotHaveAnyVotes(guild.Id));
 
         return new EmbedBuilder()
             .WithOkColor()
-            .WithTitle($"Vote Stats for {guild.Name}")
-            .AddField("Votes this month", thisMonth)
-            .AddField("Total Votes", total)
+            .WithTitle(Strings.VoteStatsFor(guild.Id, guild.Name))
+            .AddField(Strings.VotesThisMonth(guild.Id), thisMonth)
+            .AddField(Strings.TotalVotes(guild.Id), total)
             .WithThumbnailUrl(user.RealAvatarUrl().AbsoluteUri)
             .WithFooter(new EmbedFooterBuilder().WithIconUrl(user.RealAvatarUrl().AbsoluteUri)
                 .WithText($"{user} | {user.Id}"));

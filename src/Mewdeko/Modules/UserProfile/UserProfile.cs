@@ -192,9 +192,7 @@ public class UserProfile(IDataConnectionFactory dbFactory) : MewdekoModuleBase<U
     {
         if (!await Service.SetSwitchFc(ctx.User, switchFc))
         {
-            await ctx.Channel.SendErrorAsync(
-                "The Switch Friend Code you provided is invalid. Please make sure it matches the format sw-XXXX-XXXX-XXXX.",
-                Config);
+            await ctx.Channel.SendErrorAsync(Strings.InvalidSwitchFriendCode(ctx.Guild.Id), Config);
             return;
         }
 
@@ -202,7 +200,7 @@ public class UserProfile(IDataConnectionFactory dbFactory) : MewdekoModuleBase<U
         if (switchFc.Length == 0)
             await ctx.Channel.SendConfirmAsync(Strings.SwitchCodeRemoved(ctx.Guild.Id));
         else
-            await ctx.Channel.SendConfirmAsync($"Your Switch Friend Code has been set to {switchFc}.");
+            await ctx.Channel.SendConfirmAsync(Strings.SwitchFriendCodeSet(ctx.Guild.Id, switchFc));
     }
 
     /// <summary>

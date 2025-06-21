@@ -661,7 +661,8 @@ public class GiveawayService : INService, IDisposable
         var winnerEmbed = message.Embeds.FirstOrDefault().ToEmbedBuilder()
             .WithErrorColor()
             .WithDescription(strings.GiveawayWinnerAnnouncement(winner.Guild.Id, winner.Mention, giveaway.UserId))
-            .WithFooter(strings.GiveawayEndedFooter(guild.Id, DateTime.UtcNow.ToString("dd.MM.yyyy HH:mm:ss")));
+            .WithFooter(strings.GiveawayEndedFooter(guild.Id,
+                DateTime.UtcNow.ToString(strings.DatetimeFormat(guild.Id))));
 
         await message.ModifyAsync(x =>
         {
@@ -703,9 +704,11 @@ public class GiveawayService : INService, IDisposable
         var winnerEmbed = message.Embeds.FirstOrDefault().ToEmbedBuilder()
             .WithErrorColor()
             .WithDescription(
-                $"Winner: {string.Join(", ", winners.Select(x => x.Mention))}!\n" +
+                strings.GiveawayWinnerSimple(guild.Id,
+                    string.Join(strings.CommaSeparator(guild.Id), winners.Select(x => x.Mention))) + "\n" +
                 $"Hosted by: <@{giveaway.UserId}>")
-            .WithFooter(strings.GiveawayEndedFooter(guild.Id, DateTime.UtcNow.ToString("dd.MM.yyyy HH:mm:ss")));
+            .WithFooter(strings.GiveawayEndedFooter(guild.Id,
+                DateTime.UtcNow.ToString(strings.DatetimeFormat(guild.Id))));
 
         await message.ModifyAsync(x =>
         {
@@ -718,13 +721,15 @@ public class GiveawayService : INService, IDisposable
         foreach (var winnerChunk in winners.Chunk(50))
         {
             await channel.SendMessageAsync(
-                strings.GiveawayCongratulations(guild.Id, string.Join(", ", winnerChunk.Select(x => x.Mention)),
+                strings.GiveawayCongratulations(guild.Id,
+                    string.Join(strings.CommaSeparator(guild.Id), winnerChunk.Select(x => x.Mention)),
                     giveaway.Emote),
                 embed: new EmbedBuilder()
                     .WithErrorColor()
                     .WithDescription(
                         strings.GiveawayWinnerDescription(guild.Id,
-                            string.Join(", ", winnerChunk.Select(x => x.Mention)), giveaway.Item, giveaway.ServerId,
+                            string.Join(strings.CommaSeparator(guild.Id), winnerChunk.Select(x => x.Mention)),
+                            giveaway.Item, giveaway.ServerId,
                             giveaway.ChannelId, giveaway.MessageId, giveaway.UserId, prefix))
                     .Build());
         }

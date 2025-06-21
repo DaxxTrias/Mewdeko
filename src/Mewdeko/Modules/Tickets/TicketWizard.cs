@@ -249,7 +249,7 @@ public partial class TicketsSlash
                 var successEmbed = new EmbedBuilder()
                     .WithTitle(Strings.TemplateAppliedSuccess(ctx.Guild.Id, Config.SuccessEmote))
                     .WithDescription(
-                        Strings.TicketPanelCreated(ctx.Guild.Id, channel.Mention, template.Name))
+                        Strings.TicketPanelCreated(ctx.Guild.Id, channel.Mention))
                     .AddField("📋 Panel ID", panel.MessageId.ToString())
                     .AddField("🧩 Components Created", string.Join("\n", createdComponents))
                     .WithColor(Color.Green);
@@ -395,7 +395,7 @@ public partial class TicketsSlash
             // Show template preview and confirm
             var embedSettings = ConfigurationParser.ParseKeyValuePairs(template.EmbedConfig);
             var embed = new EmbedBuilder()
-                .WithTitle($"📋 Template Preview: {template.Name}")
+                .WithTitle(Strings.TemplatePreview(ctx.Guild.Id, template.Name))
                 .WithDescription(template.Description)
                 .AddField("📝 Panel Settings",
                     $"**Title:** {embedSettings.GetValueOrDefault("title")}\n" +
@@ -588,9 +588,9 @@ public partial class TicketsSlash
                 }
 
                 var successEmbed = new EmbedBuilder()
-                    .WithTitle($"{Config.SuccessEmote} Ticket Panel Created!")
+                    .WithTitle(Strings.TicketPanelCreated(ctx.Guild.Id, Config.SuccessEmote))
                     .WithDescription(
-                        $"Successfully created ticket panel in {channel.Mention} using the **{template.Name}** template.")
+                        Strings.SuccessfullyCreatedTicketPanelTemplate(ctx.Guild.Id, channel.Mention, template.Name))
                     .AddField("📋 Panel ID", panel.MessageId.ToString())
                     .AddField("🧩 Components", string.Join("\n", createdComponents))
                     .AddField("🎉 Next Steps",
@@ -683,8 +683,8 @@ public partial class TicketsSlash
                 if (issues.Any())
                 {
                     var errorEmbed = new EmbedBuilder()
-                        .WithTitle($"{Config.ErrorEmote} Configuration Issues")
-                        .WithDescription("Please fix these issues and try again:")
+                        .WithTitle(Strings.ConfigurationIssues(ctx.Guild.Id, Config.ErrorEmote))
+                        .WithDescription(Strings.PleaseFixIssues(ctx.Guild.Id))
                         .WithColor(Color.Red);
 
                     foreach (var issue in issues.Take(10))
@@ -755,8 +755,8 @@ public partial class TicketsSlash
                 if (issues.Any())
                 {
                     var errorEmbed = new EmbedBuilder()
-                        .WithTitle($"{Config.ErrorEmote} Configuration Issues")
-                        .WithDescription("Please fix these issues and try again:")
+                        .WithTitle(Strings.ConfigurationIssues(ctx.Guild.Id, Config.ErrorEmote))
+                        .WithDescription(Strings.PleaseFixIssues(ctx.Guild.Id))
                         .WithColor(Color.Red);
 
                     foreach (var issue in issues.Take(10))
@@ -773,7 +773,8 @@ public partial class TicketsSlash
                 var placeholder = menuSettings.GetValueOrDefault("placeholder", "Select an option...");
 
                 var preview =
-                    ConfigurationPreview.GenerateSelectMenuPreview(placeholder, modal.Options, modal.SharedSettings);
+                    ConfigurationPreview.GenerateSelectMenuPreview(Strings.SelectMenuPreview(ctx.Guild.Id), placeholder,
+                        modal.Options, modal.SharedSettings, Strings.ReviewSelectMenuConfig(ctx.Guild.Id));
 
                 var confirmId = Guid.NewGuid().ToString();
                 await cache.Redis.GetDatabase().StringSetAsync($"menu_confirm:{confirmId}",
@@ -871,8 +872,8 @@ public partial class TicketsSlash
                 }
 
                 var successEmbed = new EmbedBuilder()
-                    .WithTitle($"{Config.SuccessEmote} Ticket Panel Created!")
-                    .WithDescription($"Successfully created ticket panel in {channel.Mention}.")
+                    .WithTitle(Strings.TicketPanelCreated(ctx.Guild.Id, Config.SuccessEmote))
+                    .WithDescription(Strings.TicketPanelCreatedIn(ctx.Guild.Id, channel.Mention))
                     .AddField("📋 Panel ID", panel.MessageId.ToString())
                     .WithColor(Color.Green);
 

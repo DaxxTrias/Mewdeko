@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Text.Json;
 using Mewdeko.Common.Attributes.TextCommands;
 using YamlDotNet.Serialization;
 
@@ -15,12 +16,14 @@ public class ReflectionCommandValidationTests
     {
         var projectRoot = GetProjectRoot();
         LoadDataFiles(projectRoot);
-        _commandMethods = GetAllCommandMethods();
+        commandMethods = GetAllCommandMethods();
     }
 
-    private static Dictionary<string, string[]>? _aliasesData;
-    private static Dictionary<string, object>? _commandStringsData;
-    private static List<MethodInfo>? _commandMethods;
+    private static Dictionary<string, string[]>? aliasesData;
+    private static Dictionary<string, object>? commandStringsData;
+    private static List<MethodInfo>? commandMethods;
+    private static Dictionary<string, object>? responseStringsData;
+    private static Type? generatedBotStringsType;
 
     /// <summary>
     ///     Every method with [Cmd] must also have [Aliases].
@@ -30,7 +33,7 @@ public class ReflectionCommandValidationTests
     {
         var failures = new List<string>();
 
-        foreach (var method in _commandMethods!)
+        foreach (var method in commandMethods!)
         {
             var hasCmd = method.GetCustomAttribute<Cmd>() != null;
             var hasAliases = method.GetCustomAttribute<AliasesAttribute>() != null;
@@ -58,15 +61,15 @@ public class ReflectionCommandValidationTests
     {
         var failures = new List<string>();
 
-        foreach (var method in _commandMethods!.Where(m => m.GetCustomAttribute<Cmd>() != null))
+        foreach (var method in commandMethods!.Where(m => m.GetCustomAttribute<Cmd>() != null))
         {
             var methodName = method.Name.ToLowerInvariant();
 
-            if (!_aliasesData!.ContainsKey(methodName))
+            if (!aliasesData!.TryGetValue(methodName, out var value))
             {
                 failures.Add($"Method '{method.DeclaringType?.Name}.{method.Name}' missing from aliases.yml");
             }
-            else if (_aliasesData[methodName].Length == 0)
+            else if (value.Length == 0)
             {
                 failures.Add($"Method '{method.DeclaringType?.Name}.{method.Name}' has empty aliases in aliases.yml");
             }
@@ -84,23 +87,23 @@ public class ReflectionCommandValidationTests
     {
         var failures = new List<string>();
 
-        foreach (var method in _commandMethods!.Where(m => m.GetCustomAttribute<Cmd>() != null))
+        foreach (var method in commandMethods!.Where(m => m.GetCustomAttribute<Cmd>() != null))
         {
             var methodName = method.Name.ToLowerInvariant();
 
-            if (!_aliasesData!.TryGetValue(methodName, out var aliases) || aliases.Length == 0)
+            if (!aliasesData!.TryGetValue(methodName, out var aliases) || aliases.Length == 0)
                 continue; // Will be caught by previous test
 
             var primaryCommand = aliases[0];
 
-            if (!_commandStringsData!.ContainsKey(primaryCommand))
+            if (!commandStringsData!.ContainsKey(primaryCommand))
             {
                 failures.Add(
                     $"Command '{primaryCommand}' (method: {method.DeclaringType?.Name}.{method.Name}) missing from commands.en-US.yml");
             }
-            else if (_commandStringsData[primaryCommand] is Dictionary<object, object> cmdData)
+            else if (commandStringsData[primaryCommand] is Dictionary<object, object> cmdData)
             {
-                if (!cmdData.ContainsKey("desc") || string.IsNullOrWhiteSpace(cmdData["desc"]?.ToString()))
+                if (!cmdData.ContainsKey("desc") || string.IsNullOrWhiteSpace(cmdData["desc"].ToString()))
                 {
                     failures.Add(
                         $"Command '{primaryCommand}' (method: {method.DeclaringType?.Name}.{method.Name}) missing or empty description");
@@ -118,19 +121,14 @@ public class ReflectionCommandValidationTests
     [Test]
     public void EveryAliasEntryHasCommandMethod()
     {
-        var failures = new List<string>();
-        var methodNames = _commandMethods!
+        var methodNames = commandMethods!
             .Where(m => m.GetCustomAttribute<Cmd>() != null)
             .Select(m => m.Name.ToLowerInvariant())
             .ToHashSet();
 
-        foreach (var aliasKey in _aliasesData!.Keys)
-        {
-            if (!methodNames.Contains(aliasKey))
-            {
-                failures.Add($"Alias entry '{aliasKey}' in aliases.yml has no corresponding command method");
-            }
-        }
+        var failures = (from aliasKey in aliasesData!.Keys
+            where !methodNames.Contains(aliasKey)
+            select $"Alias entry '{aliasKey}' in aliases.yml has no corresponding command method").ToList();
 
         Assert.That(failures, Is.Empty,
             "Found orphaned alias entries:\n" + string.Join("\n", failures));
@@ -145,7 +143,7 @@ public class ReflectionCommandValidationTests
         var failures = new List<string>();
         var primaryCommands = new Dictionary<string, List<string>>();
 
-        foreach (var (aliasKey, aliases) in _aliasesData!)
+        foreach (var (aliasKey, aliases) in aliasesData!)
         {
             if (aliases.Length == 0) continue;
 
@@ -161,6 +159,122 @@ public class ReflectionCommandValidationTests
 
         Assert.That(failures, Is.Empty,
             "Found duplicate primary command names:\n" + string.Join("\n", failures));
+    }
+
+    /// <summary>
+    ///     All response strings should be used somewhere in the codebase.
+    /// </summary>
+    [Test]
+    public void AllResponseStringsAreUsed()
+    {
+        var failures = new List<string>();
+
+        if (responseStringsData == null)
+        {
+            Assert.Inconclusive(
+                "Response strings data not loaded - responses.en-US.json may not exist or be accessible");
+            return;
+        }
+
+        if (generatedBotStringsType == null)
+        {
+            Assert.Inconclusive(
+                "GeneratedBotStrings type not found - this test requires the main assembly to be loaded");
+            return;
+        }
+
+        // Check each key in the response file
+        foreach (var responseKey in responseStringsData.Keys.Where(responseKey =>
+                     !responseKey.StartsWith("__loctest", StringComparison.OrdinalIgnoreCase)))
+        {
+            // Check for keys that would generate invalid C# method names
+            // Note: keys starting with digits (like "8ball") are valid - source generator converts them
+            if (string.IsNullOrWhiteSpace(responseKey) ||
+                responseKey.Contains(':') ||
+                responseKey.Contains(' ') ||
+                responseKey.Contains('-') ||
+                responseKey.Contains('.'))
+            {
+                failures.Add($"Response key '{responseKey}' has invalid format for C# method generation");
+                continue;
+            }
+
+            // Convert the key to the expected method name
+            var expectedMethodName = SnakeToPascalCase(responseKey);
+
+            // Verify the method actually exists (sanity check)
+            var method = generatedBotStringsType.GetMethod(expectedMethodName);
+            if (method == null)
+            {
+                failures.Add(
+                    $"Response key '{responseKey}' should generate method '{expectedMethodName}' but method not found");
+                continue;
+            }
+
+            // Search for usage of this method in the codebase
+            if (!IsMethodUsedInCodebase(expectedMethodName))
+            {
+                failures.Add(
+                    $"Response key '{responseKey}' (method: {expectedMethodName}) is not used in the codebase");
+            }
+        }
+
+        // Output unused keys to a file
+        if (failures.Count > 0)
+        {
+            var projectRoot = GetProjectRoot();
+            var unusedKeysFile = Path.Combine(projectRoot, "data", "strings", "responses", "unused_keys.txt");
+
+            var unusedKeys = failures
+                .Where(f => f.Contains("is not used in the codebase") || f.Contains("has invalid format"))
+                .Select(failure =>
+                {
+                    // Extract the key from the failure message
+                    var keyStart = failure.IndexOf("key '", StringComparison.Ordinal) + 5;
+                    var keyEnd = failure.IndexOf('\'', keyStart);
+                    return failure.Substring(keyStart, keyEnd - keyStart);
+                }).ToList();
+
+            File.WriteAllLines(unusedKeysFile, unusedKeys);
+        }
+
+        Assert.That(failures, Is.Empty,
+            "Found unused response strings:\n" + string.Join("\n", failures));
+    }
+
+    /// <summary>
+    ///     All commands in commands.yml should have corresponding entries in aliases.yml.
+    /// </summary>
+    [Test]
+    public void AllCommandStringsHaveAliases()
+    {
+        if (commandStringsData == null || aliasesData == null)
+        {
+            Assert.Fail("Command strings or aliases data not loaded");
+            return;
+        }
+
+        // Get unique base command names (part before first underscore)
+        var baseCommands = commandStringsData.Keys
+            .Select(key => key.Split('_')[0])
+            .Distinct()
+            .ToList();
+
+        var failures = (from baseCommandKey in baseCommands
+                let foundAsKey =
+                    aliasesData.Keys.Any(aliasKey =>
+                        string.Equals(aliasKey, baseCommandKey, StringComparison.OrdinalIgnoreCase))
+                let foundAsFirstValue =
+                    aliasesData.Values.Any(aliases =>
+                        aliases.Length > 0 &&
+                        string.Equals(aliases[0], baseCommandKey, StringComparison.OrdinalIgnoreCase))
+                where !foundAsKey && !foundAsFirstValue
+                select
+                    $"Command '{baseCommandKey}' in commands.yml has no corresponding key or first alias in aliases.yml")
+            .ToList();
+
+        Assert.That(failures, Is.Empty,
+            "Found commands without aliases:\n" + string.Join("\n", failures));
     }
 
     /// <summary>
@@ -228,17 +342,156 @@ public class ReflectionCommandValidationTests
         return methods;
     }
 
+    /// <summary>
+    ///     Convert snake_case to PascalCase, handling numbers like the source generator does.
+    /// </summary>
+    private static string SnakeToPascalCase(string snakeCase)
+    {
+        var numberWords = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            {
+                "0", "Zero"
+            },
+            {
+                "1", "One"
+            },
+            {
+                "2", "Two"
+            },
+            {
+                "3", "Three"
+            },
+            {
+                "4", "Four"
+            },
+            {
+                "5", "Five"
+            },
+            {
+                "6", "Six"
+            },
+            {
+                "7", "Seven"
+            },
+            {
+                "8", "Eight"
+            },
+            {
+                "9", "Nine"
+            }
+        };
+
+        // Split by underscore and process each part
+        var parts = snakeCase.Split('_').Select(part =>
+        {
+            if (string.IsNullOrEmpty(part)) return "";
+
+            // Process the part character by character to handle numbers anywhere
+            var result = "";
+            foreach (var c in part)
+            {
+                if (char.IsDigit(c) && numberWords.TryGetValue(c.ToString(), out var word))
+                {
+                    result += word;
+                }
+                else
+                {
+                    result += c;
+                }
+            }
+
+            // Capitalize the first letter of the result
+            return result.Length > 0 ? char.ToUpper(result[0]) + result[1..].ToLower() : "";
+        });
+
+        return string.Join("", parts);
+    }
+
+    private static Dictionary<string, string>? codebaseContent;
+
+    /// <summary>
+    ///     Load all codebase content once for faster searching.
+    /// </summary>
+    private static void LoadCodebaseContent()
+    {
+        if (codebaseContent != null) return;
+
+        codebaseContent = new Dictionary<string, string>();
+        var projectRoot = GetProjectRoot();
+        var searchDirs = new[]
+        {
+            "Modules", "Services", "Controllers", "Common"
+        };
+
+        foreach (var dir in searchDirs)
+        {
+            var fullDir = Path.Combine(projectRoot, dir);
+            if (!Directory.Exists(fullDir)) continue;
+
+            foreach (var file in Directory.GetFiles(fullDir, "*.cs", SearchOption.AllDirectories))
+            {
+                try
+                {
+                    codebaseContent[file] = File.ReadAllText(file);
+                }
+                catch
+                {
+                    // Skip files we can't read
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    ///     Check if a method is used anywhere in the codebase (using preloaded content).
+    /// </summary>
+    private static bool IsMethodUsedInCodebase(string methodName)
+    {
+        LoadCodebaseContent();
+
+        var searchPattern = $"{methodName}(";
+        return codebaseContent!.Values.Any(content => content.Contains(searchPattern));
+    }
+
     private static void LoadDataFiles(string projectRoot)
     {
         // Load aliases.yml
         var aliasesPath = Path.Combine(projectRoot, "data", "aliases.yml");
         var aliasesYaml = File.ReadAllText(aliasesPath);
-        _aliasesData = new Deserializer().Deserialize<Dictionary<string, string[]>>(aliasesYaml);
+        aliasesData = new Deserializer().Deserialize<Dictionary<string, string[]>>(aliasesYaml);
 
         // Load commands.en-US.yml
         var commandStringsPath = Path.Combine(projectRoot, "data", "strings", "commands", "commands.en-US.yml");
         var commandStringsYaml = File.ReadAllText(commandStringsPath);
-        _commandStringsData = new Deserializer().Deserialize<Dictionary<string, object>>(commandStringsYaml);
+        commandStringsData = new Deserializer().Deserialize<Dictionary<string, object>>(commandStringsYaml);
+
+        // Load responses.en-US.json
+        var responsesPath = Path.Combine(projectRoot, "data", "strings", "responses", "responses.en-US.json");
+        if (File.Exists(responsesPath))
+        {
+            var responsesJson = File.ReadAllText(responsesPath);
+            responseStringsData = JsonSerializer.Deserialize<Dictionary<string, object>>(responsesJson);
+        }
+
+        // Load GeneratedBotStrings type via reflection
+        try
+        {
+            var mewdekoAssembly = AppDomain.CurrentDomain.GetAssemblies()
+                .FirstOrDefault(a => a.GetName().Name == "Mewdeko");
+
+            if (mewdekoAssembly == null)
+            {
+                // Try to load from the attribute assembly we know exists
+                mewdekoAssembly = typeof(Cmd).Assembly;
+            }
+
+            generatedBotStringsType = mewdekoAssembly.GetTypes()
+                .FirstOrDefault(t => t.Name == "GeneratedBotStrings");
+        }
+        catch
+        {
+            // If we can't load the type, that's okay for now
+        }
     }
 
     private static string GetProjectRoot()

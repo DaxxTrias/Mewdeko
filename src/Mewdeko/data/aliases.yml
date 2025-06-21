@@ -2641,9 +2641,6 @@ removemodalfield:
 listmodalfields:
   - listmodalfields
   - listmfields
-modalhelp:
-  - modalhelp
-  - mhelp
 ticketlistpanel:
   - ticketlistpanel
   - tlistpanel
@@ -2681,5 +2678,3 @@ activefilters:
 horserace:
   - horserace
   - hr
-
-

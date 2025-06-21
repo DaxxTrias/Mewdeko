@@ -197,11 +197,11 @@ public class VoteSlashCommands(InteractiveService interactivity) : MewdekoSlashM
             return;
         }
 
-        var update = await Service.UpdateTimer(role.Id, (int)parsedTime.Time.TotalSeconds);
+        var update = await Service.UpdateTimer(ctx.Guild.Id, role.Id, (int)parsedTime.Time.TotalSeconds);
         if (!update.Item1)
         {
             await ctx.Interaction.SendErrorAsync(
-                $"Updating vote role time failed due to the following reason: {update.Item2}", Config);
+                Strings.UpdatingVoteRoleTimeFailed(ctx.Guild.Id, update.Item2), Config);
         }
         else
         {
@@ -270,7 +270,7 @@ public class VoteSlashCommands(InteractiveService interactivity) : MewdekoSlashM
         if (votes is null || !votes.Any())
         {
             await ctx.Channel.SendErrorAsync(monthly
-                ? "Not enough monthly votes for a leaderboard."
+                ? Strings.NotEnoughMonthlyVotesLeaderboard(ctx.Guild.Id)
                 : "Not enough votes for a leaderboard.", Config);
             return;
         }
@@ -312,7 +312,10 @@ public class VoteSlashCommands(InteractiveService interactivity) : MewdekoSlashM
         async Task<PageBuilder> PageFactory(int page)
         {
             await Task.CompletedTask;
-            var eb = new PageBuilder().WithTitle(monthly ? "Votes leaaderboard for this month" : "Votes Leaderboard")
+            var eb = new PageBuilder()
+                .WithTitle(monthly
+                    ? Strings.VotesLeaderboardMonthlyFixed(ctx.Guild.Id)
+                    : Strings.VotesLeaderboard(ctx.Guild.Id))
                 .WithOkColor();
 
             for (var i = 0; i < voteList.Count; i++)
