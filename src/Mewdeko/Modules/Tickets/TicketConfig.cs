@@ -68,7 +68,7 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
             async Task<PageBuilder> PageFactory(int page)
             {
                 var pageBuilder = new PageBuilder()
-                    .WithTitle("Ticket Panels")
+                    .WithTitle(Strings.TicketPanels(ctx.Guild.Id))
                     .WithOkColor();
 
                 var items = panels.Skip(page * 5).Take(5);
@@ -106,18 +106,18 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
             var button = await Service.GetButtonAsync(buttonId);
             if (button == null || button.Panel.GuildId != ctx.Guild.Id)
             {
-                await ctx.Channel.SendErrorAsync("Button not found.", Config);
+                await ctx.Channel.SendErrorAsync(Strings.ButtonNotFound(ctx.Guild.Id), Config);
                 return;
             }
 
             var success = await Service.DeleteButtonAsync(ctx.Guild, buttonId);
             if (success)
             {
-                await ctx.Channel.SendConfirmAsync($"Successfully deleted button '{button.Label}'");
+                await ctx.Channel.SendConfirmAsync(Strings.ButtonDeletedSuccess(ctx.Guild.Id, button.Label));
             }
             else
             {
-                await ctx.Channel.SendErrorAsync("Failed to delete button.", Config);
+                await ctx.Channel.SendErrorAsync(Strings.FailedDeleteButton(ctx.Guild.Id), Config);
             }
         }
 
@@ -138,18 +138,18 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
             var menu = await Service.GetSelectMenuAsync(menuId.ToString());
             if (menu == null || menu.Panel.GuildId != ctx.Guild.Id)
             {
-                await ctx.Channel.SendErrorAsync("Select menu not found.", Config);
+                await ctx.Channel.SendErrorAsync(Strings.SelectMenuNotFound(ctx.Guild.Id), Config);
                 return;
             }
 
             var success = await Service.DeleteSelectMenuAsync(ctx.Guild, menuId);
             if (success)
             {
-                await ctx.Channel.SendConfirmAsync($"Successfully deleted select menu '{menu.Placeholder}'");
+                await ctx.Channel.SendConfirmAsync(Strings.SelectMenuDeletedSuccess(ctx.Guild.Id, menu.Placeholder));
             }
             else
             {
-                await ctx.Channel.SendErrorAsync("Failed to delete select menu.", Config);
+                await ctx.Channel.SendErrorAsync(Strings.FailedDeleteSelectMenu(ctx.Guild.Id), Config);
             }
         }
 
@@ -346,7 +346,7 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
             var menu = await Service.GetSelectMenuAsync(menuId);
             if (menu == null || menu.Panel.GuildId != ctx.Guild.Id)
             {
-                await ctx.Channel.SendErrorAsync("Select menu not found.", Config);
+                await ctx.Channel.SendErrorAsync(Strings.SelectMenuNotFound(ctx.Guild.Id), Config);
                 return;
             }
 
@@ -390,7 +390,7 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
             var menu = await Service.GetSelectMenuAsync(menuId);
             if (menu == null || menu.Panel.GuildId != ctx.Guild.Id)
             {
-                await ctx.Channel.SendErrorAsync("Select menu not found.", Config);
+                await ctx.Channel.SendErrorAsync(Strings.SelectMenuNotFound(ctx.Guild.Id), Config);
                 return;
             }
 
@@ -424,7 +424,7 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
             var menu = await Service.GetSelectMenuAsync(menuId);
             if (menu == null || menu.Panel.GuildId != ctx.Guild.Id)
             {
-                await ctx.Channel.SendErrorAsync("Select menu not found.", Config);
+                await ctx.Channel.SendErrorAsync(Strings.SelectMenuNotFound(ctx.Guild.Id), Config);
                 return;
             }
 
@@ -461,7 +461,7 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
             var menu = await Service.GetSelectMenuAsync(menuId);
             if (menu == null || menu.Panel.GuildId != ctx.Guild.Id)
             {
-                await ctx.Channel.SendErrorAsync("Select menu not found.", Config);
+                await ctx.Channel.SendErrorAsync(Strings.SelectMenuNotFound(ctx.Guild.Id), Config);
                 return;
             }
 
@@ -487,7 +487,7 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
             var button = await Service.GetButtonAsync(buttonId);
             if (button == null || button.Panel.GuildId != ctx.Guild.Id)
             {
-                await ctx.Channel.SendErrorAsync("Button not found.", Config);
+                await ctx.Channel.SendErrorAsync(Strings.ButtonNotFound(ctx.Guild.Id), Config);
                 return;
             }
 
@@ -568,7 +568,7 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
             var button = await Service.GetButtonAsync(buttonId);
             if (button == null || button.Panel.GuildId != ctx.Guild.Id)
             {
-                await ctx.Channel.SendErrorAsync("Button not found.", Config);
+                await ctx.Channel.SendErrorAsync(Strings.ButtonNotFound(ctx.Guild.Id), Config);
                 return;
             }
 
@@ -603,7 +603,7 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
             var button = await Service.GetButtonAsync(buttonId);
             if (button == null || button.Panel.GuildId != ctx.Guild.Id)
             {
-                await ctx.Channel.SendErrorAsync("Button not found.", Config);
+                await ctx.Channel.SendErrorAsync(Strings.ButtonNotFound(ctx.Guild.Id), Config);
                 return;
             }
 
@@ -671,7 +671,7 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
             var button = await Service.GetButtonAsync(buttonId);
             if (button == null || button.Panel.GuildId != ctx.Guild.Id)
             {
-                await ctx.Channel.SendErrorAsync("Button not found.", Config);
+                await ctx.Channel.SendErrorAsync(Strings.ButtonNotFound(ctx.Guild.Id), Config);
                 return;
             }
 
@@ -734,7 +734,7 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
             var button = await Service.GetButtonAsync(buttonId);
             if (button == null || button.Panel.GuildId != ctx.Guild.Id)
             {
-                await ctx.Channel.SendErrorAsync("Button not found.", Config);
+                await ctx.Channel.SendErrorAsync(Strings.ButtonNotFound(ctx.Guild.Id), Config);
                 return;
             }
 
@@ -828,7 +828,7 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
             var button = await Service.GetButtonAsync(buttonId);
             if (button == null || button.Panel.GuildId != ctx.Guild.Id)
             {
-                await ctx.Channel.SendErrorAsync("Button not found.", Config);
+                await ctx.Channel.SendErrorAsync(Strings.ButtonNotFound(ctx.Guild.Id), Config);
                 return;
             }
 
@@ -870,7 +870,7 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
             var button = await Service.GetButtonAsync(buttonId);
             if (button == null || button.Panel.GuildId != ctx.Guild.Id)
             {
-                await ctx.Channel.SendErrorAsync("Button not found.", Config);
+                await ctx.Channel.SendErrorAsync(Strings.ButtonNotFound(ctx.Guild.Id), Config);
                 return;
             }
 
@@ -1013,7 +1013,7 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
 
                 if (!buttons.Any() && !menus.Any())
                 {
-                    embed.WithDescription("No components found on this panel.");
+                    embed.WithDescription(Strings.NoPanelComponents(ctx.Guild.Id));
                 }
 
                 await ctx.Channel.SendMessageAsync(embed: embed.Build());
@@ -1067,7 +1067,7 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
                     await Task.CompletedTask;
                     var pagePanels = panels.Skip(5 * page).Take(5);
                     var pageBuilder = new PageBuilder()
-                        .WithTitle("Ticket Panels")
+                        .WithTitle(Strings.TicketPanels(ctx.Guild.Id))
                         .WithOkColor();
 
                     foreach (var panel in pagePanels)

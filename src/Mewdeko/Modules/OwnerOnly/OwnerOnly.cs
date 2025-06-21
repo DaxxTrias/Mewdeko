@@ -1307,12 +1307,14 @@ public class OwnerOnly(
             {
                 await potentialUser.SendMessageAsync(plainText, embeds: embed, components: components.Build())
                     .ConfigureAwait(false);
-                await ctx.Channel.SendConfirmAsync($"Message sent to {potentialUser.Mention}!").ConfigureAwait(false);
+                await ctx.Channel.SendConfirmAsync(Strings.MessageSentToUser(ctx.Guild.Id, potentialUser.Mention))
+                    .ConfigureAwait(false);
                 return;
             }
 
             await potentialUser.SendMessageAsync(rep.Replace(msg)).ConfigureAwait(false);
-            await ctx.Channel.SendConfirmAsync($"Message sent to {potentialUser.Mention}!").ConfigureAwait(false);
+            await ctx.Channel.SendConfirmAsync(Strings.MessageSentToUser(ctx.Guild.Id, potentialUser.Mention))
+                .ConfigureAwait(false);
             return;
         }
 
@@ -1331,7 +1333,8 @@ public class OwnerOnly(
             {
                 await channel.SendMessageAsync(plainText, embeds: embed, components: components?.Build())
                     .ConfigureAwait(false);
-                await ctx.Channel.SendConfirmAsync($"Message sent to {potentialServer} in {channel.Mention}")
+                await ctx.Channel
+                    .SendConfirmAsync(Strings.MessageSentToServer(ctx.Guild.Id, potentialServer, channel.Mention))
                     .ConfigureAwait(false);
                 return;
             }
@@ -1494,7 +1497,8 @@ public class OwnerOnly(
                         .WithOkColor()
                         .WithAuthor(Strings.BashOutput(ctx.Guild.Id))
                         .AddField(Strings.Input(ctx.Guild.Id), message)
-                        .WithDescription($"```{(isLinux ? "bash" : "powershell")}\n{stringList[page]}```");
+                        .WithDescription(Strings.CodeBlockShell(ctx.Guild.Id, isLinux ? "bash" : "powershell",
+                            stringList[page]));
                 }
             }
             else

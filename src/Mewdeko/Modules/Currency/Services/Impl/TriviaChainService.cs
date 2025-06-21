@@ -82,7 +82,7 @@ public class TriviaChainService(GeneratedBotStrings strings) : ITriviaChainServi
         {
             return new TriviaAnswerResult(
                 false, false, true, null,
-                "Invalid answer selection.",
+                strings.TriviaChainInvalidAnswer(guild.Id),
                 null, null);
         }
 
@@ -112,7 +112,8 @@ public class TriviaChainService(GeneratedBotStrings strings) : ITriviaChainServi
 
                 return new TriviaAnswerResult(
                     true, true, false, null,
-                    $"Chain completed! Won {potentialWin}",
+                    strings.TriviaChainCompleted(guild.Id, potentialWin,
+                        await currencyService.GetCurrencyEmote(guild.Id)),
                     completeEmbed.Build(), null);
             }
 
@@ -144,7 +145,7 @@ public class TriviaChainService(GeneratedBotStrings strings) : ITriviaChainServi
 
             return new TriviaAnswerResult(
                 false, false, true, null,
-                $"Wrong answer! Lost {chainState.BetAmount}",
+                strings.TriviaChainWrongAnswer(guild.Id, chainState.BetAmount),
                 failEmbed.Build(), null);
         }
     }
@@ -188,12 +189,13 @@ public class TriviaChainService(GeneratedBotStrings strings) : ITriviaChainServi
                     await currencyService.GetCurrencyEmote(ctx.Guild.Id)), "_ _", true);
 
         var selectMenuBuilder = new SelectMenuBuilder()
-            .WithPlaceholder("Choose your answer...")
+            .WithPlaceholder(strings.TriviaChainChooseAnswer(ctx.Guild.Id))
             .WithCustomId($"triviachain_answer_{ctx.User.Id}_{chainState.ChainLength}");
 
         for (var i = 0; i < question.options.Length; i++)
         {
-            selectMenuBuilder.AddOption(question.options[i], i.ToString(), $"Option {i + 1}");
+            selectMenuBuilder.AddOption(question.options[i], i.ToString(),
+                strings.TriviaChainOption(ctx.Guild.Id, i + 1));
         }
 
         var componentBuilder = new ComponentBuilder()
@@ -207,7 +209,7 @@ public class TriviaChainService(GeneratedBotStrings strings) : ITriviaChainServi
 
         return new TriviaAnswerResult(
             true, false, false, updatedState,
-            "Next question presented",
+            strings.TriviaChainNextQuestion(ctx.Guild.Id),
             eb.Build(), componentBuilder.Build());
     }
 

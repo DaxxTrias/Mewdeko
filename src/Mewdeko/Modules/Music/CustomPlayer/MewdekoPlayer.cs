@@ -3,16 +3,16 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
-using LinqToDB;
+using DataModel;
+using Hqub.Lastfm;
 using Lavalink4NET;
 using Lavalink4NET.Players;
 using Lavalink4NET.Protocol.Payloads.Events;
 using Lavalink4NET.Rest.Entities.Tracks;
+using LinqToDB;
 using Mewdeko.Common.Configs;
 using Mewdeko.Modules.Music.Common;
 using Mewdeko.Services.Strings;
-using DataModel;
-using Hqub.Lastfm;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 using SpotifyAPI.Web;
@@ -25,25 +25,25 @@ namespace Mewdeko.Modules.Music.CustomPlayer;
 /// </summary>
 public sealed class MewdekoPlayer : LavalinkPlayer
 {
+    private const ulong SourceGuildId = 843489716674494475;
     private readonly IAudioService audioService;
-    private PlayerStateTracker stateTracker;
-    private readonly BotConfig config;
-    private readonly IBotCredentials creds;
-    private readonly HttpClient httpClient;
     private readonly IDataCache cache;
     private readonly IMessageChannel channel;
     private readonly DiscordShardedClient client;
+    private readonly BotConfig config;
+    private readonly IBotCredentials creds;
     private readonly IDataConnectionFactory dbFactory;
-    private readonly GeneratedBotStrings Strings;
+    private readonly HttpClient httpClient;
     private readonly Random random = new();
-    private bool isAprilFoolsJokeRunning;
 
     private readonly string[] soundIds =
     [
         "1356473693294825603", "1356473638899159050", "1356473603775922256"
     ];
 
-    private const ulong SourceGuildId = 843489716674494475;
+    private readonly GeneratedBotStrings Strings;
+    private bool isAprilFoolsJokeRunning;
+    private readonly PlayerStateTracker stateTracker;
 
     /// <summary>
     ///     Initializes a new instance of <see cref="MewdekoPlayer" />.
@@ -89,7 +89,7 @@ public sealed class MewdekoPlayer : LavalinkPlayer
 
                         if (nextTrack is null)
                         {
-                            await musicChannel.SendMessageAsync("Queue is empty. Stopping.");
+                            await musicChannel.SendMessageAsync(Strings.QueueEmpty(GuildId));
                             await StopAsync(token);
                             await cache.SetCurrentTrack(GuildId, null);
                         }
@@ -123,7 +123,7 @@ public sealed class MewdekoPlayer : LavalinkPlayer
                 break;
             case TrackEndReason.LoadFailed:
                 var failedEmbed = new EmbedBuilder()
-                    .WithDescription($"Failed to load track {item.Track.Title}. Removing and skipping to the next one.")
+                    .WithDescription(Strings.TrackLoadFailed(GuildId, item.Track.Title))
                     .WithOkColor()
                     .Build();
                 await musicChannel.SendMessageAsync(embed: failedEmbed);
@@ -513,89 +513,90 @@ public sealed class MewdekoPlayer : LavalinkPlayer
     ///     Contains logic for handling autoplay in a server using Spotify's recommendation system.
     /// </summary>
     /// <returns>A bool indicating if the operation was successful.</returns>
-/// <summary>
-///     Contains logic for handling autoplay in a server using Last.fm's similar tracks API.
-/// </summary>
-/// <returns>A bool indicating if the operation was successful.</returns>
-public async Task<bool> AutoPlay()
-{
-    try
+    /// <summary>
+    ///     Contains logic for handling autoplay in a server using Last.fm's similar tracks API.
+    /// </summary>
+    /// <returns>A bool indicating if the operation was successful.</returns>
+    public async Task<bool> AutoPlay()
     {
-        var autoPlay = await GetAutoPlay();
-        if (autoPlay == 0)
-            return true;
-
-        var queue = await cache.GetMusicQueue(GuildId);
-        var lastSong = queue.MaxBy(x => x.Index);
-        if (lastSong is null)
-            return true;
-
-        // Extract track and artist information
-        var (artistName, trackTitle) = ExtractTrackInfo(lastSong.Track.Title, lastSong.Track.Author);
-
-        // Initialize Last.fm client using API key from credentials
-        if (string.IsNullOrEmpty(creds.LastFmApiKey))
+        try
         {
-            Log.Warning("Last.fm API key is not configured. AutoPlay cannot function.");
-            return false;
-        }
+            var autoPlay = await GetAutoPlay();
+            if (autoPlay == 0)
+                return true;
 
-        var lastfmClient = new LastfmClient(creds.LastFmApiKey);
+            var queue = await cache.GetMusicQueue(GuildId);
+            var lastSong = queue.MaxBy(x => x.Index);
+            if (lastSong is null)
+                return true;
 
-        // Get similar tracks from Last.fm
-        var similarTracks = await lastfmClient.Track.GetSimilarAsync(trackTitle, artistName, limit: autoPlay * 2);
-        if (similarTracks == null || !similarTracks.Any())
-        {
-            Log.Warning($"No similar tracks found for {trackTitle} by {artistName}");
-            return true;
-        }
+            // Extract track and artist information
+            var (artistName, trackTitle) = ExtractTrackInfo(lastSong.Track.Title, lastSong.Track.Author);
 
-        // Filter out tracks that are already in the queue
-        var queuedTrackNames = new HashSet<string>(
-            queue.Select(q => q.Track.Title.ToLower()),
-            StringComparer.OrdinalIgnoreCase);
-
-        var filteredTracks = similarTracks
-            .Where(t => !queuedTrackNames.Contains($"{t.Name} - {t.Artist.Name}".ToLower()))
-            .ToList();
-
-        var toTake = Math.Min(autoPlay, filteredTracks.Count);
-
-        Log.Information($"Last.fm AutoPlay found {filteredTracks.Count} potential tracks, adding {toTake}");
-
-        foreach (var track in filteredTracks.Take(toTake))
-        {
-            // Create search query with track name and artist
-            var searchQuery = $"{track.Name} {track.Artist.Name}";
-
-            var trackToLoad = await audioService.Tracks.LoadTrackAsync(searchQuery, TrackSearchMode.YouTube);
-            if (trackToLoad is null)
+            // Initialize Last.fm client using API key from credentials
+            if (string.IsNullOrEmpty(creds.LastFmApiKey))
             {
-                Log.Debug($"Could not load track: {searchQuery}");
-                continue;
+                Log.Warning("Last.fm API key is not configured. AutoPlay cannot function.");
+                return false;
             }
 
-            queue.Add(new MewdekoTrack(queue.Count + 1, trackToLoad, new PartialUser
+            var lastfmClient = new LastfmClient(creds.LastFmApiKey);
+
+            // Get similar tracks from Last.fm
+            var similarTracks = await lastfmClient.Track.GetSimilarAsync(trackTitle, artistName, autoPlay * 2);
+            if (similarTracks == null || !similarTracks.Any())
             {
-                AvatarUrl = client.CurrentUser.GetAvatarUrl(),
-                Username = "Mewdeko (Last.fm AutoPlay)",
-                Id = client.CurrentUser.Id
-            }));
+                Log.Warning($"No similar tracks found for {trackTitle} by {artistName}");
+                return true;
+            }
 
-            Log.Debug($"Added track to queue: {trackToLoad.Title}");
+            // Filter out tracks that are already in the queue
+            var queuedTrackNames = new HashSet<string>(
+                queue.Select(q => q.Track.Title.ToLower()),
+                StringComparer.OrdinalIgnoreCase);
+
+            var filteredTracks = similarTracks
+                .Where(t => !queuedTrackNames.Contains($"{t.Name} - {t.Artist.Name}".ToLower()))
+                .ToList();
+
+            var toTake = Math.Min(autoPlay, filteredTracks.Count);
+
+            Log.Information($"Last.fm AutoPlay found {filteredTracks.Count} potential tracks, adding {toTake}");
+
+            foreach (var track in filteredTracks.Take(toTake))
+            {
+                // Create search query with track name and artist
+                var searchQuery = $"{track.Name} {track.Artist.Name}";
+
+                var trackToLoad = await audioService.Tracks.LoadTrackAsync(searchQuery, TrackSearchMode.YouTube);
+                if (trackToLoad is null)
+                {
+                    Log.Debug($"Could not load track: {searchQuery}");
+                    continue;
+                }
+
+                queue.Add(new MewdekoTrack(queue.Count + 1, trackToLoad, new PartialUser
+                {
+                    AvatarUrl = client.CurrentUser.GetAvatarUrl(),
+                    Username = "Mewdeko (Last.fm AutoPlay)",
+                    Id = client.CurrentUser.Id
+                }));
+
+                Log.Debug($"Added track to queue: {trackToLoad.Title}");
+            }
+
+            await cache.SetMusicQueue(GuildId, queue);
+
+            // If we've added tracks, return success
+            return true;
         }
-
-        await cache.SetMusicQueue(GuildId, queue);
-
-        // If we've added tracks, return success
-        return true;
+        catch (Exception e)
+        {
+            Log.Error(e, "Last.fm AutoPlay error");
+            return false;
+        }
     }
-    catch (Exception e)
-    {
-        Log.Error(e, "Last.fm AutoPlay error");
-        return false;
-    }
-}
+
     /// <summary>
     ///     Extracts the artist name and track title from a song's metadata.
     /// </summary>

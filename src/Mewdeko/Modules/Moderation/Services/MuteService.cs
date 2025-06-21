@@ -5,6 +5,7 @@ using LinqToDB;
 using LinqToDB.Data;
 using Mewdeko.Common.Collections;
 using Mewdeko.Common.ModuleBehaviors;
+using Mewdeko.Services.Strings;
 using Serilog;
 
 namespace Mewdeko.Modules.Moderation.Services;
@@ -69,6 +70,7 @@ public class MuteService : INService, IReadyExecutor, IDisposable
     private readonly IDataConnectionFactory dbFactory;
 
     private readonly GuildSettingsService guildSettings;
+    private readonly GeneratedBotStrings strings;
     private bool _isProcessing;
     private Timer? _processingTimer = null;
 
@@ -86,13 +88,15 @@ public class MuteService : INService, IReadyExecutor, IDisposable
     /// <param name="guildSettings">Service for retrieving guildconfigs</param>
     /// <param name="eventHandler">Handler for async events (Hear that dnet? ASYNC, not GATEWAY THREAD)</param>
     /// <param name="bot">The bot</param>
+    /// <param name="strings">The localization service</param>
     public MuteService(DiscordShardedClient client, IDataConnectionFactory dbFactory,
         GuildSettingsService guildSettings,
-        EventHandler eventHandler, Mewdeko bot)
+        EventHandler eventHandler, Mewdeko bot, GeneratedBotStrings strings)
     {
         this.client = client;
         this.dbFactory = dbFactory;
         this.guildSettings = guildSettings;
+        this.strings = strings;
         eventHandler.UserJoined += Client_UserJoined;
         UserMuted += OnUserMuted;
         UserUnmuted += OnUserUnmuted;
@@ -544,26 +548,26 @@ public class MuteService : INService, IReadyExecutor, IDisposable
         }
     }
 
-    private static async Task OnUserMuted(IGuildUser user, IUser mod, MuteType type, string reason)
+    private async Task OnUserMuted(IGuildUser user, IUser mod, MuteType type, string reason)
     {
         if (string.IsNullOrWhiteSpace(reason))
             return;
 
         await user.SendMessageAsync(embed: new EmbedBuilder()
-            .WithDescription($"You've been muted in {user.Guild} server")
+            .WithDescription(strings.UserMutedDm(user.Guild.Id, user.Guild))
             .AddField("Mute Type", type.ToString())
             .AddField("Moderator", mod.ToString())
             .AddField("Reason", reason)
             .Build());
     }
 
-    private static async Task OnUserUnmuted(IGuildUser user, IUser mod, MuteType type, string reason)
+    private async Task OnUserUnmuted(IGuildUser user, IUser mod, MuteType type, string reason)
     {
         if (string.IsNullOrWhiteSpace(reason))
             return;
 
         await user.SendMessageAsync(embed: new EmbedBuilder()
-            .WithDescription($"You've been unmuted in {user.Guild} server")
+            .WithDescription(strings.UserUnmutedDm(user.Guild.Id, user.Guild.Name))
             .AddField("Unmute Type", type.ToString())
             .AddField("Moderator", mod.ToString())
             .AddField("Reason", reason)

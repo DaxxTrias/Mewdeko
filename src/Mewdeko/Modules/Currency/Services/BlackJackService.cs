@@ -1,11 +1,13 @@
-﻿using Embed = Discord.Embed;
+﻿using Mewdeko.Services.Strings;
+using Embed = Discord.Embed;
 
 namespace Mewdeko.Modules.Currency.Services;
 
 /// <summary>
 ///     Service that handles the logic for a Blackjack game.
 /// </summary>
-public class BlackjackService : INService
+/// <param name="strings">The localization service.</param>
+public class BlackjackService(GeneratedBotStrings strings) : INService
 {
     private static readonly string[] Suits = ["♠️", "♥️", "♦️", "♣️"];
     private static readonly string[] Ranks = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"];
@@ -86,7 +88,7 @@ public class BlackjackService : INService
     {
         if (!Games.TryGetValue(user, out var game))
         {
-            throw new InvalidOperationException("You don't have an ongoing game! Start one with .blackjack <amount>.");
+            throw new InvalidOperationException("no_ongoing_game");
         }
 
         return game;
@@ -100,7 +102,7 @@ public class BlackjackService : INService
     {
         if (!Games.Remove(user))
         {
-            throw new InvalidOperationException("You don't have an ongoing game!");
+            throw new InvalidOperationException("no_ongoing_game");
         }
     }
 
@@ -108,11 +110,12 @@ public class BlackjackService : INService
     ///     Handles the player's decision to stand and processes the dealer's turn.
     /// </summary>
     /// <param name="user">The player.</param>
+    /// <param name="guildId">The guild ID for localization.</param>
     /// <param name="updateBalanceAsync">A function to update the player's balance.</param>
     /// <param name="addTransactionAsync">A function to add a transaction for the player.</param>
     /// <param name="currencyEmote">The currency emote for the game.</param>
     /// <returns>An embed representing the final state of the game.</returns>
-    public async Task<Embed[]> HandleStandAsync(IUser user, Func<ulong, long, Task> updateBalanceAsync,
+    public async Task<Embed[]> HandleStandAsync(IUser user, ulong guildId, Func<ulong, long, Task> updateBalanceAsync,
         Func<ulong, long, string, Task> addTransactionAsync, string currencyEmote)
     {
         var embeds = new List<Embed>();
@@ -127,10 +130,10 @@ public class BlackjackService : INService
         var dealerBlackjack = BlackjackGame.IsBlackjack(game.DealerHand);
 
         var endEmbed = new EmbedBuilder()
-            .WithTitle("Game Over")
+            .WithTitle(strings.GameOver(user.Id))
             .WithErrorColor()
-            .AddField("Dealer's Hand", string.Join(" ", game.DealerHand.Select(c => $"{c.Rank}{c.Suit}")))
-            .AddField("Dealer's Total", dealerTotal);
+            .AddField(strings.DealerHand(guildId), string.Join(" ", game.DealerHand.Select(c => $"{c.Rank}{c.Suit}")))
+            .AddField(strings.DealerTotal(guildId, dealerTotal), "_ _");
 
         embeds.Add(endEmbed.Build());
 
@@ -156,13 +159,15 @@ public class BlackjackService : INService
 
             await updateBalanceAsync(playerId.Id, balanceChange);
             await addTransactionAsync(playerId.Id, balanceChange,
-                playerWon ? "Won Blackjack" : tie ? "Push" : "Lost Blackjack");
+                playerWon ? strings.WonBlackjack(guildId, balanceChange) :
+                tie ? strings.PushBlackjack(guildId) : strings.LostBlackjack(guildId, Math.Abs(balanceChange)));
 
             var handEmbed = new EmbedBuilder()
                 .WithOkColor()
-                .AddField($"{playerId}'s Hand", string.Join(" ", playerHand.Select(c => $"{c.Rank}{c.Suit}")))
-                .AddField($"{playerId}'s Total", playerTotal)
-                .AddField($"{playerId}'s Result", playerWon ? "Won" : tie ? "Push" : "Lost");
+                .AddField(strings.PlayerHand(guildId), string.Join(" ", playerHand.Select(c => $"{c.Rank}{c.Suit}")))
+                .AddField(strings.PlayerTotal(guildId, playerTotal), "_ _")
+                .AddField(strings.PlayerResult(guildId),
+                    playerWon ? strings.Won(guildId) : tie ? strings.Push(guildId) : strings.Lost(guildId), true);
 
             embeds.Add(handEmbed.Build());
         }
@@ -212,10 +217,10 @@ public class BlackjackService : INService
         public void AddPlayer(IUser user, long betAmount)
         {
             if (Players.Count >= 5)
-                throw new InvalidOperationException("full");
+                throw new InvalidOperationException("blackjack_game_full");
 
             if (Players.Contains(user))
-                throw new InvalidOperationException("ingame");
+                throw new InvalidOperationException("blackjack_already_in_game");
 
             Players.Add(user);
             PlayerHands[user] = [];
@@ -268,15 +273,17 @@ public class BlackjackService : INService
         ///     Creates an embed representing the current state of the game.
         /// </summary>
         /// <param name="title">The title of the embed.</param>
+        /// <param name="guildId">The guild ID for localization.</param>
+        /// <param name="strings">The strings service for localization.</param>
         /// <returns>An embed representing the current state of the game.</returns>
-        public Embed[] CreateGameEmbed(string title)
+        public Embed[] CreateGameEmbed(string title, ulong guildId, GeneratedBotStrings strings)
         {
             var embedList = new List<Embed>();
             var embed = new EmbedBuilder()
                 .WithTitle(title)
                 .WithColor(Color.Blue)
-                .AddField("Dealer's Hand", string.Join(" ", DealerHand.Select(c => $"{c.Rank}{c.Suit}")))
-                .AddField("Dealer's Total", CalculateHandTotal(DealerHand));
+                .AddField(strings.DealerHand(guildId), string.Join(" ", DealerHand.Select(c => $"{c.Rank}{c.Suit}")))
+                .AddField(strings.DealerTotal(guildId, CalculateHandTotal(DealerHand)), "_ _");
 
             embedList.Add(embed.Build());
 
@@ -285,9 +292,9 @@ public class BlackjackService : INService
                 var playerHand = new EmbedBuilder()
                     .WithOkColor();
 
-                playerHand.AddField($"{playerId}'s Hand",
+                playerHand.AddField(strings.PlayerHand(guildId),
                     string.Join(" ", PlayerHands[playerId].Select(c => $"{c.Rank}{c.Suit}")));
-                playerHand.AddField($"{playerId}'s Total", CalculateHandTotal(PlayerHands[playerId]));
+                playerHand.AddField(strings.PlayerTotal(guildId, CalculateHandTotal(PlayerHands[playerId])), "_ _");
 
                 embedList.Add(playerHand.Build());
             }

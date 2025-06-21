@@ -600,13 +600,14 @@ public class SlashOwnerOnly(
                         .WithOkColor()
                         .WithAuthor(Strings.BashOutput(ctx.Guild.Id))
                         .AddField("Input", message)
-                        .WithDescription($"```{(isLinux ? "bash" : "powershell")}\n{stringList[page]}```");
+                        .WithDescription(Strings.CodeBlockPlatform(ctx.Guild.Id, isLinux ? "bash" : "powershell") +
+                                         $"\n{stringList[page]}```");
                 }
             }
             else
             {
                 process.Kill();
-                await ctx.Interaction.FollowupAsync("The process was hanging and has been terminated.")
+                await ctx.Interaction.FollowupAsync(Strings.ProcessTerminated(ctx.Guild.Id))
                     .ConfigureAwait(false);
             }
 
@@ -1197,7 +1198,7 @@ public class SlashOwnerOnly(
                     var propStrings = GetPropsAndValuesString(setting, propNames);
                     var embed = new EmbedBuilder()
                         .WithOkColor()
-                        .WithTitle($"⚙️ {setting.Name}")
+                        .WithTitle(Strings.SettingsTitle(ctx.Guild.Id, setting.Name))
                         .WithDescription(propStrings);
 
                     await ctx.Interaction.FollowupAsync(embed: embed.Build()).ConfigureAwait(false);

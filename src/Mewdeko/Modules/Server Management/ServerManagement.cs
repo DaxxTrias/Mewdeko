@@ -217,7 +217,7 @@ public partial class ServerManagement(IHttpClientFactory factory, BotConfigServi
         {
             var emote1 = await ctx.Guild.GetEmoteAsync(tags.Id).ConfigureAwait(false);
             await ctx.Guild.DeleteEmoteAsync(emote1).ConfigureAwait(false);
-            await ctx.Channel.SendConfirmAsync($"{emote1} has been deleted!").ConfigureAwait(false);
+            await ctx.Channel.SendConfirmAsync(Strings.EmoteDeleted(ctx.Guild.Id, emote1)).ConfigureAwait(false);
         }
         catch (HttpException)
         {
@@ -307,7 +307,7 @@ public partial class ServerManagement(IHttpClientFactory factory, BotConfigServi
         {
             Color = Mewdeko.OkColor
         };
-        if (emotes.Count > 0) b.WithDescription($"**Added Emotes**\n{string.Join("\n", emotes)}");
+        if (emotes.Count > 0) b.WithDescription(Strings.AddedEmotes(ctx.Guild.Id, string.Join("\n", emotes)));
         if (errored.Count > 0) b.AddField("Errored Emotes", string.Join("\n\n", errored));
         await msg.ModifyAsync(x => x.Embed = b.Build()).ConfigureAwait(false);
     }
@@ -365,7 +365,8 @@ public partial class ServerManagement(IHttpClientFactory factory, BotConfigServi
             Color = Mewdeko.OkColor
         };
         if (emotes.Count > 0)
-            b.WithDescription($"**Added {emotes.Count} Emotes to {role.Mention}**\n{string.Join("\n", emotes)}");
+            b.WithDescription(Strings.AddedEmotesToRole(ctx.Guild.Id, emotes.Count, role.Mention,
+                string.Join("\n", emotes)));
         if (errored.Count > 0) b.AddField($"{errored.Count} Errored Emotes", string.Join("\n\n", errored));
         await msg.ModifyAsync(x => x.Embed = b.Build()).ConfigureAwait(false);
     }

@@ -7,7 +7,6 @@ using Mewdeko.Database.Enums;
 using Mewdeko.Modules.Permissions.Services;
 using Mewdeko.Modules.UserProfile.Common;
 using Mewdeko.Modules.UserProfile.Services;
-
 using SkiaSharp;
 
 namespace Mewdeko.Modules.UserProfile;
@@ -68,7 +67,7 @@ public class SlashUserProfile : MewdekoSlashModuleBase<UserProfileService>
         }
 
         await Service.SetBio(ctx.User, bio);
-        await ctx.Interaction.SendConfirmAsync($"Your Profile Bio has been set to:\n{bio}");
+        await ctx.Interaction.SendConfirmAsync(Strings.BioSet(ctx.Guild.Id, bio));
     }
 
     /// <summary>
@@ -114,7 +113,7 @@ public class SlashUserProfile : MewdekoSlashModuleBase<UserProfileService>
         if (!result)
             await ctx.Interaction.SendErrorAsync(Strings.ZodiacInvalid(ctx.Guild.Id), Config);
         else
-            await ctx.Interaction.SendConfirmAsync($"Your Zodiac has been set to:\n`{zodiac}`");
+            await ctx.Interaction.SendConfirmAsync(Strings.ZodiacSet(ctx.Guild.Id, zodiac));
     }
 
     /// <summary>
@@ -133,7 +132,7 @@ public class SlashUserProfile : MewdekoSlashModuleBase<UserProfileService>
 
         var discordColor = new Color(inputColor.Red, inputColor.Green, inputColor.Blue);
         await Service.SetProfileColor(ctx.User, discordColor);
-        await ctx.Interaction.SendConfirmAsync($"Your Profile Color has been set to:\n`{inputColor}`");
+        await ctx.Interaction.SendConfirmAsync(Strings.ProfileColorSet(ctx.Guild.Id, inputColor));
     }
 
     /// <summary>
@@ -151,7 +150,7 @@ public class SlashUserProfile : MewdekoSlashModuleBase<UserProfileService>
         }
 
         await Service.SetBirthday(ctx.User, dateTime);
-        await ctx.Interaction.SendConfirmAsync($"Your birthday has been set to {dateTime:d}");
+        await ctx.Interaction.SendConfirmAsync(Strings.BirthdaySet(ctx.Guild.Id, dateTime.ToString("d")));
     }
 
     /// <summary>
@@ -182,7 +181,7 @@ public class SlashUserProfile : MewdekoSlashModuleBase<UserProfileService>
         if (!await Service.SetSwitchFc(ctx.User, switchFc))
         {
             await Context.Interaction.SendErrorAsync(
-                "The Switch Friend Code you provided is invalid. Please make sure it matches the format sw-XXXX-XXXX-XXXX.",
+                Strings.InvalidFormat(ctx.Guild.Id),
                 Config);
             return;
         }
@@ -190,7 +189,7 @@ public class SlashUserProfile : MewdekoSlashModuleBase<UserProfileService>
         if (switchFc.Length == 0)
             await ctx.Interaction.SendConfirmAsync(Strings.SwitchCodeRemoved(ctx.Guild.Id));
         else
-            await ctx.Interaction.SendConfirmAsync($"Your Switch Friend Code has been set to {switchFc}.");
+            await ctx.Interaction.SendConfirmAsync(Strings.SwitchFcSet(ctx.Guild.Id, switchFc));
     }
 
     /// <summary>
@@ -368,7 +367,7 @@ public class SlashUserProfile : MewdekoSlashModuleBase<UserProfileService>
     {
         var id = ulong.Parse(sId);
         await bss.Blacklist(BlacklistType.Server, id, modal.FcbReason);
-        await  RespondAsync("blacklisted the server");
+        await RespondAsync("blacklisted the server");
     }
 
     /// <summary>
@@ -497,7 +496,8 @@ public class SlashUserProfile : MewdekoSlashModuleBase<UserProfileService>
         {
             var user = await ctx.Client.GetUserAsync(ulong.Parse(uIdStr)).ConfigureAwait(false);
             var channel = await user.CreateDMChannelAsync().ConfigureAwait(false);
-            if (modal.Message != null && SmartEmbed.TryParse(modal.Message, ctx.Guild.Id, out var eb, out var txt, out var cb))
+            if (modal.Message != null &&
+                SmartEmbed.TryParse(modal.Message, ctx.Guild.Id, out var eb, out var txt, out var cb))
                 await channel.SendMessageAsync(txt, embeds: eb, components: cb.Build()).ConfigureAwait(false);
             else
                 await channel.SendMessageAsync(modal.Message).ConfigureAwait(false);

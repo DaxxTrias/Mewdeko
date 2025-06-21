@@ -115,7 +115,7 @@ public class SlashChatTriggers(IHttpClientFactory clientFactory, InteractiveServ
     {
         if (string.IsNullOrWhiteSpace(modal.Trigger) || string.IsNullOrWhiteSpace(modal.Message))
         {
-            await RespondAsync("trigger_add_invalid").ConfigureAwait(false);
+            await RespondAsync(Strings.TriggerAddInvalid(ctx.Guild.Id)).ConfigureAwait(false);
             await FollowupWithTriggerStatus().ConfigureAwait(false);
             return;
         }

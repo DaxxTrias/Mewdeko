@@ -4,6 +4,7 @@ using Humanizer;
 using LinqToDB;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Services.Settings;
+using Mewdeko.Services.Strings;
 using Serilog;
 using ZiggyCreatures.Caching.Fusion;
 using DiscordShardedClient = Discord.WebSocket.DiscordShardedClient;
@@ -15,17 +16,17 @@ namespace Mewdeko.Modules.Afk.Services;
 /// </summary>
 public class AfkService : INService, IReadyExecutor, IDisposable
 {
+    private readonly ConcurrentDictionary<(ulong GuildId, ulong UserId), Timer> afkTimers = new();
     private readonly IFusionCache cache;
+    private readonly Timer cleanupTimer;
     private readonly DiscordShardedClient client;
     private readonly BotConfigService config;
     private readonly IDataConnectionFactory dbFactory;
-    private readonly GuildSettingsService guildSettings;
     private readonly EventHandler eventHandler;
-
-    private readonly ConcurrentDictionary<(ulong GuildId, ulong UserId), Timer> afkTimers = new();
-    private readonly ConcurrentDictionary<ulong, bool> guildDataLoaded = new();
     private readonly ConcurrentDictionary<ulong, (GuildConfig Config, DateTime Expiry)> guildConfigCache = new();
-    private readonly Timer cleanupTimer;
+    private readonly ConcurrentDictionary<ulong, bool> guildDataLoaded = new();
+    private readonly GuildSettingsService guildSettings;
+    private readonly GeneratedBotStrings strings;
     private bool isDisposed;
     private bool isInitialized;
 
@@ -38,13 +39,15 @@ public class AfkService : INService, IReadyExecutor, IDisposable
     /// <param name="guildSettings">Service for accessing guild settings.</param>
     /// <param name="eventHandler">Handler for Discord events.</param>
     /// <param name="config">The bot's configuration service.</param>
+    /// <param name="strings">The localization service.</param>
     public AfkService(
         IDataConnectionFactory dbFactory,
         DiscordShardedClient client,
         IFusionCache cache,
         GuildSettingsService guildSettings,
         EventHandler eventHandler,
-        BotConfigService config)
+        BotConfigService config,
+        GeneratedBotStrings strings)
     {
         this.cache = cache;
         this.guildSettings = guildSettings;
@@ -52,6 +55,7 @@ public class AfkService : INService, IReadyExecutor, IDisposable
         this.dbFactory = dbFactory;
         this.client = client;
         this.eventHandler = eventHandler;
+        this.strings = strings;
 
         this.eventHandler.MessageReceived += MessageReceived;
         this.eventHandler.MessageUpdated += MessageUpdated;
@@ -629,7 +633,7 @@ public class AfkService : INService, IReadyExecutor, IDisposable
                     {
                         await AfkSet(user.GuildId, user.Id, ""); // Clear AFK
                         var notifyMsg = await msg.Channel
-                            .SendMessageAsync($"Welcome back {user.Mention}, I have disabled your AFK for you.")
+                            .SendMessageAsync(strings.WelcomeBackAfk(user.Guild.Id, user.Mention))
                             .ConfigureAwait(false);
                         notifyMsg.DeleteAfter(5);
                         try
@@ -673,11 +677,12 @@ public class AfkService : INService, IReadyExecutor, IDisposable
                     {
                         var embed = new EmbedBuilder()
                             .WithAuthor(eab =>
-                                eab.WithName($"{mentionedGuildUser} is currently away")
+                                eab.WithName(strings.UserCurrentlyAway(user.Guild.Id, mentionedGuildUser))
                                     .WithIconUrl(mentionedGuildUser.GetAvatarUrl()))
                             .WithDescription(mentionedAfk.Message.Truncate(length))
                             .WithFooter(
-                                $"AFK for {(DateTime.UtcNow - (mentionedAfk.DateAdded ?? DateTime.UtcNow)).Humanize()}")
+                                strings.AfkFor(user.Guild.Id,
+                                    (DateTime.UtcNow - (mentionedAfk.DateAdded ?? DateTime.UtcNow)).Humanize()))
                             .WithOkColor()
                             .Build();
 
@@ -776,7 +781,7 @@ public class AfkService : INService, IReadyExecutor, IDisposable
                     {
                         var notifyMsg =
                             await chan.SendMessageAsync(
-                                $"Welcome back {user.Mention}! I noticed you typing so I disabled your AFK.");
+                                strings.WelcomeBackAfk(guildUser.GuildId, user.Mention));
                         notifyMsg.DeleteAfter(5);
                     }
 

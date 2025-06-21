@@ -1053,7 +1053,7 @@ public class SlashMusic(
 
         // Create response embed
         var embed = new EmbedBuilder()
-            .WithTitle("Added to Queue")
+            .WithTitle(Strings.AddedToQueue(ctx.Guild.Id))
             .WithDescription(CreateAddedTracksDescription(addedTracks))
             .WithOkColor()
             .Build();

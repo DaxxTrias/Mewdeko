@@ -286,7 +286,7 @@ public class RoleStates(BotConfigService bss, InteractiveService interactivity, 
         await Service.UpdateRoleStateSettings(roleStateSettings);
 
         await ctx.Channel.SendConfirmAsync(
-            $"{bss.Data.SuccessEmote} {Strings.RoleStatesRolesAddedToDeny(ctx.Guild.Id, addedCount)}");
+            Strings.RoleStatesRolesAddedToDeny(ctx.Guild.Id, bss.Data.SuccessEmote, addedCount));
     }
 
     /// <summary>
@@ -324,7 +324,7 @@ public class RoleStates(BotConfigService bss, InteractiveService interactivity, 
         await Service.UpdateRoleStateSettings(roleStateSettings);
 
         await ctx.Channel.SendConfirmAsync(
-            $"{bss.Data.SuccessEmote} {Strings.RoleStatesRolesRemovedFromDeny(ctx.Guild.Id, removedCount)}");
+            Strings.RoleStatesRolesRemovedFromDeny(ctx.Guild.Id, bss.Data.SuccessEmote, removedCount));
     }
 
     /// <summary>
@@ -362,7 +362,7 @@ public class RoleStates(BotConfigService bss, InteractiveService interactivity, 
         await Service.UpdateRoleStateSettings(roleStateSettings);
 
         await ctx.Channel.SendConfirmAsync(
-            $"{bss.Data.SuccessEmote} {Strings.RoleStatesUsersAddedToDeny(ctx.Guild.Id, addedCount)}");
+            Strings.RoleStatesUsersAddedToDeny(ctx.Guild.Id, bss.Data.SuccessEmote, addedCount));
     }
 
     /// <summary>
@@ -400,7 +400,7 @@ public class RoleStates(BotConfigService bss, InteractiveService interactivity, 
         await Service.UpdateRoleStateSettings(roleStateSettings);
 
         await ctx.Channel.SendConfirmAsync(
-            $"{bss.Data.SuccessEmote} {Strings.RoleStatesUsersRemovedFromDeny(ctx.Guild.Id, removedCount)}");
+            Strings.RoleStatesUsersRemovedFromDeny(ctx.Guild.Id, bss.Data.SuccessEmote, removedCount));
     }
 
     /// <summary>
@@ -415,7 +415,7 @@ public class RoleStates(BotConfigService bss, InteractiveService interactivity, 
     {
         var roleIds = roles.Where(x => x.Id != ctx.Guild.Id && !x.IsManaged).Select(x => x.Id);
         if (!roleIds.Any())
-            await ctx.Channel.SendErrorAsync($"{bss.Data.ErrorEmote} {Strings.RoleStatesNoValidRoles(ctx.Guild.Id)}",
+            await ctx.Channel.SendErrorAsync(Strings.RoleStatesNoValidRoles(ctx.Guild.Id, bss.Data.ErrorEmote),
                 Config);
         await Service.SetRoleStateManually(user, ctx.Guild.Id, roleIds);
         await ctx.Channel.SendConfirmAsync(

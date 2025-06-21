@@ -4,6 +4,7 @@ using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Modules.Administration.Common;
 using Mewdeko.Modules.Moderation.Services;
 using Mewdeko.Services.Settings;
+using Mewdeko.Services.Strings;
 
 namespace Mewdeko.Modules.Server_Management.Services;
 
@@ -20,6 +21,7 @@ public class RoleMonitorService : INService, IReadyExecutor
     // In-memory caches for quick access
     private readonly ConcurrentDictionary<ulong, GuildSettings> guildSettingsCache = new();
     private readonly MuteService muteService;
+    private readonly GeneratedBotStrings strings;
     private readonly UserPunishService userPunishService;
 
     /// <summary>
@@ -34,7 +36,7 @@ public class RoleMonitorService : INService, IReadyExecutor
     /// <param name="muteService">The mute service for handling user mutes.</param>
     public RoleMonitorService(DiscordShardedClient client, EventHandler handler, IDataConnectionFactory dbFactory,
         IDataCache dataCache, UserPunishService userPunishService, BotConfigService botConfigService,
-        MuteService muteService)
+        MuteService muteService, GeneratedBotStrings strings)
     {
         this.client = client;
         this.dbFactory = dbFactory;
@@ -42,6 +44,7 @@ public class RoleMonitorService : INService, IReadyExecutor
         this.userPunishService = userPunishService;
         this.botConfigService = botConfigService;
         this.muteService = muteService;
+        this.strings = strings;
 
         handler.AuditLogCreated += OnAuditLogCreatedAsync;
     }
@@ -357,7 +360,7 @@ public class RoleMonitorService : INService, IReadyExecutor
                 _ => "somehow forgiven..."
             };
             await dmChannel.SendErrorAsync(
-                $"You have been {action} for {actionDescription}.", botConfigService.Data);
+                strings.RoleActionDm(guild.Id, action, actionDescription), botConfigService.Data);
         }
         catch
         {

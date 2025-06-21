@@ -136,7 +136,7 @@ public class EmoteStealer(IHttpClientFactory httpFactory, BotConfigService confi
         {
             Color = Mewdeko.OkColor
         };
-        if (emotes.Count > 0) b.WithDescription($"**Added Stickers**\n{string.Join("\n", emotes)}");
+        if (emotes.Count > 0) b.WithDescription(Strings.AddedStickers(ctx.Guild.Id, string.Join("\n", emotes)));
         if (errored.Count > 0) b.AddField("Errored Stickers", string.Join("\n\n", errored));
         await ctx.Interaction.ModifyOriginalResponseAsync(x => x.Embed = b.Build()).ConfigureAwait(false);
     }

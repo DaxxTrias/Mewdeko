@@ -12,8 +12,6 @@ using Mewdeko.Modules.Utility.Services;
 using Mewdeko.Services.Impl;
 using Mewdeko.Services.Settings;
 
-
-
 namespace Mewdeko.Modules.Utility;
 
 /// <summary>
@@ -255,7 +253,8 @@ public partial class SlashUtility(
         };
         await ctx.Interaction.RespondAsync(embed:
                 new EmbedBuilder().WithOkColor()
-                    .WithAuthor($"{client.CurrentUser.Username} v{StatsService.BotVersion}",
+                    .WithAuthor(
+                        Strings.BotVersionAuthor(ctx.Guild.Id, client.CurrentUser.Username, StatsService.BotVersion),
                         client.CurrentUser.GetAvatarUrl(), config.Data.SupportServer)
                     .AddField(Strings.Authors(ctx.Guild.Id),
                         $"[{users[0]}](https://github.com/SylveonDeko)\n[{users[1]}](https://github.com/CottageDwellingCat)")
@@ -377,11 +376,11 @@ public partial class SlashUtility(
         if (usr is null)
         {
             await ctx.Interaction.SendErrorAsync(
-                "That user could not be found. Please ensure that was the correct ID.", Config);
+                Strings.UserNotFoundId(ctx.Guild.Id), Config);
         }
         else
         {
-            var embed = new EmbedBuilder().WithTitle("info for fetched user").AddField("Username", usr)
+            var embed = new EmbedBuilder().WithTitle(Strings.FetchedUserInfo(ctx.Guild.Id)).AddField("Username", usr)
                 .AddField("Created At", TimestampTag.FromDateTimeOffset(usr.CreatedAt))
                 .AddField("Public Flags", usr.PublicFlags).WithImageUrl(usr.RealAvatarUrl().ToString()).WithOkColor();
             await ctx.Interaction.RespondAsync(embed: embed.Build()).ConfigureAwait(false);
@@ -406,7 +405,8 @@ public partial class SlashUtility(
         var voicechn = guild.VoiceChannels.Count;
 
         var component = new ComponentBuilder().WithButton("More Info", "moreinfo");
-        var embed = new EmbedBuilder().WithAuthor(eab => eab.WithName(Strings.ServerInfo(ctx.Guild.Id))).WithTitle(guild.Name)
+        var embed = new EmbedBuilder().WithAuthor(eab => eab.WithName(Strings.ServerInfo(ctx.Guild.Id)))
+            .WithTitle(guild.Name)
             .AddField("Id", guild.Id.ToString())
             .AddField("Owner", ownername.Mention).AddField("Total Users", guild.Users.Count.ToString())
             .AddField("Created On", TimestampTag.FromDateTimeOffset(guild.CreatedAt)).WithColor(Mewdeko.OkColor);
@@ -455,7 +455,8 @@ public partial class SlashUtility(
         var ch = channel ?? (ITextChannel)ctx.Channel;
         var embed = new EmbedBuilder().WithTitle(ch.Name).AddField(Strings.Id(ctx.Guild.Id), ch.Id.ToString())
             .AddField(Strings.CreatedAt(ctx.Guild.Id), TimestampTag.FromDateTimeOffset(ch.CreatedAt))
-            .AddField(Strings.Users(ctx.Guild.Id), (await ch.GetUsersAsync().FlattenAsync().ConfigureAwait(false)).Count())
+            .AddField(Strings.Users(ctx.Guild.Id),
+                (await ch.GetUsersAsync().FlattenAsync().ConfigureAwait(false)).Count())
             .AddField("NSFW", ch.IsNsfw)
             .AddField("Slowmode Interval", TimeSpan.FromSeconds(ch.SlowModeInterval).Humanize())
             .AddField("Default Thread Archive Duration", ch.DefaultArchiveDuration).WithColor(Mewdeko.OkColor);

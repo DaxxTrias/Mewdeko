@@ -51,8 +51,8 @@ public class Vote(InteractiveService interactivity) : MewdekoModuleBase<VoteServ
                 if (string.IsNullOrWhiteSpace(voteMessage))
                 {
                     var eb = new EmbedBuilder()
-                        .WithTitle($"Thanks for voting for {ctx.Guild.Name}")
-                        .WithDescription($"You have votedd a total of {votes.Count} times!")
+                        .WithTitle(Strings.ThanksForVoting(ctx.Guild.Id, ctx.Guild.Name))
+                        .WithDescription(Strings.VoteCountTypo(ctx.Guild.Id, votes.Count))
                         .WithThumbnailUrl(ctx.User.RealAvatarUrl().AbsoluteUri)
                         .WithOkColor();
 
@@ -134,7 +134,7 @@ public class Vote(InteractiveService interactivity) : MewdekoModuleBase<VoteServ
             }
             else
             {
-                await ctx.Channel.SendConfirmAsync($"{role.Mention} added as a vote role.");
+                await ctx.Channel.SendConfirmAsync(Strings.VoteRoleAdded(ctx.Guild.Id, role.Mention));
             }
         }
     }
@@ -176,11 +176,11 @@ public class Vote(InteractiveService interactivity) : MewdekoModuleBase<VoteServ
         else
         {
             var eb = new EmbedBuilder()
-                .WithTitle($"{roles.Count} Vote Roles")
+                .WithTitle(Strings.VoteRolesTitle(ctx.Guild.Id, roles.Count))
                 .WithOkColor()
                 .WithDescription(string.Join("\n",
                     roles.Select(x =>
-                        $"<@&{x.RoleId}>: {(x.Timer == 0 ? "No Timer." : $"{TimeSpan.FromSeconds(x.Timer).Humanize()}")}")));
+                        $"<@&{x.RoleId}>: {(x.Timer == 0 ? Strings.None(ctx.Guild.Id) : $"{TimeSpan.FromSeconds(x.Timer).Humanize()}")}")));
             await ctx.Channel.SendMessageAsync(embed: eb.Build());
         }
     }
@@ -222,7 +222,7 @@ public class Vote(InteractiveService interactivity) : MewdekoModuleBase<VoteServ
         var update = await Service.UpdateTimer(role.Id, (int)time.Time.TotalSeconds);
         if (!update.Item1)
             await ctx.Channel.SendErrorAsync(
-                $"Updating vote role time failed due to the following reason:\n{Format.Code(update.Item2)}", Config);
+                Strings.VoteRoleUpdateFailed(ctx.Guild.Id, Format.Code(update.Item2)), Config);
         else
             await ctx.Channel.SendConfirmAsync($"Successfuly updated the vote role time to {time.Time.Humanize()}");
     }
@@ -243,7 +243,7 @@ public class Vote(InteractiveService interactivity) : MewdekoModuleBase<VoteServ
         {
             var component = new ComponentBuilder().WithButton(
                 "Press this to set the password. Remember, do not share it to anyone else.", "setvotepassword");
-            await ctx.Channel.SendMessageAsync("_ _", components: component.Build());
+            await ctx.Channel.SendMessageAsync(Strings.EmptyResponse(ctx.Guild.Id), components: component.Build());
         }
     }
 

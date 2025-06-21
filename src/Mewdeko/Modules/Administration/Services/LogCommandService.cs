@@ -3,6 +3,7 @@ using Discord.Rest;
 using LinqToDB;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Modules.Moderation.Services;
+using Mewdeko.Services.Strings;
 using Serilog;
 using DiscordShardedClient = Discord.WebSocket.DiscordShardedClient;
 
@@ -15,11 +16,13 @@ namespace Mewdeko.Modules.Administration.Services;
 /// <param name="client">The Discord client.</param>
 /// <param name="handler">The event handler.</param>
 /// <param name="muteService">The mute service.</param>
+/// <param name="strings">The localization service.</param>
 public class LogCommandService(
     IDataConnectionFactory dbFactory,
     DiscordShardedClient client,
     EventHandler handler,
-    MuteService muteService) : INService, IReadyExecutor
+    MuteService muteService,
+    GeneratedBotStrings strings) : INService, IReadyExecutor
 {
     /// <summary>
     ///     Log category types.
@@ -231,16 +234,16 @@ public class LogCommandService(
 
             var eb = new EmbedBuilder()
                 .WithOkColor()
-                .WithTitle("Role Created")
-                .WithDescription($"`Name:` {args.Name}\n" +
-                                 $"`Id:` {args.Id}\n" +
-                                 $"`Color:` {args.Color}\n" +
-                                 $"`Hoisted:` {args.IsHoisted}\n" +
-                                 $"`Mentionable:` {args.IsMentionable}\n" +
-                                 $"`Position:` {args.Position}\n" +
-                                 $"`Permissions:` {string.Join(", ", args.Permissions.ToList())}\n" +
-                                 $"`Created By:` {auditLog.User.Mention} | {auditLog.User.Id}\n" +
-                                 $"`Managed:` {args.IsManaged}");
+                .WithTitle(strings.RoleCreated(args.Guild.Id))
+                .WithDescription(strings.NameField(args.Guild.Id, args.Name) +
+                                 strings.IdField(args.Guild.Id, args.Id) +
+                                 strings.ColorField(args.Guild.Id, args.Color) +
+                                 strings.HoistedField(args.Guild.Id, args.IsHoisted) +
+                                 strings.MentionableField(args.Guild.Id, args.IsMentionable) +
+                                 strings.PositionField(args.Guild.Id, args.Position) +
+                                 strings.PermissionsField(args.Guild.Id, string.Join(", ", args.Permissions.ToList())) +
+                                 strings.CreatedByField(args.Guild.Id, auditLog.User.Mention, auditLog.User.Id) +
+                                 strings.ManagedField(args.Guild.Id, args.IsManaged));
 
             await channel.SendMessageAsync(embed: eb.Build());
         }
@@ -272,56 +275,75 @@ public class LogCommandService(
             var updatedByStr = $"`Updated By:` {auditLog.User.Mention} | {auditLog.User.Id}";
 
             if (args.Name != arsg2.Name)
-                eb.WithOkColor().WithTitle("Server Name Updated")
-                    .WithDescription($"`New Name:` {arsg2.Name}\n`Old Name:` {args.Name}\n{updatedByStr}");
+                eb.WithOkColor().WithTitle(strings.ServerNameUpdated(args.Id))
+                    .WithDescription(strings.ServerNameChangeDescription(args.Id, arsg2.Name, args.Name, updatedByStr));
             else if (args.IconUrl != arsg2.IconUrl)
-                eb.WithOkColor().WithTitle("Server Icon Updated").WithDescription(updatedByStr)
+                eb.WithOkColor().WithTitle(strings.ServerIconUpdated(args.Id)).WithDescription(updatedByStr)
                     .WithThumbnailUrl(args.IconUrl).WithImageUrl(arsg2.IconUrl);
             else if (args.BannerUrl != arsg2.BannerUrl)
-                eb.WithOkColor().WithTitle("Server Banner Updated").WithDescription(updatedByStr)
+                eb.WithOkColor().WithTitle(strings.ServerBannerUpdated(args.Id)).WithDescription(updatedByStr)
                     .WithThumbnailUrl(args.BannerUrl).WithImageUrl(arsg2.BannerUrl);
             else if (args.SplashUrl != arsg2.SplashUrl)
-                eb.WithOkColor().WithTitle("Server Splash Updated").WithDescription(updatedByStr)
+                eb.WithOkColor().WithTitle(strings.ServerSplashUpdated(args.Id)).WithDescription(updatedByStr)
                     .WithThumbnailUrl(args.SplashUrl).WithImageUrl(arsg2.SplashUrl);
             else if (args.VanityURLCode != arsg2.VanityURLCode)
-                eb.WithOkColor().WithTitle("Server Vanity URL Updated").WithDescription(
-                    $"`New Vanity URL:` {arsg2.VanityURLCode ?? "None"}\n`Old Vanity URL:` {args.VanityURLCode ?? "None"}\n{updatedByStr}");
+                eb.WithOkColor().WithTitle(strings.ServerVanityUrlUpdated(args.Id)).WithDescription(
+                    strings.ServerVanityUrlChange(args.Id, arsg2.VanityURLCode ?? strings.None(args.Id),
+                        args.VanityURLCode ?? strings.None(args.Id), updatedByStr));
             else if (args.OwnerId != arsg2.OwnerId)
-                eb.WithOkColor().WithTitle("Server Owner Updated").WithDescription(
-                    $"`New Owner:` {arsg2.Owner.Mention} | {arsg2.Owner.Id}\n`Old Owner:` {args.Owner.Mention} | {args.Owner.Id}\n{updatedByStr}");
+                eb.WithOkColor().WithTitle(strings.ServerOwnerUpdated(args.Id)).WithDescription(
+                    strings.ServerOwnerChange(args.Id, arsg2.Owner.Mention, arsg2.Owner.Id, args.Owner.Mention,
+                        args.Owner.Id, updatedByStr));
             else if (args.AFKChannel?.Id != arsg2.AFKChannel?.Id)
-                eb.WithOkColor().WithTitle("Server AFK Channel Updated").WithDescription(
-                    $"`New AFK Channel:` {arsg2.AFKChannel?.Mention ?? "None"} | {arsg2.AFKChannel?.Id.ToString() ?? "N/A"}\n`Old AFK Channel:` {args.AFKChannel?.Mention ?? "None"} | {args.AFKChannel?.Id.ToString() ?? "N/A"}\n{updatedByStr}");
+                eb.WithOkColor().WithTitle(strings.ServerAfkChannelUpdated(args.Id)).WithDescription(
+                    strings.ServerAfkChannelChange(args.Id, arsg2.AFKChannel?.Mention ?? strings.None(args.Id),
+                        arsg2.AFKChannel?.Id.ToString() ?? "N/A", args.AFKChannel?.Mention ?? strings.None(args.Id),
+                        args.AFKChannel?.Id.ToString() ?? "N/A", updatedByStr));
             else if (args.AFKTimeout != arsg2.AFKTimeout)
-                eb.WithOkColor().WithTitle("Server AFK Timeout Updated").WithDescription(
-                    $"`New AFK Timeout:` {arsg2.AFKTimeout}\n`Old AFK Timeout:` {args.AFKTimeout}\n{updatedByStr}");
+                eb.WithOkColor().WithTitle(strings.ServerAfkTimeoutUpdated(args.Id)).WithDescription(
+                    strings.ServerAfkTimeoutChange(args.Id, arsg2.AFKTimeout, args.AFKTimeout, updatedByStr));
             else if (args.DefaultMessageNotifications != arsg2.DefaultMessageNotifications)
-                eb.WithOkColor().WithTitle("Server Default Message Notifications Updated").WithDescription(
-                    $"`New Default Message Notifications:` {arsg2.DefaultMessageNotifications}\n`Old Default Message Notifications:` {args.DefaultMessageNotifications}\n{updatedByStr}");
+                eb.WithOkColor().WithTitle(strings.ServerDefaultNotificationsUpdated(args.Id)).WithDescription(
+                    strings.ServerDefaultNotificationsChange(args.Id, arsg2.DefaultMessageNotifications,
+                        args.DefaultMessageNotifications, updatedByStr));
             else if (args.ExplicitContentFilter != arsg2.ExplicitContentFilter)
-                eb.WithOkColor().WithTitle("Server Explicit Content Filter Updated").WithDescription(
-                    $"`New Explicit Content Filter:` {arsg2.ExplicitContentFilter}\n`Old Explicit Content Filter:` {args.ExplicitContentFilter}\n{updatedByStr}");
+                eb.WithOkColor().WithTitle(strings.ServerExplicitContentFilterUpdated(args.Id)).WithDescription(
+                    strings.ServerExplicitContentFilterChange(args.Id, arsg2.ExplicitContentFilter,
+                        args.ExplicitContentFilter, updatedByStr));
             else if (args.MfaLevel != arsg2.MfaLevel)
-                eb.WithOkColor().WithTitle("Server MFA Level Updated").WithDescription(
-                    $"`New MFA Level:` {arsg2.MfaLevel}\n`Old MFA Level:` {args.MfaLevel}\n{updatedByStr}");
+                eb.WithOkColor().WithTitle(strings.ServerMfaLevelUpdated(args.Id)).WithDescription(
+                    strings.ServerMfaLevelChange(args.Id, arsg2.MfaLevel, args.MfaLevel, updatedByStr));
             else if (args.VerificationLevel != arsg2.VerificationLevel)
-                eb.WithOkColor().WithTitle("Server Verification Level Updated").WithDescription(
-                    $"`New Verification Level:` {arsg2.VerificationLevel}\n`Old Verification Level:` {args.VerificationLevel}\n{updatedByStr}");
+                eb.WithOkColor().WithTitle(strings.ServerVerificationLevelUpdated(args.Id)).WithDescription(
+                    strings.ServerVerificationLevelChange(args.Id, arsg2.VerificationLevel, args.VerificationLevel,
+                        updatedByStr));
             else if (args.SystemChannel?.Id != arsg2.SystemChannel?.Id)
-                eb.WithOkColor().WithTitle("Server System Channel Updated").WithDescription(
-                    $"`New System Channel:` {arsg2.SystemChannel?.Mention ?? "None"} | {arsg2.SystemChannel?.Id.ToString() ?? "N/A"}\n`Old System Channel:` {args.SystemChannel?.Mention ?? "None"} | {args.SystemChannel?.Id.ToString() ?? "N/A"}\n{updatedByStr}");
+                eb.WithOkColor().WithTitle(strings.ServerSystemChannelUpdated(args.Id)).WithDescription(
+                    strings.ServerSystemChannelChange(args.Id, arsg2.SystemChannel?.Mention ?? strings.None(args.Id),
+                        arsg2.SystemChannel?.Id.ToString() ?? "N/A",
+                        args.SystemChannel?.Mention ?? strings.None(args.Id),
+                        args.SystemChannel?.Id.ToString() ?? "N/A", updatedByStr));
             else if (args.RulesChannel?.Id != arsg2.RulesChannel?.Id)
-                eb.WithOkColor().WithTitle("Server Rules Channel Updated").WithDescription(
-                    $"`New Rules Channel:` {arsg2.RulesChannel?.Mention ?? "None"} | {arsg2.RulesChannel?.Id.ToString() ?? "N/A"}\n`Old Rules Channel:` {args.RulesChannel?.Mention ?? "None"} | {args.RulesChannel?.Id.ToString() ?? "N/A"}\n{updatedByStr}");
+                eb.WithOkColor().WithTitle(strings.ServerRulesChannelUpdated(args.Id)).WithDescription(
+                    strings.ServerRulesChannelChange(args.Id, arsg2.RulesChannel?.Mention ?? strings.None(args.Id),
+                        arsg2.RulesChannel?.Id.ToString() ?? "N/A", args.RulesChannel?.Mention ?? strings.None(args.Id),
+                        args.RulesChannel?.Id.ToString() ?? "N/A", updatedByStr));
             else if (args.PublicUpdatesChannel?.Id != arsg2.PublicUpdatesChannel?.Id)
-                eb.WithOkColor().WithTitle("Server Public Updates Channel Updated").WithDescription(
-                    $"`New Public Updates Channel:` {arsg2.PublicUpdatesChannel?.Mention ?? "None"} | {arsg2.PublicUpdatesChannel?.Id.ToString() ?? "N/A"}\n`Old Public Updates Channel:` {args.PublicUpdatesChannel?.Mention ?? "None"} | {args.PublicUpdatesChannel?.Id.ToString() ?? "N/A"}\n{updatedByStr}");
+                eb.WithOkColor().WithTitle(strings.ServerPublicUpdatesChannelUpdated(args.Id)).WithDescription(
+                    strings.ServerPublicUpdatesChannelChange(args.Id,
+                        arsg2.PublicUpdatesChannel?.Mention ?? strings.None(args.Id),
+                        arsg2.PublicUpdatesChannel?.Id.ToString() ?? "N/A",
+                        args.PublicUpdatesChannel?.Mention ?? strings.None(args.Id),
+                        args.PublicUpdatesChannel?.Id.ToString() ?? "N/A", updatedByStr));
             else if (args.MaxVideoChannelUsers != arsg2.MaxVideoChannelUsers)
-                eb.WithOkColor().WithTitle("Server Max Video Channel Users Updated").WithDescription(
-                    $"`New Max Video Channel Users:` {arsg2.MaxVideoChannelUsers?.ToString() ?? "Unlimited"}\n`Old Max Video Channel Users:` {args.MaxVideoChannelUsers?.ToString() ?? "Unlimited"}\n{updatedByStr}");
+                eb.WithOkColor().WithTitle(strings.ServerMaxVideoUsersUpdated(args.Id)).WithDescription(
+                    strings.ServerMaxVideoUsersChange(args.Id,
+                        arsg2.MaxVideoChannelUsers?.ToString() ?? strings.Unlimited(args.Id),
+                        args.MaxVideoChannelUsers?.ToString() ?? strings.Unlimited(args.Id), updatedByStr));
             else if (args.MaxMembers != arsg2.MaxMembers)
-                eb.WithOkColor().WithTitle("Server Max Members Updated").WithDescription(
-                    $"`New Max Members:` {arsg2.MaxMembers?.ToString() ?? "N/A"}\n`Old Max Members:` {args.MaxMembers?.ToString() ?? "N/A"}\n{updatedByStr}");
+                eb.WithOkColor().WithTitle(strings.ServerMaxMembersUpdated(args.Id)).WithDescription(
+                    strings.ServerMaxMembersChange(args.Id, arsg2.MaxMembers?.ToString() ?? "N/A",
+                        args.MaxMembers?.ToString() ?? "N/A", updatedByStr));
             else
                 return;
 
@@ -353,11 +375,12 @@ public class LogCommandService(
 
             var eb = new EmbedBuilder()
                 .WithOkColor()
-                .WithTitle("Role Deleted")
-                .WithDescription($"`Role:` {args.Name}\n" +
-                                 $"`Id:` {args.Id}\n" +
-                                 $"`Deleted By:` {auditLog.User.Mention} | {auditLog.User.Id}\n" +
-                                 $"`Deleted At:` {DateTime.UtcNow:dd/MM/yyyy HH:mm:ss}");
+                .WithTitle(strings.RoleDeleted(args.Guild.Id))
+                .WithDescription(strings.RoleField(args.Guild.Id, args.Name) +
+                                 strings.IdField(args.Guild.Id, args.Id) +
+                                 strings.DeletedByField(args.Guild.Id, auditLog.User.Mention, auditLog.User.Id) +
+                                 strings.DeletedAtField(args.Guild.Id,
+                                     DateTime.UtcNow.ToString("dd/MM/yyyy HH:mm:ss")));
 
             await channel.SendMessageAsync(embed: eb.Build());
         }
@@ -390,28 +413,31 @@ public class LogCommandService(
             var roleStr = $"`Role:` {args.Mention} | {args.Id}";
 
             if (args.Name != arsg2.Name)
-                eb.WithOkColor().WithTitle("Role Name Updated")
-                    .WithDescription($"`New Role Name:` {arsg2.Name}\n`Old Role Name:` {args.Name}\n{updatedByStr}");
+                eb.WithOkColor().WithTitle(strings.RoleNameUpdated(args.Guild.Id))
+                    .WithDescription(strings.RoleNameChange(args.Guild.Id, arsg2.Name, args.Name, updatedByStr));
             else if (args.Color != arsg2.Color)
-                eb.WithColor(arsg2.Color).WithTitle("Role Color Updated").WithDescription(
-                    $"{roleStr}\n`New Role Color:` {arsg2.Color}\n`Old Role Color:` {args.Color}\n{updatedByStr}");
+                eb.WithColor(arsg2.Color).WithTitle(strings.RoleColorUpdated(args.Guild.Id)).WithDescription(
+                    strings.RoleColorChange(args.Guild.Id, roleStr, arsg2.Color, args.Color, updatedByStr));
             else if (args.IsHoisted != arsg2.IsHoisted)
-                eb.WithOkColor().WithTitle("Role Property Hoisted Updated").WithDescription(
-                    $"{roleStr}\n`New Role Hoisted:` {arsg2.IsHoisted}\n`Old Role Hoisted:` {args.IsHoisted}\n{updatedByStr}");
+                eb.WithOkColor().WithTitle(strings.RoleHoistedUpdated(args.Guild.Id)).WithDescription(
+                    strings.RoleHoistedChange(args.Guild.Id, roleStr, arsg2.IsHoisted, args.IsHoisted, updatedByStr));
             else if (args.IsMentionable != arsg2.IsMentionable)
-                eb.WithOkColor().WithTitle("Role Property Mentionable Updated").WithDescription(
-                    $"{roleStr}\n`New Role Mentionable:` {arsg2.IsMentionable}\n`Old Role Mentionable:` {args.IsMentionable}\n{updatedByStr}");
+                eb.WithOkColor().WithTitle(strings.RoleMentionableUpdated(args.Guild.Id)).WithDescription(
+                    strings.RoleMentionableChange(args.Guild.Id, roleStr, arsg2.IsMentionable, args.IsMentionable,
+                        updatedByStr));
             else if (args.IsManaged != arsg2.IsManaged)
-                eb.WithOkColor().WithTitle("Role Property Managed Updated").WithDescription(
-                    $"{roleStr}\n`New Role Managed:` {arsg2.IsManaged}\n`Old Role Managed:` {args.IsManaged}\n{updatedByStr}");
+                eb.WithOkColor().WithTitle(strings.RoleManagedUpdated(args.Guild.Id)).WithDescription(
+                    strings.RoleManagedChange(args.Guild.Id, roleStr, arsg2.IsManaged, args.IsManaged, updatedByStr));
             else if (args.Position != arsg2.Position)
-                eb.WithOkColor().WithTitle("Role Position Updated").WithDescription(
-                    $"{roleStr}\n`New Role Position:` {arsg2.Position}\n`Old Role Position:` {args.Position}\n{updatedByStr}");
+                eb.WithOkColor().WithTitle(strings.RolePositionUpdated(args.Guild.Id)).WithDescription(
+                    strings.RolePositionChange(args.Guild.Id, roleStr, arsg2.Position, args.Position, updatedByStr));
             else if (!arsg2.Permissions.Equals(args.Permissions))
-                eb.WithOkColor().WithTitle("Role Permissions Updated").WithDescription(
-                    $"{roleStr}\n`New Role Permissions:` {arsg2.Permissions}\n`Old Role Permissions:` {args.Permissions}\n{updatedByStr}");
+                eb.WithOkColor().WithTitle(strings.RolePermissionsUpdated(args.Guild.Id)).WithDescription(
+                    strings.RolePermissionsChange(args.Guild.Id, roleStr, arsg2.Permissions, args.Permissions,
+                        updatedByStr));
             else if (args.Icon != arsg2.Icon || args.Emoji?.ToString() != arsg2.Emoji?.ToString())
-                eb.WithOkColor().WithTitle("Role Icon Updated").WithDescription($"{roleStr}\n{updatedByStr}")
+                eb.WithOkColor().WithTitle(strings.RoleIconUpdated(args.Guild.Id))
+                    .WithDescription(strings.RoleIconChange(args.Guild.Id, roleStr, updatedByStr))
                     .WithThumbnailUrl(arsg2.GetIconUrl() ?? args.GetIconUrl());
             else
                 return; // No detectable change handled
@@ -439,8 +465,8 @@ public class LogCommandService(
 
             var eb = new EmbedBuilder()
                 .WithOkColor()
-                .WithTitle("Event Created")
-                .WithDescription($"`Event:` {args.Name}\n" +
+                .WithTitle(strings.EventCreated(args.Guild.Id))
+                .WithDescription(strings.EventField(args.GuildId, args.Name) +
                                  $"`Created By:` {args.Creator?.Mention ?? "N/A"} | {args.Creator?.Id.ToString() ?? "N/A"}\n" +
                                  $"`Created At:` {DateTime.UtcNow:dd/MM/yyyy HH:mm:ss}\n" +
                                  $"`Description:` {args.Description}\n" +
@@ -509,10 +535,10 @@ public class LogCommandService(
 
         var eb = new EmbedBuilder()
             .WithOkColor()
-            .WithTitle("User Role(s) Added")
-            .WithDescription($"`Role(s):` {string.Join(", ", addedRoles.Select(x => x.Mention))}\n" +
-                             $"`Added By:` {auditLog.User.Mention} | {auditLog.User.Id}" +
-                             $"\n`Added To:` {arsg2.Mention} | {arsg2.Id}");
+            .WithTitle(strings.UserRolesAdded(arsg2.Guild.Id))
+            .WithDescription(strings.RolesField(arsg2.Guild.Id, string.Join(", ", addedRoles.Select(x => x.Mention))) +
+                             strings.AddedByField(arsg2.Guild.Id, auditLog.User.Mention, auditLog.User.Id) +
+                             strings.AddedToField(arsg2.Guild.Id, arsg2.Mention, arsg2.Id));
 
         await channel.SendMessageAsync(embed: eb.Build());
     }
@@ -544,10 +570,11 @@ public class LogCommandService(
 
         var eb = new EmbedBuilder()
             .WithOkColor()
-            .WithTitle("User Role(s) Removed")
-            .WithDescription($"`Role(s):` {string.Join(", ", removedRoles.Select(x => x.Mention))}\n" +
-                             $"`Removed By:` {auditLog.User.Mention} | {auditLog.User.Id}" +
-                             $"\n`Removed From:` {arsg2.Mention} | {arsg2.Id}");
+            .WithTitle(strings.UserRolesRemoved(arsg2.Guild.Id))
+            .WithDescription(
+                strings.RolesField(arsg2.Guild.Id, string.Join(", ", removedRoles.Select(x => x.Mention))) +
+                strings.RemovedByField(arsg2.Guild.Id, auditLog.User.Mention, auditLog.User.Id) +
+                strings.RemovedFromField(arsg2.Guild.Id, arsg2.Mention, arsg2.Id));
 
         await channel.SendMessageAsync(embed: eb.Build());
     }
@@ -578,11 +605,11 @@ public class LogCommandService(
 
                 var eb = new EmbedBuilder()
                     .WithOkColor()
-                    .WithTitle("Username Updated")
+                    .WithTitle(strings.UsernameUpdated(guild.Id))
                     .WithDescription(
-                        $"`User:` {user.Mention} | {user.Id}\n" +
-                        $"`Old Username:` {args.Username}\n" +
-                        $"`New Username:` {arsg2.Username}");
+                        strings.UserField(guild.Id, user.Mention, user.Id) +
+                        strings.OldUsernameField(guild.Id, args.Username) +
+                        strings.NewUsernameField(guild.Id, arsg2.Username));
 
                 await channel.SendMessageAsync(embed: eb.Build());
             }
@@ -614,12 +641,12 @@ public class LogCommandService(
 
             var eb = new EmbedBuilder()
                 .WithOkColor()
-                .WithTitle("Nickname Updated")
+                .WithTitle(strings.NicknameUpdated(arsg2.Guild.Id))
                 .WithDescription(
-                    $"`User:` {arsg2.Mention} | {arsg2.Id}\n" +
-                    $"`Old Nickname:` {cacheable.Value.Nickname ?? cacheable.Value.Username}\n" +
-                    $"`New Nickname:` {arsg2.Nickname ?? arsg2.Username}\n" +
-                    $"`Updated By:` {entry.User.Mention} | {entry.User.Id}");
+                    strings.UserField(arsg2.Guild.Id, arsg2.Mention, arsg2.Id) +
+                    strings.OldNicknameField(arsg2.Guild.Id, cacheable.Value.Nickname ?? cacheable.Value.Username) +
+                    strings.NewNicknameField(arsg2.Guild.Id, arsg2.Nickname ?? arsg2.Username) +
+                    strings.UpdatedByField(arsg2.Guild.Id, entry.User.Mention, entry.User.Id));
 
             await channel.SendMessageAsync(embed: eb.Build());
         }
@@ -650,11 +677,11 @@ public class LogCommandService(
 
             var eb = new EmbedBuilder()
                 .WithOkColor()
-                .WithTitle("Thread Deleted")
+                .WithTitle(strings.ThreadDeleted(deletedThread.Guild.Id))
                 .WithDescription(
-                    $"`Thread Name:` {deletedThread.Name}\n" +
-                    $"`Thread Id:` {deletedThread.Id}\n" +
-                    $"`Deleted By:` {entry.User.Mention} | {entry.User.Id}");
+                    strings.ThreadNameField(deletedThread.Guild.Id, deletedThread.Name) +
+                    strings.ThreadIdField(deletedThread.Guild.Id, deletedThread.Id) +
+                    strings.DeletedByField(deletedThread.Guild.Id, entry.User.Mention, entry.User.Id));
 
             await channel.SendMessageAsync(embed: eb.Build());
         }
@@ -688,20 +715,24 @@ public class LogCommandService(
             var threadIdStr = $"`Thread:` {arsg2.Mention} | {arsg2.Id}";
 
             if (oldThread.Name != arsg2.Name)
-                eb.WithOkColor().WithTitle("Thread Name Updated").WithDescription(
-                    $"{threadIdStr}\n`Old Thread Name:` {oldThread.Name}\n`New Thread Name:` {arsg2.Name}\n{updatedByStr}");
+                eb.WithOkColor().WithTitle(strings.ThreadNameUpdated(arsg2.Guild.Id)).WithDescription(
+                    strings.ThreadNameChange(arsg2.Guild.Id, threadIdStr, oldThread.Name, arsg2.Name, updatedByStr));
             else if (oldThread.IsArchived != arsg2.IsArchived)
-                eb.WithOkColor().WithTitle("Thread Archival Status Updated").WithDescription(
-                    $"{threadIdStr}\nBefore: {oldThread.IsArchived}\nAfter: {arsg2.IsArchived}\n{updatedByStr}");
+                eb.WithOkColor().WithTitle(strings.ThreadArchiveStatusUpdated(arsg2.Guild.Id)).WithDescription(
+                    strings.ThreadArchiveStatusChange(arsg2.Guild.Id, threadIdStr, oldThread.IsArchived,
+                        arsg2.IsArchived, updatedByStr));
             else if (oldThread.IsLocked != arsg2.IsLocked)
-                eb.WithOkColor().WithTitle("Thread Lock Status Updated").WithDescription(
-                    $"{threadIdStr}\nBefore: {oldThread.IsLocked}\nAfter: {arsg2.IsLocked}\n{updatedByStr}");
+                eb.WithOkColor().WithTitle(strings.ThreadLockStatusUpdated(arsg2.Guild.Id)).WithDescription(
+                    strings.ThreadLockStatusChange(arsg2.Guild.Id, threadIdStr, oldThread.IsLocked, arsg2.IsLocked,
+                        updatedByStr));
             else if (oldThread.SlowModeInterval != arsg2.SlowModeInterval)
-                eb.WithOkColor().WithTitle("Thread Slow Mode Interval Updated").WithDescription(
-                    $"{threadIdStr}\n`Old Interval:` {oldThread.SlowModeInterval}s\n`New Interval:` {arsg2.SlowModeInterval}s\n{updatedByStr}");
+                eb.WithOkColor().WithTitle(strings.ThreadSlowModeUpdated(arsg2.Guild.Id)).WithDescription(
+                    strings.ThreadSlowModeChange(arsg2.Guild.Id, threadIdStr, oldThread.SlowModeInterval,
+                        arsg2.SlowModeInterval, updatedByStr));
             else if (oldThread.AutoArchiveDuration != arsg2.AutoArchiveDuration)
-                eb.WithOkColor().WithTitle("Thread Auto Archive Duration Updated").WithDescription(
-                    $"{threadIdStr}\n`Old Duration:` {oldThread.AutoArchiveDuration}\n`New Duration:` {arsg2.AutoArchiveDuration}\n{updatedByStr}");
+                eb.WithOkColor().WithTitle(strings.ThreadAutoArchiveUpdated(arsg2.Guild.Id)).WithDescription(
+                    strings.ThreadAutoArchiveChange(arsg2.Guild.Id, threadIdStr, oldThread.AutoArchiveDuration,
+                        arsg2.AutoArchiveDuration, updatedByStr));
             else
                 return; // No detectable change handled
 
@@ -735,13 +766,13 @@ public class LogCommandService(
 
             var eb = new EmbedBuilder()
                 .WithOkColor()
-                .WithTitle("Message Updated")
+                .WithTitle(strings.MessageUpdated(guildChannel.Guild.Id))
                 .WithDescription(
-                    $"`Message Author:` {oldMessage.Author.Mention} | {oldMessage.Author.Id}\n" +
-                    $"`Message Channel:` {guildChannel.Mention} | {guildChannel.Id}\n" +
-                    $"`Message Id:` {oldMessage.Id}\n" +
-                    $"`Old Message Content:` {oldMessage.Content.TrimTo(500)}\n" + // Trim content
-                    $"`Updated Message Content:` {args2.Content.TrimTo(500)}"); // Trim content
+                    strings.MessageAuthorField(guildChannel.Guild.Id, oldMessage.Author.Mention, oldMessage.Author.Id) +
+                    strings.MessageChannelField(guildChannel.Guild.Id, guildChannel.Mention, guildChannel.Id) +
+                    strings.MessageIdField(guildChannel.Guild.Id, oldMessage.Id) +
+                    strings.OldMessageContentField(guildChannel.Guild.Id, oldMessage.Content.TrimTo(500)) +
+                    strings.UpdatedMessageContentField(guildChannel.Guild.Id, args2.Content.TrimTo(500)));
 
             var component = new ComponentBuilder()
                 .WithButton("Jump to Message", style: ButtonStyle.Link, url: oldMessage.GetJumpUrl()).Build();
@@ -793,20 +824,23 @@ public class LogCommandService(
 
             var eb = new EmbedBuilder()
                 .WithOkColor()
-                .WithTitle("Message Deleted")
+                .WithTitle(strings.MessageDeleted(guildChannel.Guild.Id))
                 .WithDescription(
-                    $"`Message Author:` {message.Author.Mention} | {message.Author.Id}\n" +
-                    $"`Message Channel:` {guildChannel.Mention} | {guildChannel.Id}\n" +
-                    $"`Message Content:` {message.Content.TrimTo(1000)}\n" + // Trim content
-                    $"`Deleted By:` {deleteUser?.Mention ?? "Unknown"} | {deleteUser?.Id.ToString() ?? "N/A"}");
+                    strings.MessageAuthorField(guildChannel.Guild.Id, message.Author.Mention, message.Author.Id) +
+                    strings.MessageChannelField(guildChannel.Guild.Id, guildChannel.Mention, guildChannel.Id) +
+                    strings.MessageContentField(guildChannel.Guild.Id, message.Content.TrimTo(1000)) +
+                    strings.DeletedByField(guildChannel.Guild.Id,
+                        deleteUser?.Mention ?? strings.Unknown(guildChannel.Guild.Id),
+                        deleteUser?.Id.ToString() ?? "N/A"));
 
 
             if (message.Attachments.Count > 0)
             {
-                eb.AddField("Attachments", $"{message.Attachments.Count} attachment(s) were included in this message.");
+                eb.AddField(strings.Attachments(guildChannel.Guild.Id),
+                    strings.AttachmentsMessage(guildChannel.Guild.Id, message.Attachments.Count));
                 foreach (var att in message.Attachments.Take(5))
                 {
-                    eb.AddField(att.Filename.TrimTo(50), $"Size: {att.Size} bytes", true);
+                    eb.AddField(att.Filename.TrimTo(50), strings.AttachmentSize(guildChannel.Guild.Id, att.Size), true);
                 }
             }
 
@@ -842,17 +876,20 @@ public class LogCommandService(
 
             var eb = new EmbedBuilder()
                 .WithOkColor()
-                .WithTitle("User Joined")
+                .WithTitle(strings.UserJoined(guildUser.Guild.Id))
                 .WithDescription(
-                    $"`User:` {guildUser.Mention} | {guildUser.Id}\n" +
-                    $"`Account Created:` {guildUser.CreatedAt:dd/MM/yyyy HH:mm:ss}\n" + // Added time
-                    $"`Joined Server:` {guildUser.JoinedAt:dd/MM/yyyy HH:mm:ss}\n" + // Added time
-                    $"`User Status:` {guildUser.Status}\n" +
-                    $"`User Global Name:` {guildUser.GlobalName ?? guildUser.Username}")
+                    strings.UserField(guildUser.Guild.Id, guildUser.Mention, guildUser.Id) +
+                    strings.AccountCreatedField(guildUser.Guild.Id,
+                        guildUser.CreatedAt.ToString("dd/MM/yyyy HH:mm:ss")) +
+                    strings.JoinedServerField(guildUser.Guild.Id,
+                        guildUser.JoinedAt?.ToString("dd/MM/yyyy HH:mm:ss") ?? "N/A") +
+                    strings.UserStatusField(guildUser.Guild.Id, guildUser.Status) +
+                    strings.UserGlobalNameField(guildUser.Guild.Id, guildUser.GlobalName ?? guildUser.Username))
                 .WithThumbnailUrl(guildUser.RealAvatarUrl().ToString());
 
             var component = new ComponentBuilder()
-                .WithButton("View User", style: ButtonStyle.Link, url: $"discord://-/users/{guildUser.Id}").Build();
+                .WithButton(strings.ViewUser(guildUser.Guild.Id), style: ButtonStyle.Link,
+                    url: $"discord://-/users/{guildUser.Id}").Build();
 
             await channel.SendMessageAsync(components: component, embed: eb.Build());
         }
@@ -904,15 +941,16 @@ public class LogCommandService(
                 .WithOkColor()
                 .WithTitle(title)
                 .WithDescription(
-                    $"`User:` {user.Mention} | {user.Id}\n" +
-                    $"`User Global Name:` {user.GlobalName ?? user.Username}\n" +
-                    $"`Account Created:` {user.CreatedAt:dd/MM/yyyy HH:mm:ss}") // Added time
+                    strings.UserField(guild.Id, user.Mention, user.Id) +
+                    strings.UserGlobalNameField(guild.Id, user.GlobalName ?? user.Username) +
+                    strings.AccountCreatedField(guild.Id, user.CreatedAt.ToString("dd/MM/yyyy HH:mm:ss")))
                 .WithThumbnailUrl(user.RealAvatarUrl().ToString());
 
             if (footer != null)
                 eb.WithFooter(footer);
 
-            var component = new ComponentBuilder().WithButton("View User (May not work)", style: ButtonStyle.Link,
+            var component = new ComponentBuilder().WithButton(strings.ViewUserMayNotWork(guild.Id),
+                style: ButtonStyle.Link,
                 url: $"discord://-/users/{user.Id}").Build();
 
             await channel.SendMessageAsync(components: component, embed: eb.Build());
@@ -938,7 +976,7 @@ public class LogCommandService(
 
             var eb = new EmbedBuilder()
                 .WithErrorColor() // Use error color for bans
-                .WithTitle("User Banned")
+                .WithTitle(strings.UserBanned(guild.Id))
                 .WithDescription(
                     $"`User:` {user.Mention} | {user.Id}\n" +
                     $"`User Global Name:` {user.GlobalName ?? user.Username}\n" +
@@ -972,7 +1010,7 @@ public class LogCommandService(
 
             var eb = new EmbedBuilder()
                 .WithOkColor()
-                .WithTitle("User Unbanned")
+                .WithTitle(strings.UserUnbanned(guild.Id))
                 .WithDescription(
                     $"`User:` {user.Mention} | {user.Id}\n" +
                     $"`User Global Name:` {user.GlobalName ?? user.Username}\n" +
@@ -1021,7 +1059,7 @@ public class LogCommandService(
                     logChannel = guild.GetTextChannel(logSetting.AvatarUpdatedId.Value);
                 if (logChannel is null)
                     return;
-                eb.WithTitle("User Avatar Updated")
+                eb.WithTitle(strings.UserAvatarUpdated(guild.Id))
                     .WithDescription($"`User:` {userInGuild.Mention} | {userInGuild.Id}")
                     .WithThumbnailUrl(args.RealAvatarUrl().ToString()) // Old avatar
                     .WithImageUrl(arsg2.RealAvatarUrl().ToString()); // New avatar
@@ -1034,7 +1072,7 @@ public class LogCommandService(
             if (logChannel is null)
                 return;
             eb = new EmbedBuilder().WithOkColor()
-                .WithTitle("User Global Name Updated")
+                .WithTitle(strings.UserGlobalNameUpdated(guild.Id))
                 .WithDescription(
                     $"`User:` {userInGuild.Mention} | {userInGuild.Id}\n" +
                     $"`Old Global Name:` {args.GlobalName ?? args.Username}\n" +
@@ -1078,7 +1116,7 @@ public class LogCommandService(
 
             var eb = new EmbedBuilder()
                 .WithOkColor()
-                .WithTitle("Channel Created")
+                .WithTitle(strings.ChannelCreated(channel.Guild.Id))
                 .WithDescription(
                     $"`Channel:` <#{channel.Id}> ({channel.Name}) | {channel.Id}\n" +
                     $"`Created By:` {entry?.User.Mention ?? "Unknown"} | {entry?.User.Id.ToString() ?? "N/A"}\n" +
@@ -1123,7 +1161,7 @@ public class LogCommandService(
 
             var eb = new EmbedBuilder()
                 .WithOkColor()
-                .WithTitle("Channel Destroyed")
+                .WithTitle(strings.ChannelDestroyed(channel.Guild.Id))
                 .WithDescription(
                     $"`Channel:` {channel.Name} | {channel.Id}\n" + // Cannot mention deleted channel
                     $"`Destroyed By:` {entry?.User.Mention ?? "Unknown"} | {entry?.User.Id.ToString() ?? "N/A"}\n" +
@@ -1166,8 +1204,9 @@ public class LogCommandService(
 
             if (channel.Name != channel2.Name)
             {
-                eb.WithTitle("Channel Name Updated").WithDescription(
-                    $"{channelIdStr}\n`Old Name:` {channel.Name}\n`New Name:` {channel2.Name}\n{updatedByStr}");
+                eb.WithTitle(strings.ChannelNameUpdated(channel.Guild.Id)).WithDescription(
+                    strings.ChannelNameChange(channel.Guild.Id, channelIdStr, channel.Name, channel2.Name,
+                        updatedByStr));
                 changed = true;
             }
             else if (channel.Position != channel2.Position)
@@ -1182,26 +1221,32 @@ public class LogCommandService(
             {
                 if (textChannel.Topic != textChannel2.Topic)
                 {
-                    eb.WithTitle("Channel Topic Updated").WithDescription(
-                        $"{channelIdStr}\n`Old Topic:` {textChannel.Topic?.TrimTo(100) ?? "None"}\n`New Topic:` {textChannel2.Topic?.TrimTo(100) ?? "None"}\n{updatedByStr}");
+                    eb.WithTitle(strings.ChannelTopicUpdated(channel.Guild.Id)).WithDescription(
+                        strings.ChannelTopicChange(channel.Guild.Id, channelIdStr,
+                            textChannel.Topic?.TrimTo(100) ?? strings.None(channel.Guild.Id),
+                            textChannel2.Topic?.TrimTo(100) ?? strings.None(channel.Guild.Id), updatedByStr));
                     changed = true;
                 }
                 else if (textChannel.IsNsfw != textChannel2.IsNsfw)
                 {
-                    eb.WithTitle("Channel NSFW Updated").WithDescription(
-                        $"{channelIdStr}\n`Old NSFW:` {textChannel.IsNsfw}\n`New NSFW:` {textChannel2.IsNsfw}\n{updatedByStr}");
+                    eb.WithTitle(strings.ChannelNsfwUpdated(channel.Guild.Id)).WithDescription(
+                        strings.ChannelNsfwChange(channel.Guild.Id, channelIdStr, textChannel.IsNsfw,
+                            textChannel2.IsNsfw, updatedByStr));
                     changed = true;
                 }
                 else if (textChannel.SlowModeInterval != textChannel2.SlowModeInterval)
                 {
-                    eb.WithTitle("Channel Slowmode Interval Updated").WithDescription(
-                        $"{channelIdStr}\n`Old Slowmode Interval:` {textChannel.SlowModeInterval}s\n`New Slowmode Interval:` {textChannel2.SlowModeInterval}s\n{updatedByStr}");
+                    eb.WithTitle(strings.ChannelSlowmodeUpdated(channel.Guild.Id)).WithDescription(
+                        strings.ChannelSlowmodeChange(channel.Guild.Id, channelIdStr, textChannel.SlowModeInterval,
+                            textChannel2.SlowModeInterval, updatedByStr));
                     changed = true;
                 }
                 else if (textChannel.CategoryId != textChannel2.CategoryId)
                 {
-                    eb.WithTitle("Channel Category Updated").WithDescription(
-                        $"{channelIdStr}\n`Old Category:` {textChannel.Category?.Name ?? "None"}\n`New Category:` {textChannel2.Category?.Name ?? "None"}\n{updatedByStr}");
+                    eb.WithTitle(strings.ChannelCategoryUpdated(channel.Guild.Id)).WithDescription(
+                        strings.ChannelCategoryChange(channel.Guild.Id, channelIdStr,
+                            textChannel.Category?.Name ?? strings.None(channel.Guild.Id),
+                            textChannel2.Category?.Name ?? strings.None(channel.Guild.Id), updatedByStr));
                     changed = true;
                 }
             }
@@ -1210,26 +1255,30 @@ public class LogCommandService(
             {
                 if (voiceChannel.Bitrate != voiceChannel2.Bitrate)
                 {
-                    eb.WithTitle("Channel Bitrate Updated").WithDescription(
-                        $"{channelIdStr}\n`Old Bitrate:` {voiceChannel.Bitrate / 1000}kbps\n`New Bitrate:` {voiceChannel2.Bitrate / 1000}kbps\n{updatedByStr}");
+                    eb.WithTitle(strings.ChannelBitrateUpdated(channel.Guild.Id)).WithDescription(
+                        strings.ChannelBitrateChange(channel.Guild.Id, channelIdStr, voiceChannel.Bitrate / 1000,
+                            voiceChannel2.Bitrate / 1000, updatedByStr));
                     changed = true;
                 }
                 else if (voiceChannel.UserLimit != voiceChannel2.UserLimit)
                 {
-                    eb.WithTitle("Channel User Limit Updated").WithDescription(
-                        $"{channelIdStr}\n`Old User Limit:` {voiceChannel.UserLimit?.ToString() ?? "Unlimited"}\n`New User Limit:` {voiceChannel2.UserLimit?.ToString() ?? "Unlimited"}\n{updatedByStr}");
+                    eb.WithTitle(strings.ChannelUserLimitUpdated(channel.Guild.Id)).WithDescription(
+                        strings.ChannelUserLimitChange(channel.Guild.Id, channelIdStr,
+                            voiceChannel.UserLimit?.ToString() ?? strings.Unlimited(channel.Guild.Id),
+                            voiceChannel2.UserLimit?.ToString() ?? strings.Unlimited(channel.Guild.Id), updatedByStr));
                     changed = true;
                 }
                 else if (voiceChannel.CategoryId != voiceChannel2.CategoryId)
                 {
                     eb.WithTitle("Channel Category Updated").WithDescription(
-                        $"{channelIdStr}\n`Old Category:` {voiceChannel.Category?.Name ?? "None"}\n`New Category:` {voiceChannel2.Category?.Name ?? "None"}\n{updatedByStr}");
+                        $"{channelIdStr}\n`Old Category:` {voiceChannel.Category?.Name ?? strings.None(channel.Guild.Id)}\n`New Category:` {voiceChannel2.Category?.Name ?? strings.None(channel.Guild.Id)}\n{updatedByStr}");
                     changed = true;
                 }
                 else if (voiceChannel.VideoQualityMode != voiceChannel2.VideoQualityMode)
                 {
-                    eb.WithTitle("Channel Video Quality Mode Updated").WithDescription(
-                        $"{channelIdStr}\n`Old Video Quality Mode:` {voiceChannel.VideoQualityMode}\n`New Video Quality Mode:` {voiceChannel2.VideoQualityMode}\n{updatedByStr}");
+                    eb.WithTitle(strings.ChannelVideoQualityUpdated(channel.Guild.Id)).WithDescription(
+                        strings.ChannelVideoQualityChange(channel.Guild.Id, channelIdStr, voiceChannel.VideoQualityMode,
+                            voiceChannel2.VideoQualityMode, updatedByStr));
                     changed = true;
                 }
             }
@@ -1269,14 +1318,17 @@ public class LogCommandService(
             if (oldState.VoiceChannel?.Id != newState.VoiceChannel?.Id)
             {
                 if (oldState.VoiceChannel != null && newState.VoiceChannel != null)
-                    eb.WithTitle("User Moved Voice Channels").WithDescription(
-                        $"{userInfo}\n`Old Channel:` {oldState.VoiceChannel.Name}\n`New Channel:` {newState.VoiceChannel.Name}");
+                    eb.WithTitle(strings.UserMovedVoiceChannels(guildUser.Guild.Id)).WithDescription(
+                        strings.UserMovedVoiceChannelsDesc(guildUser.Guild.Id, userInfo, oldState.VoiceChannel.Name,
+                            newState.VoiceChannel.Name));
                 else if (oldState.VoiceChannel == null && newState.VoiceChannel != null)
-                    eb.WithTitle("User Joined Voice Channel")
-                        .WithDescription($"{userInfo}\n`Channel:` {newState.VoiceChannel.Name}");
+                    eb.WithTitle(strings.UserJoinedVoiceChannel(guildUser.Guild.Id))
+                        .WithDescription(strings.UserJoinedVoiceChannelDesc(guildUser.Guild.Id, userInfo,
+                            newState.VoiceChannel.Name));
                 else if (oldState.VoiceChannel != null && newState.VoiceChannel == null)
-                    eb.WithTitle("User Left Voice Channel")
-                        .WithDescription($"{userInfo}\n`Channel:` {oldState.VoiceChannel.Name}");
+                    eb.WithTitle(strings.UserLeftVoiceChannel(guildUser.Guild.Id))
+                        .WithDescription(strings.UserLeftVoiceChannelDesc(guildUser.Guild.Id, userInfo,
+                            oldState.VoiceChannel.Name));
                 stateChanged = true;
             }
             // Mute/Deafen Status Changes (only log if channel didn't change, to avoid spam)
@@ -1285,29 +1337,43 @@ public class LogCommandService(
                 if (oldState.IsDeafened != newState.IsDeafened)
                 {
                     eb.WithTitle(newState.IsDeafened
-                            ? $"User {(!newState.IsSelfDeafened ? "Server Voice Deafened" : "Self Voice Deafened")}"
-                            : "User Voice UnDeafened")
-                        .WithDescription($"{userInfo}\n`Channel:` {newState.VoiceChannel.Name}");
+                            ? strings.UserVoiceDeafened(guildUser.Guild.Id,
+                                !newState.IsSelfDeafened
+                                    ? strings.Server(guildUser.Guild.Id)
+                                    : strings.Self(guildUser.Guild.Id))
+                            : strings.UserVoiceUndeafened(guildUser.Guild.Id))
+                        .WithDescription(strings.UserVoiceStateDesc(guildUser.Guild.Id, userInfo,
+                            newState.VoiceChannel.Name));
                     stateChanged = true;
                 }
                 else if (oldState.IsMuted != newState.IsMuted)
                 {
                     eb.WithTitle(newState.IsMuted
-                            ? $"User {(!newState.IsSelfMuted ? "Server Voice Muted" : "Self Voice Muted")}"
-                            : "User Voice UnMuted")
-                        .WithDescription($"{userInfo}\n`Channel:` {newState.VoiceChannel.Name}");
+                            ? strings.UserVoiceMuted(guildUser.Guild.Id,
+                                !newState.IsSelfMuted
+                                    ? strings.Server(guildUser.Guild.Id)
+                                    : strings.Self(guildUser.Guild.Id))
+                            : strings.UserVoiceUnmuted(guildUser.Guild.Id, user.Username))
+                        .WithDescription(strings.UserVoiceStateDesc(guildUser.Guild.Id, userInfo,
+                            newState.VoiceChannel.Name));
                     stateChanged = true;
                 }
                 else if (oldState.IsStreaming != newState.IsStreaming)
                 {
-                    eb.WithTitle(newState.IsStreaming ? "User Started Streaming" : "User Stopped Streaming")
-                        .WithDescription($"{userInfo}\n`Channel:` {newState.VoiceChannel.Name}");
+                    eb.WithTitle(newState.IsStreaming
+                            ? strings.UserStartedStreaming(guildUser.Guild.Id)
+                            : strings.UserStoppedStreaming(guildUser.Guild.Id))
+                        .WithDescription(strings.UserVoiceStateDesc(guildUser.Guild.Id, userInfo,
+                            newState.VoiceChannel.Name));
                     stateChanged = true;
                 }
                 else if (oldState.IsVideoing != newState.IsVideoing)
                 {
-                    eb.WithTitle(newState.IsVideoing ? "User Started Video" : "User Stopped Video")
-                        .WithDescription($"{userInfo}\n`Channel:` {newState.VoiceChannel.Name}");
+                    eb.WithTitle(newState.IsVideoing
+                            ? strings.UserStartedVideo(guildUser.Guild.Id)
+                            : strings.UserStoppedVideo(guildUser.Guild.Id))
+                        .WithDescription(strings.UserVoiceStateDesc(guildUser.Guild.Id, userInfo,
+                            newState.VoiceChannel.Name));
                     stateChanged = true;
                 }
             }

@@ -19,11 +19,13 @@ public static class ConfigurationPreview
         Dictionary<string, string> basicSettings,
         string modalConfig,
         Dictionary<string, string> behaviorSettings,
-        Dictionary<string, string> permissionSettings, string buttonPreviewLocalized)
+        Dictionary<string, string> permissionSettings,
+        string buttonPreviewLocalized,
+        string reviewButtonConfigLocalized)
     {
         var embed = new EmbedBuilder()
             .WithTitle(buttonPreviewLocalized)
-            .WithDescription("Review your button configuration:")
+            .WithDescription(reviewButtonConfigLocalized)
             .WithColor(GetStyleColor(ConfigurationParser.ParseButtonStyle(basicSettings.GetValueOrDefault("style"))));
 
         // Basic information

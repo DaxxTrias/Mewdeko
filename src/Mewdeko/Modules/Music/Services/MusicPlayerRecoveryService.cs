@@ -3,6 +3,7 @@ using Lavalink4NET;
 using Lavalink4NET.Players;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Modules.Music.CustomPlayer;
+using Mewdeko.Services.Strings;
 using Microsoft.Extensions.Options;
 using Serilog;
 
@@ -13,9 +14,10 @@ namespace Mewdeko.Modules.Music.Services;
 /// </summary>
 public class MusicPlayerRecoveryService : INService, IReadyExecutor
 {
-    private readonly IDataCache cache;
     private readonly IAudioService audioService;
+    private readonly IDataCache cache;
     private readonly DiscordShardedClient client;
+    private readonly GeneratedBotStrings strings;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="MusicPlayerRecoveryService" /> class.
@@ -24,15 +26,18 @@ public class MusicPlayerRecoveryService : INService, IReadyExecutor
     /// <param name="audioService">The audio service.</param>
     /// <param name="client">The Discord client.</param>
     /// <param name="services">The service provider.</param>
+    /// <param name="strings">The localization service.</param>
     public MusicPlayerRecoveryService(
         IDataCache cache,
         IAudioService audioService,
         DiscordShardedClient client,
-        IServiceProvider services)
+        IServiceProvider services,
+        GeneratedBotStrings strings)
     {
         this.cache = cache;
         this.audioService = audioService;
         this.client = client;
+        this.strings = strings;
     }
 
     /// <summary>
@@ -204,11 +209,11 @@ public class MusicPlayerRecoveryService : INService, IReadyExecutor
             try
             {
                 var resumeEmbed = new EmbedBuilder()
-                    .WithTitle("🎵 Music Playback Resumed")
-                    .WithDescription($"Reconnected to voice channel and resumed playback at position " +
+                    .WithTitle(strings.MusicResume(guild.Id))
+                    .WithDescription(strings.MusicReconnected(guild.Id) +
                                      $"{state.CurrentPosition:hh\\:mm\\:ss} after bot restart.")
                     .WithColor(new Color(30, 215, 96))
-                    .WithFooter($"Track: {currentTrack.Track.Title}")
+                    .WithFooter(strings.MusicTrackFooter(guild.Id, currentTrack.Track.Title))
                     .Build();
 
                 await messageChannel.SendMessageAsync(embed: resumeEmbed);

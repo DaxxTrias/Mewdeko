@@ -4,7 +4,6 @@ using LinqToDB;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Modules.UserProfile.Common;
 using Mewdeko.Modules.UserProfile.Services;
-
 using SkiaSharp;
 
 namespace Mewdeko.Modules.UserProfile;
@@ -60,7 +59,7 @@ public class UserProfile(IDataConnectionFactory dbFactory) : MewdekoModuleBase<U
         }
 
         await Service.SetBio(ctx.User, bio);
-        await ctx.Channel.SendConfirmAsync($"Your Profile Bio has been set to:\n{bio}");
+        await ctx.Channel.SendConfirmAsync(Strings.BioSet(ctx.Guild.Id, bio));
     }
 
     /// <summary>
@@ -75,7 +74,7 @@ public class UserProfile(IDataConnectionFactory dbFactory) : MewdekoModuleBase<U
         if (!result)
             await ctx.Channel.SendErrorAsync(Strings.ZodiacInvalid(ctx.Guild.Id), Config);
         else
-            await ctx.Channel.SendConfirmAsync($"Your Zodiac has been set to:\n`{zodiac}`");
+            await ctx.Channel.SendConfirmAsync(Strings.ZodiacSet(ctx.Guild.Id, zodiac));
     }
 
     /// <summary>
@@ -88,7 +87,7 @@ public class UserProfile(IDataConnectionFactory dbFactory) : MewdekoModuleBase<U
     {
         var discordColor = new Color(input.Red, input.Green, input.Blue);
         await Service.SetProfileColor(ctx.User, discordColor);
-        await ctx.Channel.SendConfirmAsync($"Your Profile Color has been set to:\n`{input}`");
+        await ctx.Channel.SendConfirmAsync(Strings.ProfileColorSet(ctx.Guild.Id, input));
     }
 
     /// <summary>
@@ -100,7 +99,7 @@ public class UserProfile(IDataConnectionFactory dbFactory) : MewdekoModuleBase<U
     public async Task SetBirthday([Remainder] DateTime dateTime)
     {
         await Service.SetBirthday(ctx.User, dateTime);
-        await ctx.Channel.SendConfirmAsync($"Your birthday has been set to {dateTime:d}");
+        await ctx.Channel.SendConfirmAsync(Strings.BirthdaySet(ctx.Guild.Id, dateTime.ToString("d")));
     }
 
     /// <summary>
@@ -160,13 +159,13 @@ public class UserProfile(IDataConnectionFactory dbFactory) : MewdekoModuleBase<U
         if (!url.IsImage())
         {
             await ctx.Channel.SendErrorAsync(
-                "The image url you provided is invalid. Please make sure it ends with `.gif`, `.png` or `.jpg`",
+                Strings.InvalidFormat(ctx.Guild.Id),
                 Config);
             return;
         }
 
         await Service.SetProfileImage(ctx.User, url);
-        var eb = new EmbedBuilder().WithOkColor().WithDescription("Sucesffully set the profile image to:")
+        var eb = new EmbedBuilder().WithOkColor().WithDescription(Strings.ProfileImageSet(ctx.Guild.Id))
             .WithImageUrl(url);
         await ctx.Channel.SendMessageAsync(embed: eb.Build());
     }
@@ -223,7 +222,8 @@ public class UserProfile(IDataConnectionFactory dbFactory) : MewdekoModuleBase<U
         var pronouns = await Service.GetPronounsOrUnspecifiedAsync(user.Id).ConfigureAwait(false);
         var cb = new ComponentBuilder();
         if (!pronouns.PronounDb)
-            cb.WithButton(Strings.PronounsReportButton(ctx.Guild.Id), $"pronouns_report.{user.Id};", ButtonStyle.Danger);
+            cb.WithButton(Strings.PronounsReportButton(ctx.Guild.Id), $"pronouns_report.{user.Id};",
+                ButtonStyle.Danger);
         await ctx.Channel.SendConfirmAsync(
             pronouns.PronounDb
                 ? pronouns.Pronouns.Contains(' ')
@@ -248,14 +248,17 @@ public class UserProfile(IDataConnectionFactory dbFactory) : MewdekoModuleBase<U
         if (await PronounsDisabled(user).ConfigureAwait(false)) return;
         if (string.IsNullOrWhiteSpace(pronouns))
         {
-            var cb = new ComponentBuilder().WithButton(Strings.PronounsOverwriteButton(ctx.Guild.Id), "pronouns_overwrite");
+            var cb = new ComponentBuilder().WithButton(Strings.PronounsOverwriteButton(ctx.Guild.Id),
+                "pronouns_overwrite");
             if (string.IsNullOrWhiteSpace(user.Pronouns))
             {
-                await ctx.Channel.SendConfirmAsync(Strings.PronounsInternalNoOverride(ctx.Guild.Id), cb).ConfigureAwait(false);
+                await ctx.Channel.SendConfirmAsync(Strings.PronounsInternalNoOverride(ctx.Guild.Id), cb)
+                    .ConfigureAwait(false);
                 return;
             }
 
-            cb.WithButton(Strings.PronounsOverwriteClearButton(ctx.Guild.Id), "pronouns_overwrite_clear", ButtonStyle.Danger);
+            cb.WithButton(Strings.PronounsOverwriteClearButton(ctx.Guild.Id), "pronouns_overwrite_clear",
+                ButtonStyle.Danger);
             await ctx.Channel.SendConfirmAsync(Strings.PronounsInternalSelf(ctx.Guild.Id, user.Pronouns), cb)
                 .ConfigureAwait(false);
             return;
@@ -269,7 +272,8 @@ public class UserProfile(IDataConnectionFactory dbFactory) : MewdekoModuleBase<U
     private async Task<bool> PronounsDisabled(DiscordUser user)
     {
         if (!user.PronounsDisabled) return false;
-        await ReplyErrorAsync(Strings.PronounsDisabledUser(ctx.Guild.Id, user.PronounsClearedReason)).ConfigureAwait(false);
+        await ReplyErrorAsync(Strings.PronounsDisabledUser(ctx.Guild.Id, user.PronounsClearedReason))
+            .ConfigureAwait(false);
         return true;
     }
 
