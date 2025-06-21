@@ -45,7 +45,7 @@ public class XpCacheManager : INService
 
     private readonly MemoryCacheOptions hotCacheOptions = new()
     {
-        SizeLimit = 500, ExpirationScanFrequency = TimeSpan.FromMinutes(2)
+        ExpirationScanFrequency = TimeSpan.FromMinutes(2)
     };
 
     // Small hot cache for frequently accessed guilds only
