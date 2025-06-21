@@ -250,19 +250,26 @@ public class Patreon(IBotCredentials creds, PatreonApiClient patreonApiClient) :
             .WithDescription(Strings.PatreonHelpDescription(ctx.Guild.Id))
             .WithColor(Mewdeko.OkColor)
             .AddField(Strings.PatreonHelpPlaceholders(ctx.Guild.Id),
+                "**Basic Placeholders:**\n" +
                 "`%server.name%` - Server name\n" +
-                "`%server.id%` - Server ID\n" +
                 "`%channel.name%` - Channel name\n" +
-                "`%channel.mention%` - Channel mention\n" +
-                "`%bot.name%` - Bot display name\n" +
-                "`%bot.mention%` - Bot mention\n" +
                 "`%month%` - Current month name\n" +
                 "`%year%` - Current year\n" +
-                "`%patreon.link%` - Patreon link")
+                "`%patreon.link%` - Patreon link\n\n" +
+                "**Supporter Data:**\n" +
+                "`%supporter.count%` - Active supporters\n" +
+                "`%supporter.new%` - New supporters this month\n" +
+                "`%revenue.monthly%` - Monthly revenue\n" +
+                "`%supporters.summary%` - Formatted supporter text\n" +
+                "`%revenue.summary%` - Revenue summary\n" +
+                "`%growth.summary%` - Growth summary")
             .AddField(Strings.PatreonHelpBasicCommands(ctx.Guild.Id),
                 Strings.PatreonHelpBasicCommandsList(ctx.Guild.Id))
             .AddField(Strings.PatreonHelpAdvancedCommands(ctx.Guild.Id),
-                Strings.PatreonHelpAdvancedCommandsList(ctx.Guild.Id));
+                Strings.PatreonHelpAdvancedCommandsList(ctx.Guild.Id))
+            .AddField("💡 Example Message with Data",
+                "```🎉 It's %month%! Thanks to %supporters.summary%%revenue.summary%!%growth.summary%```\n" +
+                "This becomes: *🎉 It's December! Thanks to our 25 incredible supporters who help us raise $150/month! We gained 3 new supporters this month!*");
 
         await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
     }
