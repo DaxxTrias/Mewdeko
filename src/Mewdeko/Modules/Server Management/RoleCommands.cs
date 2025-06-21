@@ -774,7 +774,7 @@ public partial class ServerManagement
                 return;
             }
 
-            await ctx.Channel.SendConfirmAsync($"{config.Data.LoadingEmote} Exporting role/user list...")
+            await ctx.Channel.SendConfirmAsync(Strings.ExportingRoleUserList(ctx.Guild.Id, config.Data.LoadingEmote))
                 .ConfigureAwait(false);
             var pair = new List<ExportedRoles>();
             foreach (var i in roles.OrderByDescending(x => x.Position))
@@ -920,7 +920,8 @@ public partial class ServerManagement
             }
 
             await Service.RemoveJob(ctx.Guild, jobId).ConfigureAwait(false);
-            await ctx.Channel.SendConfirmAsync($"Applied {addedCount} role/user imports out of {toProcess.Count}!")
+            await ctx.Channel
+                .SendConfirmAsync(Strings.AppliedRoleUserImports(ctx.Guild.Id, addedCount, toProcess.Count))
                 .ConfigureAwait(false);
         }
 
@@ -1442,7 +1443,8 @@ public partial class ServerManagement
             }
 
             await Service.RemoveJob(ctx.Guild, jobId).ConfigureAwait(false);
-            await ctx.Channel.SendConfirmAsync($"Removed {role.Mention} from {count2} out of {count} users!")
+            await ctx.Channel
+                .SendConfirmAsync(Strings.RemovedRoleFromRoleForUsers(ctx.Guild.Id, role.Mention, count2, count))
                 .ConfigureAwait(false);
         }
 
@@ -1589,7 +1591,8 @@ public partial class ServerManagement
             var inrole2 = users.Where(x => x.GetRoles().Contains(role2));
             if (inrole.Count() == inrole2.Count())
             {
-                await ctx.Channel.SendErrorAsync($"All users in {role.Mention} already have {role2.Mention}!", Config)
+                await ctx.Channel
+                    .SendErrorAsync(Strings.AllUsersAlreadyHaveRole(ctx.Guild.Id, role.Mention, role2.Mention), Config)
                     .ConfigureAwait(false);
                 return;
             }
@@ -1635,7 +1638,8 @@ public partial class ServerManagement
             }
 
             await Service.RemoveJob(ctx.Guild, jobId).ConfigureAwait(false);
-            await ctx.Channel.SendConfirmAsync($"Added {role2.Mention} to {count2} users.").ConfigureAwait(false);
+            await ctx.Channel.SendConfirmAsync(Strings.AddedRoleToUsers(ctx.Guild.Id, role2.Mention, count2))
+                .ConfigureAwait(false);
         }
 
         /// <summary>
@@ -1678,7 +1682,8 @@ public partial class ServerManagement
             var inrole2 = users.Where(x => x.GetRoles().Contains(role2));
             if (!inrole2.Any())
             {
-                await ctx.Channel.SendErrorAsync($"No users in {role.Mention} have {role2.Mention}!", Config)
+                await ctx.Channel
+                    .SendErrorAsync(Strings.NoUsersInRoleHaveRole(ctx.Guild.Id, role.Mention, role2.Mention), Config)
                     .ConfigureAwait(false);
                 return;
             }
@@ -1692,7 +1697,7 @@ public partial class ServerManagement
                 "Removing a role from users within a role", role, role2).ConfigureAwait(false);
             var guildUsers = inrole as IGuildUser[] ?? inrole.ToArray();
             await ctx.Channel.SendConfirmAsync(
-                    $"Removing {role2.Mention} from users in {role.Mention}.\nThis will take about {guildUsers.Length}s.")
+                    Strings.RemovingRoleFromUsersInRole(ctx.Guild.Id, role2.Mention, role.Mention, guildUsers.Length))
                 .ConfigureAwait(false);
             var count2 = 0;
             using (ctx.Channel.EnterTypingState())
@@ -1725,7 +1730,8 @@ public partial class ServerManagement
             }
 
             await Service.RemoveJob(ctx.Guild, jobId).ConfigureAwait(false);
-            await ctx.Channel.SendConfirmAsync($"Removed {role2.Mention} from {count2} users.").ConfigureAwait(false);
+            await ctx.Channel.SendConfirmAsync(Strings.RemovedRoleFromUsers(ctx.Guild.Id, role2.Mention, count2))
+                .ConfigureAwait(false);
         }
 
         /// <summary>
@@ -1816,7 +1822,7 @@ public partial class ServerManagement
 
             await Service.RemoveJob(ctx.Guild, jobId).ConfigureAwait(false);
             await ctx.Channel.SendConfirmAsync(
-                $"Added {role2.Mention} to {count2} users and removed {role.Mention}.").ConfigureAwait(false);
+                Strings.RoleAddedRemovedUsers(ctx.Guild.Id, role2.Mention, count2, role.Mention)).ConfigureAwait(false);
         }
 
         /// <summary>

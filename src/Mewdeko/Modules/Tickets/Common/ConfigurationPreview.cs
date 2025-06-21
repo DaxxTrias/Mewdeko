@@ -80,11 +80,12 @@ public static class ConfigurationPreview
     /// <param name="options">The options configuration</param>
     /// <param name="sharedSettings">Shared settings for all options</param>
     /// <returns>An embed showing the select menu preview</returns>
-    public static EmbedBuilder GenerateSelectMenuPreview(string placeholder, string options, string sharedSettings)
+    public static EmbedBuilder GenerateSelectMenuPreview(string previewTitle, string placeholder, string options,
+        string sharedSettings, string reviewDescription)
     {
         var embed = new EmbedBuilder()
-            .WithTitle("🔍 Select Menu Preview")
-            .WithDescription("Review your select menu configuration:")
+            .WithTitle(previewTitle)
+            .WithDescription(reviewDescription)
             .WithColor(Color.Green);
 
         embed.AddField("📝 Menu Settings", $"**Placeholder:** {placeholder}", true);

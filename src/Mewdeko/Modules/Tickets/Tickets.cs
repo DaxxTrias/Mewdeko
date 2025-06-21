@@ -60,8 +60,7 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
 
                     case "create":
                         await Service.CreatePanelAsync(channel);
-                        await ctx.Channel.SendConfirmAsync(Strings.TicketPanelCreated(ctx.Guild.Id, channel.Mention,
-                            "default"));
+                        await ctx.Channel.SendConfirmAsync(Strings.TicketPanelCreated(ctx.Guild.Id, channel.Mention));
                         return;
                 }
             }
@@ -89,8 +88,7 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
 
                     case "create":
                         await Service.CreatePanelAsync(channel, embedJson);
-                        await ctx.Channel.SendConfirmAsync(Strings.TicketPanelCreated(ctx.Guild.Id, channel.Mention,
-                            "custom"));
+                        await ctx.Channel.SendConfirmAsync(Strings.TicketPanelCreated(ctx.Guild.Id, channel.Mention));
                         return;
                 }
             }

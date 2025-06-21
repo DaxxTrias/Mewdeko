@@ -660,8 +660,7 @@ public class CustomVoiceService : INService, IUnloadableService
                 }
 
                 // Send a welcome message to the text channel
-                await textChannel.SendMessageAsync(
-                    "This is the text chat for your voice channel. Only users who can access the voice channel can see this chat.");
+                await textChannel.SendMessageAsync(strings.CustomVoiceDescription(voiceChannel.Guild.Id));
             }
         }
         catch (Exception ex)

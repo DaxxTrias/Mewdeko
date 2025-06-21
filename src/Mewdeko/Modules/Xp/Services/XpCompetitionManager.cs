@@ -328,8 +328,8 @@ public class XpCompetitionManager : INService, IDisposable
                 {
                     var embed = new EmbedBuilder()
                         .WithColor(Color.Blue)
-                        .WithTitle("Competition Started!")
-                        .WithDescription($"The '{competition.Name}' competition has started!")
+                        .WithTitle(Strings.CompetitionStarted(guild.Id))
+                        .WithDescription(Strings.CompetitionHasStarted(guild.Id, competition.Name))
                         .AddField("Type", competition.Type.ToString(), true)
                         .AddField("Ends", competition.EndTime.ToString("yyyy-MM-dd HH:mm UTC"), true);
 
@@ -474,8 +474,8 @@ public class XpCompetitionManager : INService, IDisposable
                 {
                     var embed = new EmbedBuilder()
                         .WithColor(Color.Purple)
-                        .WithTitle("Competition Ended!")
-                        .WithDescription($"The '{competition.Name}' competition has ended!");
+                        .WithTitle(Strings.CompetitionEnded(guild.Id))
+                        .WithDescription(Strings.CompetitionHasEnded(guild.Id, competition.Name));
 
                     // Add top 3 winners
                     var winners = rankedEntries.Take(3).ToList();

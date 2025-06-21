@@ -660,7 +660,7 @@ public class TicketService : INService
                     {
                         var dmEmbed = new EmbedBuilder()
                             .WithTitle(strings.TicketUnclaimed(moderator.Guild.Id))
-                            .WithDescription($"Your claim on ticket #{ticket.Id} has been removed by {moderator}")
+                            .WithDescription(strings.YourClaimOnTicketRemoved(ticket.GuildId, ticket.Id, moderator))
                             .WithColor(Color.Orange)
                             .Build();
 
@@ -914,8 +914,9 @@ public class TicketService : INService
             if (modalResponses?.Any() == true)
             {
                 var modalEmbed = new EmbedBuilder()
-                    .WithTitle("Ticket Information")
-                    .WithDescription(string.Join("\n", modalResponses.Select(r => $"**{r.Key}**: {r.Value}")))
+                    .WithTitle(strings.TicketInformation(guild.Id))
+                    .WithDescription(string.Join("\n",
+                        modalResponses.Select(r => strings.ModalResponseFormat(guild.Id, r.Key, r.Value))))
                     .WithColor(Color.Blue)
                     .Build();
 
@@ -932,8 +933,8 @@ public class TicketService : INService
                 if (logChannel != null)
                 {
                     var logEmbed = new EmbedBuilder()
-                        .WithTitle("New Ticket Created")
-                        .WithDescription($"Ticket #{newId} created by {creator.Mention}")
+                        .WithTitle(strings.NewTicketCreated(guild.Id))
+                        .WithDescription(strings.TicketCreatedBy(guild.Id, newId, creator.Mention))
                         .AddField("Channel", channel.Mention, true)
                         .AddField("Type", button != null ? $"Button: {button.Label}" : $"Option: {option.Label}", true)
                         .WithColor(Color.Green)
@@ -984,7 +985,7 @@ public class TicketService : INService
                 var mentions = string.Join(" ", allRoles.Select(r => $"<@&{r}>"));
                 if (!string.IsNullOrEmpty(mentions))
                 {
-                    await channel.SendMessageAsync($"{mentions} A new ticket requires attention.");
+                    await channel.SendMessageAsync(strings.NewTicketRequiresAttention(guild.Id, mentions));
                 }
             }
 
@@ -1002,8 +1003,8 @@ public class TicketService : INService
                             if (member.IsBot) continue;
 
                             var dmEmbed = new EmbedBuilder()
-                                .WithTitle("New Ticket Notification")
-                                .WithDescription($"A new ticket has been created in {guild.Name}")
+                                .WithTitle(strings.NewTicketNotification(guild.Id))
+                                .WithDescription(strings.TicketCreatedNotification(guild.Id, guild.Name))
                                 .AddField("Creator", creator.ToString(), true)
                                 .AddField("Channel", $"#{channel.Name}", true)
                                 .WithColor(Color.Blue)
@@ -1430,7 +1431,8 @@ public class TicketService : INService
                             option: option,
                             modalResponses: responses);
 
-                        await modal.RespondAsync("Ticket created!", ephemeral: true);
+                        await modal.RespondAsync(
+                            strings.TicketCreatedResponse((modal.Channel as IGuildChannel)?.Guild.Id), ephemeral: true);
                     }
                 }
                 else
@@ -1447,7 +1449,8 @@ public class TicketService : INService
                             button,
                             modalResponses: responses);
 
-                        await modal.RespondAsync("Ticket created!", ephemeral: true);
+                        await modal.RespondAsync(
+                            strings.TicketCreatedResponse((modal.Channel as IGuildChannel)?.Guild.Id), ephemeral: true);
                     }
                 }
             }
@@ -1455,7 +1458,8 @@ public class TicketService : INService
         catch (Exception ex)
         {
             Log.Error(ex, "Error handling modal submission");
-            await modal.RespondAsync("Failed to create ticket. Please try again later.", ephemeral: true);
+            await modal.RespondAsync(strings.TicketCreateFailed((modal.Channel as IGuildChannel)?.Guild.Id),
+                ephemeral: true);
         }
     }
 
@@ -1885,8 +1889,8 @@ public class TicketService : INService
                         if (logChannel != null)
                         {
                             var errorEmbed = new EmbedBuilder()
-                                .WithTitle("⚠️ Panel Recreation Failed")
-                                .WithDescription($"Failed to recreate ticket panel in <#{channel.Value.Id}>")
+                                .WithTitle(strings.PanelRecreationFailedTitle(guild.Id))
+                                .WithDescription(strings.PanelRecreationFailedDesc(guild.Id, channel.Value.Id))
                                 .AddField("Panel ID", panel.Id)
                                 .AddField("Error", ex.Message)
                                 .WithColor(Color.Red)
@@ -2053,8 +2057,8 @@ public class TicketService : INService
         if (await guild.GetChannelAsync(ticket.ChannelId) is ITextChannel channel)
         {
             var embed = new EmbedBuilder()
-                .WithTitle("Ticket Priority Updated")
-                .WithDescription($"Priority set to **{priority}** by {staff.Mention}")
+                .WithTitle(strings.TicketPriorityUpdated(guild.Id))
+                .WithDescription(strings.TicketPrioritySetBy(guild.Id, priority, staff.Mention))
                 .WithColor(Color.Blue)
                 .Build();
 
@@ -2391,7 +2395,7 @@ public class TicketService : INService
 
             var mb = new ModalBuilder()
                 .WithCustomId(customId)
-                .WithTitle(modalConfig.Title ?? "Create Ticket");
+                .WithTitle(modalConfig.Title ?? strings.CreateTicketModalTitle(user.GuildId));
 
             foreach (var (key, field) in fields)
             {
@@ -2420,12 +2424,12 @@ public class TicketService : INService
         catch (JsonException ex)
         {
             Log.Error($"Invalid modal configuration format: {ex}");
-            await component.RespondAsync("Invalid ticket form configuration.", ephemeral: true);
+            await component.RespondAsync(strings.InvalidTicketFormConfig(user.GuildId), ephemeral: true);
         }
         catch (Exception)
         {
             Log.Error("Error creating modal");
-            await component.RespondAsync("Failed to create ticket form.", ephemeral: true);
+            await component.RespondAsync(strings.FailedCreateTicketForm(user.GuildId), ephemeral: true);
         }
     }
 
@@ -2765,8 +2769,8 @@ public class TicketService : INService
             {
                 // Send closure message
                 var embed = new EmbedBuilder()
-                    .WithTitle("Ticket Closed")
-                    .WithDescription("This ticket has been closed.")
+                    .WithTitle(strings.TicketClosed(guild.Id))
+                    .WithDescription(strings.TicketClosedDesc(guild.Id))
                     .WithColor(Color.Red)
                     .WithCurrentTimestamp()
                     .Build();
@@ -2790,7 +2794,7 @@ public class TicketService : INService
                     await ArchiveTicketAsync(ticket);
 
                     var archiveEmbed = new EmbedBuilder()
-                        .WithDescription("📁 Ticket has been automatically archived")
+                        .WithDescription(strings.TicketAutoArchived(guild.Id))
                         .WithColor(Color.LightGrey)
                         .Build();
 
@@ -2899,7 +2903,7 @@ public class TicketService : INService
                     }
 
                     var lockEmbed = new EmbedBuilder()
-                        .WithDescription("🔒 This ticket has been locked")
+                        .WithDescription(strings.TicketLocked(guild.Id))
                         .WithColor(Color.Orange)
                         .Build();
 
@@ -2932,9 +2936,9 @@ public class TicketService : INService
             if (deleteOnClose)
             {
                 var deleteEmbed = new EmbedBuilder()
-                    .WithTitle("⚠️ Ticket Scheduled for Deletion")
+                    .WithTitle(strings.TicketScheduledDeletion(guild.Id))
                     .WithDescription(
-                        $"This channel will be automatically deleted in {deleteDelay.TotalMinutes} minutes.")
+                        strings.TicketDeletionWarning(guild.Id, deleteDelay.TotalMinutes))
                     .WithColor(Color.Red)
                     .Build();
 
@@ -3052,10 +3056,11 @@ public class TicketService : INService
             var transcriptFile = new FileAttachment(stream, $"ticket-{ticket.Id}-transcript.html");
 
             var transcriptEmbed = new EmbedBuilder()
-                .WithTitle($"Ticket Transcript #{ticket.Id}")
+                .WithTitle(strings.TicketTranscriptTitle(guild.Id, ticket.Id))
                 .WithDescription(
-                    $"**Creator:** <@{ticket.CreatorId}>\n" +
-                    $"**Type:** {ticket.Button?.Label ?? ticket.SelectOption?.Label ?? "Unknown"}\n" +
+                    strings.TicketTranscriptCreator(guild.Id, ticket.CreatorId) +
+                    strings.TicketTranscriptType(guild.Id,
+                        ticket.Button?.Label ?? ticket.SelectOption?.Label ?? "Unknown") +
                     $"**Created:** {TimestampTag.FromDateTime(ticket.CreatedAt)}\n" +
                     $"**Closed:** {TimestampTag.FromDateTime(ticket.ClosedAt ?? DateTime.UtcNow)}")
                 .AddField("Channel", channel.Name, true)
@@ -3112,8 +3117,8 @@ public class TicketService : INService
             if (channel != null)
             {
                 var embed = new EmbedBuilder()
-                    .WithTitle("Ticket Claimed")
-                    .WithDescription($"This ticket has been claimed by {staff.Mention}")
+                    .WithTitle(strings.TicketClaimedTitle(guild.Id))
+                    .WithDescription(strings.TicketClaimedBy(guild.Id, staff.Mention))
                     .WithColor(Color.Green)
                     .WithCurrentTimestamp()
                     .Build();
@@ -3132,8 +3137,8 @@ public class TicketService : INService
                         if (creator != null)
                         {
                             var dmEmbed = new EmbedBuilder()
-                                .WithTitle("Ticket Claimed")
-                                .WithDescription($"Your ticket has been claimed by {staff}")
+                                .WithTitle(strings.TicketClaimedDm(guild.Id))
+                                .WithDescription(strings.TicketClaimedDmDesc(guild.Id, staff))
                                 .WithColor(Color.Green)
                                 .WithCurrentTimestamp()
                                 .Build();
@@ -3209,7 +3214,7 @@ public class TicketService : INService
                         {
                             var dmEmbed = new EmbedBuilder()
                                 .WithTitle(strings.TicketUnclaimed(guild.Id))
-                                .WithDescription($"Your claim on ticket #{ticket.Id} has been removed by {staff}")
+                                .WithDescription(strings.YourClaimOnTicketRemoved(ticket.GuildId, ticket.Id, staff))
                                 .WithColor(Color.Orange)
                                 .WithCurrentTimestamp()
                                 .Build();
@@ -3276,9 +3281,9 @@ public class TicketService : INService
                 if (channel != null)
                 {
                     var embed = new EmbedBuilder()
-                        .WithTitle("Note Added")
+                        .WithTitle(strings.NoteAdded(author.Guild.Id))
                         .WithDescription(content)
-                        .WithFooter($"Added by {author}")
+                        .WithFooter(strings.NoteAddedFooter(author.GuildId, author))
                         .WithColor(Color.Blue)
                         .WithCurrentTimestamp()
                         .Build();
@@ -3366,9 +3371,9 @@ public class TicketService : INService
                 if (channel != null)
                 {
                     var embed = new EmbedBuilder()
-                        .WithTitle("Note Edited")
-                        .WithDescription($"**Original:** {edit.OldContent}\n**New:** {newContent}")
-                        .WithFooter($"Edited by {author}")
+                        .WithTitle(strings.NoteEditedTitle(author.Guild.Id))
+                        .WithDescription(strings.NoteEditedDesc(author.Guild.Id, edit.OldContent, newContent))
+                        .WithFooter(strings.NoteEditedFooter(author.Guild.Id, author))
                         .WithColor(Color.Blue)
                         .WithCurrentTimestamp()
                         .Build();
@@ -3420,8 +3425,8 @@ public class TicketService : INService
             if (channel != null)
             {
                 var embed = new EmbedBuilder()
-                    .WithTitle("Note Deleted")
-                    .WithDescription($"A note by <@{note.AuthorId}> was deleted by {author.Mention}")
+                    .WithTitle(strings.NoteDeletedTitle(author.Guild.Id))
+                    .WithDescription(strings.NoteDeletedDesc(author.Guild.Id, note.AuthorId, author.Mention))
                     .WithColor(Color.Red)
                     .WithCurrentTimestamp()
                     .Build();
@@ -3468,8 +3473,8 @@ public class TicketService : INService
         var logChannel = await guild.GetTextChannelAsync(settings.LogChannelId.Value);
         if (logChannel == null) return ticketCase;
         var embed = new EmbedBuilder()
-            .WithTitle("Case Created")
-            .WithDescription($"Case #{ticketCase.Id} created by {creator.Mention}")
+            .WithTitle(strings.CaseCreatedTitle(guild.Id))
+            .WithDescription(strings.CaseCreatedBy(guild.Id, ticketCase.Id, creator.Mention))
             .AddField("Title", name)
             .AddField("Description", description)
             .WithColor(Color.Green)
@@ -3872,8 +3877,9 @@ public class TicketService : INService
             if (channel != null)
             {
                 var embed = new EmbedBuilder()
-                    .WithTitle("Ticket Priority Updated")
-                    .WithDescription($"Priority set to {priority.Emoji} **{priority.Name}** by {staff.Mention}")
+                    .WithTitle(strings.TicketPriorityUpdatedTitle(guild.Id))
+                    .WithDescription(strings.TicketPriorityUpdatedDetailed(guild.Id, priority.Emoji, priority.Name,
+                        staff.Mention))
                     .WithColor(new Color((uint)priority.Color))
                     .WithCurrentTimestamp()
                     .Build();
@@ -3889,7 +3895,7 @@ public class TicketService : INService
                     {
                         var mentions = string.Join(" ", supportRoles.Select(r => $"<@&{r}>"));
                         await channel.SendMessageAsync(
-                            $"{mentions} This ticket has been marked as {priority.Name} priority and requires attention.");
+                            strings.TicketPriorityMention(guild.Id, mentions, priority.Name));
                     }
                 }
             }
@@ -4027,9 +4033,9 @@ public class TicketService : INService
                 if (channel != null)
                 {
                     var embed = new EmbedBuilder()
-                        .WithTitle("Tags Removed")
-                        .WithDescription($"Tags removed by {staff.Mention}:\n" +
-                                         string.Join("\n", removedTags.Select(t => $"• **{t.Name}**")))
+                        .WithTitle(strings.TagsRemoved(guild.Id))
+                        .WithDescription(strings.TagsRemovedBy(guild.Id, staff.Mention) +
+                                         string.Join("\n", removedTags.Select(t => Format.Italics(t.Name))))
                         .WithColor(Color.Orange)
                         .WithCurrentTimestamp()
                         .Build();
@@ -4116,8 +4122,8 @@ public class TicketService : INService
             if (channel != null)
             {
                 var embed = new EmbedBuilder()
-                    .WithTitle("Tags Removed")
-                    .WithDescription($"Tags removed by {staff.Mention}:\n" +
+                    .WithTitle(strings.TagsRemoved(guild.Id))
+                    .WithDescription(strings.TagsRemovedBy(guild.Id, staff.Mention) +
                                      string.Join("\n", tags.Select(t => $"• **{t.Name}**")))
                     .WithColor(Color.Orange)
                     .WithCurrentTimestamp()
@@ -4173,8 +4179,8 @@ public class TicketService : INService
                 if (logChannel != null)
                 {
                     var embed = new EmbedBuilder()
-                        .WithTitle("User Blacklisted")
-                        .WithDescription($"<@{userId}> has been blacklisted from creating tickets.")
+                        .WithTitle(strings.UserBlacklistedTitle(guild.Id))
+                        .WithDescription(strings.UserBlacklistedDesc(guild.Id, userId))
                         .AddField("Reason", reason ?? "No reason provided")
                         .WithColor(Color.Red)
                         .WithCurrentTimestamp()
@@ -4220,8 +4226,8 @@ public class TicketService : INService
                 if (logChannel != null)
                 {
                     var embed = new EmbedBuilder()
-                        .WithTitle("User Unblacklisted")
-                        .WithDescription($"<@{userId}> has been removed from the ticket blacklist.")
+                        .WithTitle(strings.UserUnblacklistedTitle(guild.Id))
+                        .WithDescription(strings.UserUnblacklistedFromTickets(guild.Id, userId))
                         .WithColor(Color.Green)
                         .WithCurrentTimestamp()
                         .Build();
@@ -4292,9 +4298,9 @@ public class TicketService : INService
                 if (channel != null)
                 {
                     var embed = new EmbedBuilder()
-                        .WithTitle("Ticket Auto-Closed")
+                        .WithTitle(strings.TicketAutoClosedTitle(guild.Id))
                         .WithDescription(
-                            $"This ticket has been automatically closed due to {inactiveTime.TotalHours} hours of inactivity.")
+                            strings.TicketAutoClosedInactivity(guild.Id, inactiveTime.TotalHours))
                         .WithColor(Color.Red)
                         .WithCurrentTimestamp()
                         .Build();
@@ -4458,8 +4464,8 @@ public class TicketService : INService
                 ticket.LastActivityAt = DateTime.UtcNow;
 
                 var embed = new EmbedBuilder()
-                    .WithTitle("Ticket Transferred")
-                    .WithDescription($"This ticket has been transferred to {toStaff.Mention}")
+                    .WithTitle(strings.TicketTransferredTitle(guild.Id))
+                    .WithDescription(strings.TicketTransferredTo(guild.Id, toStaff.Mention))
                     .WithColor(Color.Blue)
                     .WithCurrentTimestamp()
                     .Build();
@@ -4913,10 +4919,9 @@ public class TicketService : INService
                 if (channel != null)
                 {
                     var embed = new EmbedBuilder()
-                        .WithTitle("Response Time Updated")
+                        .WithTitle(strings.ResponseTimeUpdatedTitle(guild.Id))
                         .WithDescription(
-                            $"The required response time for tickets created with the '{button.Label}' button " +
-                            $"has been updated to {responseTime?.TotalHours ?? 0} hours.")
+                            strings.ResponseTimeUpdatedDesc(guild.Id, button.Label, responseTime?.TotalHours ?? 0))
                         .WithColor(Color.Blue)
                         .WithCurrentTimestamp()
                         .Build();

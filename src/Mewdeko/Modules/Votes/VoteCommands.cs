@@ -219,7 +219,7 @@ public class Vote(InteractiveService interactivity) : MewdekoModuleBase<VoteServ
     [Discord.Interactions.RequireContext(Discord.Interactions.ContextType.Guild)]
     public async Task VoteRoleEdit(IRole role, StoopidTime time)
     {
-        var update = await Service.UpdateTimer(role.Id, (int)time.Time.TotalSeconds);
+        var update = await Service.UpdateTimer(ctx.Guild.Id, role.Id, (int)time.Time.TotalSeconds);
         if (!update.Item1)
             await ctx.Channel.SendErrorAsync(
                 Strings.VoteRoleUpdateFailed(ctx.Guild.Id, Format.Code(update.Item2)), Config);
@@ -280,8 +280,8 @@ public class Vote(InteractiveService interactivity) : MewdekoModuleBase<VoteServ
         if (votes is null || !votes.Any())
         {
             await ctx.Channel.SendErrorAsync(monthly
-                ? "Not enough monthly votes for a leaderboard."
-                : "Not enough votes for a leaderboard.", Config);
+                ? Strings.NotEnoughMonthlyVotes(ctx.Guild.Id)
+                : Strings.NotEnoughVotes(ctx.Guild.Id), Config);
             return;
         }
 
@@ -323,7 +323,10 @@ public class Vote(InteractiveService interactivity) : MewdekoModuleBase<VoteServ
         async Task<PageBuilder> PageFactory(int page)
         {
             await Task.CompletedTask;
-            var eb = new PageBuilder().WithTitle(monthly ? "Votes leaaderboard for this month" : "Votes Leaderboard")
+            var eb = new PageBuilder()
+                .WithTitle(monthly
+                    ? Strings.VotesLeaderboardMonthly(ctx.Guild.Id)
+                    : Strings.VotesLeaderboard(ctx.Guild.Id))
                 .WithOkColor();
 
             for (var i = 0; i < voteList.Count; i++)

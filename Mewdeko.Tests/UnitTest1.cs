@@ -30,9 +30,10 @@ namespace Mewdeko.Tests
             methodCallRegex = new Regex($@"\.({methodPattern})\s*\(([^)]*)\)", RegexOptions.Multiline);
         }
 
-        private (bool hasRawString, string methodName, string rawString, string lineContext) CheckForRawStrings(
+        private List<(string methodName, string rawString, string lineContext)> CheckForRawStrings(
             string code)
         {
+            var results = new List<(string methodName, string rawString, string lineContext)>();
             var matches = methodCallRegex.Matches(code);
             foreach (Match match in matches)
             {
@@ -57,11 +58,11 @@ namespace Mewdeko.Tests
                 {
                     var str = strMatch.Value;
                     if (str != "\"\"" && !parameters.Contains("Strings.") && !IsExemptString(str))
-                        return (true, methodName, str, lineContext);
+                        results.Add((methodName, str, lineContext));
                 }
             }
 
-            return (false, string.Empty, string.Empty, string.Empty);
+            return results;
         }
 
         private bool IsExemptString(string str) => new[]
@@ -109,8 +110,8 @@ namespace Mewdeko.Tests
                 if (!code.Contains("namespace Mewdeko.Modules"))
                     continue;
 
-                var (hasRawString, methodName, rawString, lineContext) = CheckForRawStrings(code);
-                if (hasRawString)
+                var rawStrings = CheckForRawStrings(code);
+                foreach (var (methodName, rawString, lineContext) in rawStrings)
                 {
                     failures.Add($"File: {Path.GetRelativePath(projectRoot, file)}\n" +
                                  $"Method: {methodName}\n" +

@@ -15445,12 +15445,6 @@ image:
       desc: ''
       type: string
       optional: false
-lmgtfy:
-  desc: Generates a Let Me Google That For You (LMGTFY) link for the provided query.
-  args:
-    - null
-  params:
-    - *o3
 shorten:
   desc: Shortens a provided URL using the goolnk.com API.
   args:
@@ -15467,26 +15461,6 @@ google:
     - null
   params:
     - *o3
-magicthegathering:
-  desc: 'Fetches and displays information about a Magic: The Gathering card.'
-  args:
-    - text
-  params:
-    - &o376
-      name: search
-      desc: 'The name or identifier of the Magic: The Gathering card to search for.'
-      type: string
-      optional: false
-hearthstone:
-  desc: Searches for and displays information about a Hearthstone card.
-  args:
-    - text
-  params:
-    - &o377
-      name: name
-      desc: The name of the Hearthstone card to search for.
-      type: string
-      optional: false
 urbandict:
   desc: Searches the Urban Dictionary and displays definitions for a given term.
   args:
@@ -15592,17 +15566,6 @@ resolvetonetags:
       desc: The message containing tone tags to be resolved.
       type: string
       optional: false
-faketweet:
-  desc: Fetches and displays a random meme from Reddit.
-  args:
-    - text
-  params:
-    - &o387
-      name: tag
-      desc: ''
-      type: Safebooru(string
-      optional: true
-      default: null
 meme_noparams:
   desc: Fetches and displays a random meme from Reddit.
   args:
@@ -15674,12 +15637,6 @@ image_string:
       desc: The search query for the image.
       type: string
       optional: false
-lmgtfy_=:
-  desc: Execute the Lmgtfy command
-  args:
-    - null
-  params:
-    - *o3
 shorten_string:
   desc: Execute the Shorten command
   args:
@@ -15692,18 +15649,6 @@ google_=:
     - null
   params:
     - *o3
-magicthegathering_string:
-  desc: Execute the MagicTheGathering command
-  args:
-    - text
-  params:
-    - *o376
-hearthstone_string:
-  desc: Execute the Hearthstone command
-  args:
-    - text
-  params:
-    - *o377
 urbandict_=:
   desc: Execute the UrbanDict command
   args:
@@ -15844,12 +15789,6 @@ image_string_1:
     - text
   params:
     - *o386
-lmgtfy_=_1:
-  desc: Generates a Let Me Google That For You (LMGTFY) link for the provided query.
-  args:
-    - null
-  params:
-    - *o3
 shorten_string_1:
   desc: Shortens a provided URL using the goolnk.com API.
   args:
@@ -15862,18 +15801,6 @@ google_=_1:
     - null
   params:
     - *o3
-magicthegathering_string_1:
-  desc: 'Fetches and displays information about a Magic: The Gathering card.'
-  args:
-    - text
-  params:
-    - *o376
-hearthstone_string_1:
-  desc: Searches for and displays information about a Hearthstone card.
-  args:
-    - text
-  params:
-    - *o377
 urbandict_=_1:
   desc: Searches the Urban Dictionary and displays definitions for a given term.
   args:
@@ -15947,12 +15874,6 @@ resolvetonetags_string_1:
     - text
   params:
     - *o385
-faketweet_Safebooru(string:
-  desc: The Searches module provides commands for searching and retrieving various types of information. It includes commands for searching memes, Reddit posts, weather, and more.
-  args:
-    - text
-  params:
-    - *o387
 meme_noparams_2:
   desc: Fetches and displays a random meme from Reddit.
   args:
@@ -16020,12 +15941,6 @@ image_string_2:
     - text
   params:
     - *o388
-lmgtfy_=_2:
-  desc: Execute the Lmgtfy command
-  args:
-    - null
-  params:
-    - *o3
 shorten_string_2:
   desc: Execute the Shorten command
   args:
@@ -16038,18 +15953,6 @@ google_=_2:
     - null
   params:
     - *o3
-magicthegathering_string_2:
-  desc: Execute the MagicTheGathering command
-  args:
-    - text
-  params:
-    - *o376
-hearthstone_string_2:
-  desc: Execute the Hearthstone command
-  args:
-    - text
-  params:
-    - *o377
 urbandict_=_2:
   desc: Execute the UrbanDict command
   args:
@@ -19732,11 +19635,6 @@ listmodalfields:
     - number
   params:
     - *o493
-modalhelp:
-  desc: Updates the modal help command to include title configuration
-  args:
-    - ''
-  params: []
 ticketlistpanel:
   desc: Lists all components of a specific ticket panel
   args:
@@ -19863,11 +19761,6 @@ listmodalfields_int:
     - number
   params:
     - *o493
-modalhelp_noparams:
-  desc: Updates the modal help command to include title configuration
-  args:
-    - ''
-  params: []
 ticketlistpanel_ulong:
   desc: Execute the TicketListPanel command
   args:
@@ -19990,11 +19883,6 @@ listmodalfields_int_1:
     - number
   params:
     - *o493
-modalhelp_noparams_1:
-  desc: Updates the modal help command to include title configuration
-  args:
-    - ''
-  params: []
 ticketlistpanel_ulong_1:
   desc: Lists all components of a specific ticket panel
   args:
@@ -20117,11 +20005,6 @@ listmodalfields_int_2:
     - number
   params:
     - *o493
-modalhelp_noparams_2:
-  desc: Updates the modal help command to include title configuration
-  args:
-    - ''
-  params: []
 ticketlistpanel_ulong_2:
   desc: Execute the TicketListPanel command
   args:
@@ -20244,11 +20127,6 @@ listmodalfields_int_3:
     - number
   params:
     - *o493
-modalhelp_noparams_3:
-  desc: Updates the modal help command to include title configuration
-  args:
-    - ''
-  params: []
 ticketlistpanel_ulong_3:
   desc: Lists all components of a specific ticket panel
   args:
@@ -20371,11 +20249,6 @@ listmodalfields_int_4:
     - number
   params:
     - *o493
-modalhelp_noparams_4:
-  desc: Updates the modal help command to include title configuration
-  args:
-    - ''
-  params: []
 ticketlistpanel_ulong_4:
   desc: Execute the TicketListPanel command
   args:

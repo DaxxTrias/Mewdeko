@@ -498,8 +498,8 @@ public class LogCommandService(
 
             var eb = new EmbedBuilder()
                 .WithOkColor()
-                .WithTitle("Thread Created")
-                .WithDescription($"`Name:` {socketThreadChannel.Name}\n" +
+                .WithTitle(strings.ThreadCreated(socketThreadChannel.Guild.Id))
+                .WithDescription(strings.ThreadName(socketThreadChannel.Guild.Id, socketThreadChannel.Name) +
                                  $"`Created By:` {socketThreadChannel.Owner?.Mention ?? "N/A"} | {socketThreadChannel.Owner?.Id.ToString() ?? "N/A"}\n" +
                                  $"`Created At:` {socketThreadChannel.CreatedAt:dd/MM/yyyy HH:mm:ss}\n" +
                                  $"`Thread Type:` {socketThreadChannel.Type}\n" +
@@ -536,7 +536,9 @@ public class LogCommandService(
         var eb = new EmbedBuilder()
             .WithOkColor()
             .WithTitle(strings.UserRolesAdded(arsg2.Guild.Id))
-            .WithDescription(strings.RolesField(arsg2.Guild.Id, string.Join(", ", addedRoles.Select(x => x.Mention))) +
+            .WithDescription(strings.RolesField(arsg2.Guild.Id,
+                                 string.Join(strings.CommaSeparator(arsg2.Guild.Id),
+                                     addedRoles.Select(x => x.Mention))) +
                              strings.AddedByField(arsg2.Guild.Id, auditLog.User.Mention, auditLog.User.Id) +
                              strings.AddedToField(arsg2.Guild.Id, arsg2.Mention, arsg2.Id));
 
@@ -572,7 +574,8 @@ public class LogCommandService(
             .WithOkColor()
             .WithTitle(strings.UserRolesRemoved(arsg2.Guild.Id))
             .WithDescription(
-                strings.RolesField(arsg2.Guild.Id, string.Join(", ", removedRoles.Select(x => x.Mention))) +
+                strings.RolesField(arsg2.Guild.Id,
+                    string.Join(strings.CommaSeparator(arsg2.Guild.Id), removedRoles.Select(x => x.Mention))) +
                 strings.RemovedByField(arsg2.Guild.Id, auditLog.User.Mention, auditLog.User.Id) +
                 strings.RemovedFromField(arsg2.Guild.Id, arsg2.Mention, arsg2.Id));
 
@@ -978,7 +981,7 @@ public class LogCommandService(
                 .WithErrorColor() // Use error color for bans
                 .WithTitle(strings.UserBanned(guild.Id))
                 .WithDescription(
-                    $"`User:` {user.Mention} | {user.Id}\n" +
+                    strings.UserInfoLine(guild.Id, user.Mention, user.Id) +
                     $"`User Global Name:` {user.GlobalName ?? user.Username}\n" +
                     $"`Account Created:` {user.CreatedAt:dd/MM/yyyy HH:mm:ss}\n" + // Added time
                     $"`Banned By:` {bannedBy?.Mention ?? "Unknown"} | {bannedBy?.Id.ToString() ?? "N/A"}")
@@ -1012,7 +1015,7 @@ public class LogCommandService(
                 .WithOkColor()
                 .WithTitle(strings.UserUnbanned(guild.Id))
                 .WithDescription(
-                    $"`User:` {user.Mention} | {user.Id}\n" +
+                    strings.UserInfoLine(guild.Id, user.Mention, user.Id) +
                     $"`User Global Name:` {user.GlobalName ?? user.Username}\n" +
                     $"`Account Created:` {user.CreatedAt:dd/MM/yyyy HH:mm:ss}\n" + // Added time
                     $"`Unbanned By:` {unbannedBy?.Mention ?? "Unknown"} | {unbannedBy?.Id.ToString() ?? "N/A"}")
@@ -1060,7 +1063,7 @@ public class LogCommandService(
                 if (logChannel is null)
                     return;
                 eb.WithTitle(strings.UserAvatarUpdated(guild.Id))
-                    .WithDescription($"`User:` {userInGuild.Mention} | {userInGuild.Id}")
+                    .WithDescription(strings.UserLogEntry(guild.Id, userInGuild.Mention, userInGuild.Id))
                     .WithThumbnailUrl(args.RealAvatarUrl().ToString()) // Old avatar
                     .WithImageUrl(arsg2.RealAvatarUrl().ToString()); // New avatar
                 await logChannel.SendMessageAsync(embed: eb.Build());
@@ -1074,7 +1077,7 @@ public class LogCommandService(
             eb = new EmbedBuilder().WithOkColor()
                 .WithTitle(strings.UserGlobalNameUpdated(guild.Id))
                 .WithDescription(
-                    $"`User:` {userInGuild.Mention} | {userInGuild.Id}\n" +
+                    $"{strings.UserLogEntry(guild.Id, userInGuild.Mention, userInGuild.Id)}\n" +
                     $"`Old Global Name:` {args.GlobalName ?? args.Username}\n" +
                     $"`New Global Name:` {arsg2.GlobalName ?? arsg2.Username}")
                 .WithThumbnailUrl(arsg2.RealAvatarUrl().ToString()); // Show current avatar
@@ -1163,7 +1166,7 @@ public class LogCommandService(
                 .WithOkColor()
                 .WithTitle(strings.ChannelDestroyed(channel.Guild.Id))
                 .WithDescription(
-                    $"`Channel:` {channel.Name} | {channel.Id}\n" + // Cannot mention deleted channel
+                    $"{strings.ChannelLogEntry(channel.Guild.Id, channel.Name, channel.Id)}\n" + // Cannot mention deleted channel
                     $"`Destroyed By:` {entry?.User.Mention ?? "Unknown"} | {entry?.User.Id.ToString() ?? "N/A"}\n" +
                     $"`Destroyed At:` {DateTime.UtcNow:dd/MM/yyyy HH:mm:ss}\n" + // Added time
                     $"`Channel Type:` {createdType}");
@@ -1212,7 +1215,7 @@ public class LogCommandService(
             else if (channel.Position != channel2.Position)
             {
                 // Position changes are often noisy due to category changes, maybe ignore?
-                // eb.WithTitle("Channel Position Updated").WithDescription($"{channelIdStr}\n`Old Position:` {channel.Position}\n`New Position:` {channel2.Position}\n{updatedByStr}");
+                // eb.WithTitle(strings.ChannelPositionUpdated(channel.Guild.Id)).WithDescription(strings.ChannelPositionChange(channel.Guild.Id, channelIdStr, channel.Position, channel2.Position, updatedByStr));
                 // changed = true;
             }
 
@@ -1270,7 +1273,7 @@ public class LogCommandService(
                 }
                 else if (voiceChannel.CategoryId != voiceChannel2.CategoryId)
                 {
-                    eb.WithTitle("Channel Category Updated").WithDescription(
+                    eb.WithTitle(strings.ChannelCategoryUpdated(channel.Guild.Id)).WithDescription(
                         $"{channelIdStr}\n`Old Category:` {voiceChannel.Category?.Name ?? strings.None(channel.Guild.Id)}\n`New Category:` {voiceChannel2.Category?.Name ?? strings.None(channel.Guild.Id)}\n{updatedByStr}");
                     changed = true;
                 }
@@ -1312,7 +1315,7 @@ public class LogCommandService(
 
             var eb = new EmbedBuilder().WithOkColor();
             var stateChanged = false;
-            var userInfo = $"`User:` {user.Mention} | {user.Id}";
+            var userInfo = strings.UserInfoLine(guildUser.Guild.Id, user.Mention, user.Id).TrimEnd('\n');
 
             // Channel Changes
             if (oldState.VoiceChannel?.Id != newState.VoiceChannel?.Id)
@@ -1428,11 +1431,11 @@ public class LogCommandService(
 
             var eb = new EmbedBuilder()
                 .WithOkColor()
-                .WithTitle($"User {muteType} Muted")
+                .WithTitle(strings.UserMutedTitle(guildUser.GuildId, muteType))
                 .WithDescription(
-                    $"`User Muted:` {guildUser.Mention} | {guildUser.Id}\n" +
-                    $"`Muted By:` {muter.Mention} | {muter.Id}\n" +
-                    $"`Reason:` {reason ?? "N/A"}")
+                    strings.UserMutedDesc(guildUser.GuildId, guildUser.Mention, guildUser.Id) +
+                    strings.MutedByDesc(guildUser.GuildId, muter.Mention, muter.Id) +
+                    strings.MuteReasonDesc(guildUser.GuildId, reason ?? "N/A"))
                 .WithThumbnailUrl(guildUser.RealAvatarUrl().ToString());
 
             await logChannel.SendMessageAsync(embed: eb.Build());
@@ -1459,11 +1462,11 @@ public class LogCommandService(
 
             var eb = new EmbedBuilder()
                 .WithOkColor()
-                .WithTitle($"User {muteType} Unmuted")
+                .WithTitle(strings.UserUnmutedTitle(guildUser.GuildId, muteType))
                 .WithDescription(
-                    $"`User Unmuted:` {guildUser.Mention} | {guildUser.Id}\n" +
-                    $"`Unmuted By:` {unmuter.Mention} | {unmuter.Id}\n" +
-                    $"`Reason:` {reason ?? "N/A"}") // Reason might not apply
+                    strings.UserUnmutedDesc(guildUser.GuildId, guildUser.Mention, guildUser.Id) +
+                    strings.UnmutedByDesc(guildUser.GuildId, unmuter.Mention, unmuter.Id) +
+                    strings.MuteReasonDesc(guildUser.GuildId, reason ?? "N/A")) // Reason might not apply
                 .WithThumbnailUrl(guildUser.RealAvatarUrl().ToString());
 
             await logChannel.SendMessageAsync(embed: eb.Build());
