@@ -335,6 +335,7 @@ public class XpVoiceTracker : INService, IDisposable
         var guildId = user.Guild.Id;
         var userId = user.Id;
         var channelId = voiceChannel.Id;
+        var xpAmount = 0;
 
         try
         {
@@ -357,7 +358,7 @@ public class XpVoiceTracker : INService, IDisposable
 
             // Calculate XP to award
             var baseXpPerMinute = Math.Min(settings.VoiceXpPerMinute, XpService.MaxVoiceXpPerMinute);
-            var xpAmount = (int)(baseXpPerMinute * cappedMinutes);
+            xpAmount = (int)(baseXpPerMinute * cappedMinutes);
 
             switch (xpAmount)
             {
@@ -396,6 +397,7 @@ public class XpVoiceTracker : INService, IDisposable
         }
         catch (Exception ex)
         {
+            Log.Information("{GuildId}|{UserId}|{XpAmount}|{ChannelId}", guildId, userId, xpAmount, channelId);
             Log.Error(ex, "Error calculating XP for user {UserId} in guild {GuildId}",
                 userId, guildId);
         }

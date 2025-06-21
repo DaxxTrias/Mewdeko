@@ -32,13 +32,20 @@ public class XpCacheManager : INService
     private static readonly TimeSpan UserXpTtl = TimeSpan.FromMinutes(30);
     private static readonly TimeSpan ExclusionTtl = TimeSpan.FromMinutes(15);
     private static readonly TimeSpan MultiplierTtl = TimeSpan.FromMinutes(5);
+
+    // Cached JsonSerializerOptions for performance - critical for Redis operations
+    private static readonly JsonSerializerOptions CachedJsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
+
     private readonly DiscordShardedClient client;
     private readonly IDataCache dataCache;
     private readonly IDataConnectionFactory dbFactory;
 
     private readonly MemoryCacheOptions hotCacheOptions = new()
     {
-        SizeLimit = 100, ExpirationScanFrequency = TimeSpan.FromMinutes(5)
+        SizeLimit = 500, ExpirationScanFrequency = TimeSpan.FromMinutes(2)
     };
 
     // Small hot cache for frequently accessed guilds only
@@ -91,7 +98,7 @@ public class XpCacheManager : INService
         {
             try
             {
-                var userData = JsonSerializer.Deserialize<GuildUserXp>((string)redisData);
+                var userData = JsonSerializer.Deserialize<GuildUserXp>((string)redisData, CachedJsonOptions);
                 if (userData is not null)
                     return userData;
             }
@@ -123,7 +130,7 @@ public class XpCacheManager : INService
         }
 
         // Cache in Redis only
-        var serializedData = JsonSerializer.Serialize(userXp);
+        var serializedData = JsonSerializer.Serialize(userXp, CachedJsonOptions);
         await redisCache.StringSetAsync(cacheKey, serializedData, UserXpTtl).ConfigureAwait(false);
 
         return userXp;
@@ -139,7 +146,7 @@ public class XpCacheManager : INService
 
         try
         {
-            var serializedData = JsonSerializer.Serialize(userXp);
+            var serializedData = JsonSerializer.Serialize(userXp, CachedJsonOptions);
             await redisCache.StringSetAsync(cacheKey, serializedData, UserXpTtl).ConfigureAwait(false);
         }
         catch (Exception ex)
@@ -172,13 +179,13 @@ public class XpCacheManager : INService
         {
             try
             {
-                settings = JsonSerializer.Deserialize<GuildXpSetting>((string)redisData);
+                settings = JsonSerializer.Deserialize<GuildXpSetting>((string)redisData, CachedJsonOptions);
                 if (settings != null)
                 {
                     // Update hot cache
                     var options = new MemoryCacheEntryOptions()
-                        .SetSize(1)
-                        .SetAbsoluteExpiration(TimeSpan.FromMinutes(10));
+                        .SetSlidingExpiration(TimeSpan.FromMinutes(10))
+                        .SetAbsoluteExpiration(TimeSpan.FromMinutes(30));
                     hotGuildCache.Set(hotCacheKey, settings, options);
                     return settings;
                 }
@@ -217,12 +224,12 @@ public class XpCacheManager : INService
         }
 
         // Update both caches
-        var serializedData = JsonSerializer.Serialize(settings);
+        var serializedData = JsonSerializer.Serialize(settings, CachedJsonOptions);
         await redisCache.StringSetAsync(cacheKey, serializedData, GuildSettingsTtl).ConfigureAwait(false);
 
         var hotOptions = new MemoryCacheEntryOptions()
-            .SetSize(1)
-            .SetAbsoluteExpiration(TimeSpan.FromMinutes(10));
+            .SetSlidingExpiration(TimeSpan.FromMinutes(10))
+            .SetAbsoluteExpiration(TimeSpan.FromMinutes(30));
         hotGuildCache.Set(hotCacheKey, settings, hotOptions);
 
         return settings;
@@ -242,13 +249,13 @@ public class XpCacheManager : INService
 
         // Update both caches
         var cacheKey = $"{RedisKeyPrefix}{GuildSettingsKey}:{settings.GuildId}";
-        var serializedData = JsonSerializer.Serialize(settings);
+        var serializedData = JsonSerializer.Serialize(settings, CachedJsonOptions);
 
         // Update hot cache
         var hotCacheKey = $"guild:{settings.GuildId}";
         var hotOptions = new MemoryCacheEntryOptions()
-            .SetSize(1)
-            .SetAbsoluteExpiration(TimeSpan.FromMinutes(10));
+            .SetSlidingExpiration(TimeSpan.FromMinutes(10))
+            .SetAbsoluteExpiration(TimeSpan.FromMinutes(30));
         hotGuildCache.Set(hotCacheKey, settings, hotOptions);
 
         // Update Redis cache
@@ -477,10 +484,11 @@ public class XpCacheManager : INService
             var server = dataCache.Redis.GetServer(dataCache.Redis.GetEndPoints().First());
 
             // Clear hot cache periodically to prevent unbounded growth
-            if (hotGuildCache.Count > 80)
+            if (hotGuildCache.Count > 400)
             {
-                hotGuildCache.Clear();
-                Log.Debug("Cleared hot guild cache");
+                // Remove only expired entries instead of clearing all
+                hotGuildCache.Compact(0.25);
+                Log.Debug("Compacted hot guild cache");
             }
 
             // Process Redis keys in batches to prevent long-running operations
@@ -680,7 +688,7 @@ public class XpCacheManager : INService
                 var batch = allRoleRewards.Skip(i).Take(batchSize);
                 cacheOperations.AddRange(from roleReward in batch
                     let cacheKey = $"{RedisKeyPrefix}rewards:{roleReward.GuildId}:role:{roleReward.Level}"
-                    let serializedReward = JsonSerializer.Serialize(roleReward)
+                    let serializedReward = JsonSerializer.Serialize(roleReward, CachedJsonOptions)
                     select redis.StringSetAsync(cacheKey, serializedReward, TimeSpan.FromMinutes(30), When.Always));
 
                 await Task.WhenAll(cacheOperations).ConfigureAwait(false);
@@ -735,7 +743,7 @@ public class XpCacheManager : INService
 
                 cacheOperations.AddRange(from currencyReward in batch
                     let cacheKey = $"{RedisKeyPrefix}rewards:{currencyReward.GuildId}:currency:{currencyReward.Level}"
-                    let serializedReward = JsonSerializer.Serialize(currencyReward)
+                    let serializedReward = JsonSerializer.Serialize(currencyReward, CachedJsonOptions)
                     select redis.StringSetAsync(cacheKey, serializedReward, TimeSpan.FromMinutes(30), When.Always));
 
                 await Task.WhenAll(cacheOperations).ConfigureAwait(false);
