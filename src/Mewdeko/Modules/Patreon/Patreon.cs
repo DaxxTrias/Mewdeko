@@ -313,8 +313,8 @@ public class Patreon(IBotCredentials creds, PatreonApiClient patreonApiClient) :
             }
 
             var embed = new EmbedBuilder()
-                .WithTitle("🔗 Patreon OAuth Setup")
-                .WithDescription("Click the button below to authorize Mewdeko to access your Patreon campaign data.")
+                .WithTitle(Strings.PatreonOauthTitle(ctx.Guild.Id))
+                .WithDescription(Strings.PatreonAuthDescription(ctx.Guild.Id))
                 .WithColor(0xF96854)
                 .AddField("⚠️ Important Requirements",
                     "• You must be the **owner** of a Patreon campaign\n" +
@@ -326,7 +326,7 @@ public class Patreon(IBotCredentials creds, PatreonApiClient patreonApiClient) :
                     "3. Review and approve the requested permissions\n" +
                     "4. You'll be redirected back automatically\n" +
                     "5. Your supporters will be synced automatically", false)
-                .WithFooter("This setup is required only once per server");
+                .WithFooter(Strings.PatreonSetupFooter(ctx.Guild.Id));
 
             var component = new ComponentBuilder()
                 .WithButton("Authorize with Patreon", style: ButtonStyle.Link, url: authUrl, emote: new Emoji("🔗"));

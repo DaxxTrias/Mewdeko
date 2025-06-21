@@ -5,6 +5,7 @@ using DataModel;
 using LinqToDB;
 using Mewdeko.Database.L2DB;
 using Mewdeko.Modules.Tickets.Common;
+using Mewdeko.Services.Strings;
 using Serilog;
 using Embed = Mewdeko.Common.Embed;
 using SelectMenuOption = DataModel.SelectMenuOption;
@@ -20,6 +21,7 @@ public class TicketService : INService
     private const string CloseButtonId = "ticket_close";
     private readonly DiscordShardedClient client;
     private readonly IDataConnectionFactory dbFactory;
+    private readonly GeneratedBotStrings strings;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="TicketService" /> class.
@@ -27,10 +29,12 @@ public class TicketService : INService
     public TicketService(
         IDataConnectionFactory dbFactory,
         DiscordShardedClient client,
-        EventHandler eventHandler)
+        EventHandler eventHandler,
+        GeneratedBotStrings strings)
     {
         this.dbFactory = dbFactory;
         this.client = client;
+        this.strings = strings;
 
         eventHandler.MessageDeleted += HandleMessageDeleted;
         eventHandler.ModalSubmitted += HandleModalSubmitted;
@@ -638,8 +642,8 @@ public class TicketService : INService
         if (await moderator.Guild.GetChannelAsync(ticket.ChannelId) is ITextChannel channel)
         {
             var embed = new EmbedBuilder()
-                .WithTitle("Ticket Unclaimed")
-                .WithDescription($"This ticket has been unclaimed by {moderator.Mention}")
+                .WithTitle(strings.TicketUnclaimed(moderator.Guild.Id))
+                .WithDescription(strings.TicketUnclaimedBy(moderator.Guild.Id, moderator.Mention))
                 .WithColor(Color.Orange)
                 .Build();
 
@@ -655,7 +659,7 @@ public class TicketService : INService
                     if (previousUser != null)
                     {
                         var dmEmbed = new EmbedBuilder()
-                            .WithTitle("Ticket Unclaimed")
+                            .WithTitle(strings.TicketUnclaimed(moderator.Guild.Id))
                             .WithDescription($"Your claim on ticket #{ticket.Id} has been removed by {moderator}")
                             .WithColor(Color.Orange)
                             .Build();
@@ -3184,8 +3188,8 @@ public class TicketService : INService
             if (channel != null)
             {
                 var embed = new EmbedBuilder()
-                    .WithTitle("Ticket Unclaimed")
-                    .WithDescription($"This ticket has been unclaimed by {staff.Mention}")
+                    .WithTitle(strings.TicketUnclaimed(guild.Id))
+                    .WithDescription(strings.TicketUnclaimedBy(guild.Id, staff.Mention))
                     .WithColor(Color.Orange)
                     .WithCurrentTimestamp()
                     .Build();
@@ -3204,7 +3208,7 @@ public class TicketService : INService
                         if (previousUser != null)
                         {
                             var dmEmbed = new EmbedBuilder()
-                                .WithTitle("Ticket Unclaimed")
+                                .WithTitle(strings.TicketUnclaimed(guild.Id))
                                 .WithDescription($"Your claim on ticket #{ticket.Id} has been removed by {staff}")
                                 .WithColor(Color.Orange)
                                 .WithCurrentTimestamp()

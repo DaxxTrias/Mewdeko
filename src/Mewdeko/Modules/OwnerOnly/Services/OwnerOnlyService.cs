@@ -399,7 +399,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
                                     if (user is null) continue;
                                     var channel = await user.CreateDMChannelAsync();
                                     await channel.SendMessageAsync(
-                                        $"New commit found: {latestCommit.Sha}\n{latestCommit.HtmlUrl}");
+                                        strings.NewCommitFound(1, latestCommit.Sha, latestCommit.HtmlUrl));
                                 }
                             }
                             else
@@ -409,7 +409,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
                                 {
                                     var channel = await user.CreateDMChannelAsync();
                                     await channel.SendMessageAsync(
-                                        $"New commit found: {latestCommit.Sha}\n{latestCommit.HtmlUrl}");
+                                        strings.NewCommitFound(1, latestCommit.Sha, latestCommit.HtmlUrl));
                                 }
                             }
                         }

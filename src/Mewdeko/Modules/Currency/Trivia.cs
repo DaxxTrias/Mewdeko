@@ -43,7 +43,7 @@ public partial class Currency
         // Check if user already has an active trivia chain
         if (TriviaChainService.GetTriviaChainState(ctx.User.Id) != null)
         {
-            await ReplyAsync("You already have an active trivia chain. Please finish it first.");
+            await ReplyAsync(Strings.TriviaChainActiveGame(ctx.Guild.Id));
             return;
         }
 
@@ -67,12 +67,13 @@ public partial class Currency
                 "_ _", true);
 
         var selectMenuBuilder = new SelectMenuBuilder()
-            .WithPlaceholder("Choose your answer...")
+            .WithPlaceholder(Strings.TriviaChainChooseAnswer(ctx.Guild.Id))
             .WithCustomId($"triviachain_answer_{ctx.User.Id}_0");
 
         for (var i = 0; i < chainState.CurrentOptions.Length; i++)
         {
-            selectMenuBuilder.AddOption(chainState.CurrentOptions[i], i.ToString(), $"Option {i + 1}");
+            selectMenuBuilder.AddOption(chainState.CurrentOptions[i], i.ToString(),
+                Strings.TriviaChainOption(ctx.Guild.Id, i + 1));
         }
 
         var componentBuilder = new ComponentBuilder()

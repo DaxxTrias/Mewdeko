@@ -347,18 +347,22 @@ public partial class Currency(
         try
         {
             var game = BlackjackService.StartOrJoinGame(ctx.User, amount);
-            var embed = game.CreateGameEmbed(Strings.BlackjackJoined(ctx.Guild.Id, ctx.User.Username));
+            var embed = game.CreateGameEmbed(Strings.BlackjackJoined(ctx.Guild.Id, ctx.User.Username), ctx.Guild.Id,
+                Strings);
             await ReplyAsync(embeds: embed);
         }
         catch (InvalidOperationException ex)
         {
             switch (ex.Message)
             {
-                case "full":
+                case "blackjack_game_full":
                     await ReplyErrorAsync(Strings.BlackjackGameFull(ctx.Guild.Id));
                     break;
-                case "ingame":
+                case "blackjack_already_in_game":
                     await ReplyErrorAsync(Strings.AlreadyInGame(ctx.Guild.Id));
+                    break;
+                case "no_ongoing_game":
+                    await ReplyErrorAsync(Strings.NoOngoingGame(ctx.Guild.Id));
                     break;
             }
         }
@@ -376,7 +380,8 @@ public partial class Currency(
         {
             var game = BlackjackService.GetGame(ctx.User);
             game.HitPlayer(ctx.User);
-            var embed = game.CreateGameEmbed(Strings.BlackjackHit(ctx.Guild.Id, ctx.User.Username));
+            var embed = game.CreateGameEmbed(Strings.BlackjackHit(ctx.Guild.Id, ctx.User.Username), ctx.Guild.Id,
+                Strings);
 
             if (BlackjackService.BlackjackGame.CalculateHandTotal(game.PlayerHands[ctx.User]) > 21)
             {
@@ -393,7 +398,15 @@ public partial class Currency(
         }
         catch (InvalidOperationException ex)
         {
-            await ReplyAsync(Strings.BlackjackError(ctx.Guild.Id, ex.Message));
+            switch (ex.Message)
+            {
+                case "no_ongoing_game":
+                    await ReplyErrorAsync(Strings.NoOngoingGame(ctx.Guild.Id));
+                    break;
+                default:
+                    await ReplyAsync(Strings.BlackjackError(ctx.Guild.Id, ex.Message));
+                    break;
+            }
         }
     }
 
@@ -407,7 +420,7 @@ public partial class Currency(
     {
         try
         {
-            var embed = await blackjackService.HandleStandAsync(ctx.User,
+            var embed = await blackjackService.HandleStandAsync(ctx.User, ctx.Guild.Id,
                 (userId, balanceChange) => Service.AddUserBalanceAsync(userId, balanceChange, ctx.Guild.Id),
                 (userId, balanceChange, description) =>
                     Service.AddTransactionAsync(userId, balanceChange, description, ctx.Guild.Id),
@@ -416,7 +429,15 @@ public partial class Currency(
         }
         catch (InvalidOperationException ex)
         {
-            await ReplyAsync(Strings.BlackjackError(ctx.Guild.Id, ex.Message));
+            switch (ex.Message)
+            {
+                case "no_ongoing_game":
+                    await ReplyErrorAsync(Strings.NoOngoingGame(ctx.Guild.Id));
+                    break;
+                default:
+                    await ReplyAsync(Strings.BlackjackError(ctx.Guild.Id, ex.Message));
+                    break;
+            }
         }
     }
 
@@ -438,7 +459,7 @@ public partial class Currency(
 
         BlackjackService.EndGame(ctx.User);
 
-        var embed = game.CreateGameEmbed(message);
+        var embed = game.CreateGameEmbed(message, ctx.Guild.Id, Strings);
         await ReplyAsync(embeds: embed);
     }
 

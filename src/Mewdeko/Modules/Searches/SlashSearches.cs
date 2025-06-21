@@ -37,7 +37,7 @@ public class SlashSearches(MartineApi martineApi) : MewdekoSlashModuleBase<Searc
                 .WithOkColor()
                 .WithAuthor(Strings.SearchAuthorReddit(ctx.Guild.Id, image.Data.Author.Name))
                 .WithDescription($"Title: {image.Data.Title}\n[Source]({image.Data.PostUrl})")
-                .WithFooter($"{image.Data.Upvotes} Upvotes! | r/{image.Data.Subreddit.Name} Powered by martineAPI")
+                .WithFooter(Strings.RedditUpvotes(ctx.Guild.Id, image.Data.Upvotes, image.Data.Subreddit.Name))
                 .WithImageUrl(image.Data.ImageUrl);
 
             if (ctx.User.Id != id)
@@ -66,7 +66,7 @@ public class SlashSearches(MartineApi martineApi) : MewdekoSlashModuleBase<Searc
 
             var errorEmbed = new EmbedBuilder()
                 .WithErrorColor()
-                .WithDescription("Failed to fetch image, please try again later!");
+                .WithDescription(Strings.FetchFailed(ctx.Guild.Id));
 
             if (ctx.User.Id != id)
             {
@@ -150,7 +150,7 @@ public class SlashSearches(MartineApi martineApi) : MewdekoSlashModuleBase<Searc
             Description = $"Title: {image.Data.Title}\n[Source]({image.Data.PostUrl})",
             Footer = new EmbedFooterBuilder
             {
-                Text = $"{image.Data.Upvotes} Upvotes! | r/{image.Data.Subreddit.Name} Powered by martineAPI"
+                Text = Strings.RedditUpvotes(ctx.Guild.Id, image.Data.Upvotes, image.Data.Subreddit.Name)
             },
             ImageUrl = image.Data.ImageUrl,
             Color = Mewdeko.OkColor

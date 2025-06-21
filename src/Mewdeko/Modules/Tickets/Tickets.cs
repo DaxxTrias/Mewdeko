@@ -34,7 +34,7 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
 
                 var msg = await ctx.Channel.SendMessageAsync(
                     embed: new EmbedBuilder()
-                        .WithDescription("Would you like to preview the panel or create it with default settings?")
+                        .WithDescription(Strings.PanelCreationPreview(ctx.Guild.Id))
                         .WithOkColor().Build(),
                     components: components.Build()
                 );
@@ -60,7 +60,8 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
 
                     case "create":
                         await Service.CreatePanelAsync(channel);
-                        await ctx.Channel.SendConfirmAsync($"Panel created in {channel.Mention}!");
+                        await ctx.Channel.SendConfirmAsync(Strings.TicketPanelCreated(ctx.Guild.Id, channel.Mention,
+                            "default"));
                         return;
                 }
             }
@@ -72,7 +73,7 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
                     .WithButton("Create", "create");
 
                 var msg = await ctx.Channel.SendMessageAsync(
-                    embed: new EmbedBuilder().WithDescription("Would you like to preview the panel or create it?")
+                    embed: new EmbedBuilder().WithDescription(Strings.PanelCreationPreview(ctx.Guild.Id))
                         .WithOkColor().Build(),
                     components: components.Build()
                 );
@@ -88,7 +89,8 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
 
                     case "create":
                         await Service.CreatePanelAsync(channel, embedJson);
-                        await ctx.Channel.SendConfirmAsync($"Panel created in {channel.Mention}!");
+                        await ctx.Channel.SendConfirmAsync(Strings.TicketPanelCreated(ctx.Guild.Id, channel.Mention,
+                            "custom"));
                         return;
                 }
             }
@@ -100,7 +102,7 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
         catch (Exception ex)
         {
             Log.Error(ex, "Error creating ticket panel");
-            await ctx.Channel.SendErrorAsync("Failed to create ticket panel.", Config);
+            await ctx.Channel.SendErrorAsync(Strings.TicketPanelCreationFailed(ctx.Guild.Id), Config);
         }
     }
 
@@ -352,14 +354,14 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
 
         if (!settings.Any())
         {
-            await ctx.Channel.SendErrorAsync("No settings provided to update.", Config);
+            await ctx.Channel.SendErrorAsync(Strings.NoSettingsToUpdate(ctx.Guild.Id), Config);
             return;
         }
 
         var success = await Service.UpdateButtonSettingsAsync(ctx.Guild, buttonId, settings);
         if (success)
             await ctx.Channel.SendConfirmAsync(
-                $"Updated {settings.Count} close behavior settings for button {buttonId}");
+                Strings.CloseBehaviorUpdated(ctx.Guild.Id, settings.Count, buttonId));
         else
             await ctx.Channel.SendErrorAsync(Strings.ButtonUpdateFailed(ctx.Guild.Id), Config);
     }

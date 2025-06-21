@@ -143,7 +143,7 @@ public class ChatTriggers(IHttpClientFactory clientFactory, InteractiveService s
 
         var cr = await Service.AddReactionTriggerAsync(ctx.Guild?.Id, reaction, message).ConfigureAwait(false);
 
-        await ctx.Channel.EmbedAsync(Service.GetEmbed(cr, ctx.Guild?.Id, "New Reaction Trigger"))
+        await ctx.Channel.EmbedAsync(Service.GetEmbed(cr, ctx.Guild?.Id, Strings.NewReactionTrigger(ctx.Guild.Id)))
             .ConfigureAwait(false);
     }
 

@@ -1002,10 +1002,10 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
                 try
                 {
                     var embed = new EmbedBuilder()
-                        .WithTitle("🎉 New Patreon Supporter!")
-                        .WithDescription($"Let's welcome **{supporter.FullName}** to our Patreon family!")
+                        .WithTitle(strings.NewPatreonSupporter(guild.Id))
+                        .WithDescription(strings.PatreonWelcome(guild.Id, supporter.FullName))
                         .WithColor(0xF96854)
-                        .AddField("Monthly Support", $"${supporter.AmountCents / 100.0:F2}", true)
+                        .AddField(strings.MonthlySupport(guild.Id), $"${supporter.AmountCents / 100.0:F2}", true)
                         .AddField("Started Supporting",
                             supporter.PledgeRelationshipStart?.ToString("MMMM dd, yyyy") ?? "Recently", true)
                         .WithThumbnailUrl("https://c5.patreon.com/external/logo/logomark_color_on_white.png");

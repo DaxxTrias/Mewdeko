@@ -559,7 +559,7 @@ public partial class LocalizationGenerator : IIncrementalGenerator
                 continue;
             }
 
-            if (c == ',' || i == json.Length - 1)
+            if (c == ',')
             {
                 if (!string.IsNullOrEmpty(currentKey))
                 {
@@ -571,6 +571,12 @@ public partial class LocalizationGenerator : IIncrementalGenerator
                 parsingKey = true;
                 continue;
             }
+        }
+
+        // Process the final key-value pair if it exists
+        if (!string.IsNullOrEmpty(currentKey))
+        {
+            result[currentKey] = currentValue ?? "";
         }
 
         return result;

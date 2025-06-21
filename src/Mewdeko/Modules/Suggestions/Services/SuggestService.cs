@@ -148,7 +148,7 @@ public class SuggestionsService : INService
         var message = await GetSuggestButtonMessage(channel.Guild);
         if (string.IsNullOrWhiteSpace(message) || message is "disabled" or "-")
         {
-            var eb = new EmbedBuilder().WithOkColor().WithDescription("Press the button below to make a suggestion!");
+            var eb = new EmbedBuilder().WithOkColor().WithDescription(Strings.MakeSuggestionPrompt(channel.Guild.Id));
             var toAdd = await channel
                 .SendMessageAsync(embed: eb.Build(), components: (await GetSuggestButton(channel.Guild)).Build())
                 .ConfigureAwait(false);
@@ -690,7 +690,7 @@ public class SuggestionsService : INService
                 if (code is "-")
                 {
                     var eb = new EmbedBuilder().WithOkColor()
-                        .WithDescription("Press the button below to make a suggestion!");
+                        .WithDescription(Strings.MakeSuggestionPrompt(channel.Guild.Id));
                     var toadd = await channel.SendMessageAsync(plainText, embed: eb.Build(),
                         components: (await GetSuggestButton(channel.Guild)).Build()).ConfigureAwait(false);
                     await SetSuggestionButtonId(channel.Guild, toadd.Id).ConfigureAwait(false);
@@ -709,7 +709,7 @@ public class SuggestionsService : INService
             if (code is "-")
             {
                 var eb = new EmbedBuilder().WithOkColor()
-                    .WithDescription("Press the button below to make a suggestion!");
+                    .WithDescription(Strings.MakeSuggestionPrompt(channel.Guild.Id));
                 try
                 {
                     await ((IUserMessage)message).ModifyAsync(async x =>
@@ -1585,7 +1585,7 @@ public class SuggestionsService : INService
         {
             return new EmbedBuilder()
                 .WithAuthor(suggestUser)
-                .WithTitle($"Suggestion #{suggest.SuggestionId} {state}")
+                .WithTitle(GetSuggestionStateTitle(guild.Id, suggest.SuggestionId, state))
                 .WithDescription(sug)
                 .WithColor(GetColorForState(state))
                 .AddField("Reason", reason)
@@ -1656,7 +1656,7 @@ public class SuggestionsService : INService
         var suggestUser = await guild.GetUserAsync(suggest.UserId);
         var embed = new EmbedBuilder()
             .WithAuthor(suggestUser)
-            .WithTitle($"Suggestion #{suggest.SuggestionId} {state}")
+            .WithTitle(GetSuggestionStateTitle(guild.Id, suggest.SuggestionId, state))
             .WithDescription(suggest.Suggestion1)
             .AddField("Reason", reason ?? "none")
             .AddField($"{state} By", moderator)
@@ -1752,6 +1752,18 @@ public class SuggestionsService : INService
             SuggestState.Implemented => Color.Green,
             SuggestState.Accepted => Color.Blue,
             _ => Color.Default
+        };
+    }
+
+    private string GetSuggestionStateTitle(ulong guildId, ulong suggestionId, SuggestState state)
+    {
+        return state switch
+        {
+            SuggestState.Denied => Strings.SuggestionDenied(guildId, suggestionId),
+            SuggestState.Considered => Strings.SuggestionConsidered(guildId, suggestionId),
+            SuggestState.Implemented => Strings.SuggestionImplemented(guildId, suggestionId),
+            SuggestState.Accepted => Strings.SuggestionAccepted(guildId, suggestionId),
+            _ => $"Suggestion #{suggestionId} {state}"
         };
     }
 

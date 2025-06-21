@@ -49,19 +49,21 @@ public class SlashGiveaways(
         var emote = maybeEmote.ToIEmote();
         if (emote.Name == null)
         {
-            await ctx.Interaction.SendErrorFollowupAsync("That emote is invalid!", Config).ConfigureAwait(false);
+            await ctx.Interaction.SendErrorFollowupAsync(Strings.GiveawayInvalidEmote(ctx.Guild.Id), Config)
+                .ConfigureAwait(false);
             return;
         }
 
         try
         {
-            var message = await ctx.Interaction.SendConfirmFollowupAsync("Checking emote...").ConfigureAwait(false);
+            var message = await ctx.Interaction.SendConfirmFollowupAsync(Strings.GiveawayCheckingEmote(ctx.Guild.Id))
+                .ConfigureAwait(false);
             await message.AddReactionAsync(emote).ConfigureAwait(false);
         }
         catch
         {
             await ctx.Interaction.SendErrorFollowupAsync(
-                    "I'm unable to use that emote for giveaways! Most likely because I'm not in a server with it.",
+                    Strings.GiveawayEmoteInvalidInteraction(ctx.Guild.Id),
                     Config)
                 .ConfigureAwait(false);
             return;
@@ -69,7 +71,7 @@ public class SlashGiveaways(
 
         await Service.SetGiveawayEmote(ctx.Guild, emote.ToString()).ConfigureAwait(false);
         await ctx.Interaction.SendConfirmFollowupAsync(
-                $"Giveaway emote set to {emote}! Just keep in mind this doesn't update until the next giveaway.")
+                Strings.GiveawayEmoteSet(ctx.Guild.Id, emote))
             .ConfigureAwait(false);
     }
 

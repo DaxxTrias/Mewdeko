@@ -69,7 +69,8 @@ public partial class Utility
                 {
                     IconUrl = ctx.User.GetAvatarUrl(),
                     Text =
-                        Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(), (DateTime.UtcNow - msg.DateAdded).Humanize())
+                        Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(),
+                            (DateTime.UtcNow - msg.DateAdded).Humanize())
                 },
                 Color = Mewdeko.OkColor
             };
@@ -135,7 +136,8 @@ public partial class Utility
                 {
                     IconUrl = ctx.User.GetAvatarUrl(),
                     Text =
-                        Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(), (DateTime.UtcNow - msg.DateAdded).Humanize())
+                        Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(),
+                            (DateTime.UtcNow - msg.DateAdded).Humanize())
                 },
                 Color = Mewdeko.OkColor
             };
@@ -203,7 +205,9 @@ public partial class Utility
                         .WithIconUrl(user.RealAvatarUrl().AbsoluteUri)
                         .WithName($"{user} said:"))
                     .WithDescription(
-                        $"{msg1.Message}\n\nMessage {(edited ? "edited" : "deleted")} {(DateTime.UtcNow - msg1.DateAdded).Humanize()} ago");
+                        Strings.MessageEdited(ctx.Guild.Id, msg1.Message,
+                            (edited ? "edited" : "deleted") + " " + (DateTime.UtcNow - msg1.DateAdded).Humanize() +
+                            " ago"));
 
                 if (msg1.ReferenceMessage is not null)
                     builder.AddField("Replied To", msg1.ReferenceMessage);

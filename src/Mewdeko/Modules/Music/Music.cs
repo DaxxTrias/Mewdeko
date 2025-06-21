@@ -1285,7 +1285,8 @@ public partial class Music(
                     var loadingEmbed = new EmbedBuilder()
                         .WithTitle(Strings.MusicAlbumTitle(ctx.Guild.Id, album.Name))
                         .WithDescription(
-                            $"Loading {album.Tracks.Total} tracks...\n{album.Artists.FirstOrDefault()?.Name ?? "Unknown"}")
+                            Strings.LoadingAlbum(ctx.Guild.Id, Config.LoadingEmote, album.Tracks.Total,
+                                album.Artists.FirstOrDefault()?.Name ?? "Unknown"))
                         .WithColor(new Color(30, 215, 96))
                         .WithThumbnailUrl(album.Images.FirstOrDefault()?.Url)
                         .WithFooter(Strings.MusicProcessingTracks(ctx.Guild.Id, tracks.Count, album.Tracks.Total))
@@ -1316,8 +1317,8 @@ public partial class Music(
                         {
                             var updatedEmbed = loadingMsg.Embeds.First().ToEmbedBuilder()
                                 .WithDescription(
-                                    $"Loading {album.Tracks.Total} tracks...\n{album.Artists.FirstOrDefault()?.Name ?? "Unknown"}\n\n" +
-                                    $"▶️ Now Playing: {ytTrack.Title}")
+                                    Strings.LoadingPlaylistWithTrack(ctx.Guild.Id, album.Tracks.Total,
+                                        album.Artists.FirstOrDefault()?.Name ?? "Unknown", ytTrack.Title))
                                 .Build();
                             await loadingMsg.ModifyAsync(x => x.Embed = updatedEmbed);
                         }
@@ -1381,8 +1382,8 @@ public partial class Music(
                             {
                                 var updatedEmbed = loadingMsg.Embeds.First().ToEmbedBuilder()
                                     .WithDescription(
-                                        $"Loading {playlist.Tracks.Total} tracks...\nPlaylist by {playlist.Owner.DisplayName}\n\n" +
-                                        $"▶️ Now Playing: {ytTrack.Title}")
+                                        Strings.LoadingPlaylistWithTrack(ctx.Guild.Id, playlist.Tracks.Total,
+                                            playlist.Owner.DisplayName, ytTrack.Title))
                                     .Build();
                                 await loadingMsg.ModifyAsync(x => x.Embed = updatedEmbed);
                             }

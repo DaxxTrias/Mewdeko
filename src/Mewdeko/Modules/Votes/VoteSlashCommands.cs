@@ -52,8 +52,8 @@ public class VoteSlashCommands(InteractiveService interactivity) : MewdekoSlashM
                 if (string.IsNullOrWhiteSpace(voteMessage))
                 {
                     var eb = new EmbedBuilder()
-                        .WithTitle($"Thanks for voting for {ctx.Guild.Name}")
-                        .WithDescription($"You have votedd a total of {votes.Count} times!")
+                        .WithTitle(Strings.ThanksForVoting(ctx.Guild.Id, ctx.Guild.Name))
+                        .WithDescription(Strings.VoteCountTypo(ctx.Guild.Id, votes.Count))
                         .WithThumbnailUrl(ctx.User.RealAvatarUrl().AbsoluteUri)
                         .WithOkColor();
 
@@ -115,7 +115,7 @@ public class VoteSlashCommands(InteractiveService interactivity) : MewdekoSlashM
         {
             var component = new ComponentBuilder().WithButton(
                 "Press this to set the password. Remember, do not share it to anyone else.", "setvotepassword");
-            await ctx.Interaction.FollowupAsync("_ _", components: component.Build());
+            await ctx.Interaction.FollowupAsync(Strings.EmptyResponse(ctx.Guild.Id), components: component.Build());
         }
     }
 
@@ -151,7 +151,7 @@ public class VoteSlashCommands(InteractiveService interactivity) : MewdekoSlashM
             if (!added.Item1)
             {
                 await ctx.Interaction.SendErrorAsync(
-                    $"Adding vote role failed for the following reason: {added.Item2}", Config);
+                    Strings.VoteRoleAddFailed(ctx.Guild.Id, added.Item2), Config);
             }
             else
             {
@@ -165,11 +165,11 @@ public class VoteSlashCommands(InteractiveService interactivity) : MewdekoSlashM
             if (!added.Item1)
             {
                 await ctx.Interaction.SendErrorAsync(
-                    $"Adding vote role failed for the following reason: {added.Item2}", Config);
+                    Strings.VoteRoleAddFailed(ctx.Guild.Id, added.Item2), Config);
             }
             else
             {
-                await ctx.Interaction.SendConfirmAsync($"{role.Mention} added as a vote role.");
+                await ctx.Interaction.SendConfirmAsync(Strings.VoteRoleAdded(ctx.Guild.Id, role.Mention));
             }
         }
     }

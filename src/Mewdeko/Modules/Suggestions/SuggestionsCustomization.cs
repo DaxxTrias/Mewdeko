@@ -176,7 +176,7 @@ public partial class Suggestions
         public async Task SuggestMotesMode(SuggestEmoteModeEnum mode)
         {
             await Service.SetEmoteMode(ctx.Guild, (int)mode).ConfigureAwait(false);
-            await ctx.Channel.SendConfirmAsync($"Sucessfully set Emote Mode to {mode}").ConfigureAwait(false);
+            await ctx.Channel.SendConfirmAsync(Strings.EmoteModeSet(ctx.Guild.Id, mode)).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -195,7 +195,8 @@ public partial class Suggestions
         public async Task SuggestButtonColor(ButtonType type)
         {
             await Service.SetSuggestButtonColor(ctx.Guild, (int)type).ConfigureAwait(false);
-            await ctx.Channel.SendConfirmAsync($"Suggest Button Color will now be `{type}`").ConfigureAwait(false);
+            await ctx.Channel.SendConfirmAsync(Strings.SuggestButtonColorSet(ctx.Guild.Id, type.ToString()))
+                .ConfigureAwait(false);
             await Service.UpdateSuggestionButtonMessage(ctx.Guild, await Service.GetSuggestButtonMessage(ctx.Guild))
                 .ConfigureAwait(false);
         }
@@ -216,7 +217,8 @@ public partial class Suggestions
         public async Task SuggestMoteColor(int num, ButtonType type)
         {
             await Service.SetButtonType(ctx.Guild, num, (int)type).ConfigureAwait(false);
-            await ctx.Channel.SendConfirmAsync($"Suggest Button {num} will now be `{type}`").ConfigureAwait(false);
+            await ctx.Channel.SendConfirmAsync(Strings.SuggestButtonTypeSet(ctx.Guild.Id, num, type))
+                .ConfigureAwait(false);
             await Service.UpdateSuggestionButtonMessage(ctx.Guild, await Service.GetSuggestButtonMessage(ctx.Guild))
                 .ConfigureAwait(false);
         }
@@ -243,7 +245,7 @@ public partial class Suggestions
             }
 
             await Service.SetMaxLength(ctx.Guild, length).ConfigureAwait(false);
-            await ctx.Channel.SendConfirmAsync($"Max length set to {length} characters!").ConfigureAwait(false);
+            await ctx.Channel.SendConfirmAsync(Strings.MaxLengthSet(ctx.Guild.Id, length)).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -293,7 +295,8 @@ public partial class Suggestions
             if (channel is null)
                 await ctx.Channel.SendConfirmAsync(Strings.ImplementedSuggestionsDefaultLook(ctx.Guild.Id));
             else
-                await ctx.Channel.SendConfirmAsync($"Accept channel set to {channel.Mention}").ConfigureAwait(false);
+                await ctx.Channel.SendConfirmAsync(Strings.AcceptChannelSet(ctx.Guild.Id, channel.Mention))
+                    .ConfigureAwait(false);
         }
 
         /// <summary>
@@ -314,7 +317,8 @@ public partial class Suggestions
             if (channel is null)
                 await ctx.Channel.SendConfirmAsync(Strings.DenyChannelDisabled(ctx.Guild.Id));
             else
-                await ctx.Channel.SendConfirmAsync($"Deny channel set to {channel.Mention}").ConfigureAwait(false);
+                await ctx.Channel.SendConfirmAsync(Strings.DenyChannelSet(ctx.Guild.Id, channel.Mention))
+                    .ConfigureAwait(false);
         }
 
         /// <summary>
@@ -336,7 +340,8 @@ public partial class Suggestions
             if (channel is null)
                 await ctx.Channel.SendConfirmAsync(Strings.ConsiderChannelDisabled(ctx.Guild.Id));
             else
-                await ctx.Channel.SendConfirmAsync($"Consider channel set to {channel.Mention}").ConfigureAwait(false);
+                await ctx.Channel.SendConfirmAsync(Strings.ConsiderChannelSet(ctx.Guild.Id, channel.Mention))
+                    .ConfigureAwait(false);
         }
 
         /// <summary>
@@ -358,7 +363,8 @@ public partial class Suggestions
             if (channel is null)
                 await ctx.Channel.SendConfirmAsync(Strings.ImplementChannelDisabled(ctx.Guild.Id));
             else
-                await ctx.Channel.SendConfirmAsync($"Implement channel set to {channel.Mention}").ConfigureAwait(false);
+                await ctx.Channel.SendConfirmAsync(Strings.ImplementChannelSet(ctx.Guild.Id, channel.Mention))
+                    .ConfigureAwait(false);
         }
 
         /// <summary>
@@ -403,7 +409,7 @@ public partial class Suggestions
         public async Task SuggestThreadsType(SuggestThreadType type)
         {
             await Service.SetSuggestThreadsType(ctx.Guild, (int)type).ConfigureAwait(false);
-            await ctx.Channel.SendConfirmAsync($"Successfully set Suggestion Threads Type to `{type}`")
+            await ctx.Channel.SendConfirmAsync(Strings.SuggestionThreadsTypeSet(ctx.Guild.Id, type))
                 .ConfigureAwait(false);
         }
 
@@ -424,7 +430,7 @@ public partial class Suggestions
             await Service
                 .UpdateSuggestionButtonMessage(ctx.Guild, await Service.GetSuggestButtonMessage(ctx.Guild), true)
                 .ConfigureAwait(false);
-            await ctx.Channel.SendConfirmAsync($"Suggest Button Channel set to {channel.Mention}")
+            await ctx.Channel.SendConfirmAsync(Strings.SuggestButtonChannelSet(ctx.Guild.Id, channel.Mention))
                 .ConfigureAwait(false);
         }
 

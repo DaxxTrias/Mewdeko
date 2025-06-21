@@ -8,12 +8,12 @@ using System.Threading;
 using AngleSharp.Html.Dom;
 using AngleSharp.Html.Parser;
 using GTranslate.Translators;
-using Html2Markdown;
 using LinqToDB;
 using MartineApiNet;
 using MartineApiNet.Enums;
 using MartineApiNet.Models.Images;
 using Mewdeko.Modules.Searches.Common;
+using Mewdeko.Services.Strings;
 using Newtonsoft.Json.Linq;
 using Refit;
 using Serilog;
@@ -62,16 +62,17 @@ public class SearchesService : INService, IUnloadableService
     });
 
     private readonly IDataCache cache;
-    private readonly MartineApi martineApi;
     private readonly IBotCredentials creds;
-    private readonly IGoogleApiService google;
     private readonly IDataConnectionFactory dbFactory;
+    private readonly IGoogleApiService google;
     private readonly IHttpClientFactory httpFactory;
 
     private readonly ConcurrentDictionary<ulong, SearchImageCacher> imageCacher = new();
     private readonly IImageCache imgs;
+    private readonly MartineApi martineApi;
     private readonly List<string> nsfwreddits;
     private readonly MewdekoRandom rng;
+    private readonly GeneratedBotStrings strings;
     private readonly List<string?> yomamaJokes;
 
     private readonly object yomamaLock = new();
@@ -89,7 +90,8 @@ public class SearchesService : INService, IUnloadableService
     /// <param name="dbFactory">The db context provider</param>
     public SearchesService(IGoogleApiService google, IDataCache cache,
         IHttpClientFactory factory,
-        IBotCredentials creds, EventHandler handler, MartineApi martineApi, IDataConnectionFactory dbFactory)
+        IBotCredentials creds, EventHandler handler, MartineApi martineApi, IDataConnectionFactory dbFactory,
+        GeneratedBotStrings strings)
     {
         httpFactory = factory;
         this.google = google;
@@ -98,6 +100,7 @@ public class SearchesService : INService, IUnloadableService
         this.creds = creds;
         this.martineApi = martineApi;
         this.dbFactory = dbFactory;
+        this.strings = strings;
         rng = new MewdekoRandom();
 
         //translate commands
@@ -142,7 +145,9 @@ public class SearchesService : INService, IUnloadableService
                 }
 
                 await umsg.Channel.SendConfirmAsync(
-                        $"{umsg.Author.Mention} `:` {text.Replace("<@ ", "<@", StringComparison.InvariantCulture).Replace("<@! ", "<@!", StringComparison.InvariantCulture)}")
+                        strings.SearchResultUser(((IGuildChannel)umsg.Channel).GuildId, umsg.Author.Mention,
+                            text.Replace("<@ ", "<@", StringComparison.InvariantCulture)
+                                .Replace("<@! ", "<@!", StringComparison.InvariantCulture)))
                     .ConfigureAwait(false);
             }
             catch
@@ -319,8 +324,7 @@ public class SearchesService : INService, IUnloadableService
 
         var textPaint = new SKPaint
         {
-            IsAntialias = true,
-            Color = SKColors.Black
+            IsAntialias = true, Color = SKColors.Black
         };
 
         using var canvas = new SKCanvas(bg);
@@ -333,6 +337,7 @@ public class SearchesService : INService, IUnloadableService
 
         return SKImage.FromBitmap(bg).Encode().ToArray();
     }
+
 // Helper method to draw rounded corners
     private static SKBitmap ApplyRoundedCorners(SKBitmap input, float radius)
     {
@@ -478,6 +483,7 @@ public class SearchesService : INService, IUnloadableService
             Log.Error(ex, "Weather error: {Message}", ex.Message);
             return (default, TimeErrors.NotFound);
         }
+
         return (default, TimeErrors.NotFound);
     }
 
@@ -765,70 +771,84 @@ public class SearchesService : INService, IUnloadableService
         return firstParagraph.Length > 1000 ? firstParagraph[..1000] + "..." : firstParagraph;
     }
 
-   /// <summary>
-/// Retrieves detailed information about a Steam game by its name.
-/// </summary>
-/// <param name="query">The name of the game to search for.</param>
-/// <returns>A task that represents the asynchronous operation. The task result contains the SteamGameInfo if found; otherwise, null.</returns>
-public async Task<SteamGameInfo?> GetSteamGameInfoByName(string query)
-{
-    query = query.Trim().ToLowerInvariant();
-    var searchCacheKey = $"steam_game_search_{query}";
+    /// <summary>
+    ///     Retrieves detailed information about a Steam game by its name.
+    /// </summary>
+    /// <param name="query">The name of the game to search for.</param>
+    /// <returns>
+    ///     A task that represents the asynchronous operation. The task result contains the SteamGameInfo if found;
+    ///     otherwise, null.
+    /// </returns>
+    public async Task<SteamGameInfo?> GetSteamGameInfoByName(string query)
+    {
+        query = query.Trim().ToLowerInvariant();
+        var searchCacheKey = $"steam_game_search_{query}";
 
-    // First try to get the AppId from search
-    var searchResult = await cache.GetOrAddCachedDataAsync(
-        searchCacheKey,
-        async _ =>
-        {
-            using var http = httpFactory.CreateClient();
-            var response = await http.GetAsync($"https://store.steampowered.com/api/storesearch/?term={Uri.EscapeDataString(query)}&l=en&cc=US");
-
-            if (!response.IsSuccessStatusCode)
-                return null;
-
-            var content = await response.Content.ReadAsStringAsync();
-            var result = JsonSerializer.Deserialize<StoreSearchResponse>(content, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-
-            if (result?.Items == null || !result.Items.Any())
-                return null;
-
-            // Return the most relevant match
-            return result.Items[0];
-        },
-        default(string),
-        TimeSpan.FromHours(1)
-    );
-
-    if (searchResult == null)
-        return null;
-
-    // Then get detailed info
-    return await cache.GetOrAddCachedDataAsync(
-        $"steam_game_details_{searchResult.Id}",
-        async _ =>
-        {
-            using var http = httpFactory.CreateClient();
-            var detailsStr = await http.GetStringAsync($"https://store.steampowered.com/api/appdetails?appids={searchResult.Id}");
-
-            var response = JsonSerializer.Deserialize<Dictionary<string, AppDetailsResponse>>(
-                detailsStr,
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
-            );
-
-            if (response?.TryGetValue(searchResult.Id.ToString(), out var gameDetails) == true && gameDetails.Success)
+        // First try to get the AppId from search
+        var searchResult = await cache.GetOrAddCachedDataAsync(
+            searchCacheKey,
+            async _ =>
             {
-                var data = gameDetails.Data;
-                data.Price = searchResult.Price; // Include the price from search result as it's more reliable
-                data.Metascore = searchResult.Metascore; // Include metascore from search as it's already parsed
-                return data;
-            }
+                using var http = httpFactory.CreateClient();
+                var response =
+                    await http.GetAsync(
+                        $"https://store.steampowered.com/api/storesearch/?term={Uri.EscapeDataString(query)}&l=en&cc=US");
 
+                if (!response.IsSuccessStatusCode)
+                    return null;
+
+                var content = await response.Content.ReadAsStringAsync();
+                var result = JsonSerializer.Deserialize<StoreSearchResponse>(content, new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
+
+                if (result?.Items == null || !result.Items.Any())
+                    return null;
+
+                // Return the most relevant match
+                return result.Items[0];
+            },
+            default(string),
+            TimeSpan.FromHours(1)
+        );
+
+        if (searchResult == null)
             return null;
-        },
-        default(string),
-        TimeSpan.FromHours(6)
-    );
-}
+
+        // Then get detailed info
+        return await cache.GetOrAddCachedDataAsync(
+            $"steam_game_details_{searchResult.Id}",
+            async _ =>
+            {
+                using var http = httpFactory.CreateClient();
+                var detailsStr =
+                    await http.GetStringAsync(
+                        $"https://store.steampowered.com/api/appdetails?appids={searchResult.Id}");
+
+                var response = JsonSerializer.Deserialize<Dictionary<string, AppDetailsResponse>>(
+                    detailsStr,
+                    new JsonSerializerOptions
+                    {
+                        PropertyNameCaseInsensitive = true
+                    }
+                );
+
+                if (response?.TryGetValue(searchResult.Id.ToString(), out var gameDetails) == true &&
+                    gameDetails.Success)
+                {
+                    var data = gameDetails.Data;
+                    data.Price = searchResult.Price; // Include the price from search result as it's more reliable
+                    data.Metascore = searchResult.Metascore; // Include metascore from search as it's already parsed
+                    return data;
+                }
+
+                return null;
+            },
+            default(string),
+            TimeSpan.FromHours(6)
+        );
+    }
 
 
     /// <summary>

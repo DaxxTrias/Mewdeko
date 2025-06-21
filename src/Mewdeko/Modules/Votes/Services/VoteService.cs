@@ -75,7 +75,7 @@ public class VoteService : INService
 
             var eb = new EmbedBuilder()
                 .WithTitle(Strings.VoteThanks(guild.Id, guild.Name))
-                .WithDescription($"You have voted a total of {votes} times!")
+                .WithDescription(Strings.VoteCountCorrect(guild.Id, votes))
                 .WithThumbnailUrl(user.RealAvatarUrl().AbsoluteUri)
                 .WithOkColor();
 

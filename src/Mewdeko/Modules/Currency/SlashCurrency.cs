@@ -147,7 +147,7 @@ public class SlashCurrency : MewdekoSlashCommandModule
         var chainState = TriviaChainService.GetTriviaChainState(userId);
         if (chainState == null)
         {
-            await RespondAsync("Trivia chain session expired. Please start a new one.", ephemeral: true);
+            await RespondAsync(Strings.TriviaChainExpired(ctx.Guild.Id), ephemeral: true);
             return;
         }
 

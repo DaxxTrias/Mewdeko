@@ -87,19 +87,19 @@ public partial class Utility(
             var comps = components?.Build();
             watch.Stop();
             var eb = new EmbedBuilder()
-                .WithTitle("Embed Successfully Parsed")
+                .WithTitle(Strings.EmbedParsed(ctx.Guild.Id))
                 .WithOkColor()
-                .WithDescription($"`PlainText Length:` ***{plainText.Length}***\n" +
+                .WithDescription(Strings.PlaintextLength(ctx.Guild.Id, plainText.Length) +
                                  $"`Embed Count:` ***{embeds?.Length}***\n" +
                                  $"`Component Count:` ***{comps?.Components.Count}")
-                .WithFooter($"Execution Time: {watch.Elapsed}");
+                .WithFooter(Strings.ExecutionTime(ctx.Guild.Id, watch.Elapsed));
             await ctx.Channel.SendMessageAsync(plainText, embeds: embeds, components: comps);
             await ctx.Channel.SendMessageAsync(embed: eb.Build());
         }
         catch (Exception e)
         {
             var eb = new EmbedBuilder()
-                .WithTitle("Error Parsing Embed")
+                .WithTitle(Strings.ErrorParsingEmbed(ctx.Guild.Id))
                 .WithDescription(e.ToString());
             await ctx.Channel.SendMessageAsync(embed: eb.Build());
         }
@@ -160,7 +160,7 @@ public partial class Utility(
         {
             var embed = new PageBuilder()
                 .WithOkColor()
-                .WithTitle("Roles with the specified permissions");
+                .WithTitle(Strings.RolesWithPermissions(ctx.Guild.Id));
 
             if (searchType == PermissionType.And)
             {

@@ -126,7 +126,7 @@ public partial class TicketsSlash : MewdekoSlashModuleBase<TicketService>
 
             if (!buttons.Any() && !menus.Any())
             {
-                embed.WithDescription("No components found on this panel.");
+                embed.WithDescription(Strings.NoPanelComponents(ctx.Guild.Id));
             }
 
             await RespondAsync(embed: embed.Build());
@@ -179,7 +179,7 @@ public partial class TicketsSlash : MewdekoSlashModuleBase<TicketService>
                 await Task.CompletedTask;
                 var pagePanels = panels.Skip(5 * page).Take(5);
                 var pageBuilder = new PageBuilder()
-                    .WithTitle("Ticket Panels")
+                    .WithTitle(Strings.TicketPanels(ctx.Guild.Id))
                     .WithOkColor();
 
                 foreach (var panel in pagePanels)
@@ -696,7 +696,7 @@ public partial class TicketsSlash : MewdekoSlashModuleBase<TicketService>
 
                 var creator = await ctx.Guild.GetUserAsync(ticketCase.CreatedBy);
                 var eb = new EmbedBuilder()
-                    .WithTitle($"Case #{ticketCase.Id}: {ticketCase.Title}")
+                    .WithTitle(Strings.TicketCase(ctx.Guild.Id, ticketCase.Id.ToString(), ticketCase.Title))
                     .WithDescription(ticketCase.Description)
                     .AddField("Created By", creator?.Mention ?? "Unknown", true)
                     .AddField("Created At", ticketCase.CreatedAt.ToString("g"), true)
@@ -874,13 +874,13 @@ public partial class TicketsSlash : MewdekoSlashModuleBase<TicketService>
             async Task<PageBuilder> PageFactory(int page)
             {
                 var pageBuilder = new PageBuilder()
-                    .WithTitle("Cases")
+                    .WithTitle(Strings.Cases(ctx.Guild.Id))
                     .WithOkColor();
 
                 foreach (var ticketCase in cases.Skip(page * 10).Take(10))
                 {
                     var creator = await ctx.Guild.GetUserAsync(ticketCase.CreatedBy);
-                    pageBuilder.AddField($"Case #{ticketCase.Id}: {ticketCase.Title}",
+                    pageBuilder.AddField(Strings.TicketCase(ctx.Guild.Id, ticketCase.Id.ToString(), ticketCase.Title),
                         $"Created by: {creator?.Mention ?? "Unknown"}\n" +
                         $"Status: {(ticketCase.ClosedAt.HasValue ? "Closed" : "Open")}\n" +
                         $"Linked Tickets: {ticketCase.Tickets.Count()}\n" +
@@ -1044,12 +1044,12 @@ public partial class TicketsSlash : MewdekoSlashModuleBase<TicketService>
         {
             await cache.Redis.GetDatabase().StringSetAsync($"btn_creation:{ctx.User.Id}:style", style);
 
-            await ctx.Interaction.SendConfirmAsync("Please enter the button label:");
+            await ctx.Interaction.SendConfirmAsync(Strings.EnterButtonLabel(ctx.Guild.Id));
             var label = await NextMessageAsync(ctx.Channel.Id, ctx.User.Id);
 
             if (string.IsNullOrEmpty(label))
             {
-                await ctx.Interaction.SendErrorAsync("Button creation cancelled - no label provided.", Config);
+                await ctx.Interaction.SendErrorAsync(Strings.ButtonCreationCancelled(ctx.Guild.Id), Config);
                 return;
             }
 
@@ -1061,7 +1061,7 @@ public partial class TicketsSlash : MewdekoSlashModuleBase<TicketService>
                 .Build();
 
             await ctx.Interaction.FollowupAsync(
-                embed: new EmbedBuilder().WithDescription("Would you like to add an emoji to the button?").WithOkColor()
+                embed: new EmbedBuilder().WithDescription(Strings.AddEmojiToButton(ctx.Guild.Id)).WithOkColor()
                     .Build(),
                 components: components);
         }
@@ -1088,7 +1088,7 @@ public partial class TicketsSlash : MewdekoSlashModuleBase<TicketService>
         {
             if (choice == "yes")
             {
-                await ctx.Interaction.SendConfirmAsync("Please enter an emoji:");
+                await ctx.Interaction.SendConfirmAsync(Strings.PleaseEnterEmoji(ctx.Guild.Id));
                 var emoji = await NextMessageAsync(ctx.Channel.Id, ctx.User.Id);
 
                 if (!string.IsNullOrEmpty(emoji))
@@ -1649,7 +1649,7 @@ public partial class TicketsSlash : MewdekoSlashModuleBase<TicketService>
                 modal.Description,
                 ctx.User as IGuildUser);
 
-            await RespondAsync($"Case #{ticketCase.Id} '{modal.CaseTitle}' created successfully!", ephemeral: true);
+            await RespondAsync(Strings.TicketCaseCreated(ctx.Guild.Id, ticketCase.Id.ToString()), ephemeral: true);
         }
         catch (Exception ex)
         {
@@ -1888,7 +1888,7 @@ public partial class TicketsSlash : MewdekoSlashModuleBase<TicketService>
             .WithButton("Yes", $"btn_emoji:{panelId}:yes")
             .WithButton("No", $"btn_emoji:{panelId}:no");
 
-        await RespondAsync("Would you like to add an emoji to the button?", components: components.Build());
+        await RespondAsync(Strings.AddEmojiToButton(ctx.Guild.Id), components: components.Build());
     }
 
 

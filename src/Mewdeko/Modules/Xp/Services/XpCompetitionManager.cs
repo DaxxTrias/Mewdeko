@@ -177,7 +177,8 @@ public class XpCompetitionManager : INService, IDisposable
                                         .WithColor(Color.Gold)
                                         .WithTitle(Strings.CompetitionMilestone(guild.Id))
                                         .WithDescription(
-                                            $"{user.Mention} is the first to reach level {competition.TargetLevel} in the '{competition.Name}' competition!")
+                                            Strings.XpCompetitionWinner(guild.Id, user.Mention, competition.TargetLevel,
+                                                competition.Name))
                                         .Build()
                                 );
                             }

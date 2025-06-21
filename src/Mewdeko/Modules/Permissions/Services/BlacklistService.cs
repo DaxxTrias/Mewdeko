@@ -1,10 +1,11 @@
 ﻿using DataModel;
+using LinqToDB;
+using LinqToDB.Data;
 using Mewdeko.Common.Configs;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Common.PubSub;
-using LinqToDB;
-using LinqToDB.Data;
 using Mewdeko.Database.Enums;
+using Mewdeko.Services.Strings;
 using Serilog;
 
 namespace Mewdeko.Modules.Permissions.Services;
@@ -22,6 +23,7 @@ public sealed class BlacklistService : IEarlyBehavior, INService
     private readonly BotConfig config;
     private readonly IDataConnectionFactory dbFactory;
     private readonly IPubSub pubSub;
+    private readonly GeneratedBotStrings strings;
 
     /// <summary>
     ///     Gets or sets the collection of blacklist entries.
@@ -44,12 +46,14 @@ public sealed class BlacklistService : IEarlyBehavior, INService
     /// </remarks>
     public BlacklistService(IDataConnectionFactory dbFactory, IPubSub pubSub, EventHandler handler,
         DiscordShardedClient client,
-        BotConfig config)
+        BotConfig config,
+        GeneratedBotStrings strings)
     {
         this.dbFactory = dbFactory;
         this.pubSub = pubSub;
         this.client = client;
         this.config = config;
+        this.strings = strings;
         _ = Reload(false);
         this.pubSub.Sub(blPubKey, OnReload);
         this.pubSub.Sub(blPrivKey, ManualCheck);
@@ -179,7 +183,7 @@ public sealed class BlacklistService : IEarlyBehavior, INService
             {
                 await channel
                     .SendErrorAsync(
-                        "This server has been blacklisted. Please click the button below to potentially appeal your server ban.",
+                        strings.ServerBlacklisted(arg.Id),
                         config)
                     .ConfigureAwait(false);
             }
@@ -207,7 +211,7 @@ public sealed class BlacklistService : IEarlyBehavior, INService
             {
                 await channel
                     .SendErrorAsync(
-                        "This server has been blacklisted. Please click the button below to potentially appeal your server ban.",
+                        strings.ServerBlacklisted(arg.Id),
                         config)
                     .ConfigureAwait(false);
             }
@@ -275,9 +279,7 @@ public sealed class BlacklistService : IEarlyBehavior, INService
 
         var item = new Blacklist
         {
-            ItemId = id,
-            Type = (int)type,
-            Reason = reason ?? "No reason provided."
+            ItemId = id, Type = (int)type, Reason = reason ?? "No reason provided."
         };
 
         await db.InsertAsync(item);
@@ -318,8 +320,7 @@ public sealed class BlacklistService : IEarlyBehavior, INService
 
         var entries = toBlacklist.Select(x => new Blacklist
         {
-            ItemId = x,
-            Type = (int)BlacklistType.User
+            ItemId = x, Type = (int)BlacklistType.User
         });
 
         // Use BulkCopy for efficient insertion of multiple records

@@ -1614,7 +1614,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
                 using var discordWebhookClient =
                     new DiscordWebhookClient(webhookUrl); // Initialize a Discord webhook client
                 await discordWebhookClient
-                    .SendMessageAsync("Test of chat trigger crossposting webhook!") // Send a test message
+                    .SendMessageAsync(strings.CrosspostTest(guildId)) // Send a test message
                     .ConfigureAwait(false);
             }
             catch // Handle exceptions
@@ -1774,7 +1774,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
     {
         var eb = new EmbedBuilder().WithOkColor()
             .WithTitle(title)
-            .WithDescription($"#{ct.Id}");
+            .WithDescription(strings.ChatTriggerId(gId, ct.Id));
 
         try
         {
@@ -1783,14 +1783,15 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
         }
         catch
         {
-            eb.AddField(strings.CtInteractionTypeTitle(gId), "Unknown");
+            eb.AddField(strings.CtInteractionTypeTitle(gId), strings.CtUnknown(gId));
         }
 
-        eb.AddField(strings.CtRealname(gId), ct.RealName() ?? "N/A")
-            .AddField(efb => efb.WithName(strings.Trigger(gId)).WithValue(ct.Trigger?.TrimTo(1024) ?? "N/A"))
+        eb.AddField(strings.CtRealname(gId), ct.RealName() ?? strings.CtNotAvailable(gId))
+            .AddField(efb =>
+                efb.WithName(strings.Trigger(gId)).WithValue(ct.Trigger?.TrimTo(1024) ?? strings.CtNotAvailable(gId)))
             .AddField(efb =>
                 efb.WithName(strings.Response(gId))
-                    .WithValue($"```css\n{(ct.Response ?? "N/A").TrimTo(1024 - 11)}```"))
+                    .WithValue($"```css\n{(ct.Response ?? strings.CtNotAvailable(gId)).TrimTo(1024 - 11)}```"))
             .AddField(strings.CtPrefixType(gId), ((RequirePrefixType)ct.PrefixType).ToString());
 
         try
@@ -1937,7 +1938,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
         props = groups.Select(x => new SlashCommandBuilder()
                 .WithName(x.Name)
                 .WithDescription(x.Triggers?.ApplicationCommandDescription.IsNullOrWhiteSpace() ?? true
-                    ? "description"
+                    ? strings.CtDefaultDescription(guildId)
                     : x.Triggers!.ApplicationCommandDescription)
                 .AddOptions(x.Triggers is not null
                     ? []
@@ -1947,7 +1948,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
                         }
                         .WithName(y.Name)
                         .WithDescription(y.Triggers?.ApplicationCommandDescription.IsNullOrWhiteSpace() ?? true
-                            ? "description"
+                            ? strings.CtDefaultDescription(guildId)
                             : y.Triggers!.ApplicationCommandDescription)
                         .WithType(y.Triggers is null
                             ? ApplicationCommandOptionType.SubCommandGroup
@@ -1957,7 +1958,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
                             : y.Children.Select(z => new SlashCommandOptionBuilder()
                                 .WithName(z.Name.Split(' ')[2])
                                 .WithDescription(z.Triggers?.ApplicationCommandDescription.IsNullOrWhiteSpace() ?? true
-                                    ? "description"
+                                    ? strings.CtDefaultDescription(guildId)
                                     : z.Triggers!.ApplicationCommandDescription)
                                 .WithType(ApplicationCommandOptionType.SubCommand)).ToArray())).ToArray()))
             .Select(x => x.Build() as ApplicationCommandProperties).ToList();
@@ -2278,7 +2279,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
         {
             Author = user,
             Content =
-                $"{reaction.Emote} reaction on: {(message.Content?.Length > 50 ? message.Content[..50] + "..." : message.Content ?? "")}",
+                $"{reaction.Emote} {strings.CtReactionOn(guild.Id)} {(message.Content?.Length > 50 ? message.Content[..50] + strings.CtContentTruncated(guild.Id) : message.Content ?? "")}",
             Channel = channel
         };
 

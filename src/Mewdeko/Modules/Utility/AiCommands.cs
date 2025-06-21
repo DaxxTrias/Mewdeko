@@ -169,7 +169,7 @@ public partial class Utility
             var component = new ComponentBuilder()
                 .WithButton(Strings.AiKeyClickToSet(ctx.Guild.Id), "setaikey")
                 .Build();
-            await ctx.Channel.SendMessageAsync("_ _", components: component);
+            await ctx.Channel.SendMessageAsync(Strings.EmptyResponse(ctx.Guild.Id), components: component);
         }
 
         /// <summary>

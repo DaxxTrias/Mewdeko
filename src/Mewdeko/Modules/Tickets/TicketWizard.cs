@@ -88,9 +88,8 @@ public partial class TicketsSlash
                 JsonSerializer.Serialize(wizardState), TimeSpan.FromMinutes(30));
 
             var embed = new EmbedBuilder()
-                .WithTitle("🎫 Ticket System Setup Wizard")
-                .WithDescription($"Let's set up your ticket system in {channel.Mention}!\n\n" +
-                                 "**Choose your setup method:**")
+                .WithTitle(Strings.TicketWizardTitle(ctx.Guild.Id))
+                .WithDescription(Strings.TicketWizardDescription(ctx.Guild.Id, channel.Mention))
                 .AddField("📋 Templates", "Use pre-made templates for common use cases")
                 .AddField("🎨 Custom Setup", "Create a completely custom panel")
                 .AddField("⚡ Quick Setup", "Fast setup with basic options")
@@ -248,9 +247,9 @@ public partial class TicketsSlash
                 await Service.UpdatePanelComponentsAsync(panel);
 
                 var successEmbed = new EmbedBuilder()
-                    .WithTitle($"{Config.SuccessEmote} Template Applied Successfully!")
+                    .WithTitle(Strings.TemplateAppliedSuccess(ctx.Guild.Id, Config.SuccessEmote))
                     .WithDescription(
-                        $"Created ticket panel in {channel.Mention} using the **{template.Name}** template.")
+                        Strings.TicketPanelCreated(ctx.Guild.Id, channel.Mention, template.Name))
                     .AddField("📋 Panel ID", panel.MessageId.ToString())
                     .AddField("🧩 Components Created", string.Join("\n", createdComponents))
                     .WithColor(Color.Green);
@@ -290,7 +289,7 @@ public partial class TicketsSlash
                 var template = templates[page];
 
                 var pageBuilder = new PageBuilder()
-                    .WithTitle($"📋 Template: {template.Name}")
+                    .WithTitle(Strings.TemplateTitle(ctx.Guild.Id, template.Name))
                     .WithDescription(template.Description)
                     .WithColor(Color.Blue);
 
@@ -351,8 +350,8 @@ public partial class TicketsSlash
             }
 
             var embed = new EmbedBuilder()
-                .WithTitle("📋 Choose a Template")
-                .WithDescription("Select a pre-made template that matches your needs:")
+                .WithTitle(Strings.ChooseTemplate(ctx.Guild.Id))
+                .WithDescription(Strings.SelectTemplateDescription(ctx.Guild.Id))
                 .WithColor(Color.Green);
 
             var components = new ComponentBuilder()
@@ -700,7 +699,7 @@ public partial class TicketsSlash
                 // Show preview and confirmation
                 var preview = ConfigurationPreview.GenerateButtonPreview(basicSettings, modal.ModalConfig,
                     behaviorSettings,
-                    permissionSettings, Strings.ButtonPreview(ctx.Guild.Id));
+                    permissionSettings, Strings.ButtonPreview(ctx.Guild.Id), Strings.ReviewButtonConfig(ctx.Guild.Id));
 
                 var confirmId = Guid.NewGuid().ToString();
                 await cache.Redis.GetDatabase().StringSetAsync($"button_confirm:{confirmId}",

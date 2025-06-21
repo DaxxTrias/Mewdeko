@@ -2,6 +2,7 @@
 using System.Threading;
 using DataModel;
 using LinqToDB;
+using Mewdeko.Services.Strings;
 using Serilog;
 
 namespace Mewdeko.Modules.CustomVoice.Services;
@@ -18,6 +19,7 @@ public class CustomVoiceService : INService, IUnloadableService
     private readonly ConcurrentDictionary<ulong, Timer> emptyChannelTimers = new();
     private readonly EventHandler eventHandler;
     private readonly SemaphoreSlim @lock = new(1, 1);
+    private readonly GeneratedBotStrings strings;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="CustomVoiceService" /> class.
@@ -25,11 +27,13 @@ public class CustomVoiceService : INService, IUnloadableService
     public CustomVoiceService(
         IDataConnectionFactory dbFactory,
         DiscordShardedClient client,
-        EventHandler eventHandler)
+        EventHandler eventHandler,
+        GeneratedBotStrings strings)
     {
         this.dbFactory = dbFactory;
         this.client = client;
         this.eventHandler = eventHandler;
+        this.strings = strings;
 
         this.eventHandler.UserVoiceStateUpdated += OnUserVoiceStateUpdated;
         this.eventHandler.ChannelDestroyed += OnChannelDestroyed;

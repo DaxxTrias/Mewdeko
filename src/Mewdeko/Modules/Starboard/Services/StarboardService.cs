@@ -1,6 +1,7 @@
 ﻿using DataModel;
 using LinqToDB;
 using Mewdeko.Common.ModuleBehaviors;
+using Mewdeko.Services.Strings;
 using Serilog;
 
 namespace Mewdeko.Modules.Starboard.Services;
@@ -13,6 +14,7 @@ public class StarboardService : INService, IReadyExecutor, IUnloadableService
     private readonly DiscordShardedClient client;
     private readonly IDataConnectionFactory dbFactory;
     private readonly EventHandler eventHandler;
+    private readonly GeneratedBotStrings strings;
     private List<DataModel.Starboard> starboardConfigs = [];
 
     private List<StarboardPost> starboardPosts = [];
@@ -24,11 +26,12 @@ public class StarboardService : INService, IReadyExecutor, IUnloadableService
     /// <param name="dbFactory">The database context provider.</param>
     /// <param name="eventHandler">The event handler.</param>
     public StarboardService(DiscordShardedClient client, IDataConnectionFactory dbFactory,
-        EventHandler eventHandler)
+        EventHandler eventHandler, GeneratedBotStrings strings)
     {
         this.client = client;
         this.dbFactory = dbFactory;
         this.eventHandler = eventHandler;
+        this.strings = strings;
         eventHandler.ReactionAdded += OnReactionAddedAsync;
         eventHandler.MessageDeleted += OnMessageDeletedAsync;
         eventHandler.ReactionRemoved += OnReactionRemoveAsync;
@@ -484,7 +487,8 @@ public class StarboardService : INService, IReadyExecutor, IUnloadableService
 
                     await post2.ModifyAsync(x =>
                     {
-                        x.Content = $"{emote} **{enumerable.Length}** {textChannel.Mention}";
+                        x.Content = strings.StarboardMessage(textChannel.Guild.Id, emote, enumerable.Length,
+                            textChannel.Mention);
                         x.Components = component;
                         x.Embed = eb1.Build();
                     });
@@ -514,7 +518,7 @@ public class StarboardService : INService, IReadyExecutor, IUnloadableService
                         eb2.WithImageUrl(imageurl);
 
                     var msg1 = await starboardChannel.SendMessageAsync(
-                        $"{emote} **{enumerable.Length}** {textChannel.Mention}",
+                        strings.StarboardMessage(textChannel.Guild.Id, emote, enumerable.Length, textChannel.Mention),
                         embed: eb2.Build(),
                         components: component);
 
@@ -538,7 +542,8 @@ public class StarboardService : INService, IReadyExecutor, IUnloadableService
 
                     await toModify.ModifyAsync(x =>
                     {
-                        x.Content = $"{emote} **{enumerable.Length}** {textChannel.Mention}";
+                        x.Content = strings.StarboardMessage(textChannel.Guild.Id, emote, enumerable.Length,
+                            textChannel.Mention);
                         x.Components = component;
                         x.Embed = eb1.Build();
                     });
@@ -555,7 +560,7 @@ public class StarboardService : INService, IReadyExecutor, IUnloadableService
                         eb2.WithImageUrl(imageurl);
 
                     var msg1 = await starboardChannel.SendMessageAsync(
-                        $"{emote} **{enumerable.Length}** {textChannel.Mention}",
+                        strings.StarboardMessage(textChannel.Guild.Id, emote, enumerable.Length, textChannel.Mention),
                         embed: eb2.Build(),
                         components: component);
 
@@ -575,7 +580,7 @@ public class StarboardService : INService, IReadyExecutor, IUnloadableService
                 eb.WithImageUrl(imageurl);
 
             var msg = await starboardChannel.SendMessageAsync(
-                $"{emote} **{enumerable.Length}** {textChannel.Mention}",
+                strings.StarboardMessage(textChannel.Guild.Id, emote, enumerable.Length, textChannel.Mention),
                 embed: eb.Build(),
                 components: component);
 

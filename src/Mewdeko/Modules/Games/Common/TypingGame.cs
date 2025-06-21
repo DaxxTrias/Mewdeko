@@ -19,11 +19,11 @@ public class TypingGame
     private readonly DiscordShardedClient client;
     private readonly List<ulong> finishedUserIds;
     private readonly GamesService games;
+    private readonly EventHandler handler;
     private readonly Options options;
     private readonly string? prefix;
-    private readonly Stopwatch sw;
-    private readonly EventHandler handler;
     private readonly GeneratedBotStrings Strings;
+    private readonly Stopwatch sw;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="TypingGame" /> class.
@@ -113,7 +113,10 @@ public class TypingGame
 
             var msg = await Channel.SendMessageAsync(
                 Strings.TypingContestCountdown(Channel.Guild.Id, time, "..."),
-                options: new RequestOptions { RetryMode = RetryMode.AlwaysRetry }
+                options: new RequestOptions
+                {
+                    RetryMode = RetryMode.AlwaysRetry
+                }
             ).ConfigureAwait(false);
 
             do
@@ -166,7 +169,8 @@ public class TypingGame
             return games.TypingArticles[new MewdekoRandom().Next(0, games.TypingArticles.Count)].Text;
         return games.TypingArticles.Count > 0
             ? games.TypingArticles[new MewdekoRandom().Next(0, games.TypingArticles.Count)].Text
-            : Strings.TypingNoArticles(Channel.Guild.Id, prefix);    }
+            : Strings.TypingNoArticles(Channel.Guild.Id, prefix);
+    }
 
 
     private void HandleAnswers()
@@ -194,28 +198,30 @@ public class TypingGame
                 var elapsed = sw.Elapsed;
                 var wpm = CurrentSentence.Length / WordValue / elapsed.TotalSeconds * 60;
                 finishedUserIds.Add(msg.Author.Id);
-             await Channel.EmbedAsync(new EmbedBuilder().WithOkColor()
-    .WithTitle(Strings.TypingRaceFinishTitle(Channel.Guild.Id, msg.Author))
-    .AddField(efb => efb
-        .WithName("Place")
-        .WithValue(Strings.TypingRaceFinishPlace(Channel.Guild.Id, finishedUserIds.Count))
-        .WithIsInline(true))
-    .AddField(efb => efb
-        .WithName("WPM")
-        .WithValue(Strings.TypingRaceFinishWpm(
-            Channel.Guild.Id,
-            wpm.ToString("F1"),
-            elapsed.TotalSeconds.ToString("F2")))
-        .WithIsInline(true))
-    .AddField(efb => efb
-        .WithName("Errors")
-        .WithValue(Strings.TypingRaceFinishErrors(Channel.Guild.Id, distance))
-        .WithIsInline(true)))
-.ConfigureAwait(false);
+                await Channel.EmbedAsync(new EmbedBuilder().WithOkColor()
+                        .WithTitle(Strings.TypingRaceFinishTitle(Channel.Guild.Id, msg.Author))
+                        .AddField(efb => efb
+                            .WithName("Place")
+                            .WithValue(Strings.TypingRaceFinishPlace(Channel.Guild.Id, finishedUserIds.Count))
+                            .WithIsInline(true))
+                        .AddField(efb => efb
+                            .WithName("WPM")
+                            .WithValue(Strings.TypingRaceFinishWpm(
+                                Channel.Guild.Id,
+                                wpm.ToString("F1"),
+                                elapsed.TotalSeconds.ToString("F2")))
+                            .WithIsInline(true))
+                        .AddField(efb => efb
+                            .WithName("Errors")
+                            .WithValue(Strings.TypingRaceFinishErrors(Channel.Guild.Id, distance))
+                            .WithIsInline(true)))
+                    .ConfigureAwait(false);
                 if (finishedUserIds.Count % 4 == 0)
                 {
                     await Channel.SendConfirmAsync(
-                            $":exclamation: A lot of people finished, here is the text for those still typing:\n\n**{Format.Sanitize(CurrentSentence.Replace(" ", " \x200B", StringComparison.InvariantCulture)).SanitizeMentions(true)}**")
+                            Strings.TypingGameFinished(Channel.Guild.Id,
+                                Format.Sanitize(CurrentSentence.Replace(" ", " \x200B",
+                                    StringComparison.InvariantCulture)).SanitizeMentions(true)))
                         .ConfigureAwait(false);
                 }
             }

@@ -39,7 +39,7 @@ public partial class Utility
         }
         else
             await ctx.Channel.SendErrorAsync(
-                "Seems like traceroute was not successful. Please double check the hostname/ip and try again.", Config);
+                Strings.TracerouteFailed(ctx.Guild.Id), Config);
 
         toDispose.Dispose();
     }
@@ -125,8 +125,9 @@ public partial class Utility
                 if (pingReply.Status == IPStatus.Success)
                 {
                     var eb = new EmbedBuilder()
-                        .WithTitle($"Ping #{i + 1}")
-                        .WithDescription($"Address: {pingReply.Address}\nLatency: {pingReply.RoundtripTime}ms")
+                        .WithTitle(Strings.PingNumber(ctx.Guild.Id, i + 1))
+                        .WithDescription(Strings.PingAddressLatency(ctx.Guild.Id, pingReply.Address,
+                            pingReply.RoundtripTime))
                         .WithOkColor();
                     embeds.Add(eb.Build());
                 }
@@ -166,7 +167,7 @@ public partial class Utility
                 else if (pingReply.Status == IPStatus.HardwareError)
                 {
                     await ctx.Channel.SendErrorAsync(
-                        "Ping failed due to a hardware error. Please report this at https://discord.gg/mewdeko.",
+                        Strings.PingHardwareError(ctx.Guild.Id),
                         Config);
                     typing.Dispose();
                     break;

@@ -83,19 +83,21 @@ public partial class ServerManagement
                 case PermValue.Inherit:
                     await ctx.Channel
                         .SendConfirmAsync(
-                            $"I have set the following permissions for the user {role.Mention} in {channel} to inherit: \n**{string.Join("\n", list)}**")
+                            Strings.PermissionsInherit(ctx.Guild.Id, role.Mention, channel, string.Join("\n", list)))
                         .ConfigureAwait(false);
                     break;
                 case PermValue.Allow:
                     await ctx.Channel
                         .SendConfirmAsync(
-                            $"I have allowed the following permissions for the user {role.Mention} in {channel}: \n**{string.Join("\n", list)}**")
+                            Strings.PermissionsAllowedForUser(ctx.Guild.Id, role.Mention, channel.ToString(),
+                                string.Join("\n", list)))
                         .ConfigureAwait(false);
                     break;
                 default:
                     await ctx.Channel
                         .SendConfirmAsync(
-                            $"I have denied the following permissions for the user {role.Mention} in {channel}: \n**{string.Join("\n", list)}**")
+                            Strings.PermissionsDeniedForUser(ctx.Guild.Id, role.Mention, channel.ToString(),
+                                string.Join("\n", list)))
                         .ConfigureAwait(false);
                     break;
             }
@@ -163,19 +165,21 @@ public partial class ServerManagement
                 case PermValue.Inherit:
                     await ctx.Channel
                         .SendConfirmAsync(
-                            $"I have set the following permissions for the user {user.Mention} in {channel} to inherit: \n**{string.Join("\n", list)}**")
+                            Strings.PermissionsInherit(ctx.Guild.Id, user.Mention, channel, string.Join("\n", list)))
                         .ConfigureAwait(false);
                     break;
                 case PermValue.Allow:
                     await ctx.Channel
                         .SendConfirmAsync(
-                            $"I have allowed the following permissions for the user {user.Mention} in {channel}: \n**{string.Join("\n", list)}**")
+                            Strings.PermissionsAllowedForUser(ctx.Guild.Id, user.Mention, channel.ToString(),
+                                string.Join("\n", list)))
                         .ConfigureAwait(false);
                     break;
                 default:
                     await ctx.Channel
                         .SendConfirmAsync(
-                            $"I have denied the following permissions for the user {user.Mention} in {channel}: \n**{string.Join("\n", list)}**")
+                            Strings.PermissionsDeniedForUser(ctx.Guild.Id, user.Mention, channel.ToString(),
+                                string.Join("\n", list)))
                         .ConfigureAwait(false);
                     break;
             }

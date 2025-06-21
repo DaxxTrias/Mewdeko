@@ -15,19 +15,19 @@ namespace Mewdeko.Modules.Giveaways.Services;
 /// </summary>
 public class GiveawayService : INService, IDisposable
 {
+    private readonly Timer cleanupTimer;
     private readonly DiscordShardedClient client;
     private readonly BotConfig config;
     private readonly BotCredentials credentials;
     private readonly IDataConnectionFactory dbFactory;
-    private readonly GuildSettingsService guildConfig;
-    private readonly MessageCountService msgCntService;
-    private readonly GeneratedBotStrings strings;
 
     // Memory management
     private readonly ConcurrentDictionary<int, Timer> giveawayTimers = new();
+    private readonly GuildSettingsService guildConfig;
     private readonly ConcurrentDictionary<ulong, (GuildConfig Config, DateTime Expiry)> guildConfigCache = new();
+    private readonly MessageCountService msgCntService;
+    private readonly GeneratedBotStrings strings;
     private readonly SemaphoreSlim timerLock = new(1, 1);
-    private readonly Timer cleanupTimer;
     private bool isDisposed;
 
     /// <summary>
@@ -118,29 +118,29 @@ public class GiveawayService : INService, IDisposable
         // Validate giveaway exists and is active
         var giveaway = await GetGiveawayById(giveawayId);
         if (giveaway == null)
-            return (false, "That giveaway does not exist.");
+            return (false, strings.GiveawayNotFound(giveaway?.ServerId ?? 0));
 
         if (giveaway.Ended == 1)
-            return (false, "That giveaway has ended.");
+            return (false, strings.GiveawayAlreadyEnded(giveaway.ServerId, "", 0));
 
         if (!giveaway.UseButton && !giveaway.UseCaptcha)
-            return (false, "This giveaway doesn't use a button/captcha.");
+            return (false, strings.GiveawayInvalidEntryMethod(giveaway.ServerId));
 
         // Verify user is in the guild
         var guild = client.GetGuild(giveaway.ServerId);
         if (guild == null)
-            return (false, "The guild for this giveaway could not be found.");
+            return (false, strings.GiveawayGuildNotFound(giveaway.ServerId));
 
         var users = await guild.GetUsersAsync().FlattenAsync();
         if (users.All(u => u.Id != userId))
-            return (false, "That user is not in the server for this giveaway.");
+            return (false, strings.GiveawayUserNotInServer(giveaway.ServerId));
 
         // Check if user is already entered
         var existing = await dbContext.GiveawayUsers
             .AnyAsync(gu => gu.UserId == userId && gu.GiveawayId == giveawayId);
 
         if (existing)
-            return (false, "User has already entered this giveaway.");
+            return (false, strings.GiveawayAlreadyEntered(giveaway.ServerId));
 
         // Add user to giveaway
         await dbContext.InsertAsync(new GiveawayUser
@@ -163,11 +163,11 @@ public class GiveawayService : INService, IDisposable
         // Validate guild and channel
         var guild = client.GetGuild(serverId);
         if (guild == null)
-            throw new Exception("Guild not found");
+            throw new Exception(strings.GiveawayGuildNotFound(serverId));
 
         var channel = guild.GetTextChannel(giveaway.ChannelId);
         if (channel == null)
-            throw new Exception("Channel not found");
+            throw new Exception(strings.GiveawayChannelNotFound(serverId));
 
         // Get guild config with caching
         var gconfig = await GetGuildConfigCached(serverId);
@@ -208,7 +208,7 @@ public class GiveawayService : INService, IDisposable
         if (giveaway.UseButton)
         {
             var builder = new ComponentBuilder()
-                .WithButton("Enter", $"entergiveaway:{entry}", emote: emote);
+                .WithButton(strings.GiveawayEnterButton(serverId), $"entergiveaway:{entry}", emote: emote);
 
             await msg.ModifyAsync(x => x.Components = builder.Build());
         }
@@ -218,7 +218,7 @@ public class GiveawayService : INService, IDisposable
             try
             {
                 var builder = new ComponentBuilder()
-                    .WithButton("Enter (Web Captcha)",
+                    .WithButton(strings.GiveawayEnterCaptchaButton(serverId),
                         url: $"{credentials.GiveawayEntryUrl}?guildId={guild.Id}&giveawayId={entry}",
                         style: ButtonStyle.Link,
                         emote: emote);
@@ -353,7 +353,7 @@ public class GiveawayService : INService, IDisposable
         if (useButton)
         {
             var builder = new ComponentBuilder()
-                .WithButton("Enter", $"entergiveaway:{entry}", emote: emote);
+                .WithButton(strings.GiveawayEnterButton(serverId), $"entergiveaway:{entry}", emote: emote);
 
             await msg.ModifyAsync(x => x.Components = builder.Build());
         }
@@ -363,7 +363,7 @@ public class GiveawayService : INService, IDisposable
             try
             {
                 var builder = new ComponentBuilder()
-                    .WithButton("Enter (Web Captcha)",
+                    .WithButton(strings.GiveawayEnterCaptchaButton(serverId),
                         url: $"{credentials.GiveawayEntryUrl}?guildId={guild.Id}&giveawayId={entry}",
                         style: ButtonStyle.Link,
                         emote: emote);
@@ -496,7 +496,7 @@ public class GiveawayService : INService, IDisposable
             {
                 var eb = new EmbedBuilder
                 {
-                    Color = Mewdeko.ErrorColor, Description = "There were not enough participants!"
+                    Color = Mewdeko.ErrorColor, Description = strings.GiveawayNotEnoughParticipants(guild.Id)
                 };
 
                 await message.ModifyAsync(x =>
@@ -553,7 +553,7 @@ public class GiveawayService : INService, IDisposable
             {
                 var eb = new EmbedBuilder()
                     .WithErrorColor()
-                    .WithDescription("Looks like nobody that actually met the requirements joined..")
+                    .WithDescription(strings.GiveawayNoRequirements(guild.Id))
                     .Build();
 
                 await message.ModifyAsync(x =>
@@ -660,26 +660,24 @@ public class GiveawayService : INService, IDisposable
         // Update giveaway message
         var winnerEmbed = message.Embeds.FirstOrDefault().ToEmbedBuilder()
             .WithErrorColor()
-            .WithDescription($"Winner: {winner.Mention}!\nHosted by: <@{giveaway.UserId}>")
-            .WithFooter($"Ended at {DateTime.UtcNow:dd.MM.yyyy HH:mm:ss}");
+            .WithDescription(strings.GiveawayWinnerAnnouncement(winner.Guild.Id, winner.Mention, giveaway.UserId))
+            .WithFooter(strings.GiveawayEndedFooter(guild.Id, DateTime.UtcNow.ToString("dd.MM.yyyy HH:mm:ss")));
 
         await message.ModifyAsync(x =>
         {
             x.Embed = winnerEmbed.Build();
-            x.Content = $"{giveaway.Emote} **Giveaway Ended!** {giveaway.Emote}";
+            x.Content = strings.GiveawayEndedContent(guild.Id, giveaway.Emote);
             x.Components = null;
         });
 
         // Send winner announcement message
         await channel.SendMessageAsync(
-            $"Congratulations to {winner.Mention}! {giveaway.Emote}",
+            strings.GiveawayCongratulations(guild.Id, winner.Mention, giveaway.Emote),
             embed: new EmbedBuilder()
                 .WithErrorColor()
                 .WithDescription(
-                    $"{winner.Mention} won the giveaway for [{giveaway.Item}]" +
-                    $"(https://discord.com/channels/{giveaway.ServerId}/{giveaway.ChannelId}/{giveaway.MessageId})! \n\n" +
-                    $"- (Hosted by: <@{giveaway.UserId}>)\n" +
-                    $"- Reroll: `{prefix}reroll {giveaway.MessageId}`")
+                    strings.GiveawayWinnerDescription(guild.Id, winner.Mention, giveaway.Item, giveaway.ServerId,
+                        giveaway.ChannelId, giveaway.MessageId, giveaway.UserId, prefix))
                 .Build());
 
         // Mark giveaway as ended
@@ -707,12 +705,12 @@ public class GiveawayService : INService, IDisposable
             .WithDescription(
                 $"Winner: {string.Join(", ", winners.Select(x => x.Mention))}!\n" +
                 $"Hosted by: <@{giveaway.UserId}>")
-            .WithFooter($"Ended at {DateTime.UtcNow:dd.MM.yyyy HH:mm:ss}");
+            .WithFooter(strings.GiveawayEndedFooter(guild.Id, DateTime.UtcNow.ToString("dd.MM.yyyy HH:mm:ss")));
 
         await message.ModifyAsync(x =>
         {
             x.Embed = winnerEmbed.Build();
-            x.Content = $"{giveaway.Emote} **Giveaway Ended!** {giveaway.Emote}";
+            x.Content = strings.GiveawayEndedContent(guild.Id, giveaway.Emote);
             x.Components = null;
         });
 
@@ -720,14 +718,14 @@ public class GiveawayService : INService, IDisposable
         foreach (var winnerChunk in winners.Chunk(50))
         {
             await channel.SendMessageAsync(
-                $"Congratulations to {string.Join(", ", winnerChunk.Select(x => x.Mention))}! {giveaway.Emote}",
+                strings.GiveawayCongratulations(guild.Id, string.Join(", ", winnerChunk.Select(x => x.Mention)),
+                    giveaway.Emote),
                 embed: new EmbedBuilder()
                     .WithErrorColor()
                     .WithDescription(
-                        $"{string.Join(", ", winnerChunk.Select(x => x.Mention))} won the giveaway for " +
-                        $"[{giveaway.Item}](https://discord.com/channels/{giveaway.ServerId}/{giveaway.ChannelId}/{giveaway.MessageId})! \n\n" +
-                        $"- (Hosted by: <@{giveaway.UserId}>)\n" +
-                        $"- Reroll: `{prefix}reroll {giveaway.MessageId}`")
+                        strings.GiveawayWinnerDescription(guild.Id,
+                            string.Join(", ", winnerChunk.Select(x => x.Mention)), giveaway.Item, giveaway.ServerId,
+                            giveaway.ChannelId, giveaway.MessageId, giveaway.UserId, prefix))
                     .Build());
         }
 
@@ -771,10 +769,10 @@ public class GiveawayService : INService, IDisposable
                     var embed = new EmbedBuilder()
                         .WithOkColor()
                         .WithDescription(
-                            $"Congratulations! You won a giveaway for [{giveaway.Item}]" +
-                            $"(https://discord.com/channels/{giveaway.ServerId}/{giveaway.ChannelId}/{giveaway.MessageId})!");
+                            strings.GiveawayWinnerDm(guild.Id, giveaway.Item, giveaway.ServerId, giveaway.ChannelId,
+                                giveaway.MessageId));
 
-                    embed.AddField("Message from Host", customMessage);
+                    embed.AddField(strings.GiveawayMessageFromHost(guild.Id), customMessage);
                     await winner.SendMessageAsync(embed: embed.Build());
                 }
             }
@@ -784,8 +782,8 @@ public class GiveawayService : INService, IDisposable
                 var embed = new EmbedBuilder()
                     .WithOkColor()
                     .WithDescription(
-                        $"Congratulations! You won a giveaway for [{giveaway.Item}]" +
-                        $"(https://discord.com/channels/{giveaway.ServerId}/{giveaway.ChannelId}/{giveaway.MessageId})!");
+                        strings.GiveawayWinnerDm(guild.Id, giveaway.Item, giveaway.ServerId, giveaway.ChannelId,
+                            giveaway.MessageId));
 
                 await winner.SendMessageAsync(embed: embed.Build());
             }

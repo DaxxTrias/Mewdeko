@@ -73,7 +73,7 @@ public partial class Searches(
         {
             Author = new EmbedAuthorBuilder
             {
-                Name = $"u/{image.Data.Author.Name}"
+                Name = Strings.RedditAuthor(ctx.Guild.Id, image.Data.Author.Name)
             },
             Description = $"Title: {image.Data.Title}\n[Source]({image.Data.PostUrl})",
             Footer = new EmbedFooterBuilder
@@ -137,12 +137,12 @@ public partial class Searches(
         {
             Author = new EmbedAuthorBuilder
             {
-                Name = $"u/{image.Data.Author.Name}"
+                Name = Strings.RedditAuthor(ctx.Guild.Id, image.Data.Author.Name)
             },
             Description = $"Title: {image.Data.Title}\n[Source]({image.Data.PostUrl})",
             Footer = new EmbedFooterBuilder
             {
-                Text = $"{image.Data.Upvotes} Upvotes! | r/{image.Data.Subreddit.Name} Powered by martineAPI"
+                Text = Strings.RedditUpvotesFooter(ctx.Guild.Id, image.Data.Upvotes, image.Data.Subreddit.Name)
             },
             ImageUrl = image.Data.ImageUrl,
             Color = Mewdeko.OkColor
@@ -252,7 +252,7 @@ public partial class Searches(
                         .WithIsInline(true))
                 .WithOkColor()
                 .WithFooter(efb =>
-                    efb.WithText("Powered by openweathermap.org")
+                    efb.WithText(Strings.WeatherAttribution(ctx.Guild.Id))
                         .WithIconUrl($"https://openweathermap.org/img/w/{data.Weather[0].Icon}.png"));
         }
 
@@ -482,9 +482,9 @@ public partial class Searches(
 
             var em = new EmbedBuilder()
                 .WithOkColor()
-                .WithAuthor($"u/{image.Data.Author.Name}")
+                .WithAuthor(Strings.RedditAuthor(ctx.Guild.Id, image.Data.Author.Name))
                 .WithDescription($"Title: {image.Data.Title}\n[Source]({image.Data.PostUrl})")
-                .WithFooter($"{image.Data.Upvotes} Upvotes! | r/{image.Data.Subreddit.Name} Powered by martineAPI")
+                .WithFooter(Strings.RedditUpvotesFooter(ctx.Guild.Id, image.Data.Upvotes, image.Data.Subreddit.Name))
                 .WithImageUrl(image.Data.ImageUrl);
 
             await msg.ModifyAsync(x =>
@@ -726,7 +726,7 @@ public partial class Searches(
             if (data is null)
             {
                 await ctx.Channel.SendErrorAsync(
-                        "Neither google nor duckduckgo returned a result! Please search something else!", Config)
+                        Strings.SearchNoResults(ctx.Guild.Id), Config)
                     .ConfigureAwait(false);
                 return;
             }
@@ -1179,14 +1179,15 @@ public partial class Searches(
 
         if (obj.Error != null || !obj.Verses.Any())
         {
-            await ctx.Channel.SendErrorAsync(obj.Error ?? "No verse found.", Config).ConfigureAwait(false);
+            await ctx.Channel.SendErrorAsync(obj.Error ?? Strings.NoVerseFound(ctx.Guild.Id), Config)
+                .ConfigureAwait(false);
         }
         else
         {
             var v = obj.Verses[0];
             await ctx.Channel.EmbedAsync(new EmbedBuilder()
                 .WithOkColor()
-                .WithTitle($"{v.BookName} {v.Chapter}:{v.Verse}")
+                .WithTitle(Strings.BibleVerseTitle(ctx.Guild.Id, v.BookName, v.Chapter, v.Verse))
                 .WithDescription(v.Text)).ConfigureAwait(false);
         }
     }
@@ -1268,7 +1269,7 @@ public partial class Searches(
         else
         {
             await channel.EmbedAsync(new EmbedBuilder().WithOkColor()
-                .WithDescription($"{umsg.Author.Mention} [{tag ?? "url"}]({imgObj.FileUrl})")
+                .WithDescription($"{umsg.Author.Mention} [{tag ?? Strings.Url(ctx.Guild.Id)}]({imgObj.FileUrl})")
                 .WithImageUrl(imgObj.FileUrl)
                 .WithFooter(efb => efb.WithText(type.ToString()))).ConfigureAwait(false);
         }
@@ -1314,7 +1315,8 @@ public partial class Searches(
 
         if (gameInfo.Recommendations?.Total > 0)
         {
-            pageBuilder.WithFooter($"💭 {gameInfo.Recommendations.Total:N0} recommendations");
+            pageBuilder.WithFooter(Strings.GameRecommendations(ctx.Guild.Id,
+                gameInfo.Recommendations.Total.ToString("N0")));
         }
 
         return pageBuilder;
