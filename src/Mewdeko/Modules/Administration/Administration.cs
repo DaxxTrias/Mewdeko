@@ -91,6 +91,30 @@ public partial class Administration(InteractiveService serv)
         Inherit
     }
 
+    // Cache for compiled regex patterns to avoid repeated compilation  
+    private static readonly ConcurrentDictionary<string, Regex> RegexCache = new();
+
+    /// <summary>
+    ///     Gets a cached compiled regex pattern or creates and caches a new one.
+    /// </summary>
+    /// <param name="pattern">The regex pattern to compile</param>
+    /// <returns>A compiled regex with optimized options</returns>
+    private static Regex GetCachedRegex(string pattern)
+    {
+        return RegexCache.GetOrAdd(pattern, static p =>
+        {
+            try
+            {
+                return new Regex(p, RegexOptions.Compiled, TimeSpan.FromMilliseconds(200));
+            }
+            catch (ArgumentException)
+            {
+                // If pattern is invalid, return a regex that never matches
+                return new Regex("(?!.*)", RegexOptions.Compiled);
+            }
+        });
+    }
+
 
     /// <summary>
     ///     Bans multiple users by their avatar id, aka their avatar hash. Useful for userbots that are stupid.
@@ -289,7 +313,7 @@ public partial class Administration(InteractiveService serv)
     [BotPerm(GuildPermission.BanMembers)]
     public async Task NameBan([Remainder] string name)
     {
-        var regex = new Regex(name, RegexOptions.Compiled, TimeSpan.FromMilliseconds(200));
+        var regex = GetCachedRegex(name);
         var users = await ctx.Guild.GetUsersAsync();
         users = users.Where(x => regex.IsMatch(x.Username.ToLower())).ToList();
         if (!users.Any())
@@ -399,7 +423,7 @@ public partial class Administration(InteractiveService serv)
         {
             await ctx.Guild.DownloadUsersAsync().ConfigureAwait(false);
             IEnumerable<IUser> users;
-            if (option is not null && option.ToLower() == "-accage" && time1 is not null)
+            if (option is not null && option.Equals("-accage", StringComparison.OrdinalIgnoreCase) && time1 is not null)
             {
                 users = ((SocketGuild)ctx.Guild).Users.Where(c =>
                     c.JoinedAt != null
@@ -419,7 +443,7 @@ public partial class Administration(InteractiveService serv)
                 return;
             }
 
-            if (option is not null && option.ToLower() == "-p")
+            if (option is not null && option.Equals("-p", StringComparison.OrdinalIgnoreCase))
             {
                 var paginator = new LazyPaginatorBuilder().AddUser(ctx.User).WithPageFactory(PageFactory)
                     .WithFooter(PaginatorFooter.PageNumber | PaginatorFooter.Users)
@@ -503,7 +527,7 @@ public partial class Administration(InteractiveService serv)
             return;
         }
 
-        if (option is not null && option.ToLower() == "-p")
+        if (option is not null && option.Equals("-p", StringComparison.OrdinalIgnoreCase))
         {
             var paginator = new LazyPaginatorBuilder()
                 .AddUser(ctx.User)

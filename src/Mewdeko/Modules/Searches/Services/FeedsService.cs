@@ -469,7 +469,7 @@ public class FeedsService : INService
 
         // Check if feed already exists for this guild
         var exists = await db.FeedSubs
-            .AnyAsync(x => x.GuildId == guildId && x.Url.ToLower() == rssFeed.Trim().ToLower());
+            .AnyAsync(x => x.GuildId == guildId && x.Url.Equals(rssFeed.Trim(), StringComparison.OrdinalIgnoreCase));
 
         if (exists)
             return false;
@@ -484,9 +484,7 @@ public class FeedsService : INService
         // Create and add new feed with GuildId
         var fs = new FeedSub
         {
-            GuildId = guildId,
-            ChannelId = channelId,
-            Url = rssFeed.Trim()
+            GuildId = guildId, ChannelId = channelId, Url = rssFeed.Trim()
         };
 
         await db.InsertAsync(fs);

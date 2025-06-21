@@ -83,10 +83,12 @@ public static class ConfigurationParser
                     var fieldConfig = new ModalFieldConfig
                     {
                         Label = fieldParts[0],
-                        Style = fieldParts[1].ToLower() == "long" ? 2 : 1,
-                        Required = fieldParts.Length > 2 && fieldParts[2].ToLower().Contains("required"),
+                        Style = fieldParts[1].Equals("long", StringComparison.OrdinalIgnoreCase) ? 2 : 1,
+                        Required =
+                            fieldParts.Length > 2 &&
+                            fieldParts[2].Contains("required", StringComparison.OrdinalIgnoreCase),
                         MinLength = 1,
-                        MaxLength = fieldParts[1].ToLower() == "long" ? 4000 : 1000
+                        MaxLength = fieldParts[1].Equals("long", StringComparison.OrdinalIgnoreCase) ? 4000 : 1000
                     };
                     config.Fields[fieldId] = fieldConfig;
                 }

@@ -702,7 +702,7 @@ public partial class Suggestions
             }
 
             if (!_.Contains("disable") &&
-                !ctx.Message.Tags.Where(t => t.Type == TagType.Emoji).Select(x => (IEmote)x.Value).Any())
+                !ctx.Message.Tags.Any(t => t.Type == TagType.Emoji))
             {
                 await ctx.Channel.SendErrorAsync(Strings.EmotesRequiredSpecific(ctx.Guild.Id), Config)
                     .ConfigureAwait(false);

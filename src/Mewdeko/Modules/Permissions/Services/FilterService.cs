@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
+using DataModel;
 using Discord.Net;
 using LinqToDB;
 using Mewdeko.Common.Configs;
@@ -8,7 +9,6 @@ using Mewdeko.Common.PubSub;
 using Mewdeko.Modules.Administration.Services;
 using Mewdeko.Modules.Moderation.Services;
 using Mewdeko.Services.Strings;
-using DataModel;
 using Serilog;
 
 namespace Mewdeko.Modules.Permissions.Services;
@@ -26,6 +26,9 @@ public class FilterService : IEarlyBehavior, INService
     private readonly CultureInfo? cultureInfo = new("en-US");
     private readonly IDataConnectionFactory dbFactory;
     private readonly GuildSettingsService gss;
+
+    // Cache for compiled regex patterns to avoid repeated compilation
+    private readonly ConcurrentDictionary<string, Regex> regexCache = new();
     private readonly UserPunishService userPunServ;
 
     /// <summary>
@@ -115,8 +118,7 @@ public class FilterService : IEarlyBehavior, INService
 
         var item = new AutoBanWord
         {
-            Word = id,
-            GuildId = id2
+            Word = id, GuildId = id2
         };
 
         await db.InsertAsync(item);
@@ -354,12 +356,15 @@ public class FilterService : IEarlyBehavior, INService
     {
         try
         {
-            var regex = new Regex(word, RegexOptions.Compiled, TimeSpan.FromMilliseconds(250));
+            var regex = regexCache.GetOrAdd(word, static pattern =>
+                new Regex(pattern, RegexOptions.Compiled, TimeSpan.FromMilliseconds(250)));
             var match = regex.Match(content);
             return (match.Success, match.Value);
         }
         catch (ArgumentException)
         {
+            // Remove from cache if invalid
+            regexCache.TryRemove(word, out _);
             await RemoveInvalidBannedRegex(word, guildId);
             return (false, string.Empty);
         }
@@ -401,7 +406,8 @@ public class FilterService : IEarlyBehavior, INService
                 // DM failed, continue with ban anyway
             }
 
-            await guild.AddBanAsync(msg.Author, options: new RequestOptions {
+            await guild.AddBanAsync(msg.Author, options: new RequestOptions
+            {
                 AuditLogReason = Strings.AutobanReason(guild.Id, matchedText)
             }).ConfigureAwait(false);
 
@@ -418,12 +424,20 @@ public class FilterService : IEarlyBehavior, INService
     {
         try
         {
-            var regex = new Regex(word, RegexOptions.Compiled | RegexOptions.IgnoreCase,
-                TimeSpan.FromMilliseconds(250));
+            // Create cache key that includes case sensitivity info
+            var cacheKey = $"{word}|ignorecase";
+            var regex = regexCache.GetOrAdd(cacheKey, static key =>
+            {
+                var pattern = key.Split('|')[0];
+                return new Regex(pattern, RegexOptions.Compiled | RegexOptions.IgnoreCase,
+                    TimeSpan.FromMilliseconds(250));
+            });
             return regex.IsMatch(content);
         }
         catch (ArgumentException)
         {
+            // Remove from cache if invalid
+            regexCache.TryRemove($"{word}|ignorecase", out _);
             await RemoveInvalidRegex(word, guildId);
             return false;
         }
@@ -436,7 +450,7 @@ public class FilterService : IEarlyBehavior, INService
 
         await db.FilteredWords
             .Where(fw => fw.GuildId == guildId &&
-                   fw.Word.Trim().Equals(word, StringComparison.InvariantCultureIgnoreCase))
+                         fw.Word.Trim().Equals(word, StringComparison.InvariantCultureIgnoreCase))
             .DeleteAsync();
     }
 

@@ -52,6 +52,12 @@ public class SearchesService : INService, IUnloadableService
         Birds
     }
 
+    // Cached JsonSerializerOptions for performance
+    private static readonly JsonSerializerOptions CachedJsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
+
     private static readonly HtmlParser GoogleParser = new(new HtmlParserOptions
     {
         IsScripting = false,
@@ -691,12 +697,7 @@ public class SearchesService : INService, IUnloadableService
         using var http = httpFactory.CreateClient();
         var res = await http.GetStringAsync("https://official-joke-api.appspot.com/random_joke").ConfigureAwait(false);
 
-        var options = new JsonSerializerOptions
-        {
-            PropertyNameCaseInsensitive = true
-        };
-
-        var resObj = JsonSerializer.Deserialize<JokeResponse>(res, options);
+        var resObj = JsonSerializer.Deserialize<JokeResponse>(res, CachedJsonOptions);
         return (resObj?.Setup, resObj?.Punchline ?? string.Empty);
     }
 
@@ -798,10 +799,7 @@ public class SearchesService : INService, IUnloadableService
                     return null;
 
                 var content = await response.Content.ReadAsStringAsync();
-                var result = JsonSerializer.Deserialize<StoreSearchResponse>(content, new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                });
+                var result = JsonSerializer.Deserialize<StoreSearchResponse>(content, CachedJsonOptions);
 
                 if (result?.Items == null || !result.Items.Any())
                     return null;
@@ -826,13 +824,8 @@ public class SearchesService : INService, IUnloadableService
                     await http.GetStringAsync(
                         $"https://store.steampowered.com/api/appdetails?appids={searchResult.Id}");
 
-                var response = JsonSerializer.Deserialize<Dictionary<string, AppDetailsResponse>>(
-                    detailsStr,
-                    new JsonSerializerOptions
-                    {
-                        PropertyNameCaseInsensitive = true
-                    }
-                );
+                var response =
+                    JsonSerializer.Deserialize<Dictionary<string, AppDetailsResponse>>(detailsStr, CachedJsonOptions);
 
                 if (response?.TryGetValue(searchResult.Id.ToString(), out var gameDetails) == true &&
                     gameDetails.Success)

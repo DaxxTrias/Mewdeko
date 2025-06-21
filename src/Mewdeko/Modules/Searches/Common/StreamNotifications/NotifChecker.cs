@@ -13,6 +13,12 @@ namespace Mewdeko.Modules.Searches.Common.StreamNotifications;
 /// </summary>
 public class NotifChecker
 {
+    // Cached JsonSerializerOptions for performance - this is critical for Redis operations
+    private static readonly JsonSerializerOptions CachedJsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
+
     private readonly string key;
     private readonly HashSet<(FType, string)> offlineBuffer;
     private readonly ConcurrentDictionary<string, StreamData?> streamCache = new();
@@ -208,7 +214,7 @@ public class NotifChecker
     /// <returns><c>true</c> if data was successfully added or updated; otherwise, <c>false</c>.</returns>
     public Task<bool> CacheAddData(StreamDataKey streamDataKey, StreamData? data, bool replace)
     {
-        var serializedKey = JsonSerializer.Serialize(streamDataKey);
+        var serializedKey = JsonSerializer.Serialize(streamDataKey, CachedJsonOptions);
 
         if (replace)
         {
@@ -225,7 +231,7 @@ public class NotifChecker
     /// <param name="streamdataKey">The stream data key.</param>
     private Task CacheDeleteData(StreamDataKey streamdataKey)
     {
-        streamCache.TryRemove(JsonSerializer.Serialize(streamdataKey), out _);
+        streamCache.TryRemove(JsonSerializer.Serialize(streamdataKey, CachedJsonOptions), out _);
         return Task.CompletedTask;
     }
 
@@ -245,7 +251,7 @@ public class NotifChecker
     {
         var result = streamCache
             .Select(pair => (
-                Key: JsonSerializer.Deserialize<StreamDataKey>(pair.Key),
+                Key: JsonSerializer.Deserialize<StreamDataKey>(pair.Key, CachedJsonOptions),
                 Value: pair.Value))
             .Where(item => item.Key.Name is not null)
             .ToDictionary(item => item.Key, item => item.Value);

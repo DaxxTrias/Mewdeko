@@ -577,7 +577,7 @@ public partial class Currency(
             {
                 case "red":
                 case "black":
-                    won = betType.ToLower() == color;
+                    won = betType.Equals(color, StringComparison.OrdinalIgnoreCase);
                     break;
                 case "even":
                     won = result != 0 && result % 2 == 0;
@@ -1387,7 +1387,7 @@ public partial class Currency(
         if (playerTotal > bankerTotal)
         {
             eb.AddField("Result", Strings.BaccaratPlayerWins(ctx.Guild.Id, playerTotal), false);
-            if (betType.ToLower() == "player")
+            if (betType.Equals("player", StringComparison.OrdinalIgnoreCase))
             {
                 won = true;
                 multiplier = 1.95; // 1:1 payout minus 5% commission
@@ -1396,7 +1396,7 @@ public partial class Currency(
         else if (bankerTotal > playerTotal)
         {
             eb.AddField("Result", Strings.BaccaratBankerWins(ctx.Guild.Id, bankerTotal), false);
-            if (betType.ToLower() == "banker")
+            if (betType.Equals("banker", StringComparison.OrdinalIgnoreCase))
             {
                 won = true;
                 multiplier = 1.95; // 1:1 payout minus 5% commission
@@ -1405,7 +1405,7 @@ public partial class Currency(
         else
         {
             eb.AddField("Result", Strings.BaccaratTie(ctx.Guild.Id, playerTotal), false);
-            if (betType.ToLower() == "tie")
+            if (betType.Equals("tie", StringComparison.OrdinalIgnoreCase))
             {
                 won = true;
                 multiplier = 8.0; // 8:1 payout for tie

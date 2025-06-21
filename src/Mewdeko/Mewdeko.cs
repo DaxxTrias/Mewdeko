@@ -27,6 +27,12 @@ namespace Mewdeko;
 /// </summary>
 public class Mewdeko
 {
+    // Cached JsonSerializerOptions for performance
+    private static readonly JsonSerializerOptions CachedJsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
+
     /// <summary>
     ///     Initializes a new instance of the Mewdeko class.
     /// </summary>
@@ -376,12 +382,7 @@ public class Mewdeko
         {
             try
             {
-                var options = new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                };
-
-                var status = JsonSerializer.Deserialize<GameStatus>((string)game, options);
+                var status = JsonSerializer.Deserialize<GameStatus>((string)game, CachedJsonOptions);
                 await Client.SetGameAsync(status?.Name, type: status?.Activity ?? ActivityType.Playing)
                     .ConfigureAwait(false);
             }
@@ -395,12 +396,7 @@ public class Mewdeko
         {
             try
             {
-                var options = new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                };
-
-                var stream = JsonSerializer.Deserialize<StreamStatus>((string)streamData, options);
+                var stream = JsonSerializer.Deserialize<StreamStatus>((string)streamData, CachedJsonOptions);
                 await Client.SetGameAsync(stream?.Name, stream?.Url, ActivityType.Streaming)
                     .ConfigureAwait(false);
             }
