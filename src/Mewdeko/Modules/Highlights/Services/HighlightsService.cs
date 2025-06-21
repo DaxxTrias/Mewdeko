@@ -59,12 +59,18 @@ public class HighlightsService : INService, IReadyExecutor, IUnloadableService
             var hlSettings = allHighlightSettings.Where(x => x.GuildId == i.Id).ToList();
             if (highlights.Any())
             {
-                await cache.SetAsync($"highlights_{i.Id}", highlights);
+                await cache.SetAsync($"highlights_{i.Id}", highlights,
+                    options => options
+                        .SetDuration(TimeSpan.FromMinutes(30))
+                );
             }
 
             if (hlSettings.Any())
             {
-                await cache.SetAsync($"highlightSettings_{i.Id}", hlSettings);
+                await cache.SetAsync($"highlightSettings_{i.Id}", hlSettings,
+                    options => options
+                        .SetDuration(TimeSpan.FromMinutes(30))
+                );
             }
         }
 
@@ -216,7 +222,10 @@ public class HighlightsService : INService, IReadyExecutor, IUnloadableService
         var current =
             await cache.GetOrSetAsync($"highlights_{guildId}", _ => Task.FromResult(new List<Highlight>()));
         current.Add(toadd);
-        await cache.SetAsync($"highlights_{guildId}", current).ConfigureAwait(false);
+        await cache.SetAsync($"highlights_{guildId}", current,
+            options => options
+                .SetDuration(TimeSpan.FromMinutes(30))
+        ).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -245,7 +254,10 @@ public class HighlightsService : INService, IReadyExecutor, IUnloadableService
             var current1 = await cache.GetOrSetAsync($"highlightSettings_{guildId}",
                 _ => Task.FromResult(new List<HighlightSetting>()));
             current1.Add(toadd);
-            await cache.SetAsync($"highlightSettings_{guildId}", current1).ConfigureAwait(false);
+            await cache.SetAsync($"highlightSettings_{guildId}", current1,
+                options => options
+                    .SetDuration(TimeSpan.FromMinutes(30))
+            ).ConfigureAwait(false);
         }
         else
         {
@@ -255,7 +267,10 @@ public class HighlightsService : INService, IReadyExecutor, IUnloadableService
             var current = await cache.GetOrSetAsync($"highlightSettings_{guildId}",
                 _ => Task.FromResult(new List<HighlightSetting>()));
             current.Add(toupdate);
-            await cache.SetAsync($"highlightSettings_{guildId}", current).ConfigureAwait(false);
+            await cache.SetAsync($"highlightSettings_{guildId}", current,
+                options => options
+                    .SetDuration(TimeSpan.FromMinutes(30))
+            ).ConfigureAwait(false);
         }
     }
 
@@ -290,7 +305,10 @@ public class HighlightsService : INService, IReadyExecutor, IUnloadableService
             var current1 = await cache.GetOrSetAsync($"highlightSettings_{guildId}",
                 _ => Task.FromResult(new List<HighlightSetting>()));
             current1.Add(toadd);
-            await cache.SetAsync($"highlightSettings_{guildId}", current1).ConfigureAwait(false);
+            await cache.SetAsync($"highlightSettings_{guildId}", current1,
+                options => options
+                    .SetDuration(TimeSpan.FromMinutes(30))
+            ).ConfigureAwait(false);
             return ignored;
         }
 
@@ -347,7 +365,10 @@ public class HighlightsService : INService, IReadyExecutor, IUnloadableService
             var current1 = await cache.GetOrSetAsync($"highlightSettings_{guildId}",
                 _ => Task.FromResult(new List<HighlightSetting>()));
             current1.Add(toadd);
-            await cache.SetAsync($"highlightSettings_{guildId}", current1).ConfigureAwait(false);
+            await cache.SetAsync($"highlightSettings_{guildId}", current1,
+                options => options
+                    .SetDuration(TimeSpan.FromMinutes(30))
+            ).ConfigureAwait(false);
             return ignored;
         }
 
@@ -390,7 +411,10 @@ public class HighlightsService : INService, IReadyExecutor, IUnloadableService
             current.Remove(toremove);
         }
 
-        await cache.SetAsync($"highlights_{toremove.GuildId}", current).ConfigureAwait(false);
+        await cache.SetAsync($"highlights_{toremove.GuildId}", current,
+            options => options
+                .SetDuration(TimeSpan.FromMinutes(30))
+        ).ConfigureAwait(false);
     }
 
     private async Task<List<Highlight?>> GetForGuild(ulong guildId)
@@ -420,7 +444,10 @@ public class HighlightsService : INService, IReadyExecutor, IUnloadableService
         var cacheKey = $"highlightStagger_{guildId}_{userId}";
         var result = await cache.TryGetAsync<bool>(cacheKey);
         if (result.HasValue) return false;
-        await cache.SetAsync(cacheKey, true, TimeSpan.FromMinutes(2));
+        await cache.SetAsync(cacheKey, true,
+            options => options
+                .SetDuration(TimeSpan.FromMinutes(2))
+        );
         return true;
     }
 }

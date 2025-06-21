@@ -337,7 +337,15 @@ public class Program
         services.AddSingleton<BotConfig>();
         services.AddConfigServices();
         services.AddBotStringsServices(credentials.TotalShards);
-        services.AddMemoryCache();
+        // Optimized MemoryCache configuration for performance
+        services.AddMemoryCache(options =>
+        {
+            // Scan for expired entries every 2 minutes for responsiveness
+            options.ExpirationScanFrequency = TimeSpan.FromMinutes(2);
+
+            // Disable size tracking for better performance
+            options.TrackLinkedCacheEntries = false;
+        });
         services.AddLavalink()
             .ConfigureLavalink(x =>
             {
@@ -348,7 +356,45 @@ public class Program
         services.AddSingleton<ToneTagService>();
         services.AddTransient<GuildSettingsService>();
 
-        services.AddFusionCache().TryWithAutoSetup();
+        // Optimized FusionCache configuration for performance and reliability
+        services.AddFusionCache()
+            .WithOptions(options =>
+            {
+                // Circuit breaker for distributed cache stability
+                options.DistributedCacheCircuitBreakerDuration = TimeSpan.FromSeconds(2);
+
+                // Optimized logging levels to reduce noise
+                options.FactorySyntheticTimeoutsLogLevel = LogLevel.Debug;
+                options.DistributedCacheSyntheticTimeoutsLogLevel = LogLevel.Debug;
+                options.FailSafeActivationLogLevel = LogLevel.Debug;
+                options.FactoryErrorsLogLevel = LogLevel.Error;
+                options.DistributedCacheErrorsLogLevel = LogLevel.Error;
+            })
+            .WithDefaultEntryOptions(new FusionCacheEntryOptions
+            {
+                // Default cache duration
+                Duration = TimeSpan.FromMinutes(10),
+
+                // Fail-safe configuration for reliability
+                IsFailSafeEnabled = true,
+                FailSafeMaxDuration = TimeSpan.FromHours(2),
+                FailSafeThrottleDuration = TimeSpan.FromSeconds(30),
+
+                // Factory timeouts scaled by server count
+                FactorySoftTimeout = serverCount > 1000 ? TimeSpan.FromSeconds(2) : TimeSpan.FromSeconds(1),
+                FactoryHardTimeout = serverCount > 1000 ? TimeSpan.FromSeconds(5) : TimeSpan.FromSeconds(3),
+
+                // Distributed cache timeouts
+                DistributedCacheSoftTimeout = serverCount > 1000 ? TimeSpan.FromSeconds(3) : TimeSpan.FromSeconds(2),
+                DistributedCacheHardTimeout = serverCount > 1000 ? TimeSpan.FromSeconds(5) : TimeSpan.FromSeconds(3),
+
+                // Background operations for better performance
+                AllowBackgroundDistributedCacheOperations = true,
+
+                // Jittering to prevent thundering herd
+                JitterMaxDuration = TimeSpan.FromSeconds(2)
+            })
+            .TryWithAutoSetup();
 
         if (credentials.UseGlobalCurrency)
             services.AddTransient<ICurrencyService, GlobalCurrencyService>();

@@ -58,8 +58,11 @@ public sealed class RatelimitAttribute : PreconditionAttribute
 
     private static async Task<TimeSpan?> TryAddRatelimitAsync(IFusionCache cache, string cacheKey, int expireIn)
     {
-        var existingRatelimit = await cache.GetOrSetAsync(cacheKey, _ => Task.FromResult<TimeSpan?>(TimeSpan.FromSeconds(expireIn)), options => options.SetDuration(TimeSpan.FromSeconds(expireIn)));
+        var duration = TimeSpan.FromSeconds(expireIn);
+        var existingRatelimit = await cache.GetOrSetAsync(cacheKey,
+            _ => Task.FromResult<TimeSpan?>(duration),
+            options => options.SetDuration(duration));
 
-        return existingRatelimit == TimeSpan.FromSeconds(expireIn) ? null : existingRatelimit;
+        return existingRatelimit == duration ? null : existingRatelimit;
     }
 }
