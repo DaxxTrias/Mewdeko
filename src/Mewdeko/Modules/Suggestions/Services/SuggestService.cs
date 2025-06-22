@@ -1516,7 +1516,7 @@ public class SuggestionsService : INService
         IDiscordInteraction? interaction = null)
     {
         await using var dbContext = await dbFactory.CreateConnectionAsync();
-        var suggest = (await Suggestions(guild.Id, suggestionId)).FirstOrDefault();
+        var suggest = (await Suggestions(guild.Id, suggestionId))?.FirstOrDefault();
         if (suggest == null)
         {
             await SendErrorMessage(interaction, channel,
@@ -1525,7 +1525,8 @@ public class SuggestionsService : INService
         }
 
         var statusConfig = await GetStatusConfig(guild, state);
-        var embed = await CreateStatusEmbed(guild, user, suggest, state, reason ?? "none", statusConfig);
+        var embed = await CreateStatusEmbed(guild, user, suggest, state,
+            !string.IsNullOrWhiteSpace(reason) ? reason : "none", statusConfig);
 
         await UpdateSuggestionMessage(guild, suggest, embed, statusConfig);
         await NotifyUser(guild, user, suggest, state, reason, interaction, channel);
@@ -1658,7 +1659,7 @@ public class SuggestionsService : INService
             .WithAuthor(suggestUser)
             .WithTitle(GetSuggestionStateTitle(guild.Id, suggest.SuggestionId, state))
             .WithDescription(suggest.Suggestion1)
-            .AddField("Reason", reason ?? "none")
+            .AddField("Reason", !string.IsNullOrWhiteSpace(reason) ? reason : "none")
             .AddField($"{state} By", moderator)
             .WithColor(GetColorForState(state))
             .Build();

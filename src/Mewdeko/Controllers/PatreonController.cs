@@ -6,7 +6,7 @@ using Serilog;
 namespace Mewdeko.Controllers;
 
 /// <summary>
-/// Controller for handling Patreon OAuth operations
+///     Controller for handling Patreon OAuth operations
 /// </summary>
 [ApiController]
 [Route("botapi/patreon")]
@@ -18,7 +18,7 @@ public class PatreonController : ControllerBase
     private readonly PatreonService patreonService;
 
     /// <summary>
-    /// Initializes a new instance of the PatreonController class.
+    ///     Initializes a new instance of the PatreonController class.
     /// </summary>
     /// <param name="patreonService">The Patreon service.</param>
     /// <param name="patreonApiClient">The Patreon API client.</param>
@@ -34,7 +34,7 @@ public class PatreonController : ControllerBase
     }
 
     /// <summary>
-    /// Generates OAuth authorization URL for a guild
+    ///     Generates OAuth authorization URL for a guild
     /// </summary>
     /// <param name="guildId">Discord guild ID</param>
     /// <returns>OAuth authorization URL</returns>
@@ -79,12 +79,12 @@ public class PatreonController : ControllerBase
     }
 
     /// <summary>
-    /// Handles OAuth callback from Patreon
+    /// Handles the OAuth callback from Patreon after user authorization.
     /// </summary>
-    /// <param name="code">Authorization code from Patreon</param>
-    /// <param name="state">State parameter containing guild ID</param>
-    /// <param name="error">Error parameter if OAuth failed</param>
-    /// <returns>OAuth callback result</returns>
+    /// <param name="code">The authorization code provided by Patreon.</param>
+    /// <param name="state">The state parameter returned from Patreon, containing the guild ID.</param>
+    /// <param name="error">An error parameter, if the authorization failed.</param>
+    /// <returns>A result indicating the success or failure of the OAuth process.</returns>
     [HttpGet("oauth/callback")]
     [EnableRateLimiting("AuthPolicy")]
     public async Task<IActionResult> OAuthCallback(
@@ -112,7 +112,6 @@ public class PatreonController : ControllerBase
                 });
             }
 
-            // Parse guild ID from state
             var stateParts = state.Split(':');
             if (stateParts.Length != 2 || !ulong.TryParse(stateParts[0], out var guildId))
             {
@@ -135,7 +134,6 @@ public class PatreonController : ControllerBase
 
             var redirectUri = $"{credentials.PatreonBaseUrl}/dashboard/patreon";
 
-            // Exchange code for tokens
             var tokenResponse = await patreonApiClient.ExchangeCodeForTokenAsync(
                 code,
                 credentials.PatreonClientId,
@@ -151,33 +149,19 @@ public class PatreonController : ControllerBase
                 });
             }
 
-            // Get user identity to determine campaign ID
-            var identity = await patreonApiClient.GetUserIdentityAsync(tokenResponse.AccessToken);
-            if (identity?.Data?.Id == null)
+            var campaignsResponse = await patreonApiClient.GetCampaignsAsync(tokenResponse.AccessToken);
+            if (campaignsResponse?.Data == null || campaignsResponse.Data.Count == 0)
             {
-                Log.Error("Failed to get Patreon user identity for guild {GuildId}", guildId);
-                return StatusCode(500, new
-                {
-                    error = "Failed to get user identity"
-                });
-            }
-
-            // Get user's campaigns
-            var campaigns = await patreonApiClient.GetUserCampaignsAsync(tokenResponse.AccessToken);
-            if (campaigns?.Data == null || !campaigns.Data.Any())
-            {
-                Log.Warning("No Patreon campaigns found for user {UserId} in guild {GuildId}",
-                    identity.Data.Id, guildId);
+                Log.Warning("No Patreon campaigns found for the authenticated user in guild {GuildId}", guildId);
                 return BadRequest(new
                 {
-                    error = "No Patreon campaigns found for this user"
+                    error =
+                        "No Patreon campaigns found for this user. Ensure you are logging in with the creator account."
                 });
             }
 
-            // Use the first campaign (most common case)
-            var campaignId = campaigns.Data.First().Id;
+            var campaignId = campaignsResponse.Data.First().Id;
 
-            // Store tokens and campaign ID in guild config
             var success = await patreonService.StoreOAuthTokensAsync(
                 guildId,
                 tokenResponse.AccessToken,
@@ -194,22 +178,10 @@ public class PatreonController : ControllerBase
                 });
             }
 
-            // Trigger initial supporter sync
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await patreonService.UpdateSupportersAsync(guildId);
-                }
-                catch (Exception ex)
-                {
-                    Log.Error(ex, "Failed to perform initial supporter sync for guild {GuildId}", guildId);
-                }
-            });
+            _ = Task.Run(() => patreonService.SyncAllAsync(guildId));
 
             Log.Information("Successfully completed Patreon OAuth for guild {GuildId} with campaign {CampaignId}",
                 guildId, campaignId);
-
             return Ok(new PatreonOAuthCallbackResponse
             {
                 Success = true,
@@ -229,7 +201,7 @@ public class PatreonController : ControllerBase
     }
 
     /// <summary>
-    /// Gets the OAuth state information for a guild
+    ///     Gets the OAuth state information for a guild
     /// </summary>
     /// <param name="guildId">Discord guild ID</param>
     /// <returns>OAuth state information</returns>
@@ -262,7 +234,7 @@ public class PatreonController : ControllerBase
     }
 
     /// <summary>
-    /// Gets comprehensive analytics for a guild's Patreon integration
+    ///     Gets comprehensive analytics for a guild's Patreon integration
     /// </summary>
     /// <param name="guildId">Discord guild ID</param>
     /// <returns>Patreon analytics data</returns>
@@ -295,7 +267,7 @@ public class PatreonController : ControllerBase
     }
 
     /// <summary>
-    /// Gets active supporters for a guild
+    ///     Gets active supporters for a guild
     /// </summary>
     /// <param name="guildId">Discord guild ID</param>
     /// <returns>List of active supporters</returns>
@@ -328,7 +300,7 @@ public class PatreonController : ControllerBase
     }
 
     /// <summary>
-    /// Gets Patreon configuration for a guild
+    ///     Gets Patreon configuration for a guild
     /// </summary>
     /// <param name="guildId">Discord guild ID</param>
     /// <returns>Patreon configuration</returns>
@@ -352,7 +324,7 @@ public class PatreonController : ControllerBase
     }
 
     /// <summary>
-    /// Updates Patreon configuration for a guild
+    ///     Updates Patreon configuration for a guild
     /// </summary>
     /// <param name="guildId">Discord guild ID</param>
     /// <param name="request">Configuration update request</param>
@@ -412,7 +384,7 @@ public class PatreonController : ControllerBase
     }
 
     /// <summary>
-    /// Gets Patreon tiers for a guild
+    ///     Gets Patreon tiers for a guild
     /// </summary>
     /// <param name="guildId">Discord guild ID</param>
     /// <returns>List of Patreon tiers</returns>
@@ -445,7 +417,7 @@ public class PatreonController : ControllerBase
     }
 
     /// <summary>
-    /// Gets Patreon goals for a guild
+    ///     Gets Patreon goals for a guild
     /// </summary>
     /// <param name="guildId">Discord guild ID</param>
     /// <returns>List of Patreon goals</returns>
@@ -478,7 +450,7 @@ public class PatreonController : ControllerBase
     }
 
     /// <summary>
-    /// Triggers manual operations for Patreon integration
+    ///     Triggers manual operations for Patreon integration
     /// </summary>
     /// <param name="guildId">Discord guild ID</param>
     /// <param name="request">Operation request</param>
@@ -501,6 +473,12 @@ public class PatreonController : ControllerBase
 
             switch (request.Operation.ToLowerInvariant())
             {
+                case "sync_all":
+                    await patreonService.SyncAllAsync(guildId);
+                    return Ok(new
+                    {
+                        message = "Full Patreon data sync completed successfully."
+                    });
                 case "sync":
                     await patreonService.UpdateSupportersAsync(guildId);
                     return Ok(new
@@ -548,7 +526,7 @@ public class PatreonController : ControllerBase
     }
 
     /// <summary>
-    /// Maps a Patreon tier to a Discord role
+    ///     Maps a Patreon tier to a Discord role
     /// </summary>
     /// <param name="guildId">Discord guild ID</param>
     /// <param name="request">Tier mapping request</param>
@@ -588,127 +566,127 @@ public class PatreonController : ControllerBase
 }
 
 /// <summary>
-/// Response model for OAuth URL generation
+///     Response model for OAuth URL generation
 /// </summary>
 public class PatreonOAuthResponse
 {
     /// <summary>
-    /// The OAuth authorization URL
+    ///     The OAuth authorization URL
     /// </summary>
     public string AuthorizationUrl { get; set; } = null!;
 
     /// <summary>
-    /// The state parameter for the OAuth flow
+    ///     The state parameter for the OAuth flow
     /// </summary>
     public string State { get; set; } = null!;
 }
 
 /// <summary>
-/// Response model for OAuth callback
+///     Response model for OAuth callback
 /// </summary>
 public class PatreonOAuthCallbackResponse
 {
     /// <summary>
-    /// Whether the OAuth flow was successful
+    ///     Whether the OAuth flow was successful
     /// </summary>
     public bool Success { get; set; }
 
     /// <summary>
-    /// Success or error message
+    ///     Success or error message
     /// </summary>
     public string Message { get; set; } = null!;
 
     /// <summary>
-    /// Discord guild ID
+    ///     Discord guild ID
     /// </summary>
     public ulong GuildId { get; set; }
 
     /// <summary>
-    /// Patreon campaign ID
+    ///     Patreon campaign ID
     /// </summary>
     public string? CampaignId { get; set; }
 }
 
 /// <summary>
-/// Response model for OAuth status
+///     Response model for OAuth status
 /// </summary>
 public class PatreonOAuthStatusResponse
 {
     /// <summary>
-    /// Whether Patreon integration is configured for this guild
+    ///     Whether Patreon integration is configured for this guild
     /// </summary>
     public bool IsConfigured { get; set; }
 
     /// <summary>
-    /// Patreon campaign ID if configured
+    ///     Patreon campaign ID if configured
     /// </summary>
     public string? CampaignId { get; set; }
 
     /// <summary>
-    /// Last time supporters were synced
+    ///     Last time supporters were synced
     /// </summary>
     public DateTime? LastSync { get; set; }
 
     /// <summary>
-    /// When the OAuth token expires
+    ///     When the OAuth token expires
     /// </summary>
     public DateTime? TokenExpiry { get; set; }
 }
 
 /// <summary>
-/// Request model for updating Patreon configuration
+///     Request model for updating Patreon configuration
 /// </summary>
 public class PatreonConfigUpdateRequest
 {
     /// <summary>
-    /// Discord channel ID for announcements
+    ///     Discord channel ID for announcements
     /// </summary>
     public ulong? ChannelId { get; set; }
 
     /// <summary>
-    /// Custom announcement message
+    ///     Custom announcement message
     /// </summary>
     public string? Message { get; set; }
 
     /// <summary>
-    /// Day of month for announcements (1-31)
+    ///     Day of month for announcements (1-31)
     /// </summary>
     public int? AnnouncementDay { get; set; }
 
     /// <summary>
-    /// Whether to toggle announcements on/off
+    ///     Whether to toggle announcements on/off
     /// </summary>
     public bool? ToggleAnnouncements { get; set; }
 
     /// <summary>
-    /// Whether to toggle role sync on/off
+    ///     Whether to toggle role sync on/off
     /// </summary>
     public bool? ToggleRoleSync { get; set; }
 }
 
 /// <summary>
-/// Request model for Patreon operations
+///     Request model for Patreon operations
 /// </summary>
 public class PatreonOperationRequest
 {
     /// <summary>
-    /// Operation to perform (sync, refresh_token, manual_announcement, sync_roles)
+    ///     Operation to perform (sync, refresh_token, manual_announcement, sync_roles)
     /// </summary>
     public string Operation { get; set; } = null!;
 }
 
 /// <summary>
-/// Request model for mapping Patreon tiers to Discord roles
+///     Request model for mapping Patreon tiers to Discord roles
 /// </summary>
 public class PatreonTierMappingRequest
 {
     /// <summary>
-    /// Patreon tier ID
+    ///     Patreon tier ID
     /// </summary>
     public string TierId { get; set; } = null!;
 
     /// <summary>
-    /// Discord role ID
+    ///     Discord role ID
     /// </summary>
     public ulong RoleId { get; set; }
 }

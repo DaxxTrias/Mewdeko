@@ -120,6 +120,105 @@ public class StarboardService : INService, IReadyExecutor, IUnloadableService
         => starboardConfigs.Where(x => x.GuildId == guildId).ToList();
 
     /// <summary>
+    ///     Gets recent starboard highlights for a guild.
+    /// </summary>
+    /// <param name="guildId">The ID of the guild.</param>
+    /// <param name="limit">The maximum number of highlights to return.</param>
+    /// <returns>A list of recent starboard highlights.</returns>
+    public async Task<List<StarboardHighlight>> GetRecentHighlights(ulong guildId, int limit = 5)
+    {
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
+
+        // Get starboard configs for this guild
+        var guildStarboards = starboardConfigs.Where(s => s.GuildId == guildId).ToList();
+        if (guildStarboards.Count == 0)
+            return new List<StarboardHighlight>();
+
+        // Get recent starboard posts for this guild
+        var recentPosts = await dbContext.StarboardPosts
+            .Where(sp => guildStarboards.Select(gs => gs.Id).Contains(sp.StarboardConfigId))
+            .OrderByDescending(sp => sp.DateAdded)
+            .Take(limit * 2) // Get more than needed in case some messages are deleted
+            .ToListAsync();
+
+        var highlights = new List<StarboardHighlight>();
+        var guild = client.GetGuild(guildId);
+
+        if (guild == null)
+            return highlights;
+
+        // Process each post and try to get message content from Discord
+        foreach (var post in recentPosts)
+        {
+            if (highlights.Count >= limit)
+                break;
+
+            try
+            {
+                var starboardConfig = guildStarboards.FirstOrDefault(s => s.Id == post.StarboardConfigId);
+                if (starboardConfig == null) continue;
+
+                var starboardChannel = guild.GetTextChannel(starboardConfig.StarboardChannelId);
+                if (starboardChannel == null) continue;
+
+                var starboardMessage = await starboardChannel.GetMessageAsync(post.PostId);
+                if (starboardMessage == null) continue;
+
+                // Parse star count from the starboard message - handle different emotes
+                var starCount = 0;
+                var emote = starboardConfig.Emote ?? "⭐";
+                if (starboardMessage.Content.Contains(emote))
+                {
+                    var starText = starboardMessage.Content.Split(' ')[0];
+                    if (int.TryParse(starText.Replace(emote, "").Trim(), out var parsedCount))
+                        starCount = parsedCount;
+                }
+
+                // Try to get original message content and author info
+                var originalContent = "Message content unavailable";
+                var authorName = "Unknown User";
+                var authorAvatarUrl = "";
+                var imageUrl = "";
+
+                // Extract content from starboard message embed or content
+                if (starboardMessage.Embeds.Any())
+                {
+                    var embed = starboardMessage.Embeds.First();
+                    originalContent = embed.Description ?? originalContent;
+                    authorName = embed.Author?.Name ?? authorName;
+                    authorAvatarUrl = embed.Author?.IconUrl ?? "";
+
+                    // Check for images in embed
+                    if (embed.Image.HasValue)
+                        imageUrl = embed.Image.Value.Url;
+                    else if (embed.Thumbnail.HasValue)
+                        imageUrl = embed.Thumbnail.Value.Url;
+                }
+
+                highlights.Add(new StarboardHighlight
+                {
+                    MessageId = post.MessageId,
+                    ChannelId = 0, // We'd need to store this in the DB to get it
+                    StarCount = starCount,
+                    Content = originalContent,
+                    AuthorName = authorName,
+                    AuthorAvatarUrl = authorAvatarUrl,
+                    ImageUrl = imageUrl,
+                    StarEmote = emote,
+                    CreatedAt = post.DateAdded ?? DateTime.UtcNow
+                });
+            }
+            catch (Exception ex)
+            {
+                // Log error but continue processing other messages
+                Log.Warning($"Failed to process starboard highlight for post {post.Id}: {ex.Message}");
+            }
+        }
+
+        return highlights.OrderByDescending(h => h.StarCount).ToList();
+    }
+
+    /// <summary>
     ///     Sets whether bots are allowed to be starred for a specific starboard.
     /// </summary>
     /// <param name="guild">The guild.</param>
@@ -668,4 +767,55 @@ public class StarboardService : INService, IReadyExecutor, IUnloadableService
             await RemoveStarboardPost(msg.Id, config.Id);
         }
     }
+}
+
+/// <summary>
+///     Represents a starboard highlight for dashboard display
+/// </summary>
+public class StarboardHighlight
+{
+    /// <summary>
+    ///     The original message ID
+    /// </summary>
+    public ulong MessageId { get; set; }
+
+    /// <summary>
+    ///     The channel ID where the message was posted
+    /// </summary>
+    public ulong ChannelId { get; set; }
+
+    /// <summary>
+    ///     The number of stars this message has
+    /// </summary>
+    public int StarCount { get; set; }
+
+    /// <summary>
+    ///     The content of the message
+    /// </summary>
+    public string Content { get; set; } = string.Empty;
+
+    /// <summary>
+    ///     The name of the message author
+    /// </summary>
+    public string AuthorName { get; set; } = string.Empty;
+
+    /// <summary>
+    ///     The avatar URL of the message author
+    /// </summary>
+    public string? AuthorAvatarUrl { get; set; }
+
+    /// <summary>
+    ///     The URL of any image attached to the message
+    /// </summary>
+    public string? ImageUrl { get; set; }
+
+    /// <summary>
+    ///     The star emote used for this starboard
+    /// </summary>
+    public string StarEmote { get; set; } = "⭐";
+
+    /// <summary>
+    ///     When the message was created
+    /// </summary>
+    public DateTime CreatedAt { get; set; }
 }

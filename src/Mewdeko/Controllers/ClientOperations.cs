@@ -165,7 +165,8 @@ public class ClientOperations(DiscordShardedClient client) : Controller
             Id = user.Id.ToString(),
             user.Username,
             DisplayName = user.Nickname ?? user.Username,
-            AvatarUrl = user.GetAvatarUrl() ?? user.GetDefaultAvatarUrl()
+            AvatarUrl = user.GetAvatarUrl() ?? user.GetDefaultAvatarUrl(),
+            user.IsBot
         });
 
         return Ok(members);

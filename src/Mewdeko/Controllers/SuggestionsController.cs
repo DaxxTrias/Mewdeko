@@ -27,7 +27,7 @@ public class SuggestionsController(
     /// <param name="userId">The user to retrieve suggestions for. (Optional)</param>
     /// <returns>A 404 if data is not found, or an 200 with data if found.</returns>
     [HttpGet("{userId?}")]
-    public async Task<IActionResult> GetSuggestions(ulong guildId, ulong userId = 0)
+    public async Task<IActionResult> GetSuggestions(ulong guildId, ulong? userId = null)
     {
         var suggestions = await service.Suggestions(guildId);
 
@@ -35,7 +35,7 @@ public class SuggestionsController(
         if (suggestions.Count == 0)
             return NotFound("No suggestions for this guild.");
 
-        if (userId == 0) return Ok(suggestions);
+        if (userId is null) return Ok(suggestions);
         var userSuggestions = suggestions.Where(x => x.UserId == userId);
         if (!userSuggestions.Any())
             return NotFound("No suggestions for this user.");
