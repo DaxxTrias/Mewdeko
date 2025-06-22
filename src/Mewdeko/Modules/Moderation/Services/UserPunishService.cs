@@ -485,7 +485,22 @@ public class UserPunishService : INService, IDisposable
     public async Task<IGrouping<ulong, Warning>[]> WarnlogAll(ulong gid)
     {
         await using var dbContext = await dbFactory.CreateConnectionAsync();
-        return dbContext.Warnings.Where(x => x.GuildId == gid).GroupBy(x => x.UserId).ToArray();
+        // Use AsEnumerable() to move GroupBy to client-side
+        return dbContext.Warnings.Where(x => x.GuildId == gid).AsEnumerable().GroupBy(x => x.UserId).ToArray();
+    }
+
+    /// <summary>
+    ///     Retrieves all warnings for a guild without grouping.
+    /// </summary>
+    /// <param name="gid">The ID of the guild.</param>
+    /// <returns></returns>
+    public async Task<Warning[]> GetAllWarnings(ulong gid)
+    {
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
+        return await dbContext.Warnings
+            .Where(x => x.GuildId == gid)
+            .OrderByDescending(x => x.DateAdded)
+            .ToArrayAsync();
     }
 
     /// <summary>

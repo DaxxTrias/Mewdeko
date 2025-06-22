@@ -13,10 +13,9 @@ namespace Mewdeko.Modules.Patreon.Services;
 public class PatreonApiClient : INService
 {
     private const string BaseUrl = "https://www.patreon.com/api/oauth2/v2";
-    private const string OAuthUrl = "https://www.patreon.com/oauth2";
-    private const string OAuthTokenUrl = "https://www.patreon.com/api/oauth2/token";
+    private const string OAuthUrl = "https://www.patreon.com/oauth2/authorize";
+    private const string ApiTokenUrl = "https://www.patreon.com/api/oauth2/token";
 
-    // Cached JsonSerializerOptions for performance
     private static readonly JsonSerializerOptions CachedJsonOptions = new()
     {
         PropertyNameCaseInsensitive = true
@@ -25,7 +24,7 @@ public class PatreonApiClient : INService
     private readonly IHttpClientFactory httpClientFactory;
 
     /// <summary>
-    /// Initializes a new instance of the PatreonApiClient class.
+    /// Initializes a new instance of the <see cref="PatreonApiClient"/> class.
     /// </summary>
     /// <param name="httpClientFactory">The HTTP client factory.</param>
     public PatreonApiClient(IHttpClientFactory httpClientFactory)
@@ -34,41 +33,38 @@ public class PatreonApiClient : INService
     }
 
     /// <summary>
-    /// Gets the OAuth authorization URL for Patreon
+    /// Gets the OAuth authorization URL for Patreon.
     /// </summary>
-    /// <param name="clientId">Patreon client ID</param>
-    /// <param name="redirectUri">OAuth redirect URI</param>
-    /// <param name="state">State parameter for OAuth flow</param>
-    /// <returns>Authorization URL</returns>
+    /// <param name="clientId">Your Patreon client ID.</param>
+    /// <param name="redirectUri">The URI to redirect to after authorization.</param>
+    /// <param name="state">A random string for CSRF protection.</param>
+    /// <returns>A fully-formed URL to redirect the user to for authorization.</returns>
     public string GetAuthorizationUrl(string clientId, string redirectUri, string state)
     {
-        var scope = "identity campaigns w:campaigns.webhook campaigns.members";
-
+        var scope = "identity identity[email] campaigns w:campaigns.webhook campaigns.members";
         var query = HttpUtility.ParseQueryString(string.Empty);
         query["response_type"] = "code";
         query["client_id"] = clientId;
         query["redirect_uri"] = redirectUri;
         query["scope"] = scope;
         query["state"] = state;
-
-        return $"{OAuthUrl}/authorize?{query}";
+        return $"{OAuthUrl}?{query}";
     }
 
     /// <summary>
-    /// Exchanges authorization code for access token
+    /// Exchanges an authorization code for an access token and refresh token.
     /// </summary>
-    /// <param name="code">Authorization code from OAuth callback</param>
-    /// <param name="clientId">Patreon client ID</param>
-    /// <param name="clientSecret">Patreon client secret</param>
-    /// <param name="redirectUri">OAuth redirect URI</param>
-    /// <returns>Token response</returns>
+    /// <param name="code">The authorization code from the OAuth callback.</param>
+    /// <param name="clientId">Your Patreon client ID.</param>
+    /// <param name="clientSecret">Your Patreon client secret.</param>
+    /// <param name="redirectUri">The same redirect URI used in the authorization request.</param>
+    /// <returns>A <see cref="PatreonTokenResponse"/> containing the tokens, or null if the request fails.</returns>
     public async Task<PatreonTokenResponse?> ExchangeCodeForTokenAsync(string code, string clientId,
         string clientSecret, string redirectUri)
     {
         try
         {
             using var client = httpClientFactory.CreateClient();
-
             var requestData = new Dictionary<string, string>
             {
                 ["grant_type"] = "authorization_code",
@@ -77,15 +73,13 @@ public class PatreonApiClient : INService
                 ["client_secret"] = clientSecret,
                 ["redirect_uri"] = redirectUri
             };
-
             var content = new FormUrlEncodedContent(requestData);
-            var response = await client.PostAsync($"{OAuthTokenUrl}", content);
-
+            var response = await client.PostAsync(ApiTokenUrl, content);
             if (!response.IsSuccessStatusCode)
             {
                 var errorContent = await response.Content.ReadAsStringAsync();
-                Log.Error("Failed to exchange Patreon code for token: {StatusCode} - {Content}",
-                    response.StatusCode, errorContent);
+                Log.Error("Failed to exchange Patreon code for token: {StatusCode} - {Content}", response.StatusCode,
+                    errorContent);
                 return null;
             }
 
@@ -100,19 +94,18 @@ public class PatreonApiClient : INService
     }
 
     /// <summary>
-    /// Refreshes an access token using refresh token
+    /// Refreshes an access token using a refresh token.
     /// </summary>
-    /// <param name="refreshToken">The refresh token</param>
-    /// <param name="clientId">Patreon client ID</param>
-    /// <param name="clientSecret">Patreon client secret</param>
-    /// <returns>New token response</returns>
+    /// <param name="refreshToken">The refresh token obtained during the initial token exchange.</param>
+    /// <param name="clientId">Your Patreon client ID.</param>
+    /// <param name="clientSecret">Your Patreon client secret.</param>
+    /// <returns>A new <see cref="PatreonTokenResponse"/> containing the refreshed tokens, or null if the request fails.</returns>
     public async Task<PatreonTokenResponse?> RefreshTokenAsync(string refreshToken, string clientId,
         string clientSecret)
     {
         try
         {
             using var client = httpClientFactory.CreateClient();
-
             var requestData = new Dictionary<string, string>
             {
                 ["grant_type"] = "refresh_token",
@@ -120,15 +113,13 @@ public class PatreonApiClient : INService
                 ["client_id"] = clientId,
                 ["client_secret"] = clientSecret
             };
-
             var content = new FormUrlEncodedContent(requestData);
-            var response = await client.PostAsync($"{OAuthUrl}/token", content);
-
+            var response = await client.PostAsync(ApiTokenUrl, content);
             if (!response.IsSuccessStatusCode)
             {
                 var errorContent = await response.Content.ReadAsStringAsync();
-                Log.Error("Failed to refresh Patreon token: {StatusCode} - {Content}",
-                    response.StatusCode, errorContent);
+                Log.Error("Failed to refresh Patreon token: {StatusCode} - {Content}", response.StatusCode,
+                    errorContent);
                 return null;
             }
 
@@ -143,40 +134,36 @@ public class PatreonApiClient : INService
     }
 
     /// <summary>
-    /// Gets the current user's campaigns
+    /// Gets a list of campaigns associated with the authenticated user, optionally including related data.
     /// </summary>
-    /// <param name="accessToken">Access token</param>
-    /// <returns>List of campaigns</returns>
-    public async Task<List<PatreonCampaign>?> GetCampaignsAsync(string accessToken)
+    /// <param name="accessToken">The creator's access token.</param>
+    /// <returns>A full API response containing a list of <see cref="PatreonCampaign"/> objects and included data, or null if the request fails.</returns>
+    public async Task<PatreonApiResponse<List<PatreonCampaign>>?> GetCampaignsAsync(string accessToken)
     {
         try
         {
             using var client = CreateAuthenticatedClient(accessToken);
-
-            var includes = "tiers,goals,creator";
-            var fields =
-                "campaign[created_at,creation_name,discord_server_id,image_small_url,image_url,is_charged_immediately,is_monthly,main_video_url,one_liner,patron_count,pay_per_name,pledge_sum,pledge_url,published_at,summary,thanks_embed,thanks_msg,thanks_video_url,url]";
-
-            var query = HttpUtility.ParseQueryString(string.Empty);
-            query["include"] = includes;
-            query["fields"] = fields;
-
-            var response = await client.GetAsync($"{BaseUrl}/campaigns?{query}");
-
+            var query = new Dictionary<string, string>
+            {
+                ["include"] = "tiers,creator,goals",
+                ["fields[campaign]"] =
+                    "created_at,creation_name,discord_server_id,image_small_url,image_url,is_charged_immediately,is_monthly,main_video_url,one_liner,patron_count,pay_per_name,pledge_url,published_at,summary,thanks_embed,thanks_msg,thanks_video_url,url",
+                ["fields[tier]"] = "title,amount_cents,patron_count,description,published,image_url,discord_role_ids",
+                ["fields[goal]"] = "title,amount_cents,completed_percentage,description,reached_at,created_at"
+            };
+            var queryString = await new FormUrlEncodedContent(query).ReadAsStringAsync();
+            var response = await client.GetAsync($"{BaseUrl}/campaigns?{queryString}");
             if (!response.IsSuccessStatusCode)
             {
                 var errorContent = await response.Content.ReadAsStringAsync();
-                Log.Error("Failed to get Patreon campaigns: {StatusCode} - {Content}",
-                    response.StatusCode, errorContent);
+                Log.Error("Failed to get Patreon campaigns: {StatusCode} - {Content}", response.StatusCode,
+                    errorContent);
                 return null;
             }
 
             var responseContent = await response.Content.ReadAsStringAsync();
-            var apiResponse =
-                JsonSerializer.Deserialize<PatreonApiResponse<List<PatreonCampaign>>>(responseContent,
-                    CachedJsonOptions);
-
-            return apiResponse?.Data;
+            return JsonSerializer.Deserialize<PatreonApiResponse<List<PatreonCampaign>>>(responseContent,
+                CachedJsonOptions);
         }
         catch (Exception ex)
         {
@@ -186,177 +173,37 @@ public class PatreonApiClient : INService
     }
 
     /// <summary>
-    /// Gets members/supporters for a campaign
+    /// Gets a single campaign by its ID, optionally including related data like tiers and goals.
     /// </summary>
-    /// <param name="accessToken">Access token</param>
-    /// <param name="campaignId">Campaign ID</param>
-    /// <param name="cursor">Pagination cursor</param>
-    /// <returns>Campaign members</returns>
-    public async Task<PatreonApiResponse<List<PatreonMember>>?> GetCampaignMembersAsync(string accessToken,
-        string campaignId, string? cursor = null)
+    /// <param name="accessToken">The creator's access token.</param>
+    /// <param name="campaignId">The ID of the campaign to retrieve.</param>
+    /// <returns>A full API response containing the single <see cref="PatreonCampaign"/> object and included data, or null if the request fails.</returns>
+    public async Task<PatreonApiResponse<PatreonCampaign>?> GetCampaignAsync(string accessToken, string campaignId)
     {
         try
         {
             using var client = CreateAuthenticatedClient(accessToken);
-
-            var includes = "currently_entitled_tiers,user";
-            var fields =
-                "member[currently_entitled_amount_cents,email,full_name,is_follower,last_charge_date,last_charge_status,lifetime_support_cents,next_charge_date,note,patron_status,pledge_relationship_start,will_pay_amount_cents]";
-            fields += ",user[email,first_name,full_name,image_url,last_name,social_connections,thumb_url,url,vanity]";
-            fields +=
-                ",tier[amount_cents,created_at,description,discord_role_ids,image_url,patron_count,post_count,published,title,url]";
-
-            var query = HttpUtility.ParseQueryString(string.Empty);
-            query["include"] = includes;
-            query["fields"] = fields;
-            query["page[count]"] = "1000"; // Max allowed
-
-            if (!string.IsNullOrEmpty(cursor))
+            var query = new Dictionary<string, string>
             {
-                query["page[cursor]"] = cursor;
-            }
-
-            var response = await client.GetAsync($"{BaseUrl}/campaigns/{campaignId}/members?{query}");
+                ["include"] = "tiers,creator,goals",
+                ["fields[campaign]"] =
+                    "created_at,creation_name,discord_server_id,image_small_url,image_url,is_charged_immediately,is_monthly,main_video_url,one_liner,patron_count,pay_per_name,pledge_url,published_at,summary,thanks_embed,thanks_msg,thanks_video_url,url",
+                ["fields[tier]"] = "title,amount_cents,patron_count,description,published,image_url,discord_role_ids",
+                ["fields[goal]"] = "title,amount_cents,completed_percentage,description,reached_at,created_at"
+            };
+            var queryString = await new FormUrlEncodedContent(query).ReadAsStringAsync();
+            var response = await client.GetAsync($"{BaseUrl}/campaigns/{campaignId}?{queryString}");
 
             if (!response.IsSuccessStatusCode)
             {
                 var errorContent = await response.Content.ReadAsStringAsync();
-                Log.Error("Failed to get Patreon campaign members: {StatusCode} - {Content}",
-                    response.StatusCode, errorContent);
+                Log.Error("Failed to get Patreon campaign: {StatusCode} - {Content}", response.StatusCode,
+                    errorContent);
                 return null;
             }
 
             var responseContent = await response.Content.ReadAsStringAsync();
-            var apiResponse =
-                JsonSerializer.Deserialize<PatreonApiResponse<List<PatreonMember>>>(responseContent, CachedJsonOptions);
-
-            return apiResponse;
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "Error getting Patreon campaign members");
-            return null;
-        }
-    }
-
-    /// <summary>
-    /// Gets tiers for a campaign
-    /// </summary>
-    /// <param name="accessToken">Access token</param>
-    /// <param name="campaignId">Campaign ID</param>
-    /// <returns>Campaign tiers</returns>
-    public async Task<List<PatreonTierData>?> GetCampaignTiersAsync(string accessToken, string campaignId)
-    {
-        try
-        {
-            using var client = CreateAuthenticatedClient(accessToken);
-
-            var fields =
-                "tier[amount_cents,created_at,description,discord_role_ids,image_url,patron_count,post_count,published,title,url]";
-
-            var query = HttpUtility.ParseQueryString(string.Empty);
-            query["fields"] = fields;
-
-            var response = await client.GetAsync($"{BaseUrl}/campaigns/{campaignId}/tiers?{query}");
-
-            if (!response.IsSuccessStatusCode)
-            {
-                var errorContent = await response.Content.ReadAsStringAsync();
-                Log.Error("Failed to get Patreon campaign tiers: {StatusCode} - {Content}",
-                    response.StatusCode, errorContent);
-                return null;
-            }
-
-            var responseContent = await response.Content.ReadAsStringAsync();
-            var apiResponse =
-                JsonSerializer.Deserialize<PatreonApiResponse<List<PatreonTierData>>>(responseContent,
-                    CachedJsonOptions);
-
-            return apiResponse?.Data;
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "Error getting Patreon campaign tiers");
-            return null;
-        }
-    }
-
-    /// <summary>
-    /// Gets goals for a campaign
-    /// </summary>
-    /// <param name="accessToken">Access token</param>
-    /// <param name="campaignId">Campaign ID</param>
-    /// <returns>Campaign goals</returns>
-    public async Task<List<PatreonGoalData>?> GetCampaignGoalsAsync(string accessToken, string campaignId)
-    {
-        try
-        {
-            using var client = CreateAuthenticatedClient(accessToken);
-
-            var fields = "goal[amount_cents,completed_percentage,created_at,description,reached_at,title]";
-
-            var query = HttpUtility.ParseQueryString(string.Empty);
-            query["fields"] = fields;
-
-            var response = await client.GetAsync($"{BaseUrl}/campaigns/{campaignId}/goals?{query}");
-
-            if (!response.IsSuccessStatusCode)
-            {
-                var errorContent = await response.Content.ReadAsStringAsync();
-                Log.Error("Failed to get Patreon campaign goals: {StatusCode} - {Content}",
-                    response.StatusCode, errorContent);
-                return null;
-            }
-
-            var responseContent = await response.Content.ReadAsStringAsync();
-            var apiResponse =
-                JsonSerializer.Deserialize<PatreonApiResponse<List<PatreonGoalData>>>(responseContent,
-                    CachedJsonOptions);
-
-            return apiResponse?.Data;
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "Error getting Patreon campaign goals");
-            return null;
-        }
-    }
-
-    /// <summary>
-    /// Gets campaign details
-    /// </summary>
-    /// <param name="accessToken">Access token</param>
-    /// <param name="campaignId">Campaign ID</param>
-    /// <returns>Campaign details</returns>
-    public async Task<PatreonCampaign?> GetCampaignAsync(string accessToken, string campaignId)
-    {
-        try
-        {
-            using var client = CreateAuthenticatedClient(accessToken);
-
-            var includes = "tiers,goals,creator";
-            var fields =
-                "campaign[created_at,creation_name,discord_server_id,image_small_url,image_url,is_charged_immediately,is_monthly,main_video_url,one_liner,patron_count,pay_per_name,pledge_sum,pledge_url,published_at,summary,thanks_embed,thanks_msg,thanks_video_url,url]";
-
-            var query = HttpUtility.ParseQueryString(string.Empty);
-            query["include"] = includes;
-            query["fields"] = fields;
-
-            var response = await client.GetAsync($"{BaseUrl}/campaigns/{campaignId}?{query}");
-
-            if (!response.IsSuccessStatusCode)
-            {
-                var errorContent = await response.Content.ReadAsStringAsync();
-                Log.Error("Failed to get Patreon campaign: {StatusCode} - {Content}",
-                    response.StatusCode, errorContent);
-                return null;
-            }
-
-            var responseContent = await response.Content.ReadAsStringAsync();
-            var apiResponse =
-                JsonSerializer.Deserialize<PatreonApiResponse<PatreonCampaign>>(responseContent, CachedJsonOptions);
-
-            return apiResponse?.Data;
+            return JsonSerializer.Deserialize<PatreonApiResponse<PatreonCampaign>>(responseContent, CachedJsonOptions);
         }
         catch (Exception ex)
         {
@@ -366,27 +213,76 @@ public class PatreonApiClient : INService
     }
 
     /// <summary>
-    /// Gets the current user's identity
+    /// Gets a paginated list of members (patrons) for a specific campaign.
     /// </summary>
-    /// <param name="accessToken">Access token</param>
-    /// <returns>User identity</returns>
+    /// <param name="accessToken">The creator's access token.</param>
+    /// <param name="campaignId">The ID of the campaign.</param>
+    /// <param name="cursor">The pagination cursor for the next page of results. Can be null for the first page.</param>
+    /// <returns>A <see cref="PatreonApiResponse{T}"/> containing a list of <see cref="PatreonMember"/> objects and pagination info, or null if the request fails.</returns>
+    public async Task<PatreonApiResponse<List<PatreonMember>>?> GetCampaignMembersAsync(string accessToken,
+        string campaignId, string? cursor = null)
+    {
+        try
+        {
+            using var client = CreateAuthenticatedClient(accessToken);
+            var query = new Dictionary<string, string>
+            {
+                ["include"] = "currently_entitled_tiers,user",
+                ["fields[member]"] =
+                    "currently_entitled_amount_cents,email,full_name,is_follower,last_charge_date,last_charge_status,lifetime_support_cents,next_charge_date,note,patron_status,pledge_relationship_start,will_pay_amount_cents",
+                ["fields[user]"] = "email,first_name,full_name,image_url,last_name,thumb_url,url,vanity",
+                ["fields[tier]"] =
+                    "amount_cents,created_at,description,discord_role_ids,image_url,patron_count,published,title,url",
+                ["page[count]"] = "100"
+            };
+            if (!string.IsNullOrEmpty(cursor))
+            {
+                query["page[cursor]"] = cursor;
+            }
+
+            var queryString = await new FormUrlEncodedContent(query).ReadAsStringAsync();
+            var response = await client.GetAsync($"{BaseUrl}/campaigns/{campaignId}/members?{queryString}");
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorContent = await response.Content.ReadAsStringAsync();
+                Log.Error("Failed to get Patreon campaign members: {StatusCode} - {Content}", response.StatusCode,
+                    errorContent);
+                return null;
+            }
+
+            var responseContent = await response.Content.ReadAsStringAsync();
+            return JsonSerializer.Deserialize<PatreonApiResponse<List<PatreonMember>>>(responseContent,
+                CachedJsonOptions);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Error getting Patreon campaign members");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Gets the identity information for the user associated with the access token.
+    /// </summary>
+    /// <param name="accessToken">The user's access token.</param>
+    /// <returns>A <see cref="PatreonApiResponse{T}"/> containing the <see cref="PatreonUser"/> data, or null if the request fails.</returns>
     public async Task<PatreonApiResponse<PatreonUser>?> GetUserIdentityAsync(string accessToken)
     {
         try
         {
             using var client = CreateAuthenticatedClient(accessToken);
-
-            var fields = "user[email,first_name,full_name,image_url,last_name,social_connections,url,vanity]";
-            var query = HttpUtility.ParseQueryString(string.Empty);
-            query["fields"] = fields;
-
-            var response = await client.GetAsync($"{BaseUrl}/identity?{query}");
-
+            var query = new Dictionary<string, string>
+            {
+                ["fields[user]"] = "email,first_name,full_name,image_url,last_name,social_connections,url,vanity",
+                ["include"] = "memberships"
+            };
+            var queryString = await new FormUrlEncodedContent(query).ReadAsStringAsync();
+            var response = await client.GetAsync($"{BaseUrl}/identity?{queryString}");
             if (!response.IsSuccessStatusCode)
             {
                 var errorContent = await response.Content.ReadAsStringAsync();
-                Log.Error("Failed to get Patreon user identity: {StatusCode} - {Content}",
-                    response.StatusCode, errorContent);
+                Log.Error("Failed to get Patreon user identity: {StatusCode} - {Content}", response.StatusCode,
+                    errorContent);
                 return null;
             }
 
@@ -400,51 +296,6 @@ public class PatreonApiClient : INService
         }
     }
 
-    /// <summary>
-    /// Gets the current user's campaigns
-    /// </summary>
-    /// <param name="accessToken">Access token</param>
-    /// <returns>User's campaigns</returns>
-    public async Task<PatreonApiResponse<List<PatreonCampaign>>?> GetUserCampaignsAsync(string accessToken)
-    {
-        try
-        {
-            using var client = CreateAuthenticatedClient(accessToken);
-
-            var includes = "tiers,goals";
-            var fields =
-                "campaign[created_at,creation_name,discord_server_id,image_small_url,image_url,is_charged_immediately,is_monthly,main_video_url,one_liner,patron_count,pay_per_name,pledge_sum,pledge_url,published_at,summary,url]";
-
-            var query = HttpUtility.ParseQueryString(string.Empty);
-            query["include"] = includes;
-            query["fields"] = fields;
-
-            var response = await client.GetAsync($"{BaseUrl}/campaigns?{query}");
-
-            if (!response.IsSuccessStatusCode)
-            {
-                var errorContent = await response.Content.ReadAsStringAsync();
-                Log.Error("Failed to get Patreon user campaigns: {StatusCode} - {Content}",
-                    response.StatusCode, errorContent);
-                return null;
-            }
-
-            var responseContent = await response.Content.ReadAsStringAsync();
-            return JsonSerializer.Deserialize<PatreonApiResponse<List<PatreonCampaign>>>(responseContent,
-                CachedJsonOptions);
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "Error getting Patreon user campaigns");
-            return null;
-        }
-    }
-
-    /// <summary>
-    /// Creates an authenticated HTTP client
-    /// </summary>
-    /// <param name="accessToken">Access token</param>
-    /// <returns>Authenticated HTTP client</returns>
     private HttpClient CreateAuthenticatedClient(string accessToken)
     {
         var client = httpClientFactory.CreateClient();

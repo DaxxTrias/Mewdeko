@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Threading;
 using DataModel;
 using LinqToDB;
@@ -515,6 +516,7 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
             }
 
             // Mark inactive supporters (not in current API response)
+            Log.Information(JsonSerializer.Serialize(supporters));
             var supporterIds = supporters.Select(s => s.Id).ToList();
             await uow.PatreonSupporters
                 .Where(x => x.GuildId == guildId && !supporterIds.Contains(x.PatreonUserId))
@@ -573,6 +575,154 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
         {
             Log.Error(ex, "Error refreshing Patreon token for guild {GuildId}", guildId);
             return null;
+        }
+    }
+
+    /// <summary>
+    ///     Orchestrates a full synchronization of all Patreon data (supporters, tiers, goals) for a guild.
+    /// </summary>
+    /// <param name="guildId">The Discord guild ID to sync.</param>
+    public async Task SyncAllAsync(ulong guildId)
+    {
+        Log.Information("Starting full Patreon data sync for guild {GuildId}", guildId);
+
+        // Refresh token first to ensure all subsequent API calls are authenticated.
+        var refreshedToken = await RefreshTokenAsync(guildId);
+        if (refreshedToken == null)
+        {
+            Log.Error("Could not refresh token for guild {GuildId}. Aborting full sync.", guildId);
+            return;
+        }
+
+        await UpdateSupportersAsync(guildId);
+        await UpdateTiersAndGoalsAsync(guildId);
+
+        Log.Information("Full Patreon data sync completed for guild {GuildId}", guildId);
+    }
+
+    /// <summary>
+    ///     Fetches and updates Tiers and Goals for a guild from the Patreon API.
+    ///     This is done in one call to be efficient, as both are 'included' on the campaign object.
+    /// </summary>
+    /// <param name="guildId">Discord guild ID</param>
+    /// <returns>Number of items updated, or -1 if failed</returns>
+    public async Task<int> UpdateTiersAndGoalsAsync(ulong guildId)
+    {
+        try
+        {
+            await using var uow = await db.CreateConnectionAsync();
+            var guildConfig = await uow.GuildConfigs.FirstOrDefaultAsync(x => x.GuildId == guildId);
+
+            if (guildConfig?.PatreonAccessToken == null || guildConfig.PatreonCampaignId == null)
+            {
+                Log.Warning("No Patreon access token or campaign ID found for tier/goal sync in guild {GuildId}",
+                    guildId);
+                return -1;
+            }
+
+            var campaignResponse =
+                await apiClient.GetCampaignAsync(guildConfig.PatreonAccessToken, guildConfig.PatreonCampaignId);
+            if (campaignResponse?.Included == null)
+            {
+                Log.Warning("Failed to fetch campaign data with includes for guild {GuildId}", guildId);
+                return -1;
+            }
+
+            var includedData = campaignResponse.Included;
+            var updatedCount = 0;
+
+            // Process Tiers
+            var apiTiers = includedData.Where(x => x.Type == "tier").ToList();
+            foreach (var apiTierResource in apiTiers)
+            {
+                var apiTier = new PatreonTierData
+                {
+                    Id = apiTierResource.Id, Attributes = apiTierResource.Attributes
+                };
+                var existingTier =
+                    await uow.PatreonTiers.FirstOrDefaultAsync(x => x.GuildId == guildId && x.TierId == apiTier.Id);
+                if (existingTier == null)
+                {
+                    await uow.InsertAsync(new PatreonTier
+                    {
+                        GuildId = guildId,
+                        TierId = apiTier.Id,
+                        TierTitle = apiTier.Title ?? "Untitled Tier",
+                        AmountCents = apiTier.AmountCents ?? 0,
+                        Description = apiTier.Description,
+                        IsActive = apiTier.Published ?? false,
+                        DateAdded = DateTime.UtcNow
+                    });
+                    updatedCount++;
+                }
+                else
+                {
+                    await uow.PatreonTiers.Where(x => x.Id == existingTier.Id)
+                        .UpdateAsync(x => new PatreonTier
+                        {
+                            TierTitle = apiTier.Title ?? existingTier.TierTitle,
+                            AmountCents = apiTier.AmountCents ?? existingTier.AmountCents,
+                            Description = apiTier.Description ?? existingTier.Description,
+                            IsActive = apiTier.Published ?? existingTier.IsActive,
+                            DateAdded = DateTime.UtcNow
+                        });
+                    updatedCount++;
+                }
+            }
+
+            Log.Information("Updated {Count} tiers for guild {GuildId}", apiTiers.Count, guildId);
+
+            // Process Goals
+            var apiGoals = includedData.Where(x => x.Type == "goal").ToList();
+            foreach (var apiGoalResource in apiGoals)
+            {
+                var apiGoal = new PatreonGoalData
+                {
+                    Id = apiGoalResource.Id, Attributes = apiGoalResource.Attributes
+                };
+                var existingGoal =
+                    await uow.PatreonGoals.FirstOrDefaultAsync(x => x.GuildId == guildId && x.GoalId == apiGoal.Id);
+                if (existingGoal == null)
+                {
+                    await uow.InsertAsync(new PatreonGoal
+                    {
+                        GuildId = guildId,
+                        GoalId = apiGoal.Id,
+                        Title = apiGoal.Title ?? "Untitled Goal",
+                        Description = apiGoal.Description,
+                        AmountCents = apiGoal.AmountCents ?? 0,
+                        CompletedPercentage = apiGoal.CompletedPercentage ?? 0,
+                        CreatedAt = ParseDateTime(apiGoal.CreatedAt) ?? DateTime.UtcNow,
+                        ReachedAt = ParseDateTime(apiGoal.ReachedAt),
+                        IsActive = true,
+                        LastUpdated = DateTime.UtcNow
+                    });
+                    updatedCount++;
+                }
+                else
+                {
+                    await uow.PatreonGoals.Where(x => x.Id == existingGoal.Id)
+                        .UpdateAsync(x => new PatreonGoal
+                        {
+                            Title = apiGoal.Title ?? existingGoal.Title,
+                            Description = apiGoal.Description ?? existingGoal.Description,
+                            AmountCents = apiGoal.AmountCents ?? existingGoal.AmountCents,
+                            CompletedPercentage = apiGoal.CompletedPercentage ?? existingGoal.CompletedPercentage,
+                            ReachedAt = ParseDateTime(apiGoal.ReachedAt) ?? existingGoal.ReachedAt,
+                            LastUpdated = DateTime.UtcNow
+                        });
+                    updatedCount++;
+                }
+            }
+
+            Log.Information("Updated {Count} goals for guild {GuildId}", apiGoals.Count, guildId);
+
+            return updatedCount;
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Error updating tiers and goals for guild {GuildId}", guildId);
+            return -1;
         }
     }
 

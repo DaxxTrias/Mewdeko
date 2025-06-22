@@ -1,6 +1,6 @@
+using Mewdeko.Modules.Starboard.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Mewdeko.Modules.Starboard.Services;
 
 namespace Mewdeko.Controllers;
 
@@ -12,8 +12,8 @@ namespace Mewdeko.Controllers;
 [Authorize("ApiKeyPolicy")]
 public class StarboardController : Controller
 {
-    private readonly StarboardService starboardService;
     private readonly DiscordShardedClient client;
+    private readonly StarboardService starboardService;
 
     /// <summary>
     /// Initializes a new instance of the StarboardController
@@ -44,7 +44,8 @@ public class StarboardController : Controller
         if (guild == null)
             return NotFound("Guild not found");
 
-        var starboardId = await starboardService.CreateStarboard(guild, request.ChannelId, request.Emote, request.Threshold);
+        var starboardId =
+            await starboardService.CreateStarboard(guild, request.ChannelId, request.Emote, request.Threshold);
         return Ok(starboardId);
     }
 
@@ -120,7 +121,8 @@ public class StarboardController : Controller
     /// Sets whether to remove starred messages when they fall below threshold
     /// </summary>
     [HttpPost("{starboardId}/remove-below-threshold")]
-    public async Task<IActionResult> SetRemoveBelowThreshold(ulong guildId, int starboardId, [FromBody] bool removeBelowThreshold)
+    public async Task<IActionResult> SetRemoveBelowThreshold(ulong guildId, int starboardId,
+        [FromBody] bool removeBelowThreshold)
     {
         var guild = client.GetGuild(guildId);
         if (guild == null)
@@ -198,7 +200,24 @@ public class StarboardController : Controller
         if (result.Config == null)
             return NotFound("Starboard configuration not found");
 
-        return Ok(new { wasAdded = result.WasAdded, config = result.Config });
+        return Ok(new
+        {
+            wasAdded = result.WasAdded, config = result.Config
+        });
+    }
+
+    /// <summary>
+    ///     Gets recent starboard highlights for a guild
+    /// </summary>
+    [HttpGet("highlights")]
+    public async Task<IActionResult> GetStarboardHighlights(ulong guildId, [FromQuery] int limit = 5)
+    {
+        var guild = client.GetGuild(guildId);
+        if (guild == null)
+            return NotFound("Guild not found");
+
+        var highlights = await starboardService.GetRecentHighlights(guildId, limit);
+        return Ok(highlights);
     }
 }
 

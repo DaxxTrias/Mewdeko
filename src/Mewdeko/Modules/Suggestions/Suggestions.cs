@@ -182,10 +182,17 @@ public partial class Suggestions : MewdekoModuleBase<SuggestionsService>
     [Aliases]
     [RequireContext(ContextType.Guild)]
     [UserPerm(GuildPermission.ManageMessages)]
-    public Task Deny(ulong sid, [Remainder] string? reason = null)
+    public async Task Deny(ulong sid, [Remainder] string? reason = null)
     {
-        return Service.SendDenyEmbed(ctx.Guild, ctx.User, sid,
-            ctx.Channel as ITextChannel, reason.EscapeWeirdStuff());
+        try
+        {
+            await Service.SendDenyEmbed(ctx.Guild, ctx.User, sid,
+                ctx.Channel as ITextChannel, reason is null ? "" : reason.EscapeWeirdStuff());
+        }
+        catch (InvalidOperationException e)
+        {
+            await ReplyErrorAsync(e.Message);
+        }
     }
 
     /// <summary>
@@ -200,10 +207,17 @@ public partial class Suggestions : MewdekoModuleBase<SuggestionsService>
     [Aliases]
     [RequireContext(ContextType.Guild)]
     [UserPerm(GuildPermission.ManageMessages)]
-    public Task Accept(ulong sid, [Remainder] string? reason = null)
+    public async Task Accept(ulong sid, [Remainder] string? reason = null)
     {
-        return Service.SendAcceptEmbed(ctx.Guild, ctx.User, sid,
-            ctx.Channel as ITextChannel, reason.EscapeWeirdStuff());
+        try
+        {
+            await Service.SendAcceptEmbed(ctx.Guild, ctx.User, sid,
+                ctx.Channel as ITextChannel, reason is null ? "" : reason.EscapeWeirdStuff());
+        }
+        catch (InvalidOperationException e)
+        {
+            await ReplyErrorAsync(e.Message);
+        }
     }
 
     /// <summary>
@@ -218,10 +232,17 @@ public partial class Suggestions : MewdekoModuleBase<SuggestionsService>
     [Aliases]
     [RequireContext(ContextType.Guild)]
     [UserPerm(GuildPermission.ManageMessages)]
-    public Task Implemented(ulong sid, [Remainder] string? reason = null)
+    public async Task Implemented(ulong sid, [Remainder] string? reason = null)
     {
-        return Service.SendImplementEmbed(ctx.Guild, ctx.User, sid,
-            ctx.Channel as ITextChannel, reason.EscapeWeirdStuff());
+        try
+        {
+            await Service.SendImplementEmbed(ctx.Guild, ctx.User, sid,
+                ctx.Channel as ITextChannel, reason is null ? "" : reason.EscapeWeirdStuff());
+        }
+        catch (InvalidOperationException e)
+        {
+            await ReplyErrorAsync(e.Message);
+        }
     }
 
     /// <summary>
@@ -236,9 +257,16 @@ public partial class Suggestions : MewdekoModuleBase<SuggestionsService>
     [Aliases]
     [RequireContext(ContextType.Guild)]
     [UserPerm(GuildPermission.ManageMessages)]
-    public Task Consider(ulong sid, [Remainder] string? reason = null)
+    public async Task Consider(ulong sid, [Remainder] string? reason = null)
     {
-        return Service.SendConsiderEmbed(ctx.Guild, ctx.User, sid,
-            ctx.Channel as ITextChannel, reason.EscapeWeirdStuff());
+        try
+        {
+            await Service.SendConsiderEmbed(ctx.Guild, ctx.User, sid,
+                ctx.Channel as ITextChannel, reason is null ? "" : reason.EscapeWeirdStuff());
+        }
+        catch (InvalidOperationException e)
+        {
+            await ReplyErrorAsync(e.Message);
+        }
     }
 }
