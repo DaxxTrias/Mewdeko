@@ -735,7 +735,10 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
     {
         await using var uow = await db.CreateConnectionAsync();
         return await uow.PatreonSupporters
-            .Where(x => x.GuildId == guildId && x.PatronStatus == "active_patron")
+            .Where(x => x.GuildId == guildId && (
+                x.PatronStatus == "active_patron" ||
+                x.PatronStatus == "declined_patron" ||
+                (x.PatronStatus == null && x.CurrentlyEntitledAmountCents > 0)))
             .OrderByDescending(x => x.AmountCents)
             .ToListAsync();
     }
@@ -840,7 +843,10 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
 
             // Get all linked supporters
             var supporters = await uow.PatreonSupporters
-                .Where(x => x.GuildId == guildId && x.DiscordUserId != 0 && x.PatronStatus == "active_patron")
+                .Where(x => x.GuildId == guildId && x.DiscordUserId != 0 && (
+                    x.PatronStatus == "active_patron" ||
+                    x.PatronStatus == "declined_patron" ||
+                    (x.PatronStatus == null && x.CurrentlyEntitledAmountCents > 0)))
                 .ToListAsync();
 
             // Get tier mappings
@@ -917,7 +923,10 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
 
             // Determine target role based on supporter status and amount
             IRole? targetRole = null;
-            if (supporter?.PatronStatus == "active_patron" && supporter.AmountCents > 0)
+            if (supporter != null && supporter.AmountCents > 0 && (
+                    supporter.PatronStatus == "active_patron" ||
+                    supporter.PatronStatus == "declined_patron" ||
+                    (supporter.PatronStatus == null && supporter.CurrentlyEntitledAmountCents > 0)))
             {
                 // Find the highest tier the user qualifies for
                 var qualifyingTier = tiers.FirstOrDefault(t => supporter.AmountCents >= t.AmountCents);
@@ -1071,7 +1080,10 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
                 .Where(x => x.GuildId == guildId)
                 .ToListAsync();
 
-            var activeSupporters = supporters.Where(s => s.PatronStatus == "active_patron").ToList();
+            var activeSupporters = supporters.Where(s =>
+                s.PatronStatus == "active_patron" ||
+                s.PatronStatus == "declined_patron" ||
+                (s.PatronStatus == null && s.CurrentlyEntitledAmountCents > 0)).ToList();
             var formerSupporters = supporters.Where(s => s.PatronStatus == "former_patron").ToList();
 
             var totalRevenue = activeSupporters.Sum(s => s.AmountCents) / 100.0;
@@ -1159,7 +1171,9 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
             var cutoffDate = DateTime.UtcNow.AddDays(-7);
             var newSupporters = await uow.PatreonSupporters
                 .Where(x => x.GuildId == guildId &&
-                            x.PatronStatus == "active_patron" &&
+                            (x.PatronStatus == "active_patron" ||
+                             x.PatronStatus == "declined_patron" ||
+                             (x.PatronStatus == null && x.CurrentlyEntitledAmountCents > 0)) &&
                             x.PledgeRelationshipStart >= cutoffDate)
                 .ToListAsync();
 
