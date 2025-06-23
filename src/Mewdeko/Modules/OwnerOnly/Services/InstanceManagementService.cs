@@ -231,7 +231,7 @@ public class InstanceManagementService : INService, IReadyExecutor
         if (instance == null)
             return false;
 
-        await db.BotInstances.Select(x => instance).DeleteAsync();
+        await db.DeleteAsync(instance);
         return true;
     }
 }

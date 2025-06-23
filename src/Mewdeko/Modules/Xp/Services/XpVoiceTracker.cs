@@ -1,4 +1,6 @@
+using System.Text.Json;
 using System.Threading;
+using DataModel;
 using LinqToDB;
 using Mewdeko.Modules.Xp.Models;
 using Microsoft.Extensions.Caching.Memory;
@@ -13,7 +15,7 @@ public class XpVoiceTracker : INService, IDisposable
 {
     // Constants
     private const int MinUsersForXp = 2;
-    private const int MaxConcurrentSessions = 50000;
+    private const int MaxConcurrentSessions = 100000;
     private readonly Timer aggressiveCleanupTimer;
     private readonly XpCacheManager cacheManager;
 
@@ -65,15 +67,17 @@ public class XpVoiceTracker : INService, IDisposable
         validationTimer = new Timer(ValidateActiveSessions, null,
             TimeSpan.FromMinutes(1), validationInterval);
 
-        // Initialize aggressive cleanup timer every 10 minutes
+        // Initialize aggressive cleanup timer every 3 minutes
         aggressiveCleanupTimer = new Timer(AggressiveCleanup, null,
-            TimeSpan.FromMinutes(2), TimeSpan.FromMinutes(10));
+            TimeSpan.FromMinutes(2), TimeSpan.FromMinutes(3));
 
         // Initialize diagnostics timer to log stats every hour
         diagnosticsTimer = new Timer(_ => LogDiagnostics(), null,
             TimeSpan.FromMinutes(10), TimeSpan.FromHours(1));
 
-        Log.Information("Voice XP Tracker initialized with memory optimization");
+        Log.Information(
+            "Voice XP Tracker initialized with memory optimization - Max sessions: {MaxSessions}, Cleanup interval: {CleanupInterval}min",
+            MaxConcurrentSessions, 3);
     }
 
     /// <summary>
@@ -128,7 +132,11 @@ public class XpVoiceTracker : INService, IDisposable
                         session.EndEligiblePeriod(now);
                     }
 
-                    await CalculateAndAwardXp(guildUser, before.VoiceChannel, session).ConfigureAwait(false);
+                    // Additional null check to prevent null reference exception
+                    if (before.VoiceChannel != null)
+                    {
+                        await CalculateAndAwardXp(guildUser, before.VoiceChannel, session).ConfigureAwait(false);
+                    }
                 }
             }
 
@@ -233,15 +241,33 @@ public class XpVoiceTracker : INService, IDisposable
                 return;
             }
 
-            // Check if user is excluded using Redis
+            // Pre-validate: Check if user is excluded using Redis
             if (await IsUserExcludedAsync(guildId, userId).ConfigureAwait(false))
                 return;
 
-            // Check if channel is excluded using Redis
+            // Pre-validate: Check if channel is excluded using Redis
             if (await IsChannelExcludedAsync(guildId, channelId).ConfigureAwait(false))
                 return;
 
-            // Get or create session
+            // Pre-validate: Check if user is participating (not muted/deafened)
+            if (!IsParticipatingInVoice(user))
+            {
+                Log.Debug("Skipping voice session creation for non-participating user {UserId} in channel {ChannelId}",
+                    userId, channelId);
+                return;
+            }
+
+            // Pre-validate: Check if channel has minimum users for XP eligibility
+            var eligibleUserCount = voiceChannel.Users.Count(u => !u.IsBot && IsParticipatingInVoice(u));
+            if (eligibleUserCount < MinUsersForXp)
+            {
+                Log.Debug(
+                    "Skipping voice session creation - channel {ChannelId} has only {Count} eligible users (minimum {Min})",
+                    channelId, eligibleUserCount, MinUsersForXp);
+                return;
+            }
+
+            // Get or create session - we already validated eligibility above
             var key = (userId, channelId);
             var session = voiceSessions.GetOrAdd(key, _ => new VoiceSession
             {
@@ -253,17 +279,19 @@ public class XpVoiceTracker : INService, IDisposable
                 LastEligibilityChange = timestamp
             });
 
-            // Check channel eligibility (requires 2+ users)
-            var isEligible = await IsChannelEligibleAsync(guildId, channelId, voiceChannel).ConfigureAwait(false);
-
-            // Start eligible period if conditions are met
-            if (isEligible && IsParticipatingInVoice(user))
-            {
-                session.StartEligiblePeriod(timestamp);
-            }
+            // Since we pre-validated eligibility, start the eligible period immediately
+            session.StartEligiblePeriod(timestamp);
 
             // Update session in dictionary
             voiceSessions[key] = session;
+
+            // Log session creation for monitoring
+            if (voiceSessions.Count % 1000 == 0 || voiceSessions.Count > MaxConcurrentSessions * 0.8)
+            {
+                Log.Information(
+                    "Voice session created - Active sessions: {ActiveSessions}/{MaxSessions} ({Percentage:F1}%)",
+                    voiceSessions.Count, MaxConcurrentSessions, (voiceSessions.Count * 100.0) / MaxConcurrentSessions);
+            }
         }
         catch (Exception ex)
         {
@@ -336,11 +364,12 @@ public class XpVoiceTracker : INService, IDisposable
         var userId = user.Id;
         var channelId = voiceChannel.Id;
         var xpAmount = 0;
+        GuildXpSetting settings = null;
 
         try
         {
             // Get settings
-            var settings = await cacheManager.GetGuildXpSettingsAsync(guildId).ConfigureAwait(false);
+            settings = await cacheManager.GetGuildXpSettingsAsync(guildId).ConfigureAwait(false);
 
             // Skip if voice XP is disabled
             if (settings.VoiceXpPerMinute <= 0 || settings.VoiceXpTimeout <= 0)
@@ -397,7 +426,8 @@ public class XpVoiceTracker : INService, IDisposable
         }
         catch (Exception ex)
         {
-            Log.Information("{GuildId}|{UserId}|{XpAmount}|{ChannelId}", guildId, userId, xpAmount, channelId);
+            Log.Information("{GuildId}|{UserId}|{XpAmount}|{ChannelId}|{VoiceXpMinutes}", guildId, userId, xpAmount,
+                channelId, JsonSerializer.Serialize(settings));
             Log.Error(ex, "Error calculating XP for user {UserId} in guild {GuildId}",
                 userId, guildId);
         }
@@ -572,6 +602,37 @@ public class XpVoiceTracker : INService, IDisposable
                         {
                             voiceSessions.TryRemove(key, out _);
                             sessionsRemoved++;
+                            continue;
+                        }
+
+                        // Additional cleanup checks for edge cases
+                        var channel = guild.GetVoiceChannel(session.ChannelId);
+                        if (channel == null)
+                        {
+                            // Channel was deleted
+                            voiceSessions.TryRemove(key, out _);
+                            sessionsRemoved++;
+                            continue;
+                        }
+
+                        // Check if session has been running too long without activity (over 6 hours)
+                        var sessionAge = DateTime.UtcNow - session.JoinTime;
+                        if (sessionAge.TotalHours > 6)
+                        {
+                            Log.Debug("Removing stale voice session for user {UserId} - session age: {Hours:F1} hours",
+                                session.UserId, sessionAge.TotalHours);
+                            voiceSessions.TryRemove(key, out _);
+                            sessionsRemoved++;
+                            continue;
+                        }
+
+                        // Check if channel no longer meets minimum user requirements
+                        var currentEligibleUsers = channel.Users.Count(u => !u.IsBot && IsParticipatingInVoice(u));
+                        if (currentEligibleUsers < MinUsersForXp && session.CurrentlyEligible)
+                        {
+                            // End eligibility period but keep session for potential future eligibility
+                            session.EndEligiblePeriod(DateTime.UtcNow);
+                            voiceSessions[key] = session;
                         }
                     }
                     catch
@@ -591,9 +652,10 @@ public class XpVoiceTracker : INService, IDisposable
 
             if (sessionsRemoved > 0)
             {
+                var utilizationPercent = (voiceSessions.Count * 100.0) / MaxConcurrentSessions;
                 Log.Information("Aggressive voice tracker cleanup: removed {Count} stale sessions, " +
-                                "active sessions: {Active}",
-                    sessionsRemoved, voiceSessions.Count);
+                                "active sessions: {Active}/{Max} ({Percentage:F1}%)",
+                    sessionsRemoved, voiceSessions.Count, MaxConcurrentSessions, utilizationPercent);
             }
         }
         catch (Exception ex)
@@ -742,10 +804,21 @@ public class XpVoiceTracker : INService, IDisposable
     /// </summary>
     private void LogDiagnostics()
     {
-        Log.Information("XpVoiceTracker stats: Active sessions: {SessionCount}, " +
-                        "Channel eligibility cache: {ChannelCount}",
-            voiceSessions.Count,
-            channelEligibilityCache.Count);
+        var utilizationPercent = (voiceSessions.Count * 100.0) / MaxConcurrentSessions;
+        var eligibleSessions = voiceSessions.Values.Count(s => s.CurrentlyEligible);
+
+        Log.Information("XpVoiceTracker stats: Active sessions: {SessionCount}/{MaxSessions} ({Percentage:F1}%), " +
+                        "Eligible sessions: {EligibleCount}, Channel eligibility cache: {ChannelCount}",
+            voiceSessions.Count, MaxConcurrentSessions, utilizationPercent,
+            eligibleSessions, channelEligibilityCache.Count);
+
+        // Warning if utilization is high
+        if (utilizationPercent > 80)
+        {
+            Log.Warning(
+                "Voice session utilization is high ({Percentage:F1}%) - consider monitoring for potential issues",
+                utilizationPercent);
+        }
     }
 
     /// <summary>
@@ -800,8 +873,10 @@ public class XpVoiceTracker : INService, IDisposable
         /// <returns>The total eligible duration.</returns>
         public TimeSpan GetEligibleDuration(DateTime referenceTime)
         {
-            if (!CurrentlyEligible) return TotalEligibleDuration;
-            if (!LastEligibilityStart.HasValue) return TotalEligibleDuration;
+            if (!CurrentlyEligible)
+                return TotalEligibleDuration;
+            if (!LastEligibilityStart.HasValue)
+                return TotalEligibleDuration;
 
             return TotalEligibleDuration + (referenceTime - LastEligibilityStart.Value);
         }
@@ -812,7 +887,8 @@ public class XpVoiceTracker : INService, IDisposable
         /// <param name="timestamp">The timestamp when eligibility started.</param>
         public void StartEligiblePeriod(DateTime timestamp)
         {
-            if (CurrentlyEligible) return;
+            if (CurrentlyEligible)
+                return;
 
             CurrentlyEligible = true;
             LastEligibilityChange = timestamp;
@@ -825,7 +901,8 @@ public class XpVoiceTracker : INService, IDisposable
         /// <param name="timestamp">The timestamp when eligibility ended.</param>
         public void EndEligiblePeriod(DateTime timestamp)
         {
-            if (!CurrentlyEligible || !LastEligibilityStart.HasValue) return;
+            if (!CurrentlyEligible || !LastEligibilityStart.HasValue)
+                return;
 
             TotalEligibleDuration += timestamp - LastEligibilityStart.Value;
             CurrentlyEligible = false;
