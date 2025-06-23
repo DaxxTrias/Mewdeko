@@ -399,6 +399,104 @@ public class BotCredentials : IBotCredentials
         }
     }
 
+    private void UpdateMissingCredentialsInteractively(List<string> missingCredentials)
+    {
+        Log.Information("Updating missing credentials...");
+
+        // Load existing credentials to preserve non-missing values
+        CredentialsModel existingModel = null;
+        if (File.Exists(credsFileName))
+        {
+            try
+            {
+                var existingJson = File.ReadAllText(credsFileName);
+                existingModel = JsonSerializer.Deserialize<CredentialsModel>(existingJson);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning($"Could not parse existing credentials file: {ex.Message}");
+                existingModel = new CredentialsModel();
+            }
+        }
+        else
+        {
+            existingModel = new CredentialsModel();
+        }
+
+        // Update only missing credentials
+        if (missingCredentials.Contains("Bot Token"))
+        {
+            Log.Information(
+                "Please enter your bot's token. You can get it from https://discord.com/developers/applications");
+            var token = Console.ReadLine();
+
+            while (string.IsNullOrWhiteSpace(token))
+            {
+                Log.Error("Bot token cannot be empty. Please enter a valid token:");
+                token = Console.ReadLine();
+            }
+
+            existingModel.Token = token;
+        }
+
+        if (missingCredentials.Contains("Owner IDs"))
+        {
+            Log.Information(
+                "Please enter your ID and any other IDs separated by a space to mark them as owners. You can get your ID by enabling developer mode in Discord and right-clicking your name");
+            var ownersInput = Console.ReadLine();
+            var ownersList = new List<ulong>();
+
+            if (!string.IsNullOrWhiteSpace(ownersInput))
+            {
+                var ownerIds = ownersInput.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                foreach (var ownerId in ownerIds)
+                {
+                    if (ulong.TryParse(ownerId, out var parsedId))
+                    {
+                        ownersList.Add(parsedId);
+                    }
+                    else
+                    {
+                        Log.Warning($"'{ownerId}' is not a valid ID and will be ignored.");
+                    }
+                }
+            }
+
+            existingModel.OwnerIds = ownersList;
+        }
+
+        if (missingCredentials.Contains("PostgreSQL Connection String"))
+        {
+            Log.Information("Please input your PostgreSQL Connection String.");
+            var psqlConnectionString = Console.ReadLine();
+
+            while (string.IsNullOrWhiteSpace(psqlConnectionString))
+            {
+                Log.Error("PostgreSQL Connection String cannot be empty. Please enter a valid connection string:");
+                psqlConnectionString = Console.ReadLine();
+            }
+
+            existingModel.PsqlConnectionString = psqlConnectionString;
+        }
+
+        // Save updated credentials
+        try
+        {
+            var options = new JsonSerializerOptions
+            {
+                WriteIndented = true
+            };
+            File.WriteAllText(credsFileName, JsonSerializer.Serialize(existingModel, options));
+            Log.Information("credentials.json has been updated successfully.");
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Failed to update credentials.json file.");
+            Log.Error(ex.Message);
+            Environment.Exit(1);
+        }
+    }
+
     private void UpdateCredentials(object sender, FileSystemEventArgs e)
     {
         try
@@ -494,17 +592,41 @@ public class BotCredentials : IBotCredentials
                 : 970086914826858547;
             UseGlobalCurrency = bool.TryParse(data[nameof(UseGlobalCurrency)], out var ugc) && ugc;
 
+            // Check for missing or invalid critical credentials
+            var missingCredentials = new List<string>();
+
             if (string.IsNullOrWhiteSpace(Token))
-            {
-                Log.Error(
-                    "Token is missing from credentials.json or Environment variables. Add it and restart the program");
-                Helpers.ReadErrorAndExit(5);
-            }
+                missingCredentials.Add("Bot Token");
 
             if (string.IsNullOrWhiteSpace(PsqlConnectionString))
+                missingCredentials.Add("PostgreSQL Connection String");
+
+            if (OwnerIds == null || OwnerIds.Length == 0)
+                missingCredentials.Add("Owner IDs");
+
+            // If any critical credentials are missing, offer to fix them
+            if (missingCredentials.Count > 0)
             {
-                Log.Error("PostgreSQL connection string is missing. Please add it and restart.");
-                Helpers.ReadErrorAndExit(5);
+                Log.Error($"The following critical credentials are missing: {string.Join(", ", missingCredentials)}");
+                Log.Information("Would you like to fix these credentials?");
+                Log.Information("1. Update credentials using interactive wizard");
+                Log.Information("2. Exit and fix manually");
+                Log.Information("Enter your choice (1 or 2): ");
+
+                var choice = Console.ReadLine();
+                switch (choice)
+                {
+                    case "1":
+                        UpdateMissingCredentialsInteractively(missingCredentials);
+                        // Reload credentials after update
+                        UpdateCredentials(null, null);
+                        return; // Skip the old validation since we've fixed the issues
+                    case "2":
+                    default:
+                        Log.Error("Please fix the missing credentials and restart the program.");
+                        Helpers.ReadErrorAndExit(5);
+                        break;
+                }
             }
             else
             {
