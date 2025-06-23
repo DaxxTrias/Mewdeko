@@ -201,6 +201,9 @@ public class InviteCountService : INService, IReadyExecutor
             if (!settings.IsEnabled)
                 return;
         var guild = user.Guild;
+        var curUser = await guild.GetCurrentUserAsync();
+        if (!curUser.GuildPermissions.Has(GuildPermission.ManageGuild))
+            return;
         var newInvites = await guild.GetInvitesAsync();
         var usedInvite = FindUsedInvite(guild.Id, newInvites);
 
