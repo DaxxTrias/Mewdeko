@@ -86,7 +86,7 @@ public class XpBackgroundProcessor : INService, IDisposable
         processingTimer = new Timer(ProcessXpBatches, null, TimeSpan.FromSeconds(1), currentProcessingInterval);
         decayTimer = new Timer(ProcessXpDecay, null, TimeSpan.FromHours(12), TimeSpan.FromHours(12));
         cleanupTimer = new Timer(CleanupCaches, null, TimeSpan.FromHours(2), TimeSpan.FromHours(2));
-        memoryMonitorTimer = new Timer(LogMemoryStats, null, TimeSpan.FromMinutes(5), TimeSpan.FromSeconds(5));
+        memoryMonitorTimer = new Timer(LogMemoryStats, null, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5));
 
         Log.Information(
             "XP Background Processor initialized with queue capacity {Capacity} and {Concurrency} concurrent DB operations",
