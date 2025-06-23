@@ -1,14 +1,13 @@
 using DataModel;
 using LinqToDB;
 using Newtonsoft.Json;
-using Serilog;
 
 namespace Mewdeko.Modules.Utility.Services;
 
 /// <summary>
 ///     Service for managing chat logs
 /// </summary>
-public class ChatLogService(IDataConnectionFactory dbFactory) : INService
+public class ChatLogService(IDataConnectionFactory dbFactory, ILogger<ChatLogService> logger) : INService
 {
     /// <summary>
     ///     Saves a chat log
@@ -43,7 +42,7 @@ public class ChatLogService(IDataConnectionFactory dbFactory) : INService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error saving chat log");
+            logger.LogError(ex, "Error saving chat log");
             throw;
         }
     }
@@ -60,7 +59,7 @@ public class ChatLogService(IDataConnectionFactory dbFactory) : INService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error getting chat log");
+            logger.LogError(ex, "Error getting chat log");
             throw;
         }
     }
@@ -80,7 +79,7 @@ public class ChatLogService(IDataConnectionFactory dbFactory) : INService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error getting chat logs for guild");
+            logger.LogError(ex, "Error getting chat logs for guild");
             throw;
         }
     }
@@ -103,7 +102,7 @@ public class ChatLogService(IDataConnectionFactory dbFactory) : INService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error updating chat log name");
+            logger.LogError(ex, "Error updating chat log name");
             throw;
         }
     }
@@ -125,7 +124,7 @@ public class ChatLogService(IDataConnectionFactory dbFactory) : INService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error deleting chat log");
+            logger.LogError(ex, "Error deleting chat log");
             throw;
         }
     }

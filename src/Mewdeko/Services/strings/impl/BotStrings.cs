@@ -61,85 +61,83 @@ public class BotStrings : IBotStrings
         }
     }
 
-   /// <summary>
-///     Retrieves the strings associated with a command, optionally for the specified guild.
-/// </summary>
-public CommandStrings GetCommandStrings(string commandName, ulong? guildId = null)
-{
-    return GetCommandStrings(commandName, localization.GetCultureInfo(guildId));
-}
-
-/// <summary>
-///     Retrieves the strings associated with a command and the specified culture information.
-/// </summary>
-public CommandStrings GetCommandStrings(string commandName, CultureInfo? cultureInfo)
-{
-    var cmdStrings = stringsProvider.GetCommandStrings(cultureInfo.Name, commandName);
-
-    if (cmdStrings is not null)
+    /// <summary>
+    ///     Retrieves the strings associated with a command, optionally for the specified guild.
+    /// </summary>
+    public CommandStrings GetCommandStrings(string commandName, ulong? guildId = null)
     {
-        // Apply owo transformation if needed
-        if (cultureInfo.Name == "owo" && cmdStrings.Overloads.Count == 0)
-        {
-            cmdStrings.Desc = OwoServices.OwoIfy(cmdStrings.Desc);
-            cmdStrings.Args = cmdStrings.Args.Select(OwoServices.OwoIfy).ToArray();
-
-            // Transform parameter descriptions
-            foreach (var param in cmdStrings.Parameters)
-            {
-                param.Description = OwoServices.OwoIfy(param.Description);
-            }
-        }
-        return cmdStrings;
+        return GetCommandStrings(commandName, localization.GetCultureInfo(guildId));
     }
 
-    // Try to get overloads if available
-    var overloadedCmdStrings = stringsProvider.GetCommandOverloads(cultureInfo.Name, commandName);
-    if (overloadedCmdStrings != null && overloadedCmdStrings.Count > 0)
+    /// <summary>
+    ///     Retrieves the strings associated with a command and the specified culture information.
+    /// </summary>
+    public CommandStrings GetCommandStrings(string commandName, CultureInfo? cultureInfo)
     {
-        // Construct a unified CommandStrings from overloads
-        var result = new CommandStrings
-        {
-            Desc = overloadedCmdStrings[0].Desc,
-            Args = overloadedCmdStrings[0].Args,
-            IsOverload = false,
-            Overloads = overloadedCmdStrings.Skip(1).ToList()  // First one becomes main, rest are overloads
-        };
+        var cmdStrings = stringsProvider.GetCommandStrings(cultureInfo.Name, commandName);
 
-        if (cultureInfo.Name == "owo")
+        if (cmdStrings is not null)
         {
-            result.Desc = OwoServices.OwoIfy(result.Desc);
-            result.Args = result.Args.Select(OwoServices.OwoIfy).ToArray();
-            // Transform overloads too
-            foreach (var overload in result.Overloads)
+            // Apply owo transformation if needed
+            if (cultureInfo.Name == "owo" && cmdStrings.Overloads.Count == 0)
             {
-                overload.Desc = OwoServices.OwoIfy(overload.Desc);
-                overload.Args = overload.Args.Select(OwoServices.OwoIfy).ToArray();
-                foreach (var param in overload.Parameters)
+                cmdStrings.Desc = OwoServices.OwoIfy(cmdStrings.Desc);
+                cmdStrings.Args = cmdStrings.Args.Select(OwoServices.OwoIfy).ToArray();
+
+                // Transform parameter descriptions
+                foreach (var param in cmdStrings.Parameters)
                 {
                     param.Description = OwoServices.OwoIfy(param.Description);
                 }
             }
+
+            return cmdStrings;
         }
 
-        return result;
+        // Try to get overloads if available
+        var overloadedCmdStrings = stringsProvider.GetCommandOverloads(cultureInfo.Name, commandName);
+        if (overloadedCmdStrings != null && overloadedCmdStrings.Count > 0)
+        {
+            // Construct a unified CommandStrings from overloads
+            var result = new CommandStrings
+            {
+                Desc = overloadedCmdStrings[0].Desc,
+                Args = overloadedCmdStrings[0].Args,
+                IsOverload = false,
+                Overloads = overloadedCmdStrings.Skip(1).ToList() // First one becomes main, rest are overloads
+            };
+
+            if (cultureInfo.Name == "owo")
+            {
+                result.Desc = OwoServices.OwoIfy(result.Desc);
+                result.Args = result.Args.Select(OwoServices.OwoIfy).ToArray();
+                // Transform overloads too
+                foreach (var overload in result.Overloads)
+                {
+                    overload.Desc = OwoServices.OwoIfy(overload.Desc);
+                    overload.Args = overload.Args.Select(OwoServices.OwoIfy).ToArray();
+                    foreach (var param in overload.Parameters)
+                    {
+                        param.Description = OwoServices.OwoIfy(param.Description);
+                    }
+                }
+            }
+
+            return result;
+        }
+
+        // Fall back to US culture if needed
+        if (cultureInfo.Name != usCultureInfo.Name)
+            return GetCommandStrings(commandName, usCultureInfo);
+
+        Log.Warning("'{CommandName}' doesn't exist in 'en-US' command strings. Please report this",
+            commandName);
+
+        return new CommandStrings
+        {
+            Args = [""], Desc = "?", Parameters = [], Overloads = []
+        };
     }
-
-    // Fall back to US culture if needed
-    if (cultureInfo.Name != usCultureInfo.Name)
-        return GetCommandStrings(commandName, usCultureInfo);
-
-    Log.Warning("'{CommandName}' doesn't exist in 'en-US' command strings. Please report this",
-        commandName);
-
-    return new CommandStrings
-    {
-        Args = [ "" ],
-        Desc = "?",
-        Parameters = [],
-        Overloads = []
-    };
-}
 
     /// <summary>
     ///     Reloads the bot strings.
@@ -219,7 +217,7 @@ public class CommandStrings
     ///     Whether this command is an overload of another command
     /// </summary>
     [YamlMember(Alias = "isOverload")]
-    public bool IsOverload { get; set; } = false;
+    public bool IsOverload { get; set; }
 }
 
 /// <summary>
@@ -293,4 +291,3 @@ public class CommandOverload
     [YamlMember(Alias = "signature")]
     public string Signature { get; set; } = string.Empty;
 }
-

@@ -68,7 +68,8 @@ public abstract class MewdekoSlashCommandModule : InteractionModuleBase
     public Task<IUserMessage> SendEphemeralFollowupErrorAsync(
         string message)
     {
-        return ctx.Interaction.FollowupAsync(embed: new EmbedBuilder().WithErrorColor().WithDescription(message).Build(),
+        return ctx.Interaction.FollowupAsync(
+            embed: new EmbedBuilder().WithErrorColor().WithDescription(message).Build(),
             ephemeral: true, components: Config.ShowInviteButton
                 ? new ComponentBuilder()
                     .WithButton("Support Server", style: ButtonStyle.Link, url: "https://discord.gg/mewdeko")
@@ -76,6 +77,7 @@ public abstract class MewdekoSlashCommandModule : InteractionModuleBase
                     .Build()
                 : null);
     }
+
     /// <summary>
     ///     Sends an ephemeral error message as a reply to the user with the specified key and optional arguments.
     /// </summary>
@@ -250,17 +252,16 @@ public abstract class MewdekoSlashCommandModule : InteractionModuleBase
 
         async Task Interaction(SocketMessage arg)
         {
-                if (arg.Author.Id != userId || arg.Channel.Id != channelId) return;
-                userInputTask.TrySetResult(arg.Content);
-                try
-                {
-                    await arg.DeleteAsync();
-                }
-                catch
-                {
-                    //Exclude
-                }
-
+            if (arg.Author.Id != userId || arg.Channel.Id != channelId) return;
+            userInputTask.TrySetResult(arg.Content);
+            try
+            {
+                await arg.DeleteAsync();
+            }
+            catch
+            {
+                //Exclude
+            }
         }
     }
 }

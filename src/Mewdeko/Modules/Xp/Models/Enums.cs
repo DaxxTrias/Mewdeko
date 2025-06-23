@@ -57,7 +57,7 @@ public enum XpCurveType
     Custom = 4,
 
     /// <summary>
-    /// Uses the old xp curve approach before the xp rewrite.
+    ///     Uses the old xp curve approach before the xp rewrite.
     /// </summary>
     Legacy = 5
 }

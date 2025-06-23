@@ -34,7 +34,8 @@ public partial class Utility
             }
             catch (Exception ex)
             {
-                await ctx.Channel.SendErrorAsync($"⚙ {Strings.CalcError(ctx.Guild.Id)}", ex.Message).ConfigureAwait(false);
+                await ctx.Channel.SendErrorAsync($"⚙ {Strings.CalcError(ctx.Guild.Id)}", ex.Message)
+                    .ConfigureAwait(false);
             }
         }
 
@@ -82,7 +83,8 @@ public partial class Utility
             }
             catch (Exception ex)
             {
-                await ctx.Channel.SendErrorAsync($"⚙ {Strings.GraphError(ctx.Guild.Id)}", ex.Message).ConfigureAwait(false);
+                await ctx.Channel.SendErrorAsync($"⚙ {Strings.GraphError(ctx.Guild.Id)}", ex.Message)
+                    .ConfigureAwait(false);
             }
         }
 
@@ -104,7 +106,8 @@ public partial class Utility
             }
             catch (Exception ex)
             {
-                await ctx.Channel.SendErrorAsync($"⚙ {Strings.SymbolicError(ctx.Guild.Id)}", ex.Message).ConfigureAwait(false);
+                await ctx.Channel.SendErrorAsync($"⚙ {Strings.SymbolicError(ctx.Guild.Id)}", ex.Message)
+                    .ConfigureAwait(false);
             }
         }
 

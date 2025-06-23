@@ -16,7 +16,7 @@ public interface IDataCache
     /// <summary>
     ///     Sets user status cache.
     /// </summary>
-    Task<bool> SetUserStatusCache(ulong id, string base64);
+    public Task<bool> SetUserStatusCache(ulong id, string base64);
 
     #endregion
 
@@ -25,7 +25,7 @@ public interface IDataCache
     /// <summary>
     ///     Tries to add a ratelimit.
     /// </summary>
-    TimeSpan? TryAddRatelimit(ulong id, string name, int expireIn);
+    public TimeSpan? TryAddRatelimit(ulong id, string name, int expireIn);
 
     #endregion
 
@@ -34,17 +34,17 @@ public interface IDataCache
     /// <summary>
     ///     Gets the Redis connection multiplexer.
     /// </summary>
-    ConnectionMultiplexer Redis { get; }
+    public ConnectionMultiplexer Redis { get; }
 
     /// <summary>
     ///     Gets the local image cache.
     /// </summary>
-    IImageCache LocalImages { get; }
+    public IImageCache LocalImages { get; }
 
     /// <summary>
     ///     Gets the local data cache.
     /// </summary>
-    ILocalDataCache LocalData { get; }
+    public ILocalDataCache LocalData { get; }
 
     #endregion
 
@@ -53,17 +53,17 @@ public interface IDataCache
     /// <summary>
     ///     Caches AFK status for a user in a guild.
     /// </summary>
-    Task CacheAfk(ulong guildId, ulong userId, Afk afk);
+    public Task CacheAfk(ulong guildId, ulong userId, Afk afk);
 
     /// <summary>
     ///     Retrieves AFK status for a user in a guild.
     /// </summary>
-    Task<Afk?> RetrieveAfk(ulong guildId, ulong userId);
+    public Task<Afk?> RetrieveAfk(ulong guildId, ulong userId);
 
     /// <summary>
     ///     Clears AFK status for a user in a guild.
     /// </summary>
-    Task ClearAfk(ulong guildId, ulong userId);
+    public Task ClearAfk(ulong guildId, ulong userId);
 
     #endregion
 
@@ -74,7 +74,7 @@ public interface IDataCache
     /// </summary>
     /// <param name="userId">The guild ID.</param>
     /// <param name="playlist">The playlist to save.</param>
-    Task SavePlaylist(ulong userId, MusicPlaylist playlist);
+    public Task SavePlaylist(ulong userId, MusicPlaylist playlist);
 
     /// <summary>
     ///     Gets a specific playlist by name.
@@ -82,14 +82,14 @@ public interface IDataCache
     /// <param name="userId">The user ID.</param>
     /// <param name="name">The name of the playlist.</param>
     /// <returns>The playlist if found, null otherwise.</returns>
-    Task<MusicPlaylist?> GetPlaylist(ulong userId, string name);
+    public Task<MusicPlaylist?> GetPlaylist(ulong userId, string name);
 
     /// <summary>
     ///     Gets all playlists for a guild.
     /// </summary>
     /// <param name="userId">The guild ID.</param>
     /// <returns>The list of playlists.</returns>
-    Task<List<MusicPlaylist>> GetPlaylists(ulong userId);
+    public Task<List<MusicPlaylist>> GetPlaylists(ulong userId);
 
     /// <summary>
     ///     Sets the player state for a specific guild.
@@ -97,21 +97,21 @@ public interface IDataCache
     /// <param name="guildId">The ID of the guild.</param>
     /// <param name="state">The player state to save.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    Task SetPlayerState(ulong guildId, MusicPlayerState state);
+    public Task SetPlayerState(ulong guildId, MusicPlayerState state);
 
     /// <summary>
     ///     Retrieves the player state for a specific guild.
     /// </summary>
     /// <param name="guildId">The ID of the guild.</param>
     /// <returns>The player state if found; otherwise, null.</returns>
-    Task<MusicPlayerState?> GetPlayerState(ulong guildId);
+    public Task<MusicPlayerState?> GetPlayerState(ulong guildId);
 
     /// <summary>
     ///     Removes the player state for a specific guild.
     /// </summary>
     /// <param name="guildId">The ID of the guild.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    Task RemovePlayerState(ulong guildId);
+    public Task RemovePlayerState(ulong guildId);
 
     /// <summary>
     ///     Deletes a playlist.
@@ -119,14 +119,14 @@ public interface IDataCache
     /// <param name="userId">The guild ID.</param>
     /// <param name="name">The name of the playlist to delete.</param>
     /// <returns>True if playlist was deleted, false if not found.</returns>
-    Task<bool> DeletePlaylist(ulong userId, string name);
+    public Task<bool> DeletePlaylist(ulong userId, string name);
 
     /// <summary>
     ///     Retrieves music queue for a server.
     /// </summary>
     /// <param name="id">The server ID.</param>
     /// <returns>The music queue.</returns>
-    Task<List<MewdekoTrack>> GetMusicQueue(ulong id);
+    public Task<List<MewdekoTrack>> GetMusicQueue(ulong id);
 
     /// <summary>
     ///     Sets music queue for a server.
@@ -134,7 +134,7 @@ public interface IDataCache
     /// <param name="id">The server ID.</param>
     /// <param name="tracks">The music queue.</param>
     /// <returns>A task representing the operation.</returns>
-    Task SetMusicQueue(ulong id, List<MewdekoTrack> tracks);
+    public Task SetMusicQueue(ulong id, List<MewdekoTrack> tracks);
 
     /// <summary>
     ///     Sets the current track for a server.
@@ -142,21 +142,21 @@ public interface IDataCache
     /// <param name="id">The server ID.</param>
     /// <param name="track">The current track.</param>
     /// <returns>A task representing the operation.</returns>
-    Task SetCurrentTrack(ulong id, MewdekoTrack? track);
+    public Task SetCurrentTrack(ulong id, MewdekoTrack? track);
 
     /// <summary>
     ///     Retrieves the current track for a server.
     /// </summary>
     /// <param name="id">The server ID.</param>
     /// <returns>The current track.</returns>
-    Task<MewdekoTrack?> GetCurrentTrack(ulong id);
+    public Task<MewdekoTrack?> GetCurrentTrack(ulong id);
 
     /// <summary>
     ///     Gets music player settings for a server.
     /// </summary>
     /// <param name="id">The server ID.</param>
     /// <returns>The music player settings if found, null otherwise.</returns>
-    Task<MusicPlayerSetting?> GetMusicPlayerSettings(ulong id);
+    public Task<MusicPlayerSetting?> GetMusicPlayerSettings(ulong id);
 
     /// <summary>
     ///     Sets music player settings for a server.
@@ -164,14 +164,14 @@ public interface IDataCache
     /// <param name="id">The server ID.</param>
     /// <param name="settings">The settings to cache.</param>
     /// <returns>A task representing the operation.</returns>
-    Task SetMusicPlayerSettings(ulong id, MusicPlayerSetting settings);
+    public Task SetMusicPlayerSettings(ulong id, MusicPlayerSetting settings);
 
     /// <summary>
     ///     Gets the set of users who have voted to skip the current track.
     /// </summary>
     /// <param name="id">The server ID.</param>
     /// <returns>The set of user IDs who have voted to skip, or null if no votes exist.</returns>
-    Task<HashSet<ulong>?> GetVoteSkip(ulong id);
+    public Task<HashSet<ulong>?> GetVoteSkip(ulong id);
 
     /// <summary>
     ///     Sets the current vote skip state for a server.
@@ -179,7 +179,7 @@ public interface IDataCache
     /// <param name="id">The server ID.</param>
     /// <param name="userIds">The set of user IDs who have voted to skip, or null to clear votes.</param>
     /// <returns>A task representing the operation.</returns>
-    Task SetVoteSkip(ulong id, HashSet<ulong>? userIds);
+    public Task SetVoteSkip(ulong id, HashSet<ulong>? userIds);
 
     #endregion
 
@@ -188,67 +188,67 @@ public interface IDataCache
     /// <summary>
     ///     Tries to add a highlight stagger for a user in a guild.
     /// </summary>
-    Task<bool> TryAddHighlightStagger(ulong guildId, ulong userId);
+    public Task<bool> TryAddHighlightStagger(ulong guildId, ulong userId);
 
     /// <summary>
     ///     Gets the highlight stagger for a user in a guild.
     /// </summary>
-    Task<bool> GetHighlightStagger(ulong guildId, ulong userId);
+    public Task<bool> GetHighlightStagger(ulong guildId, ulong userId);
 
     /// <summary>
     ///     Caches highlights for a guild.
     /// </summary>
-    Task CacheHighlights(ulong id, List<Highlight> highlights);
+    public Task CacheHighlights(ulong id, List<Highlight> highlights);
 
     /// <summary>
     ///     Caches highlight settings for a guild.
     /// </summary>
-    Task CacheHighlightSettings(ulong id, List<HighlightSetting> highlightSettings);
+    public Task CacheHighlightSettings(ulong id, List<HighlightSetting> highlightSettings);
 
     /// <summary>
     ///     Adds highlights to cache for a guild.
     /// </summary>
-    Task AddHighlightToCache(ulong id, List<Highlight?> newHighlight);
+    public Task AddHighlightToCache(ulong id, List<Highlight?> newHighlight);
 
     /// <summary>
     ///     Removes highlights from cache for a guild.
     /// </summary>
-    Task RemoveHighlightFromCache(ulong id, List<Highlight?> newHighlight);
+    public Task RemoveHighlightFromCache(ulong id, List<Highlight?> newHighlight);
 
     /// <summary>
     ///     Executes a Redis command.
     /// </summary>
-    Task<RedisResult> ExecuteRedisCommand(string command);
+    public Task<RedisResult> ExecuteRedisCommand(string command);
 
     /// <summary>
     ///     Adds a highlight setting to cache for a guild.
     /// </summary>
-    Task AddHighlightSettingToCache(ulong id, List<HighlightSetting?> newHighlightSetting);
+    public Task AddHighlightSettingToCache(ulong id, List<HighlightSetting?> newHighlightSetting);
 
     /// <summary>
     ///     Tries to add a highlight stagger for a user.
     /// </summary>
-    Task<bool> TryAddHighlightStaggerUser(ulong id);
+    public Task<bool> TryAddHighlightStaggerUser(ulong id);
 
     /// <summary>
     ///     Gets highlights for a guild.
     /// </summary>
-    List<Highlight?>? GetHighlightsForGuild(ulong id);
+    public List<Highlight?>? GetHighlightsForGuild(ulong id);
 
     /// <summary>
     ///     Gets highlight settings for a guild.
     /// </summary>
-    List<HighlightSetting>? GetHighlightSettingsForGuild(ulong id);
+    public List<HighlightSetting>? GetHighlightSettingsForGuild(ulong id);
 
     /// <summary>
     ///     Gets snipes for a guild.
     /// </summary>
-    Task<List<SnipeStore>?> GetSnipesForGuild(ulong id);
+    public Task<List<SnipeStore>?> GetSnipesForGuild(ulong id);
 
     /// <summary>
     ///     Caches snipes for a guild.
     /// </summary>
-    Task AddSnipeToCache(ulong id, List<SnipeStore> newAfk);
+    public Task AddSnipeToCache(ulong id, List<SnipeStore> newAfk);
 
     #endregion
 
@@ -257,12 +257,12 @@ public interface IDataCache
     /// <summary>
     ///     Tries to get image data asynchronously.
     /// </summary>
-    Task<(bool Success, byte[] Data)> TryGetImageDataAsync(Uri key);
+    public Task<(bool Success, byte[] Data)> TryGetImageDataAsync(Uri key);
 
     /// <summary>
     ///     Sets image data asynchronously.
     /// </summary>
-    Task SetImageDataAsync(Uri key, byte[] data);
+    public Task SetImageDataAsync(Uri key, byte[] data);
 
     #endregion
 
@@ -271,12 +271,12 @@ public interface IDataCache
     /// <summary>
     ///     Sets ship cache.
     /// </summary>
-    Task SetShip(ulong user1, ulong user2, int score);
+    public Task SetShip(ulong user1, ulong user2, int score);
 
     /// <summary>
     ///     Gets ship cache.
     /// </summary>
-    Task<ShipCache?> GetShip(ulong user1, ulong user2);
+    public Task<ShipCache?> GetShip(ulong user1, ulong user2);
 
     #endregion
 
@@ -287,14 +287,14 @@ public interface IDataCache
     /// </summary>
     /// <param name="id">The guild ID.</param>
     /// <param name="config">The config to cache.</param>
-    Task SetGuildConfigCache(ulong id, GuildConfig config);
+    public Task SetGuildConfigCache(ulong id, GuildConfig config);
 
     /// <summary>
     ///     Retrieves config for a guild.
     /// </summary>
     /// <param name="id">The guild ID.</param>
     /// <returns>If successfull, the guild config, if not, null.</returns>
-    Task<GuildConfig?> GetGuildConfigCache(ulong id);
+    public Task<GuildConfig?> GetGuildConfigCache(ulong id);
 
     #endregion
 
@@ -303,18 +303,19 @@ public interface IDataCache
     /// <summary>
     ///     Gets or adds cached data asynchronously.
     /// </summary>
-    Task<TOut?> GetOrAddCachedDataAsync<TParam, TOut>(string key, Func<TParam?, Task<TOut?>> factory, TParam param,
+    public Task<TOut?> GetOrAddCachedDataAsync<TParam, TOut>(string key, Func<TParam?, Task<TOut?>> factory,
+        TParam param,
         TimeSpan expiry) where TOut : class;
 
     /// <summary>
     ///     Sets status role cache.
     /// </summary>
-    Task SetStatusRoleCache(List<StatusRole> statusRoles);
+    public Task SetStatusRoleCache(List<StatusRole> statusRoles);
 
     /// <summary>
     ///     Gets status role cache.
     /// </summary>
-    Task<List<StatusRole>?> GetStatusRoleCache();
+    public Task<List<StatusRole>?> GetStatusRoleCache();
 
     #endregion
 }

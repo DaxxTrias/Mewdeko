@@ -4,7 +4,6 @@ using System.Threading;
 using DataModel;
 using LinqToDB;
 using LinqToDB.Data;
-using Serilog;
 using SkiaSharp;
 using StackExchange.Redis;
 using Embed = Discord.Embed;
@@ -23,6 +22,7 @@ public class JoinLeaveLoggerService : INService, IDisposable
     private readonly IDataConnectionFactory dbFactory;
     private readonly Timer flushTimer;
     private readonly GuildSettingsService guildSettingsService;
+    private readonly ILogger<JoinLeaveLoggerService> logger;
 
     /// <summary>
     ///     Constructor for the JoinLeaveLoggerService.
@@ -33,11 +33,12 @@ public class JoinLeaveLoggerService : INService, IDisposable
     /// <param name="credentials">Bot credentials for accessing the Redis database.</param>
     /// <param name="guildSettingsService">Service for getting and updating GuildConfigs in the db.</param>
     public JoinLeaveLoggerService(EventHandler eventHandler, IDataCache cache, IDataConnectionFactory dbFactory,
-        IBotCredentials credentials, GuildSettingsService guildSettingsService)
+        IBotCredentials credentials, GuildSettingsService guildSettingsService, ILogger<JoinLeaveLoggerService> logger)
     {
         this.cache = cache;
         this.credentials = credentials;
         this.guildSettingsService = guildSettingsService;
+        this.logger = logger;
         this.dbFactory = dbFactory;
 
         _ = LoadDataFromSqliteToRedisAsync();
@@ -87,7 +88,7 @@ public class JoinLeaveLoggerService : INService, IDisposable
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error logging user join event for Guild ID: {GuildId}", args.Guild.Id);
+            logger.LogError(ex, "Error logging user join event for Guild ID: {GuildId}", args.Guild.Id);
         }
     }
 
@@ -115,7 +116,7 @@ public class JoinLeaveLoggerService : INService, IDisposable
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error logging user leave event for Guild ID: {GuildId}", guild.Id);
+            logger.LogError(ex, "Error logging user leave event for Guild ID: {GuildId}", guild.Id);
         }
     }
 
@@ -401,7 +402,7 @@ public class JoinLeaveLoggerService : INService, IDisposable
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error loading data from SQLite to Redis.");
+            logger.LogError(ex, "Error loading data from SQLite to Redis.");
         }
     }
 
@@ -410,7 +411,7 @@ public class JoinLeaveLoggerService : INService, IDisposable
     /// </summary>
     private async Task FlushDataToSqliteAsync()
     {
-        Log.Information("Flushing join/leave logs to DB...");
+        logger.LogInformation("Flushing join/leave logs to DB...");
 
         try
         {
@@ -446,16 +447,16 @@ public class JoinLeaveLoggerService : INService, IDisposable
             if (logsToInsert.Any())
             {
                 await dbContext.BulkCopyAsync(logsToInsert);
-                Log.Information($"Flushed {logsToInsert.Count} join/leave logs to DB.");
+                logger.LogInformation($"Flushed {logsToInsert.Count} join/leave logs to DB.");
             }
             else
             {
-                Log.Information("No join/leave logs to flush.");
+                logger.LogInformation("No join/leave logs to flush.");
             }
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error flushing data from Redis to SQLite.");
+            logger.LogError(ex, "Error flushing data from Redis to SQLite.");
         }
     }
 
@@ -505,7 +506,7 @@ public class JoinLeaveLoggerService : INService, IDisposable
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error updating graph color for Guild ID: {GuildId}", guildId);
+            logger.LogError(ex, "Error updating graph color for Guild ID: {GuildId}", guildId);
         }
     }
 

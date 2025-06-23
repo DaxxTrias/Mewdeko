@@ -65,9 +65,7 @@ public class RedisBotStringsProvider : IBotStringsProvider
 
         var cmdStrings = new CommandStrings
         {
-            Args = args,
-            Desc = descStr,
-            Signature = signatureStr
+            Args = args, Desc = descStr, Signature = signatureStr
         };
 
         // Parse parameters if they exist

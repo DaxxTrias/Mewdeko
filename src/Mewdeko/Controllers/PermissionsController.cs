@@ -9,7 +9,6 @@ using Mewdeko.Modules.Permissions.Services;
 using Mewdeko.Services.Impl;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Serilog;
 
 namespace Mewdeko.Controllers;
 
@@ -27,7 +26,9 @@ public class PermissionsController(
     PermissionService permissionService,
     DiscordPermOverrideService dpoService,
     CommandService cmdServ,
-    IDataConnectionFactory dbFactory) : Controller
+    IDataConnectionFactory dbFactory,
+    ILogger<PermissionsController> logger
+) : Controller
 {
     /// <summary>
     ///     Gets all dpos for a guild
@@ -186,20 +187,21 @@ public class PermissionsController(
 
                 if (rowsAffected == 0)
                 {
-                    Log.Warning("Attempted to set permission role for non-existent GuildConfig {GuildId}", guildId);
+                    logger.LogWarning("Attempted to set permission role for non-existent GuildConfig {GuildId}",
+                        guildId);
                     return NotFound($"Configuration for guild {guildId} not found.");
                 }
 
                 var config = await db.GuildConfigs.Where(gc => gc.GuildId == guildId).FirstOrDefaultAsync();
                 if (config == null)
                 {
-                    Log.Error("Failed to re-fetch GuildConfig {GuildId} after successful update.", guildId);
+                    logger.LogError("Failed to re-fetch GuildConfig {GuildId} after successful update.", guildId);
                     return StatusCode(500, "Failed to retrieve configuration after update.");
                 }
 
                 // Get permissions needed for cache update
-                var permissions = await AsyncExtensions.ToListAsync(db.Permissions1
-                    .Where(p => p.GuildId == guildId));
+                var permissions = await db.Permissions1
+                    .Where(p => p.GuildId == guildId).ToListAsync();
 
                 permissionService.UpdateCache(guildId, permissions, config);
             } // db context disposed here
@@ -208,7 +210,7 @@ public class PermissionsController(
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error setting permission role for guild {GuildId}", guildId);
+            logger.LogError(ex, "Error setting permission role for guild {GuildId}", guildId);
             return StatusCode(500, "An error occurred while updating settings.");
         }
     }
@@ -259,7 +261,7 @@ public class PermissionsController(
         }
         catch (Exception e)
         {
-            Log.Error(e, "Error fetching commands and modules");
+            logger.LogError(e, "Error fetching commands and modules");
             return StatusCode(500, "Error fetching commands and modules");
         }
     }

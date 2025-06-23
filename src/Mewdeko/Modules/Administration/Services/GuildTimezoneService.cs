@@ -61,7 +61,7 @@ public class GuildTimezoneService : INService
 
         if (gc == null)
         {
-             return;
+            return;
         }
 
         gc.TimeZoneId = tz?.Id;

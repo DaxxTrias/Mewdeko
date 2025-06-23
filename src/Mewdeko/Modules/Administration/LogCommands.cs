@@ -12,7 +12,8 @@ public partial class Administration
     ///     Module for logging commands.
     /// </summary>
     [Group]
-    public class LogCommands(GuildSettingsService gss) : MewdekoSubmodule<LogCommandService>
+    public class LogCommands(GuildSettingsService gss, ILogger<LogCommands> logger)
+        : MewdekoSubmodule<LogCommandService>
     {
         /// <summary>
         ///     Sets the logging category for a specified type of logs.
@@ -187,7 +188,7 @@ public partial class Administration
             }
             catch (Exception e)
             {
-                Serilog.Log.Error(e, "There was an issue setting logs");
+                logger.LogError(e, "There was an issue setting logs");
                 await ErrorAsync(Strings.CommandFatalError(ctx.Guild.Id));
             }
         }
@@ -290,7 +291,7 @@ public partial class Administration
             }
             catch (Exception e)
             {
-                Serilog.Log.Error(e, "There was an issue setting logs");
+                logger.LogError(e, "There was an issue setting logs");
                 await ErrorAsync(Strings.CommandFatalError(ctx.Guild.Id));
             }
         }

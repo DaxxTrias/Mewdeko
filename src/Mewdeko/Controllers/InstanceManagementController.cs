@@ -1,12 +1,11 @@
 ﻿using Mewdeko.Modules.OwnerOnly.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Logging;
 
 namespace Mewdeko.Controllers;
 
 /// <summary>
-/// Controller for managing multiple bot instances.
+///     Controller for managing multiple bot instances.
 /// </summary>
 [ApiController]
 [Route("botapi/[controller]")]
@@ -17,7 +16,7 @@ public class InstanceManagementController : Controller
     private readonly ILogger<InstanceManagementController> logger;
 
     /// <summary>
-    /// Initializes a new instance of the controller.
+    ///     Initializes a new instance of the controller.
     /// </summary>
     public InstanceManagementController(
         InstanceManagementService instanceManagementService,
@@ -28,7 +27,7 @@ public class InstanceManagementController : Controller
     }
 
     /// <summary>
-    /// Gets all active bot instances.
+    ///     Gets all active bot instances.
     /// </summary>
     /// <returns>List of active bot instances.</returns>
     [HttpGet]
@@ -47,7 +46,7 @@ public class InstanceManagementController : Controller
     }
 
     /// <summary>
-    /// Adds a new bot instance.
+    ///     Adds a new bot instance.
     /// </summary>
     /// <param name="port">The port number the instance is running on.</param>
     [HttpPost("{port}")]
@@ -73,7 +72,7 @@ public class InstanceManagementController : Controller
     }
 
     /// <summary>
-    /// Removes a bot instance.
+    ///     Removes a bot instance.
     /// </summary>
     /// <param name="port">The port number of the instance to remove.</param>
     [HttpDelete("{port}")]

@@ -11,7 +11,7 @@ public interface ILateBlocker
     /// <summary>
     ///     Gets the priority of the module. The lower the number, the higher the priority.
     /// </summary>
-    int Priority { get; }
+    public int Priority { get; }
 
     /// <summary>
     ///     Tries to block the execution of subsequent modules after a command has been executed.
@@ -24,7 +24,7 @@ public interface ILateBlocker
     ///     A task that represents the asynchronous operation. The task result contains a boolean indicating whether the
     ///     module blocked the execution.
     /// </returns>
-    Task<bool> TryBlockLate(DiscordShardedClient client, ICommandContext context,
+    public Task<bool> TryBlockLate(DiscordShardedClient client, ICommandContext context,
         string moduleName, CommandInfo command);
 
     /// <summary>
@@ -37,6 +37,6 @@ public interface ILateBlocker
     ///     A task that represents the asynchronous operation. The task result contains a boolean indicating whether the
     ///     module blocked the execution.
     /// </returns>
-    Task<bool> TryBlockLate(DiscordShardedClient client, IInteractionContext context,
+    public Task<bool> TryBlockLate(DiscordShardedClient client, IInteractionContext context,
         ICommandInfo command);
 }

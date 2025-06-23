@@ -1,10 +1,10 @@
-﻿using Discord.Commands;
+﻿using DataModel;
+using Discord.Commands;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
 using LinqToDB;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Modules.Permissions.Services;
-using DataModel;
 
 namespace Mewdeko.Modules.Permissions;
 
@@ -133,10 +133,12 @@ public partial class Permissions
             switch (await Service.GetFw(ctx.Guild.Id))
             {
                 case 1:
-                    await ctx.Channel.SendConfirmAsync(Strings.WarnFilteredWordEnabled(ctx.Guild.Id)).ConfigureAwait(false);
+                    await ctx.Channel.SendConfirmAsync(Strings.WarnFilteredWordEnabled(ctx.Guild.Id))
+                        .ConfigureAwait(false);
                     break;
                 case 0:
-                    await ctx.Channel.SendConfirmAsync(Strings.WarnFilteredWordDisabled(ctx.Guild.Id)).ConfigureAwait(false);
+                    await ctx.Channel.SendConfirmAsync(Strings.WarnFilteredWordDisabled(ctx.Guild.Id))
+                        .ConfigureAwait(false);
                     break;
             }
         }
@@ -256,8 +258,7 @@ public partial class Permissions
                 // Add new filter
                 await db.InsertAsync(new FilterInvitesChannelId
                 {
-                    GuildId = guildId,
-                    ChannelId = channelId
+                    GuildId = guildId, ChannelId = channelId
                 });
 
                 await ReplyConfirmAsync(Strings.InviteFilterChannelOn(guildId)).ConfigureAwait(false);
@@ -336,8 +337,7 @@ public partial class Permissions
                 // Add new filter
                 await db.InsertAsync(new FilterLinksChannelId
                 {
-                    GuildId = guildId,
-                    ChannelId = channelId
+                    GuildId = guildId, ChannelId = channelId
                 });
 
                 await ReplyConfirmAsync(Strings.LinkFilterChannelOn(guildId)).ConfigureAwait(false);
@@ -416,8 +416,7 @@ public partial class Permissions
                 // Add new filter
                 await db.InsertAsync(new FilterWordsChannelId
                 {
-                    GuildId = guildId,
-                    ChannelId = channelId
+                    GuildId = guildId, ChannelId = channelId
                 });
 
                 await ReplyConfirmAsync(Strings.WordFilterChannelOn(guildId)).ConfigureAwait(false);
@@ -471,8 +470,7 @@ public partial class Permissions
                 // Add new filter word
                 await db.InsertAsync(new FilteredWord
                 {
-                    GuildId = guildId,
-                    Word = word
+                    GuildId = guildId, Word = word
                 });
 
                 await ReplyConfirmAsync(Strings.FilterWordAdd(guildId, Format.Code(word))).ConfigureAwait(false);

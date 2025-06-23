@@ -3,14 +3,14 @@ using MartineApiNet;
 using MartineApiNet.Enums;
 using Mewdeko.Modules.Searches.Services;
 using Refit;
-using Serilog;
 
 namespace Mewdeko.Modules.Searches;
 
 /// <summary>
 ///     Provides slash command interactions for searching and retrieving content from various sources.
 /// </summary>
-public class SlashSearches(MartineApi martineApi) : MewdekoSlashModuleBase<SearchesService>
+public class SlashSearches(MartineApi martineApi, ILogger<SlashSearches> logger)
+    : MewdekoSlashModuleBase<SearchesService>
 {
     /// <summary>
     ///     Handles the "randomimage" component interaction, fetching and displaying a new random image from the specified
@@ -58,7 +58,7 @@ public class SlashSearches(MartineApi martineApi) : MewdekoSlashModuleBase<Searc
         }
         catch (ApiException ex)
         {
-            Log.Error(
+            logger.LogError(
                 "Image fetch failed in button handler. Error:\nCode: {StatusCode}\nContent: {Content}",
                 ex.StatusCode,
                 ex.HasContent ? ex.Content : "No Content"

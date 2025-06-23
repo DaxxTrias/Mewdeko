@@ -981,7 +981,7 @@ public partial class Currency(
                         Strings.WarTransactionWon(ctx.Guild.Id), ctx.Guild.Id);
                     eb.AddField("Result",
                             Strings.WarBattleWin(ctx.Guild.Id, warBetAmount,
-                                await Service.GetCurrencyEmote(ctx.Guild.Id)), false)
+                                await Service.GetCurrencyEmote(ctx.Guild.Id)))
                         .WithColor(Color.Green);
                 }
                 else
@@ -991,7 +991,7 @@ public partial class Currency(
                         Strings.WarTransactionLost(ctx.Guild.Id), ctx.Guild.Id);
                     eb.AddField("Result",
                             Strings.WarBattleLose(ctx.Guild.Id, warBetAmount,
-                                await Service.GetCurrencyEmote(ctx.Guild.Id)), false)
+                                await Service.GetCurrencyEmote(ctx.Guild.Id)))
                         .WithColor(Color.Red);
                 }
             }
@@ -1042,7 +1042,7 @@ public partial class Currency(
         var eb = new EmbedBuilder()
             .WithTitle(Strings.CrapsTitle(ctx.Guild.Id))
             .WithColor(Color.Blue)
-            .AddField(Strings.CrapsRolled(ctx.Guild.Id, die1, die2, total), "", false);
+            .AddField(Strings.CrapsRolled(ctx.Guild.Id, die1, die2, total), "");
 
         var won = false;
         var multiplier = 1.0;
@@ -1053,19 +1053,19 @@ public partial class Currency(
                 if (total == 7 || total == 11)
                 {
                     won = true;
-                    eb.AddField("Result", Strings.CrapsNatural(ctx.Guild.Id, total), false);
+                    eb.AddField("Result", Strings.CrapsNatural(ctx.Guild.Id, total));
                 }
                 else if (total == 2 || total == 3 || total == 12)
                 {
                     won = false;
-                    eb.AddField("Result", Strings.CrapsCraps(ctx.Guild.Id, total), false);
+                    eb.AddField("Result", Strings.CrapsCraps(ctx.Guild.Id, total));
                 }
                 else
                 {
-                    eb.AddField("Point", Strings.CrapsPointEstablished(ctx.Guild.Id, total), false);
+                    eb.AddField("Point", Strings.CrapsPointEstablished(ctx.Guild.Id, total));
                     var pointRoll = RollForPoint(rand, total);
                     won = pointRoll.won;
-                    eb.AddField("Point Roll", pointRoll.description, false);
+                    eb.AddField("Point Roll", pointRoll.description);
                 }
 
                 break;
@@ -1087,7 +1087,7 @@ public partial class Currency(
                 {
                     var pointRoll = RollForPoint(rand, total);
                     won = !pointRoll.won;
-                    eb.AddField("Point Roll", pointRoll.description, false);
+                    eb.AddField("Point Roll", pointRoll.description);
                 }
 
                 break;
@@ -1130,7 +1130,7 @@ public partial class Currency(
             _ => won ? "You won!" : "You lost!"
         };
 
-        eb.AddField("Outcome", resultMessage, false)
+        eb.AddField("Outcome", resultMessage)
             .WithColor(won ? Color.Green : Color.Red);
 
         await ReplyAsync(embed: eb.Build());
@@ -1204,7 +1204,7 @@ public partial class Currency(
                 .WithColor(Color.Green);
 
             var symbols = GenerateScratchSymbols(true);
-            eb.AddField(Strings.ScratchCardSymbols(ctx.Guild.Id, symbols), "", false);
+            eb.AddField(Strings.ScratchCardSymbols(ctx.Guild.Id, symbols), "");
         }
         else
         {
@@ -1212,7 +1212,7 @@ public partial class Currency(
                 .WithColor(Color.Red);
 
             var symbols = GenerateScratchSymbols(false);
-            eb.AddField(Strings.ScratchCardSymbols(ctx.Guild.Id, symbols), "", false);
+            eb.AddField(Strings.ScratchCardSymbols(ctx.Guild.Id, symbols), "");
         }
 
         await ReplyAsync(embed: eb.Build());
@@ -1279,10 +1279,10 @@ public partial class Currency(
             await Service.AddTransactionAsync(ctx.User.Id, winAmount,
                 Strings.RussianRouletteTransactionWon(ctx.Guild.Id), ctx.Guild.Id);
 
-            eb.AddField("Result", Strings.RussianRouletteClick(ctx.Guild.Id), false)
+            eb.AddField("Result", Strings.RussianRouletteClick(ctx.Guild.Id))
                 .AddField("Outcome",
                     Strings.RussianRouletteSurvived(ctx.Guild.Id, winAmount,
-                        await Service.GetCurrencyEmote(ctx.Guild.Id)), false)
+                        await Service.GetCurrencyEmote(ctx.Guild.Id)))
                 .WithColor(Color.Green);
         }
         else
@@ -1292,8 +1292,7 @@ public partial class Currency(
                 Strings.RussianRouletteTransactionLost(ctx.Guild.Id), ctx.Guild.Id);
 
             eb.AddField("Outcome",
-                    Strings.RussianRouletteDied(ctx.Guild.Id, betAmount, await Service.GetCurrencyEmote(ctx.Guild.Id)),
-                    false)
+                    Strings.RussianRouletteDied(ctx.Guild.Id, betAmount, await Service.GetCurrencyEmote(ctx.Guild.Id)))
                 .WithColor(Color.Red);
         }
 
@@ -1377,16 +1376,16 @@ public partial class Currency(
             .WithTitle(Strings.BaccaratTitle(ctx.Guild.Id))
             .WithColor(Color.Blue)
             .AddField(Strings.BaccaratPlayerHand(ctx.Guild.Id),
-                string.Join(" ", playerHand.Select(c => $"{c.rank}{c.suit}")) + $" (Total: {playerTotal})", false)
+                string.Join(" ", playerHand.Select(c => $"{c.rank}{c.suit}")) + $" (Total: {playerTotal})")
             .AddField(Strings.BaccaratBankerHand(ctx.Guild.Id),
-                string.Join(" ", bankerHand.Select(c => $"{c.rank}{c.suit}")) + $" (Total: {bankerTotal})", false);
+                string.Join(" ", bankerHand.Select(c => $"{c.rank}{c.suit}")) + $" (Total: {bankerTotal})");
 
         var won = false;
         var multiplier = 1.0;
 
         if (playerTotal > bankerTotal)
         {
-            eb.AddField("Result", Strings.BaccaratPlayerWins(ctx.Guild.Id, playerTotal), false);
+            eb.AddField("Result", Strings.BaccaratPlayerWins(ctx.Guild.Id, playerTotal));
             if (betType.Equals("player", StringComparison.OrdinalIgnoreCase))
             {
                 won = true;
@@ -1395,7 +1394,7 @@ public partial class Currency(
         }
         else if (bankerTotal > playerTotal)
         {
-            eb.AddField("Result", Strings.BaccaratBankerWins(ctx.Guild.Id, bankerTotal), false);
+            eb.AddField("Result", Strings.BaccaratBankerWins(ctx.Guild.Id, bankerTotal));
             if (betType.Equals("banker", StringComparison.OrdinalIgnoreCase))
             {
                 won = true;
@@ -1404,7 +1403,7 @@ public partial class Currency(
         }
         else
         {
-            eb.AddField("Result", Strings.BaccaratTie(ctx.Guild.Id, playerTotal), false);
+            eb.AddField("Result", Strings.BaccaratTie(ctx.Guild.Id, playerTotal));
             if (betType.Equals("tie", StringComparison.OrdinalIgnoreCase))
             {
                 won = true;
@@ -1431,10 +1430,10 @@ public partial class Currency(
 
         if (playerNatural || bankerNatural)
         {
-            eb.AddField("Special", Strings.BaccaratNatural(ctx.Guild.Id, Math.Max(playerTotal, bankerTotal)), false);
+            eb.AddField("Special", Strings.BaccaratNatural(ctx.Guild.Id, Math.Max(playerTotal, bankerTotal)));
         }
 
-        eb.AddField("Outcome", resultMessage, false)
+        eb.AddField("Outcome", resultMessage)
             .WithColor(won ? Color.Green : Color.Red);
 
         await ReplyAsync(embed: eb.Build());
@@ -1659,21 +1658,19 @@ public partial class Currency(
             var winSymbol = symbols[rand.Next(symbols.Length)];
             return $"{winSymbol} {winSymbol} {winSymbol}";
         }
-        else
+
+        var symbol1 = symbols[rand.Next(symbols.Length)];
+        var symbol2 = symbols[rand.Next(symbols.Length)];
+        var symbol3 = symbols[rand.Next(symbols.Length)];
+
+        // Make sure they're not all the same
+        while (symbol1 == symbol2 && symbol2 == symbol3)
         {
-            var symbol1 = symbols[rand.Next(symbols.Length)];
-            var symbol2 = symbols[rand.Next(symbols.Length)];
-            var symbol3 = symbols[rand.Next(symbols.Length)];
-
-            // Make sure they're not all the same
-            while (symbol1 == symbol2 && symbol2 == symbol3)
-            {
-                symbol2 = symbols[rand.Next(symbols.Length)];
-                symbol3 = symbols[rand.Next(symbols.Length)];
-            }
-
-            return $"{symbol1} {symbol2} {symbol3}";
+            symbol2 = symbols[rand.Next(symbols.Length)];
+            symbol3 = symbols[rand.Next(symbols.Length)];
         }
+
+        return $"{symbol1} {symbol2} {symbol3}";
     }
 
     private static int CalculateBaccaratTotal(List<(string rank, string suit, int value)> hand)
@@ -1787,10 +1784,8 @@ public partial class Currency(
         var eb = new EmbedBuilder()
             .WithTitle(Strings.KenoTitle(ctx.Guild.Id))
             .WithColor(multiplier > 0 ? Color.Green : Color.Red)
-            .AddField(Strings.KenoYourNumbers(ctx.Guild.Id, string.Join(", ", selectedNumbers.OrderBy(x => x))), "",
-                false)
-            .AddField(Strings.KenoDrawnNumbers(ctx.Guild.Id, string.Join(", ", drawnNumbers.OrderBy(x => x))), "",
-                false)
+            .AddField(Strings.KenoYourNumbers(ctx.Guild.Id, string.Join(", ", selectedNumbers.OrderBy(x => x))), "")
+            .AddField(Strings.KenoDrawnNumbers(ctx.Guild.Id, string.Join(", ", drawnNumbers.OrderBy(x => x))), "")
             .AddField(Strings.KenoMatches(ctx.Guild.Id, matches.ToString()), "", true);
 
         if (multiplier > 0)
@@ -1973,7 +1968,7 @@ public partial class Currency(
             resultsText += $"{i + 1}. {duck} Duck #{raceResults[i].duckIndex + 1}{isUserDuck}\n";
         }
 
-        eb.AddField(Strings.DuckRaceResults(ctx.Guild.Id, resultsText), "", false);
+        eb.AddField(Strings.DuckRaceResults(ctx.Guild.Id, resultsText), "");
 
         if (multiplier > 0)
         {
@@ -2043,10 +2038,10 @@ public partial class Currency(
             .AddField(Strings.BingoCardType(ctx.Guild.Id, cardType.ToUpper()), "", true)
             .AddField(
                 Strings.BingoCalledNumbers(ctx.Guild.Id,
-                    string.Join(", ", calledNumbers.Take(10)) + (calledNumbers.Count > 10 ? "..." : "")), "", false);
+                    string.Join(", ", calledNumbers.Take(10)) + (calledNumbers.Count > 10 ? "..." : "")), "");
 
         var cardDisplay = FormatBingoCard(playerCard, calledNumbers);
-        eb.AddField(Strings.BingoYourCard(ctx.Guild.Id, cardDisplay), "", false);
+        eb.AddField(Strings.BingoYourCard(ctx.Guild.Id, cardDisplay), "");
 
         if (won)
         {
@@ -2184,7 +2179,7 @@ public partial class Currency(
             .WithTitle(Strings.MemoryTitle(ctx.Guild.Id))
             .WithDescription(Strings.MemorySequenceHidden(ctx.Guild.Id))
             .WithColor(Color.Orange)
-            .AddField(Strings.MemoryInstructions(ctx.Guild.Id), Strings.MemoryInstructionsText(ctx.Guild.Id), false);
+            .AddField(Strings.MemoryInstructions(ctx.Guild.Id), Strings.MemoryInstructionsText(ctx.Guild.Id));
 
         await message.ModifyAsync(m => m.Embed = hideEmbed.Build());
 
@@ -2660,8 +2655,7 @@ public partial class Currency(
         if (challenge.Progress >= challenge.RequiredAmount)
         {
             eb.WithColor(Color.Green)
-                .AddField(Strings.DailyChallengeStatus(ctx.Guild.Id), Strings.DailyChallengeReadyToClaim(ctx.Guild.Id),
-                    false);
+                .AddField(Strings.DailyChallengeStatus(ctx.Guild.Id), Strings.DailyChallengeReadyToClaim(ctx.Guild.Id));
         }
 
         await ReplyAsync(embed: eb.Build());

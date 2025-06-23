@@ -5,7 +5,7 @@ using Mewdeko.Modules.Xp.Models;
 using Mewdeko.Modules.Xp.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Serilog;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Mewdeko.Controllers;
 
@@ -19,7 +19,9 @@ public class XpController(
     XpService xp,
     DiscordShardedClient client,
     IDataConnectionFactory dbFactory,
-    IHttpClientFactory httpClientFactory) : Controller
+    IHttpClientFactory httpClientFactory,
+    ILogger<XpController> logger,
+    IServiceProvider serviceProvider) : Controller
 {
     /// <summary>
     ///     Gets the XP settings for a guild
@@ -70,7 +72,7 @@ public class XpController(
                 }
                 catch (Exception ex)
                 {
-                    Log.Error(ex, "Error recomputing levels for guild {GuildId}", guildId);
+                    logger.LogError(ex, "Error recomputing levels for guild {GuildId}", guildId);
                 }
             });
         }
@@ -436,7 +438,7 @@ public class XpController(
     [HttpGet("template")]
     public async Task<IActionResult> GetTemplate(ulong guildId)
     {
-        var cardGenerator = new XpCardGenerator(dbFactory, xp, httpClientFactory);
+        var cardGenerator = serviceProvider.GetRequiredService<XpCardGenerator>();
         var template = await cardGenerator.GetTemplateAsync(guildId);
         return Ok(template);
     }

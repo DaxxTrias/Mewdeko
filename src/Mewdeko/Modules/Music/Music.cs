@@ -13,7 +13,6 @@ using Lavalink4NET.Tracks;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Modules.Music.Common;
 using Mewdeko.Modules.Music.CustomPlayer;
-using Serilog;
 using SpotifyAPI.Web;
 using Swan;
 
@@ -26,7 +25,8 @@ public partial class Music(
     IAudioService service,
     IDataCache cache,
     InteractiveService interactiveService,
-    GuildSettingsService guildSettingsService) : MewdekoModule
+    GuildSettingsService guildSettingsService,
+    ILogger<Music> logger) : MewdekoModule
 {
     /// <summary>
     ///     Retrieves the music player an attempts to join the voice channel.
@@ -181,7 +181,7 @@ public partial class Music(
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error in Play command with query: {Query}", query);
+            logger.LogError(ex, "Error in Play command with query: {Query}", query);
             await ReplyErrorAsync(Strings.MusicGenericError(ctx.Guild.Id));
         }
     }
@@ -258,7 +258,7 @@ public partial class Music(
         }
         catch (Exception e)
         {
-            Log.Error("Failed to get now playing track: {Message}", e.Message);
+            logger.LogError("Failed to get now playing track: {Message}", e.Message);
         }
     }
 
@@ -383,7 +383,7 @@ public partial class Music(
         }
         catch (Exception e)
         {
-            Log.Error(e, "Failed to move song.");
+            logger.LogError(e, "Failed to move song.");
         }
     }
 
@@ -1073,7 +1073,7 @@ public partial class Music(
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error processing URL: {Url}", url);
+            logger.LogError(ex, "Error processing URL: {Url}", url);
             await ReplyErrorAsync(Strings.MusicUrlProcessError(ctx.Guild.Id));
         }
     }
@@ -1124,7 +1124,7 @@ public partial class Music(
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error processing search query: {Query}", query);
+            logger.LogError(ex, "Error processing search query: {Query}", query);
             await ReplyErrorAsync(Strings.MusicSearchError(ctx.Guild.Id));
         }
     }
@@ -1376,7 +1376,7 @@ public partial class Music(
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error processing Spotify URL: {Url}", url);
+            logger.LogError(ex, "Error processing Spotify URL: {Url}", url);
             throw; // Rethrow to be handled by caller
         }
 

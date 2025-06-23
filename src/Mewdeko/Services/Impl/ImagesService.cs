@@ -1,6 +1,5 @@
 ﻿using System.IO;
 using Mewdeko.Common.ModuleBehaviors;
-using Serilog;
 using ZiggyCreatures.Caching.Fusion;
 
 namespace Mewdeko.Services.Impl;
@@ -67,6 +66,8 @@ public sealed class FusionImagesCache : IImageCache, IReadyExecutor, INService
     private const string EmojiPath = BasePath + "emoji/";
 
     private readonly IFusionCache cache;
+
+    private readonly ILogger<FusionImagesCache> logger;
     // private readonly string imagesPath; // Currently unused
 
     /// <summary>
@@ -74,9 +75,10 @@ public sealed class FusionImagesCache : IImageCache, IReadyExecutor, INService
     /// </summary>
     /// <param name="cache">The FusionCache instance.</param>
     /// <param name="creds">The bot credentials.</param>
-    public FusionImagesCache(IFusionCache cache, IBotCredentials creds)
+    public FusionImagesCache(IFusionCache cache, IBotCredentials creds, ILogger<FusionImagesCache> logger)
     {
         this.cache = cache;
+        this.logger = logger;
     }
 
     /// <summary>
@@ -145,7 +147,7 @@ public sealed class FusionImagesCache : IImageCache, IReadyExecutor, INService
     /// </summary>
     public async Task OnReadyAsync()
     {
-        Log.Information($"Starting {GetType()} Cache");
+        logger.LogInformation($"Starting {GetType()} Cache");
         if (await AllKeysExist().ConfigureAwait(false))
             return;
 
@@ -171,8 +173,8 @@ public sealed class FusionImagesCache : IImageCache, IReadyExecutor, INService
 
         if (paths.Length != validData.Length)
         {
-            Log.Information("{Loaded}/{Max} paths for the key '{ImageKey}' have been loaded.\n" +
-                            "Some of the supplied paths are either unavailable or invalid",
+            logger.LogInformation("{Loaded}/{Max} paths for the key '{ImageKey}' have been loaded.\n" +
+                                  "Some of the supplied paths are either unavailable or invalid",
                 validData.Length, paths.Length, key);
         }
     }
@@ -185,7 +187,7 @@ public sealed class FusionImagesCache : IImageCache, IReadyExecutor, INService
         }
         catch (Exception ex)
         {
-            Log.Warning(ex, "Failed reading image bytes from path: {Path}", path);
+            logger.LogWarning(ex, "Failed reading image bytes from path: {Path}", path);
             return null;
         }
     }

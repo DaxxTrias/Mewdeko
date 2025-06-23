@@ -16,7 +16,6 @@ using Mewdeko.Modules.Utility.Common;
 using Mewdeko.Modules.Utility.Services;
 using Mewdeko.Services.Impl;
 using Mewdeko.Services.Settings;
-using Serilog;
 using StringExtensions = Mewdeko.Extensions.StringExtensions;
 
 namespace Mewdeko.Modules.Utility;
@@ -47,7 +46,8 @@ public partial class Utility(
     HttpClient httpClient,
     BotConfigService config,
     IDataConnectionFactory dbFactory,
-    IDataCache cache)
+    IDataCache cache,
+    ILogger<Utility> logger)
     : MewdekoModuleBase<UtilityService>
 {
     /// <summary>
@@ -1426,7 +1426,7 @@ public partial class Utility(
 
         if (ctx.Guild is not SocketGuild socketGuild)
         {
-            Log.Warning("Can't cast guild to socket guild");
+            logger.LogWarning("Can't cast guild to socket guild");
             return;
         }
 
@@ -1757,7 +1757,7 @@ public partial class Utility(
                 catch (Exception ex)
                 {
                     await ctx.Channel.SendErrorAsync(Strings.EmbedFailed(ctx.Guild.Id), Config);
-                    Log.Error("Error sending message: {Message}", ex.Message);
+                    logger.LogError("Error sending message: {Message}", ex.Message);
                 }
             }
             else
@@ -1772,7 +1772,7 @@ public partial class Utility(
                 catch (Exception ex)
                 {
                     await ctx.Channel.SendErrorAsync(Strings.EmbedFailed(ctx.Guild.Id), Config);
-                    Log.Error("Error sending message: {Message}", ex.Message);
+                    logger.LogError("Error sending message: {Message}", ex.Message);
                 }
         }
         else if (!string.IsNullOrWhiteSpace(msg))
@@ -1804,7 +1804,7 @@ public partial class Utility(
                 catch (Exception ex)
                 {
                     await ctx.Channel.SendErrorAsync(Strings.EmbedFailed(ctx.Guild.Id), Config);
-                    Log.Error("Error sending message: {Message}", ex.Message);
+                    logger.LogError("Error sending message: {Message}", ex.Message);
                 }
         }
     }

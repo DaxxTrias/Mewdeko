@@ -6,7 +6,6 @@ using LinqToDB;
 using Mewdeko.Database.L2DB;
 using Mewdeko.Modules.Tickets.Common;
 using Mewdeko.Services.Strings;
-using Serilog;
 using Embed = Mewdeko.Common.Embed;
 using SelectMenuOption = DataModel.SelectMenuOption;
 
@@ -21,6 +20,7 @@ public class TicketService : INService
     private const string CloseButtonId = "ticket_close";
     private readonly DiscordShardedClient client;
     private readonly IDataConnectionFactory dbFactory;
+    private readonly ILogger<TicketService> logger;
     private readonly GeneratedBotStrings strings;
 
     /// <summary>
@@ -30,11 +30,12 @@ public class TicketService : INService
         IDataConnectionFactory dbFactory,
         DiscordShardedClient client,
         EventHandler eventHandler,
-        GeneratedBotStrings strings)
+        GeneratedBotStrings strings, ILogger<TicketService> logger)
     {
         this.dbFactory = dbFactory;
         this.client = client;
         this.strings = strings;
+        this.logger = logger;
 
         eventHandler.MessageDeleted += HandleMessageDeleted;
         eventHandler.ModalSubmitted += HandleModalSubmitted;
@@ -135,7 +136,7 @@ public class TicketService : INService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error previewing panel embed");
+            logger.LogError(ex, "Error previewing panel embed");
             throw;
         }
     }
@@ -268,7 +269,7 @@ public class TicketService : INService
         }
         catch (Exception e)
         {
-            Log.Error(e.ToString());
+            logger.LogError(e.ToString());
         }
 
         return null;
@@ -601,12 +602,12 @@ public class TicketService : INService
             }
             catch (Exception ex)
             {
-                Log.Warning(ex, "Failed to delete panel message {MessageId} in guild {GuildId}", panel.MessageId,
+                logger.LogWarning(ex, "Failed to delete panel message {MessageId} in guild {GuildId}", panel.MessageId,
                     guild.Id);
                 // Don't fail the entire operation if we can't delete the Discord message
             }
 
-            Log.Information(
+            logger.LogInformation(
                 "Deleted panel {PanelId} in guild {GuildId} (force: {Force}, cleared {TotalTickets} ticket references: {ActiveTickets} active, {DeletedTickets} soft-deleted)",
                 panel.Id, guild.Id, force, allReferencedTickets.Count, activeReferencedTickets.Count,
                 deletedReferencedTickets.Count);
@@ -615,7 +616,7 @@ public class TicketService : INService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Failed to delete panel {PanelId} in guild {GuildId}", panelId, guild.Id);
+            logger.LogError(ex, "Failed to delete panel {PanelId} in guild {GuildId}", panelId, guild.Id);
             return (false, $"Failed to delete panel: {ex.Message}", null, null);
         }
     }
@@ -669,7 +670,7 @@ public class TicketService : INService
                 }
                 catch (Exception ex)
                 {
-                    Log.Warning(ex, "Failed to send DM notification for ticket unclaim");
+                    logger.LogWarning(ex, "Failed to send DM notification for ticket unclaim");
                 }
             }
         }
@@ -822,7 +823,7 @@ public class TicketService : INService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Failed to create ticket channel");
+            logger.LogError(ex, "Failed to create ticket channel");
             throw new InvalidOperationException("Failed to create ticket channel. Please check bot permissions.");
         }
 
@@ -950,7 +951,7 @@ public class TicketService : INService
         catch (Exception ex)
         {
             // Cleanup on failure
-            Log.Error(ex, "Error during ticket creation messages/notifications");
+            logger.LogError(ex, "Error during ticket creation messages/notifications");
             try
             {
                 await channel.DeleteAsync();
@@ -958,7 +959,7 @@ public class TicketService : INService
             }
             catch (Exception cleanupEx)
             {
-                Log.Error(cleanupEx, "Error during ticket cleanup");
+                logger.LogError(cleanupEx, "Error during ticket cleanup");
             }
 
             throw new InvalidOperationException("Failed to complete ticket creation.");
@@ -1014,7 +1015,7 @@ public class TicketService : INService
                         }
                         catch (Exception ex)
                         {
-                            Log.Warning(ex, "Failed to send DM notification to {UserId}", member.Id);
+                            logger.LogWarning(ex, "Failed to send DM notification to {UserId}", member.Id);
                         }
                     }
                 }
@@ -1022,7 +1023,7 @@ public class TicketService : INService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error sending ticket notifications");
+            logger.LogError(ex, "Error sending ticket notifications");
         }
     }
 
@@ -1154,7 +1155,7 @@ public class TicketService : INService
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Error during ticket archiving process for ticket {TicketId}", ticket.Id);
+                logger.LogError(ex, "Error during ticket archiving process for ticket {TicketId}", ticket.Id);
 
                 // Fallback - just mark as archived
                 await ctx.Tickets
@@ -1201,7 +1202,7 @@ public class TicketService : INService
                 }
                 catch (Exception ex)
                 {
-                    Log.Warning(ex, "Failed to rename archived ticket channel {ChannelId}", channel.Id);
+                    logger.LogWarning(ex, "Failed to rename archived ticket channel {ChannelId}", channel.Id);
                 }
             }
 
@@ -1219,12 +1220,12 @@ public class TicketService : INService
             }
             catch (Exception ex)
             {
-                Log.Warning(ex, "Failed to lock archived ticket channel {ChannelId}", channel.Id);
+                logger.LogWarning(ex, "Failed to lock archived ticket channel {ChannelId}", channel.Id);
             }
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error during archive cleanup for ticket {TicketId}", ticket.Id);
+            logger.LogError(ex, "Error during archive cleanup for ticket {TicketId}", ticket.Id);
         }
     }
 
@@ -1312,13 +1313,13 @@ public class TicketService : INService
 
                     foreach (var option in menu.SelectMenuOptions)
                     {
-                        Log.Information(
+                        logger.LogInformation(
                             "Processing option: ID={Id}, Label='{Label}', Value='{Value}', SelectMenuId={SelectMenuId}",
                             option.Id, option.Label ?? "NULL", option.Value ?? "NULL", option.SelectMenuId);
 
                         if (string.IsNullOrWhiteSpace(option.Label))
                         {
-                            Log.Warning("Skipping option {Id} - Label is null/empty", option.Id);
+                            logger.LogWarning("Skipping option {Id} - Label is null/empty", option.Id);
                             continue;
                         }
 
@@ -1351,7 +1352,7 @@ public class TicketService : INService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Failed to update panel components for panel {PanelId}", panel.Id);
+            logger.LogError(ex, "Failed to update panel components for panel {PanelId}", panel.Id);
         }
     }
 
@@ -1457,7 +1458,7 @@ public class TicketService : INService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error handling modal submission");
+            logger.LogError(ex, "Error handling modal submission");
             await modal.RespondAsync(strings.TicketCreateFailed((modal.Channel as IGuildChannel)?.Guild.Id),
                 ephemeral: true);
         }
@@ -1550,7 +1551,8 @@ public class TicketService : INService
                             }
                             catch (Exception ex)
                             {
-                                Log.Warning(ex, "Failed to parse emoji {Emoji} for button {ButtonId}", button.Emoji,
+                                logger.LogWarning(ex, "Failed to parse emoji {Emoji} for button {ButtonId}",
+                                    button.Emoji,
                                     button.Id);
                             }
                         }
@@ -1593,7 +1595,8 @@ public class TicketService : INService
                                 }
                                 catch (Exception ex)
                                 {
-                                    Log.Warning(ex, "Failed to parse emoji {Emoji} for option {OptionId}", option.Emoji,
+                                    logger.LogWarning(ex, "Failed to parse emoji {Emoji} for option {OptionId}",
+                                        option.Emoji,
                                         option.Id);
                                 }
                             }
@@ -1618,14 +1621,15 @@ public class TicketService : INService
                 .Set(p => p.MessageId, newMessage.Id)
                 .UpdateAsync();
 
-            Log.Information("Manually recreated panel {PanelId} with new message ID {MessageId} in guild {GuildId}",
+            logger.LogInformation(
+                "Manually recreated panel {PanelId} with new message ID {MessageId} in guild {GuildId}",
                 panel.Id, newMessage.Id, guildId);
 
             return (true, newMessage.Id, channel.Mention, null);
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error recreating panel {PanelId} in guild {GuildId}", panelId, guildId);
+            logger.LogError(ex, "Error recreating panel {PanelId} in guild {GuildId}", panelId, guildId);
             return (false, null, null, "An error occurred while recreating the panel.");
         }
     }
@@ -1682,7 +1686,7 @@ public class TicketService : INService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error checking panel status in guild {GuildId}", guildId);
+            logger.LogError(ex, "Error checking panel status in guild {GuildId}", guildId);
             return [];
         }
     }
@@ -1760,7 +1764,7 @@ public class TicketService : INService
                 var targetChannel = channel.Value as ITextChannel;
                 if (targetChannel == null)
                 {
-                    Log.Warning("Cannot recreate panel {PanelId} - channel is not a text channel", panel.Id);
+                    logger.LogWarning("Cannot recreate panel {PanelId} - channel is not a text channel", panel.Id);
                     return;
                 }
 
@@ -1769,7 +1773,7 @@ public class TicketService : INService
                     out _);
                 if (!success)
                 {
-                    Log.Error("Failed to parse embed JSON for panel {PanelId}", panel.Id);
+                    logger.LogError("Failed to parse embed JSON for panel {PanelId}", panel.Id);
                     return;
                 }
 
@@ -1802,7 +1806,8 @@ public class TicketService : INService
                                 }
                                 catch (Exception ex)
                                 {
-                                    Log.Warning(ex, "Failed to parse emoji {Emoji} for button {ButtonId}", button.Emoji,
+                                    logger.LogWarning(ex, "Failed to parse emoji {Emoji} for button {ButtonId}",
+                                        button.Emoji,
                                         button.Id);
                                 }
                             }
@@ -1846,7 +1851,7 @@ public class TicketService : INService
                                     }
                                     catch (Exception ex)
                                     {
-                                        Log.Warning(ex, "Failed to parse emoji {Emoji} for option {OptionId}",
+                                        logger.LogWarning(ex, "Failed to parse emoji {Emoji} for option {OptionId}",
                                             option.Emoji, option.Id);
                                     }
                                 }
@@ -1871,12 +1876,12 @@ public class TicketService : INService
                     .Set(p => p.MessageId, newMessage.Id)
                     .UpdateAsync();
 
-                Log.Information("Successfully recreated deleted panel {PanelId} with new message ID {MessageId}",
+                logger.LogInformation("Successfully recreated deleted panel {PanelId} with new message ID {MessageId}",
                     panel.Id, newMessage.Id);
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Failed to recreate deleted panel {PanelId}", panel.Id);
+                logger.LogError(ex, "Failed to recreate deleted panel {PanelId}", panel.Id);
 
                 // If recreation fails, we could optionally notify admins
                 try
@@ -1903,7 +1908,7 @@ public class TicketService : INService
                 }
                 catch (Exception logEx)
                 {
-                    Log.Error(logEx, "Failed to log panel recreation failure");
+                    logger.LogError(logEx, "Failed to log panel recreation failure");
                 }
             }
         }
@@ -1943,12 +1948,12 @@ public class TicketService : INService
             // Update the panel in Discord
             await UpdatePanelComponentsAsync(menu.Panel);
 
-            Log.Information("Deleted select menu {MenuId} from guild {GuildId}", menuId, guild.Id);
+            logger.LogInformation("Deleted select menu {MenuId} from guild {GuildId}", menuId, guild.Id);
             return true;
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Failed to delete select menu {MenuId} from guild {GuildId}", menuId, guild.Id);
+            logger.LogError(ex, "Failed to delete select menu {MenuId} from guild {GuildId}", menuId, guild.Id);
             return false;
         }
     }
@@ -1982,12 +1987,13 @@ public class TicketService : INService
             // Update the panel in Discord
             await UpdatePanelComponentsAsync(option.SelectMenu.Panel);
 
-            Log.Information("Deleted select menu option {OptionId} from guild {GuildId}", optionId, guild.Id);
+            logger.LogInformation("Deleted select menu option {OptionId} from guild {GuildId}", optionId, guild.Id);
             return true;
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Failed to delete select menu option {OptionId} from guild {GuildId}", optionId, guild.Id);
+            logger.LogError(ex, "Failed to delete select menu option {OptionId} from guild {GuildId}", optionId,
+                guild.Id);
             return false;
         }
     }
@@ -2360,7 +2366,7 @@ public class TicketService : INService
     {
         try
         {
-            Log.Information(modalJson);
+            logger.LogInformation(modalJson);
 
             ModalConfiguration modalConfig;
             Dictionary<string, ModalFieldConfig> fields;
@@ -2387,7 +2393,7 @@ public class TicketService : INService
                 };
             }
 
-            Log.Information(JsonSerializer.Serialize(fields));
+            logger.LogInformation(JsonSerializer.Serialize(fields));
 
             // Validate field count
             if (fields.Count > 5)
@@ -2423,12 +2429,12 @@ public class TicketService : INService
         }
         catch (JsonException ex)
         {
-            Log.Error($"Invalid modal configuration format: {ex}");
+            logger.LogError($"Invalid modal configuration format: {ex}");
             await component.RespondAsync(strings.InvalidTicketFormConfig(user.GuildId), ephemeral: true);
         }
         catch (Exception)
         {
-            Log.Error("Error creating modal");
+            logger.LogError("Error creating modal");
             await component.RespondAsync(strings.FailedCreateTicketForm(user.GuildId), ephemeral: true);
         }
     }
@@ -2477,7 +2483,7 @@ public class TicketService : INService
 
             menu.Id = await ctx.InsertWithInt32IdentityAsync(menu);
 
-            Log.Information("Created PanelSelectMenu with ID: {MenuId}", menu.Id);
+            logger.LogInformation("Created PanelSelectMenu with ID: {MenuId}", menu.Id);
 
             var firstOption = new SelectMenuOption
             {
@@ -2500,12 +2506,12 @@ public class TicketService : INService
                 MaxActiveTickets = 1
             };
 
-            Log.Information("Attempting to insert SelectMenuOption with SelectMenuId: {SelectMenuId}",
+            logger.LogInformation("Attempting to insert SelectMenuOption with SelectMenuId: {SelectMenuId}",
                 firstOption.SelectMenuId);
 
             firstOption.Id = await ctx.InsertWithInt32IdentityAsync(firstOption);
 
-            Log.Information("Created SelectMenuOption with ID: {OptionId}", firstOption.Id);
+            logger.LogInformation("Created SelectMenuOption with ID: {OptionId}", firstOption.Id);
 
             var completeMenu = await ctx.PanelSelectMenus
                 .LoadWithAsTable(m => m.SelectMenuOptions)
@@ -2513,7 +2519,7 @@ public class TicketService : INService
 
             if (completeMenu == null)
             {
-                Log.Error("Failed to load complete menu after creation");
+                logger.LogError("Failed to load complete menu after creation");
                 throw new InvalidOperationException("Failed to load created menu");
             }
 
@@ -2524,7 +2530,7 @@ public class TicketService : INService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Failed to add select menu to panel {PanelId}", panel.Id);
+            logger.LogError(ex, "Failed to add select menu to panel {PanelId}", panel.Id);
 
             try
             {
@@ -2537,7 +2543,7 @@ public class TicketService : INService
             }
             catch (Exception cleanupEx)
             {
-                Log.Warning(cleanupEx, "Failed to cleanup partial menu creation");
+                logger.LogWarning(cleanupEx, "Failed to cleanup partial menu creation");
             }
 
             throw;
@@ -2638,11 +2644,11 @@ public class TicketService : INService
                 RenameOnClose = true
             };
 
-            Log.Information("About to save option: Label='{Label}', Value='{Value}', SelectMenuId={SelectMenuId}",
+            logger.LogInformation("About to save option: Label='{Label}', Value='{Value}', SelectMenuId={SelectMenuId}",
                 option.Label, option.Value, option.SelectMenuId);
             option.Id = await ctx.InsertWithInt32IdentityAsync(option);
             var savedOption = await ctx.SelectMenuOptions.FirstOrDefaultAsync(o => o.Id == option.Id);
-            Log.Information("Retrieved saved option: ID={Id}, Label='{Label}', Value='{Value}'",
+            logger.LogInformation("Retrieved saved option: ID={Id}, Label='{Label}', Value='{Value}'",
                 savedOption?.Id, savedOption?.Label ?? "NULL", savedOption?.Value ?? "NULL");
 
 
@@ -2655,7 +2661,7 @@ public class TicketService : INService
         }
         catch (Exception e)
         {
-            Log.Information(e, "ERRRRROR");
+            logger.LogInformation(e, "ERRRRROR");
             return null;
         }
     }
@@ -2811,7 +2817,7 @@ public class TicketService : INService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error closing ticket {TicketId}", ticket.Id);
+            logger.LogError(ex, "Error closing ticket {TicketId}", ticket.Id);
             return false;
         }
     }
@@ -2852,7 +2858,7 @@ public class TicketService : INService
                 }
                 catch (Exception ex)
                 {
-                    Log.Warning(ex, "Failed to rename closed ticket channel {ChannelId}", channel.Id);
+                    logger.LogWarning(ex, "Failed to rename closed ticket channel {ChannelId}", channel.Id);
                 }
             }
 
@@ -2869,7 +2875,7 @@ public class TicketService : INService
                 }
                 catch (Exception ex)
                 {
-                    Log.Warning(ex, "Failed to remove creator permissions from ticket {TicketId}", ticket.Id);
+                    logger.LogWarning(ex, "Failed to remove creator permissions from ticket {TicketId}", ticket.Id);
                 }
             }
 
@@ -2911,7 +2917,7 @@ public class TicketService : INService
                 }
                 catch (Exception ex)
                 {
-                    Log.Warning(ex, "Failed to lock ticket channel {ChannelId}", channel.Id);
+                    logger.LogWarning(ex, "Failed to lock ticket channel {ChannelId}", channel.Id);
                 }
             }
 
@@ -2927,7 +2933,7 @@ public class TicketService : INService
                     }
                     catch (Exception ex)
                     {
-                        Log.Warning(ex, "Failed to move ticket to archive category");
+                        logger.LogWarning(ex, "Failed to move ticket to archive category");
                     }
                 }
             }
@@ -2950,7 +2956,7 @@ public class TicketService : INService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error during channel cleanup for ticket {TicketId}", ticket.Id);
+            logger.LogError(ex, "Error during channel cleanup for ticket {TicketId}", ticket.Id);
         }
     }
 
@@ -2975,7 +2981,7 @@ public class TicketService : INService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Failed to schedule ticket deletion for ticket {TicketId}", ticket.Id);
+            logger.LogError(ex, "Failed to schedule ticket deletion for ticket {TicketId}", ticket.Id);
         }
     }
 
@@ -3002,7 +3008,7 @@ public class TicketService : INService
                 if (channel != null)
                 {
                     await channel.DeleteAsync();
-                    Log.Information("Deleted scheduled ticket channel {ChannelId}", deletion.ChannelId);
+                    logger.LogInformation("Deleted scheduled ticket channel {ChannelId}", deletion.ChannelId);
                 }
 
                 // Mark ticket as deleted
@@ -3020,7 +3026,7 @@ public class TicketService : INService
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Failed to process scheduled deletion {DeletionId}", deletion.Id);
+                logger.LogError(ex, "Failed to process scheduled deletion {DeletionId}", deletion.Id);
 
                 // Mark as failed and increment retry count
                 await ctx.ScheduledTicketDeletions
@@ -3078,7 +3084,7 @@ public class TicketService : INService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Failed to generate transcript for ticket {TicketId}", ticket.Id);
+            logger.LogError(ex, "Failed to generate transcript for ticket {TicketId}", ticket.Id);
         }
     }
 
@@ -3148,7 +3154,7 @@ public class TicketService : INService
                     }
                     catch (Exception ex)
                     {
-                        Log.Warning(ex, "Failed to send DM notification to ticket creator");
+                        logger.LogWarning(ex, "Failed to send DM notification to ticket creator");
                     }
                 }
             }
@@ -3157,7 +3163,7 @@ public class TicketService : INService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error claiming ticket {TicketId}", ticket.Id);
+            logger.LogError(ex, "Error claiming ticket {TicketId}", ticket.Id);
             return false;
         }
     }
@@ -3224,7 +3230,7 @@ public class TicketService : INService
                     }
                     catch (Exception ex)
                     {
-                        Log.Warning(ex, "Failed to send DM notification for ticket unclaim");
+                        logger.LogWarning(ex, "Failed to send DM notification for ticket unclaim");
                     }
                 }
             }
@@ -3233,7 +3239,7 @@ public class TicketService : INService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error unclaiming ticket {TicketId}", ticket.Id);
+            logger.LogError(ex, "Error unclaiming ticket {TicketId}", ticket.Id);
             return false;
         }
     }
@@ -3301,7 +3307,7 @@ public class TicketService : INService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error adding note to ticket {TicketId}", ticket.Id);
+            logger.LogError(ex, "Error adding note to ticket {TicketId}", ticket.Id);
             return false;
         }
     }
@@ -3391,7 +3397,7 @@ public class TicketService : INService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error editing note {NoteId}", noteId);
+            logger.LogError(ex, "Error editing note {NoteId}", noteId);
             return false;
         }
     }
@@ -3439,7 +3445,7 @@ public class TicketService : INService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error deleting note {NoteId}", noteId);
+            logger.LogError(ex, "Error deleting note {NoteId}", noteId);
             return false;
         }
     }
@@ -3516,7 +3522,7 @@ public class TicketService : INService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error linking ticket {TicketId} to case {CaseId}", ticketId, caseId);
+            logger.LogError(ex, "Error linking ticket {TicketId} to case {CaseId}", ticketId, caseId);
             return false;
         }
     }
@@ -3546,7 +3552,7 @@ public class TicketService : INService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error unlinking ticket {TicketId} from case", ticketId);
+            logger.LogError(ex, "Error unlinking ticket {TicketId} from case", ticketId);
             return false;
         }
     }
@@ -3791,7 +3797,7 @@ public class TicketService : INService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error creating priority {PriorityId} for guild {GuildId}", id, guildId);
+            logger.LogError(ex, "Error creating priority {PriorityId} for guild {GuildId}", id, guildId);
             return false;
         }
     }
@@ -3830,7 +3836,7 @@ public class TicketService : INService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error deleting priority {PriorityId} for guild {GuildId}", id, guildId);
+            logger.LogError(ex, "Error deleting priority {PriorityId} for guild {GuildId}", id, guildId);
             return false;
         }
     }
@@ -3902,7 +3908,7 @@ public class TicketService : INService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error setting priority for ticket {TicketId}", ticket.Id);
+            logger.LogError(ex, "Error setting priority for ticket {TicketId}", ticket.Id);
             return false;
         }
     }
@@ -3941,7 +3947,7 @@ public class TicketService : INService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error creating tag {TagId} for guild {GuildId}", id, guildId);
+            logger.LogError(ex, "Error creating tag {TagId} for guild {GuildId}", id, guildId);
             return false;
         }
     }
@@ -3980,7 +3986,7 @@ public class TicketService : INService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error deleting tag {TagId} for guild {GuildId}", id, guildId);
+            logger.LogError(ex, "Error deleting tag {TagId} for guild {GuildId}", id, guildId);
             return false;
         }
     }
@@ -4046,7 +4052,7 @@ public class TicketService : INService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error removing tags from ticket {TicketId}", ticket.Id);
+            logger.LogError(ex, "Error removing tags from ticket {TicketId}", ticket.Id);
             return false;
         }
     }
@@ -4134,7 +4140,7 @@ public class TicketService : INService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error removing tags from ticket {TicketId}", ticket.Id);
+            logger.LogError(ex, "Error removing tags from ticket {TicketId}", ticket.Id);
             return false;
         }
     }
@@ -4191,7 +4197,7 @@ public class TicketService : INService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error blacklisting user {UserId} in guild {GuildId}", userId, guild.Id);
+            logger.LogError(ex, "Error blacklisting user {UserId} in guild {GuildId}", userId, guild.Id);
             return false;
         }
     }
@@ -4237,7 +4243,7 @@ public class TicketService : INService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error unblacklisting user {UserId} in guild {GuildId}", userId, guild.Id);
+            logger.LogError(ex, "Error unblacklisting user {UserId} in guild {GuildId}", userId, guild.Id);
             return false;
         }
     }
@@ -4317,7 +4323,7 @@ public class TicketService : INService
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Failed to close inactive ticket {TicketId}", ticket.Id);
+                logger.LogError(ex, "Failed to close inactive ticket {TicketId}", ticket.Id);
                 failed++;
             }
         }
@@ -4371,7 +4377,7 @@ public class TicketService : INService
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Failed to move ticket channel {ChannelId}", channel.Id);
+                logger.LogError(ex, "Failed to move ticket channel {ChannelId}", channel.Id);
                 failed++;
             }
         }
@@ -4419,7 +4425,7 @@ public class TicketService : INService
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Failed to add role to ticket {TicketId}", ticket.Id);
+                logger.LogError(ex, "Failed to add role to ticket {TicketId}", ticket.Id);
                 failed++;
             }
         }
@@ -4472,7 +4478,7 @@ public class TicketService : INService
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Failed to transfer ticket {TicketId}", ticket.Id);
+                logger.LogError(ex, "Failed to transfer ticket {TicketId}", ticket.Id);
                 failed++;
             }
         }
@@ -4519,7 +4525,7 @@ public class TicketService : INService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Failed to update panel {PanelId}", panelId);
+            logger.LogError(ex, "Failed to update panel {PanelId}", panelId);
             return false;
         }
     }
@@ -4556,7 +4562,7 @@ public class TicketService : INService
                 }
                 catch (Exception ex)
                 {
-                    Log.Warning(ex, "Failed to delete old panel message");
+                    logger.LogWarning(ex, "Failed to delete old panel message");
                 }
             }
 
@@ -4625,7 +4631,7 @@ public class TicketService : INService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Failed to move panel {PanelId}", panelId);
+            logger.LogError(ex, "Failed to move panel {PanelId}", panelId);
             return false;
         }
     }
@@ -4784,7 +4790,7 @@ public class TicketService : INService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Failed to duplicate panel {PanelId}", panelId);
+            logger.LogError(ex, "Failed to duplicate panel {PanelId}", panelId);
             return null;
         }
     }
@@ -4881,7 +4887,7 @@ public class TicketService : INService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Failed to reorder buttons for panel {PanelId}", panelId);
+            logger.LogError(ex, "Failed to reorder buttons for panel {PanelId}", panelId);
             return false;
         }
     }
@@ -4933,7 +4939,7 @@ public class TicketService : INService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Failed to update response time for button {ButtonId}", buttonId);
+            logger.LogError(ex, "Failed to update response time for button {ButtonId}", buttonId);
             return false;
         }
     }
@@ -5032,7 +5038,7 @@ public class TicketService : INService
                         break;
 
                     default:
-                        Log.Warning("Unknown button setting: {SettingKey}", setting.Key);
+                        logger.LogWarning("Unknown button setting: {SettingKey}", setting.Key);
                         break;
                 }
             }
@@ -5047,7 +5053,7 @@ public class TicketService : INService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Failed to update settings for button {ButtonId}", buttonId);
+            logger.LogError(ex, "Failed to update settings for button {ButtonId}", buttonId);
             return false;
         }
     }
@@ -5098,7 +5104,7 @@ public class TicketService : INService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Failed to delete button {ButtonId} from guild {GuildId}", buttonId, guild.Id);
+            logger.LogError(ex, "Failed to delete button {ButtonId} from guild {GuildId}", buttonId, guild.Id);
             return false;
         }
     }

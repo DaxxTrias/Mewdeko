@@ -2,7 +2,7 @@ adsarm:
   desc: Toggles the auto delete of server advertisement messages.
   args:
     - ''
-  params: []
+  params: [ ]
 asar:
   desc: Adds the specified role to the auto-self-assignable role list.
   args:
@@ -54,12 +54,12 @@ lsar:
   desc: Lists the auto-self-assignable roles configured for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 togglexclsar:
   desc: Toggles the exclusivity of auto-self-assignable roles.
   args:
     - ''
-  params: []
+  params: [ ]
 rolelevelreq:
   desc: Sets the level requirement for an auto-self-assignable role.
   args:
@@ -99,7 +99,7 @@ adsarm_noparams:
   desc: Toggles the auto delete of server advertisement messages.
   args:
     - ''
-  params: []
+  params: [ ]
 asar_IRole:
   desc: Execute the Asar command
   args:
@@ -131,12 +131,12 @@ lsar_noparams:
   desc: Lists the auto-self-assignable roles configured for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 togglexclsar_noparams:
   desc: Toggles the exclusivity of auto-self-assignable roles.
   args:
     - ''
-  params: []
+  params: [ ]
 rolelevelreq_int_IRole:
   desc: Sets the level requirement for an auto-self-assignable role.
   args:
@@ -160,7 +160,7 @@ adsarm_noparams_1:
   desc: Module for managing self-assigned roles.
   args:
     - ''
-  params: []
+  params: [ ]
 asar_IRole_1:
   desc: Adds the specified role to the auto-self-assignable role list.
   args:
@@ -192,12 +192,12 @@ lsar_noparams_1:
   desc: Lists the auto-self-assignable roles configured for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 togglexclsar_noparams_1:
   desc: Toggles the exclusivity of auto-self-assignable roles.
   args:
     - ''
-  params: []
+  params: [ ]
 rolelevelreq_int_IRole_1:
   desc: Sets the level requirement for an auto-self-assignable role.
   args:
@@ -221,7 +221,7 @@ adsarm_noparams_2:
   desc: Toggles the auto delete of server advertisement messages.
   args:
     - ''
-  params: []
+  params: [ ]
 asar_IRole_2:
   desc: Execute the Asar command
   args:
@@ -253,12 +253,12 @@ lsar_noparams_2:
   desc: Lists the auto-self-assignable roles configured for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 togglexclsar_noparams_2:
   desc: Toggles the exclusivity of auto-self-assignable roles.
   args:
     - ''
-  params: []
+  params: [ ]
 rolelevelreq_int_IRole_2:
   desc: Sets the level requirement for an auto-self-assignable role.
   args:
@@ -282,12 +282,12 @@ boostmsg:
   desc: Displays the current boost message.
   args:
     - ''
-  params: []
+  params: [ ]
 boost:
   desc: Enables or disables boost messages.
   args:
     - ''
-  params: []
+  params: [ ]
 boostdel:
   desc: Sets the timer for deleting boost messages.
   args:
@@ -339,12 +339,12 @@ greetdm:
   desc: Toggles the sending of greeting messages via direct message.
   args:
     - ''
-  params: []
+  params: [ ]
 greetdmmsg:
   desc: Displays the current direct message greeting message.
   args:
     - ''
-  params: []
+  params: [ ]
 greetdmmsg_=:
   desc: Sets the direct message greeting message to the specified text.
   args:
@@ -355,12 +355,12 @@ bye:
   desc: Toggles the sending of a bye message.
   args:
     - ''
-  params: []
+  params: [ ]
 byemsg:
   desc: Displays the current bye message.
   args:
     - ''
-  params: []
+  params: [ ]
 byemsg_string:
   desc: Sets the bye message to the specified text.
   args:
@@ -399,12 +399,12 @@ boostmsg_noparams:
   desc: Displays the current boost message.
   args:
     - ''
-  params: []
+  params: [ ]
 boost_noparams:
   desc: Enables or disables boost messages.
   args:
     - ''
-  params: []
+  params: [ ]
 boostdel_=:
   desc: Sets the timer for deleting boost messages.
   args:
@@ -436,12 +436,12 @@ greetdm_noparams:
   desc: Toggles the sending of greeting messages via direct message.
   args:
     - ''
-  params: []
+  params: [ ]
 greetdmmsg_noparams:
   desc: Displays the current direct message greeting message.
   args:
     - ''
-  params: []
+  params: [ ]
 greetdmmsg_=_1:
   desc: Sets the direct message greeting message to the specified text.
   args:
@@ -452,12 +452,12 @@ bye_noparams:
   desc: Toggles the sending of a bye message.
   args:
     - ''
-  params: []
+  params: [ ]
 byemsg_noparams:
   desc: Displays the current bye message.
   args:
     - ''
-  params: []
+  params: [ ]
 byemsg_string_1:
   desc: Sets the bye message to the specified text.
   args:
@@ -492,12 +492,12 @@ boostmsg_noparams_1:
   desc: Handles the greet and bye messages as well as boost settings bfor the server.
   args:
     - ''
-  params: []
+  params: [ ]
 boost_noparams_1:
   desc: Enables or disables boost messages.
   args:
     - ''
-  params: []
+  params: [ ]
 boostdel_=_1:
   desc: Sets the timer for deleting boost messages.
   args:
@@ -529,12 +529,12 @@ greetdm_noparams_1:
   desc: Toggles the sending of greeting messages via direct message.
   args:
     - ''
-  params: []
+  params: [ ]
 greetdmmsg_noparams_1:
   desc: Displays the current direct message greeting message.
   args:
     - ''
-  params: []
+  params: [ ]
 greetdmmsg_=_2:
   desc: Sets the direct message greeting message to the specified text.
   args:
@@ -545,12 +545,12 @@ bye_noparams_1:
   desc: Toggles the sending of a bye message.
   args:
     - ''
-  params: []
+  params: [ ]
 byemsg_noparams_1:
   desc: Displays the current bye message.
   args:
     - ''
-  params: []
+  params: [ ]
 byemsg_string_2:
   desc: Sets the bye message to the specified text.
   args:
@@ -585,12 +585,12 @@ boostmsg_noparams_2:
   desc: Displays the current boost message.
   args:
     - ''
-  params: []
+  params: [ ]
 boost_noparams_2:
   desc: Enables or disables boost messages.
   args:
     - ''
-  params: []
+  params: [ ]
 boostdel_=_2:
   desc: Sets the timer for deleting boost messages.
   args:
@@ -622,12 +622,12 @@ greetdm_noparams_2:
   desc: Toggles the sending of greeting messages via direct message.
   args:
     - ''
-  params: []
+  params: [ ]
 greetdmmsg_noparams_2:
   desc: Displays the current direct message greeting message.
   args:
     - ''
-  params: []
+  params: [ ]
 greetdmmsg_=_3:
   desc: Sets the direct message greeting message to the specified text.
   args:
@@ -638,12 +638,12 @@ bye_noparams_2:
   desc: Toggles the sending of a bye message.
   args:
     - ''
-  params: []
+  params: [ ]
 byemsg_noparams_2:
   desc: Displays the current bye message.
   args:
     - ''
-  params: []
+  params: [ ]
 byemsg_string_3:
   desc: Sets the bye message to the specified text.
   args:
@@ -678,12 +678,12 @@ timezones:
   desc: List all available time zones.
   args:
     - ''
-  params: []
+  params: [ ]
 timezone:
   desc: Shows the time zone of the guild if set.
   args:
     - ''
-  params: []
+  params: [ ]
 timezone_string:
   desc: Gets info about a time zone.
   args:
@@ -698,12 +698,12 @@ timezones_noparams:
   desc: List all available time zones.
   args:
     - ''
-  params: []
+  params: [ ]
 timezone_noparams:
   desc: Shows the time zone of the guild if set.
   args:
     - ''
-  params: []
+  params: [ ]
 timezone_string_1:
   desc: Gets info about a time zone.
   args:
@@ -714,12 +714,12 @@ timezones_noparams_1:
   desc: Handles commands related to time zones.
   args:
     - ''
-  params: []
+  params: [ ]
 timezone_noparams_1:
   desc: Shows the time zone of the guild if set.
   args:
     - ''
-  params: []
+  params: [ ]
 timezone_string_2:
   desc: Gets info about a time zone.
   args:
@@ -730,12 +730,12 @@ timezones_noparams_2:
   desc: Handles commands related to time zones.
   args:
     - ''
-  params: []
+  params: [ ]
 timezone_noparams_2:
   desc: Shows the time zone of the guild if set.
   args:
     - ''
-  params: []
+  params: [ ]
 timezone_string_3:
   desc: Gets info about a time zone.
   args:
@@ -774,7 +774,7 @@ vcrolelist:
   desc: List all voice channel roles for this guild.
   args:
     - ''
-  params: []
+  params: [ ]
 vcrolerm_ulong:
   desc: Unbinds a role from a voice channel.
   args:
@@ -799,7 +799,7 @@ vcrolelist_noparams:
   desc: List all voice channel roles for this guild.
   args:
     - ''
-  params: []
+  params: [ ]
 vcrolerm_ulong_1:
   desc: Module for managing voice channel roles.
   args:
@@ -824,7 +824,7 @@ vcrolelist_noparams_1:
   desc: List all voice channel roles for this guild.
   args:
     - ''
-  params: []
+  params: [ ]
 vcrolerm_ulong_2:
   desc: Module for managing voice channel roles.
   args:
@@ -849,7 +849,7 @@ vcrolelist_noparams_2:
   desc: List all voice channel roles for this guild.
   args:
     - ''
-  params: []
+  params: [ ]
 banbyhash:
   desc: Enumerates different variations of the term "channel".
   args:
@@ -864,12 +864,12 @@ guildstatsoptout:
   desc: Allows you to opt the entire guild out of stats tracking.
   args:
     - ''
-  params: []
+  params: [ ]
 deleteguildstatsdata:
   desc: Allows you to delete all stats data for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 setnick:
   desc: Lets you set the nickname for a mentioned user. If no user is mentioned it defaults to setting a nickname for the bot.
   args:
@@ -967,7 +967,7 @@ staffroledisable:
   desc: Disables the role assigned to staff members.
   args:
     - ''
-  params: []
+  params: [ ]
 delmsgoncmd:
   desc: Displays the status of deleting messages on command execution.
   args:
@@ -1107,7 +1107,7 @@ nsfwtoggle:
   desc: Toggles the NSFW setting of the current text channel.
   args:
     - ''
-  params: []
+  params: [ ]
 edit:
   desc: Edits a message in the specified text channel.
   args:
@@ -1179,12 +1179,12 @@ guildstatsoptout_noparams:
   desc: Allows you to opt the entire guild out of stats tracking.
   args:
     - ''
-  params: []
+  params: [ ]
 deleteguildstatsdata_noparams:
   desc: Allows you to delete all stats data for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 setnick_IGuildUser_=:
   desc: Lets you set the nickname for a mentioned user. If no user is mentioned it defaults to setting a nickname for the bot.
   args:
@@ -1254,7 +1254,7 @@ staffroledisable_noparams:
   desc: Disables the role assigned to staff members.
   args:
     - ''
-  params: []
+  params: [ ]
 delmsgoncmd_List:
   desc: Displays the status of deleting messages on command execution.
   args:
@@ -1350,7 +1350,7 @@ nsfwtoggle_noparams:
   desc: Toggles the NSFW setting of the current text channel.
   args:
     - ''
-  params: []
+  params: [ ]
 edit_ITextChannel_ulong_string:
   desc: Execute the Edit command
   args:
@@ -1406,12 +1406,12 @@ guildstatsoptout_noparams_1:
   desc: Allows you to opt the entire guild out of stats tracking.
   args:
     - ''
-  params: []
+  params: [ ]
 deleteguildstatsdata_noparams_1:
   desc: Allows you to delete all stats data for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 setnick_IGuildUser_=_1:
   desc: Lets you set the nickname for a mentioned user. If no user is mentioned it defaults to setting a nickname for the bot.
   args:
@@ -1481,7 +1481,7 @@ staffroledisable_noparams_1:
   desc: Disables the role assigned to staff members.
   args:
     - ''
-  params: []
+  params: [ ]
 delmsgoncmd_List_1:
   desc: Displays the status of deleting messages on command execution.
   args:
@@ -1577,7 +1577,7 @@ nsfwtoggle_noparams_1:
   desc: Toggles the NSFW setting of the current text channel.
   args:
     - ''
-  params: []
+  params: [ ]
 edit_ITextChannel_ulong_string_1:
   desc: Edits a message in the specified text channel.
   args:
@@ -1621,12 +1621,12 @@ guildstatsoptout_noparams_2:
   desc: Allows you to opt the entire guild out of stats tracking.
   args:
     - ''
-  params: []
+  params: [ ]
 deleteguildstatsdata_noparams_2:
   desc: Allows you to delete all stats data for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 setnick_IGuildUser_=_2:
   desc: Lets you set the nickname for a mentioned user. If no user is mentioned it defaults to setting a nickname for the bot.
   args:
@@ -1696,7 +1696,7 @@ staffroledisable_noparams_2:
   desc: Disables the role assigned to staff members.
   args:
     - ''
-  params: []
+  params: [ ]
 delmsgoncmd_List_2:
   desc: Displays the status of deleting messages on command execution.
   args:
@@ -1792,7 +1792,7 @@ nsfwtoggle_noparams_2:
   desc: Toggles the NSFW setting of the current text channel.
   args:
     - ''
-  params: []
+  params: [ ]
 edit_ITextChannel_ulong_string_2:
   desc: Execute the Edit command
   args:
@@ -1840,7 +1840,7 @@ autoassignrole_noparams:
   desc: Displays the list of roles eligible for auto-assigning when users join the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 autoassignbotrole:
   desc: Enables or disables auto-assigning the specified role to bots when they join the guild.
   args:
@@ -1851,7 +1851,7 @@ autoassignbotrole_noparams:
   desc: Displays the list of roles eligible for auto-assigning to bots when they join the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 autoassignrole_IRole:
   desc: Enables or disables auto-assigning the specified role to users when they join the guild.
   args:
@@ -1862,7 +1862,7 @@ autoassignrole_noparams_1:
   desc: Displays the list of roles eligible for auto-assigning when users join the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 autoassignbotrole_IRole:
   desc: Enables or disables auto-assigning the specified role to bots when they join the guild.
   args:
@@ -1873,7 +1873,7 @@ autoassignbotrole_noparams_1:
   desc: Displays the list of roles eligible for auto-assigning to bots when they join the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 autoassignrole_IRole_1:
   desc: Commands for managing auto-assign roles.
   args:
@@ -1884,7 +1884,7 @@ autoassignrole_noparams_2:
   desc: Displays the list of roles eligible for auto-assigning when users join the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 autoassignbotrole_IRole_1:
   desc: Enables or disables auto-assigning the specified role to bots when they join the guild.
   args:
@@ -1895,7 +1895,7 @@ autoassignbotrole_noparams_2:
   desc: Displays the list of roles eligible for auto-assigning to bots when they join the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 autoassignrole_IRole_2:
   desc: Enables or disables auto-assigning the specified role to users when they join the guild.
   args:
@@ -1906,7 +1906,7 @@ autoassignrole_noparams_3:
   desc: Displays the list of roles eligible for auto-assigning when users join the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 autoassignbotrole_IRole_2:
   desc: Enables or disables auto-assigning the specified role to bots when they join the guild.
   args:
@@ -1917,7 +1917,7 @@ autoassignbotrole_noparams_3:
   desc: Displays the list of roles eligible for auto-assigning to bots when they join the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 autobanroleadd:
   desc: Adds a role to the list of AutoBanRoles.
   args:
@@ -1990,12 +1990,12 @@ discordpermoverridereset:
   desc: Resets all command permission overrides in the current guild.
   args:
     - ''
-  params: []
+  params: [ ]
 discordpermoverridelist:
   desc: Lists all command permission overrides in the current guild.
   args:
     - ''
-  params: []
+  params: [ ]
 discordpermoverride_CommandOrCrInfo_GuildPermission[]:
   desc: Execute the DiscordPermOverride command
   args:
@@ -2008,12 +2008,12 @@ discordpermoverridereset_noparams:
   desc: Resets all command permission overrides in the current guild.
   args:
     - ''
-  params: []
+  params: [ ]
 discordpermoverridelist_noparams:
   desc: Lists all command permission overrides in the current guild.
   args:
     - ''
-  params: []
+  params: [ ]
 discordpermoverride_CommandOrCrInfo_GuildPermission[]_1:
   desc: Module for managing Discord permission overrides. This module allows administrators to override the required permissions for a command.
   args:
@@ -2026,12 +2026,12 @@ discordpermoverridereset_noparams_1:
   desc: Resets all command permission overrides in the current guild.
   args:
     - ''
-  params: []
+  params: [ ]
 discordpermoverridelist_noparams_1:
   desc: Lists all command permission overrides in the current guild.
   args:
     - ''
-  params: []
+  params: [ ]
 discordpermoverride_CommandOrCrInfo_GuildPermission[]_2:
   desc: Execute the DiscordPermOverride command
   args:
@@ -2044,32 +2044,32 @@ discordpermoverridereset_noparams_2:
   desc: Resets all command permission overrides in the current guild.
   args:
     - ''
-  params: []
+  params: [ ]
 discordpermoverridelist_noparams_2:
   desc: Lists all command permission overrides in the current guild.
   args:
     - ''
-  params: []
+  params: [ ]
 gamevoicechannel:
   desc: Toggles the current voice channel as the game voice channel for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 gamevoicechannel_noparams:
   desc: Toggles the current voice channel as the game voice channel for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 gamevoicechannel_noparams_1:
   desc: The module for managing game voice channels.
   args:
     - ''
-  params: []
+  params: [ ]
 gamevoicechannel_noparams_2:
   desc: Toggles the current voice channel as the game voice channel for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 languageset:
   desc: Sets the language for the current guild.
   args:
@@ -2084,7 +2084,7 @@ languagesetdefault:
   desc: Displays the default language for the bot.
   args:
     - ''
-  params: []
+  params: [ ]
 languagesetdefault_string:
   desc: Sets the default language for the bot.
   args:
@@ -2095,7 +2095,7 @@ languageslist:
   desc: Lists all supported languages along with their codes.
   args:
     - ''
-  params: []
+  params: [ ]
 languageset_string:
   desc: Sets the language for the current guild.
   args:
@@ -2106,7 +2106,7 @@ languagesetdefault_noparams:
   desc: Displays the default language for the bot.
   args:
     - ''
-  params: []
+  params: [ ]
 languagesetdefault_string_1:
   desc: Sets the default language for the bot.
   args:
@@ -2117,7 +2117,7 @@ languageslist_noparams:
   desc: Lists all supported languages along with their codes.
   args:
     - ''
-  params: []
+  params: [ ]
 languageset_string_1:
   desc: Module for managing the bot's language settings.
   args:
@@ -2128,7 +2128,7 @@ languagesetdefault_noparams_1:
   desc: Displays the default language for the bot.
   args:
     - ''
-  params: []
+  params: [ ]
 languagesetdefault_string_2:
   desc: Sets the default language for the bot.
   args:
@@ -2139,7 +2139,7 @@ languageslist_noparams_1:
   desc: Lists all supported languages along with their codes.
   args:
     - ''
-  params: []
+  params: [ ]
 languageset_string_2:
   desc: Sets the language for the current guild.
   args:
@@ -2150,7 +2150,7 @@ languagesetdefault_noparams_2:
   desc: Displays the default language for the bot.
   args:
     - ''
-  params: []
+  params: [ ]
 languagesetdefault_string_3:
   desc: Sets the default language for the bot.
   args:
@@ -2161,12 +2161,12 @@ languageslist_noparams_2:
   desc: Lists all supported languages along with their codes.
   args:
     - ''
-  params: []
+  params: [ ]
 prefixcommand:
   desc: Enumerates different variations of the term "set". Used for idiots that try to do .prefix set !.
   args:
     - ''
-  params: []
+  params: [ ]
 prefixcommand_Set_string:
   desc: Sets the command prefix for the guild.
   args:
@@ -2193,7 +2193,7 @@ prefixcommand_noparams:
   desc: Represents the term "set".
   args:
     - ''
-  params: []
+  params: [ ]
 prefixcommand_Set_string_1:
   desc: Sets the command prefix for the guild.
   args:
@@ -2212,7 +2212,7 @@ prefixcommand_noparams_1:
   desc: Module for managing the bot's prefix.
   args:
     - ''
-  params: []
+  params: [ ]
 prefixcommand_Set_string_2:
   desc: Sets the command prefix for the guild.
   args:
@@ -2231,7 +2231,7 @@ prefixcommand_noparams_2:
   desc: Represents the term "set".
   args:
     - ''
-  params: []
+  params: [ ]
 prefixcommand_Set_string_3:
   desc: Sets the command prefix for the guild.
   args:
@@ -2250,7 +2250,7 @@ antialt:
   desc: Disables the Anti-Alt protection for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 antialt_StoopidTime_PunishmentAction_=:
   desc: Configures the Anti-Alt protection for the guild, setting the minimum account age and punishment action.
   args:
@@ -2284,7 +2284,7 @@ antiraid:
   desc: Disables the Anti-Raid protection for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 antiraid_int_int_PunishmentAction_StoopidTime:
   desc: Configures the Anti-Raid protection for the guild, setting the user threshold, detection time window, punishment action, and optional punishment duration.
   args:
@@ -2322,7 +2322,7 @@ antispam:
   desc: Disables the Anti-Spam protection for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 antispam_int_PunishmentAction_StoopidTime:
   desc: Configures the Anti-Spam protection for the guild, setting the message count threshold, punishment action, and optional punishment duration.
   args:
@@ -2366,7 +2366,7 @@ antimassmention:
   desc: Configures the Anti-Spam protection for the guild, setting the message count threshold, punishment action, and optional punishment duration.
   args:
     - ''
-  params: []
+  params: [ ]
 antimassmention_int_int_int_bool_PunishmentAction_=:
   desc: Configures the Anti-Mass-Mention protection for the guild, setting the mention threshold for a single message, the time window for mention tracking, the maximum allowed mentions in the time window, and the punishment action.
   args:
@@ -2418,7 +2418,7 @@ antialt_noparams:
   desc: Disables the Anti-Alt protection for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 antialt_StoopidTime_PunishmentAction_=_1:
   desc: Execute the AntiAlt command
   args:
@@ -2440,7 +2440,7 @@ antiraid_noparams:
   desc: Disables the Anti-Raid protection for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 antiraid_int_int_PunishmentAction_StoopidTime_1:
   desc: Execute the AntiRaid command
   args:
@@ -2462,7 +2462,7 @@ antispam_noparams:
   desc: Disables the Anti-Spam protection for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 antispam_int_PunishmentAction_StoopidTime_1:
   desc: Execute the AntiSpam command
   args:
@@ -2494,7 +2494,7 @@ antimassmention_noparams:
   desc: Disables the Anti-Mass-Mention protection for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 antimassmention_int_int_int_bool_PunishmentAction_=_1:
   desc: Execute the AntiMassMention command
   args:
@@ -2522,7 +2522,7 @@ antialt_noparams_1:
   desc: Commands for managing the Anti-Alt, Anti-Raid, and Anti-Spam protection settings.
   args:
     - ''
-  params: []
+  params: [ ]
 antialt_StoopidTime_PunishmentAction_=_2:
   desc: Configures the Anti-Alt protection for the guild, setting the minimum account age and punishment action.
   args:
@@ -2544,7 +2544,7 @@ antiraid_noparams_1:
   desc: Disables the Anti-Raid protection for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 antiraid_int_int_PunishmentAction_StoopidTime_2:
   desc: Configures the Anti-Raid protection for the guild, setting the user threshold, detection time window, punishment action, and optional punishment duration.
   args:
@@ -2566,7 +2566,7 @@ antispam_noparams_1:
   desc: Disables the Anti-Spam protection for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 antispam_int_PunishmentAction_StoopidTime_2:
   desc: Configures the Anti-Spam protection for the guild, setting the message count threshold, punishment action, and optional punishment duration.
   args:
@@ -2594,7 +2594,7 @@ antimassmention_noparams_1:
   desc: Configures the Anti-Spam protection for the guild, setting the message count threshold, punishment action, and optional punishment duration.
   args:
     - ''
-  params: []
+  params: [ ]
 antimassmention_int_int_int_bool_PunishmentAction_=_2:
   desc: Configures the Anti-Mass-Mention protection for the guild, setting the mention threshold for a single message, the time window for mention tracking, the maximum allowed mentions in the time window, and the punishment action.
   args:
@@ -2622,7 +2622,7 @@ antialt_noparams_2:
   desc: Commands for managing the Anti-Alt, Anti-Raid, and Anti-Spam protection settings.
   args:
     - ''
-  params: []
+  params: [ ]
 antialt_StoopidTime_PunishmentAction_=_3:
   desc: Execute the AntiAlt command
   args:
@@ -2644,7 +2644,7 @@ antiraid_noparams_2:
   desc: Disables the Anti-Raid protection for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 antiraid_int_int_PunishmentAction_StoopidTime_3:
   desc: Execute the AntiRaid command
   args:
@@ -2666,7 +2666,7 @@ antispam_noparams_2:
   desc: Disables the Anti-Spam protection for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 antispam_int_PunishmentAction_StoopidTime_3:
   desc: Execute the AntiSpam command
   args:
@@ -2694,7 +2694,7 @@ antimassmention_noparams_2:
   desc: Disables the Anti-Mass-Mention protection for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 antimassmention_int_int_int_bool_PunishmentAction_=_3:
   desc: Execute the AntiMassMention command
   args:
@@ -2785,7 +2785,7 @@ reactionroleslist:
   desc: Displays a list of reaction roles configured in the server.
   args:
     - ''
-  params: []
+  params: [ ]
 reactionrolesremove:
   desc: Removes a reaction role based on its index.
   args:
@@ -2963,7 +2963,7 @@ reactionroleslist_noparams:
   desc: Displays a list of reaction roles configured in the server.
   args:
     - ''
-  params: []
+  params: [ ]
 reactionrolesremove_int:
   desc: Removes a reaction role based on its index.
   args:
@@ -3085,7 +3085,7 @@ reactionroleslist_noparams_1:
   desc: Displays a list of reaction roles configured in the server.
   args:
     - ''
-  params: []
+  params: [ ]
 reactionrolesremove_int_1:
   desc: Removes a reaction role based on its index.
   args:
@@ -3207,7 +3207,7 @@ reactionroleslist_noparams_2:
   desc: Displays a list of reaction roles configured in the server.
   args:
     - ''
-  params: []
+  params: [ ]
 reactionrolesremove_int_2:
   desc: Removes a reaction role based on its index.
   args:
@@ -3322,7 +3322,7 @@ logevents:
   desc: Displays the current logging events configuration for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 log_LogType_=:
   desc: Sets the logging channel for a specific event type.
   args:
@@ -3365,7 +3365,7 @@ logevents_noparams:
   desc: Displays the current logging events configuration for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 log_LogType_=_1:
   desc: Execute the Log command
   args:
@@ -3404,7 +3404,7 @@ logevents_noparams_1:
   desc: Displays the current logging events configuration for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 log_LogType_=_2:
   desc: Sets the logging channel for a specific event type.
   args:
@@ -3443,7 +3443,7 @@ logevents_noparams_2:
   desc: Displays the current logging events configuration for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 log_LogType_=_3:
   desc: Execute the Log command
   args:
@@ -3468,7 +3468,7 @@ afkdel:
   desc: Displays the current auto-deletion duration for AFK messages.
   args:
     - ''
-  params: []
+  params: [ ]
 afkdel_int:
   desc: Sets the auto-deletion duration for AFK messages.
   args:
@@ -3508,7 +3508,7 @@ getactiveafks:
   desc: Displays a list of active users who are currently AFK.
   args:
     - ''
-  params: []
+  params: [ ]
 afkview:
   desc: Displays the AFK status of a specific user.
   args:
@@ -3523,7 +3523,7 @@ afkdisabledlist:
   desc: Lists the text channels where the AFK message doesnt display.
   args:
     - ''
-  params: []
+  params: [ ]
 afklength:
   desc: Sets the maximum length of all AFK messages.
   args:
@@ -3597,7 +3597,7 @@ afkdel_noparams:
   desc: Displays the current auto-deletion duration for AFK messages.
   args:
     - ''
-  params: []
+  params: [ ]
 afkdel_int_1:
   desc: Sets the auto-deletion duration for AFK messages.
   args:
@@ -3621,7 +3621,7 @@ getactiveafks_noparams:
   desc: Displays a list of active users who are currently AFK.
   args:
     - ''
-  params: []
+  params: [ ]
 afkview_IGuildUser:
   desc: Displays the AFK status of a specific user.
   args:
@@ -3632,7 +3632,7 @@ afkdisabledlist_noparams:
   desc: Lists the text channels where the AFK message doesnt display.
   args:
     - ''
-  params: []
+  params: [ ]
 afklength_int:
   desc: Sets the maximum length of all AFK messages.
   args:
@@ -3682,7 +3682,7 @@ afkdel_noparams_1:
   desc: Displays the current auto-deletion duration for AFK messages.
   args:
     - ''
-  params: []
+  params: [ ]
 afkdel_int_2:
   desc: Sets the auto-deletion duration for AFK messages.
   args:
@@ -3706,7 +3706,7 @@ getactiveafks_noparams_1:
   desc: Displays a list of active users who are currently AFK.
   args:
     - ''
-  params: []
+  params: [ ]
 afkview_IGuildUser_1:
   desc: Displays the AFK status of a specific user.
   args:
@@ -3717,7 +3717,7 @@ afkdisabledlist_noparams_1:
   desc: Lists the text channels where the AFK message doesnt display.
   args:
     - ''
-  params: []
+  params: [ ]
 afklength_int_1:
   desc: Sets the maximum length of all AFK messages.
   args:
@@ -3767,7 +3767,7 @@ afkdel_noparams_2:
   desc: Displays the current auto-deletion duration for AFK messages.
   args:
     - ''
-  params: []
+  params: [ ]
 afkdel_int_3:
   desc: Sets the auto-deletion duration for AFK messages.
   args:
@@ -3791,7 +3791,7 @@ getactiveafks_noparams_2:
   desc: Displays a list of active users who are currently AFK.
   args:
     - ''
-  params: []
+  params: [ ]
 afkview_IGuildUser_2:
   desc: Displays the AFK status of a specific user.
   args:
@@ -3802,7 +3802,7 @@ afkdisabledlist_noparams_2:
   desc: Lists the text channels where the AFK message doesnt display.
   args:
     - ''
-  params: []
+  params: [ ]
 afklength_int_2:
   desc: Sets the maximum length of all AFK messages.
   args:
@@ -3846,7 +3846,7 @@ ctsexport:
   desc: Exports chat trigger settings for the current guild.
   args:
     - ''
-  params: []
+  params: [ ]
 ctsimport:
   desc: Imports chat trigger settings for the current guild.
   args:
@@ -3897,12 +3897,12 @@ listchattriggers:
   desc: Lists all chat triggers.
   args:
     - ''
-  params: []
+  params: [ ]
 listchattriggersgroup:
   desc: Lists all chat triggers grouped by trigger.
   args:
     - ''
-  params: []
+  params: [ ]
 showchattrigger:
   desc: Shows details of a specific chat trigger.
   args:
@@ -3985,12 +3985,12 @@ ctsreload:
   desc: Reloads chat triggers.
   args:
     - ''
-  params: []
+  params: [ ]
 ctsclear:
   desc: Toggles a chat trigger option.
   args:
     - ''
-  params: []
+  params: [ ]
 ctrgranttoggle:
   desc: Toggles role grant for a chat trigger.
   args:
@@ -4095,7 +4095,7 @@ ctintererrors:
   desc: Displays the interaction errors for chat triggers.
   args:
     - ''
-  params: []
+  params: [ ]
 ctprefixtype:
   desc: Sets the prefix type for a chat trigger.
   args:
@@ -4122,7 +4122,7 @@ ctsexport_noparams:
   desc: Exports chat trigger settings for the current guild.
   args:
     - ''
-  params: []
+  params: [ ]
 ctsimport_=:
   desc: Imports chat trigger settings for the current guild.
   args:
@@ -4157,12 +4157,12 @@ listchattriggers_noparams:
   desc: Lists all chat triggers.
   args:
     - ''
-  params: []
+  params: [ ]
 listchattriggersgroup_noparams:
   desc: Lists all chat triggers grouped by trigger.
   args:
     - ''
-  params: []
+  params: [ ]
 showchattrigger_int:
   desc: Shows details of a specific chat trigger.
   args:
@@ -4229,12 +4229,12 @@ ctsreload_noparams:
   desc: Reloads chat triggers.
   args:
     - ''
-  params: []
+  params: [ ]
 ctsclear_noparams:
   desc: Clears all chat triggers.
   args:
     - ''
-  params: []
+  params: [ ]
 ctrgranttoggle_int_IRole:
   desc: Toggles role grant for a chat trigger.
   args:
@@ -4303,7 +4303,7 @@ ctintererrors_noparams:
   desc: Displays the interaction errors for chat triggers.
   args:
     - ''
-  params: []
+  params: [ ]
 ctprefixtype_int_RequirePrefixType:
   desc: Sets the prefix type for a chat trigger.
   args:
@@ -4322,7 +4322,7 @@ ctsexport_noparams_1:
   desc: Module for chat triggers.
   args:
     - ''
-  params: []
+  params: [ ]
 ctsimport_=_1:
   desc: Imports chat trigger settings for the current guild.
   args:
@@ -4357,12 +4357,12 @@ listchattriggers_noparams_1:
   desc: Lists all chat triggers.
   args:
     - ''
-  params: []
+  params: [ ]
 listchattriggersgroup_noparams_1:
   desc: Lists all chat triggers grouped by trigger.
   args:
     - ''
-  params: []
+  params: [ ]
 showchattrigger_int_1:
   desc: Shows details of a specific chat trigger.
   args:
@@ -4429,12 +4429,12 @@ ctsreload_noparams_1:
   desc: Reloads chat triggers.
   args:
     - ''
-  params: []
+  params: [ ]
 ctsclear_noparams_1:
   desc: Toggles a chat trigger option.
   args:
     - ''
-  params: []
+  params: [ ]
 ctrgranttoggle_int_IRole_1:
   desc: Toggles role grant for a chat trigger.
   args:
@@ -4503,7 +4503,7 @@ ctintererrors_noparams_1:
   desc: Displays the interaction errors for chat triggers.
   args:
     - ''
-  params: []
+  params: [ ]
 ctprefixtype_int_RequirePrefixType_1:
   desc: Sets the prefix type for a chat trigger.
   args:
@@ -4522,7 +4522,7 @@ ctsexport_noparams_2:
   desc: Module for chat triggers.
   args:
     - ''
-  params: []
+  params: [ ]
 ctsimport_=_2:
   desc: Imports chat trigger settings for the current guild.
   args:
@@ -4557,12 +4557,12 @@ listchattriggers_noparams_2:
   desc: Lists all chat triggers.
   args:
     - ''
-  params: []
+  params: [ ]
 listchattriggersgroup_noparams_2:
   desc: Lists all chat triggers grouped by trigger.
   args:
     - ''
-  params: []
+  params: [ ]
 showchattrigger_int_2:
   desc: Shows details of a specific chat trigger.
   args:
@@ -4629,12 +4629,12 @@ ctsreload_noparams_2:
   desc: Reloads chat triggers.
   args:
     - ''
-  params: []
+  params: [ ]
 ctsclear_noparams_2:
   desc: Clears all chat triggers.
   args:
     - ''
-  params: []
+  params: [ ]
 ctrgranttoggle_int_IRole_2:
   desc: Toggles role grant for a chat trigger.
   args:
@@ -4703,7 +4703,7 @@ ctintererrors_noparams_2:
   desc: Displays the interaction errors for chat triggers.
   args:
     - ''
-  params: []
+  params: [ ]
 ctprefixtype_int_RequirePrefixType_2:
   desc: Sets the prefix type for a chat trigger.
   args:
@@ -4862,7 +4862,7 @@ cash:
   desc: Checks the current balance of the user.
   args:
     - ''
-  params: []
+  params: [ ]
 coinflip:
   desc: Allows the user to flip a coin with a specified bet amount and guess.
   args:
@@ -4899,7 +4899,7 @@ dailyreward:
   desc: Allows the user to claim their daily reward.
   args:
     - ''
-  params: []
+  params: [ ]
 highlow:
   desc: Allows the user to guess whether the next number is higher or lower than the current number.
   args:
@@ -4914,7 +4914,7 @@ leaderboard:
   desc: Displays the leaderboard of users with the highest balances.
   args:
     - ''
-  params: []
+  params: [ ]
 setdaily:
   desc: Sets the daily reward amount and cooldown time for the guild.
   args:
@@ -4954,12 +4954,12 @@ hit:
   desc: Hits and draws a new card for the player.
   args:
     - ''
-  params: []
+  params: [ ]
 stand:
   desc: Stands and ends the player's turn, handling the dealer's turn.
   args:
     - ''
-  params: []
+  params: [ ]
 slot:
   desc: Ends the game and updates the player's balance and transactions.
   args:
@@ -5011,7 +5011,7 @@ cash_noparams:
   desc: Checks the current balance of the user.
   args:
     - ''
-  params: []
+  params: [ ]
 coinflip_long_string:
   desc: Allows the user to flip a coin with a specified bet amount and guess.
   args:
@@ -5032,7 +5032,7 @@ dailyreward_noparams:
   desc: Allows the user to claim their daily reward.
   args:
     - ''
-  params: []
+  params: [ ]
 highlow_string:
   desc: Allows the user to guess whether the next number is higher or lower than the current number.
   args:
@@ -5043,7 +5043,7 @@ leaderboard_noparams:
   desc: Displays the leaderboard of users with the highest balances.
   args:
     - ''
-  params: []
+  params: [ ]
 setdaily_int_StoopidTime:
   desc: Sets the daily reward amount and cooldown time for the guild.
   args:
@@ -5067,12 +5067,12 @@ hit_noparams:
   desc: Hits and draws a new card for the player.
   args:
     - ''
-  params: []
+  params: [ ]
 stand_noparams:
   desc: Stands and ends the player's turn, handling the dealer's turn.
   args:
     - ''
-  params: []
+  params: [ ]
 slot_=:
   desc: Plays a slot machine game with a specified bet amount.
   args:
@@ -5107,7 +5107,7 @@ cash_noparams_1:
   desc: Module for managing currency.
   args:
     - ''
-  params: []
+  params: [ ]
 coinflip_long_string_1:
   desc: Allows the user to flip a coin with a specified bet amount and guess.
   args:
@@ -5128,7 +5128,7 @@ dailyreward_noparams_1:
   desc: Allows the user to claim their daily reward.
   args:
     - ''
-  params: []
+  params: [ ]
 highlow_string_1:
   desc: Allows the user to guess whether the next number is higher or lower than the current number.
   args:
@@ -5139,7 +5139,7 @@ leaderboard_noparams_1:
   desc: Displays the leaderboard of users with the highest balances.
   args:
     - ''
-  params: []
+  params: [ ]
 setdaily_int_StoopidTime_1:
   desc: Sets the daily reward amount and cooldown time for the guild.
   args:
@@ -5163,12 +5163,12 @@ hit_noparams_1:
   desc: Hits and draws a new card for the player.
   args:
     - ''
-  params: []
+  params: [ ]
 stand_noparams_1:
   desc: Stands and ends the player's turn, handling the dealer's turn.
   args:
     - ''
-  params: []
+  params: [ ]
 slot_=_1:
   desc: Ends the game and updates the player's balance and transactions.
   args:
@@ -5203,7 +5203,7 @@ cash_noparams_2:
   desc: Module for managing currency.
   args:
     - ''
-  params: []
+  params: [ ]
 coinflip_long_string_2:
   desc: Allows the user to flip a coin with a specified bet amount and guess.
   args:
@@ -5224,7 +5224,7 @@ dailyreward_noparams_2:
   desc: Allows the user to claim their daily reward.
   args:
     - ''
-  params: []
+  params: [ ]
 highlow_string_2:
   desc: Allows the user to guess whether the next number is higher or lower than the current number.
   args:
@@ -5235,7 +5235,7 @@ leaderboard_noparams_2:
   desc: Displays the leaderboard of users with the highest balances.
   args:
     - ''
-  params: []
+  params: [ ]
 setdaily_int_StoopidTime_2:
   desc: Sets the daily reward amount and cooldown time for the guild.
   args:
@@ -5259,12 +5259,12 @@ hit_noparams_2:
   desc: Hits and draws a new card for the player.
   args:
     - ''
-  params: []
+  params: [ ]
 stand_noparams_2:
   desc: Stands and ends the player's turn, handling the dealer's turn.
   args:
     - ''
-  params: []
+  params: [ ]
 slot_=_2:
   desc: Plays a slot machine game with a specified bet amount.
   args:
@@ -5367,7 +5367,7 @@ rategirl:
   desc: Command that used to exist. Called trans people a slur in NadekoBot. Here as a memory and a fuck you to NadekoBot.
   args:
     - ''
-  params: []
+  params: [ ]
 linux:
   desc: Funni interjecting linux command
   args:
@@ -5387,7 +5387,7 @@ dragon:
   desc: Command to toggle the user's dragon status. Usually used for beta commands.
   args:
     - ''
-  params: []
+  params: [ ]
 choose_=:
   desc: Command to choose randomly from a list of options.
   args:
@@ -5404,7 +5404,7 @@ rategirl_noparams:
   desc: Command that used to exist. Called trans people a slur in NadekoBot. Here as a memory and a fuck you to NadekoBot.
   args:
     - ''
-  params: []
+  params: [ ]
 linux_string_string:
   desc: Funni interjecting linux command
   args:
@@ -5416,7 +5416,7 @@ dragon_noparams:
   desc: Command to toggle the user's dragon status. Usually used for beta commands.
   args:
     - ''
-  params: []
+  params: [ ]
 choose_=_1:
   desc: Initializes a new instance of the Games class.
   args:
@@ -5433,7 +5433,7 @@ rategirl_noparams_1:
   desc: Command that used to exist. Called trans people a slur in NadekoBot. Here as a memory and a fuck you to NadekoBot.
   args:
     - ''
-  params: []
+  params: [ ]
 linux_string_string_1:
   desc: Funni interjecting linux command
   args:
@@ -5445,7 +5445,7 @@ dragon_noparams_1:
   desc: Command to toggle the user's dragon status. Usually used for beta commands.
   args:
     - ''
-  params: []
+  params: [ ]
 choose_=_2:
   desc: Command to choose randomly from a list of options.
   args:
@@ -5462,7 +5462,7 @@ rategirl_noparams_2:
   desc: Command that used to exist. Called trans people a slur in NadekoBot. Here as a memory and a fuck you to NadekoBot.
   args:
     - ''
-  params: []
+  params: [ ]
 linux_string_string_2:
   desc: Funni interjecting linux command
   args:
@@ -5474,12 +5474,12 @@ dragon_noparams_2:
   desc: Command to toggle the user's dragon status. Usually used for beta commands.
   args:
     - ''
-  params: []
+  params: [ ]
 hangmanlist:
   desc: Lists the available hangman types in the current guild.
   args:
     - ''
-  params: []
+  params: [ ]
 hangman:
   desc: Starts a hangman game with the specified type.
   args:
@@ -5494,12 +5494,12 @@ hangmanstop:
   desc: Handles the event when the hangman game ends.
   args:
     - ''
-  params: []
+  params: [ ]
 hangmanlist_noparams:
   desc: Lists the available hangman types in the current guild.
   args:
     - ''
-  params: []
+  params: [ ]
 hangman_=:
   desc: Starts a hangman game with the specified type.
   args:
@@ -5510,12 +5510,12 @@ hangmanstop_noparams:
   desc: Stops the currently running hangman game in the current channel.
   args:
     - ''
-  params: []
+  params: [ ]
 hangmanlist_noparams_1:
   desc: A module containing Hangman commands.
   args:
     - ''
-  params: []
+  params: [ ]
 hangman_=_1:
   desc: Starts a hangman game with the specified type.
   args:
@@ -5526,12 +5526,12 @@ hangmanstop_noparams_1:
   desc: Handles the event when the hangman game ends.
   args:
     - ''
-  params: []
+  params: [ ]
 hangmanlist_noparams_2:
   desc: A module containing Hangman commands.
   args:
     - ''
-  params: []
+  params: [ ]
 hangman_=_2:
   desc: Starts a hangman game with the specified type.
   args:
@@ -5542,27 +5542,27 @@ hangmanstop_noparams_2:
   desc: Stops the currently running hangman game in the current channel.
   args:
     - ''
-  params: []
+  params: [ ]
 nunchi:
   desc: Starts or joins a game of Nunchi.
   args:
     - ''
-  params: []
+  params: [ ]
 nunchi_noparams:
   desc: Starts or joins a game of Nunchi.
   args:
     - ''
-  params: []
+  params: [ ]
 nunchi_noparams_1:
   desc: A module containing Nunchi commands.
   args:
     - ''
-  params: []
+  params: [ ]
 nunchi_noparams_2:
   desc: A module containing Nunchi commands.
   args:
     - ''
-  params: []
+  params: [ ]
 poll:
   desc: Starts a poll with a single answer type.
   args:
@@ -5592,12 +5592,12 @@ pollstats:
   desc: Displays the current statistics of the active poll in the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 pollend:
   desc: Ends the current poll in the guild and displays the final statistics.
   args:
     - ''
-  params: []
+  params: [ ]
 poll_string:
   desc: Starts a poll with a single answer type.
   args:
@@ -5615,12 +5615,12 @@ pollstats_noparams:
   desc: Displays the current statistics of the active poll in the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 pollend_noparams:
   desc: Ends the current poll in the guild and displays the final statistics.
   args:
     - ''
-  params: []
+  params: [ ]
 poll_string_1:
   desc: A module containing poll commands.
   args:
@@ -5638,12 +5638,12 @@ pollstats_noparams_1:
   desc: Displays the current statistics of the active poll in the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 pollend_noparams_1:
   desc: Ends the current poll in the guild and displays the final statistics.
   args:
     - ''
-  params: []
+  params: [ ]
 poll_string_2:
   desc: Starts a poll with a single answer type.
   args:
@@ -5661,12 +5661,12 @@ pollstats_noparams_2:
   desc: Displays the current statistics of the active poll in the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 pollend_noparams_2:
   desc: Ends the current poll in the guild and displays the final statistics.
   args:
     - ''
-  params: []
+  params: [ ]
 typestart:
   desc: Initializes a new instance of SpeedTypingCommands.
   args:
@@ -5681,7 +5681,7 @@ typestop:
   desc: Stops the current speed typing game.
   args:
     - ''
-  params: []
+  params: [ ]
 typeadd:
   desc: Adds a new article for the typing game.
   args:
@@ -5722,7 +5722,7 @@ typestop_noparams:
   desc: Stops the current speed typing game.
   args:
     - ''
-  params: []
+  params: [ ]
 typeadd_string:
   desc: Adds a new article for the typing game.
   args:
@@ -5751,7 +5751,7 @@ typestop_noparams_1:
   desc: Stops the current speed typing game.
   args:
     - ''
-  params: []
+  params: [ ]
 typeadd_string_1:
   desc: Adds a new article for the typing game.
   args:
@@ -5780,7 +5780,7 @@ typestop_noparams_2:
   desc: Stops the current speed typing game.
   args:
     - ''
-  params: []
+  params: [ ]
 typeadd_string_2:
   desc: Adds a new article for the typing game.
   args:
@@ -5841,12 +5841,12 @@ tl:
   desc: Internal trivia handler.
   args:
     - ''
-  params: []
+  params: [ ]
 tq:
   desc: Stops the current trivia game.
   args:
     - ''
-  params: []
+  params: [ ]
 trivia_string[]:
   desc: Starts a trivia game.
   args:
@@ -5857,12 +5857,12 @@ tl_noparams:
   desc: Shows the current trivia leaderboard.
   args:
     - ''
-  params: []
+  params: [ ]
 tq_noparams:
   desc: Stops the current trivia game.
   args:
     - ''
-  params: []
+  params: [ ]
 trivia_string[]_1:
   desc: A module containing Trivia commands.
   args:
@@ -5873,12 +5873,12 @@ tl_noparams_1:
   desc: Internal trivia handler.
   args:
     - ''
-  params: []
+  params: [ ]
 tq_noparams_1:
   desc: Stops the current trivia game.
   args:
     - ''
-  params: []
+  params: [ ]
 trivia_string[]_2:
   desc: Starts a trivia game.
   args:
@@ -5889,12 +5889,12 @@ tl_noparams_2:
   desc: Shows the current trivia leaderboard.
   args:
     - ''
-  params: []
+  params: [ ]
 tq_noparams_2:
   desc: Stops the current trivia game.
   args:
     - ''
-  params: []
+  params: [ ]
 gdmmessage:
   desc: Sets the dm message sent to users when they win a giveaway.
   args:
@@ -5931,7 +5931,7 @@ gdm:
   desc: Sets whether to DM the winner of a giveaway.
   args:
     - ''
-  params: []
+  params: [ ]
 gemote:
   desc: Sets the emote used for giveaways.
   args:
@@ -5956,7 +5956,7 @@ gstats:
   desc: Shows the stats for giveaways.
   args:
     - ''
-  params: []
+  params: [ ]
 gstart:
   desc: Quick start a giveaway.
   args:
@@ -5986,12 +5986,12 @@ gstart_noparams:
   desc: More detailed giveaway starting, lets you set a banner, ping role, and more.
   args:
     - ''
-  params: []
+  params: [ ]
 glist:
   desc: Lists all active giveaways.
   args:
     - ''
-  params: []
+  params: [ ]
 gend:
   desc: Ends a giveaway.
   args:
@@ -6030,7 +6030,7 @@ gdm_noparams:
   desc: Sets whether to DM the winner of a giveaway.
   args:
     - ''
-  params: []
+  params: [ ]
 gemote_IEmote:
   desc: Sets the emote used for giveaways.
   args:
@@ -6047,7 +6047,7 @@ gstats_noparams:
   desc: Shows the stats for giveaways.
   args:
     - ''
-  params: []
+  params: [ ]
 gstart_ITextChannel_StoopidTime_int_string:
   desc: Quick start a giveaway.
   args:
@@ -6061,12 +6061,12 @@ gstart_noparams_1:
   desc: More detailed giveaway starting, lets you set a banner, ping role, and more.
   args:
     - ''
-  params: []
+  params: [ ]
 glist_noparams:
   desc: Lists all active giveaways.
   args:
     - ''
-  params: []
+  params: [ ]
 gend_ulong:
   desc: Ends a giveaway.
   args:
@@ -6101,7 +6101,7 @@ gdm_noparams_1:
   desc: Sets whether to DM the winner of a giveaway.
   args:
     - ''
-  params: []
+  params: [ ]
 gemote_IEmote_1:
   desc: Sets the emote used for giveaways.
   args:
@@ -6118,7 +6118,7 @@ gstats_noparams_1:
   desc: Shows the stats for giveaways.
   args:
     - ''
-  params: []
+  params: [ ]
 gstart_ITextChannel_StoopidTime_int_string_1:
   desc: Quick start a giveaway.
   args:
@@ -6132,12 +6132,12 @@ gstart_noparams_2:
   desc: More detailed giveaway starting, lets you set a banner, ping role, and more.
   args:
     - ''
-  params: []
+  params: [ ]
 glist_noparams_1:
   desc: Lists all active giveaways.
   args:
     - ''
-  params: []
+  params: [ ]
 gend_ulong_1:
   desc: Ends a giveaway.
   args:
@@ -6172,7 +6172,7 @@ gdm_noparams_2:
   desc: Sets whether to DM the winner of a giveaway.
   args:
     - ''
-  params: []
+  params: [ ]
 gemote_IEmote_2:
   desc: Sets the emote used for giveaways.
   args:
@@ -6189,7 +6189,7 @@ gstats_noparams_2:
   desc: Shows the stats for giveaways.
   args:
     - ''
-  params: []
+  params: [ ]
 gstart_ITextChannel_StoopidTime_int_string_2:
   desc: Quick start a giveaway.
   args:
@@ -6203,12 +6203,12 @@ gstart_noparams_3:
   desc: More detailed giveaway starting, lets you set a banner, ping role, and more.
   args:
     - ''
-  params: []
+  params: [ ]
 glist_noparams_2:
   desc: Lists all active giveaways.
   args:
     - ''
-  params: []
+  params: [ ]
 gend_ulong_2:
   desc: Ends a giveaway.
   args:
@@ -6219,7 +6219,7 @@ exportcommandsjson:
   desc: Exports all commands to a json file. Used mainly for https://mewdeko.tech/commands
   args:
     - ''
-  params: []
+  params: [ ]
 searchcommand:
   desc: Searches for a command by name or description.
   args:
@@ -6234,12 +6234,12 @@ modules:
   desc: Shows a list of all modules. Is basically just a help alias at this point.
   args:
     - ''
-  params: []
+  params: [ ]
 donate:
   desc: SHows how to support the bot.
   args:
     - ''
-  params: []
+  params: [ ]
 commands:
   desc: Shows commands for a specific module. If null, is an alias for modules which is an alias for help.
   args:
@@ -6256,22 +6256,22 @@ guide:
   desc: Shows the guide for the bot.
   args:
     - ''
-  params: []
+  params: [ ]
 source:
   desc: Shows the source code link for the bot.
   args:
     - ''
-  params: []
+  params: [ ]
 vote:
   desc: Shows a link to vote for mewdeko.
   args:
     - ''
-  params: []
+  params: [ ]
 exportcommandsjson_noparams:
   desc: Exports all commands to a json file. Used mainly for https://mewdeko.tech/commands
   args:
     - ''
-  params: []
+  params: [ ]
 searchcommand_string:
   desc: Searches for a command by name or description.
   args:
@@ -6282,12 +6282,12 @@ modules_noparams:
   desc: Shows a list of all modules. Is basically just a help alias at this point.
   args:
     - ''
-  params: []
+  params: [ ]
 donate_noparams:
   desc: SHows how to support the bot.
   args:
     - ''
-  params: []
+  params: [ ]
 commands_=:
   desc: SHows how to support the bot.
   args:
@@ -6304,22 +6304,22 @@ guide_noparams:
   desc: Shows the guide for the bot.
   args:
     - ''
-  params: []
+  params: [ ]
 source_noparams:
   desc: Shows the guide for the bot.
   args:
     - ''
-  params: []
+  params: [ ]
 vote_noparams:
   desc: Shows the source code link for the bot.
   args:
     - ''
-  params: []
+  params: [ ]
 exportcommandsjson_noparams_1:
   desc: A module containing commands for getting help.
   args:
     - ''
-  params: []
+  params: [ ]
 searchcommand_string_1:
   desc: Searches for a command by name or description.
   args:
@@ -6330,12 +6330,12 @@ modules_noparams_1:
   desc: Shows a list of all modules. Is basically just a help alias at this point.
   args:
     - ''
-  params: []
+  params: [ ]
 donate_noparams_1:
   desc: SHows how to support the bot.
   args:
     - ''
-  params: []
+  params: [ ]
 commands_=_1:
   desc: Shows commands for a specific module. If null, is an alias for modules which is an alias for help.
   args:
@@ -6352,22 +6352,22 @@ guide_noparams_1:
   desc: Shows the guide for the bot.
   args:
     - ''
-  params: []
+  params: [ ]
 source_noparams_1:
   desc: Shows the source code link for the bot.
   args:
     - ''
-  params: []
+  params: [ ]
 vote_noparams_1:
   desc: Shows a link to vote for mewdeko.
   args:
     - ''
-  params: []
+  params: [ ]
 exportcommandsjson_noparams_2:
   desc: Exports all commands to a json file. Used mainly for https://mewdeko.tech/commands
   args:
     - ''
-  params: []
+  params: [ ]
 searchcommand_string_2:
   desc: Searches for a command by name or description.
   args:
@@ -6378,12 +6378,12 @@ modules_noparams_2:
   desc: Shows a list of all modules. Is basically just a help alias at this point.
   args:
     - ''
-  params: []
+  params: [ ]
 donate_noparams_2:
   desc: SHows how to support the bot.
   args:
     - ''
-  params: []
+  params: [ ]
 commands_=_2:
   desc: SHows how to support the bot.
   args:
@@ -6400,17 +6400,17 @@ guide_noparams_2:
   desc: Shows the guide for the bot.
   args:
     - ''
-  params: []
+  params: [ ]
 source_noparams_2:
   desc: Shows the guide for the bot.
   args:
     - ''
-  params: []
+  params: [ ]
 vote_noparams_2:
   desc: Shows the source code link for the bot.
   args:
     - ''
-  params: []
+  params: [ ]
 highlight:
   desc: The actions available for the highlight command.
   args:
@@ -7147,12 +7147,12 @@ massnickprogress:
   desc: The thing used for addrole in commands to be able to parse it
   args:
     - ''
-  params: []
+  params: [ ]
 massnickstop:
   desc: Stops a mass nickname operation.
   args:
     - ''
-  params: []
+  params: [ ]
 dehoistall:
   desc: Dehoists all users in the guild by replacing special characters in their nicknames.
   args:
@@ -7167,7 +7167,7 @@ sanitizeall:
   desc: Sanitizes all users in the guild by replacing special characters in their usernames.
   args:
     - ''
-  params: []
+  params: [ ]
 dehoist:
   desc: Dehoists a user by replacing special characters in their username.
   args:
@@ -7271,7 +7271,7 @@ warnlogall:
   desc: Gets how many warnings each user has.
   args:
     - ''
-  params: []
+  params: [ ]
 warnclear:
   desc: Clears a user's warnings. If an index is provided, clears only that warning.
   args:
@@ -7329,7 +7329,7 @@ warnpunishlist:
   desc: Lists the warn punishments for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 ban:
   desc: Bans a user for a specified amount of time.
   args:
@@ -7406,7 +7406,7 @@ banmsgreset:
   desc: Resets the ban message to the default message.
   args:
     - ''
-  params: []
+  params: [ ]
 banmessagetest:
   desc: Tests the ban message. Use it as a prank!
   args:
@@ -7515,12 +7515,12 @@ massnickprogress_noparams:
   desc: The thing used for addrole in commands to be able to parse it
   args:
     - ''
-  params: []
+  params: [ ]
 massnickstop_noparams:
   desc: Stops a mass nickname operation.
   args:
     - ''
-  params: []
+  params: [ ]
 dehoistall_=:
   desc: Dehoists all users in the guild by replacing special characters in their nicknames.
   args:
@@ -7531,7 +7531,7 @@ sanitizeall_noparams:
   desc: Sanitizes all users in the guild by replacing special characters in their usernames.
   args:
     - ''
-  params: []
+  params: [ ]
 dehoist_IGuildUser:
   desc: Dehoists a user by replacing special characters in their username.
   args:
@@ -7595,7 +7595,7 @@ warnlogall_noparams:
   desc: Gets how many warnings each user has.
   args:
     - ''
-  params: []
+  params: [ ]
 warnclear_IGuildUser_=:
   desc: Clears a user's warnings. If an index is provided, clears only that warning.
   args:
@@ -7633,7 +7633,7 @@ warnpunishlist_noparams:
   desc: Lists the warn punishments for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 ban_StoopidTime_StoopidTime_IGuildUser_=:
   desc: Bans a user for a specified amount of time.
   args:
@@ -7686,7 +7686,7 @@ banmsgreset_noparams:
   desc: Resets the ban message to the default message.
   args:
     - ''
-  params: []
+  params: [ ]
 banmessagetest_=:
   desc: Tests the ban message. Use it as a prank!
   args:
@@ -7759,12 +7759,12 @@ massnickprogress_noparams_1:
   desc: Module for user punishment commands.
   args:
     - ''
-  params: []
+  params: [ ]
 massnickstop_noparams_1:
   desc: Stops a mass nickname operation.
   args:
     - ''
-  params: []
+  params: [ ]
 dehoistall_=_1:
   desc: Dehoists all users in the guild by replacing special characters in their nicknames.
   args:
@@ -7775,7 +7775,7 @@ sanitizeall_noparams_1:
   desc: Sanitizes all users in the guild by replacing special characters in their usernames.
   args:
     - ''
-  params: []
+  params: [ ]
 dehoist_IGuildUser_1:
   desc: Dehoists a user by replacing special characters in their username.
   args:
@@ -7839,7 +7839,7 @@ warnlogall_noparams_1:
   desc: Gets how many warnings each user has.
   args:
     - ''
-  params: []
+  params: [ ]
 warnclear_IGuildUser_=_1:
   desc: Clears a user's warnings. If an index is provided, clears only that warning.
   args:
@@ -7877,7 +7877,7 @@ warnpunishlist_noparams_1:
   desc: Lists the warn punishments for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 ban_StoopidTime_StoopidTime_IGuildUser_=_1:
   desc: Bans a user for a specified amount of time.
   args:
@@ -7930,7 +7930,7 @@ banmsgreset_noparams_1:
   desc: Resets the ban message to the default message.
   args:
     - ''
-  params: []
+  params: [ ]
 banmessagetest_=_1:
   desc: Tests the ban message. Use it as a prank!
   args:
@@ -8003,12 +8003,12 @@ massnickprogress_noparams_2:
   desc: The thing used for addrole in commands to be able to parse it
   args:
     - ''
-  params: []
+  params: [ ]
 massnickstop_noparams_2:
   desc: Stops a mass nickname operation.
   args:
     - ''
-  params: []
+  params: [ ]
 dehoistall_=_2:
   desc: Dehoists all users in the guild by replacing special characters in their nicknames.
   args:
@@ -8019,7 +8019,7 @@ sanitizeall_noparams_2:
   desc: Sanitizes all users in the guild by replacing special characters in their usernames.
   args:
     - ''
-  params: []
+  params: [ ]
 dehoist_IGuildUser_2:
   desc: Dehoists a user by replacing special characters in their username.
   args:
@@ -8083,7 +8083,7 @@ warnlogall_noparams_2:
   desc: Gets how many warnings each user has.
   args:
     - ''
-  params: []
+  params: [ ]
 warnclear_IGuildUser_=_2:
   desc: Clears a user's warnings. If an index is provided, clears only that warning.
   args:
@@ -8121,7 +8121,7 @@ warnpunishlist_noparams_2:
   desc: Lists the warn punishments for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 ban_StoopidTime_StoopidTime_IGuildUser_=_2:
   desc: Bans a user for a specified amount of time.
   args:
@@ -8174,7 +8174,7 @@ banmsgreset_noparams_2:
   desc: Resets the ban message to the default message.
   args:
     - ''
-  params: []
+  params: [ ]
 banmessagetest_=_2:
   desc: Tests the ban message. Use it as a prank!
   args:
@@ -8319,7 +8319,7 @@ mwarnlogall:
   desc: Gets the mini warnlog for all users.
   args:
     - ''
-  params: []
+  params: [ ]
 mwarnclear:
   desc: Clears a user's mini warnings. If index is specified, clears only that warning.
   args:
@@ -8386,7 +8386,7 @@ mwarnpunishlist:
   desc: Lists mini warn punishments.
   args:
     - ''
-  params: []
+  params: [ ]
 setmwarnchannel_ITextChannel:
   desc: The addrole thing used for punishments
   args:
@@ -8439,7 +8439,7 @@ mwarnlogall_noparams:
   desc: Gets the mini warnlog for all users.
   args:
     - ''
-  params: []
+  params: [ ]
 mwarnclear_IGuildUser_=:
   desc: Clears a user's mini warnings. If index is specified, clears only that warning.
   args:
@@ -8486,7 +8486,7 @@ mwarnpunishlist_noparams:
   desc: Lists mini warn punishments.
   args:
     - ''
-  params: []
+  params: [ ]
 setmwarnchannel_ITextChannel_1:
   desc: Module for managing mini warnings.
   args:
@@ -8539,7 +8539,7 @@ mwarnlogall_noparams_1:
   desc: Gets the mini warnlog for all users.
   args:
     - ''
-  params: []
+  params: [ ]
 mwarnclear_IGuildUser_=_1:
   desc: Clears a user's mini warnings. If index is specified, clears only that warning.
   args:
@@ -8586,7 +8586,7 @@ mwarnpunishlist_noparams_1:
   desc: Lists mini warn punishments.
   args:
     - ''
-  params: []
+  params: [ ]
 setmwarnchannel_ITextChannel_2:
   desc: The addrole thing used for punishments
   args:
@@ -8639,7 +8639,7 @@ mwarnlogall_noparams_2:
   desc: Gets the mini warnlog for all users.
   args:
     - ''
-  params: []
+  params: [ ]
 mwarnclear_IGuildUser_=_2:
   desc: Clears a user's mini warnings. If index is specified, clears only that warning.
   args:
@@ -8686,7 +8686,7 @@ mwarnpunishlist_noparams_2:
   desc: Lists mini warn punishments.
   args:
     - ''
-  params: []
+  params: [ ]
 multigreetadd:
   desc: The types of MultiGreets.
   args:
@@ -8803,7 +8803,7 @@ multigreetlist:
   desc: Lists all MultiGreets.
   args:
     - ''
-  params: []
+  params: [ ]
 multigreetadd_=:
   desc: Executes all MultiGreets.
   args:
@@ -8880,7 +8880,7 @@ multigreetlist_noparams:
   desc: Lists all MultiGreets.
   args:
     - ''
-  params: []
+  params: [ ]
 multigreetadd_=_1:
   desc: Module for MultiGreets.
   args:
@@ -8957,7 +8957,7 @@ multigreetlist_noparams_1:
   desc: Lists all MultiGreets.
   args:
     - ''
-  params: []
+  params: [ ]
 multigreetadd_=_2:
   desc: Executes all MultiGreets.
   args:
@@ -9034,7 +9034,7 @@ multigreetlist_noparams_2:
   desc: Lists all MultiGreets.
   args:
     - ''
-  params: []
+  params: [ ]
 bass:
   desc: Sets the bass boost level for the current track.
   args:
@@ -9097,12 +9097,12 @@ resetfilters:
   desc: Removes all active audio filters from the current track.
   args:
     - ''
-  params: []
+  params: [ ]
 activefilters:
   desc: Displays all currently active audio filters.
   args:
     - ''
-  params: []
+  params: [ ]
 bass_=:
   desc: Sets the bass boost level for the current track.
   args:
@@ -9161,12 +9161,12 @@ resetfilters_noparams:
   desc: Removes all active audio filters from the current track.
   args:
     - ''
-  params: []
+  params: [ ]
 activefilters_noparams:
   desc: Execute the ActiveFilters command
   args:
     - ''
-  params: []
+  params: [ ]
 bass_=_1:
   desc: Sets various audio effects for the player
   args:
@@ -9225,12 +9225,12 @@ resetfilters_noparams_1:
   desc: Removes all active audio filters from the current track.
   args:
     - ''
-  params: []
+  params: [ ]
 activefilters_noparams_1:
   desc: Displays all currently active audio filters.
   args:
     - ''
-  params: []
+  params: [ ]
 bass_=_2:
   desc: Sets the bass boost level for the current track.
   args:
@@ -9289,27 +9289,27 @@ resetfilters_noparams_2:
   desc: Removes all active audio filters from the current track.
   args:
     - ''
-  params: []
+  params: [ ]
 activefilters_noparams_2:
   desc: Execute the ActiveFilters command
   args:
     - ''
-  params: []
+  params: [ ]
 join:
   desc: A module containing music commands.
   args:
     - ''
-  params: []
+  params: [ ]
 leave:
   desc: Disconnects the bot from the voice channel.
   args:
     - ''
-  params: []
+  params: [ ]
 clearqueue:
   desc: Clears the music queue.
   args:
     - ''
-  params: []
+  params: [ ]
 play:
   desc: Plays a specified track in the current voice channel.
   args:
@@ -9334,12 +9334,12 @@ pause:
   desc: Pauses or unpauses the player based on the current state.
   args:
     - ''
-  params: []
+  params: [ ]
 nowplaying:
   desc: Gets the now playing track, if any.
   args:
     - ''
-  params: []
+  params: [ ]
 songremove:
   desc: Removes the selected track from the queue. If the selected track is the current track, it will be skipped. If next track is not available, the player will stop.
   args:
@@ -9389,7 +9389,7 @@ voteskip:
   desc: Initiates or participates in a vote to skip the current track.
   args:
     - ''
-  params: []
+  params: [ ]
 setdjrole:
   desc: Sets the DJ role for music commands that require elevated permissions.
   args:
@@ -9422,7 +9422,7 @@ playlists:
   desc: Lists all saved playlists for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 deleteplaylist:
   desc: Removes a saved playlist.
   args:
@@ -9447,17 +9447,17 @@ shuffle:
   desc: Shuffles the current music queue.
   args:
     - ''
-  params: []
+  params: [ ]
 skip:
   desc: Skips to the next track.
   args:
     - ''
-  params: []
+  params: [ ]
 queue:
   desc: The music queue.
   args:
     - ''
-  params: []
+  params: [ ]
 autoplay:
   desc: Sets the autoplay amount in the guild. Uses spotify api so client secret and id must be valid.
   args:
@@ -9472,7 +9472,7 @@ musicsettings:
   desc: Gets the guilds current settings for music.
   args:
     - ''
-  params: []
+  params: [ ]
 setmusicchannel:
   desc: Sets the channel where music events will be sent.
   args:
@@ -9493,17 +9493,17 @@ join_noparams:
   desc: A module containing music commands.
   args:
     - ''
-  params: []
+  params: [ ]
 leave_noparams:
   desc: Disconnects the bot from the voice channel.
   args:
     - ''
-  params: []
+  params: [ ]
 clearqueue_noparams:
   desc: Clears the music queue.
   args:
     - ''
-  params: []
+  params: [ ]
 play_int:
   desc: Plays a specified track in the current voice channel.
   args:
@@ -9520,12 +9520,12 @@ pause_noparams:
   desc: Pauses or unpauses the player based on the current state.
   args:
     - ''
-  params: []
+  params: [ ]
 nowplaying_noparams:
   desc: Gets the now playing track, if any.
   args:
     - ''
-  params: []
+  params: [ ]
 songremove_int:
   desc: Removes the selected track from the queue. If the selected track is the current track, it will be skipped. If next track is not available, the player will stop.
   args:
@@ -9555,7 +9555,7 @@ voteskip_noparams:
   desc: Initiates or participates in a vote to skip the current track.
   args:
     - ''
-  params: []
+  params: [ ]
 setdjrole_=:
   desc: Sets the DJ role for music commands that require elevated permissions.
   args:
@@ -9580,7 +9580,7 @@ playlists_noparams:
   desc: Lists all saved playlists for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 deleteplaylist_string:
   desc: Removes a saved playlist.
   args:
@@ -9597,17 +9597,17 @@ shuffle_noparams:
   desc: Shuffles the current music queue.
   args:
     - ''
-  params: []
+  params: [ ]
 skip_noparams:
   desc: Skips to the next track.
   args:
     - ''
-  params: []
+  params: [ ]
 queue_noparams:
   desc: The music queue.
   args:
     - ''
-  params: []
+  params: [ ]
 autoplay_int:
   desc: Sets the autoplay amount in the guild. Uses spotify api so client secret and id must be valid.
   args:
@@ -9618,7 +9618,7 @@ musicsettings_noparams:
   desc: Gets the guilds current settings for music.
   args:
     - ''
-  params: []
+  params: [ ]
 setmusicchannel_=:
   desc: Sets the channel where music events will be sent.
   args:
@@ -9655,27 +9655,27 @@ hentaigif:
   desc: Command to fetch and display NSFW content from the "HENTAI_GIF" subreddit.
   args:
     - ''
-  params: []
+  params: [ ]
 pussy:
   desc: Command to fetch and display NSFW content from the "pussy" subreddit.
   args:
     - ''
-  params: []
+  params: [ ]
 anal:
   desc: Command to fetch and display NSFW content from the "anal" subreddit.
   args:
     - ''
-  params: []
+  params: [ ]
 porn:
   desc: Command to fetch and display NSFW content from the "porn" subreddit.
   args:
     - ''
-  params: []
+  params: [ ]
 bondage:
   desc: Command to fetch and display NSFW content from the "bondage" subreddit.
   args:
     - ''
-  params: []
+  params: [ ]
 nhentaisearch:
   desc: Command to search for hentai manga on NHentai based on the provided search query.
   args:
@@ -9874,12 +9874,12 @@ boobs:
   desc: Command to fetch and display NSFW content from the "boobs" subreddit in the current guild channel or direct messages.
   args:
     - ''
-  params: []
+  params: [ ]
 butts:
   desc: Command to fetch and display NSFW content from the "ass" subreddit in the current guild channel or direct messages.
   args:
     - ''
-  params: []
+  params: [ ]
 nsfwtagblacklist:
   desc: Command to manage the blacklist of NSFW tags in the current guild.
   args:
@@ -9902,27 +9902,27 @@ hentaigif_noparams:
   desc: Command to fetch and display NSFW content from the "HENTAI_GIF" subreddit.
   args:
     - ''
-  params: []
+  params: [ ]
 pussy_noparams:
   desc: Command to fetch and display NSFW content from the "pussy" subreddit.
   args:
     - ''
-  params: []
+  params: [ ]
 anal_noparams:
   desc: Command to fetch and display NSFW content from the "anal" subreddit.
   args:
     - ''
-  params: []
+  params: [ ]
 porn_noparams:
   desc: Command to fetch and display NSFW content from the "porn" subreddit.
   args:
     - ''
-  params: []
+  params: [ ]
 bondage_noparams:
   desc: Command to fetch and display NSFW content from the "bondage" subreddit.
   args:
     - ''
-  params: []
+  params: [ ]
 nhentaisearch_string:
   desc: Command to search for hentai manga on NHentai based on the provided search query.
   args:
@@ -10061,12 +10061,12 @@ boobs_noparams:
   desc: Command to fetch and display NSFW content from the "boobs" subreddit in the current guild channel or direct messages.
   args:
     - ''
-  params: []
+  params: [ ]
 butts_noparams:
   desc: Command to fetch and display NSFW content from the "ass" subreddit in the current guild channel or direct messages.
   args:
     - ''
-  params: []
+  params: [ ]
 nsfwtagblacklist_=:
   desc: Command to manage the blacklist of NSFW tags in the current guild.
   args:
@@ -10089,27 +10089,27 @@ hentaigif_noparams_1:
   desc: Command to fetch and display NSFW content from the "HENTAI_GIF" subreddit.
   args:
     - ''
-  params: []
+  params: [ ]
 pussy_noparams_1:
   desc: Command to fetch and display NSFW content from the "pussy" subreddit.
   args:
     - ''
-  params: []
+  params: [ ]
 anal_noparams_1:
   desc: Command to fetch and display NSFW content from the "anal" subreddit.
   args:
     - ''
-  params: []
+  params: [ ]
 porn_noparams_1:
   desc: Command to fetch and display NSFW content from the "porn" subreddit.
   args:
     - ''
-  params: []
+  params: [ ]
 bondage_noparams_1:
   desc: Command to fetch and display NSFW content from the "bondage" subreddit.
   args:
     - ''
-  params: []
+  params: [ ]
 nhentaisearch_string_1:
   desc: Command to search for hentai manga on NHentai based on the provided search query.
   args:
@@ -10248,12 +10248,12 @@ boobs_noparams_1:
   desc: Command to fetch and display NSFW content from the "boobs" subreddit in the current guild channel or direct messages.
   args:
     - ''
-  params: []
+  params: [ ]
 butts_noparams_1:
   desc: Command to fetch and display NSFW content from the "ass" subreddit in the current guild channel or direct messages.
   args:
     - ''
-  params: []
+  params: [ ]
 nsfwtagblacklist_=_1:
   desc: Command to manage the blacklist of NSFW tags in the current guild.
   args:
@@ -10276,27 +10276,27 @@ hentaigif_noparams_2:
   desc: Command to fetch and display NSFW content from the "HENTAI_GIF" subreddit.
   args:
     - ''
-  params: []
+  params: [ ]
 pussy_noparams_2:
   desc: Command to fetch and display NSFW content from the "pussy" subreddit.
   args:
     - ''
-  params: []
+  params: [ ]
 anal_noparams_2:
   desc: Command to fetch and display NSFW content from the "anal" subreddit.
   args:
     - ''
-  params: []
+  params: [ ]
 porn_noparams_2:
   desc: Command to fetch and display NSFW content from the "porn" subreddit.
   args:
     - ''
-  params: []
+  params: [ ]
 bondage_noparams_2:
   desc: Command to fetch and display NSFW content from the "bondage" subreddit.
   args:
     - ''
-  params: []
+  params: [ ]
 nhentaisearch_string_2:
   desc: Command to search for hentai manga on NHentai based on the provided search query.
   args:
@@ -10435,12 +10435,12 @@ boobs_noparams_2:
   desc: Command to fetch and display NSFW content from the "boobs" subreddit in the current guild channel or direct messages.
   args:
     - ''
-  params: []
+  params: [ ]
 butts_noparams_2:
   desc: Command to fetch and display NSFW content from the "ass" subreddit in the current guild channel or direct messages.
   args:
     - ''
-  params: []
+  params: [ ]
 nsfwtagblacklist_=_2:
   desc: Command to manage the blacklist of NSFW tags in the current guild.
   args:
@@ -10461,7 +10461,7 @@ listinstances:
   desc: Lists all registered bot instances and their status.
   args:
     - ''
-  params: []
+  params: [ ]
 removeinstance:
   desc: Removes a bot instance from dashboard management.
   args:
@@ -10491,7 +10491,7 @@ listinstances_noparams:
   desc: Lists all registered bot instances and their status.
   args:
     - ''
-  params: []
+  params: [ ]
 removeinstance_int:
   desc: Removes a bot instance from dashboard management.
   args:
@@ -10508,7 +10508,7 @@ update:
   desc: Defines the set of user statuses that can be programmatically assigned.
   args:
     - ''
-  params: []
+  params: [ ]
 sudo:
   desc: Executes a command as if it were sent by the specified guild user.
   args:
@@ -10534,7 +10534,7 @@ generatedocs:
   desc: Generates command documentation YML files
   args:
     - ''
-  params: []
+  params: [ ]
 redisexec:
   desc: Executes a Redis command and returns the result.
   args:
@@ -10559,17 +10559,17 @@ listservers:
   desc: Lists all servers the bot is currently in.
   args:
     - ''
-  params: []
+  params: [ ]
 commandstats:
   desc: Retrieves and displays statistics on the most used command, module, guild, and user.
   args:
     - ''
-  params: []
+  params: [ ]
 rotateplaying:
   desc: Changes yml based config for the bot.
   args:
     - ''
-  params: []
+  params: [ ]
 addplaying:
   desc: Adds a new status to the rotation of playing statuses for the bot.
   args:
@@ -10589,7 +10589,7 @@ listplaying:
   desc: Lists all statuses currently in the rotation.
   args:
     - ''
-  params: []
+  params: [ ]
 defprefix:
   desc: Sets or displays the default command prefix.
   args:
@@ -10687,22 +10687,22 @@ startupcommandsclear:
   desc: Clears all startup commands for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 forwardmessages:
   desc: Toggles the forwarding of direct messages to the bot's owner(s).
   args:
     - ''
-  params: []
+  params: [ ]
 forwardtoall:
   desc: Toggles whether forwarded messages are sent to all of the bot's owners or just the primary owner.
   args:
     - ''
-  params: []
+  params: [ ]
 shardstats:
   desc: Displays statistics for all shards of the bot, including their statuses, guild counts, and user counts.
   args:
     - ''
-  params: []
+  params: [ ]
 leaveserver:
   desc: Commands the bot to leave a server.
   args:
@@ -10717,7 +10717,7 @@ die:
   desc: Initiates a shutdown of the bot.
   args:
     - ''
-  params: []
+  params: [ ]
 setname:
   desc: Changes the bot's username to the specified new name.
   args:
@@ -10799,12 +10799,12 @@ imagesreload:
   desc: Initiates the reloading of images used by the bot.
   args:
     - ''
-  params: []
+  params: [ ]
 stringsreload:
   desc: Initiates the reloading of bot strings (localizations).
   args:
     - ''
-  params: []
+  params: [ ]
 bash:
   desc: Executes a bash command. Depending on the platform, the command is executed in either bash or PowerShell.
   args:
@@ -10825,7 +10825,7 @@ update_noparams:
   desc: Indicates the user is idle and may be away from their device.
   args:
     - ''
-  params: []
+  params: [ ]
 sudo_IGuildUser_string:
   desc: Execute the Sudo command
   args:
@@ -10843,7 +10843,7 @@ generatedocs_noparams:
   desc: Generates command documentation YML files
   args:
     - ''
-  params: []
+  params: [ ]
 redisexec_string:
   desc: Executes a Redis command and returns the result.
   args:
@@ -10860,17 +10860,17 @@ listservers_noparams:
   desc: Lists all servers the bot is currently in.
   args:
     - ''
-  params: []
+  params: [ ]
 commandstats_noparams:
   desc: Execute the CommandStats command
   args:
     - ''
-  params: []
+  params: [ ]
 rotateplaying_noparams:
   desc: Changes yml based config for the bot.
   args:
     - ''
-  params: []
+  params: [ ]
 addplaying_ActivityType_string:
   desc: Adds a new status to the rotation of playing statuses for the bot.
   args:
@@ -10882,7 +10882,7 @@ listplaying_noparams:
   desc: Lists all statuses currently in the rotation.
   args:
     - ''
-  params: []
+  params: [ ]
 defprefix_=:
   desc: Sets or displays the default command prefix.
   args:
@@ -10948,22 +10948,22 @@ startupcommandsclear_noparams:
   desc: Clears all startup commands for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 forwardmessages_noparams:
   desc: Toggles the forwarding of direct messages to the bot's owner(s).
   args:
     - ''
-  params: []
+  params: [ ]
 forwardtoall_noparams:
   desc: Toggles whether forwarded messages are sent to all of the bot's owners or just the primary owner.
   args:
     - ''
-  params: []
+  params: [ ]
 shardstats_noparams:
   desc: Execute the ShardStats command
   args:
     - ''
-  params: []
+  params: [ ]
 leaveserver_string:
   desc: Commands the bot to leave a server.
   args:
@@ -10974,7 +10974,7 @@ die_noparams:
   desc: Initiates a shutdown of the bot.
   args:
     - ''
-  params: []
+  params: [ ]
 setname_string:
   desc: Changes the bot's username to the specified new name.
   args:
@@ -11032,12 +11032,12 @@ imagesreload_noparams:
   desc: Initiates the reloading of images used by the bot.
   args:
     - ''
-  params: []
+  params: [ ]
 stringsreload_noparams:
   desc: Initiates the reloading of bot strings (localizations).
   args:
     - ''
-  params: []
+  params: [ ]
 bash_string:
   desc: Execute the Bash command
   args:
@@ -11054,7 +11054,7 @@ update_noparams_1:
   desc: Initializes a new instance of the OwnerOnly class, intended for owner-only operations within the Mewdeko bot framework.
   args:
     - ''
-  params: []
+  params: [ ]
 sudo_IGuildUser_string_1:
   desc: Executes a command as if it were sent by the specified guild user.
   args:
@@ -11072,7 +11072,7 @@ generatedocs_noparams_1:
   desc: Generates command documentation YML files
   args:
     - ''
-  params: []
+  params: [ ]
 redisexec_string_1:
   desc: Executes a Redis command and returns the result.
   args:
@@ -11089,17 +11089,17 @@ listservers_noparams_1:
   desc: Lists all servers the bot is currently in.
   args:
     - ''
-  params: []
+  params: [ ]
 commandstats_noparams_1:
   desc: Retrieves and displays statistics on the most used command, module, guild, and user.
   args:
     - ''
-  params: []
+  params: [ ]
 rotateplaying_noparams_1:
   desc: Changes yml based config for the bot.
   args:
     - ''
-  params: []
+  params: [ ]
 addplaying_ActivityType_string_1:
   desc: Adds a new status to the rotation of playing statuses for the bot.
   args:
@@ -11111,7 +11111,7 @@ listplaying_noparams_1:
   desc: Lists all statuses currently in the rotation.
   args:
     - ''
-  params: []
+  params: [ ]
 defprefix_=_1:
   desc: Sets or displays the default command prefix.
   args:
@@ -11177,22 +11177,22 @@ startupcommandsclear_noparams_1:
   desc: Clears all startup commands for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 forwardmessages_noparams_1:
   desc: Toggles the forwarding of direct messages to the bot's owner(s).
   args:
     - ''
-  params: []
+  params: [ ]
 forwardtoall_noparams_1:
   desc: Toggles whether forwarded messages are sent to all of the bot's owners or just the primary owner.
   args:
     - ''
-  params: []
+  params: [ ]
 shardstats_noparams_1:
   desc: Displays statistics for all shards of the bot, including their statuses, guild counts, and user counts.
   args:
     - ''
-  params: []
+  params: [ ]
 leaveserver_string_1:
   desc: Commands the bot to leave a server.
   args:
@@ -11203,7 +11203,7 @@ die_noparams_1:
   desc: Initiates a shutdown of the bot.
   args:
     - ''
-  params: []
+  params: [ ]
 setname_string_1:
   desc: Changes the bot's username to the specified new name.
   args:
@@ -11261,12 +11261,12 @@ imagesreload_noparams_1:
   desc: Initiates the reloading of images used by the bot.
   args:
     - ''
-  params: []
+  params: [ ]
 stringsreload_noparams_1:
   desc: Initiates the reloading of bot strings (localizations).
   args:
     - ''
-  params: []
+  params: [ ]
 bash_string_1:
   desc: Executes a bash command. Depending on the platform, the command is executed in either bash or PowerShell.
   args:
@@ -11283,7 +11283,7 @@ update_noparams_2:
   desc: Indicates the user is idle and may be away from their device.
   args:
     - ''
-  params: []
+  params: [ ]
 sudo_IGuildUser_string_2:
   desc: Execute the Sudo command
   args:
@@ -11301,7 +11301,7 @@ generatedocs_noparams_2:
   desc: Generates command documentation YML files
   args:
     - ''
-  params: []
+  params: [ ]
 redisexec_string_2:
   desc: Executes a Redis command and returns the result.
   args:
@@ -11318,17 +11318,17 @@ listservers_noparams_2:
   desc: Lists all servers the bot is currently in.
   args:
     - ''
-  params: []
+  params: [ ]
 commandstats_noparams_2:
   desc: Execute the CommandStats command
   args:
     - ''
-  params: []
+  params: [ ]
 rotateplaying_noparams_2:
   desc: Changes yml based config for the bot.
   args:
     - ''
-  params: []
+  params: [ ]
 addplaying_ActivityType_string_2:
   desc: Adds a new status to the rotation of playing statuses for the bot.
   args:
@@ -11340,7 +11340,7 @@ listplaying_noparams_2:
   desc: Lists all statuses currently in the rotation.
   args:
     - ''
-  params: []
+  params: [ ]
 defprefix_=_2:
   desc: Sets or displays the default command prefix.
   args:
@@ -11406,22 +11406,22 @@ startupcommandsclear_noparams_2:
   desc: Clears all startup commands for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 forwardmessages_noparams_2:
   desc: Toggles the forwarding of direct messages to the bot's owner(s).
   args:
     - ''
-  params: []
+  params: [ ]
 forwardtoall_noparams_2:
   desc: Toggles whether forwarded messages are sent to all of the bot's owners or just the primary owner.
   args:
     - ''
-  params: []
+  params: [ ]
 shardstats_noparams_2:
   desc: Execute the ShardStats command
   args:
     - ''
-  params: []
+  params: [ ]
 leaveserver_string_2:
   desc: Commands the bot to leave a server.
   args:
@@ -11432,7 +11432,7 @@ die_noparams_2:
   desc: Initiates a shutdown of the bot.
   args:
     - ''
-  params: []
+  params: [ ]
 setname_string_2:
   desc: Changes the bot's username to the specified new name.
   args:
@@ -11490,12 +11490,12 @@ imagesreload_noparams_2:
   desc: Initiates the reloading of images used by the bot.
   args:
     - ''
-  params: []
+  params: [ ]
 stringsreload_noparams_2:
   desc: Initiates the reloading of bot strings (localizations).
   args:
     - ''
-  params: []
+  params: [ ]
 bash_string_2:
   desc: Execute the Bash command
   args:
@@ -11577,7 +11577,7 @@ manualblacklistcheck:
   desc: Performs a manual check for blacklisted entities across the bot's scope.
   args:
     - ''
-  params: []
+  params: [ ]
 userblacklist_AddRemove_ulong_string:
   desc: Execute the UserBlacklist command
   args:
@@ -11627,7 +11627,7 @@ manualblacklistcheck_noparams:
   desc: Performs a manual check for blacklisted entities across the bot's scope.
   args:
     - ''
-  params: []
+  params: [ ]
 userblacklist_AddRemove_ulong_string_1:
   desc: Defines permission-related commands, including user, channel, and server blacklist operations.
   args:
@@ -11681,7 +11681,7 @@ manualblacklistcheck_noparams_1:
   desc: Performs a manual check for blacklisted entities across the bot's scope.
   args:
     - ''
-  params: []
+  params: [ ]
 userblacklist_AddRemove_ulong_string_2:
   desc: Execute the UserBlacklist command
   args:
@@ -11731,17 +11731,17 @@ manualblacklistcheck_noparams_2:
   desc: Performs a manual check for blacklisted entities across the bot's scope.
   args:
     - ''
-  params: []
+  params: [ ]
 globalpermlist:
   desc: Lists all currently globally blocked modules and commands.
   args:
     - ''
-  params: []
+  params: [ ]
 resetglobalperms:
   desc: Resets all global permissions, clearing all global command and module blocks.
   args:
     - ''
-  params: []
+  params: [ ]
 globalmodule:
   desc: Toggles a module on or off the global block list.
   args:
@@ -11766,12 +11766,12 @@ globalpermlist_noparams:
   desc: Lists all currently globally blocked modules and commands.
   args:
     - ''
-  params: []
+  params: [ ]
 resetglobalperms_noparams:
   desc: Resets all global permissions, clearing all global command and module blocks.
   args:
     - ''
-  params: []
+  params: [ ]
 globalmodule_ModuleOrCrInfo:
   desc: Toggles a module on or off the global block list.
   args:
@@ -11788,12 +11788,12 @@ globalpermlist_noparams_1:
   desc: Provides commands for managing global permissions, allowing for the blocking or unblocking of specific commands and modules across all guilds.
   args:
     - ''
-  params: []
+  params: [ ]
 resetglobalperms_noparams_1:
   desc: Resets all global permissions, clearing all global command and module blocks.
   args:
     - ''
-  params: []
+  params: [ ]
 globalmodule_ModuleOrCrInfo_1:
   desc: Toggles a module on or off the global block list.
   args:
@@ -11810,12 +11810,12 @@ globalpermlist_noparams_2:
   desc: Lists all currently globally blocked modules and commands.
   args:
     - ''
-  params: []
+  params: [ ]
 resetglobalperms_noparams_2:
   desc: Resets all global permissions, clearing all global command and module blocks.
   args:
     - ''
-  params: []
+  params: [ ]
 globalmodule_ModuleOrCrInfo_2:
   desc: Toggles a module on or off the global block list.
   args:
@@ -11844,7 +11844,7 @@ allcmdcooldowns:
   desc: Displays all commands with active cooldowns in the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 cmdcooldown_CommandOrCrInfo_=:
   desc: Execute the CmdCooldown command
   args:
@@ -11857,7 +11857,7 @@ allcmdcooldowns_noparams:
   desc: Execute the AllCmdCooldowns command
   args:
     - ''
-  params: []
+  params: [ ]
 cmdcooldown_CommandOrCrInfo_=_1:
   desc: Represents commands for managing command cooldowns.
   args:
@@ -11870,7 +11870,7 @@ allcmdcooldowns_noparams_1:
   desc: Displays all commands with active cooldowns in the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 cmdcooldown_CommandOrCrInfo_=_2:
   desc: Execute the CmdCooldown command
   args:
@@ -11883,7 +11883,7 @@ allcmdcooldowns_noparams_2:
   desc: Execute the AllCmdCooldowns command
   args:
     - ''
-  params: []
+  params: [ ]
 autobanword:
   desc: Toggles a word on or off the automatic ban list for the current guild.
   args:
@@ -11898,7 +11898,7 @@ autobanwordlist:
   desc: Displays a paginated list of all words on the automatic ban list for the current guild.
   args:
     - ''
-  params: []
+  params: [ ]
 fwarn:
   desc: Enables or disables warnings for filtered words in the current guild.
   args:
@@ -11919,37 +11919,37 @@ fwclear:
   desc: Clears all filtered words for the current guild.
   args:
     - ''
-  params: []
+  params: [ ]
 srvrfilterinv:
   desc: Toggles the server-wide invite link filter on or off.
   args:
     - ''
-  params: []
+  params: [ ]
 chnlfilterinv:
   desc: Toggles the invite link filter for a specific channel on or off.
   args:
     - ''
-  params: []
+  params: [ ]
 srvrfilterlin:
   desc: Toggles the server-wide link filter on or off.
   args:
     - ''
-  params: []
+  params: [ ]
 chnlfilterlin:
   desc: Toggles the link filter for a specific channel on or off.
   args:
     - ''
-  params: []
+  params: [ ]
 srvrfilterwords:
   desc: Toggles the server-wide word filter on or off.
   args:
     - ''
-  params: []
+  params: [ ]
 chnlfilterwords:
   desc: Toggles the word filter for a specific channel on or off.
   args:
     - ''
-  params: []
+  params: [ ]
 filterword:
   desc: Adds or removes a word from the filtered words list in the current guild.
   args:
@@ -11964,7 +11964,7 @@ lstfilterwords:
   desc: Lists all words currently on the filtered words list for the current guild.
   args:
     - ''
-  params: []
+  params: [ ]
 autobanword_string:
   desc: Execute the AutoBanWord command
   args:
@@ -11975,7 +11975,7 @@ autobanwordlist_noparams:
   desc: Execute the AutoBanWordList command
   args:
     - ''
-  params: []
+  params: [ ]
 fwarn_string:
   desc: Execute the FWarn command
   args:
@@ -11992,37 +11992,37 @@ fwclear_noparams:
   desc: Execute the FwClear command
   args:
     - ''
-  params: []
+  params: [ ]
 srvrfilterinv_noparams:
   desc: Execute the SrvrFilterInv command
   args:
     - ''
-  params: []
+  params: [ ]
 chnlfilterinv_noparams:
   desc: Execute the ChnlFilterInv command
   args:
     - ''
-  params: []
+  params: [ ]
 srvrfilterlin_noparams:
   desc: Execute the SrvrFilterLin command
   args:
     - ''
-  params: []
+  params: [ ]
 chnlfilterlin_noparams:
   desc: Execute the ChnlFilterLin command
   args:
     - ''
-  params: []
+  params: [ ]
 srvrfilterwords_noparams:
   desc: Execute the SrvrFilterWords command
   args:
     - ''
-  params: []
+  params: [ ]
 chnlfilterwords_noparams:
   desc: Execute the ChnlFilterWords command
   args:
     - ''
-  params: []
+  params: [ ]
 filterword_string:
   desc: Execute the FilterWord command
   args:
@@ -12033,7 +12033,7 @@ lstfilterwords_noparams:
   desc: Execute the LstFilterWords command
   args:
     - ''
-  params: []
+  params: [ ]
 autobanword_string_1:
   desc: Provides commands for managing word filters and automatic bans within guilds.
   args:
@@ -12044,7 +12044,7 @@ autobanwordlist_noparams_1:
   desc: Displays a paginated list of all words on the automatic ban list for the current guild.
   args:
     - ''
-  params: []
+  params: [ ]
 fwarn_string_1:
   desc: Enables or disables warnings for filtered words in the current guild.
   args:
@@ -12061,37 +12061,37 @@ fwclear_noparams_1:
   desc: Clears all filtered words for the current guild.
   args:
     - ''
-  params: []
+  params: [ ]
 srvrfilterinv_noparams_1:
   desc: Toggles the server-wide invite link filter on or off.
   args:
     - ''
-  params: []
+  params: [ ]
 chnlfilterinv_noparams_1:
   desc: Toggles the invite link filter for a specific channel on or off.
   args:
     - ''
-  params: []
+  params: [ ]
 srvrfilterlin_noparams_1:
   desc: Toggles the server-wide link filter on or off.
   args:
     - ''
-  params: []
+  params: [ ]
 chnlfilterlin_noparams_1:
   desc: Toggles the link filter for a specific channel on or off.
   args:
     - ''
-  params: []
+  params: [ ]
 srvrfilterwords_noparams_1:
   desc: Toggles the server-wide word filter on or off.
   args:
     - ''
-  params: []
+  params: [ ]
 chnlfilterwords_noparams_1:
   desc: Toggles the word filter for a specific channel on or off.
   args:
     - ''
-  params: []
+  params: [ ]
 filterword_string_1:
   desc: Adds or removes a word from the filtered words list in the current guild.
   args:
@@ -12102,7 +12102,7 @@ lstfilterwords_noparams_1:
   desc: Lists all words currently on the filtered words list for the current guild.
   args:
     - ''
-  params: []
+  params: [ ]
 autobanword_string_2:
   desc: Execute the AutoBanWord command
   args:
@@ -12113,7 +12113,7 @@ autobanwordlist_noparams_2:
   desc: Execute the AutoBanWordList command
   args:
     - ''
-  params: []
+  params: [ ]
 fwarn_string_2:
   desc: Execute the FWarn command
   args:
@@ -12130,37 +12130,37 @@ fwclear_noparams_2:
   desc: Execute the FwClear command
   args:
     - ''
-  params: []
+  params: [ ]
 srvrfilterinv_noparams_2:
   desc: Execute the SrvrFilterInv command
   args:
     - ''
-  params: []
+  params: [ ]
 chnlfilterinv_noparams_2:
   desc: Execute the ChnlFilterInv command
   args:
     - ''
-  params: []
+  params: [ ]
 srvrfilterlin_noparams_2:
   desc: Execute the SrvrFilterLin command
   args:
     - ''
-  params: []
+  params: [ ]
 chnlfilterlin_noparams_2:
   desc: Execute the ChnlFilterLin command
   args:
     - ''
-  params: []
+  params: [ ]
 srvrfilterwords_noparams_2:
   desc: Execute the SrvrFilterWords command
   args:
     - ''
-  params: []
+  params: [ ]
 chnlfilterwords_noparams_2:
   desc: Execute the ChnlFilterWords command
   args:
     - ''
-  params: []
+  params: [ ]
 filterword_string_2:
   desc: Execute the FilterWord command
   args:
@@ -12171,12 +12171,12 @@ lstfilterwords_noparams_2:
   desc: Execute the LstFilterWords command
   args:
     - ''
-  params: []
+  params: [ ]
 resetperms:
   desc: Used with the permrole command to reset the permission role.
   args:
     - ''
-  params: []
+  params: [ ]
 verbose:
   desc: Sets whether commands should throw an error based on what the issue is when using a command.
   args:
@@ -12203,7 +12203,7 @@ listperms:
   desc: Lists the permissions for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 removeperm:
   desc: Removes a permission from the list based on its index.
   args:
@@ -12385,7 +12385,7 @@ resetperms_noparams:
   desc: Used with the permrole command to reset the permission role.
   args:
     - ''
-  params: []
+  params: [ ]
 verbose_=:
   desc: Sets whether commands should throw an error based on what the issue is when using a command.
   args:
@@ -12408,7 +12408,7 @@ listperms_noparams:
   desc: Lists the permissions for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 removeperm_int:
   desc: Removes a permission from the list based on its index.
   args:
@@ -12538,7 +12538,7 @@ resetperms_noparams_1:
   desc: A module for managing permissions for commands.
   args:
     - ''
-  params: []
+  params: [ ]
 verbose_=_1:
   desc: Sets whether commands should throw an error based on what the issue is when using a command.
   args:
@@ -12561,7 +12561,7 @@ listperms_noparams_1:
   desc: Lists the permissions for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 removeperm_int_1:
   desc: Removes a permission from the list based on its index.
   args:
@@ -12691,7 +12691,7 @@ resetperms_noparams_2:
   desc: Used with the permrole command to reset the permission role.
   args:
     - ''
-  params: []
+  params: [ ]
 verbose_=_2:
   desc: Sets whether commands should throw an error based on what the issue is when using a command.
   args:
@@ -12714,7 +12714,7 @@ listperms_noparams_2:
   desc: Lists the permissions for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 removeperm_int_2:
   desc: Removes a permission from the list based on its index.
   args:
@@ -12945,7 +12945,7 @@ rolegreetlist:
   desc: Lists all role greets set up in the guild, providing detailed information for each.
   args:
     - ''
-  params: []
+  params: [ ]
 rolegreetadd_IRole_=:
   desc: Adds a new role greet message for a specified role. If no channel is specified, the current channel is used.
   args:
@@ -13015,7 +13015,7 @@ rolegreetlist_noparams:
   desc: Lists all role greets set up in the guild, providing detailed information for each.
   args:
     - ''
-  params: []
+  params: [ ]
 rolegreetadd_IRole_=_1:
   desc: The RoleGreets module provides commands for managing role greet messages within a Discord guild. These messages are sent when a user receives a specific role, allowing for custom greetings or information to be shared automatically.
   args:
@@ -13085,7 +13085,7 @@ rolegreetlist_noparams_1:
   desc: Lists all role greets set up in the guild, providing detailed information for each.
   args:
     - ''
-  params: []
+  params: [ ]
 rolegreetadd_IRole_=_2:
   desc: Adds a new role greet message for a specified role. If no channel is specified, the current channel is used.
   args:
@@ -13155,17 +13155,17 @@ rolegreetlist_noparams_2:
   desc: Lists all role greets set up in the guild, providing detailed information for each.
   args:
     - ''
-  params: []
+  params: [ ]
 togglerolestates:
   desc: Toggles the role states feature on or off.
   args:
     - ''
-  params: []
+  params: [ ]
 saveallrolestates:
   desc: Saves role states for all users in the server.
   args:
     - ''
-  params: []
+  params: [ ]
 transferrolestates:
   desc: Transfers role states from the current server to another server.
   args:
@@ -13180,22 +13180,22 @@ togglerolestatesignorebots:
   desc: Toggles whether bots should be ignored by the role states feature.
   args:
     - ''
-  params: []
+  params: [ ]
 togglerolestatesclearonban:
   desc: Toggles whether role states should be cleared when a user is banned.
   args:
     - ''
-  params: []
+  params: [ ]
 viewrolestatessettings:
   desc: Displays the current settings for the role states feature.
   args:
     - ''
-  params: []
+  params: [ ]
 viewuserrolestates:
   desc: Displays the role states for all users.
   args:
     - ''
-  params: []
+  params: [ ]
 deleteuserrolestate:
   desc: Deletes the role state for a specific user.
   args:
@@ -13301,12 +13301,12 @@ togglerolestates_noparams:
   desc: Toggles the role states feature on or off.
   args:
     - ''
-  params: []
+  params: [ ]
 saveallrolestates_noparams:
   desc: Saves role states for all users in the server.
   args:
     - ''
-  params: []
+  params: [ ]
 transferrolestates_ulong:
   desc: Transfers role states from the current server to another server.
   args:
@@ -13317,22 +13317,22 @@ togglerolestatesignorebots_noparams:
   desc: Toggles whether bots should be ignored by the role states feature.
   args:
     - ''
-  params: []
+  params: [ ]
 togglerolestatesclearonban_noparams:
   desc: Toggles whether role states should be cleared when a user is banned.
   args:
     - ''
-  params: []
+  params: [ ]
 viewrolestatessettings_noparams:
   desc: Displays the current settings for the role states feature.
   args:
     - ''
-  params: []
+  params: [ ]
 viewuserrolestates_noparams:
   desc: Displays the role states for all users.
   args:
     - ''
-  params: []
+  params: [ ]
 deleteuserrolestate_IGuildUser:
   desc: Deletes the role state for a specific user.
   args:
@@ -13398,12 +13398,12 @@ togglerolestates_noparams_1:
   desc: Execute the ToggleRoleStates command
   args:
     - ''
-  params: []
+  params: [ ]
 saveallrolestates_noparams_1:
   desc: Saves role states for all users in the server.
   args:
     - ''
-  params: []
+  params: [ ]
 transferrolestates_ulong_1:
   desc: Transfers role states from the current server to another server.
   args:
@@ -13414,22 +13414,22 @@ togglerolestatesignorebots_noparams_1:
   desc: Toggles whether bots should be ignored by the role states feature.
   args:
     - ''
-  params: []
+  params: [ ]
 togglerolestatesclearonban_noparams_1:
   desc: Toggles whether role states should be cleared when a user is banned.
   args:
     - ''
-  params: []
+  params: [ ]
 viewrolestatessettings_noparams_1:
   desc: Displays the current settings for the role states feature.
   args:
     - ''
-  params: []
+  params: [ ]
 viewuserrolestates_noparams_1:
   desc: Displays the role states for all users.
   args:
     - ''
-  params: []
+  params: [ ]
 deleteuserrolestate_IGuildUser_1:
   desc: Deletes the role state for a specific user.
   args:
@@ -13491,12 +13491,12 @@ togglerolestates_noparams_2:
   desc: Execute the ToggleRoleStates command
   args:
     - ''
-  params: []
+  params: [ ]
 saveallrolestates_noparams_2:
   desc: Saves role states for all users in the server.
   args:
     - ''
-  params: []
+  params: [ ]
 transferrolestates_ulong_2:
   desc: Transfers role states from the current server to another server.
   args:
@@ -13507,22 +13507,22 @@ togglerolestatesignorebots_noparams_2:
   desc: Toggles whether bots should be ignored by the role states feature.
   args:
     - ''
-  params: []
+  params: [ ]
 togglerolestatesclearonban_noparams_2:
   desc: Toggles whether role states should be cleared when a user is banned.
   args:
     - ''
-  params: []
+  params: [ ]
 viewrolestatessettings_noparams_2:
   desc: Displays the current settings for the role states feature.
   args:
     - ''
-  params: []
+  params: [ ]
 viewuserrolestates_noparams_2:
   desc: Displays the role states for all users.
   args:
     - ''
-  params: []
+  params: [ ]
 deleteuserrolestate_IGuildUser_2:
   desc: Deletes the role state for a specific user.
   args:
@@ -14385,17 +14385,17 @@ randomneko:
   desc: Sends a random neko image.
   args:
     - ''
-  params: []
+  params: [ ]
 randomkitsune:
   desc: Sends a random kitsune image.
   args:
     - ''
-  params: []
+  params: [ ]
 randomwaifu:
   desc: Sends a random waifu image.
   args:
     - ''
-  params: []
+  params: [ ]
 mal:
   desc: Retrieves and displays information about a MyAnimeList profile.
   args:
@@ -14465,17 +14465,17 @@ randomneko_noparams:
   desc: Sends a random neko image.
   args:
     - ''
-  params: []
+  params: [ ]
 randomkitsune_noparams:
   desc: Sends a random kitsune image.
   args:
     - ''
-  params: []
+  params: [ ]
 randomwaifu_noparams:
   desc: Sends a random waifu image.
   args:
     - ''
-  params: []
+  params: [ ]
 mal_string:
   desc: Execute the Mal command
   args:
@@ -14533,17 +14533,17 @@ randomneko_noparams_1:
   desc: Sends a random neko image.
   args:
     - ''
-  params: []
+  params: [ ]
 randomkitsune_noparams_1:
   desc: Sends a random kitsune image.
   args:
     - ''
-  params: []
+  params: [ ]
 randomwaifu_noparams_1:
   desc: Sends a random waifu image.
   args:
     - ''
-  params: []
+  params: [ ]
 mal_string_1:
   desc: Retrieves and displays information about a MyAnimeList profile.
   args:
@@ -14597,17 +14597,17 @@ randomneko_noparams_2:
   desc: Sends a random neko image.
   args:
     - ''
-  params: []
+  params: [ ]
 randomkitsune_noparams_2:
   desc: Sends a random kitsune image.
   args:
     - ''
-  params: []
+  params: [ ]
 randomwaifu_noparams_2:
   desc: Sends a random waifu image.
   args:
     - ''
-  params: []
+  params: [ ]
 mal_string_2:
   desc: Execute the Mal command
   args:
@@ -14687,7 +14687,7 @@ feedlist:
   desc: Lists all RSS feeds added to the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 feedadd_string_=:
   desc: Execute the FeedAdd command
   args:
@@ -14719,7 +14719,7 @@ feedlist_noparams:
   desc: Lists all RSS feeds added to the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 feedadd_string_=_1:
   desc: Module for managing RSS feeds in the guild.
   args:
@@ -14751,7 +14751,7 @@ feedlist_noparams_1:
   desc: Lists all RSS feeds added to the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 feedadd_string_=_2:
   desc: Execute the FeedAdd command
   args:
@@ -14783,112 +14783,112 @@ feedlist_noparams_2:
   desc: Lists all RSS feeds added to the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 yomama:
   desc: Retrieves a Yo Mama joke.
   args:
     - ''
-  params: []
+  params: [ ]
 randjoke:
   desc: Retrieves a random joke.
   args:
     - ''
-  params: []
+  params: [ ]
 chucknorris:
   desc: Retrieves a Chuck Norris joke.
   args:
     - ''
-  params: []
+  params: [ ]
 wowjoke:
   desc: Retrieves a joke related to World of Warcraft.
   args:
     - ''
-  params: []
+  params: [ ]
 magicitem:
   desc: Retrieves a magic item description related to World of Warcraft.
   args:
     - ''
-  params: []
+  params: [ ]
 yomama_noparams:
   desc: Retrieves a Yo Mama joke.
   args:
     - ''
-  params: []
+  params: [ ]
 randjoke_noparams:
   desc: Retrieves a random joke.
   args:
     - ''
-  params: []
+  params: [ ]
 chucknorris_noparams:
   desc: Retrieves a Chuck Norris joke.
   args:
     - ''
-  params: []
+  params: [ ]
 wowjoke_noparams:
   desc: Retrieves a joke related to World of Warcraft.
   args:
     - ''
-  params: []
+  params: [ ]
 magicitem_noparams:
   desc: Retrieves a magic item description related to World of Warcraft.
   args:
     - ''
-  params: []
+  params: [ ]
 yomama_noparams_1:
   desc: Module for retrieving various types of jokes.
   args:
     - ''
-  params: []
+  params: [ ]
 randjoke_noparams_1:
   desc: Retrieves a random joke.
   args:
     - ''
-  params: []
+  params: [ ]
 chucknorris_noparams_1:
   desc: Retrieves a Chuck Norris joke.
   args:
     - ''
-  params: []
+  params: [ ]
 wowjoke_noparams_1:
   desc: Retrieves a joke related to World of Warcraft.
   args:
     - ''
-  params: []
+  params: [ ]
 magicitem_noparams_1:
   desc: Retrieves a magic item description related to World of Warcraft.
   args:
     - ''
-  params: []
+  params: [ ]
 yomama_noparams_2:
   desc: Module for retrieving various types of jokes.
   args:
     - ''
-  params: []
+  params: [ ]
 randjoke_noparams_2:
   desc: Retrieves a random joke.
   args:
     - ''
-  params: []
+  params: [ ]
 chucknorris_noparams_2:
   desc: Retrieves a Chuck Norris joke.
   args:
     - ''
-  params: []
+  params: [ ]
 wowjoke_noparams_2:
   desc: Retrieves a joke related to World of Warcraft.
   args:
     - ''
-  params: []
+  params: [ ]
 magicitem_noparams_2:
   desc: Retrieves a magic item description related to World of Warcraft.
   args:
     - ''
-  params: []
+  params: [ ]
 memelist:
   desc: Lists available meme templates.
   args:
     - ''
-  params: []
+  params: [ ]
 memegen:
   desc: Generates a meme with the specified template and text.
   args:
@@ -14905,7 +14905,7 @@ memelist_noparams:
   desc: Lists available meme templates.
   args:
     - ''
-  params: []
+  params: [ ]
 memegen_string_=:
   desc: Execute the Memegen command
   args:
@@ -14918,7 +14918,7 @@ memelist_noparams_1:
   desc: Module for generating memes using the memegen API.
   args:
     - ''
-  params: []
+  params: [ ]
 memegen_string_=_1:
   desc: Generates a meme with the specified template and text.
   args:
@@ -14931,7 +14931,7 @@ memelist_noparams_2:
   desc: Lists available meme templates.
   args:
     - ''
-  params: []
+  params: [ ]
 memegen_string_=_2:
   desc: Execute the Memegen command
   args:
@@ -15100,17 +15100,17 @@ streamsclear:
   desc: Clears all streams from the guild's notification list.
   args:
     - ''
-  params: []
+  params: [ ]
 streamlist:
   desc: Lists all streams currently followed by the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 streamoffline:
   desc: Toggles the setting for notifying the guild when a followed stream goes offline.
   args:
     - ''
-  params: []
+  params: [ ]
 streammessage:
   desc: Sets a custom notification message for a specific stream in the guild's notification list.
   args:
@@ -15152,17 +15152,17 @@ streamsclear_noparams:
   desc: Clears all streams from the guild's notification list.
   args:
     - ''
-  params: []
+  params: [ ]
 streamlist_noparams:
   desc: Lists all streams currently followed by the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 streamoffline_noparams:
   desc: Toggles the setting for notifying the guild when a followed stream goes offline.
   args:
     - ''
-  params: []
+  params: [ ]
 streammessage_int_string:
   desc: Execute the StreamMessage command
   args:
@@ -15192,17 +15192,17 @@ streamsclear_noparams_1:
   desc: Clears all streams from the guild's notification list.
   args:
     - ''
-  params: []
+  params: [ ]
 streamlist_noparams_1:
   desc: Lists all streams currently followed by the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 streamoffline_noparams_1:
   desc: Toggles the setting for notifying the guild when a followed stream goes offline.
   args:
     - ''
-  params: []
+  params: [ ]
 streammessage_int_string_1:
   desc: Sets a custom notification message for a specific stream in the guild's notification list.
   args:
@@ -15232,17 +15232,17 @@ streamsclear_noparams_2:
   desc: Clears all streams from the guild's notification list.
   args:
     - ''
-  params: []
+  params: [ ]
 streamlist_noparams_2:
   desc: Lists all streams currently followed by the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 streamoffline_noparams_2:
   desc: Toggles the setting for notifying the guild when a followed stream goes offline.
   args:
     - ''
-  params: []
+  params: [ ]
 streammessage_int_string_2:
   desc: Execute the StreamMessage command
   args:
@@ -15288,7 +15288,7 @@ translangs:
   desc: Lists all available languages for translation.
   args:
     - ''
-  params: []
+  params: [ ]
 translate_string_=:
   desc: Execute the Translate command
   args:
@@ -15313,7 +15313,7 @@ translangs_noparams:
   desc: Lists all available languages for translation.
   args:
     - ''
-  params: []
+  params: [ ]
 translate_string_=_1:
   desc: Provides commands for translating text and managing auto-translation settings within a Discord guild.
   args:
@@ -15338,7 +15338,7 @@ translangs_noparams_1:
   desc: Lists all available languages for translation.
   args:
     - ''
-  params: []
+  params: [ ]
 translate_string_=_2:
   desc: Execute the Translate command
   args:
@@ -15363,7 +15363,7 @@ translangs_noparams_2:
   desc: Lists all available languages for translation.
   args:
     - ''
-  params: []
+  params: [ ]
 xkcd:
   desc: Fetches and displays an XKCD comic. If 'latest' is specified, fetches the latest comic; otherwise, fetches a random comic.
   args:
@@ -15420,7 +15420,7 @@ meme:
   desc: Fetches and displays a random meme from Reddit.
   args:
     - ''
-  params: []
+  params: [ ]
 randomreddit:
   desc: Fetches and displays a random post from a specified subreddit.
   args:
@@ -15481,22 +15481,22 @@ randomcat:
   desc: Displays a random cat image.
   args:
     - ''
-  params: []
+  params: [ ]
 randomdog:
   desc: Displays a random dog image.
   args:
     - ''
-  params: []
+  params: [ ]
 randomfood:
   desc: Displays a random food image.
   args:
     - ''
-  params: []
+  params: [ ]
 randombird:
   desc: Displays birb.
   args:
     - ''
-  params: []
+  params: [ ]
 image:
   desc: Fetches and displays a random image from the specified category using Martine API.
   args:
@@ -15543,7 +15543,7 @@ catfact:
   desc: Fetches and shares a random cat fact.
   args:
     - ''
-  params: []
+  params: [ ]
 revav:
   desc: Performs a reverse image search using an avatar link.
   args:
@@ -15632,7 +15632,7 @@ meme_noparams:
   desc: Fetches and displays a random meme from Reddit.
   args:
     - ''
-  params: []
+  params: [ ]
 randomreddit_string:
   desc: Execute the RandomReddit command
   args:
@@ -15673,22 +15673,22 @@ randomcat_noparams:
   desc: Displays a random cat image.
   args:
     - ''
-  params: []
+  params: [ ]
 randomdog_noparams:
   desc: Displays a random dog image.
   args:
     - ''
-  params: []
+  params: [ ]
 randomfood_noparams:
   desc: Displays a random food image.
   args:
     - ''
-  params: []
+  params: [ ]
 randombird_noparams:
   desc: Displays birb.
   args:
     - ''
-  params: []
+  params: [ ]
 image_string:
   desc: Execute the Image command
   args:
@@ -15727,7 +15727,7 @@ catfact_noparams:
   desc: Fetches and shares a random cat fact.
   args:
     - ''
-  params: []
+  params: [ ]
 revav_=:
   desc: Execute the Revav command
   args:
@@ -15788,7 +15788,7 @@ meme_noparams_1:
   desc: The Searches module provides commands for searching and retrieving various types of information. It includes commands for searching memes, Reddit posts, weather, and more.
   args:
     - ''
-  params: []
+  params: [ ]
 randomreddit_string_1:
   desc: Fetches and displays a random post from a specified subreddit.
   args:
@@ -15829,22 +15829,22 @@ randomcat_noparams_1:
   desc: Displays a random cat image.
   args:
     - ''
-  params: []
+  params: [ ]
 randomdog_noparams_1:
   desc: Displays a random dog image.
   args:
     - ''
-  params: []
+  params: [ ]
 randomfood_noparams_1:
   desc: Displays a random food image.
   args:
     - ''
-  params: []
+  params: [ ]
 randombird_noparams_1:
   desc: Displays birb.
   args:
     - ''
-  params: []
+  params: [ ]
 image_string_1:
   desc: Fetches and displays a random image from the specified category using Martine API.
   args:
@@ -15879,7 +15879,7 @@ catfact_noparams_1:
   desc: Fetches and shares a random cat fact.
   args:
     - ''
-  params: []
+  params: [ ]
 revav_=_1:
   desc: Performs a reverse image search using an avatar link.
   args:
@@ -15940,7 +15940,7 @@ meme_noparams_2:
   desc: Fetches and displays a random meme from Reddit.
   args:
     - ''
-  params: []
+  params: [ ]
 randomreddit_string_2:
   desc: Execute the RandomReddit command
   args:
@@ -15981,22 +15981,22 @@ randomcat_noparams_2:
   desc: Displays a random cat image.
   args:
     - ''
-  params: []
+  params: [ ]
 randomdog_noparams_2:
   desc: Displays a random dog image.
   args:
     - ''
-  params: []
+  params: [ ]
 randomfood_noparams_2:
   desc: Displays a random food image.
   args:
     - ''
-  params: []
+  params: [ ]
 randombird_noparams_2:
   desc: Displays birb.
   args:
     - ''
-  params: []
+  params: [ ]
 image_string_2:
   desc: Execute the Image command
   args:
@@ -16031,7 +16031,7 @@ catfact_noparams_2:
   desc: Fetches and shares a random cat fact.
   args:
     - ''
-  params: []
+  params: [ ]
 revav_=_2:
   desc: Execute the Revav command
   args:
@@ -16306,7 +16306,7 @@ rolejobs:
   desc: Lists all ongoing mass role operations within the server, providing details about each.
   args:
     - ''
-  params: []
+  params: [ ]
 addtoall:
   desc: Adds a specified role to all server members.
   args:
@@ -16341,7 +16341,7 @@ exportrolelist:
   desc: Exports a list of roles and their associated users to a text file, allowing for easy backup and transfer.
   args:
     - ''
-  params: []
+  params: [ ]
 importrolelist:
   desc: Imports roles and user associations from a text file, applying the specified roles to the mentioned users.
   args:
@@ -16529,7 +16529,7 @@ rolejobs_noparams:
   desc: Lists all ongoing mass role operations within the server, providing details about each.
   args:
     - ''
-  params: []
+  params: [ ]
 addtoall_IRole:
   desc: Adds a specified role to all server members.
   args:
@@ -16552,7 +16552,7 @@ exportrolelist_noparams:
   desc: Exports a list of roles and their associated users to a text file, allowing for easy backup and transfer.
   args:
     - ''
-  params: []
+  params: [ ]
 importrolelist_=:
   desc: Imports roles and user associations from a text file, applying the specified roles to the mentioned users.
   args:
@@ -16688,7 +16688,7 @@ rolejobs_noparams_1:
   desc: Lists all ongoing mass role operations within the server, providing details about each.
   args:
     - ''
-  params: []
+  params: [ ]
 addtoall_IRole_1:
   desc: Adds a specified role to all server members.
   args:
@@ -16711,7 +16711,7 @@ exportrolelist_noparams_1:
   desc: Exports a list of roles and their associated users to a text file, allowing for easy backup and transfer.
   args:
     - ''
-  params: []
+  params: [ ]
 importrolelist_=_1:
   desc: Imports roles and user associations from a text file, applying the specified roles to the mentioned users.
   args:
@@ -16847,7 +16847,7 @@ rolejobs_noparams_2:
   desc: Lists all ongoing mass role operations within the server, providing details about each.
   args:
     - ''
-  params: []
+  params: [ ]
 addtoall_IRole_2:
   desc: Adds a specified role to all server members.
   args:
@@ -16870,7 +16870,7 @@ exportrolelist_noparams_2:
   desc: Exports a list of roles and their associated users to a text file, allowing for easy backup and transfer.
   args:
     - ''
-  params: []
+  params: [ ]
 importrolelist_=_2:
   desc: Imports roles and user associations from a text file, applying the specified roles to the mentioned users.
   args:
@@ -16940,7 +16940,7 @@ permview:
   desc: Contains commands related to server management.
   args:
     - ''
-  params: []
+  params: [ ]
 permview_IGuildUser:
   desc: Displays the list of allowed permissions for the specified user.
   args:
@@ -17058,7 +17058,7 @@ permview_noparams:
   desc: Contains commands related to server management.
   args:
     - ''
-  params: []
+  params: [ ]
 permview_IGuildUser_1:
   desc: Displays the list of allowed permissions for the specified user.
   args:
@@ -17186,7 +17186,7 @@ unlockdown:
   desc: Unlocks the server by allowing @everyone to send messages again.
   args:
     - ''
-  params: []
+  params: [ ]
 nuke:
   desc: Deletes and recreates a text channel, effectively "nuking" it.
   args:
@@ -17300,7 +17300,7 @@ slowmode_noparams:
   desc: Toggles the slowmode interval for the current text channel between off and a default interval.
   args:
     - ''
-  params: []
+  params: [ ]
 createwebhook:
   desc: Creates a webhook in a text channel with an optional custom avatar.
   args:
@@ -17347,7 +17347,7 @@ unlockdown_noparams:
   desc: Unlocks the server by allowing @everyone to send messages again.
   args:
     - ''
-  params: []
+  params: [ ]
 nuke_=:
   desc: Deletes and recreates a text channel, effectively "nuking" it.
   args:
@@ -17417,7 +17417,7 @@ slowmode_noparams_1:
   desc: Execute the Slowmode command
   args:
     - ''
-  params: []
+  params: [ ]
 createwebhook_ITextChannel_string_=:
   desc: Creates a webhook in a text channel with an optional custom avatar.
   args:
@@ -17464,7 +17464,7 @@ unlockdown_noparams_1:
   desc: Unlocks the server by allowing @everyone to send messages again.
   args:
     - ''
-  params: []
+  params: [ ]
 nuke_=_1:
   desc: Deletes and recreates a text channel, effectively "nuking" it.
   args:
@@ -17534,7 +17534,7 @@ slowmode_noparams_2:
   desc: Toggles the slowmode interval for the current text channel between off and a default interval.
   args:
     - ''
-  params: []
+  params: [ ]
 createwebhook_ITextChannel_string_=_1:
   desc: Creates a webhook in a text channel with an optional custom avatar.
   args:
@@ -17581,7 +17581,7 @@ unlockdown_noparams_2:
   desc: Unlocks the server by allowing @everyone to send messages again.
   args:
     - ''
-  params: []
+  params: [ ]
 nuke_=_2:
   desc: Deletes and recreates a text channel, effectively "nuking" it.
   args:
@@ -17651,7 +17651,7 @@ slowmode_noparams_3:
   desc: Execute the Slowmode command
   args:
     - ''
-  params: []
+  params: [ ]
 createwebhook_ITextChannel_string_=_2:
   desc: Creates a webhook in a text channel with an optional custom avatar.
   args:
@@ -17747,7 +17747,7 @@ listblacklists:
   desc: Lists all blacklisted and whitelisted roles and permissions.
   args:
     - ''
-  params: []
+  params: [ ]
 setdefaultpunishment_PunishmentAction:
   desc: Sets the default punishment action for the guild.
   args:
@@ -17810,7 +17810,7 @@ listblacklists_noparams:
   desc: Lists all blacklisted and whitelisted roles and permissions.
   args:
     - ''
-  params: []
+  params: [ ]
 setdefaultpunishment_PunishmentAction_1:
   desc: Manages role monitoring settings, blacklists, and whitelists.
   args:
@@ -17877,7 +17877,7 @@ listblacklists_noparams_1:
   desc: Lists all blacklisted and whitelisted roles and permissions.
   args:
     - ''
-  params: []
+  params: [ ]
 setdefaultpunishment_PunishmentAction_2:
   desc: Sets the default punishment action for the guild.
   args:
@@ -17940,7 +17940,7 @@ listblacklists_noparams_2:
   desc: Lists all blacklisted and whitelisted roles and permissions.
   args:
     - ''
-  params: []
+  params: [ ]
 createstarboard:
   desc: Enum representing the mode for whitelisting or blacklisting channels for starboard.
   args:
@@ -17972,7 +17972,7 @@ liststarboards:
   desc: Lists all starboard configurations in the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 starboardallowbots:
   desc: Sets whether bots are allowed to be counted for a specific starboard.
   args:
@@ -18087,7 +18087,7 @@ liststarboards_noparams:
   desc: Lists all starboard configurations in the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 starboardallowbots_int_bool:
   desc: Sets whether bots are allowed to be counted for a specific starboard.
   args:
@@ -18166,7 +18166,7 @@ liststarboards_noparams_1:
   desc: Lists all starboard configurations in the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 starboardallowbots_int_bool_1:
   desc: Sets whether bots are allowed to be counted for a specific starboard.
   args:
@@ -18245,7 +18245,7 @@ liststarboards_noparams_2:
   desc: Lists all starboard configurations in the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 starboardallowbots_int_bool_2:
   desc: Sets whether bots are allowed to be counted for a specific starboard.
   args:
@@ -18396,7 +18396,7 @@ liststatusroles:
   desc: Lists all current status roles with their details.
   args:
     - ''
-  params: []
+  params: [ ]
 addstatusrole_string:
   desc: Adds a status role configuration.
   args:
@@ -18468,7 +18468,7 @@ liststatusroles_noparams:
   desc: Lists all current status roles with their details.
   args:
     - ''
-  params: []
+  params: [ ]
 addstatusrole_string_1:
   desc: Module for managing roles that are assigned based on user status.
   args:
@@ -18540,7 +18540,7 @@ liststatusroles_noparams_1:
   desc: Lists all current status roles with their details.
   args:
     - ''
-  params: []
+  params: [ ]
 addstatusrole_string_2:
   desc: Module for managing roles that are assigned based on user status.
   args:
@@ -18612,7 +18612,7 @@ liststatusroles_noparams_2:
   desc: Lists all current status roles with their details.
   args:
     - ''
-  params: []
+  params: [ ]
 setsuggestchannel:
   desc: Sets or disables the suggestion channel for the server.
   args:
@@ -18633,7 +18633,7 @@ suggestclear:
   desc: Clears all suggestions from the server.
   args:
     - ''
-  params: []
+  params: [ ]
 suggest:
   desc: Submits a new suggestion to the designated suggestion channel.
   args:
@@ -18704,7 +18704,7 @@ suggestclear_noparams:
   desc: Clears all suggestions from the server.
   args:
     - ''
-  params: []
+  params: [ ]
 suggest_string:
   desc: Submits a new suggestion to the designated suggestion channel.
   args:
@@ -18759,7 +18759,7 @@ suggestclear_noparams_1:
   desc: Clears all suggestions from the server.
   args:
     - ''
-  params: []
+  params: [ ]
 suggest_string_1:
   desc: Submits a new suggestion to the designated suggestion channel.
   args:
@@ -18814,7 +18814,7 @@ suggestclear_noparams_2:
   desc: Clears all suggestions from the server.
   args:
     - ''
-  params: []
+  params: [ ]
 suggest_string_2:
   desc: Submits a new suggestion to the designated suggestion channel.
   args:
@@ -19015,22 +19015,22 @@ archiveondeny:
   desc: Toggles the archive setting for suggestions upon denial.
   args:
     - ''
-  params: []
+  params: [ ]
 archiveonaccept:
   desc: Toggles the archive setting for suggestions upon acceptance.
   args:
     - ''
-  params: []
+  params: [ ]
 archiveonconsider:
   desc: Toggles the archive setting for suggestions upon consideration.
   args:
     - ''
-  params: []
+  params: [ ]
 archiveonimplement:
   desc: Toggles the archive setting for suggestions upon implementation.
   args:
     - ''
-  params: []
+  params: [ ]
 denymessage:
   desc: Sets or updates the deny message for suggestions.
   args:
@@ -19167,22 +19167,22 @@ archiveondeny_noparams:
   desc: Toggles the archive setting for suggestions upon denial.
   args:
     - ''
-  params: []
+  params: [ ]
 archiveonaccept_noparams:
   desc: Toggles the archive setting for suggestions upon acceptance.
   args:
     - ''
-  params: []
+  params: [ ]
 archiveonconsider_noparams:
   desc: Toggles the archive setting for suggestions upon consideration.
   args:
     - ''
-  params: []
+  params: [ ]
 archiveonimplement_noparams:
   desc: Toggles the archive setting for suggestions upon implementation.
   args:
     - ''
-  params: []
+  params: [ ]
 denymessage_string:
   desc: Sets or updates the deny message for suggestions.
   args:
@@ -19322,22 +19322,22 @@ archiveondeny_noparams_1:
   desc: Toggles the archive setting for suggestions upon denial.
   args:
     - ''
-  params: []
+  params: [ ]
 archiveonaccept_noparams_1:
   desc: Toggles the archive setting for suggestions upon acceptance.
   args:
     - ''
-  params: []
+  params: [ ]
 archiveonconsider_noparams_1:
   desc: Toggles the archive setting for suggestions upon consideration.
   args:
     - ''
-  params: []
+  params: [ ]
 archiveonimplement_noparams_1:
   desc: Toggles the archive setting for suggestions upon implementation.
   args:
     - ''
-  params: []
+  params: [ ]
 denymessage_string_1:
   desc: Sets or updates the deny message for suggestions.
   args:
@@ -19474,22 +19474,22 @@ archiveondeny_noparams_2:
   desc: Toggles the archive setting for suggestions upon denial.
   args:
     - ''
-  params: []
+  params: [ ]
 archiveonaccept_noparams_2:
   desc: Toggles the archive setting for suggestions upon acceptance.
   args:
     - ''
-  params: []
+  params: [ ]
 archiveonconsider_noparams_2:
   desc: Toggles the archive setting for suggestions upon consideration.
   args:
     - ''
-  params: []
+  params: [ ]
 archiveonimplement_noparams_2:
   desc: Toggles the archive setting for suggestions upon implementation.
   args:
     - ''
-  params: []
+  params: [ ]
 denymessage_string_2:
   desc: Sets or updates the deny message for suggestions.
   args:
@@ -19512,7 +19512,7 @@ panellist:
   desc: Provides configuration commands for managing ticket panels, buttons, and select menus.
   args:
     - ''
-  params: []
+  params: [ ]
 deletebutton:
   desc: Deletes a button from a panel.
   args:
@@ -19713,12 +19713,12 @@ ticketlistpanels:
   desc: Lists all ticket panels in the guild
   args:
     - ''
-  params: []
+  params: [ ]
 panellist_noparams:
   desc: Lists all ticket panels in the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 deletebutton_int:
   desc: Deletes a button from a panel.
   args:
@@ -19835,12 +19835,12 @@ ticketlistpanels_noparams:
   desc: Lists all ticket panels in the guild
   args:
     - ''
-  params: []
+  params: [ ]
 panellist_noparams_1:
   desc: Initializes a new instance of the TicketConfig class.
   args:
     - ''
-  params: []
+  params: [ ]
 deletebutton_int_1:
   desc: Deletes a button from a panel.
   args:
@@ -19957,12 +19957,12 @@ ticketlistpanels_noparams_1:
   desc: Lists all ticket panels in the guild
   args:
     - ''
-  params: []
+  params: [ ]
 panellist_noparams_2:
   desc: Lists all ticket panels in the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 deletebutton_int_2:
   desc: Deletes a button from a panel.
   args:
@@ -20079,12 +20079,12 @@ ticketlistpanels_noparams_2:
   desc: Lists all ticket panels in the guild
   args:
     - ''
-  params: []
+  params: [ ]
 panellist_noparams_3:
   desc: Provides configuration commands for managing ticket panels, buttons, and select menus.
   args:
     - ''
-  params: []
+  params: [ ]
 deletebutton_int_3:
   desc: Deletes a button from a panel.
   args:
@@ -20201,12 +20201,12 @@ ticketlistpanels_noparams_3:
   desc: Lists all ticket panels in the guild
   args:
     - ''
-  params: []
+  params: [ ]
 panellist_noparams_4:
   desc: Lists all ticket panels in the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 deletebutton_int_4:
   desc: Deletes a button from a panel.
   args:
@@ -20323,7 +20323,7 @@ ticketlistpanels_noparams_4:
   desc: Lists all ticket panels in the guild
   args:
     - ''
-  params: []
+  params: [ ]
 ticketpanel:
   desc: Creates a ticket panel
   args:
@@ -20380,22 +20380,22 @@ ticketclaim:
   desc: Claims the current ticket as a staff member.
   args:
     - ''
-  params: []
+  params: [ ]
 ticketunclaim:
   desc: Unclaims the current ticket.
   args:
     - ''
-  params: []
+  params: [ ]
 ticketclose:
   desc: Closes the current ticket.
   args:
     - ''
-  params: []
+  params: [ ]
 ticketarchive:
   desc: Archives a ticket, moving it to the archive category if set.
   args:
     - ''
-  params: []
+  params: [ ]
 ticketcreatecase:
   desc: Creates a new ticket case.
   args:
@@ -20425,7 +20425,7 @@ ticketunlinkcase:
   desc: Unlinks the current ticket from its case.
   args:
     - ''
-  params: []
+  params: [ ]
 ticketpriority:
   desc: Sets the priority level for the current ticket.
   args:
@@ -20535,7 +20535,7 @@ ticketstats:
   desc: Shows ticket statistics for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 ticketuserstats:
   desc: Shows ticket statistics for a user.
   args:
@@ -20678,22 +20678,22 @@ ticketclaim_noparams:
   desc: Claims the current ticket as a staff member.
   args:
     - ''
-  params: []
+  params: [ ]
 ticketunclaim_noparams:
   desc: Unclaims the current ticket.
   args:
     - ''
-  params: []
+  params: [ ]
 ticketclose_noparams:
   desc: Closes the current ticket.
   args:
     - ''
-  params: []
+  params: [ ]
 ticketarchive_noparams:
   desc: Archives a ticket, moving it to the archive category if set.
   args:
     - ''
-  params: []
+  params: [ ]
 ticketcreatecase_string_string:
   desc: Creates a new ticket case.
   args:
@@ -20711,7 +20711,7 @@ ticketunlinkcase_noparams:
   desc: Unlinks the current ticket from its case.
   args:
     - ''
-  params: []
+  params: [ ]
 ticketpriority_string:
   desc: Sets the priority level for the current ticket.
   args:
@@ -20781,7 +20781,7 @@ ticketstats_noparams:
   desc: Shows ticket statistics for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 ticketuserstats_=:
   desc: Shows ticket statistics for a user.
   args:
@@ -20900,22 +20900,22 @@ ticketclaim_noparams_1:
   desc: Claims the current ticket as a staff member.
   args:
     - ''
-  params: []
+  params: [ ]
 ticketunclaim_noparams_1:
   desc: Unclaims the current ticket.
   args:
     - ''
-  params: []
+  params: [ ]
 ticketclose_noparams_1:
   desc: Closes the current ticket.
   args:
     - ''
-  params: []
+  params: [ ]
 ticketarchive_noparams_1:
   desc: Archives a ticket, moving it to the archive category if set.
   args:
     - ''
-  params: []
+  params: [ ]
 ticketcreatecase_string_string_1:
   desc: Creates a new ticket case.
   args:
@@ -20933,7 +20933,7 @@ ticketunlinkcase_noparams_1:
   desc: Unlinks the current ticket from its case.
   args:
     - ''
-  params: []
+  params: [ ]
 ticketpriority_string_1:
   desc: Sets the priority level for the current ticket.
   args:
@@ -21003,7 +21003,7 @@ ticketstats_noparams_1:
   desc: Shows ticket statistics for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 ticketuserstats_=_1:
   desc: Shows ticket statistics for a user.
   args:
@@ -21122,22 +21122,22 @@ ticketclaim_noparams_2:
   desc: Claims the current ticket as a staff member.
   args:
     - ''
-  params: []
+  params: [ ]
 ticketunclaim_noparams_2:
   desc: Unclaims the current ticket.
   args:
     - ''
-  params: []
+  params: [ ]
 ticketclose_noparams_2:
   desc: Closes the current ticket.
   args:
     - ''
-  params: []
+  params: [ ]
 ticketarchive_noparams_2:
   desc: Archives a ticket, moving it to the archive category if set.
   args:
     - ''
-  params: []
+  params: [ ]
 ticketcreatecase_string_string_2:
   desc: Creates a new ticket case.
   args:
@@ -21155,7 +21155,7 @@ ticketunlinkcase_noparams_2:
   desc: Unlinks the current ticket from its case.
   args:
     - ''
-  params: []
+  params: [ ]
 ticketpriority_string_2:
   desc: Sets the priority level for the current ticket.
   args:
@@ -21225,7 +21225,7 @@ ticketstats_noparams_2:
   desc: Shows ticket statistics for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 ticketuserstats_=_2:
   desc: Shows ticket statistics for a user.
   args:
@@ -21310,7 +21310,7 @@ greetdmoptout:
   desc: Allows a user to toggle opting out of greet dms. Only works if the server they are joining uses mewdeko for dm greets.
   args:
     - ''
-  params: []
+  params: [ ]
 setbio:
   desc: Sets or updates the biography in the user's profile.
   args:
@@ -21355,12 +21355,12 @@ userstatsoptout:
   desc: Toggles the user's opt-out status for command statistics collection.
   args:
     - ''
-  params: []
+  params: [ ]
 deleteuserstatsdata:
   desc: Deletes the user's command statistics data.
   args:
     - ''
-  params: []
+  params: [ ]
 setbirthdayprivacy:
   desc: Sets the birthday privacy mode in the user's profile.
   args:
@@ -21452,7 +21452,7 @@ greetdmoptout_noparams:
   desc: Allows a user to toggle opting out of greet dms. Only works if the server they are joining uses mewdeko for dm greets.
   args:
     - ''
-  params: []
+  params: [ ]
 setbio_string:
   desc: Sets or updates the biography in the user's profile.
   args:
@@ -21481,12 +21481,12 @@ userstatsoptout_noparams:
   desc: Toggles the user's opt-out status for command statistics collection.
   args:
     - ''
-  params: []
+  params: [ ]
 deleteuserstatsdata_noparams:
   desc: Deletes the user's command statistics data.
   args:
     - ''
-  params: []
+  params: [ ]
 setbirthdayprivacy_BirthdayDisplayModeEnum:
   desc: Sets the birthday privacy mode in the user's profile.
   args:
@@ -21550,7 +21550,7 @@ greetdmoptout_noparams_1:
   desc: Allows a user to toggle opting out of greet dms. Only works if the server they are joining uses mewdeko for dm greets.
   args:
     - ''
-  params: []
+  params: [ ]
 setbio_string_1:
   desc: Sets or updates the biography in the user's profile.
   args:
@@ -21579,12 +21579,12 @@ userstatsoptout_noparams_1:
   desc: Toggles the user's opt-out status for command statistics collection.
   args:
     - ''
-  params: []
+  params: [ ]
 deleteuserstatsdata_noparams_1:
   desc: Deletes the user's command statistics data.
   args:
     - ''
-  params: []
+  params: [ ]
 setbirthdayprivacy_BirthdayDisplayModeEnum_1:
   desc: Sets the birthday privacy mode in the user's profile.
   args:
@@ -21648,7 +21648,7 @@ greetdmoptout_noparams_2:
   desc: Allows a user to toggle opting out of greet dms. Only works if the server they are joining uses mewdeko for dm greets.
   args:
     - ''
-  params: []
+  params: [ ]
 setbio_string_2:
   desc: Sets or updates the biography in the user's profile.
   args:
@@ -21677,12 +21677,12 @@ userstatsoptout_noparams_2:
   desc: Toggles the user's opt-out status for command statistics collection.
   args:
     - ''
-  params: []
+  params: [ ]
 deleteuserstatsdata_noparams_2:
   desc: Deletes the user's command statistics data.
   args:
     - ''
-  params: []
+  params: [ ]
 setbirthdayprivacy_BirthdayDisplayModeEnum_2:
   desc: Sets the birthday privacy mode in the user's profile.
   args:
@@ -22019,7 +22019,7 @@ streamrole_noparams:
   desc: Disables the stream role feature in the server.
   args:
     - ''
-  params: []
+  params: [ ]
 streamrolekeyword:
   desc: Sets a keyword for the stream role feature. Only users with streams containing this keyword will receive the stream role.
   args:
@@ -22059,7 +22059,7 @@ streamrole_noparams_1:
   desc: Disables the stream role feature in the server.
   args:
     - ''
-  params: []
+  params: [ ]
 streamrolekeyword_=:
   desc: Sets a keyword for the stream role feature. Only users with streams containing this keyword will receive the stream role.
   args:
@@ -22091,7 +22091,7 @@ streamrole_noparams_2:
   desc: Disables the stream role feature in the server.
   args:
     - ''
-  params: []
+  params: [ ]
 streamrolekeyword_=_1:
   desc: Sets a keyword for the stream role feature. Only users with streams containing this keyword will receive the stream role.
   args:
@@ -22123,7 +22123,7 @@ streamrole_noparams_3:
   desc: Disables the stream role feature in the server.
   args:
     - ''
-  params: []
+  params: [ ]
 streamrolekeyword_=_2:
   desc: Sets a keyword for the stream role feature. Only users with streams containing this keyword will receive the stream role.
   args:
@@ -22148,7 +22148,7 @@ convertlist:
   desc: Lists all available units that can be converted.
   args:
     - ''
-  params: []
+  params: [ ]
 convert:
   desc: Converts a specified value from one unit to another.
   args:
@@ -22173,7 +22173,7 @@ convertlist_noparams:
   desc: Lists all available units that can be converted.
   args:
     - ''
-  params: []
+  params: [ ]
 convert_string_string_decimal:
   desc: Converts a specified value from one unit to another.
   args:
@@ -22186,7 +22186,7 @@ convertlist_noparams_1:
   desc: Contains commands for converting units from one system to another.
   args:
     - ''
-  params: []
+  params: [ ]
 convert_string_string_decimal_1:
   desc: Converts a specified value from one unit to another.
   args:
@@ -22199,7 +22199,7 @@ convertlist_noparams_2:
   desc: Contains commands for converting units from one system to another.
   args:
     - ''
-  params: []
+  params: [ ]
 convert_string_string_decimal_2:
   desc: Converts a specified value from one unit to another.
   args:
@@ -22285,7 +22285,7 @@ invite:
   desc: Gets the bots invite link. As well as showing the website, docs, and support server.
   args:
     - ''
-  params: []
+  params: [ ]
 snipeset:
   desc: Enables or disables sniping of deleted messages. Default is disabled.
   args:
@@ -22300,7 +22300,7 @@ snipe:
   desc: Snipes the last deleted message in the channel.
   args:
     - ''
-  params: []
+  params: [ ]
 snipelist:
   desc: Gets the last x amount of deleted messages in a channel.
   args:
@@ -22416,7 +22416,7 @@ editsnipe:
   desc: Snipes the last edited message in the current channel.
   args:
     - ''
-  params: []
+  params: [ ]
 editsnipe_IUser:
   desc: Snipes the last edited message by a user in the current channel.
   args:
@@ -22450,7 +22450,7 @@ vote_noparams_3:
   desc: Shows a link to vote for mewdeko.
   args:
     - ''
-  params: []
+  params: [ ]
 inrole:
   desc: Shows a list of users in a specified role.
   args:
@@ -22496,12 +22496,12 @@ channelid:
   desc: Gets the channel id of the current channel.
   args:
     - ''
-  params: []
+  params: [ ]
 serverid:
   desc: Gets the server id of the current server.
   args:
     - ''
-  params: []
+  params: [ ]
 roles:
   desc: Gets a list of roles in the current server. Shows a user's roles if a user is specified.
   args:
@@ -22540,7 +22540,7 @@ stats:
   desc: Shows the bot's stats.
   args:
     - ''
-  params: []
+  params: [ ]
 showemojis:
   desc: Enlarges one or more specified emojis.
   args:
@@ -22555,7 +22555,7 @@ ping:
   desc: Shows the bot's ping.
   args:
     - ''
-  params: []
+  params: [ ]
 roll_string:
   desc: Rolls a dice with the specified number of sides. Dnd dice are supported.
   args:
@@ -22629,7 +22629,7 @@ invite_noparams:
   desc: Gets the bots invite link. As well as showing the website, docs, and support server.
   args:
     - ''
-  params: []
+  params: [ ]
 snipeset_PermissionAction:
   desc: Enables or disables sniping of deleted messages. Default is disabled.
   args:
@@ -22640,7 +22640,7 @@ snipe_noparams:
   desc: Snipes the last deleted message in the channel.
   args:
     - ''
-  params: []
+  params: [ ]
 snipelist_=:
   desc: Gets the last x amount of deleted messages in a channel.
   args:
@@ -22736,7 +22736,7 @@ editsnipe_noparams:
   desc: Snipes the last edited message in the current channel.
   args:
     - ''
-  params: []
+  params: [ ]
 editsnipe_IUser_1:
   desc: Snipes the last edited message by a user in the current channel.
   args:
@@ -22766,7 +22766,7 @@ vote_noparams_4:
   desc: Shows a link to vote for mewdeko.
   args:
     - ''
-  params: []
+  params: [ ]
 inrole_IRole:
   desc: Shows a list of users in a specified role.
   args:
@@ -22796,12 +22796,12 @@ channelid_noparams:
   desc: Gets the channel id of the current channel.
   args:
     - ''
-  params: []
+  params: [ ]
 serverid_noparams:
   desc: Gets the channel id of the current channel.
   args:
     - ''
-  params: []
+  params: [ ]
 roles_=:
   desc: Gets a list of roles in the current server. Shows a user's roles if a user is specified.
   args:
@@ -22832,7 +22832,7 @@ stats_noparams:
   desc: Shows the bot's stats.
   args:
     - ''
-  params: []
+  params: [ ]
 showemojis_string:
   desc: Enlarges one or more specified emojis.
   args:
@@ -22843,7 +22843,7 @@ ping_noparams:
   desc: Shows the bot's ping.
   args:
     - ''
-  params: []
+  params: [ ]
 roll_string_1:
   desc: Rolls a dice with the specified number of sides. Dnd dice are supported.
   args:
@@ -22909,7 +22909,7 @@ invite_noparams_1:
   desc: Gets the bots invite link. As well as showing the website, docs, and support server.
   args:
     - ''
-  params: []
+  params: [ ]
 snipeset_PermissionAction_1:
   desc: Enables or disables sniping of deleted messages. Default is disabled.
   args:
@@ -22920,7 +22920,7 @@ snipe_noparams_1:
   desc: Snipes the last deleted message in the channel.
   args:
     - ''
-  params: []
+  params: [ ]
 snipelist_=_1:
   desc: Gets the last x amount of deleted messages in a channel.
   args:
@@ -23016,7 +23016,7 @@ editsnipe_noparams_1:
   desc: Snipes the last edited message in the current channel.
   args:
     - ''
-  params: []
+  params: [ ]
 editsnipe_IUser_2:
   desc: Snipes the last edited message by a user in the current channel.
   args:
@@ -23046,7 +23046,7 @@ vote_noparams_5:
   desc: Shows a link to vote for mewdeko.
   args:
     - ''
-  params: []
+  params: [ ]
 inrole_IRole_1:
   desc: Shows a list of users in a specified role.
   args:
@@ -23076,12 +23076,12 @@ channelid_noparams_1:
   desc: Gets the channel id of the current channel.
   args:
     - ''
-  params: []
+  params: [ ]
 serverid_noparams_1:
   desc: Gets the server id of the current server.
   args:
     - ''
-  params: []
+  params: [ ]
 roles_=_1:
   desc: Gets a list of roles in the current server. Shows a user's roles if a user is specified.
   args:
@@ -23112,7 +23112,7 @@ stats_noparams_1:
   desc: Shows the bot's stats.
   args:
     - ''
-  params: []
+  params: [ ]
 showemojis_string_1:
   desc: Enlarges one or more specified emojis.
   args:
@@ -23123,7 +23123,7 @@ ping_noparams_1:
   desc: Shows the bot's ping.
   args:
     - ''
-  params: []
+  params: [ ]
 roll_string_2:
   desc: Rolls a dice with the specified number of sides. Dnd dice are supported.
   args:
@@ -23189,7 +23189,7 @@ invite_noparams_2:
   desc: Gets the bots invite link. As well as showing the website, docs, and support server.
   args:
     - ''
-  params: []
+  params: [ ]
 snipeset_PermissionAction_2:
   desc: Enables or disables sniping of deleted messages. Default is disabled.
   args:
@@ -23200,7 +23200,7 @@ snipe_noparams_2:
   desc: Snipes the last deleted message in the channel.
   args:
     - ''
-  params: []
+  params: [ ]
 snipelist_=_2:
   desc: Gets the last x amount of deleted messages in a channel.
   args:
@@ -23296,7 +23296,7 @@ editsnipe_noparams_2:
   desc: Snipes the last edited message in the current channel.
   args:
     - ''
-  params: []
+  params: [ ]
 editsnipe_IUser_3:
   desc: Snipes the last edited message by a user in the current channel.
   args:
@@ -23326,7 +23326,7 @@ vote_noparams_6:
   desc: Shows a link to vote for mewdeko.
   args:
     - ''
-  params: []
+  params: [ ]
 inrole_IRole_2:
   desc: Shows a list of users in a specified role.
   args:
@@ -23356,12 +23356,12 @@ channelid_noparams_2:
   desc: Gets the channel id of the current channel.
   args:
     - ''
-  params: []
+  params: [ ]
 serverid_noparams_2:
   desc: Gets the channel id of the current channel.
   args:
     - ''
-  params: []
+  params: [ ]
 roles_=_2:
   desc: Gets a list of roles in the current server. Shows a user's roles if a user is specified.
   args:
@@ -23392,7 +23392,7 @@ stats_noparams_2:
   desc: Shows the bot's stats.
   args:
     - ''
-  params: []
+  params: [ ]
 showemojis_string_2:
   desc: Enlarges one or more specified emojis.
   args:
@@ -23403,7 +23403,7 @@ ping_noparams_2:
   desc: Shows the bot's ping.
   args:
     - ''
-  params: []
+  params: [ ]
 roll_string_3:
   desc: Rolls a dice with the specified number of sides. Dnd dice are supported.
   args:
@@ -23476,7 +23476,7 @@ aikey:
   desc: Sets the API key for the AI service
   args:
     - ''
-  params: []
+  params: [ ]
 aiprompt:
   desc: Sets the system prompt for the AI
   args:
@@ -23491,7 +23491,7 @@ aiconfig:
   desc: Shows current AI configuration
   args:
     - ''
-  params: []
+  params: [ ]
 aichannel_=_=:
   desc: Configures AI service for a channel
   args:
@@ -23524,7 +23524,7 @@ aikey_noparams:
   desc: Sets the API key for the AI service
   args:
     - ''
-  params: []
+  params: [ ]
 aiprompt_string:
   desc: Sets the system prompt for the AI
   args:
@@ -23535,7 +23535,7 @@ aiconfig_noparams:
   desc: Shows current AI configuration
   args:
     - ''
-  params: []
+  params: [ ]
 aichannel_=_=_1:
   desc: Configures AI service for a channel
   args:
@@ -23568,7 +23568,7 @@ aikey_noparams_1:
   desc: Sets the API key for the AI service
   args:
     - ''
-  params: []
+  params: [ ]
 aiprompt_string_1:
   desc: Sets the system prompt for the AI
   args:
@@ -23579,7 +23579,7 @@ aiconfig_noparams_1:
   desc: Shows current AI configuration
   args:
     - ''
-  params: []
+  params: [ ]
 aichannel_=_=_2:
   desc: Configures AI service for a channel
   args:
@@ -23612,7 +23612,7 @@ aikey_noparams_2:
   desc: Sets the API key for the AI service
   args:
     - ''
-  params: []
+  params: [ ]
 aiprompt_string_2:
   desc: Sets the system prompt for the AI
   args:
@@ -23623,7 +23623,7 @@ aiconfig_noparams_2:
   desc: Shows current AI configuration
   args:
     - ''
-  params: []
+  params: [ ]
 addautopublish:
   desc: Enables auto-publishing for a specified news channel within the guild.
   args:
@@ -23696,7 +23696,7 @@ getautopublishes:
   desc: Displays a list of channels with auto-publish enabled and their associated blacklists.
   args:
     - ''
-  params: []
+  params: [ ]
 addautopublish_ITextChannel:
   desc: Enables auto-publishing for a specified news channel within the guild.
   args:
@@ -23741,7 +23741,7 @@ getautopublishes_noparams:
   desc: Displays a list of channels with auto-publish enabled and their associated blacklists.
   args:
     - ''
-  params: []
+  params: [ ]
 addautopublish_ITextChannel_1:
   desc: Commands for managing auto-publishing of messages in announcement channels.
   args:
@@ -23786,7 +23786,7 @@ getautopublishes_noparams_1:
   desc: Displays a list of channels with auto-publish enabled and their associated blacklists.
   args:
     - ''
-  params: []
+  params: [ ]
 addautopublish_ITextChannel_2:
   desc: Enables auto-publishing for a specified news channel within the guild.
   args:
@@ -23831,7 +23831,7 @@ getautopublishes_noparams_2:
   desc: Displays a list of channels with auto-publish enabled and their associated blacklists.
   args:
     - ''
-  params: []
+  params: [ ]
 calculate:
   desc: Evaluates a mathematical expression and returns the result.
   args:
@@ -23873,7 +23873,7 @@ calcops:
   desc: Lists available mathematical operations that can be used in expressions.
   args:
     - ''
-  params: []
+  params: [ ]
 calculate_string:
   desc: Evaluates a mathematical expression and returns the result.
   args:
@@ -23899,7 +23899,7 @@ calcops_noparams:
   desc: Lists available mathematical operations that can be used in expressions.
   args:
     - ''
-  params: []
+  params: [ ]
 calculate_string_1:
   desc: Provides calculator functionality including expression evaluation, graphing, and symbolic math.
   args:
@@ -23925,7 +23925,7 @@ calcops_noparams_1:
   desc: Lists available mathematical operations that can be used in expressions.
   args:
     - ''
-  params: []
+  params: [ ]
 calculate_string_2:
   desc: Evaluates a mathematical expression and returns the result.
   args:
@@ -23951,7 +23951,7 @@ calcops_noparams_2:
   desc: Lists available mathematical operations that can be used in expressions.
   args:
     - ''
-  params: []
+  params: [ ]
 invites:
   desc: Initializes a new instance of the InviteCommands class.
   args:
@@ -23962,17 +23962,17 @@ invitesettings:
   desc: Displays the current invite settings for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 toggleinvitetracking:
   desc: Toggles invite tracking for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 toggleremoveinviteonleave:
   desc: Toggles whether invites should be removed when a user leaves the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 setminaccountage:
   desc: Sets the minimum account age required for an invite to be counted.
   args:
@@ -23987,7 +23987,7 @@ inviteleaderboard:
   desc: Displays a leaderboard of users with the most invites.
   args:
     - ''
-  params: []
+  params: [ ]
 whoinvited:
   desc: Displays who invited a specific user to the guild.
   args:
@@ -24010,17 +24010,17 @@ invitesettings_noparams:
   desc: Displays the current invite settings for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 toggleinvitetracking_noparams:
   desc: Toggles invite tracking for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 toggleremoveinviteonleave_noparams:
   desc: Toggles whether invites should be removed when a user leaves the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 setminaccountage_int:
   desc: Sets the minimum account age required for an invite to be counted.
   args:
@@ -24031,7 +24031,7 @@ inviteleaderboard_noparams:
   desc: Displays a leaderboard of users with the most invites.
   args:
     - ''
-  params: []
+  params: [ ]
 whoinvited_=:
   desc: Displays who invited a specific user to the guild.
   args:
@@ -24054,17 +24054,17 @@ invitesettings_noparams_1:
   desc: Displays the current invite settings for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 toggleinvitetracking_noparams_1:
   desc: Toggles invite tracking for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 toggleremoveinviteonleave_noparams_1:
   desc: Toggles whether invites should be removed when a user leaves the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 setminaccountage_int_1:
   desc: Sets the minimum account age required for an invite to be counted.
   args:
@@ -24075,7 +24075,7 @@ inviteleaderboard_noparams_1:
   desc: Displays a leaderboard of users with the most invites.
   args:
     - ''
-  params: []
+  params: [ ]
 whoinvited_=_1:
   desc: Displays who invited a specific user to the guild.
   args:
@@ -24098,17 +24098,17 @@ invitesettings_noparams_2:
   desc: Displays the current invite settings for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 toggleinvitetracking_noparams_2:
   desc: Toggles invite tracking for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 toggleremoveinviteonleave_noparams_2:
   desc: Toggles whether invites should be removed when a user leaves the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 setminaccountage_int_2:
   desc: Sets the minimum account age required for an invite to be counted.
   args:
@@ -24119,7 +24119,7 @@ inviteleaderboard_noparams_2:
   desc: Displays a leaderboard of users with the most invites.
   args:
     - ''
-  params: []
+  params: [ ]
 whoinvited_=_2:
   desc: Displays who invited a specific user to the guild.
   args:
@@ -24136,12 +24136,12 @@ joinstats:
   desc: Generates and sends a graph displaying the join statistics of the server.
   args:
     - ''
-  params: []
+  params: [ ]
 leavestats:
   desc: Generates and sends a graph displaying the leave statistics of the server.
   args:
     - ''
-  params: []
+  params: [ ]
 joinstatscolor:
   desc: Sets the color for the join statistics graph.
   args:
@@ -24166,7 +24166,7 @@ joinstatscolor_noparams:
   desc: Sets the default color for the join statistics graph to gold. This method is a convenience command that applies a predefined color without the need for RGB input.
   args:
     - ''
-  params: []
+  params: [ ]
 leavestatscolor:
   desc: Sets the default color for the leave statistics graph using specific RGB values. Allows for precise control over the graph's appearance.
   args:
@@ -24191,17 +24191,17 @@ leavestatscolor_noparams:
   desc: Sets the default color for the leave statistics graph to gold. This method is a convenience command that applies a predefined color without the need for RGB input.
   args:
     - ''
-  params: []
+  params: [ ]
 joinstats_noparams:
   desc: Generates and sends a graph displaying the join statistics of the server.
   args:
     - ''
-  params: []
+  params: [ ]
 leavestats_noparams:
   desc: Generates and sends a graph displaying the leave statistics of the server.
   args:
     - ''
-  params: []
+  params: [ ]
 joinstatscolor_int_int_int:
   desc: Sets the color for the join statistics graph.
   args:
@@ -24214,7 +24214,7 @@ joinstatscolor_noparams_1:
   desc: Sets the default color for the join statistics graph to gold. This method is a convenience command that applies a predefined color without the need for RGB input.
   args:
     - ''
-  params: []
+  params: [ ]
 leavestatscolor_int_int_int:
   desc: Execute the LeaveStatsColor command
   args:
@@ -24227,17 +24227,17 @@ leavestatscolor_noparams_1:
   desc: Execute the LeaveStatsColor command
   args:
     - ''
-  params: []
+  params: [ ]
 joinstats_noparams_1:
   desc: Commands for managing join and leave statistics.
   args:
     - ''
-  params: []
+  params: [ ]
 leavestats_noparams_1:
   desc: Generates and sends a graph displaying the leave statistics of the server.
   args:
     - ''
-  params: []
+  params: [ ]
 joinstatscolor_int_int_int_1:
   desc: Sets the color for the join statistics graph.
   args:
@@ -24250,7 +24250,7 @@ joinstatscolor_noparams_2:
   desc: Sets the default color for the join statistics graph to gold. This method is a convenience command that applies a predefined color without the need for RGB input.
   args:
     - ''
-  params: []
+  params: [ ]
 leavestatscolor_int_int_int_1:
   desc: Sets the default color for the leave statistics graph using specific RGB values. Allows for precise control over the graph's appearance.
   args:
@@ -24263,17 +24263,17 @@ leavestatscolor_noparams_2:
   desc: Sets the default color for the leave statistics graph to gold. This method is a convenience command that applies a predefined color without the need for RGB input.
   args:
     - ''
-  params: []
+  params: [ ]
 joinstats_noparams_2:
   desc: Commands for managing join and leave statistics.
   args:
     - ''
-  params: []
+  params: [ ]
 leavestats_noparams_2:
   desc: Generates and sends a graph displaying the leave statistics of the server.
   args:
     - ''
-  params: []
+  params: [ ]
 joinstatscolor_int_int_int_2:
   desc: Sets the color for the join statistics graph.
   args:
@@ -24286,7 +24286,7 @@ joinstatscolor_noparams_3:
   desc: Sets the default color for the join statistics graph to gold. This method is a convenience command that applies a predefined color without the need for RGB input.
   args:
     - ''
-  params: []
+  params: [ ]
 leavestatscolor_int_int_int_2:
   desc: Execute the LeaveStatsColor command
   args:
@@ -24299,7 +24299,7 @@ leavestatscolor_noparams_3:
   desc: Execute the LeaveStatsColor command
   args:
     - ''
-  params: []
+  params: [ ]
 previewlinks:
   desc: Toggles link previews on or off for the server.
   args:
@@ -24344,12 +24344,12 @@ servermessages:
   desc: Retrieves message statistics for the entire server.
   args:
     - ''
-  params: []
+  params: [ ]
 topusers:
   desc: Displays a leaderboard of the top 10 users by message count.
   args:
     - ''
-  params: []
+  params: [ ]
 minmessagecountlength:
   desc: Sets the minimum length for a message to count
   args:
@@ -24370,7 +24370,7 @@ togglemessagecount:
   desc: Toggles message counting in the server
   args:
     - ''
-  params: []
+  params: [ ]
 resetmessagecounts:
   desc: Resets message counts for a user, channel, or both, with confirmation.
   args:
@@ -24404,12 +24404,12 @@ servermessages_noparams:
   desc: Retrieves message statistics for the entire server.
   args:
     - ''
-  params: []
+  params: [ ]
 topusers_noparams:
   desc: Displays a leaderboard of the top 10 users by message count.
   args:
     - ''
-  params: []
+  params: [ ]
 minmessagecountlength_=:
   desc: Sets the minimum length for a message to count
   args:
@@ -24426,7 +24426,7 @@ togglemessagecount_noparams:
   desc: Toggles message counting in the server
   args:
     - ''
-  params: []
+  params: [ ]
 resetmessagecounts_=_=:
   desc: Resets message counts for a user, channel, or both, with confirmation.
   args:
@@ -24456,12 +24456,12 @@ servermessages_noparams_1:
   desc: Retrieves message statistics for the entire server.
   args:
     - ''
-  params: []
+  params: [ ]
 topusers_noparams_1:
   desc: Displays a leaderboard of the top 10 users by message count.
   args:
     - ''
-  params: []
+  params: [ ]
 minmessagecountlength_=_1:
   desc: Sets the minimum length for a message to count
   args:
@@ -24478,7 +24478,7 @@ togglemessagecount_noparams_1:
   desc: Toggles message counting in the server
   args:
     - ''
-  params: []
+  params: [ ]
 resetmessagecounts_=_=_1:
   desc: Resets message counts for a user, channel, or both, with confirmation.
   args:
@@ -24508,12 +24508,12 @@ servermessages_noparams_2:
   desc: Retrieves message statistics for the entire server.
   args:
     - ''
-  params: []
+  params: [ ]
 topusers_noparams_2:
   desc: Displays a leaderboard of the top 10 users by message count.
   args:
     - ''
-  params: []
+  params: [ ]
 minmessagecountlength_=_2:
   desc: Sets the minimum length for a message to count
   args:
@@ -24530,7 +24530,7 @@ togglemessagecount_noparams_2:
   desc: Toggles message counting in the server
   args:
     - ''
-  params: []
+  params: [ ]
 resetmessagecounts_=_=_2:
   desc: Resets message counts for a user, channel, or both, with confirmation.
   args:
@@ -24603,7 +24603,7 @@ aliasesclear:
   desc: Clears all command aliases for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 alias:
   desc: Adds a new alias for a command, or removes an existing alias if no mapping is provided.
   args:
@@ -24620,12 +24620,12 @@ aliaslist:
   desc: Lists all command aliases currently set for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 aliasesclear_noparams:
   desc: Clears all command aliases for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 alias_string_=:
   desc: Adds a new alias for a command, or removes an existing alias if no mapping is provided.
   args:
@@ -24638,12 +24638,12 @@ aliaslist_noparams:
   desc: Lists all command aliases currently set for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 aliasesclear_noparams_1:
   desc: Commands for managing command aliases.
   args:
     - ''
-  params: []
+  params: [ ]
 alias_string_=_1:
   desc: Adds a new alias for a command, or removes an existing alias if no mapping is provided.
   args:
@@ -24656,12 +24656,12 @@ aliaslist_noparams_1:
   desc: Lists all command aliases currently set for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 aliasesclear_noparams_2:
   desc: Clears all command aliases for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 alias_string_=_2:
   desc: Adds a new alias for a command, or removes an existing alias if no mapping is provided.
   args:
@@ -24674,7 +24674,7 @@ aliaslist_noparams_2:
   desc: Lists all command aliases currently set for the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 rinfo:
   desc: Displays information about a specified role within the guild.
   args:
@@ -24895,7 +24895,7 @@ remindlist:
   desc: Lists all reminders for the current user.
   args:
     - ''
-  params: []
+  params: [ ]
 reminddelete:
   desc: Deletes a specific reminder.
   args:
@@ -24926,7 +24926,7 @@ remindlist_noparams:
   desc: Lists all reminders for the current user.
   args:
     - ''
-  params: []
+  params: [ ]
 reminddelete_int:
   desc: Deletes a specific reminder.
   args:
@@ -24953,7 +24953,7 @@ remindlist_noparams_1:
   desc: Lists all reminders for the current user.
   args:
     - ''
-  params: []
+  params: [ ]
 reminddelete_int_1:
   desc: Deletes a specific reminder.
   args:
@@ -24980,7 +24980,7 @@ remindlist_noparams_2:
   desc: Lists all reminders for the current user.
   args:
     - ''
-  params: []
+  params: [ ]
 reminddelete_int_2:
   desc: Deletes a specific reminder.
   args:
@@ -25063,7 +25063,7 @@ repeatlist:
   desc: Lists all active repeaters in the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 repeatmessage:
   desc: Updates the message of an existing repeater.
   args:
@@ -25140,7 +25140,7 @@ repeatlist_noparams:
   desc: Lists all active repeaters in the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 repeatmessage_int_string:
   desc: Updates the message of an existing repeater.
   args:
@@ -25213,7 +25213,7 @@ repeatlist_noparams_1:
   desc: Lists all active repeaters in the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 repeatmessage_int_string_1:
   desc: Updates the message of an existing repeater.
   args:
@@ -25282,7 +25282,7 @@ repeatlist_noparams_2:
   desc: Lists all active repeaters in the guild.
   args:
     - ''
-  params: []
+  params: [ ]
 repeatmessage_int_string_2:
   desc: Updates the message of an existing repeater.
   args:
@@ -25341,12 +25341,12 @@ voteroleslist:
   desc: Lists all roles that are granted to users when they vote.
   args:
     - ''
-  params: []
+  params: [ ]
 voterolesclear:
   desc: Clears all roles that are granted to users when they vote.
   args:
     - ''
-  params: []
+  params: [ ]
 voteroleedit:
   desc: Edits the duration for which a vote role is granted to users.
   args:
@@ -25366,7 +25366,7 @@ votepassword:
   desc: Initiates a confirmation process for setting a new vote password, cautioning the user about its security.
   args:
     - ''
-  params: []
+  params: [ ]
 votes:
   desc: Displays the total number of votes cast by a specific user or the command invoker.
   args:
@@ -25409,12 +25409,12 @@ voteroleslist_noparams:
   desc: Lists all roles that are granted to users when they vote.
   args:
     - ''
-  params: []
+  params: [ ]
 voterolesclear_noparams:
   desc: Clears all roles that are granted to users when they vote.
   args:
     - ''
-  params: []
+  params: [ ]
 voteroleedit_IRole_StoopidTime:
   desc: Edits the duration for which a vote role is granted to users.
   args:
@@ -25426,7 +25426,7 @@ votepassword_noparams:
   desc: Initiates a confirmation process for setting a new vote password, cautioning the user about its security.
   args:
     - ''
-  params: []
+  params: [ ]
 votes_=:
   desc: Displays the total number of votes cast by a specific user or the command invoker.
   args:
@@ -25469,12 +25469,12 @@ voteroleslist_noparams_1:
   desc: Lists all roles that are granted to users when they vote.
   args:
     - ''
-  params: []
+  params: [ ]
 voterolesclear_noparams_1:
   desc: Clears all roles that are granted to users when they vote.
   args:
     - ''
-  params: []
+  params: [ ]
 voteroleedit_IRole_StoopidTime_1:
   desc: Edits the duration for which a vote role is granted to users.
   args:
@@ -25486,7 +25486,7 @@ votepassword_noparams_1:
   desc: Initiates a confirmation process for setting a new vote password, cautioning the user about its security.
   args:
     - ''
-  params: []
+  params: [ ]
 votes_=_1:
   desc: Displays the total number of votes cast by a specific user or the command invoker.
   args:
@@ -25529,12 +25529,12 @@ voteroleslist_noparams_2:
   desc: Lists all roles that are granted to users when they vote.
   args:
     - ''
-  params: []
+  params: [ ]
 voterolesclear_noparams_2:
   desc: Clears all roles that are granted to users when they vote.
   args:
     - ''
-  params: []
+  params: [ ]
 voteroleedit_IRole_StoopidTime_2:
   desc: Edits the duration for which a vote role is granted to users.
   args:
@@ -25546,7 +25546,7 @@ votepassword_noparams_2:
   desc: Initiates a confirmation process for setting a new vote password, cautioning the user about its security.
   args:
     - ''
-  params: []
+  params: [ ]
 votes_=_2:
   desc: Displays the total number of votes cast by a specific user or the command invoker.
   args:
@@ -25623,7 +25623,7 @@ resetxp_noparams:
   desc: Resets a user's XP to zero.
   args:
     - ''
-  params: []
+  params: [ ]
 levelnotif:
   desc: Sets how users are notified when they level up.
   args:
@@ -25638,7 +25638,7 @@ xpsettings:
   desc: Shows the server's XP leaderboard settings.
   args:
     - ''
-  params: []
+  params: [ ]
 setmessagexp:
   desc: Sets the amount of XP gained per message.
   args:
@@ -25749,7 +25749,7 @@ xpboosts:
   desc: Lists active XP boost events.
   args:
     - ''
-  params: []
+  params: [ ]
 cancelboost:
   desc: Cancels an XP boost event.
   args:
@@ -25855,7 +25855,7 @@ rolerewards:
   desc: Lists all role rewards.
   args:
     - ''
-  params: []
+  params: [ ]
 currencyreward:
   desc: Sets a currency reward for a specific level.
   args:
@@ -25877,7 +25877,7 @@ currencyrewards:
   desc: Lists all currency rewards.
   args:
     - ''
-  params: []
+  params: [ ]
 xpcompetition:
   desc: Creates a new XP competition.
   args:
@@ -25925,7 +25925,7 @@ xpcompetitions:
   desc: Lists active XP competitions.
   args:
     - ''
-  params: []
+  params: [ ]
 competitionleaderboard:
   desc: Shows the leaderboard for an active competition.
   args:
@@ -25994,7 +25994,7 @@ resetxp_noparams_1:
   desc: Resets a user's XP to zero.
   args:
     - ''
-  params: []
+  params: [ ]
 levelnotif_XpNotificationType:
   desc: Sets how users are notified when they level up.
   args:
@@ -26005,7 +26005,7 @@ xpsettings_noparams:
   desc: Shows the server's XP leaderboard settings.
   args:
     - ''
-  params: []
+  params: [ ]
 setmessagexp_int:
   desc: Sets the amount of XP gained per message.
   args:
@@ -26068,7 +26068,7 @@ xpboosts_noparams:
   desc: Lists active XP boost events.
   args:
     - ''
-  params: []
+  params: [ ]
 cancelboost_int:
   desc: Cancels an XP boost event.
   args:
@@ -26134,7 +26134,7 @@ rolerewards_noparams:
   desc: Lists all role rewards.
   args:
     - ''
-  params: []
+  params: [ ]
 currencyreward_int_long:
   desc: Sets a currency reward for a specific level.
   args:
@@ -26152,7 +26152,7 @@ currencyrewards_noparams:
   desc: Lists all currency rewards.
   args:
     - ''
-  params: []
+  params: [ ]
 xpcompetition_StoopidTime_XpCompetitionType_=_=:
   desc: Execute the XpCompetition command
   args:
@@ -26176,7 +26176,7 @@ xpcompetitions_noparams:
   desc: Lists active XP competitions.
   args:
     - ''
-  params: []
+  params: [ ]
 competitionleaderboard_int:
   desc: Shows the leaderboard for an active competition.
   args:
@@ -26233,7 +26233,7 @@ resetxp_noparams_2:
   desc: Resets a user's XP to zero.
   args:
     - ''
-  params: []
+  params: [ ]
 levelnotif_XpNotificationType_1:
   desc: Sets how users are notified when they level up.
   args:
@@ -26244,7 +26244,7 @@ xpsettings_noparams_1:
   desc: Shows the server's XP leaderboard settings.
   args:
     - ''
-  params: []
+  params: [ ]
 setmessagexp_int_1:
   desc: Sets the amount of XP gained per message.
   args:
@@ -26307,7 +26307,7 @@ xpboosts_noparams_1:
   desc: Lists active XP boost events.
   args:
     - ''
-  params: []
+  params: [ ]
 cancelboost_int_1:
   desc: Cancels an XP boost event.
   args:
@@ -26373,7 +26373,7 @@ rolerewards_noparams_1:
   desc: Lists all role rewards.
   args:
     - ''
-  params: []
+  params: [ ]
 currencyreward_int_long_1:
   desc: Sets a currency reward for a specific level.
   args:
@@ -26391,7 +26391,7 @@ currencyrewards_noparams_1:
   desc: Lists all currency rewards.
   args:
     - ''
-  params: []
+  params: [ ]
 xpcompetition_StoopidTime_XpCompetitionType_=_=_1:
   desc: Creates a new XP competition.
   args:
@@ -26415,7 +26415,7 @@ xpcompetitions_noparams_1:
   desc: Lists active XP competitions.
   args:
     - ''
-  params: []
+  params: [ ]
 competitionleaderboard_int_1:
   desc: Shows the leaderboard for an active competition.
   args:
@@ -26472,7 +26472,7 @@ resetxp_noparams_3:
   desc: Resets a user's XP to zero.
   args:
     - ''
-  params: []
+  params: [ ]
 levelnotif_XpNotificationType_2:
   desc: Sets how users are notified when they level up.
   args:
@@ -26483,7 +26483,7 @@ xpsettings_noparams_2:
   desc: Shows the server's XP leaderboard settings.
   args:
     - ''
-  params: []
+  params: [ ]
 setmessagexp_int_2:
   desc: Sets the amount of XP gained per message.
   args:
@@ -26546,7 +26546,7 @@ xpboosts_noparams_2:
   desc: Lists active XP boost events.
   args:
     - ''
-  params: []
+  params: [ ]
 cancelboost_int_2:
   desc: Cancels an XP boost event.
   args:
@@ -26612,7 +26612,7 @@ rolerewards_noparams_2:
   desc: Lists all role rewards.
   args:
     - ''
-  params: []
+  params: [ ]
 currencyreward_int_long_2:
   desc: Sets a currency reward for a specific level.
   args:
@@ -26630,7 +26630,7 @@ currencyrewards_noparams_2:
   desc: Lists all currency rewards.
   args:
     - ''
-  params: []
+  params: [ ]
 xpcompetition_StoopidTime_XpCompetitionType_=_=_2:
   desc: Execute the XpCompetition command
   args:
@@ -26654,7 +26654,7 @@ xpcompetitions_noparams_2:
   desc: Lists active XP competitions.
   args:
     - ''
-  params: []
+  params: [ ]
 competitionleaderboard_int_2:
   desc: Shows the leaderboard for an active competition.
   args:
@@ -26671,12 +26671,12 @@ voicecontrols:
   desc: Shows interactive controls for managing your custom voice channel.
   args:
     - ''
-  params: []
+  params: [ ]
 setupvoicehub:
   desc: Sets up a voice channel as a hub for creating custom voice channels.
   args:
     - ''
-  params: []
+  params: [ ]
 setvoicehub:
   desc: Sets a specific voice channel as the hub for creating custom voice channels.
   args:
@@ -26700,7 +26700,7 @@ voicechannels:
   desc: Lists active custom voice channels.
   args:
     - ''
-  params: []
+  params: [ ]
 voicerename:
   desc: Renames your custom voice channel.
   args:
@@ -26737,7 +26737,7 @@ voiceunlock:
   desc: Unlocks your custom voice channel.
   args:
     - ''
-  params: []
+  params: [ ]
 voiceallow:
   desc: Allows a specific user to join your locked voice channel.
   args:
@@ -26758,7 +26758,7 @@ voiceclaim:
   desc: Claims ownership of a custom voice channel if the owner is not present.
   args:
     - ''
-  params: []
+  params: [ ]
 voicetransfer:
   desc: Transfers ownership of your custom voice channel to another user.
   args:
@@ -26775,7 +26775,7 @@ voicepreferences:
   desc: Sets your voice channel preferences.
   args:
     - ''
-  params: []
+  params: [ ]
 voiceprefsname:
   desc: Sets your preferred name format for custom voice channels.
   args:
@@ -26810,17 +26810,17 @@ voiceprefsreset:
   desc: Resets all your voice channel preferences.
   args:
     - ''
-  params: []
+  params: [ ]
 voicecontrols_noparams:
   desc: Shows interactive controls for managing your custom voice channel.
   args:
     - ''
-  params: []
+  params: [ ]
 setupvoicehub_noparams:
   desc: Sets up a voice channel as a hub for creating custom voice channels.
   args:
     - ''
-  params: []
+  params: [ ]
 setvoicehub_IVoiceChannel_=:
   desc: Sets a specific voice channel as the hub for creating custom voice channels.
   args:
@@ -26840,7 +26840,7 @@ voicechannels_noparams:
   desc: Lists active custom voice channels.
   args:
     - ''
-  params: []
+  params: [ ]
 voicerename_string:
   desc: Renames your custom voice channel.
   args:
@@ -26869,7 +26869,7 @@ voiceunlock_noparams:
   desc: Unlocks your custom voice channel.
   args:
     - ''
-  params: []
+  params: [ ]
 voiceallow_IGuildUser:
   desc: Unlocks your custom voice channel.
   args:
@@ -26886,7 +26886,7 @@ voiceclaim_noparams:
   desc: Claims ownership of a custom voice channel if the owner is not present.
   args:
     - ''
-  params: []
+  params: [ ]
 voicetransfer_IGuildUser:
   desc: Transfers ownership of your custom voice channel to another user.
   args:
@@ -26903,7 +26903,7 @@ voicepreferences_noparams:
   desc: Sets your voice channel preferences.
   args:
     - ''
-  params: []
+  params: [ ]
 voiceprefsname_=:
   desc: Sets your preferred name format for custom voice channels.
   args:
@@ -26938,17 +26938,17 @@ voiceprefsreset_noparams:
   desc: Resets all your voice channel preferences.
   args:
     - ''
-  params: []
+  params: [ ]
 voicecontrols_noparams_1:
   desc: Commands for managing custom voice channels.
   args:
     - ''
-  params: []
+  params: [ ]
 setupvoicehub_noparams_1:
   desc: Sets up a voice channel as a hub for creating custom voice channels.
   args:
     - ''
-  params: []
+  params: [ ]
 setvoicehub_IVoiceChannel_=_1:
   desc: Sets a specific voice channel as the hub for creating custom voice channels.
   args:
@@ -26968,7 +26968,7 @@ voicechannels_noparams_1:
   desc: Lists active custom voice channels.
   args:
     - ''
-  params: []
+  params: [ ]
 voicerename_string_1:
   desc: Renames your custom voice channel.
   args:
@@ -26997,7 +26997,7 @@ voiceunlock_noparams_1:
   desc: Unlocks your custom voice channel.
   args:
     - ''
-  params: []
+  params: [ ]
 voiceallow_IGuildUser_1:
   desc: Allows a specific user to join your locked voice channel.
   args:
@@ -27014,7 +27014,7 @@ voiceclaim_noparams_1:
   desc: Claims ownership of a custom voice channel if the owner is not present.
   args:
     - ''
-  params: []
+  params: [ ]
 voicetransfer_IGuildUser_1:
   desc: Transfers ownership of your custom voice channel to another user.
   args:
@@ -27031,7 +27031,7 @@ voicepreferences_noparams_1:
   desc: Sets your voice channel preferences.
   args:
     - ''
-  params: []
+  params: [ ]
 voiceprefsname_=_1:
   desc: Sets your preferred name format for custom voice channels.
   args:
@@ -27066,17 +27066,17 @@ voiceprefsreset_noparams_1:
   desc: Resets all your voice channel preferences.
   args:
     - ''
-  params: []
+  params: [ ]
 voicecontrols_noparams_2:
   desc: Commands for managing custom voice channels.
   args:
     - ''
-  params: []
+  params: [ ]
 setupvoicehub_noparams_2:
   desc: Sets up a voice channel as a hub for creating custom voice channels.
   args:
     - ''
-  params: []
+  params: [ ]
 setvoicehub_IVoiceChannel_=_2:
   desc: Sets a specific voice channel as the hub for creating custom voice channels.
   args:
@@ -27096,7 +27096,7 @@ voicechannels_noparams_2:
   desc: Lists active custom voice channels.
   args:
     - ''
-  params: []
+  params: [ ]
 voicerename_string_2:
   desc: Renames your custom voice channel.
   args:
@@ -27125,7 +27125,7 @@ voiceunlock_noparams_2:
   desc: Unlocks your custom voice channel.
   args:
     - ''
-  params: []
+  params: [ ]
 voiceallow_IGuildUser_2:
   desc: Unlocks your custom voice channel.
   args:
@@ -27142,7 +27142,7 @@ voiceclaim_noparams_2:
   desc: Claims ownership of a custom voice channel if the owner is not present.
   args:
     - ''
-  params: []
+  params: [ ]
 voicetransfer_IGuildUser_2:
   desc: Transfers ownership of your custom voice channel to another user.
   args:
@@ -27159,7 +27159,7 @@ voicepreferences_noparams_2:
   desc: Sets your voice channel preferences.
   args:
     - ''
-  params: []
+  params: [ ]
 voiceprefsname_=_2:
   desc: Sets your preferred name format for custom voice channels.
   args:
@@ -27194,7 +27194,7 @@ voiceprefsreset_noparams_2:
   desc: Resets all your voice channel preferences.
   args:
     - ''
-  params: []
+  params: [ ]
 config:
   desc: Changes yml based config for the bot.
   args:

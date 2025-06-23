@@ -2,17 +2,17 @@ using System.Text;
 using Discord.Commands;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Modules.Patreon.Services;
-using Serilog;
 
 namespace Mewdeko.Modules.Patreon;
 
 /// <summary>
-/// Commands for managing Patreon integration and announcements.
+///     Commands for managing Patreon integration and announcements.
 /// </summary>
-public class Patreon(IBotCredentials creds, PatreonApiClient patreonApiClient) : MewdekoModuleBase<PatreonService>
+public class Patreon(IBotCredentials creds, PatreonApiClient patreonApiClient, ILogger<Patreon> logger)
+    : MewdekoModuleBase<PatreonService>
 {
     /// <summary>
-    /// Sets or shows the Patreon announcement channel.
+    ///     Sets or shows the Patreon announcement channel.
     /// </summary>
     /// <param name="channel">The channel to set for Patreon announcements. If null, shows current channel.</param>
     /// <example>.patreon channel #announcements</example>
@@ -61,7 +61,7 @@ public class Patreon(IBotCredentials creds, PatreonApiClient patreonApiClient) :
     }
 
     /// <summary>
-    /// Disables Patreon announcements for this server.
+    ///     Disables Patreon announcements for this server.
     /// </summary>
     /// <example>.patreon disable</example>
     [Cmd]
@@ -76,9 +76,12 @@ public class Patreon(IBotCredentials creds, PatreonApiClient patreonApiClient) :
     }
 
     /// <summary>
-    /// Sets a custom message for Patreon announcements.
+    ///     Sets a custom message for Patreon announcements.
     /// </summary>
-    /// <param name="message">The custom message. Use placeholders like %server.name%, %month%, etc. Use "-" to reset to default.</param>
+    /// <param name="message">
+    ///     The custom message. Use placeholders like %server.name%, %month%, etc. Use "-" to reset to
+    ///     default.
+    /// </param>
     /// <example>.patreon message 🎉 Support us on Patreon! %patreon.link%</example>
     /// <example>.patreon message -</example>
     [Cmd]
@@ -114,7 +117,7 @@ public class Patreon(IBotCredentials creds, PatreonApiClient patreonApiClient) :
     }
 
     /// <summary>
-    /// Sets the day of the month for Patreon announcements.
+    ///     Sets the day of the month for Patreon announcements.
     /// </summary>
     /// <param name="day">The day of the month (1-28) to send announcements.</param>
     /// <example>.patreon day 1</example>
@@ -143,7 +146,7 @@ public class Patreon(IBotCredentials creds, PatreonApiClient patreonApiClient) :
     }
 
     /// <summary>
-    /// Toggles Patreon announcements on or off.
+    ///     Toggles Patreon announcements on or off.
     /// </summary>
     /// <example>.patreon toggle</example>
     [Cmd]
@@ -166,7 +169,7 @@ public class Patreon(IBotCredentials creds, PatreonApiClient patreonApiClient) :
     }
 
     /// <summary>
-    /// Shows the current Patreon configuration for this server.
+    ///     Shows the current Patreon configuration for this server.
     /// </summary>
     /// <example>.patreon config</example>
     [Cmd]
@@ -213,7 +216,7 @@ public class Patreon(IBotCredentials creds, PatreonApiClient patreonApiClient) :
     }
 
     /// <summary>
-    /// Manually triggers a Patreon announcement.
+    ///     Manually triggers a Patreon announcement.
     /// </summary>
     /// <example>.patreon announce</example>
     [Cmd]
@@ -236,7 +239,7 @@ public class Patreon(IBotCredentials creds, PatreonApiClient patreonApiClient) :
     }
 
     /// <summary>
-    /// Shows Patreon module information and available placeholders.
+    ///     Shows Patreon module information and available placeholders.
     /// </summary>
     /// <example>.patreon help</example>
     [Cmd]
@@ -275,7 +278,7 @@ public class Patreon(IBotCredentials creds, PatreonApiClient patreonApiClient) :
     }
 
     /// <summary>
-    /// Securely sets up Patreon OAuth integration
+    ///     Securely sets up Patreon OAuth integration
     /// </summary>
     /// <example>.patreon sync</example>
     [Cmd]
@@ -326,13 +329,13 @@ public class Patreon(IBotCredentials creds, PatreonApiClient patreonApiClient) :
                 .AddField("⚠️ Important Requirements",
                     "• You must be the **owner** of a Patreon campaign\n" +
                     "• This will give the bot access to your supporter data\n" +
-                    "• You can revoke access anytime from your Patreon settings", false)
+                    "• You can revoke access anytime from your Patreon settings")
                 .AddField("📋 Setup Process",
                     "1. Click the \"Authorize with Patreon\" button below\n" +
                     "2. Sign in to Patreon if prompted\n" +
                     "3. Review and approve the requested permissions\n" +
                     "4. You'll be redirected back automatically\n" +
-                    "5. Your supporters will be synced automatically", false)
+                    "5. Your supporters will be synced automatically")
                 .WithFooter(Strings.PatreonSetupFooter(ctx.Guild.Id));
 
             var component = new ComponentBuilder()
@@ -342,13 +345,13 @@ public class Patreon(IBotCredentials creds, PatreonApiClient patreonApiClient) :
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error setting up Patreon OAuth for guild {GuildId}", ctx.Guild.Id);
+            logger.LogError(ex, "Error setting up Patreon OAuth for guild {GuildId}", ctx.Guild.Id);
             await ReplyErrorAsync("❌ An error occurred while setting up Patreon OAuth.").ConfigureAwait(false);
         }
     }
 
     /// <summary>
-    /// Lists active Patreon supporters
+    ///     Lists active Patreon supporters
     /// </summary>
     /// <example>.patreon supporters</example>
     [Cmd]
@@ -397,7 +400,7 @@ public class Patreon(IBotCredentials creds, PatreonApiClient patreonApiClient) :
     }
 
     /// <summary>
-    /// Links a Discord user to a Patreon supporter
+    ///     Links a Discord user to a Patreon supporter
     /// </summary>
     /// <param name="user">Discord user to link</param>
     /// <param name="patreonUserId">Patreon user ID</param>
@@ -421,7 +424,7 @@ public class Patreon(IBotCredentials creds, PatreonApiClient patreonApiClient) :
     }
 
     /// <summary>
-    /// Toggles automatic role synchronization
+    ///     Toggles automatic role synchronization
     /// </summary>
     /// <example>.patreon rolesync</example>
     [Cmd]
@@ -445,7 +448,7 @@ public class Patreon(IBotCredentials creds, PatreonApiClient patreonApiClient) :
     }
 
     /// <summary>
-    /// Maps a Patreon tier to a Discord role
+    ///     Maps a Patreon tier to a Discord role
     /// </summary>
     /// <param name="tierId">Patreon tier ID</param>
     /// <param name="role">Discord role to assign</param>
@@ -470,7 +473,7 @@ public class Patreon(IBotCredentials creds, PatreonApiClient patreonApiClient) :
     }
 
     /// <summary>
-    /// Syncs roles for all linked supporters
+    ///     Syncs roles for all linked supporters
     /// </summary>
     /// <example>.patreon syncall</example>
     [Cmd]
@@ -490,7 +493,7 @@ public class Patreon(IBotCredentials creds, PatreonApiClient patreonApiClient) :
     }
 
     /// <summary>
-    /// Shows Patreon supporter statistics
+    ///     Shows Patreon supporter statistics
     /// </summary>
     /// <example>.patreon stats</example>
     [Cmd]
@@ -523,14 +526,14 @@ public class Patreon(IBotCredentials creds, PatreonApiClient patreonApiClient) :
             var topSupporter = supporters.First();
             embed.AddField(Strings.PatreonStatsTop(ctx.Guild.Id),
                 Strings.PatreonStatsTopSupporter(ctx.Guild.Id,
-                    $"{topSupporter.FullName} - ${topSupporter.AmountCents / 100.0:F2}/month"), false);
+                    $"{topSupporter.FullName} - ${topSupporter.AmountCents / 100.0:F2}/month"));
         }
 
         await ctx.Channel.SendMessageAsync(embed: embed.Build()).ConfigureAwait(false);
     }
 
     /// <summary>
-    /// Shows current Patreon goals
+    ///     Shows current Patreon goals
     /// </summary>
     /// <example>.patreon goals</example>
     [Cmd]
@@ -559,14 +562,14 @@ public class Patreon(IBotCredentials creds, PatreonApiClient patreonApiClient) :
                 : Strings.PatreonGoalProgress(ctx.Guild.Id, goal.CompletedPercentage);
 
             embed.AddField(Strings.PatreonGoalField(ctx.Guild.Id, $"{goal.Title} (${amount:F2})"),
-                $"{goal.Description}\n**{Strings.PatreonGoalStatus(ctx.Guild.Id)}:** {status}", false);
+                $"{goal.Description}\n**{Strings.PatreonGoalStatus(ctx.Guild.Id)}:** {status}");
         }
 
         await ctx.Channel.SendMessageAsync(embed: embed.Build()).ConfigureAwait(false);
     }
 
     /// <summary>
-    /// Shows top Patreon supporters
+    ///     Shows top Patreon supporters
     /// </summary>
     /// <param name="count">Number of top supporters to show (1-20)</param>
     /// <example>.patreon top</example>
@@ -593,7 +596,7 @@ public class Patreon(IBotCredentials creds, PatreonApiClient patreonApiClient) :
 
         var description = new StringBuilder();
 
-        for (int i = 0; i < Math.Min(count, supporters.Count); i++)
+        for (var i = 0; i < Math.Min(count, supporters.Count); i++)
         {
             var supporter = supporters[i];
             var amount = supporter.AmountCents / 100.0;
@@ -613,7 +616,7 @@ public class Patreon(IBotCredentials creds, PatreonApiClient patreonApiClient) :
     }
 
     /// <summary>
-    /// Lists Patreon tier-role mappings
+    ///     Lists Patreon tier-role mappings
     /// </summary>
     /// <example>.patreon roles</example>
     [Cmd]
@@ -655,7 +658,7 @@ public class Patreon(IBotCredentials creds, PatreonApiClient patreonApiClient) :
     }
 
     /// <summary>
-    /// Shows detailed Patreon analytics
+    ///     Shows detailed Patreon analytics
     /// </summary>
     /// <example>.patreon analytics</example>
     [Cmd]
@@ -701,14 +704,14 @@ public class Patreon(IBotCredentials creds, PatreonApiClient patreonApiClient) :
         {
             var topText = string.Join("\n", analytics.TopSupporters.Select((s, i) =>
                 Strings.PatreonAnalyticsTopEntry(ctx.Guild.Id, i + 1, s.Name, s.Amount, s.IsLinked ? "✅" : "❌")));
-            embed.AddField(Strings.PatreonAnalyticsTop(ctx.Guild.Id), topText, false);
+            embed.AddField(Strings.PatreonAnalyticsTop(ctx.Guild.Id), topText);
         }
 
         await ctx.Channel.SendMessageAsync(embed: embed.Build()).ConfigureAwait(false);
     }
 
     /// <summary>
-    /// Sends recognition messages for new supporters
+    ///     Sends recognition messages for new supporters
     /// </summary>
     /// <param name="channel">Channel to send recognition messages</param>
     /// <example>.patreon recognize #general</example>

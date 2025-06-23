@@ -10,7 +10,7 @@ namespace Mewdeko.Modules.Tickets.Common;
 public static class ConfigurationParser
 {
     /// <summary>
-    /// Creates modal JSON in the format expected by TicketService
+    ///     Creates modal JSON in the format expected by TicketService
     /// </summary>
     /// <param name="modalConfig">The modal configuration text</param>
     /// <returns>A JSON string containing only the fields dictionary</returns>

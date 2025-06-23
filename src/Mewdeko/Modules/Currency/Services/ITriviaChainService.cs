@@ -12,7 +12,7 @@ public interface ITriviaChainService : INService
     /// </summary>
     /// <param name="userId">The user ID.</param>
     /// <returns>The trivia chain state if it exists, otherwise null.</returns>
-    TriviaChainState? GetTriviaChainState(ulong userId);
+    public TriviaChainState? GetTriviaChainState(ulong userId);
 
     /// <summary>
     ///     Creates a new trivia chain game for a user.
@@ -22,7 +22,7 @@ public interface ITriviaChainService : INService
     /// <param name="betAmount">The bet amount.</param>
     /// <param name="category">The trivia category.</param>
     /// <returns>The initial trivia chain state with the first question.</returns>
-    Task<TriviaChainState> StartTriviaChainAsync(ulong userId, ulong guildId, long betAmount, string category);
+    public Task<TriviaChainState> StartTriviaChainAsync(ulong userId, ulong guildId, long betAmount, string category);
 
     /// <summary>
     ///     Processes a trivia answer and updates the game state.
@@ -32,12 +32,12 @@ public interface ITriviaChainService : INService
     /// <param name="chainState">The current trivia chain state.</param>
     /// <param name="currencyService">The currency service.</param>
     /// <returns>The result of processing the answer.</returns>
-    Task<TriviaAnswerResult> ProcessTriviaAnswerAsync(IInteractionContext ctx, string answerIndex,
+    public Task<TriviaAnswerResult> ProcessTriviaAnswerAsync(IInteractionContext ctx, string answerIndex,
         TriviaChainState chainState, ICurrencyService currencyService);
 
     /// <summary>
     ///     Removes the trivia chain state for a user.
     /// </summary>
     /// <param name="userId">The user ID.</param>
-    void RemoveTriviaChainState(ulong userId);
+    public void RemoveTriviaChainState(ulong userId);
 }

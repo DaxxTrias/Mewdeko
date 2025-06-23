@@ -1,12 +1,12 @@
 namespace Mewdeko.Modules.Tickets.Common;
 
 /// <summary>
-/// Validation helper for user configurations
+///     Validation helper for user configurations
 /// </summary>
 public static class ConfigurationValidator
 {
     /// <summary>
-    /// Validates button configuration and returns issues
+    ///     Validates button configuration and returns issues
     /// </summary>
     /// <param name="basicSettings">Basic button settings</param>
     /// <param name="modalConfig">Modal configuration</param>
@@ -26,7 +26,10 @@ public static class ConfigurationValidator
         if (basicSettings.TryGetValue("style", out var setting))
         {
             var style = setting.ToLower();
-            if (!new[] { "primary", "secondary", "success", "danger" }.Contains(style))
+            if (!new[]
+                {
+                    "primary", "secondary", "success", "danger"
+                }.Contains(style))
                 issues.Add("❌ Button style must be: primary, secondary, success, or danger");
         }
 
@@ -54,7 +57,7 @@ public static class ConfigurationValidator
     }
 
     /// <summary>
-    /// Validates modal configuration
+    ///     Validates modal configuration
     /// </summary>
     /// <param name="modalConfig">The modal configuration to validate</param>
     /// <returns>List of validation issues</returns>
@@ -72,7 +75,10 @@ public static class ConfigurationValidator
             var fieldParts = line[2..].Split('|');
             if (fieldParts.Length < 2)
                 issues.Add($"❌ Invalid field format: {line}. Use: Label|Type|Required");
-            else if (!new[] { "short", "long" }.Contains(fieldParts[1].ToLower()))
+            else if (!new[]
+                     {
+                         "short", "long"
+                     }.Contains(fieldParts[1].ToLower()))
                 issues.Add($"❌ Field type must be 'short' or 'long': {fieldParts[1]}");
         }
 
@@ -80,7 +86,7 @@ public static class ConfigurationValidator
     }
 
     /// <summary>
-    /// Validates select menu configuration
+    ///     Validates select menu configuration
     /// </summary>
     /// <param name="options">The options configuration</param>
     /// <returns>List of validation issues</returns>

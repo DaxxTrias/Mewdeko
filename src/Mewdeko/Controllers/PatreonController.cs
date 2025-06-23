@@ -1,7 +1,6 @@
 using Mewdeko.Modules.Patreon.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
-using Serilog;
 
 namespace Mewdeko.Controllers;
 
@@ -14,6 +13,7 @@ namespace Mewdeko.Controllers;
 public class PatreonController : ControllerBase
 {
     private readonly IBotCredentials credentials;
+    private readonly ILogger<PatreonController> logger;
     private readonly PatreonApiClient patreonApiClient;
     private readonly PatreonService patreonService;
 
@@ -26,11 +26,12 @@ public class PatreonController : ControllerBase
     public PatreonController(
         PatreonService patreonService,
         PatreonApiClient patreonApiClient,
-        IBotCredentials credentials)
+        IBotCredentials credentials, ILogger<PatreonController> logger)
     {
         this.patreonService = patreonService;
         this.patreonApiClient = patreonApiClient;
         this.credentials = credentials;
+        this.logger = logger;
     }
 
     /// <summary>
@@ -46,7 +47,7 @@ public class PatreonController : ControllerBase
         {
             if (string.IsNullOrEmpty(credentials.PatreonClientId))
             {
-                Log.Warning("Patreon OAuth URL requested but no client ID configured");
+                logger.LogWarning("Patreon OAuth URL requested but no client ID configured");
                 return BadRequest(new
                 {
                     error = "Patreon integration not configured"
@@ -61,7 +62,7 @@ public class PatreonController : ControllerBase
                 redirectUri,
                 state);
 
-            Log.Information("Generated Patreon OAuth URL for guild {GuildId}", guildId);
+            logger.LogInformation("Generated Patreon OAuth URL for guild {GuildId}", guildId);
 
             return Ok(new PatreonOAuthResponse
             {
@@ -70,7 +71,7 @@ public class PatreonController : ControllerBase
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error generating Patreon OAuth URL for guild {GuildId}", guildId);
+            logger.LogError(ex, "Error generating Patreon OAuth URL for guild {GuildId}", guildId);
             return StatusCode(500, new
             {
                 error = "Internal server error"
@@ -79,7 +80,7 @@ public class PatreonController : ControllerBase
     }
 
     /// <summary>
-    /// Handles the OAuth callback from Patreon after user authorization.
+    ///     Handles the OAuth callback from Patreon after user authorization.
     /// </summary>
     /// <param name="code">The authorization code provided by Patreon.</param>
     /// <param name="state">The state parameter returned from Patreon, containing the guild ID.</param>
@@ -96,7 +97,7 @@ public class PatreonController : ControllerBase
         {
             if (!string.IsNullOrEmpty(error))
             {
-                Log.Warning("Patreon OAuth callback received error: {Error}", error);
+                logger.LogWarning("Patreon OAuth callback received error: {Error}", error);
                 return BadRequest(new
                 {
                     error = $"OAuth error: {error}"
@@ -105,7 +106,7 @@ public class PatreonController : ControllerBase
 
             if (string.IsNullOrEmpty(code) || string.IsNullOrEmpty(state))
             {
-                Log.Warning("Patreon OAuth callback missing required parameters");
+                logger.LogWarning("Patreon OAuth callback missing required parameters");
                 return BadRequest(new
                 {
                     error = "Missing required parameters"
@@ -115,7 +116,7 @@ public class PatreonController : ControllerBase
             var stateParts = state.Split(':');
             if (stateParts.Length != 2 || !ulong.TryParse(stateParts[0], out var guildId))
             {
-                Log.Warning("Invalid state parameter in Patreon OAuth callback: {State}", state);
+                logger.LogWarning("Invalid state parameter in Patreon OAuth callback: {State}", state);
                 return BadRequest(new
                 {
                     error = "Invalid state parameter"
@@ -125,7 +126,7 @@ public class PatreonController : ControllerBase
             if (string.IsNullOrEmpty(credentials.PatreonClientId) ||
                 string.IsNullOrEmpty(credentials.PatreonClientSecret))
             {
-                Log.Error("Patreon OAuth callback but credentials not configured");
+                logger.LogError("Patreon OAuth callback but credentials not configured");
                 return StatusCode(500, new
                 {
                     error = "Patreon integration not configured"
@@ -142,7 +143,7 @@ public class PatreonController : ControllerBase
 
             if (tokenResponse == null)
             {
-                Log.Error("Failed to exchange Patreon OAuth code for tokens for guild {GuildId}", guildId);
+                logger.LogError("Failed to exchange Patreon OAuth code for tokens for guild {GuildId}", guildId);
                 return StatusCode(500, new
                 {
                     error = "Failed to exchange authorization code"
@@ -152,7 +153,7 @@ public class PatreonController : ControllerBase
             var campaignsResponse = await patreonApiClient.GetCampaignsAsync(tokenResponse.AccessToken);
             if (campaignsResponse?.Data == null || campaignsResponse.Data.Count == 0)
             {
-                Log.Warning("No Patreon campaigns found for the authenticated user in guild {GuildId}", guildId);
+                logger.LogWarning("No Patreon campaigns found for the authenticated user in guild {GuildId}", guildId);
                 return BadRequest(new
                 {
                     error =
@@ -171,7 +172,7 @@ public class PatreonController : ControllerBase
 
             if (!success)
             {
-                Log.Error("Failed to store Patreon OAuth tokens for guild {GuildId}", guildId);
+                logger.LogError("Failed to store Patreon OAuth tokens for guild {GuildId}", guildId);
                 return StatusCode(500, new
                 {
                     error = "Failed to store OAuth tokens"
@@ -180,7 +181,7 @@ public class PatreonController : ControllerBase
 
             _ = Task.Run(() => patreonService.SyncAllAsync(guildId));
 
-            Log.Information("Successfully completed Patreon OAuth for guild {GuildId} with campaign {CampaignId}",
+            logger.LogInformation("Successfully completed Patreon OAuth for guild {GuildId} with campaign {CampaignId}",
                 guildId, campaignId);
             return Ok(new PatreonOAuthCallbackResponse
             {
@@ -192,7 +193,7 @@ public class PatreonController : ControllerBase
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error handling Patreon OAuth callback");
+            logger.LogError(ex, "Error handling Patreon OAuth callback");
             return StatusCode(500, new
             {
                 error = "Internal server error"
@@ -225,7 +226,7 @@ public class PatreonController : ControllerBase
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error getting Patreon OAuth status for guild {GuildId}", guildId);
+            logger.LogError(ex, "Error getting Patreon OAuth status for guild {GuildId}", guildId);
             return StatusCode(500, new
             {
                 error = "Internal server error"
@@ -258,7 +259,7 @@ public class PatreonController : ControllerBase
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error getting Patreon analytics for guild {GuildId}", guildId);
+            logger.LogError(ex, "Error getting Patreon analytics for guild {GuildId}", guildId);
             return StatusCode(500, new
             {
                 error = "Internal server error"
@@ -291,7 +292,7 @@ public class PatreonController : ControllerBase
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error getting Patreon supporters for guild {GuildId}", guildId);
+            logger.LogError(ex, "Error getting Patreon supporters for guild {GuildId}", guildId);
             return StatusCode(500, new
             {
                 error = "Internal server error"
@@ -315,7 +316,7 @@ public class PatreonController : ControllerBase
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error getting Patreon config for guild {GuildId}", guildId);
+            logger.LogError(ex, "Error getting Patreon config for guild {GuildId}", guildId);
             return StatusCode(500, new
             {
                 error = "Internal server error"
@@ -375,7 +376,7 @@ public class PatreonController : ControllerBase
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error updating Patreon config for guild {GuildId}", guildId);
+            logger.LogError(ex, "Error updating Patreon config for guild {GuildId}", guildId);
             return StatusCode(500, new
             {
                 error = "Internal server error"
@@ -408,7 +409,7 @@ public class PatreonController : ControllerBase
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error getting Patreon tiers for guild {GuildId}", guildId);
+            logger.LogError(ex, "Error getting Patreon tiers for guild {GuildId}", guildId);
             return StatusCode(500, new
             {
                 error = "Internal server error"
@@ -441,7 +442,7 @@ public class PatreonController : ControllerBase
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error getting Patreon goals for guild {GuildId}", guildId);
+            logger.LogError(ex, "Error getting Patreon goals for guild {GuildId}", guildId);
             return StatusCode(500, new
             {
                 error = "Internal server error"
@@ -516,7 +517,7 @@ public class PatreonController : ControllerBase
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error executing Patreon operation {Operation} for guild {GuildId}", request.Operation,
+            logger.LogError(ex, "Error executing Patreon operation {Operation} for guild {GuildId}", request.Operation,
                 guildId);
             return StatusCode(500, new
             {
@@ -555,7 +556,7 @@ public class PatreonController : ControllerBase
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error mapping Patreon tier {TierId} to role {RoleId} for guild {GuildId}",
+            logger.LogError(ex, "Error mapping Patreon tier {TierId} to role {RoleId} for guild {GuildId}",
                 request.TierId, request.RoleId, guildId);
             return StatusCode(500, new
             {

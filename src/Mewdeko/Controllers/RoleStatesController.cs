@@ -1,23 +1,23 @@
 ﻿using DataModel;
+using Mewdeko.Modules.RoleStates.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Mewdeko.Modules.RoleStates.Services;
 
 namespace Mewdeko.Controllers;
 
 /// <summary>
-/// Controller for managing role states (saved roles when users leave/join)
+///     Controller for managing role states (saved roles when users leave/join)
 /// </summary>
 [ApiController]
 [Route("botapi/[controller]/{guildId}")]
 [Authorize("ApiKeyPolicy")]
 public class RoleStatesController : Controller
 {
-    private readonly RoleStatesService roleStatesService;
     private readonly DiscordShardedClient client;
+    private readonly RoleStatesService roleStatesService;
 
     /// <summary>
-    /// Initializes a new instance of the RoleStatesController
+    ///     Initializes a new instance of the RoleStatesController
     /// </summary>
     public RoleStatesController(RoleStatesService roleStatesService, DiscordShardedClient client)
     {
@@ -26,7 +26,7 @@ public class RoleStatesController : Controller
     }
 
     /// <summary>
-    /// Gets role state settings for a guild
+    ///     Gets role state settings for a guild
     /// </summary>
     [HttpGet("settings")]
     public async Task<IActionResult> GetSettings(ulong guildId)
@@ -36,7 +36,7 @@ public class RoleStatesController : Controller
     }
 
     /// <summary>
-    /// Toggles role state functionality for a guild
+    ///     Toggles role state functionality for a guild
     /// </summary>
     [HttpPost("toggle")]
     public async Task<IActionResult> ToggleRoleStates(ulong guildId)
@@ -46,7 +46,7 @@ public class RoleStatesController : Controller
     }
 
     /// <summary>
-    /// Gets role state for a specific user
+    ///     Gets role state for a specific user
     /// </summary>
     [HttpGet("user/{userId}")]
     public async Task<IActionResult> GetUserRoleState(ulong guildId, ulong userId)
@@ -59,7 +59,7 @@ public class RoleStatesController : Controller
     }
 
     /// <summary>
-    /// Gets all role states in a guild
+    ///     Gets all role states in a guild
     /// </summary>
     [HttpGet("all")]
     public async Task<IActionResult> GetAllRoleStates(ulong guildId)
@@ -69,7 +69,7 @@ public class RoleStatesController : Controller
     }
 
     /// <summary>
-    /// Adds roles to a user's role state
+    ///     Adds roles to a user's role state
     /// </summary>
     [HttpPost("user/{userId}/roles")]
     public async Task<IActionResult> AddRolesToUser(ulong guildId, ulong userId, [FromBody] List<ulong> roleIds)
@@ -82,7 +82,7 @@ public class RoleStatesController : Controller
     }
 
     /// <summary>
-    /// Removes roles from a user's role state
+    ///     Removes roles from a user's role state
     /// </summary>
     [HttpDelete("user/{userId}/roles")]
     public async Task<IActionResult> RemoveRolesFromUser(ulong guildId, ulong userId, [FromBody] List<ulong> roleIds)
@@ -95,7 +95,7 @@ public class RoleStatesController : Controller
     }
 
     /// <summary>
-    /// Deletes a user's role state
+    ///     Deletes a user's role state
     /// </summary>
     [HttpDelete("user/{userId}")]
     public async Task<IActionResult> DeleteUserRoleState(ulong guildId, ulong userId)
@@ -108,7 +108,7 @@ public class RoleStatesController : Controller
     }
 
     /// <summary>
-    /// Applies one user's role state to another user
+    ///     Applies one user's role state to another user
     /// </summary>
     [HttpPost("user/{sourceUserId}/apply/{targetUserId}")]
     public async Task<IActionResult> ApplyRoleState(ulong guildId, ulong sourceUserId, ulong targetUserId)
@@ -129,7 +129,7 @@ public class RoleStatesController : Controller
     }
 
     /// <summary>
-    /// Sets roles for a user manually
+    ///     Sets roles for a user manually
     /// </summary>
     [HttpPost("user/{userId}/set-roles")]
     public async Task<IActionResult> SetUserRoles(ulong guildId, ulong userId, [FromBody] List<ulong> roleIds)
@@ -147,7 +147,7 @@ public class RoleStatesController : Controller
     }
 
     /// <summary>
-    /// Toggles the option to clear saved roles upon a user's ban
+    ///     Toggles the option to clear saved roles upon a user's ban
     /// </summary>
     [HttpPost("clear-on-ban")]
     public async Task<IActionResult> ToggleClearOnBan(ulong guildId, [FromBody] object data)
@@ -161,7 +161,7 @@ public class RoleStatesController : Controller
     }
 
     /// <summary>
-    /// Toggles the option to ignore bots when saving and restoring roles
+    ///     Toggles the option to ignore bots when saving and restoring roles
     /// </summary>
     [HttpPost("ignore-bots")]
     public async Task<IActionResult> ToggleIgnoreBots(ulong guildId, [FromBody] object data)
@@ -175,7 +175,7 @@ public class RoleStatesController : Controller
     }
 
     /// <summary>
-    /// Updates the role state settings for a guild
+    ///     Updates the role state settings for a guild
     /// </summary>
     [HttpPost("settings")]
     public async Task<IActionResult> UpdateSettings(ulong guildId, [FromBody] RoleStateSetting settings)
@@ -188,7 +188,7 @@ public class RoleStatesController : Controller
     }
 
     /// <summary>
-    /// Saves the current role states of all users in a guild
+    ///     Saves the current role states of all users in a guild
     /// </summary>
     [HttpPost("save-all")]
     public async Task<IActionResult> SaveAllUserRoleStates(ulong guildId)
@@ -198,6 +198,9 @@ public class RoleStatesController : Controller
             return NotFound("Guild not found");
 
         var (savedCount, errorMessage) = await roleStatesService.SaveAllUserRoleStates(guild);
-        return Ok(new { savedCount, errorMessage });
+        return Ok(new
+        {
+            savedCount, errorMessage
+        });
     }
 }

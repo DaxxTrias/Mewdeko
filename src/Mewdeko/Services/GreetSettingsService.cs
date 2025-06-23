@@ -1,6 +1,5 @@
 ﻿using DataModel;
 using LinqToDB;
-using Serilog;
 
 namespace Mewdeko.Services;
 
@@ -19,6 +18,7 @@ public class GreetSettingsService : INService
         });
 
     private readonly GuildSettingsService gss;
+    private readonly ILogger<GreetSettingsService> logger;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="GreetSettingsService" /> class, setting up event handlers for user
@@ -33,9 +33,10 @@ public class GreetSettingsService : INService
     ///     activities such as joining, leaving, or boosting.
     /// </remarks>
     public GreetSettingsService(DiscordShardedClient client, GuildSettingsService gss, IDataConnectionFactory dbFactory,
-        EventHandler eventHandler)
+        EventHandler eventHandler, ILogger<GreetSettingsService> logger)
     {
         this.dbFactory = dbFactory;
+        this.logger = logger;
         this.client = client;
         this.gss = gss;
 
@@ -98,7 +99,7 @@ public class GreetSettingsService : INService
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Error sending boost message");
+                logger.LogError(ex, "Error sending boost message");
             }
         }
         else
@@ -112,7 +113,7 @@ public class GreetSettingsService : INService
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Error sending boost message");
+                logger.LogError(ex, "Error sending boost message");
             }
         }
     }
@@ -307,7 +308,7 @@ public class GreetSettingsService : INService
             }
             catch (Exception ex)
             {
-                Log.Warning(ex, "Error embeding bye message");
+                logger.LogWarning(ex, "Error embeding bye message");
             }
         }
         else
@@ -335,7 +336,7 @@ public class GreetSettingsService : INService
             }
             catch (Exception ex)
             {
-                Log.Warning(ex, "Error sending bye message");
+                logger.LogWarning(ex, "Error sending bye message");
             }
         }
     }

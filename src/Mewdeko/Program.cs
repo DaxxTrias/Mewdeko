@@ -29,7 +29,6 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 using Microsoft.OpenApi.Models;
 using NekosBestApiNet;
 using Serilog;
@@ -39,19 +38,19 @@ using RunMode = Discord.Commands.RunMode;
 namespace Mewdeko;
 
 /// <summary>
-/// The main entry point class for the Mewdeko application.
-/// Handles initialization, dependency injection, and starting the bot or web host.
+///     The main entry point class for the Mewdeko application.
+///     Handles initialization, dependency injection, and starting the bot or web host.
 /// </summary>
 public class Program
 {
     /// <summary>
-    /// Gets or sets the shared data cache instance.
+    ///     Gets or sets the shared data cache instance.
     /// </summary>
     private static IDataCache Cache { get; set; } = null!;
 
     /// <summary>
-    /// The entry point of the application. Configures logging, dependencies, migrations,
-    /// and starts either the web host and bot or just the bot based on configuration.
+    ///     The entry point of the application. Configures logging, dependencies, migrations,
+    ///     and starts either the web host and bot or just the bot based on configuration.
     /// </summary>
     /// <param name="args">Command-line arguments passed to the application.</param>
     /// <returns>A <see cref="Task" /> representing the asynchronous operation of running the application.</returns>
@@ -66,7 +65,7 @@ public class Program
         // Test connection first
         if (!dbUpgrader.TestConnection())
         {
-            Log.Error("Failed to connect to database! Check connection string.");
+            log.Error("Failed to connect to database! Check connection string.");
             Helpers.ReadErrorAndExit(6);
             return;
         }
@@ -74,23 +73,23 @@ public class Program
         // Check if upgrade is needed
         if (dbUpgrader.IsUpgradeRequired())
         {
-            Log.Information("Database upgrade required. Running migrations...");
+            log.Information("Database upgrade required. Running migrations...");
             var scriptsToExecute = dbUpgrader.GetScriptsToExecute();
-            Log.Information("Scripts to execute: {Scripts}", string.Join(", ", scriptsToExecute));
+            log.Information("Scripts to execute: {Scripts}", string.Join(", ", scriptsToExecute));
 
             var migrationResult = dbUpgrader.PerformUpgrade();
             if (!migrationResult.Successful)
             {
-                Log.Error("Database migration failed! Error: {Error}", migrationResult.Error);
+                log.Error("Database migration failed! Error: {Error}", migrationResult.Error);
                 Helpers.ReadErrorAndExit(6);
                 return;
             }
 
-            Log.Information("Database migrations completed successfully");
+            log.Information("Database migrations completed successfully");
         }
         else
         {
-            Log.Information("Database is up to date, no migrations needed");
+            log.Information("Database is up to date, no migrations needed");
         }
 
         var discordRestClient = new DiscordRestClient();
@@ -102,7 +101,7 @@ public class Program
 
         if (!Uri.TryCreate(credentials.LavalinkUrl, UriKind.Absolute, out _))
         {
-            Log.Error("The Lavalink URL is invalid! Please check the Lavalink URL in the configuration");
+            log.Error("The Lavalink URL is invalid! Please check the Lavalink URL in the configuration");
             Helpers.ReadErrorAndExit(5);
         }
 
@@ -110,7 +109,7 @@ public class Program
         {
             var builder = WebApplication.CreateBuilder(args);
             builder.Logging.ClearProviders();
-
+            builder.Services.AddTransient(typeof(ILogger<>), typeof(Logger<>));
             ConfigureServices(builder.Services, credentials, Cache, serverCount.GetValueOrDefault());
 
             builder.WebHost.UseUrls($"http://localhost:{credentials.ApiPort}");
@@ -195,7 +194,7 @@ public class Program
                 }
                 catch (Exception ex)
                 {
-                    Log.Error(ex, "Error processing request: {Method} {Path}",
+                    log.Error(ex, "Error processing request: {Method} {Path}",
                         context.Request.Method,
                         context.Request.Path);
                     throw;
@@ -226,7 +225,7 @@ public class Program
                     }
                     catch (Exception ex)
                     {
-                        Log.Error(ex, "Error reading request body for logging");
+                        log.Error(ex, "Error reading request body for logging");
                         diagnosticContext.Set("RequestBody", "Error reading request body");
                     }
                 };
@@ -245,7 +244,7 @@ public class Program
             app.UseAuthorization();
             app.MapControllers();
 
-            foreach (var address in app.Urls) Log.Information("API Listening on {Address}", address);
+            foreach (var address in app.Urls) log.Information("API Listening on {Address}", address);
             await app.RunAsync();
         }
         else
@@ -259,13 +258,13 @@ public class Program
                 })
                 .Build();
 
-            Log.Information("API is disabled. Starting bot only.");
+            log.Information("API is disabled. Starting bot only.");
             await host.RunAsync();
         }
     }
 
     /// <summary>
-    /// Configures the shared services for the application (both bot and API).
+    ///     Configures the shared services for the application (both bot and API).
     /// </summary>
     /// <param name="services">The service collection to configure.</param>
     /// <param name="credentials">The bot credentials.</param>
@@ -284,10 +283,13 @@ public class Program
             FormatUsersInBidirectionalUnicode = false,
             LogGatewayIntentWarnings = false,
             DefaultRetryMode = RetryMode.RetryRatelimit,
-            TotalShards = credentials.TotalShards,
+            TotalShards = credentials.TotalShards
         });
 
-        services.AddSerilog(LogSetup.SetupLogger("Mewdeko"));
+        services.AddSerilog((serviceProvider, loggerConfiguration) =>
+        {
+            LogSetup.ConfigureLogger(loggerConfiguration);
+        });
         services.AddSingleton(client);
         services.AddSingleton(credentials);
         services.AddSingleton(cache);
@@ -417,6 +419,7 @@ public class Program
             .AsSelfWithInterfaces()
             .WithSingletonLifetime()
         );
+
 
         services.AddSingleton<Mewdeko>();
         services.AddSingleton<PatreonApiClient>();

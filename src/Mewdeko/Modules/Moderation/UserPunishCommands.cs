@@ -10,7 +10,6 @@ using Mewdeko.Modules.Administration.Common;
 using Mewdeko.Modules.Moderation.Common;
 using Mewdeko.Modules.Moderation.Services;
 using NekosBestApiNet;
-using Serilog;
 using Swan;
 using UserExtensions = Mewdeko.Extensions.UserExtensions;
 
@@ -30,7 +29,8 @@ public partial class Moderation : MewdekoModule
         MuteService mute,
         IDataConnectionFactory dbFactory,
         InteractiveService serv,
-        NekosBestApi nekos)
+        NekosBestApi nekos,
+        ILogger<UserPunishCommands> logger)
         : MewdekoSubmodule<UserPunishService>
     {
         /// <summary>
@@ -418,7 +418,7 @@ public partial class Moderation : MewdekoModule
             }
             catch (Exception ex)
             {
-                Log.Warning(ex.Message);
+                logger.LogWarning(ex.Message);
                 var errorEmbed = new EmbedBuilder()
                     .WithErrorColor()
                     .WithDescription(Strings.CantApplyPunishment(ctx.Guild.Id));

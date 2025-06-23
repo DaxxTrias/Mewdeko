@@ -2,19 +2,18 @@ using System.Text;
 using Discord.Interactions;
 using Mewdeko.Common.Attributes.InteractionCommands;
 using Mewdeko.Modules.Patreon.Services;
-using Serilog;
 
 namespace Mewdeko.Modules.Patreon;
 
 /// <summary>
-/// Slash commands for managing Patreon integration and announcements.
+///     Slash commands for managing Patreon integration and announcements.
 /// </summary>
 [Group("patreon", "Manage Patreon settings")]
-public class SlashPatreon(IBotCredentials creds, PatreonApiClient patreonApiClient)
+public class SlashPatreon(IBotCredentials creds, PatreonApiClient patreonApiClient, ILogger<SlashPatreon> logger)
     : MewdekoSlashModuleBase<PatreonService>
 {
     /// <summary>
-    /// Sets the Patreon announcement channel.
+    ///     Sets the Patreon announcement channel.
     /// </summary>
     /// <param name="channel">The channel to set for Patreon announcements.</param>
     [SlashCommand("channel", "Set the Patreon announcement channel")]
@@ -37,7 +36,7 @@ public class SlashPatreon(IBotCredentials creds, PatreonApiClient patreonApiClie
     }
 
     /// <summary>
-    /// Disables Patreon announcements for this server.
+    ///     Disables Patreon announcements for this server.
     /// </summary>
     [SlashCommand("disable", "Disable Patreon announcements")]
     [RequireContext(ContextType.Guild)]
@@ -50,7 +49,7 @@ public class SlashPatreon(IBotCredentials creds, PatreonApiClient patreonApiClie
     }
 
     /// <summary>
-    /// Sets a custom message for Patreon announcements.
+    ///     Sets a custom message for Patreon announcements.
     /// </summary>
     /// <param name="message">The custom message. Use placeholders like %server.name%, %month%, etc.</param>
     [SlashCommand("message", "Set a custom message for Patreon announcements")]
@@ -72,7 +71,7 @@ public class SlashPatreon(IBotCredentials creds, PatreonApiClient patreonApiClie
     }
 
     /// <summary>
-    /// Resets the Patreon message to default.
+    ///     Resets the Patreon message to default.
     /// </summary>
     [SlashCommand("reset-message", "Reset the Patreon message to default")]
     [RequireContext(ContextType.Guild)]
@@ -85,14 +84,14 @@ public class SlashPatreon(IBotCredentials creds, PatreonApiClient patreonApiClie
     }
 
     /// <summary>
-    /// Sets the day of the month for Patreon announcements.
+    ///     Sets the day of the month for Patreon announcements.
     /// </summary>
     /// <param name="day">The day of the month (1-28) to send announcements.</param>
     [SlashCommand("day", "Set the day of the month for Patreon announcements")]
     [RequireContext(ContextType.Guild)]
     [SlashUserPerm(GuildPermission.Administrator)]
     [CheckPermissions]
-    public async Task PatreonDay([MinValue(1), MaxValue(28)] int day)
+    public async Task PatreonDay([MinValue(1)] [MaxValue(28)] int day)
     {
         if (!await Service.SetAnnouncementDay(ctx.Guild.Id, day))
         {
@@ -104,7 +103,7 @@ public class SlashPatreon(IBotCredentials creds, PatreonApiClient patreonApiClie
     }
 
     /// <summary>
-    /// Toggles Patreon announcements on or off.
+    ///     Toggles Patreon announcements on or off.
     /// </summary>
     [SlashCommand("toggle", "Toggle Patreon announcements on or off")]
     [RequireContext(ContextType.Guild)]
@@ -125,7 +124,7 @@ public class SlashPatreon(IBotCredentials creds, PatreonApiClient patreonApiClie
     }
 
     /// <summary>
-    /// Shows the current Patreon configuration for this server.
+    ///     Shows the current Patreon configuration for this server.
     /// </summary>
     [SlashCommand("config", "Show current Patreon configuration")]
     [RequireContext(ContextType.Guild)]
@@ -170,7 +169,7 @@ public class SlashPatreon(IBotCredentials creds, PatreonApiClient patreonApiClie
     }
 
     /// <summary>
-    /// Manually triggers a Patreon announcement.
+    ///     Manually triggers a Patreon announcement.
     /// </summary>
     [SlashCommand("announce", "Manually trigger a Patreon announcement")]
     [RequireContext(ContextType.Guild)]
@@ -191,7 +190,7 @@ public class SlashPatreon(IBotCredentials creds, PatreonApiClient patreonApiClie
     }
 
     /// <summary>
-    /// Shows Patreon module information and available placeholders.
+    ///     Shows Patreon module information and available placeholders.
     /// </summary>
     [SlashCommand("help", "Show Patreon module help and available placeholders")]
     [RequireContext(ContextType.Guild)]
@@ -224,7 +223,7 @@ public class SlashPatreon(IBotCredentials creds, PatreonApiClient patreonApiClie
     }
 
     /// <summary>
-    /// View the current Patreon announcement message.
+    ///     View the current Patreon announcement message.
     /// </summary>
     [SlashCommand("view", "View current Patreon announcement message")]
     [RequireContext(ContextType.Guild)]
@@ -244,7 +243,7 @@ public class SlashPatreon(IBotCredentials creds, PatreonApiClient patreonApiClie
     }
 
     /// <summary>
-    /// Securely sets up Patreon OAuth integration
+    ///     Securely sets up Patreon OAuth integration
     /// </summary>
     [SlashCommand("sync", "Set up Patreon OAuth integration")]
     [RequireContext(ContextType.Guild)]
@@ -252,7 +251,7 @@ public class SlashPatreon(IBotCredentials creds, PatreonApiClient patreonApiClie
     [CheckPermissions]
     public async Task PatreonSync()
     {
-        await DeferAsync(ephemeral: true);
+        await DeferAsync(true);
 
         try
         {
@@ -295,13 +294,13 @@ public class SlashPatreon(IBotCredentials creds, PatreonApiClient patreonApiClie
                 .AddField("⚠️ Important Requirements",
                     "• You must be the **owner** of a Patreon campaign\n" +
                     "• This will give the bot access to your supporter data\n" +
-                    "• You can revoke access anytime from your Patreon settings", false)
+                    "• You can revoke access anytime from your Patreon settings")
                 .AddField("📋 Setup Process",
                     "1. Click the \"Authorize with Patreon\" button below\n" +
                     "2. Sign in to Patreon if prompted\n" +
                     "3. Review and approve the requested permissions\n" +
                     "4. You'll be redirected back automatically\n" +
-                    "5. Your supporters will be synced automatically", false)
+                    "5. Your supporters will be synced automatically")
                 .WithFooter(Strings.PatreonSetupFooter(ctx.Guild.Id));
 
             var component = new ComponentBuilder()
@@ -311,13 +310,13 @@ public class SlashPatreon(IBotCredentials creds, PatreonApiClient patreonApiClie
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error setting up Patreon OAuth for guild {GuildId}", ctx.Guild.Id);
+            logger.LogError(ex, "Error setting up Patreon OAuth for guild {GuildId}", ctx.Guild.Id);
             await FollowupAsync("❌ An error occurred while setting up Patreon OAuth.", ephemeral: true);
         }
     }
 
     /// <summary>
-    /// Lists active Patreon supporters
+    ///     Lists active Patreon supporters
     /// </summary>
     [SlashCommand("supporters", "List active Patreon supporters")]
     [RequireContext(ContextType.Guild)]
@@ -325,7 +324,7 @@ public class SlashPatreon(IBotCredentials creds, PatreonApiClient patreonApiClie
     [CheckPermissions]
     public async Task PatreonSupporters()
     {
-        await DeferAsync(ephemeral: true);
+        await DeferAsync(true);
 
         var supporters = await Service.GetActiveSupportersAsync(ctx.Guild.Id);
 
@@ -366,7 +365,7 @@ public class SlashPatreon(IBotCredentials creds, PatreonApiClient patreonApiClie
     }
 
     /// <summary>
-    /// Links a Discord user to a Patreon supporter
+    ///     Links a Discord user to a Patreon supporter
     /// </summary>
     /// <param name="user">Discord user to link</param>
     /// <param name="patreonUserId">Patreon user ID</param>
@@ -387,7 +386,7 @@ public class SlashPatreon(IBotCredentials creds, PatreonApiClient patreonApiClie
     }
 
     /// <summary>
-    /// Toggles automatic role synchronization
+    ///     Toggles automatic role synchronization
     /// </summary>
     [SlashCommand("rolesync", "Toggle automatic role synchronization")]
     [RequireContext(ContextType.Guild)]
@@ -409,7 +408,7 @@ public class SlashPatreon(IBotCredentials creds, PatreonApiClient patreonApiClie
     }
 
     /// <summary>
-    /// Maps a Patreon tier to a Discord role
+    ///     Maps a Patreon tier to a Discord role
     /// </summary>
     /// <param name="tierId">Patreon tier ID</param>
     /// <param name="role">Discord role to assign</param>
@@ -431,7 +430,7 @@ public class SlashPatreon(IBotCredentials creds, PatreonApiClient patreonApiClie
     }
 
     /// <summary>
-    /// Syncs roles for all linked supporters
+    ///     Syncs roles for all linked supporters
     /// </summary>
     [SlashCommand("syncall", "Sync roles for all linked supporters")]
     [RequireContext(ContextType.Guild)]
@@ -440,7 +439,7 @@ public class SlashPatreon(IBotCredentials creds, PatreonApiClient patreonApiClie
     [CheckPermissions]
     public async Task PatreonSyncAll()
     {
-        await DeferAsync(ephemeral: true);
+        await DeferAsync(true);
 
         var result = await Service.SyncAllRolesAsync(ctx.Guild.Id);
 
@@ -448,7 +447,7 @@ public class SlashPatreon(IBotCredentials creds, PatreonApiClient patreonApiClie
     }
 
     /// <summary>
-    /// Shows Patreon supporter statistics
+    ///     Shows Patreon supporter statistics
     /// </summary>
     [SlashCommand("stats", "Show Patreon supporter statistics")]
     [RequireContext(ContextType.Guild)]
@@ -456,7 +455,7 @@ public class SlashPatreon(IBotCredentials creds, PatreonApiClient patreonApiClie
     [CheckPermissions]
     public async Task PatreonStats()
     {
-        await DeferAsync(ephemeral: true);
+        await DeferAsync(true);
 
         var supporters = await Service.GetActiveSupportersAsync(ctx.Guild.Id);
         var tiers = await Service.GetTiersAsync(ctx.Guild.Id);
@@ -481,21 +480,21 @@ public class SlashPatreon(IBotCredentials creds, PatreonApiClient patreonApiClie
             var topSupporter = supporters.First();
             embed.AddField(Strings.PatreonStatsTop(ctx.Guild.Id),
                 Strings.PatreonStatsTopSupporter(ctx.Guild.Id,
-                    $"{topSupporter.FullName} - ${(topSupporter.AmountCents / 100.0):F2}"), false);
+                    $"{topSupporter.FullName} - ${(topSupporter.AmountCents / 100.0):F2}"));
         }
 
         await FollowupAsync(embed: embed.Build(), ephemeral: true);
     }
 
     /// <summary>
-    /// Shows current Patreon goals
+    ///     Shows current Patreon goals
     /// </summary>
     [SlashCommand("goals", "Show current Patreon goals")]
     [RequireContext(ContextType.Guild)]
     [CheckPermissions]
     public async Task PatreonGoals()
     {
-        await DeferAsync(ephemeral: true);
+        await DeferAsync(true);
 
         var goals = await Service.GetGoalsAsync(ctx.Guild.Id);
 
@@ -517,22 +516,22 @@ public class SlashPatreon(IBotCredentials creds, PatreonApiClient patreonApiClie
                 : Strings.PatreonGoalProgress(ctx.Guild.Id, goal.CompletedPercentage);
 
             embed.AddField(Strings.PatreonGoalField(ctx.Guild.Id, $"{goal.Title} (${amount:F2})"),
-                $"{goal.Description}\n**{Strings.PatreonGoalStatus(ctx.Guild.Id)}:** {status}", false);
+                $"{goal.Description}\n**{Strings.PatreonGoalStatus(ctx.Guild.Id)}:** {status}");
         }
 
         await FollowupAsync(embed: embed.Build(), ephemeral: true);
     }
 
     /// <summary>
-    /// Shows top Patreon supporters
+    ///     Shows top Patreon supporters
     /// </summary>
     /// <param name="count">Number of top supporters to show (1-20)</param>
     [SlashCommand("top", "Show top Patreon supporters")]
     [RequireContext(ContextType.Guild)]
     [CheckPermissions]
-    public async Task PatreonTop([MinValue(1), MaxValue(20)] int count = 10)
+    public async Task PatreonTop([MinValue(1)] [MaxValue(20)] int count = 10)
     {
-        await DeferAsync(ephemeral: true);
+        await DeferAsync(true);
 
         var supporters = await Service.GetActiveSupportersAsync(ctx.Guild.Id);
 
@@ -548,7 +547,7 @@ public class SlashPatreon(IBotCredentials creds, PatreonApiClient patreonApiClie
 
         var description = new StringBuilder();
 
-        for (int i = 0; i < Math.Min(count, supporters.Count); i++)
+        for (var i = 0; i < Math.Min(count, supporters.Count); i++)
         {
             var supporter = supporters[i];
             var amount = supporter.AmountCents / 100.0;
@@ -568,7 +567,7 @@ public class SlashPatreon(IBotCredentials creds, PatreonApiClient patreonApiClie
     }
 
     /// <summary>
-    /// Lists Patreon tier-role mappings
+    ///     Lists Patreon tier-role mappings
     /// </summary>
     [SlashCommand("roles", "List Patreon tier-role mappings")]
     [RequireContext(ContextType.Guild)]
@@ -576,7 +575,7 @@ public class SlashPatreon(IBotCredentials creds, PatreonApiClient patreonApiClie
     [CheckPermissions]
     public async Task PatreonRoles()
     {
-        await DeferAsync(ephemeral: true);
+        await DeferAsync(true);
 
         var tiers = await Service.GetTiersAsync(ctx.Guild.Id);
 
@@ -610,7 +609,7 @@ public class SlashPatreon(IBotCredentials creds, PatreonApiClient patreonApiClie
     }
 
     /// <summary>
-    /// Shows detailed Patreon analytics
+    ///     Shows detailed Patreon analytics
     /// </summary>
     [SlashCommand("analytics", "Show detailed Patreon analytics")]
     [RequireContext(ContextType.Guild)]
@@ -618,7 +617,7 @@ public class SlashPatreon(IBotCredentials creds, PatreonApiClient patreonApiClie
     [CheckPermissions]
     public async Task PatreonAnalytics()
     {
-        await DeferAsync(ephemeral: true);
+        await DeferAsync(true);
 
         var analytics = await Service.GetAnalyticsAsync(ctx.Guild.Id);
 
@@ -656,14 +655,14 @@ public class SlashPatreon(IBotCredentials creds, PatreonApiClient patreonApiClie
         {
             var topText = string.Join("\n", analytics.TopSupporters.Select((s, i) =>
                 Strings.PatreonAnalyticsTopEntry(ctx.Guild.Id, i + 1, s.Name, s.Amount, s.IsLinked ? "✅" : "❌")));
-            embed.AddField(Strings.PatreonAnalyticsTop(ctx.Guild.Id), topText, false);
+            embed.AddField(Strings.PatreonAnalyticsTop(ctx.Guild.Id), topText);
         }
 
         await FollowupAsync(embed: embed.Build(), ephemeral: true);
     }
 
     /// <summary>
-    /// Sends recognition messages for new supporters
+    ///     Sends recognition messages for new supporters
     /// </summary>
     /// <param name="channel">Channel to send recognition messages</param>
     [SlashCommand("recognize", "Send recognition messages for new supporters")]
@@ -673,7 +672,7 @@ public class SlashPatreon(IBotCredentials creds, PatreonApiClient patreonApiClie
     [CheckPermissions]
     public async Task PatreonRecognize(ITextChannel? channel = null)
     {
-        await DeferAsync(ephemeral: true);
+        await DeferAsync(true);
 
         var targetChannel = channel ?? ctx.Channel as ITextChannel;
         if (targetChannel == null)

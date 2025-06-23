@@ -39,7 +39,8 @@ public class SlashHighlights : MewdekoSlashModuleBase<HighlightsService>
     {
         await using var dbContext = await dbFactory.CreateConnectionAsync();
 
-        var highlights = await (dbContext.Highlights.Where(x => x.GuildId == ctx.Guild.Id && x.UserId == ctx.User.Id)).ToListAsync();
+        var highlights = await (dbContext.Highlights.Where(x => x.GuildId == ctx.Guild.Id && x.UserId == ctx.User.Id))
+            .ToListAsync();
         if (string.IsNullOrWhiteSpace(words))
         {
             await ctx.Interaction.SendErrorAsync(Strings.HighlightPhraseRequired(ctx.Guild.Id), Config)
@@ -70,7 +71,8 @@ public class SlashHighlights : MewdekoSlashModuleBase<HighlightsService>
     {
         await using var dbContext = await dbFactory.CreateConnectionAsync();
 
-        var highlights = await (dbContext.Highlights.Where(x => x.GuildId == ctx.Guild.Id && x.UserId == ctx.User.Id)).ToListAsync();
+        var highlights = await (dbContext.Highlights.Where(x => x.GuildId == ctx.Guild.Id && x.UserId == ctx.User.Id))
+            .ToListAsync();
 
         if (highlights.Count == 0)
         {
@@ -122,7 +124,8 @@ public class SlashHighlights : MewdekoSlashModuleBase<HighlightsService>
 
         await using var dbContext = await dbFactory.CreateConnectionAsync();
 
-        var highlightsForUser = await (dbContext.Highlights.Where(x => x.GuildId == ctx.Guild.Id && x.UserId == ctx.User.Id)).ToListAsync();
+        var highlightsForUser =
+            await (dbContext.Highlights.Where(x => x.GuildId == ctx.Guild.Id && x.UserId == ctx.User.Id)).ToListAsync();
 
         if (highlightsForUser.Count == 0)
         {
@@ -179,7 +182,8 @@ public class SlashHighlights : MewdekoSlashModuleBase<HighlightsService>
 
         await using var dbContext = await dbFactory.CreateConnectionAsync();
 
-        var highlightsForUser = await (dbContext.Highlights.Where(x => x.GuildId == ctx.Guild.Id && x.UserId == ctx.User.Id)).ToListAsync();
+        var highlightsForUser =
+            await (dbContext.Highlights.Where(x => x.GuildId == ctx.Guild.Id && x.UserId == ctx.User.Id)).ToListAsync();
 
         var matched = highlightsForUser.Where(x => words.ToLower().Contains(x.Word.ToLower()));
         if (!matched.Any())

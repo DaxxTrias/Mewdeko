@@ -1,7 +1,6 @@
 ﻿using System.IO;
 using System.Net;
 using System.Net.Http;
-using Google;
 using Google.Apis.Auth.OAuth2;
 using Google.Apis.Services;
 using Google.Apis.YouTube.v3;
@@ -10,7 +9,6 @@ using Google.Cloud.Vision.V1;
 using Grpc.Auth;
 using Grpc.Core;
 using Newtonsoft.Json.Linq;
-using Serilog;
 using Image = Google.Cloud.Vision.V1.Image;
 
 namespace Mewdeko.Services.Impl;
@@ -415,6 +413,8 @@ public class GoogleApiService : IGoogleApiService
         }
     };
 
+    private readonly ILogger<GoogleApiService> logger;
+
     private readonly ImageAnnotatorClient? visionClient;
 
     private readonly YouTubeService yt;
@@ -424,10 +424,11 @@ public class GoogleApiService : IGoogleApiService
     /// </summary>
     /// <param name="creds">Bot credentials.</param>
     /// <param name="factory">HTTP client factory.</param>
-    public GoogleApiService(IBotCredentials creds, IHttpClientFactory factory)
+    public GoogleApiService(IBotCredentials creds, IHttpClientFactory factory, ILogger<GoogleApiService> logger)
     {
         this.creds = creds;
         httpFactory = factory;
+        this.logger = logger;
 
         var bcs = new BaseClientService.Initializer
         {
@@ -446,7 +447,7 @@ public class GoogleApiService : IGoogleApiService
         }
         catch (Exception)
         {
-            Log.Error("Google Cloud Credentials not found. Image command will be unfiltered.");
+            logger.LogError("Google Cloud Credentials not found. Image command will be unfiltered.");
             visionClient = null;
         }
 

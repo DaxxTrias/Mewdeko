@@ -3,14 +3,14 @@
 namespace Mewdeko.Modules.Utility.Services.Impl;
 
 /// <summary>
-/// Factory for creating AI clients and their corresponding stream parsers.
+///     Factory for creating AI clients and their corresponding stream parsers.
 /// </summary>
 public class AiClientFactory : IAiClientFactory
 {
     private readonly Dictionary<AiService.AiProvider, (IAiClient Client, IAiStreamParser Parser)> clients;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="AiClientFactory"/> class.
+    ///     Initializes a new instance of the <see cref="AiClientFactory" /> class.
     /// </summary>
     /// <param name="httpClientFactory">The HTTP client factory.</param>
     public AiClientFactory(IHttpClientFactory httpClientFactory)

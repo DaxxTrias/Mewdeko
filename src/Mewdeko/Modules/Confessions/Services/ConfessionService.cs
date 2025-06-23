@@ -2,7 +2,6 @@
 using LinqToDB;
 using Mewdeko.Common.Configs;
 using Mewdeko.Services.Strings;
-using Serilog;
 
 namespace Mewdeko.Modules.Confessions.Services;
 
@@ -19,7 +18,8 @@ public class ConfessionService(
     DiscordShardedClient client,
     GuildSettingsService guildSettings,
     BotConfig config,
-    GeneratedBotStrings strings)
+    GeneratedBotStrings strings,
+    ILogger<ConfessionService> logger)
     : INService
 {
     /// <summary>
@@ -221,7 +221,7 @@ public class ConfessionService(
         }
         catch (Exception e)
         {
-            Log.Information($"{e}");
+            logger.LogInformation($"{e}");
         }
     }
 

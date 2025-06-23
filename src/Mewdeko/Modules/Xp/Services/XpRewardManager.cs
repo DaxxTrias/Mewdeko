@@ -5,7 +5,6 @@ using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.Currency.Services;
 using Mewdeko.Modules.Xp.Models;
 using Mewdeko.Services.Strings;
-using Serilog;
 
 namespace Mewdeko.Modules.Xp.Services;
 
@@ -18,10 +17,11 @@ public class XpRewardManager : INService
     private readonly DiscordShardedClient client;
     private readonly ICurrencyService currencyService;
     private readonly IDataConnectionFactory dbFactory;
+    private readonly ILogger<XpRewardManager> logger;
     private readonly GeneratedBotStrings Strings;
 
     /// <summary>
-    ///     Initializes a new instance of the <see cref="XpRewardManager"/> class.
+    ///     Initializes a new instance of the <see cref="XpRewardManager" /> class.
     /// </summary>
     /// <param name="client">The Discord client.</param>
     /// <param name="dbFactory">The database factory.</param>
@@ -31,13 +31,14 @@ public class XpRewardManager : INService
         DiscordShardedClient client,
         IDataConnectionFactory dbFactory,
         ICurrencyService currencyService,
-        XpCacheManager cacheManager, GeneratedBotStrings strings)
+        XpCacheManager cacheManager, GeneratedBotStrings strings, ILogger<XpRewardManager> logger)
     {
         this.client = client;
         this.dbFactory = dbFactory;
         this.currencyService = currencyService;
         this.cacheManager = cacheManager;
         Strings = strings;
+        this.logger = logger;
     }
 
     /// <summary>
@@ -152,7 +153,7 @@ public class XpRewardManager : INService
             var serializedReward = JsonSerializer.Serialize(rewardToCache);
             await cacheManager.GetRedisDatabase().StringSetAsync(cacheKey, serializedReward, TimeSpan.FromMinutes(30));
 
-            Log.Information("Set and cached role reward for guild {GuildId} level {Level}: Role {RoleId}",
+            logger.LogInformation("Set and cached role reward for guild {GuildId} level {Level}: Role {RoleId}",
                 guildId, level, roleId.Value);
         }
         else if (existingReward != null)
@@ -165,7 +166,7 @@ public class XpRewardManager : INService
             // Clear from cache
             await cacheManager.GetRedisDatabase().KeyDeleteAsync($"xp:rewards:{guildId}:role:{level}");
 
-            Log.Information("Removed role reward for guild {GuildId} level {Level}", guildId, level);
+            logger.LogInformation("Removed role reward for guild {GuildId} level {Level}", guildId, level);
         }
     }
 
@@ -284,7 +285,7 @@ public class XpRewardManager : INService
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Error sending XP notification for {UserId} in {GuildId}",
+                logger.LogError(ex, "Error sending XP notification for {UserId} in {GuildId}",
                     notification.UserId, notification.GuildId);
             }
         }
@@ -346,7 +347,7 @@ public class XpRewardManager : INService
                 }
                 catch (Exception ex)
                 {
-                    Log.Error(ex, "Error granting role reward to {UserId} in {GuildId}", userId, guildId);
+                    logger.LogError(ex, "Error granting role reward to {UserId} in {GuildId}", userId, guildId);
                 }
             }
         }
@@ -451,15 +452,15 @@ public class XpRewardManager : INService
                 await currencyService.AddTransactionAsync(
                     reward.UserId,
                     reward.Amount,
-                    $"XP Level-up reward",
+                    "XP Level-up reward",
                     reward.GuildId);
 
-                Log.Information("Awarded {Amount} currency to {UserId} in {GuildId}",
+                logger.LogInformation("Awarded {Amount} currency to {UserId} in {GuildId}",
                     reward.Amount, reward.UserId, reward.GuildId);
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Error granting currency reward to {UserId} in {GuildId}",
+                logger.LogError(ex, "Error granting currency reward to {UserId} in {GuildId}",
                     reward.UserId, reward.GuildId);
             }
         }

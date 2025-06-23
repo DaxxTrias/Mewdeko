@@ -23,7 +23,6 @@ using Mewdeko.Services.strings;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Scripting;
 using Microsoft.CodeAnalysis.Scripting;
-using Serilog;
 using ContextType = Discord.Interactions.ContextType;
 
 namespace Mewdeko.Modules.OwnerOnly;
@@ -48,7 +47,8 @@ public class SlashOwnerOnly(
     IDataConnectionFactory dbFactory,
     IDataCache cache,
     GuildSettingsService guildSettings,
-    CommandHandler commandHandler)
+    CommandHandler commandHandler,
+    ILogger<SlashOwnerOnly> logger)
     : MewdekoSlashModuleBase<OwnerOnlyService>
 {
     /// <summary>
@@ -748,7 +748,8 @@ public class SlashOwnerOnly(
         IServiceProvider services,
         DiscordShardedClient client,
         IEnumerable<IConfigService> settingServices,
-        Localization localization)
+        Localization localization,
+        ILogger<ConfigCommands> logger)
         : MewdekoSlashModuleBase<OwnerOnlyService>
     {
         /// <summary>
@@ -1118,7 +1119,7 @@ public class SlashOwnerOnly(
             }
             catch (RateLimitedException)
             {
-                Log.Warning("You've been ratelimited. Wait 2 hours to change your name");
+                logger.LogWarning("You've been ratelimited. Wait 2 hours to change your name");
             }
 
             await ReplyConfirmAsync(Strings.BotName(ctx.Guild.Id, Format.Bold(newName))).ConfigureAwait(false);

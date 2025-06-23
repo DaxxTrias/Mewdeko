@@ -15,7 +15,7 @@ public interface IBotStrings
     /// <param name="guildId">The ID of the guild (server) if the text is specific to a guild. Default is null.</param>
     /// <param name="data">Additional data to format the text.</param>
     /// <returns>The retrieved text.</returns>
-    string? GetText(string? key, ulong? guildId = null, params object?[] data);
+    public string? GetText(string? key, ulong? guildId = null, params object?[] data);
 
     /// <summary>
     ///     Gets the text associated with the specified key and culture.
@@ -24,12 +24,12 @@ public interface IBotStrings
     /// <param name="locale">The culture info specifying the locale of the text. Default is null.</param>
     /// <param name="data">Additional data to format the text.</param>
     /// <returns>The retrieved text.</returns>
-    string GetText(string? key, CultureInfo? locale, params object?[] data);
+    public string GetText(string? key, CultureInfo? locale, params object?[] data);
 
     /// <summary>
     ///     Reloads the bot strings.
     /// </summary>
-    void Reload();
+    public void Reload();
 
     /// <summary>
     ///     Gets the command strings associated with the specified command name.
@@ -37,7 +37,7 @@ public interface IBotStrings
     /// <param name="commandName">The name of the command.</param>
     /// <param name="guildId">The ID of the guild (server) if the command strings are specific to a guild. Default is null.</param>
     /// <returns>The command strings.</returns>
-    CommandStrings GetCommandStrings(string commandName, ulong? guildId = null);
+    public CommandStrings GetCommandStrings(string commandName, ulong? guildId = null);
 
     /// <summary>
     ///     Gets the command strings associated with the specified command name and culture.
@@ -45,7 +45,5 @@ public interface IBotStrings
     /// <param name="commandName">The name of the command.</param>
     /// <param name="cultureInfo">The culture info specifying the locale of the command strings. Default is null.</param>
     /// <returns>The command strings.</returns>
-    CommandStrings GetCommandStrings(string commandName, CultureInfo? cultureInfo);
-
-
+    public CommandStrings GetCommandStrings(string commandName, CultureInfo? cultureInfo);
 }

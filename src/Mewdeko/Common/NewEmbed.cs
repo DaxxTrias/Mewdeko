@@ -240,10 +240,8 @@ public class NewEmbed
         if (Components is null) return null;
         foreach (var comp in Components)
         {
-
             if (comp.IsSelect)
             {
-
                 if (rowLength != 0)
                 {
                     ++activeRowId;
@@ -256,7 +254,6 @@ public class NewEmbed
             }
             else
             {
-
                 if (rowLength != 0)
                 {
                     ++activeRowId;
@@ -321,7 +318,7 @@ public class NewEmbed
             .WithOptions([new SelectMenuOptionBuilder("a", "a")])
             .WithCustomId(pos.ToString());
 
-        if ((sel.MaxOptions, sel.MinOptions) is ((> 25) or (< 0), (> 25) or (< 0)))
+        if ((sel.MaxOptions, sel.MinOptions) is (> 25 or < 0, > 25 or < 0))
             sb = error.WithPlaceholder("MinOptions and MaxOptions must be less than 25 and more than 0");
         else if (sel.MaxOptions < sel.MinOptions)
             sb = error.WithPlaceholder("MinOptions must be larger than or equal to MaxOptions");
@@ -345,7 +342,8 @@ public class NewEmbed
                 .WithMinValues(sel.MinOptions)
                 .WithOptions(sel.Options
                     .Select(x =>
-                        new SelectMenuOptionBuilder(x.Name, $"option.{x.Id}.{GenerateSecureString(10)}", x.Description ?? "None",
+                        new SelectMenuOptionBuilder(x.Name, $"option.{x.Id}.{GenerateSecureString(10)}",
+                            x.Description ?? "None",
                             x.Emoji?.ToIEmote()))
                     .ToList());
 

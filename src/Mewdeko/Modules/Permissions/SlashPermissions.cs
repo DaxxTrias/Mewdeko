@@ -1094,7 +1094,7 @@ public class SlashPermissions : MewdekoSlashModuleBase<PermissionService>
 
         var cb = new ComponentBuilder()
             .WithSelectMenu(
-                $"credperms_m.{(int)perm.PrimaryTarget}.{perm.PrimaryTargetId}.{(int)perm.SecondaryTarget}.{perm.SecondaryTargetName}",
+                $"credperms_m.{perm.PrimaryTarget}.{perm.PrimaryTargetId}.{perm.SecondaryTarget}.{perm.SecondaryTargetName}",
                 [
                     new SelectMenuOptionBuilder(Strings.PermQuickOptionsRedundantToolEnable(ctx.Guild.Id), "enabled",
                         Strings.PermQuickOptionsRedundantToolEnabledDescription(ctx.Guild.Id)),

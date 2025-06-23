@@ -6,7 +6,6 @@ using Humanizer;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Common.TypeReaders.Models;
 using Mewdeko.Modules.Administration.Services;
-using Serilog;
 
 namespace Mewdeko.Modules.Administration;
 
@@ -14,7 +13,7 @@ namespace Mewdeko.Modules.Administration;
 ///     Class for the Administration Module.
 /// </summary>
 /// <param name="serv">The interactivity service by Fergun.Interactive</param>
-public partial class Administration(InteractiveService serv)
+public partial class Administration(InteractiveService serv, ILogger<Administration> logger)
     : MewdekoModuleBase<AdministrationService>
 {
     /// <summary>
@@ -91,7 +90,7 @@ public partial class Administration(InteractiveService serv)
         Inherit
     }
 
-    // Cache for compiled regex patterns to avoid repeated compilation  
+    // Cache for compiled regex patterns to avoid repeated compilation
     private static readonly ConcurrentDictionary<string, Regex> RegexCache = new();
 
     /// <summary>
@@ -330,7 +329,7 @@ public partial class Administration(InteractiveService serv)
             return;
         }
 
-        if (!int.TryParse(deleteString, out var _))
+        if (!int.TryParse(deleteString, out _))
         {
             await ctx.Channel.SendErrorAsync(Strings.InvalidInputNumber(ctx.Guild.Id), Config);
             return;
@@ -496,7 +495,7 @@ public partial class Administration(InteractiveService serv)
         }
         catch (Exception ex)
         {
-            Log.Error(ex.ToString());
+            logger.LogError(ex.ToString());
         }
     }
 
@@ -669,7 +668,7 @@ public partial class Administration(InteractiveService serv)
         }
         catch (Exception exception)
         {
-            Log.Error("Error in prunemembers: \n{0}", exception);
+            logger.LogError("Error in prunemembers: \n{0}", exception);
         }
     }
 

@@ -749,7 +749,7 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
         }
 
         // Update the channel name
-        if (await Service.UpdateVoiceChannelAsync(Context.Guild.Id, user.VoiceChannel.Id, name: name))
+        if (await Service.UpdateVoiceChannelAsync(Context.Guild.Id, user.VoiceChannel.Id, name))
         {
             await ReplyConfirmAsync(Strings.CustomVoiceRenamed(Context.Guild.Id, name));
         }

@@ -177,8 +177,8 @@ public partial class Utility
 
             var matchingQuotes = await db.Quotes
                 .Where(q => q.GuildId == ctx.Guild.Id &&
-                           q.Keyword == keyword &&
-                           q.Text.ToUpper().Contains(text.ToUpper()))
+                            q.Keyword == keyword &&
+                            q.Text.ToUpper().Contains(text.ToUpper()))
                 .ToListAsync();
 
             var keywordquote = matchingQuotes.Any()
@@ -263,7 +263,8 @@ public partial class Utility
             await using var db = await dbFactory.CreateConnectionAsync();
             q.Id = await db.InsertWithInt32IdentityAsync(q);
 
-            await ReplyConfirmAsync(Strings.QuoteAddedNew(ctx.Guild.Id, Format.Code(q.Id.ToString()))).ConfigureAwait(false);
+            await ReplyConfirmAsync(Strings.QuoteAddedNew(ctx.Guild.Id, Format.Code(q.Id.ToString())))
+                .ConfigureAwait(false);
         }
 
         /// <summary>

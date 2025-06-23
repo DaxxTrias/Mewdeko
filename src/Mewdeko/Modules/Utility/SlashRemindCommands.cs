@@ -1,9 +1,9 @@
 using Discord.Interactions;
+using Fergun.Interactive;
+using Fergun.Interactive.Pagination;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Common.Modals;
 using Mewdeko.Modules.Utility.Services;
-using Fergun.Interactive;
-using Fergun.Interactive.Pagination;
 
 namespace Mewdeko.Modules.Utility;
 
@@ -21,8 +21,10 @@ public class SlashRemindCommands(InteractiveService interactivity) : MewdekoSlas
     /// <returns>A task that represents the asynchronous operation of adding a personal reminder.</returns>
     [SlashCommand("me", "Send a reminder to yourself.")]
     public async Task Me(
-        [Summary("time", "When should the reminder respond.")] TimeSpan time,
-        [Summary("reminder", "(optional) what should the reminder message be")] string? reminder = "")
+        [Summary("time", "When should the reminder respond.")]
+        TimeSpan time,
+        [Summary("reminder", "(optional) what should the reminder message be")]
+        string? reminder = "")
     {
         await DeferAsync(true);
         if (string.IsNullOrEmpty(reminder))
@@ -60,8 +62,10 @@ public class SlashRemindCommands(InteractiveService interactivity) : MewdekoSlas
     /// <returns>A task that represents the asynchronous operation of adding a channel reminder.</returns>
     [SlashCommand("here", "Send a reminder to this channel.")]
     public async Task Here(
-        [Summary("time", "When should the reminder respond.")] TimeSpan time,
-        [Summary("reminder", "(optional) what should the reminder message be")] string? reminder = "")
+        [Summary("time", "When should the reminder respond.")]
+        TimeSpan time,
+        [Summary("reminder", "(optional) what should the reminder message be")]
+        string? reminder = "")
     {
         if (ctx.Guild is null)
         {
@@ -107,9 +111,12 @@ public class SlashRemindCommands(InteractiveService interactivity) : MewdekoSlas
     [SlashCommand("channel", "Send a reminder to this channel.")]
     [UserPerm(ChannelPermission.ManageMessages)]
     public async Task Channel(
-        [Summary("channel", "where should the reminder be sent?")] ITextChannel channel,
-        [Summary("time", "When should the reminder respond.")] TimeSpan time,
-        [Summary("reminder", "(optional) what should the reminder message be")] string? reminder = "")
+        [Summary("channel", "where should the reminder be sent?")]
+        ITextChannel channel,
+        [Summary("time", "When should the reminder respond.")]
+        TimeSpan time,
+        [Summary("reminder", "(optional) what should the reminder message be")]
+        string? reminder = "")
     {
         var perms = ((IGuildUser)ctx.User).GetPermissions(channel);
         if (!perms.SendMessages || !perms.ViewChannel)
@@ -163,7 +170,7 @@ public class SlashRemindCommands(InteractiveService interactivity) : MewdekoSlas
         await DeferAsync(pri);
 
         var shouldSanitize = ctx.Guild != null &&
-            !((IGuildUser)ctx.User).GetPermissions((IGuildChannel)ctx.Channel).MentionEveryone;
+                             !((IGuildUser)ctx.User).GetPermissions((IGuildChannel)ctx.Channel).MentionEveryone;
 
         var (success, message) = await Service.CreateReminderAsync(
             id,
@@ -237,10 +244,10 @@ public class SlashRemindCommands(InteractiveService interactivity) : MewdekoSlas
                 pageBuilder.AddField(
                     $"#{++i} {rem.When:HH:mm yyyy-MM-dd} UTC (in {(int)diff.TotalHours}h {diff.Minutes}m)",
                     $"""
-                    `Target:` {(rem.IsPrivate ? "DM" : "Channel")}
-                    `TargetId:` {rem.ChannelId}
-                    `Message:` {rem.Message?.TrimTo(50)}
-                    """);
+                     `Target:` {(rem.IsPrivate ? "DM" : "Channel")}
+                     `TargetId:` {rem.ChannelId}
+                     `Message:` {rem.Message?.TrimTo(50)}
+                     """);
             }
 
             return pageBuilder;

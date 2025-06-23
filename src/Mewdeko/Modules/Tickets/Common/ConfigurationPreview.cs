@@ -3,12 +3,12 @@ using System.Text;
 namespace Mewdeko.Modules.Tickets.Common;
 
 /// <summary>
-/// Preview generator for showing users what their configuration will look like
+///     Preview generator for showing users what their configuration will look like
 /// </summary>
 public static class ConfigurationPreview
 {
     /// <summary>
-    /// Generates a preview embed for button configuration
+    ///     Generates a preview embed for button configuration
     /// </summary>
     /// <param name="basicSettings">Basic button settings</param>
     /// <param name="modalConfig">Modal configuration</param>
@@ -74,7 +74,7 @@ public static class ConfigurationPreview
     }
 
     /// <summary>
-    /// Generates a preview for select menu configuration
+    ///     Generates a preview for select menu configuration
     /// </summary>
     /// <param name="placeholder">The placeholder text</param>
     /// <param name="options">The options configuration</param>
@@ -126,7 +126,7 @@ public static class ConfigurationPreview
     }
 
     /// <summary>
-    /// Gets the color associated with a button style
+    ///     Gets the color associated with a button style
     /// </summary>
     /// <param name="style">The button style</param>
     /// <returns>The Discord color for the style</returns>
@@ -140,7 +140,7 @@ public static class ConfigurationPreview
     };
 
     /// <summary>
-    /// Parses modal configuration for preview display
+    ///     Parses modal configuration for preview display
     /// </summary>
     /// <param name="modalConfig">The modal configuration</param>
     /// <returns>A formatted string showing the modal fields</returns>

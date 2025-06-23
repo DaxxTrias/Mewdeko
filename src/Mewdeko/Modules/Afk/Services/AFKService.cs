@@ -5,7 +5,6 @@ using LinqToDB;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Services.Settings;
 using Mewdeko.Services.Strings;
-using Serilog;
 using ZiggyCreatures.Caching.Fusion;
 using DiscordShardedClient = Discord.WebSocket.DiscordShardedClient;
 
@@ -26,9 +25,11 @@ public class AfkService : INService, IReadyExecutor, IDisposable
     private readonly ConcurrentDictionary<ulong, (GuildConfig Config, DateTime Expiry)> guildConfigCache = new();
     private readonly ConcurrentDictionary<ulong, bool> guildDataLoaded = new();
     private readonly GuildSettingsService guildSettings;
+    private readonly ILogger<AfkService> logger;
     private readonly GeneratedBotStrings strings;
     private bool isDisposed;
     private bool isInitialized;
+
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="AfkService" /> class.
@@ -47,7 +48,7 @@ public class AfkService : INService, IReadyExecutor, IDisposable
         GuildSettingsService guildSettings,
         EventHandler eventHandler,
         BotConfigService config,
-        GeneratedBotStrings strings)
+        GeneratedBotStrings strings, ILogger<AfkService> logger)
     {
         this.cache = cache;
         this.guildSettings = guildSettings;
@@ -56,6 +57,7 @@ public class AfkService : INService, IReadyExecutor, IDisposable
         this.client = client;
         this.eventHandler = eventHandler;
         this.strings = strings;
+        this.logger = logger;
 
         this.eventHandler.MessageReceived += MessageReceived;
         this.eventHandler.MessageUpdated += MessageUpdated;
@@ -76,7 +78,7 @@ public class AfkService : INService, IReadyExecutor, IDisposable
         await Task.CompletedTask; // Keep async signature but no initial await needed
         if (isInitialized)
             return;
-        Log.Information("Starting {Type} Cache", GetType());
+        logger.LogInformation("Starting {Type} Cache", GetType());
         Environment.SetEnvironmentVariable("AFK_CACHED", "1");
         _ = Task.Run(async () => // Run cleanup in background
         {
@@ -91,17 +93,17 @@ public class AfkService : INService, IReadyExecutor, IDisposable
 
                 if (deletedCount > 0)
                 {
-                    Log.Information("Cleaned up {Count} old AFK entries during startup", deletedCount);
+                    logger.LogInformation("Cleaned up {Count} old AFK entries during startup", deletedCount);
                 }
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Error during startup AFK cleanup");
+                logger.LogError(ex, "Error during startup AFK cleanup");
             }
         });
         isInitialized = true;
 
-        Log.Information("AFK Service Ready");
+        logger.LogInformation("AFK Service Ready");
     }
 
     #region Public AFK Management Methods
@@ -370,7 +372,7 @@ public class AfkService : INService, IReadyExecutor, IDisposable
             return cached.Config;
         }
 
-        var config = await guildSettings.GetGuildConfig(guildId, false);
+        var config = await guildSettings.GetGuildConfig(guildId);
         if (config != null)
         {
             guildConfigCache[guildId] = (config, DateTime.UtcNow.AddMinutes(15));
@@ -457,7 +459,7 @@ public class AfkService : INService, IReadyExecutor, IDisposable
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error in timed AFK callback for {GuildId}:{UserId}", state.GuildId, state.UserId);
+            logger.LogError(ex, "Error in timed AFK callback for {GuildId}:{UserId}", state.GuildId, state.UserId);
         }
         finally
         {
@@ -478,7 +480,7 @@ public class AfkService : INService, IReadyExecutor, IDisposable
     {
         try
         {
-            Log.Debug("Running AFK timer cleanup, current count: {TimerCount}", afkTimers.Count);
+            logger.LogDebug("Running AFK timer cleanup, current count: {TimerCount}", afkTimers.Count);
             var now = DateTime.UtcNow;
 
             var expiredConfigs = guildConfigCache
@@ -518,7 +520,8 @@ public class AfkService : INService, IReadyExecutor, IDisposable
 
                     if (oldAfkIdsToDelete.Any())
                     {
-                        Log.Information("Deleting {Count} AFK entries older than one month", oldAfkIdsToDelete.Count);
+                        logger.LogInformation("Deleting {Count} AFK entries older than one month",
+                            oldAfkIdsToDelete.Count);
                         var ids = oldAfkIdsToDelete.Select(a => a.Id).ToList();
                         await db.Afks.Where(a => ids.Contains(a.Id)).DeleteAsync().ConfigureAwait(false);
 
@@ -534,14 +537,14 @@ public class AfkService : INService, IReadyExecutor, IDisposable
                 }
                 catch (Exception ex)
                 {
-                    Log.Error(ex, "Error during old AFK entries cleanup task");
+                    logger.LogError(ex, "Error during old AFK entries cleanup task");
                 }
             });
-            Log.Debug("AFK timer cleanup complete, new count: {TimerCount}", afkTimers.Count);
+            logger.LogDebug("AFK timer cleanup complete, new count: {TimerCount}", afkTimers.Count);
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error during AFK timer cleanup");
+            logger.LogError(ex, "Error during AFK timer cleanup");
         }
     }
 
@@ -556,7 +559,7 @@ public class AfkService : INService, IReadyExecutor, IDisposable
                 .Where(x => x.WasTimed && x.When > now) // Ensure When is not null and in future
                 .ToListAsync().ConfigureAwait(false); // Use ToListAsync
 
-            Log.Information("Initializing {Count} timed AFKs", timedAfks.Count);
+            logger.LogInformation("Initializing {Count} timed AFKs", timedAfks.Count);
 
             foreach (var afk in timedAfks)
             {
@@ -573,7 +576,7 @@ public class AfkService : INService, IReadyExecutor, IDisposable
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error initializing timed AFKs");
+            logger.LogError(ex, "Error initializing timed AFKs");
         }
     }
 
@@ -602,7 +605,7 @@ public class AfkService : INService, IReadyExecutor, IDisposable
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error in TimedAfkFinished for {GuildId}:{UserId}", afk.GuildId, afk.UserId);
+            logger.LogError(ex, "Error in TimedAfkFinished for {GuildId}:{UserId}", afk.GuildId, afk.UserId);
         }
     }
 
@@ -731,7 +734,7 @@ public class AfkService : INService, IReadyExecutor, IDisposable
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error in AfkHandler MessageReceived");
+            logger.LogError(ex, "Error in AfkHandler MessageReceived");
         }
     }
 
@@ -751,7 +754,7 @@ public class AfkService : INService, IReadyExecutor, IDisposable
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error in AfkHandler MessageUpdated");
+            logger.LogError(ex, "Error in AfkHandler MessageUpdated");
         }
     }
 
@@ -800,7 +803,7 @@ public class AfkService : INService, IReadyExecutor, IDisposable
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error in AfkHandler UserTyping");
+            logger.LogError(ex, "Error in AfkHandler UserTyping");
         }
     }
 
@@ -834,10 +837,10 @@ public class AfkService : INService, IReadyExecutor, IDisposable
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error during AfkService Dispose");
+            logger.LogError(ex, "Error during AfkService Dispose");
         }
 
-        Log.Information("AfkService disposed");
+        logger.LogInformation("AfkService disposed");
         GC.SuppressFinalize(this); // Prevent finalizer run
     }
 

@@ -116,7 +116,7 @@ public static class ChatTriggersExtensions
     {
         return await crs
             .FirstOrDefaultAsync(x => x.GuildId == guildId &&
-                                     Sql.Lower(x.Trigger) == Sql.Lower(input));
+                                      Sql.Lower(x.Trigger) == Sql.Lower(input));
     }
 
     /// <summary>

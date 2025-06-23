@@ -4,14 +4,14 @@ using DbUp.Engine;
 namespace Mewdeko.Database;
 
 /// <summary>
-/// Database upgrade service using DbUp
+///     Database upgrade service using DbUp
 /// </summary>
 public class DatabaseUpgrader
 {
     private readonly string connectionString;
 
     /// <summary>
-    /// Initializes a new instance of the DatabaseUpgrader
+    ///     Initializes a new instance of the DatabaseUpgrader
     /// </summary>
     /// <param name="connectionString">Database connection string</param>
     public DatabaseUpgrader(string connectionString)
@@ -20,7 +20,7 @@ public class DatabaseUpgrader
     }
 
     /// <summary>
-    /// Checks if database upgrade is required
+    ///     Checks if database upgrade is required
     /// </summary>
     /// <returns>True if upgrade is needed</returns>
     public bool IsUpgradeRequired()
@@ -30,7 +30,7 @@ public class DatabaseUpgrader
     }
 
     /// <summary>
-    /// Gets the list of scripts that will be executed
+    ///     Gets the list of scripts that will be executed
     /// </summary>
     /// <returns>List of scripts to execute</returns>
     public IEnumerable<string> GetScriptsToExecute()
@@ -40,7 +40,7 @@ public class DatabaseUpgrader
     }
 
     /// <summary>
-    /// Tests database connection
+    ///     Tests database connection
     /// </summary>
     /// <returns>True if connection is successful</returns>
     public bool TestConnection()
@@ -50,7 +50,7 @@ public class DatabaseUpgrader
     }
 
     /// <summary>
-    /// Performs database upgrade with embedded SQL scripts
+    ///     Performs database upgrade with embedded SQL scripts
     /// </summary>
     /// <returns>Upgrade result with success status and error information</returns>
     public DatabaseUpgradeResult PerformUpgrade()
@@ -60,7 +60,7 @@ public class DatabaseUpgrader
     }
 
     /// <summary>
-    /// Marks scripts as executed without running them (useful for syncing environments)
+    ///     Marks scripts as executed without running them (useful for syncing environments)
     /// </summary>
     /// <returns>True if operation was successful</returns>
     public bool MarkAsExecuted()
@@ -70,7 +70,7 @@ public class DatabaseUpgrader
     }
 
     /// <summary>
-    /// Builds the DbUp upgrader with configuration
+    ///     Builds the DbUp upgrader with configuration
     /// </summary>
     /// <returns>Configured upgrade engine</returns>
     private UpgradeEngine BuildUpgrader()

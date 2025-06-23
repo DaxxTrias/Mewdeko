@@ -4,7 +4,6 @@ using DataModel;
 using LinqToDB;
 using Mewdeko.Modules.Administration.Services;
 using Mewdeko.Services.Strings;
-using Serilog;
 using Swan;
 
 namespace Mewdeko.Modules.Utility.Services;
@@ -16,10 +15,11 @@ public partial class RemindService : INService
 {
     private readonly DiscordShardedClient client;
     private readonly IDataConnectionFactory dbFactory;
+    private readonly ILogger<RemindService> logger;
 
     private readonly Regex regex = MyRegex();
     private readonly ConcurrentDictionary<int, Timer> reminderTimers;
-    private readonly GeneratedBotStrings Strings;
+    private readonly GeneratedBotStrings strings;
     private readonly GuildTimezoneService tz;
 
     /// <summary>
@@ -30,12 +30,13 @@ public partial class RemindService : INService
     /// <param name="tz">The timezone service for guild timezones.</param>
     /// <param name="strings">The bot strings service for localized messages.</param>
     public RemindService(DiscordShardedClient client, IDataConnectionFactory dbFactory, GuildTimezoneService tz,
-        GeneratedBotStrings strings)
+        GeneratedBotStrings strings, ILogger<RemindService> logger)
     {
         this.client = client;
         this.dbFactory = dbFactory;
         this.tz = tz;
-        Strings = strings;
+        this.strings = strings;
+        this.logger = logger;
         reminderTimers = new ConcurrentDictionary<int, Timer>();
         _ = InitializeRemindersAsync();
     }
@@ -109,7 +110,7 @@ public partial class RemindService : INService
 
             await ch.EmbedAsync(new EmbedBuilder()
                     .WithOkColor()
-                    .WithTitle(Strings.ReminderTitle(reminder.ServerId))
+                    .WithTitle(strings.ReminderTitle(reminder.ServerId))
                     .AddField("Created At",
                         reminder.DateAdded.HasValue ? reminder.DateAdded.Value.ToLongDateString() : "?")
                     .AddField("By",
@@ -122,7 +123,7 @@ public partial class RemindService : INService
         }
         catch (Exception ex)
         {
-            Log.Information(ex.Message + $"({reminder.Id})");
+            logger.LogInformation(ex.Message + $"({reminder.Id})");
         }
     }
 
@@ -146,7 +147,7 @@ public partial class RemindService : INService
     }
 
     /// <summary>
-    /// Creates a new reminder and schedules it for execution.
+    ///     Creates a new reminder and schedules it for execution.
     /// </summary>
     /// <param name="targetId">The ID of the target channel or user.</param>
     /// <param name="isPrivate">Whether the reminder should be sent as a private message.</param>
@@ -197,7 +198,7 @@ public partial class RemindService : INService
             : TimeZoneInfo.ConvertTime(time, tz.GetTimeZoneOrUtc(serverId.Value));
 
         var unixTime = gTime.ToUnixEpochDate();
-        var response = $"⏰ {Strings.Remind(serverId ?? 0,
+        var response = $"⏰ {strings.Remind(serverId ?? 0,
             Format.Bold(!isPrivate ? $"<#{targetId}>" : userId.ToString()),
             Format.Bold(message),
             $"<t:{unixTime}:R>")}";
@@ -206,7 +207,7 @@ public partial class RemindService : INService
     }
 
     /// <summary>
-    /// Retrieves all reminders for a specific user.
+    ///     Retrieves all reminders for a specific user.
     /// </summary>
     /// <param name="userId">The ID of the user whose reminders to retrieve.</param>
     /// <returns>A list of all reminders for the specified user.</returns>
@@ -221,7 +222,7 @@ public partial class RemindService : INService
     }
 
     /// <summary>
-    /// Deletes a specific reminder for a user.
+    ///     Deletes a specific reminder for a user.
     /// </summary>
     /// <param name="userId">The ID of the user who owns the reminder.</param>
     /// <param name="index">The index of the reminder to delete.</param>
@@ -276,7 +277,7 @@ public partial class RemindService : INService
 
         if (string.IsNullOrWhiteSpace(what))
         {
-            Log.Warning("No message provided for the reminder");
+            logger.LogWarning("No message provided for the reminder");
             return false;
         }
 
@@ -291,13 +292,13 @@ public partial class RemindService : INService
 
             if (!int.TryParse(m.Groups[groupName].Value, out var value))
             {
-                Log.Warning($"Reminder regex group {groupName} has invalid value.");
+                logger.LogWarning($"Reminder regex group {groupName} has invalid value.");
                 return false;
             }
 
             if (value < 1)
             {
-                Log.Warning("Reminder time value has to be an integer greater than 0");
+                logger.LogWarning("Reminder time value has to be an integer greater than 0");
                 return false;
             }
 

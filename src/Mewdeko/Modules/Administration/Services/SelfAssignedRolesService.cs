@@ -1,13 +1,15 @@
 ﻿using DataModel;
 using LinqToDB;
-using Serilog;
 
 namespace Mewdeko.Modules.Administration.Services;
 
 /// <summary>
 ///     The service for managing self-assigned roles.
 /// </summary>
-public class SelfAssignedRolesService(IDataConnectionFactory dbFactory, GuildSettingsService gss) : INService
+public class SelfAssignedRolesService(
+    IDataConnectionFactory dbFactory,
+    GuildSettingsService gss,
+    ILogger<SelfAssignedRolesService> logger) : INService
 {
     /// <summary>
     ///     Enum representing the possible results of an assign operation.
@@ -130,12 +132,12 @@ public class SelfAssignedRolesService(IDataConnectionFactory dbFactory, GuildSet
 
         if (roles == null)
         {
-            Log.Warning("SelfAssignableRoles collection is null for Guild {GuildId}", guildUser.GuildId);
+            logger.LogWarning("SelfAssignableRoles collection is null for Guild {GuildId}", guildUser.GuildId);
             return (AssignResult.ErrNotAssignable, autoDelete, null);
         }
 
         var selfAssignedRoles = roles as SelfAssignableRole[] ?? roles.ToArray();
-        var theRoleYouWant = Array.Find<SelfAssignableRole>(selfAssignedRoles, r => r.RoleId == role.Id);
+        var theRoleYouWant = Array.Find(selfAssignedRoles, r => r.RoleId == role.Id);
 
         if (theRoleYouWant == null)
             return (AssignResult.ErrNotAssignable, autoDelete, null);
@@ -146,7 +148,7 @@ public class SelfAssignedRolesService(IDataConnectionFactory dbFactory, GuildSet
         if (exclusive)
         {
             var roleIdsInGroup = selfAssignedRoles
-                .Where<SelfAssignableRole>(x => x.Group == theRoleYouWant.Group && x.RoleId != role.Id)
+                .Where(x => x.Group == theRoleYouWant.Group && x.RoleId != role.Id)
                 .Select(x => x.RoleId)
                 .ToHashSet();
 
@@ -165,7 +167,7 @@ public class SelfAssignedRolesService(IDataConnectionFactory dbFactory, GuildSet
                 }
                 catch (Exception ex)
                 {
-                    Log.Warning(ex, "Error removing exclusive roles for SAR assignment for user {UserId}",
+                    logger.LogWarning(ex, "Error removing exclusive roles for SAR assignment for user {UserId}",
                         guildUser.Id);
                 }
             }
@@ -177,7 +179,7 @@ public class SelfAssignedRolesService(IDataConnectionFactory dbFactory, GuildSet
         }
         catch (Exception ex)
         {
-            Log.Warning(ex, "Failed to add role {RoleId} to user {UserId}", role.Id, guildUser.Id);
+            logger.LogWarning(ex, "Failed to add role {RoleId} to user {UserId}", role.Id, guildUser.Id);
             extra = ex;
             return (AssignResult.ErrNotPerms, autoDelete, extra);
         }
@@ -251,7 +253,7 @@ public class SelfAssignedRolesService(IDataConnectionFactory dbFactory, GuildSet
         }
         catch (Exception ex)
         {
-            Log.Warning(ex, "Failed to remove role {RoleId} from user {UserId}", role.Id, guildUser.Id);
+            logger.LogWarning(ex, "Failed to remove role {RoleId} from user {UserId}", role.Id, guildUser.Id);
             return (RemoveResult.ErrNotPerms, autoDelete);
         }
 
@@ -393,7 +395,7 @@ public class SelfAssignedRolesService(IDataConnectionFactory dbFactory, GuildSet
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Failed to remove non-existent roles from SelfAssignableRoles for Guild {GuildId}",
+                logger.LogError(ex, "Failed to remove non-existent roles from SelfAssignableRoles for Guild {GuildId}",
                     guild.Id);
             }
         }

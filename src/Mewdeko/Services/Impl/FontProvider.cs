@@ -43,8 +43,7 @@ public class FontProvider
         // Create the font for text
         RipTextFont = new SKFont
         {
-            Typeface = NotoSans,
-            Size = 20
+            Typeface = NotoSans, Size = 20
         };
 
         RipPaint = new SKPaint

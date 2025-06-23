@@ -4,7 +4,7 @@ using Serilog;
 namespace Mewdeko.Modules.Utility.Services.Impl;
 
 /// <summary>
-/// Parses streaming responses from Claude's API.
+///     Parses streaming responses from Claude's API.
 /// </summary>
 public class ClaudeStreamParser : IAiStreamParser
 {

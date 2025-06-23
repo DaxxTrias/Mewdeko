@@ -4,7 +4,6 @@ using Discord.Commands;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Modules.Tickets.Common;
 using Mewdeko.Modules.Tickets.Services;
-using Serilog;
 
 namespace Mewdeko.Modules.Tickets;
 
@@ -12,7 +11,7 @@ namespace Mewdeko.Modules.Tickets;
 ///     Commands for managing the ticket system, including panels, tickets, cases,
 ///     and administrative functions.
 /// </summary>
-public partial class Tickets : MewdekoModuleBase<TicketService>
+public partial class Tickets(ILogger<Tickets> logger) : MewdekoModuleBase<TicketService>
 {
     /// <summary>
     ///     Creates a ticket panel
@@ -99,7 +98,7 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error creating ticket panel");
+            logger.LogError(ex, "Error creating ticket panel");
             await ctx.Channel.SendErrorAsync(Strings.TicketPanelCreationFailed(ctx.Guild.Id), Config);
         }
     }

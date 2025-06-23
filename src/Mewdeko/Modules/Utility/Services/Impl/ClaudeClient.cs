@@ -17,7 +17,7 @@ public class ClaudeClient : IAiClient
     private readonly IHttpClientFactory httpClientFactory;
 
     /// <summary>
-    ///     Initializes a new instance of the <see cref="ClaudeClient"/> class.
+    ///     Initializes a new instance of the <see cref="ClaudeClient" /> class.
     /// </summary>
     /// <param name="httpClientFactory">The HTTP client factory.</param>
     public ClaudeClient(IHttpClientFactory httpClientFactory)

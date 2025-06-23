@@ -5,7 +5,6 @@ using Mewdeko.Common.Configs;
 using Mewdeko.Modules.Utility.Services;
 using Mewdeko.Services.Impl;
 using Mewdeko.Services.Strings;
-using Serilog;
 using Swan;
 
 namespace Mewdeko.Modules.Giveaways.Services;
@@ -21,10 +20,12 @@ public class GiveawayService : INService, IDisposable
     private readonly BotCredentials credentials;
     private readonly IDataConnectionFactory dbFactory;
 
+
     // Memory management
     private readonly ConcurrentDictionary<int, Timer> giveawayTimers = new();
     private readonly GuildSettingsService guildConfig;
     private readonly ConcurrentDictionary<ulong, (GuildConfig Config, DateTime Expiry)> guildConfigCache = new();
+    private readonly ILogger<GiveawayService> logger;
     private readonly MessageCountService msgCntService;
     private readonly GeneratedBotStrings strings;
     private readonly SemaphoreSlim timerLock = new(1, 1);
@@ -47,7 +48,7 @@ public class GiveawayService : INService, IDisposable
         BotConfig config,
         BotCredentials credentials,
         MessageCountService msgCntService,
-        GeneratedBotStrings strings)
+        GeneratedBotStrings strings, ILogger<GiveawayService> logger)
     {
         this.client = client;
         this.dbFactory = dbFactory;
@@ -56,6 +57,7 @@ public class GiveawayService : INService, IDisposable
         this.credentials = credentials;
         this.msgCntService = msgCntService;
         this.strings = strings;
+        this.logger = logger;
 
         // Set up periodic cleanup (every 60 minutes)
         cleanupTimer = new Timer(_ => CleanupResources(), null, TimeSpan.FromMinutes(60), TimeSpan.FromMinutes(60));
@@ -227,7 +229,7 @@ public class GiveawayService : INService, IDisposable
             }
             catch (Exception e)
             {
-                Log.Error(e, "Error adding captcha button to giveaway {GiveawayId}", entry);
+                logger.LogError(e, "Error adding captcha button to giveaway {GiveawayId}", entry);
                 throw;
             }
         }
@@ -372,7 +374,7 @@ public class GiveawayService : INService, IDisposable
             }
             catch (Exception e)
             {
-                Log.Error(e, "Error adding captcha button to giveaway {GiveawayId}", entry);
+                logger.LogError(e, "Error adding captcha button to giveaway {GiveawayId}", entry);
                 throw;
             }
         }
@@ -405,14 +407,16 @@ public class GiveawayService : INService, IDisposable
             var guild = inputGuild ?? client.GetGuild(giveaway.ServerId);
             if (guild is null)
             {
-                Log.Warning("Guild {GuildId} not found for giveaway {GiveawayId}", giveaway.ServerId, giveaway.Id);
+                logger.LogWarning("Guild {GuildId} not found for giveaway {GiveawayId}", giveaway.ServerId,
+                    giveaway.Id);
                 return;
             }
 
             var channel = inputChannel ?? await guild.GetTextChannelAsync(giveaway.ChannelId);
             if (channel is null)
             {
-                Log.Warning("Channel {ChannelId} not found for giveaway {GiveawayId}", giveaway.ChannelId, giveaway.Id);
+                logger.LogWarning("Channel {ChannelId} not found for giveaway {GiveawayId}", giveaway.ChannelId,
+                    giveaway.Id);
                 return;
             }
 
@@ -422,7 +426,7 @@ public class GiveawayService : INService, IDisposable
             {
                 if (await channel.GetMessageAsync(giveaway.MessageId) is not IUserMessage msg)
                 {
-                    Log.Warning("Message {MessageId} not found for giveaway {GiveawayId}", giveaway.MessageId,
+                    logger.LogWarning("Message {MessageId} not found for giveaway {GiveawayId}", giveaway.MessageId,
                         giveaway.Id);
                     return;
                 }
@@ -431,7 +435,7 @@ public class GiveawayService : INService, IDisposable
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Error retrieving message {MessageId} for giveaway {GiveawayId}",
+                logger.LogError(ex, "Error retrieving message {MessageId} for giveaway {GiveawayId}",
                     giveaway.MessageId, giveaway.Id);
                 return;
             }
@@ -595,7 +599,7 @@ public class GiveawayService : INService, IDisposable
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error processing giveaway {GiveawayId}", giveaway.Id);
+            logger.LogError(ex, "Error processing giveaway {GiveawayId}", giveaway.Id);
         }
     }
 
@@ -616,12 +620,12 @@ public class GiveawayService : INService, IDisposable
                 users.Add(user);
             }
 
-            Log.Debug("Retrieved {Count} reaction users for message {MessageId}",
+            logger.LogDebug("Retrieved {Count} reaction users for message {MessageId}",
                 users.Count, message.Id);
         }
         catch (Exception ex)
         {
-            Log.Warning(ex, "Error fetching reaction users for message {MessageId}", message.Id);
+            logger.LogWarning(ex, "Error fetching reaction users for message {MessageId}", message.Id);
         }
 
         return users;
@@ -796,7 +800,7 @@ public class GiveawayService : INService, IDisposable
         catch (Exception ex)
         {
             // Ignore DM errors
-            Log.Warning(ex, "Failed to send DM to winner {UserId} for giveaway {GiveawayId}",
+            logger.LogWarning(ex, "Failed to send DM to winner {UserId} for giveaway {GiveawayId}",
                 winner.Id, giveaway.Id);
         }
     }
@@ -913,7 +917,7 @@ public class GiveawayService : INService, IDisposable
         }
 
         // Get config from service and cache for 15 minutes
-        var config = await guildConfig.GetGuildConfig(guildId, false);
+        var config = await guildConfig.GetGuildConfig(guildId);
         guildConfigCache[guildId] = (config, DateTime.UtcNow.AddMinutes(15));
 
         return config;
@@ -970,12 +974,12 @@ public class GiveawayService : INService, IDisposable
 
             giveawayTimers[giveaway.Id] = timer;
 
-            Log.Debug("Scheduled giveaway {GiveawayId} to end in {TimeToGo}",
+            logger.LogDebug("Scheduled giveaway {GiveawayId} to end in {TimeToGo}",
                 giveaway.Id, timeToGo.Humanize());
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error scheduling giveaway {GiveawayId}", giveaway.Id);
+            logger.LogError(ex, "Error scheduling giveaway {GiveawayId}", giveaway.Id);
         }
         finally
         {
@@ -1012,7 +1016,7 @@ public class GiveawayService : INService, IDisposable
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error in giveaway timer callback for giveaway {GiveawayId}", timerState.GiveawayId);
+            logger.LogError(ex, "Error in giveaway timer callback for giveaway {GiveawayId}", timerState.GiveawayId);
             CleanupGiveawayTimer(timerState.GiveawayId);
         }
     }
@@ -1029,7 +1033,7 @@ public class GiveawayService : INService, IDisposable
     {
         try
         {
-            Log.Debug("Running giveaway cleanup, current timer count: {TimerCount}", giveawayTimers.Count);
+            logger.LogDebug("Running giveaway cleanup, current timer count: {TimerCount}", giveawayTimers.Count);
 
             // Clean up expired guild config cache entries
             var expiredConfigs = guildConfigCache
@@ -1079,17 +1083,17 @@ public class GiveawayService : INService, IDisposable
                         }
                     }
 
-                    Log.Debug("Giveaway cleanup complete, new timer count: {TimerCount}", giveawayTimers.Count);
+                    logger.LogDebug("Giveaway cleanup complete, new timer count: {TimerCount}", giveawayTimers.Count);
                 }
                 catch (Exception ex)
                 {
-                    Log.Error(ex, "Error during giveaway timer verification");
+                    logger.LogError(ex, "Error during giveaway timer verification");
                 }
             });
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error during giveaway cleanup");
+            logger.LogError(ex, "Error during giveaway cleanup");
         }
     }
 
@@ -1097,14 +1101,14 @@ public class GiveawayService : INService, IDisposable
     {
         try
         {
-            Log.Information("Initializing Giveaways");
+            logger.LogInformation("Initializing Giveaways");
             var now = DateTime.UtcNow;
 
             // Load active giveaways
             var activeGiveaways = await GetGiveawaysBeforeAsync(now.AddHours(24));
             var count = activeGiveaways.Count();
 
-            Log.Information("Found {Count} active giveaways to schedule", count);
+            logger.LogInformation("Found {Count} active giveaways to schedule", count);
 
             // Schedule each giveaway
             foreach (var giveaway in activeGiveaways)
@@ -1114,7 +1118,7 @@ public class GiveawayService : INService, IDisposable
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error initializing giveaways");
+            logger.LogError(ex, "Error initializing giveaways");
         }
     }
 
@@ -1143,7 +1147,7 @@ public class GiveawayService : INService, IDisposable
         // Dispose semaphore
         timerLock.Dispose();
 
-        Log.Information("GiveawayService disposed");
+        logger.LogInformation("GiveawayService disposed");
     }
 
     #endregion

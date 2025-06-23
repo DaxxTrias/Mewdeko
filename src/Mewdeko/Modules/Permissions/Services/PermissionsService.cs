@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using DataModel;
 using Discord.Commands;
 using Discord.Interactions;
 using LinqToDB;
@@ -6,7 +7,6 @@ using Mewdeko.Common.Configs;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Modules.Permissions.Common;
 using Mewdeko.Services.Strings;
-using DataModel;
 using CommandInfo = Discord.Commands.CommandInfo;
 
 namespace Mewdeko.Modules.Permissions.Services;
@@ -212,7 +212,7 @@ public class PermissionService : ILateBlocker, INService, IReadyExecutor
 
         foreach (var guildPerms in groupedPerms)
         {
-            Debug.Assert(guildPerms.Key != null, "guildPerms.Key != null");
+            Debug.Assert(guildPerms.Key != null);
             var guildId = guildPerms.Key.Value;
             var permissions = guildPerms.ToList();
 
@@ -225,6 +225,7 @@ public class PermissionService : ILateBlocker, INService, IReadyExecutor
                     perm.GuildId = guildId;
                     await db.InsertAsync(perm);
                 }
+
                 permissions = defaultPerms.ToList();
             }
 
@@ -272,6 +273,7 @@ public class PermissionService : ILateBlocker, INService, IReadyExecutor
                 perm.GuildId = guildId;
                 await db.InsertAsync(perm);
             }
+
             permissions = defaultPerms.ToList();
         }
 
@@ -310,6 +312,7 @@ public class PermissionService : ILateBlocker, INService, IReadyExecutor
                 perm.GuildId = guildId;
                 await db.InsertAsync(perm);
             }
+
             permissions = defaultPerms.ToList();
         }
 

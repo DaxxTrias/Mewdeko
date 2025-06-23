@@ -11,7 +11,7 @@ public class DailyChallengeService : INService
     private readonly IDataConnectionFactory connectionFactory;
 
     /// <summary>
-    ///     Initializes a new instance of the <see cref="DailyChallengeService"/> class.
+    ///     Initializes a new instance of the <see cref="DailyChallengeService" /> class.
     /// </summary>
     /// <param name="connectionFactory">The database connection factory.</param>
     public DailyChallengeService(IDataConnectionFactory connectionFactory)

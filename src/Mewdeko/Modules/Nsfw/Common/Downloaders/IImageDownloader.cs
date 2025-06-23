@@ -15,7 +15,7 @@ public interface IImageDownloader
     /// <param name="isExplicit">Indicates whether explicit content is allowed.</param>
     /// <param name="cancel">A cancellation token that can be used to cancel the operation.</param>
     /// <returns>A task representing the asynchronous operation, containing a list of <see cref="ImageData" />.</returns>
-    Task<List<ImageData>> DownloadImageDataAsync(
+    public Task<List<ImageData>> DownloadImageDataAsync(
         string[] tags,
         int page = 0,
         bool isExplicit = false,

@@ -5,7 +5,7 @@ using Mewdeko.Modules.Searches.Common.StreamNotifications.Models;
 namespace Mewdeko.Modules.Searches.Services.Common;
 
 /// <summary>
-/// Extensions for notifs
+///     Extensions for notifs
 /// </summary>
 public static class NotifExtensions
 {

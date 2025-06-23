@@ -8,7 +8,6 @@ using Mewdeko.Common.TypeReaders.Models;
 using Mewdeko.Modules.Administration.Common;
 using Mewdeko.Modules.Moderation.Common;
 using Mewdeko.Modules.Permissions.Services;
-using Serilog;
 using Embed = Discord.Embed;
 
 namespace Mewdeko.Modules.Moderation.Services;
@@ -22,9 +21,11 @@ public class UserPunishService : INService, IDisposable
     private readonly DiscordShardedClient client;
     private readonly IDataConnectionFactory dbFactory;
     private readonly GuildSettingsService guildSettings;
+    private readonly ILogger<UserPunishService> logger;
     private readonly Dictionary<ulong, MassNick> massNicks = new();
     private readonly MuteService mute;
     private Timer? warnExpirationTimer;
+
 
     /// <summary>
     ///     Constructs a new instance of the UserPunishService class.
@@ -36,20 +37,21 @@ public class UserPunishService : INService, IDisposable
     /// <param name="guildSettings">An instance of the GuildSettingsService class.</param>
     public UserPunishService(MuteService mute, IDataConnectionFactory dbFactory, BlacklistService blacklistService,
         DiscordShardedClient client,
-        GuildSettingsService guildSettings)
+        GuildSettingsService guildSettings, ILogger<UserPunishService> logger)
     {
         this.mute = mute;
         this.dbFactory = dbFactory;
         this.blacklistService = blacklistService;
         this.client = client;
         this.guildSettings = guildSettings;
+        this.logger = logger;
         // Initializes a new Timer that checks all warning expirations every 12 hours
         warnExpirationTimer = new Timer(async _ => await CheckAllWarnExpiresAsync().ConfigureAwait(false), null,
             TimeSpan.FromSeconds(0), TimeSpan.FromHours(12));
     }
 
     /// <summary>
-    /// Disposes the user punish service and cleans up resources.
+    ///     Disposes the user punish service and cleans up resources.
     /// </summary>
     public void Dispose()
     {
@@ -316,7 +318,7 @@ public class UserPunishService : INService, IDisposable
                 }
                 else
                 {
-                    Log.Warning($"Can't find role {roleId.Value} on server {guild.Id} to apply punishment.");
+                    logger.LogWarning($"Can't find role {roleId.Value} on server {guild.Id} to apply punishment.");
                 }
 
                 break;
@@ -333,7 +335,8 @@ public class UserPunishService : INService, IDisposable
                 }
                 catch
                 {
-                    Log.Warning($"Unable to apply timeout to user {user} in Guild {guild} due to missing permissions");
+                    logger.LogWarning(
+                        $"Unable to apply timeout to user {user} in Guild {guild} due to missing permissions");
                 }
 
                 break;
@@ -411,7 +414,7 @@ public class UserPunishService : INService, IDisposable
         }
 
         if (warningIdsToClear.Count > 0 || warningIdsToDelete.Count > 0)
-            Log.Information("Cleared {Cleared} warnings and deleted {Deleted} warnings due to expiry",
+            logger.LogInformation("Cleared {Cleared} warnings and deleted {Deleted} warnings due to expiry",
                 warningIdsToClear.Count, warningIdsToDelete.Count);
     }
 

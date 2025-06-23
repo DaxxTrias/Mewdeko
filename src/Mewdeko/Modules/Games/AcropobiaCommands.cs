@@ -113,7 +113,8 @@ public partial class Games
             switch (submissions.Length)
             {
                 case 0:
-                    await ctx.Channel.SendErrorAsync(Strings.Acrophobia(ctx.Guild.Id), Strings.AcroEndedNoSub(ctx.Guild.Id))
+                    await ctx.Channel.SendErrorAsync(Strings.Acrophobia(ctx.Guild.Id),
+                            Strings.AcroEndedNoSub(ctx.Guild.Id))
                         .ConfigureAwait(false);
                     return;
                 case 1:
@@ -148,7 +149,8 @@ public partial class Games
         {
             if (!votes.Any() || votes.All(x => x.Value == 0))
             {
-                await ctx.Channel.SendErrorAsync(Strings.Acrophobia(ctx.Guild.Id), Strings.AcroNoVotesCast(ctx.Guild.Id))
+                await ctx.Channel
+                    .SendErrorAsync(Strings.Acrophobia(ctx.Guild.Id), Strings.AcroNoVotesCast(ctx.Guild.Id))
                     .ConfigureAwait(false);
                 return;
             }

@@ -2,7 +2,6 @@ using DataModel;
 using Discord.Net;
 using LinqToDB;
 using Mewdeko.Modules.Xp.Models;
-using Serilog;
 
 namespace Mewdeko.Modules.Xp.Services;
 
@@ -15,6 +14,7 @@ public class XpRoleSyncService : INService
     private readonly IDataConnectionFactory dbFactory;
     private readonly ConcurrentDictionary<ulong, bool> guildSyncInProgress = new();
     private readonly ConcurrentDictionary<ulong, DateTime> lastSyncTimes = new();
+    private readonly ILogger<XpRoleSyncService> logger;
     private readonly XpService xpService;
 
     /// <summary>
@@ -23,11 +23,13 @@ public class XpRoleSyncService : INService
     /// <param name="dbFactory">The database connection factory.</param>
     /// <param name="xpService">The xp service</param>
     /// <param name="cacheManager">The xp cache manager.</param>
-    public XpRoleSyncService(IDataConnectionFactory dbFactory, XpService xpService, XpCacheManager cacheManager)
+    public XpRoleSyncService(IDataConnectionFactory dbFactory, XpService xpService, XpCacheManager cacheManager,
+        ILogger<XpRoleSyncService> logger)
     {
         this.dbFactory = dbFactory;
         this.xpService = xpService;
         this.cacheManager = cacheManager;
+        this.logger = logger;
     }
 
     /// <summary>
@@ -115,7 +117,7 @@ public class XpRoleSyncService : INService
                 catch (Exception ex)
                 {
                     result.ErrorUsers++;
-                    Log.Warning(ex, "Failed to sync roles for user {UserId} in guild {GuildId}", userXp.UserId,
+                    logger.LogWarning(ex, "Failed to sync roles for user {UserId} in guild {GuildId}", userXp.UserId,
                         guild.Id);
                 }
             }
@@ -230,7 +232,8 @@ public class XpRoleSyncService : INService
                 {
                     if (!roleDict.TryGetValue(roleId, out var role))
                     {
-                        Log.Warning("Role {RoleId} not found in guild {GuildId} for user {UserId}", roleId, guild.Id,
+                        logger.LogWarning("Role {RoleId} not found in guild {GuildId} for user {UserId}", roleId,
+                            guild.Id,
                             userXp.UserId);
                         continue;
                     }
@@ -240,28 +243,30 @@ public class XpRoleSyncService : INService
                 }
                 catch (HttpException ex) when (ex.DiscordCode == DiscordErrorCode.MissingPermissions)
                 {
-                    Log.Warning("Missing permissions to add role {RoleId} to user {UserId} in guild {GuildId}", roleId,
+                    logger.LogWarning("Missing permissions to add role {RoleId} to user {UserId} in guild {GuildId}",
+                        roleId,
                         userXp.UserId, guild.Id);
                     result.HasError = true;
                     result.ErrorMessage = "Missing permissions";
                 }
                 catch (HttpException ex) when (ex.DiscordCode == DiscordErrorCode.InvalidFormBody)
                 {
-                    Log.Warning("Invalid form body adding role {RoleId} to user {UserId} in guild {GuildId}: {Message}",
+                    logger.LogWarning(
+                        "Invalid form body adding role {RoleId} to user {UserId} in guild {GuildId}: {Message}",
                         roleId, userXp.UserId, guild.Id, ex.Message);
                     result.HasError = true;
                     result.ErrorMessage = "Invalid form body";
                 }
                 catch (HttpException ex) when (ex.DiscordCode == DiscordErrorCode.WriteRatelimitReached)
                 {
-                    Log.Warning("Rate limited adding role {RoleId} to user {UserId} in guild {GuildId}", roleId,
+                    logger.LogWarning("Rate limited adding role {RoleId} to user {UserId} in guild {GuildId}", roleId,
                         userXp.UserId, guild.Id);
                     result.HasError = true;
                     result.ErrorMessage = "Rate limited";
                 }
                 catch (Exception ex)
                 {
-                    Log.Warning(ex, "Failed to add role {RoleId} to user {UserId} in guild {GuildId}: {Message}",
+                    logger.LogWarning(ex, "Failed to add role {RoleId} to user {UserId} in guild {GuildId}: {Message}",
                         roleId, userXp.UserId, guild.Id, ex.Message);
                     result.HasError = true;
                     result.ErrorMessage = ex.Message;
@@ -274,7 +279,8 @@ public class XpRoleSyncService : INService
                 {
                     if (!roleDict.TryGetValue(roleId, out var role))
                     {
-                        Log.Warning("Role {RoleId} not found in guild {GuildId} for user {UserId}", roleId, guild.Id,
+                        logger.LogWarning("Role {RoleId} not found in guild {GuildId} for user {UserId}", roleId,
+                            guild.Id,
                             userXp.UserId);
                         continue;
                     }
@@ -284,14 +290,15 @@ public class XpRoleSyncService : INService
                 }
                 catch (HttpException ex) when (ex.DiscordCode == DiscordErrorCode.MissingPermissions)
                 {
-                    Log.Warning("Missing permissions to remove role {RoleId} from user {UserId} in guild {GuildId}",
+                    logger.LogWarning(
+                        "Missing permissions to remove role {RoleId} from user {UserId} in guild {GuildId}",
                         roleId, userXp.UserId, guild.Id);
                     result.HasError = true;
                     result.ErrorMessage = "Missing permissions";
                 }
                 catch (HttpException ex) when (ex.DiscordCode == DiscordErrorCode.InvalidFormBody)
                 {
-                    Log.Warning(
+                    logger.LogWarning(
                         "Invalid form body removing role {RoleId} from user {UserId} in guild {GuildId}: {Message}",
                         roleId, userXp.UserId, guild.Id, ex.Message);
                     result.HasError = true;
@@ -299,14 +306,16 @@ public class XpRoleSyncService : INService
                 }
                 catch (HttpException ex) when (ex.DiscordCode == DiscordErrorCode.WriteRatelimitReached)
                 {
-                    Log.Warning("Rate limited removing role {RoleId} from user {UserId} in guild {GuildId}", roleId,
+                    logger.LogWarning("Rate limited removing role {RoleId} from user {UserId} in guild {GuildId}",
+                        roleId,
                         userXp.UserId, guild.Id);
                     result.HasError = true;
                     result.ErrorMessage = "Rate limited";
                 }
                 catch (Exception ex)
                 {
-                    Log.Warning(ex, "Failed to remove role {RoleId} from user {UserId} in guild {GuildId}: {Message}",
+                    logger.LogWarning(ex,
+                        "Failed to remove role {RoleId} from user {UserId} in guild {GuildId}: {Message}",
                         roleId, userXp.UserId, guild.Id, ex.Message);
                     result.HasError = true;
                     result.ErrorMessage = ex.Message;
@@ -320,7 +329,7 @@ public class XpRoleSyncService : INService
         {
             result.HasError = true;
             result.ErrorMessage = ex.Message;
-            Log.Error(ex, "Error syncing roles for user {UserId} in guild {GuildId}: {Message}", userXp.UserId,
+            logger.LogError(ex, "Error syncing roles for user {UserId} in guild {GuildId}: {Message}", userXp.UserId,
                 guild.Id, ex.Message);
         }
 
@@ -422,7 +431,7 @@ public class XpRoleSyncService : INService
                 }
                 catch (Exception ex)
                 {
-                    Log.Warning(ex, "Failed to add role {RoleId} to user {UserId}", roleId, userXp.UserId);
+                    logger.LogWarning(ex, "Failed to add role {RoleId} to user {UserId}", roleId, userXp.UserId);
                 }
             }
 
@@ -437,7 +446,7 @@ public class XpRoleSyncService : INService
                 }
                 catch (Exception ex)
                 {
-                    Log.Warning(ex, "Failed to remove role {RoleId} from user {UserId}", roleId, userXp.UserId);
+                    logger.LogWarning(ex, "Failed to remove role {RoleId} from user {UserId}", roleId, userXp.UserId);
                 }
             }
 
@@ -448,7 +457,7 @@ public class XpRoleSyncService : INService
         {
             result.HasError = true;
             result.ErrorMessage = ex.Message;
-            Log.Error(ex, "Error syncing roles for user {UserId} in guild {GuildId}", userXp.UserId, guild.Id);
+            logger.LogError(ex, "Error syncing roles for user {UserId} in guild {GuildId}", userXp.UserId, guild.Id);
         }
 
         return result;

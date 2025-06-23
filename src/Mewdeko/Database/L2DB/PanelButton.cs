@@ -95,7 +95,7 @@ public class PanelButton
     public bool AutoArchiveOnClose { get; set; } = false;
 
     /// <summary>
-    /// Support role IDs that can access tickets created with this button
+    ///     Support role IDs that can access tickets created with this button
     /// </summary>
     [NotColumn]
     public ulong[] SupportRoles
@@ -105,7 +105,7 @@ public class PanelButton
     }
 
     /// <summary>
-    /// Viewer role IDs that can view tickets created with this button
+    ///     Viewer role IDs that can view tickets created with this button
     /// </summary>
     [NotColumn]
     public ulong[] ViewerRoles
@@ -117,13 +117,13 @@ public class PanelButton
     #region Associations
 
     /// <summary>
-    /// FK_PanelButtons_TicketPanels_PanelId - The panel this button belongs to
+    ///     FK_PanelButtons_TicketPanels_PanelId - The panel this button belongs to
     /// </summary>
     [Association(CanBeNull = false, ThisKey = nameof(PanelId), OtherKey = nameof(TicketPanel.Id))]
     public TicketPanel Panel { get; set; } = null!;
 
     /// <summary>
-    /// FK_Tickets_PanelButtons_ButtonId backreference
+    ///     FK_Tickets_PanelButtons_ButtonId backreference
     /// </summary>
     [Association(ThisKey = nameof(Id), OtherKey = nameof(Ticket.ButtonId))]
     public IEnumerable<Ticket> Tickets { get; set; } = null!;

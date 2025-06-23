@@ -4,7 +4,6 @@ using DataModel;
 using Humanizer;
 using LinqToDB;
 using Mewdeko.Modules.Xp.Models;
-using Serilog;
 using SkiaSharp;
 
 namespace Mewdeko.Modules.Xp.Services;
@@ -17,6 +16,7 @@ public class XpCardGenerator : INService
     private readonly IDataConnectionFactory dbFactory;
     private readonly byte[] defaultBackground;
     private readonly IHttpClientFactory httpClientFactory;
+    private readonly ILogger<XpCardGenerator> logger;
     private readonly XpService xpService;
 
     /// <summary>
@@ -28,11 +28,12 @@ public class XpCardGenerator : INService
     public XpCardGenerator(
         IDataConnectionFactory dbFactory,
         XpService xpService,
-        IHttpClientFactory httpClientFactory)
+        IHttpClientFactory httpClientFactory, ILogger<XpCardGenerator> logger)
     {
         this.dbFactory = dbFactory ?? throw new ArgumentNullException(nameof(dbFactory));
         this.xpService = xpService ?? throw new ArgumentNullException(nameof(xpService));
         this.httpClientFactory = httpClientFactory ?? throw new ArgumentNullException(nameof(httpClientFactory));
+        this.logger = logger;
         defaultBackground = xpService.GetDefaultBackgroundImage();
     }
 
@@ -269,7 +270,7 @@ public class XpCardGenerator : INService
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Error drawing avatar image: {Message}", ex.Message);
+                logger.LogError(ex, "Error drawing avatar image: {Message}", ex.Message);
             }
         }
 

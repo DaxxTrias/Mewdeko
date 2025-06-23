@@ -1,11 +1,10 @@
 ﻿#nullable enable
+
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-
 using Mewdeko.Modules.Searches.Common.StreamNotifications.Models;
-
 using Serilog;
 
 namespace Mewdeko.Modules.Searches.Common.StreamNotifications.Providers;

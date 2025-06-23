@@ -3,7 +3,6 @@ using DataModel;
 using Discord.Interactions;
 using Mewdeko.Common.Attributes.InteractionCommands;
 using Mewdeko.Modules.Administration.Services;
-using Serilog;
 using LogType = Mewdeko.Modules.Administration.Services.LogCommandService.LogType;
 
 namespace Mewdeko.Modules.Administration;
@@ -20,14 +19,17 @@ public class LogSlashCommands : MewdekoSlashModuleBase<LogCommandService>
     public static readonly ConcurrentDictionary<ulong, IUserMessage> LogSelectMessages = new();
 
     private readonly GuildSettingsService gss;
+    private readonly ILogger<LogSlashCommands> logger;
+
 
     /// <summary>
     ///     Initializes a new instance of the LogSlashCommands class.
     /// </summary>
     /// <param name="gss">Service for managing guild settings</param>
-    public LogSlashCommands(GuildSettingsService gss)
+    public LogSlashCommands(GuildSettingsService gss, ILogger<LogSlashCommands> logger)
     {
         this.gss = gss;
+        this.logger = logger;
     }
 
     /// <summary>
@@ -55,7 +57,7 @@ public class LogSlashCommands : MewdekoSlashModuleBase<LogCommandService>
         }
         catch (Exception e)
         {
-            Log.Error(e, "There was an issue setting logs");
+            logger.LogError(e, "There was an issue setting logs");
             await ReplyConfirmAsync(Strings.CommandFatalError(Context.Guild.Id));
         }
     }
@@ -315,7 +317,7 @@ public class LogSlashCommands : MewdekoSlashModuleBase<LogCommandService>
         catch (Exception e)
         {
             await RespondAsync(Strings.CommandFatalError(Context.Guild.Id), ephemeral: true);
-            Log.Error(e, "There was an issue setting logs");
+            logger.LogError(e, "There was an issue setting logs");
         }
     }
 
@@ -416,7 +418,7 @@ public class LogSlashCommands : MewdekoSlashModuleBase<LogCommandService>
         }
         catch (Exception e)
         {
-            Log.Error(e, "There was an issue setting logs");
+            logger.LogError(e, "There was an issue setting logs");
             await ReplyConfirmAsync(Strings.CommandFatalError(Context.Guild.Id));
         }
     }

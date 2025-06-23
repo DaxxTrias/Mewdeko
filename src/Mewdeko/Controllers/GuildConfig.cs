@@ -1,7 +1,6 @@
 ﻿using DataModel;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Serilog;
 
 namespace Mewdeko.Controllers;
 
@@ -12,7 +11,7 @@ namespace Mewdeko.Controllers;
 [ApiController]
 [Route("botapi/[controller]/{guildId}")]
 [Authorize("ApiKeyPolicy")]
-public class GuildConfigController(GuildSettingsService service) : Controller
+public class GuildConfigController(GuildSettingsService service, ILogger<GuildConfigController> logger) : Controller
 {
     /// <summary>
     ///     Gets a guild config
@@ -29,7 +28,7 @@ public class GuildConfigController(GuildSettingsService service) : Controller
         }
         catch (Exception e)
         {
-            Log.Error(e, "Error getting guild config");
+            logger.LogError(e, "Error getting guild config");
             return StatusCode(500);
         }
     }
@@ -45,7 +44,7 @@ public class GuildConfigController(GuildSettingsService service) : Controller
     {
         try
         {
-            Log.Information(guildId.ToString());
+            logger.LogInformation(guildId.ToString());
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
             await service.UpdateGuildConfig(guildId, model);
@@ -53,7 +52,7 @@ public class GuildConfigController(GuildSettingsService service) : Controller
         }
         catch (Exception e)
         {
-            Log.Error(e, "Error updating guild config");
+            logger.LogError(e, "Error updating guild config");
             return StatusCode(500);
         }
     }

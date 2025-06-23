@@ -36,7 +36,8 @@ public class HighlightAutocompleter : AutocompleteHandler
         IServiceProvider services)
     {
         var content = (string)interaction.Data.Current.Value;
-        var highlights = await cache.GetOrSetAsync($"highlights_{context.Guild.Id}", _ => Task.FromResult<List<Highlight>>([]));
+        var highlights =
+            await cache.GetOrSetAsync($"highlights_{context.Guild.Id}", _ => Task.FromResult<List<Highlight>>([]));
 
         var results = highlights
             .Where(x => x.UserId == context.User.Id && x.GuildId == context.Guild.Id)

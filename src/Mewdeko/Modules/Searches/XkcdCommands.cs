@@ -4,7 +4,6 @@ using Discord.Commands;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Modules.Searches.Common.StreamNotifications.Models;
 
-
 namespace Mewdeko.Modules.Searches;
 
 public partial class Searches

@@ -599,7 +599,8 @@ public class Afk(InteractiveService serv) : MewdekoModuleBase<AfkService>
                 await ReplyErrorAsync(Strings.AfkRmFailNoafk(ctx.Guild.Id)).ConfigureAwait(false);
                 break;
             case > 0 when erroredusers > 0:
-                await ReplyConfirmAsync(Strings.AfkSuccessHierarchy(ctx.Guild.Id, users, erroredusers)).ConfigureAwait(false);
+                await ReplyConfirmAsync(Strings.AfkSuccessHierarchy(ctx.Guild.Id, users, erroredusers))
+                    .ConfigureAwait(false);
                 break;
             case 0 when erroredusers >= 1:
                 await ReplyErrorAsync(Strings.AfkRmFailHierarchy(ctx.Guild.Id)).ConfigureAwait(false);

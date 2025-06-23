@@ -18,7 +18,7 @@ public abstract class MewdekoModule : ModuleBase
     protected CultureInfo? CultureInfo { get; set; }
 
     /// <summary>
-    /// Source generated strings.
+    ///     Source generated strings.
     /// </summary>
     public GeneratedBotStrings Strings { get; set; }
 

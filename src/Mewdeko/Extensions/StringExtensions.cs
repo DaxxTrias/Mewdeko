@@ -4,7 +4,6 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using Mewdeko.Common.Yml;
 
-
 namespace Mewdeko.Extensions;
 
 /// <summary>

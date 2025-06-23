@@ -4,16 +4,17 @@ using Discord.Interactions;
 using LinqToDB;
 using Mewdeko.Common.Attributes.InteractionCommands;
 using Mewdeko.Modules.CustomVoice.Services;
-using Serilog;
 
 namespace Mewdeko.Modules.CustomVoice;
 
 /// <summary>
 ///     Interaction commands for managing custom voice channels.
 /// </summary>
-public class CustomVoiceSlash(DiscordShardedClient client, IDataConnectionFactory dbFactory) : MewdekoSlashModuleBase<CustomVoiceService>
+public class CustomVoiceSlash(
+    DiscordShardedClient client,
+    IDataConnectionFactory dbFactory,
+    ILogger<CustomVoiceSlash> logger) : MewdekoSlashModuleBase<CustomVoiceService>
 {
-
     /// <summary>
     ///     Button handler for basic voice channel operations (rename, limit, bitrate, lock/unlock)
     /// </summary>
@@ -51,7 +52,8 @@ public class CustomVoiceSlash(DiscordShardedClient client, IDataConnectionFactor
         if (!isOwner)
         {
             var config = await Service.GetOrCreateConfigAsync(ctx.Guild.Id);
-            var hasAdminRole = config.CustomVoiceAdminRoleId.HasValue && user.RoleIds.Contains(config.CustomVoiceAdminRoleId.Value);
+            var hasAdminRole = config.CustomVoiceAdminRoleId.HasValue &&
+                               user.RoleIds.Contains(config.CustomVoiceAdminRoleId.Value);
 
             if (!hasAdminRole)
             {
@@ -73,7 +75,7 @@ public class CustomVoiceSlash(DiscordShardedClient client, IDataConnectionFactor
                     return;
                 }
 
-                await DeferAsync(ephemeral: true);
+                await DeferAsync(true);
 
                 // Create a modal for renaming
                 var modal = new ModalBuilder()
@@ -99,7 +101,7 @@ public class CustomVoiceSlash(DiscordShardedClient client, IDataConnectionFactor
                     return;
                 }
 
-                await DeferAsync(ephemeral: true);
+                await DeferAsync(true);
 
                 // Create a modal for setting user limit
                 var limitModal = new ModalBuilder()
@@ -121,11 +123,12 @@ public class CustomVoiceSlash(DiscordShardedClient client, IDataConnectionFactor
             case "bitrate":
                 if (!guildConfig.AllowBitrateCustomization)
                 {
-                    await SendEphemeralFollowupErrorAsync(Strings.CustomVoiceBitrateCustomizationDisabled(ctx.Guild.Id));
+                    await SendEphemeralFollowupErrorAsync(
+                        Strings.CustomVoiceBitrateCustomizationDisabled(ctx.Guild.Id));
                     return;
                 }
 
-                await DeferAsync(ephemeral: true);
+                await DeferAsync(true);
 
                 // Create a modal for setting bitrate
                 var bitrateModal = new ModalBuilder()
@@ -151,10 +154,11 @@ public class CustomVoiceSlash(DiscordShardedClient client, IDataConnectionFactor
                     return;
                 }
 
-                await DeferAsync(ephemeral: true);
+                await DeferAsync(true);
                 if (customChannel.IsLocked)
                 {
-                    await ctx.Interaction.SendEphemeralFollowupConfirmAsync(Strings.CustomVoiceAlreadyLocked(ctx.Guild.Id));
+                    await ctx.Interaction.SendEphemeralFollowupConfirmAsync(
+                        Strings.CustomVoiceAlreadyLocked(ctx.Guild.Id));
                     return;
                 }
 
@@ -167,6 +171,7 @@ public class CustomVoiceSlash(DiscordShardedClient client, IDataConnectionFactor
                 {
                     await SendEphemeralFollowupErrorAsync(Strings.CustomVoiceLockError(ctx.Guild.Id));
                 }
+
                 break;
 
             case "unlock":
@@ -176,10 +181,11 @@ public class CustomVoiceSlash(DiscordShardedClient client, IDataConnectionFactor
                     return;
                 }
 
-                await DeferAsync(ephemeral: true);
+                await DeferAsync(true);
                 if (!customChannel.IsLocked)
                 {
-                    await ctx.Interaction.SendEphemeralFollowupConfirmAsync(Strings.CustomVoiceAlreadyUnlocked(ctx.Guild.Id));
+                    await ctx.Interaction.SendEphemeralFollowupConfirmAsync(
+                        Strings.CustomVoiceAlreadyUnlocked(ctx.Guild.Id));
                     return;
                 }
 
@@ -192,13 +198,15 @@ public class CustomVoiceSlash(DiscordShardedClient client, IDataConnectionFactor
                 {
                     await SendEphemeralFollowupErrorAsync(Strings.CustomVoiceUnlockError(ctx.Guild.Id));
                 }
+
                 break;
 
             case "transfer":
-                await DeferAsync(ephemeral: true);
+                await DeferAsync(true);
 
                 // Get users who can become owners (users in the voice channel except the current owner)
-                var usersInChannel = (await channel.GetUsersAsync().FlattenAsync()).Where(u => u.Id != customChannel.OwnerId).ToList();
+                var usersInChannel = (await channel.GetUsersAsync().FlattenAsync())
+                    .Where(u => u.Id != customChannel.OwnerId).ToList();
                 usersInChannel = usersInChannel.Where(x => x.VoiceChannel.Id == parsedChannelId).ToList();
 
                 if (usersInChannel.Count == 0)
@@ -239,14 +247,13 @@ public class CustomVoiceSlash(DiscordShardedClient client, IDataConnectionFactor
                 // Handle the keepalive action which includes a parameter
                 if (action.StartsWith("keepalive"))
                 {
-                    await DeferAsync(ephemeral: true);
+                    await DeferAsync(true);
                     var inter = ctx.Interaction.Data as IComponentInteractionData;
                     // Parse the additional parameter from the custom ID
                     // The format is "keepalive:{channelId}:{newKeepAliveValue}"
                     var parts = inter.CustomId.Split(':');
                     if (parts.Length >= 4 && bool.TryParse(parts[3], out var keepAlive))
                     {
-
                         if (customChannel.KeepAlive == keepAlive)
                         {
                             var stateText = keepAlive
@@ -279,6 +286,7 @@ public class CustomVoiceSlash(DiscordShardedClient client, IDataConnectionFactor
                 {
                     await SendEphemeralFollowupErrorAsync(Strings.CustomVoiceInvalidAction(ctx.Guild.Id));
                 }
+
                 break;
         }
     }
@@ -290,7 +298,7 @@ public class CustomVoiceSlash(DiscordShardedClient client, IDataConnectionFactor
     [SlashUserPerm(GuildPermission.UseApplicationCommands)]
     public async Task HandleRenameModal(string channelId, ModalRenameChannel modal)
     {
-        await DeferAsync(ephemeral: true);
+        await DeferAsync(true);
 
         // Validate channel ID
         if (!ulong.TryParse(channelId, out var parsedChannelId))
@@ -313,7 +321,8 @@ public class CustomVoiceSlash(DiscordShardedClient client, IDataConnectionFactor
         if (!isOwner)
         {
             var config = await Service.GetOrCreateConfigAsync(ctx.Guild.Id);
-            var hasAdminRole = config.CustomVoiceAdminRoleId.HasValue && user.RoleIds.Contains(config.CustomVoiceAdminRoleId.Value);
+            var hasAdminRole = config.CustomVoiceAdminRoleId.HasValue &&
+                               user.RoleIds.Contains(config.CustomVoiceAdminRoleId.Value);
 
             if (!hasAdminRole)
             {
@@ -336,9 +345,10 @@ public class CustomVoiceSlash(DiscordShardedClient client, IDataConnectionFactor
             return;
         }
 
-        if (await Service.UpdateVoiceChannelAsync(ctx.Guild.Id, parsedChannelId, name: modal.ChannelName))
+        if (await Service.UpdateVoiceChannelAsync(ctx.Guild.Id, parsedChannelId, modal.ChannelName))
         {
-            await ctx.Interaction.SendEphemeralFollowupConfirmAsync(Strings.CustomVoiceRenamed(ctx.Guild.Id, modal.ChannelName));
+            await ctx.Interaction.SendEphemeralFollowupConfirmAsync(
+                Strings.CustomVoiceRenamed(ctx.Guild.Id, modal.ChannelName));
             await UpdateVoiceControlsMessage(customChannel);
         }
         else
@@ -354,7 +364,7 @@ public class CustomVoiceSlash(DiscordShardedClient client, IDataConnectionFactor
     [SlashUserPerm(GuildPermission.UseApplicationCommands)]
     public async Task HandleLimitModal(string channelId, ModalUserLimit modal)
     {
-        await DeferAsync(ephemeral: true);
+        await DeferAsync(true);
 
         // Validate channel ID
         if (!ulong.TryParse(channelId, out var parsedChannelId))
@@ -377,7 +387,8 @@ public class CustomVoiceSlash(DiscordShardedClient client, IDataConnectionFactor
         if (!isOwner)
         {
             var config = await Service.GetOrCreateConfigAsync(ctx.Guild.Id);
-            var hasAdminRole = config.CustomVoiceAdminRoleId.HasValue && user.RoleIds.Contains(config.CustomVoiceAdminRoleId.Value);
+            var hasAdminRole = config.CustomVoiceAdminRoleId.HasValue &&
+                               user.RoleIds.Contains(config.CustomVoiceAdminRoleId.Value);
 
             if (!hasAdminRole)
             {
@@ -402,14 +413,16 @@ public class CustomVoiceSlash(DiscordShardedClient client, IDataConnectionFactor
 
         if (guildConfig.MaxUserLimit > 0 && limit > guildConfig.MaxUserLimit)
         {
-            await SendEphemeralFollowupErrorAsync(Strings.CustomVoiceLimitTooHigh(ctx.Guild.Id, guildConfig.MaxUserLimit));
+            await SendEphemeralFollowupErrorAsync(Strings.CustomVoiceLimitTooHigh(ctx.Guild.Id,
+                guildConfig.MaxUserLimit));
             return;
         }
 
         if (await Service.UpdateVoiceChannelAsync(ctx.Guild.Id, parsedChannelId, userLimit: limit))
         {
             var limitText = limit == 0 ? Strings.CustomVoiceConfigUnlimited(ctx.Guild.Id) : limit.ToString();
-            await ctx.Interaction.SendEphemeralFollowupConfirmAsync(Strings.CustomVoiceLimitSet(ctx.Guild.Id, limitText));
+            await ctx.Interaction.SendEphemeralFollowupConfirmAsync(
+                Strings.CustomVoiceLimitSet(ctx.Guild.Id, limitText));
             await UpdateVoiceControlsMessage(customChannel);
         }
         else
@@ -425,7 +438,7 @@ public class CustomVoiceSlash(DiscordShardedClient client, IDataConnectionFactor
     [SlashUserPerm(GuildPermission.UseApplicationCommands)]
     public async Task HandleBitrateModal(string channelId, ModalBitrate modal)
     {
-        await DeferAsync(ephemeral: true);
+        await DeferAsync(true);
 
         // Validate channel ID
         if (!ulong.TryParse(channelId, out var parsedChannelId))
@@ -448,7 +461,8 @@ public class CustomVoiceSlash(DiscordShardedClient client, IDataConnectionFactor
         if (!isOwner)
         {
             var config = await Service.GetOrCreateConfigAsync(ctx.Guild.Id);
-            var hasAdminRole = config.CustomVoiceAdminRoleId.HasValue && user.RoleIds.Contains(config.CustomVoiceAdminRoleId.Value);
+            var hasAdminRole = config.CustomVoiceAdminRoleId.HasValue &&
+                               user.RoleIds.Contains(config.CustomVoiceAdminRoleId.Value);
 
             if (!hasAdminRole)
             {
@@ -473,13 +487,15 @@ public class CustomVoiceSlash(DiscordShardedClient client, IDataConnectionFactor
 
         if (guildConfig.MaxBitrate > 0 && bitrate > guildConfig.MaxBitrate)
         {
-            await SendEphemeralFollowupErrorAsync(Strings.CustomVoiceBitrateTooHigh(ctx.Guild.Id, guildConfig.MaxBitrate));
+            await SendEphemeralFollowupErrorAsync(
+                Strings.CustomVoiceBitrateTooHigh(ctx.Guild.Id, guildConfig.MaxBitrate));
             return;
         }
 
         if (await Service.UpdateVoiceChannelAsync(ctx.Guild.Id, parsedChannelId, bitrate: bitrate))
         {
-            await ctx.Interaction.SendEphemeralFollowupConfirmAsync(Strings.CustomVoiceBitrateSet(ctx.Guild.Id, bitrate));
+            await ctx.Interaction.SendEphemeralFollowupConfirmAsync(
+                Strings.CustomVoiceBitrateSet(ctx.Guild.Id, bitrate));
             await UpdateVoiceControlsMessage(customChannel);
         }
         else
@@ -495,7 +511,7 @@ public class CustomVoiceSlash(DiscordShardedClient client, IDataConnectionFactor
     [SlashUserPerm(GuildPermission.UseApplicationCommands)]
     public async Task HandleTransferUser(string channelId, string[] selectedUsers)
     {
-        await DeferAsync(ephemeral: true);
+        await DeferAsync(true);
 
         if (selectedUsers.Length != 1)
         {
@@ -524,7 +540,8 @@ public class CustomVoiceSlash(DiscordShardedClient client, IDataConnectionFactor
         if (!isOwner)
         {
             var config = await Service.GetOrCreateConfigAsync(ctx.Guild.Id);
-            var hasAdminRole = config.CustomVoiceAdminRoleId.HasValue && user.RoleIds.Contains(config.CustomVoiceAdminRoleId.Value);
+            var hasAdminRole = config.CustomVoiceAdminRoleId.HasValue &&
+                               user.RoleIds.Contains(config.CustomVoiceAdminRoleId.Value);
 
             if (!hasAdminRole)
             {
@@ -558,7 +575,8 @@ public class CustomVoiceSlash(DiscordShardedClient client, IDataConnectionFactor
         // Transfer the ownership
         if (await Service.TransferOwnershipAsync(ctx.Guild.Id, parsedChannelId, newOwnerId))
         {
-            await ctx.Interaction.SendEphemeralFollowupConfirmAsync(Strings.CustomVoiceTransferSuccess(ctx.Guild.Id, newOwner.Mention));
+            await ctx.Interaction.SendEphemeralFollowupConfirmAsync(
+                Strings.CustomVoiceTransferSuccess(ctx.Guild.Id, newOwner.Mention));
             await UpdateVoiceControlsMessage(customChannel);
         }
         else
@@ -574,7 +592,7 @@ public class CustomVoiceSlash(DiscordShardedClient client, IDataConnectionFactor
     [SlashUserPerm(GuildPermission.UseApplicationCommands)]
     public async Task HandleUserMenu(string channelId, string[] selectedOptions)
     {
-        await DeferAsync(ephemeral: true);
+        await DeferAsync(true);
 
         if (selectedOptions.Length != 1)
         {
@@ -603,7 +621,8 @@ public class CustomVoiceSlash(DiscordShardedClient client, IDataConnectionFactor
         if (!isOwner)
         {
             var config = await Service.GetOrCreateConfigAsync(ctx.Guild.Id);
-            var hasAdminRole = config.CustomVoiceAdminRoleId.HasValue && user.RoleIds.Contains(config.CustomVoiceAdminRoleId.Value);
+            var hasAdminRole = config.CustomVoiceAdminRoleId.HasValue &&
+                               user.RoleIds.Contains(config.CustomVoiceAdminRoleId.Value);
 
             if (!hasAdminRole)
             {
@@ -651,7 +670,8 @@ public class CustomVoiceSlash(DiscordShardedClient client, IDataConnectionFactor
                 var channel = await ctx.Guild.GetVoiceChannelAsync(parsedChannelId);
                 if (channel == null || (await channel.GetUsersAsync().FlattenAsync()).All(u => u.Id != targetUserId))
                 {
-                    await SendEphemeralFollowupErrorAsync(Strings.CustomVoiceUserNotInChannel(ctx.Guild.Id, targetUser.Username));
+                    await SendEphemeralFollowupErrorAsync(
+                        Strings.CustomVoiceUserNotInChannel(ctx.Guild.Id, targetUser.Username));
                     return;
                 }
 
@@ -666,26 +686,33 @@ public class CustomVoiceSlash(DiscordShardedClient client, IDataConnectionFactor
                 try
                 {
                     await targetUser.ModifyAsync(props => props.Channel = null);
-                    await ctx.Interaction.SendEphemeralFollowupConfirmAsync(Strings.CustomVoiceUserKicked(ctx.Guild.Id, targetUser.Mention));
+                    await ctx.Interaction.SendEphemeralFollowupConfirmAsync(
+                        Strings.CustomVoiceUserKicked(ctx.Guild.Id, targetUser.Mention));
                     await UpdateVoiceControlsMessage(customChannel);
                 }
                 catch (Exception ex)
                 {
-                    Log.Error(ex, "Error kicking user {UserId} from voice channel {ChannelId}", targetUserId, parsedChannelId);
-                    await SendEphemeralFollowupErrorAsync(Strings.CustomVoiceUserKickError(ctx.Guild.Id, targetUser.Mention));
+                    logger.LogError(ex, "Error kicking user {UserId} from voice channel {ChannelId}", targetUserId,
+                        parsedChannelId);
+                    await SendEphemeralFollowupErrorAsync(
+                        Strings.CustomVoiceUserKickError(ctx.Guild.Id, targetUser.Mention));
                 }
+
                 break;
 
             case "allow":
                 if (await Service.AllowUserAsync(ctx.Guild.Id, parsedChannelId, targetUserId))
                 {
-                    await ctx.Interaction.SendEphemeralFollowupConfirmAsync(Strings.CustomVoiceUserAllowed(ctx.Guild.Id, targetUser.Mention));
+                    await ctx.Interaction.SendEphemeralFollowupConfirmAsync(
+                        Strings.CustomVoiceUserAllowed(ctx.Guild.Id, targetUser.Mention));
                     await UpdateVoiceControlsMessage(customChannel);
                 }
                 else
                 {
-                    await SendEphemeralFollowupErrorAsync(Strings.CustomVoiceUserAllowError(ctx.Guild.Id, targetUser.Mention));
+                    await SendEphemeralFollowupErrorAsync(
+                        Strings.CustomVoiceUserAllowError(ctx.Guild.Id, targetUser.Mention));
                 }
+
                 break;
 
             case "deny":
@@ -697,13 +724,16 @@ public class CustomVoiceSlash(DiscordShardedClient client, IDataConnectionFactor
 
                 if (await Service.DenyUserAsync(ctx.Guild.Id, parsedChannelId, targetUserId))
                 {
-                    await ctx.Interaction.SendEphemeralFollowupConfirmAsync(Strings.CustomVoiceUserDenied(ctx.Guild.Id, targetUser.Mention));
+                    await ctx.Interaction.SendEphemeralFollowupConfirmAsync(
+                        Strings.CustomVoiceUserDenied(ctx.Guild.Id, targetUser.Mention));
                     await UpdateVoiceControlsMessage(customChannel);
                 }
                 else
                 {
-                    await SendEphemeralFollowupErrorAsync(Strings.CustomVoiceUserDenyError(ctx.Guild.Id, targetUser.Mention));
+                    await SendEphemeralFollowupErrorAsync(
+                        Strings.CustomVoiceUserDenyError(ctx.Guild.Id, targetUser.Mention));
                 }
+
                 break;
 
             case "unallow":
@@ -739,13 +769,16 @@ public class CustomVoiceSlash(DiscordShardedClient client, IDataConnectionFactor
                         }
                     }
 
-                    await ctx.Interaction.SendEphemeralFollowupConfirmAsync(Strings.CustomVoiceUserRemovedFromAllowed(ctx.Guild.Id, targetUser.Mention));
+                    await ctx.Interaction.SendEphemeralFollowupConfirmAsync(
+                        Strings.CustomVoiceUserRemovedFromAllowed(ctx.Guild.Id, targetUser.Mention));
                     await UpdateVoiceControlsMessage(customChannel);
                 }
                 else
                 {
-                    await SendEphemeralFollowupErrorAsync(Strings.CustomVoiceUserNotInAllowList(ctx.Guild.Id, targetUser.Mention));
+                    await SendEphemeralFollowupErrorAsync(
+                        Strings.CustomVoiceUserNotInAllowList(ctx.Guild.Id, targetUser.Mention));
                 }
+
                 break;
 
             case "undeny":
@@ -780,13 +813,16 @@ public class CustomVoiceSlash(DiscordShardedClient client, IDataConnectionFactor
                         await voiceChannel.RemovePermissionOverwriteAsync(targetUser);
                     }
 
-                    await ctx.Interaction.SendEphemeralFollowupConfirmAsync(Strings.CustomVoiceUserRemovedFromDenied(ctx.Guild.Id, targetUser.Mention));
+                    await ctx.Interaction.SendEphemeralFollowupConfirmAsync(
+                        Strings.CustomVoiceUserRemovedFromDenied(ctx.Guild.Id, targetUser.Mention));
                     await UpdateVoiceControlsMessage(customChannel);
                 }
                 else
                 {
-                    await SendEphemeralFollowupErrorAsync(Strings.CustomVoiceUserNotInDenyList(ctx.Guild.Id, targetUser.Mention));
+                    await SendEphemeralFollowupErrorAsync(
+                        Strings.CustomVoiceUserNotInDenyList(ctx.Guild.Id, targetUser.Mention));
                 }
+
                 break;
 
             default:
@@ -828,20 +864,28 @@ public class CustomVoiceSlash(DiscordShardedClient client, IDataConnectionFactor
                 .WithTitle(Strings.CustomVoiceControlsTitle(ctx.Guild.Id, channel.Name))
                 .WithOkColor()
                 .WithDescription(Strings.CustomVoiceControlsDesc(ctx.Guild.Id))
-                .AddField(Strings.CustomVoiceControlsOwner(ctx.Guild.Id), MentionUtils.MentionUser(updatedCustomChannel.OwnerId), true)
+                .AddField(Strings.CustomVoiceControlsOwner(ctx.Guild.Id),
+                    MentionUtils.MentionUser(updatedCustomChannel.OwnerId), true)
                 .AddField(Strings.CustomVoiceControlsCreated(ctx.Guild.Id),
-                    Strings.CustomVoiceControlsTimeAgo(ctx.Guild.Id, (DateTime.UtcNow - updatedCustomChannel.CreatedAt).TotalHours.ToString("F1")), true)
+                    Strings.CustomVoiceControlsTimeAgo(ctx.Guild.Id,
+                        (DateTime.UtcNow - updatedCustomChannel.CreatedAt).TotalHours.ToString("F1")), true)
                 .AddField(Strings.CustomVoiceControlsUserLimit(ctx.Guild.Id),
-                    channel.UserLimit == 0 ? Strings.CustomVoiceConfigUnlimited(ctx.Guild.Id) : channel.UserLimit.ToString(), true)
+                    channel.UserLimit == 0
+                        ? Strings.CustomVoiceConfigUnlimited(ctx.Guild.Id)
+                        : channel.UserLimit.ToString(), true)
                 .AddField(Strings.CustomVoiceControlsBitrate(ctx.Guild.Id), $"{channel.Bitrate / 1000} kbps", true)
                 .AddField(Strings.CustomVoiceControlsLocked(ctx.Guild.Id),
-                    updatedCustomChannel.IsLocked ? Strings.CustomVoiceConfigYes(ctx.Guild.Id) : Strings.CustomVoiceConfigNo(ctx.Guild.Id), true)
+                    updatedCustomChannel.IsLocked
+                        ? Strings.CustomVoiceConfigYes(ctx.Guild.Id)
+                        : Strings.CustomVoiceConfigNo(ctx.Guild.Id), true)
                 .AddField(Strings.CustomVoiceControlsKeepAlive(ctx.Guild.Id),
-                    updatedCustomChannel.KeepAlive ? Strings.CustomVoiceConfigYes(ctx.Guild.Id) : Strings.CustomVoiceConfigNo(ctx.Guild.Id), true)
+                    updatedCustomChannel.KeepAlive
+                        ? Strings.CustomVoiceConfigYes(ctx.Guild.Id)
+                        : Strings.CustomVoiceConfigNo(ctx.Guild.Id), true)
                 .AddField(Strings.CustomVoiceControlsUsers(ctx.Guild.Id),
-                    (await channel.GetUsersAsync().FlattenAsync()).Count() == 0 ?
-                        Strings.CustomVoiceControlsNoUsers(ctx.Guild.Id) :
-                        string.Join(", ", (await channel.GetUsersAsync().FlattenAsync()).Select(u => u.Mention)));
+                    (await channel.GetUsersAsync().FlattenAsync()).Count() == 0
+                        ? Strings.CustomVoiceControlsNoUsers(ctx.Guild.Id)
+                        : string.Join(", ", (await channel.GetUsersAsync().FlattenAsync()).Select(u => u.Mention)));
 
             // Rebuild the components
             var components = new ComponentBuilder();
@@ -874,9 +918,9 @@ public class CustomVoiceSlash(DiscordShardedClient client, IDataConnectionFactor
             // Row 2: Lock/Keep Alive toggles
             components.WithButton(
                 customId: $"voice:{(updatedCustomChannel.IsLocked ? "unlock" : "lock")}:{channel.Id}",
-                label: updatedCustomChannel.IsLocked ?
-                    Strings.CustomVoiceControlsUnlockButton(ctx.Guild.Id) :
-                    Strings.CustomVoiceControlsLockButton(ctx.Guild.Id),
+                label: updatedCustomChannel.IsLocked
+                    ? Strings.CustomVoiceControlsUnlockButton(ctx.Guild.Id)
+                    : Strings.CustomVoiceControlsLockButton(ctx.Guild.Id),
                 style: updatedCustomChannel.IsLocked ? ButtonStyle.Success : ButtonStyle.Danger,
                 disabled: !guildConfig.AllowLocking,
                 row: 1
@@ -884,9 +928,9 @@ public class CustomVoiceSlash(DiscordShardedClient client, IDataConnectionFactor
 
             components.WithButton(
                 customId: $"voice:keepalive:{channel.Id}:{!updatedCustomChannel.KeepAlive}",
-                label: updatedCustomChannel.KeepAlive ?
-                    Strings.CustomVoiceControlsDisableKeepAliveButton(ctx.Guild.Id) :
-                    Strings.CustomVoiceControlsEnableKeepAliveButton(ctx.Guild.Id),
+                label: updatedCustomChannel.KeepAlive
+                    ? Strings.CustomVoiceControlsDisableKeepAliveButton(ctx.Guild.Id)
+                    : Strings.CustomVoiceControlsEnableKeepAliveButton(ctx.Guild.Id),
                 style: updatedCustomChannel.KeepAlive ? ButtonStyle.Danger : ButtonStyle.Success,
                 row: 1
             );
@@ -899,7 +943,8 @@ public class CustomVoiceSlash(DiscordShardedClient client, IDataConnectionFactor
             );
 
             // Row 3: User management dropdown
-            if (guildConfig.AllowUserManagement && ((await channel.GetUsersAsync().FlattenAsync()).Count() > 1 || updatedCustomChannel.IsLocked))
+            if (guildConfig.AllowUserManagement && ((await channel.GetUsersAsync().FlattenAsync()).Count() > 1 ||
+                                                    updatedCustomChannel.IsLocked))
             {
                 var userSelect = new SelectMenuBuilder()
                     .WithPlaceholder(Strings.CustomVoiceControlsManageUsersPlaceholder(ctx.Guild.Id))
@@ -908,7 +953,8 @@ public class CustomVoiceSlash(DiscordShardedClient client, IDataConnectionFactor
                     .WithMaxValues(1);
 
                 // Add options for all users except the channel owner
-                foreach (var channelUser in (await channel.GetUsersAsync().FlattenAsync()).Where(u => u.Id != updatedCustomChannel.OwnerId))
+                foreach (var channelUser in (await channel.GetUsersAsync().FlattenAsync()).Where(u =>
+                             u.Id != updatedCustomChannel.OwnerId))
                 {
                     userSelect.AddOption(
                         Strings.CustomVoiceControlsKickOption(ctx.Guild.Id, channelUser.Username),
@@ -922,7 +968,8 @@ public class CustomVoiceSlash(DiscordShardedClient client, IDataConnectionFactor
                 foreach (var guildUser in await ctx.Guild.GetUsersAsync())
                 {
                     // Skip users who are in the voice channel to avoid duplicate entries
-                    if ((await channel.GetUsersAsync().FlattenAsync()).Any(u => u.Id == guildUser.Id) || guildUser.Id == client.CurrentUser.Id)
+                    if ((await channel.GetUsersAsync().FlattenAsync()).Any(u => u.Id == guildUser.Id) ||
+                        guildUser.Id == client.CurrentUser.Id)
                         continue;
 
                     // Only add a reasonable number of users to avoid hitting Discord's limits
@@ -938,7 +985,8 @@ public class CustomVoiceSlash(DiscordShardedClient client, IDataConnectionFactor
                     {
                         try
                         {
-                            var allowedUsers = JsonSerializer.Deserialize<List<ulong>>(updatedCustomChannel.AllowedUsersJson);
+                            var allowedUsers =
+                                JsonSerializer.Deserialize<List<ulong>>(updatedCustomChannel.AllowedUsersJson);
                             isAllowed = allowedUsers?.Contains(guildUser.Id) == true;
                         }
                         catch { }
@@ -948,7 +996,8 @@ public class CustomVoiceSlash(DiscordShardedClient client, IDataConnectionFactor
                     {
                         try
                         {
-                            var deniedUsers = JsonSerializer.Deserialize<List<ulong>>(updatedCustomChannel.DeniedUsersJson);
+                            var deniedUsers =
+                                JsonSerializer.Deserialize<List<ulong>>(updatedCustomChannel.DeniedUsersJson);
                             isDenied = deniedUsers?.Contains(guildUser.Id) == true;
                         }
                         catch { }
@@ -1007,7 +1056,8 @@ public class CustomVoiceSlash(DiscordShardedClient client, IDataConnectionFactor
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error updating voice controls message for channel {ChannelId}", customChannel.ChannelId);
+            logger.LogError(ex, "Error updating voice controls message for channel {ChannelId}",
+                customChannel.ChannelId);
         }
     }
 }

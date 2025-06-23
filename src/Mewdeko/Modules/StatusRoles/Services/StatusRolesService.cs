@@ -1,5 +1,5 @@
-﻿using LinqToDB;
-using Serilog;
+﻿using DataModel;
+using LinqToDB;
 using ZiggyCreatures.Caching.Fusion;
 
 namespace Mewdeko.Modules.StatusRoles.Services;
@@ -12,7 +12,8 @@ public class StatusRolesService : INService
     private readonly IFusionCache cache;
     private readonly DiscordShardedClient client;
     private readonly IDataConnectionFactory dbFactory;
-    private readonly ConcurrentDictionary<ulong, HashSet<DataModel.StatusRole>> guildStatusRoles = new();
+    private readonly ConcurrentDictionary<ulong, HashSet<StatusRole>> guildStatusRoles = new();
+    private readonly ILogger<StatusRolesService> logger;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="StatusRolesService" /> class.
@@ -22,11 +23,12 @@ public class StatusRolesService : INService
     /// <param name="eventHandler">The event handler.</param>
     /// <param name="cache">The data cache service.</param>
     public StatusRolesService(DiscordShardedClient client, IDataConnectionFactory dbFactory, EventHandler eventHandler,
-        IFusionCache cache)
+        IFusionCache cache, ILogger<StatusRolesService> logger)
     {
         this.client = client;
         this.dbFactory = dbFactory;
         this.cache = cache;
+        this.logger = logger;
         eventHandler.PresenceUpdated += EventHandlerOnPresenceUpdated;
         _ = OnReadyAsync();
     }
@@ -36,7 +38,7 @@ public class StatusRolesService : INService
     /// </summary>
     private async Task OnReadyAsync()
     {
-        Log.Information("Starting {Type} Cache", GetType());
+        logger.LogInformation("Starting {Type} Cache", GetType());
         await using var dbContext = await dbFactory.CreateConnectionAsync();
 
         var statusRoles = await dbContext.StatusRoles.ToListAsync();
@@ -54,10 +56,10 @@ public class StatusRolesService : INService
 
         await cache.SetAsync("statusRoles", statusRoles);
 
-        Log.Information("StatusRoles cached");
+        logger.LogInformation("StatusRoles cached");
     }
 
-    private async Task<List<DataModel.StatusRole>> GetStatusRolesAsync()
+    private async Task<List<StatusRole>> GetStatusRolesAsync()
     {
         var cacheResult = await cache.GetOrSetAsync("statusRoles", async () =>
         {
@@ -93,7 +95,7 @@ public class StatusRolesService : INService
     }
 
     private async Task ProcessStatusRole(SocketGuildUser user, CustomStatusGame status, CustomStatusGame? beforeStatus,
-        DataModel.StatusRole? statusRole)
+        StatusRole? statusRole)
     {
         var toAdd = string.IsNullOrWhiteSpace(statusRole.ToAdd)
             ? []
@@ -118,7 +120,7 @@ public class StatusRolesService : INService
         await HandleRoleAddition(user, statusRole, toAdd, toRemove);
     }
 
-    private async Task HandleRoleRemoval(SocketGuildUser user, DataModel.StatusRole statusRole, List<ulong> toAdd,
+    private async Task HandleRoleRemoval(SocketGuildUser user, StatusRole statusRole, List<ulong> toAdd,
         List<ulong> toRemove)
     {
         if (statusRole.RemoveAdded)
@@ -132,7 +134,7 @@ public class StatusRolesService : INService
         }
     }
 
-    private async Task HandleRoleAddition(SocketGuildUser user, DataModel.StatusRole statusRole, List<ulong> toAdd,
+    private async Task HandleRoleAddition(SocketGuildUser user, StatusRole statusRole, List<ulong> toAdd,
         List<ulong> toRemove)
     {
         await RemoveRoles(user, toRemove);
@@ -145,7 +147,7 @@ public class StatusRolesService : INService
         }
     }
 
-    private static async Task RemoveRoles(SocketGuildUser user, IEnumerable<ulong> roleIds)
+    private async Task RemoveRoles(SocketGuildUser user, IEnumerable<ulong> roleIds)
     {
         try
         {
@@ -153,11 +155,11 @@ public class StatusRolesService : INService
         }
         catch
         {
-            Log.Error("Unable to remove statusroles in {Guild} due to permission issues", user.Guild);
+            logger.LogError("Unable to remove statusroles in {Guild} due to permission issues", user.Guild);
         }
     }
 
-    private static async Task AddRoles(SocketGuildUser user, IEnumerable<ulong> roleIds)
+    private async Task AddRoles(SocketGuildUser user, IEnumerable<ulong> roleIds)
     {
         try
         {
@@ -165,7 +167,7 @@ public class StatusRolesService : INService
         }
         catch
         {
-            Log.Error("Unable to add statusroles in {Guild} due to permission issues", user.Guild);
+            logger.LogError("Unable to add statusroles in {Guild} due to permission issues", user.Guild);
         }
     }
 
@@ -197,7 +199,7 @@ public class StatusRolesService : INService
         if (await dbContext.StatusRoles.AnyAsync(x => x.GuildId == guildId && x.Status == status))
             return false;
 
-        var toAdd = new DataModel.StatusRole
+        var toAdd = new StatusRole
         {
             Status = status, GuildId = guildId
         };
@@ -246,7 +248,7 @@ public class StatusRolesService : INService
     ///     Removes a status role configuration.
     /// </summary>
     /// <param name="status">The status role configuration to remove.</param>
-    public async Task RemoveStatusRoleConfig(DataModel.StatusRole status)
+    public async Task RemoveStatusRoleConfig(StatusRole status)
     {
         try
         {
@@ -265,7 +267,7 @@ public class StatusRolesService : INService
         }
         catch (Exception e)
         {
-            Log.Error(e, "Error removing status role config");
+            logger.LogError(e, "Error removing status role config");
         }
     }
 
@@ -274,7 +276,7 @@ public class StatusRolesService : INService
     /// </summary>
     /// <param name="guildId">The ID of the guild.</param>
     /// <returns>The set of status role configurations for the guild.</returns>
-    public Task<HashSet<DataModel.StatusRole>> GetStatusRoleConfig(ulong guildId)
+    public Task<HashSet<StatusRole>> GetStatusRoleConfig(ulong guildId)
     {
         return Task.FromResult(guildStatusRoles.GetValueOrDefault(guildId, []));
     }
@@ -285,7 +287,7 @@ public class StatusRolesService : INService
     /// <param name="status">The status role configuration.</param>
     /// <param name="toAdd">The IDs of the roles to add.</param>
     /// <returns>True if the roles were successfully set; otherwise, false.</returns>
-    public async Task<bool> SetAddRoles(DataModel.StatusRole status, string toAdd)
+    public async Task<bool> SetAddRoles(StatusRole status, string toAdd)
     {
         return await UpdateStatusRoleConfig(status, s => s.ToAdd = toAdd);
     }
@@ -296,7 +298,7 @@ public class StatusRolesService : INService
     /// <param name="status">The status role configuration.</param>
     /// <param name="toRemove">The IDs of the roles to remove.</param>
     /// <returns>True if the roles were successfully set; otherwise, false.</returns>
-    public async Task<bool> SetRemoveRoles(DataModel.StatusRole status, string toRemove)
+    public async Task<bool> SetRemoveRoles(StatusRole status, string toRemove)
     {
         return await UpdateStatusRoleConfig(status, s => s.ToRemove = toRemove);
     }
@@ -307,7 +309,7 @@ public class StatusRolesService : INService
     /// <param name="status">The status role configuration.</param>
     /// <param name="channelId">The ID of the channel.</param>
     /// <returns>True if the channel was successfully set; otherwise, false.</returns>
-    public async Task<bool> SetStatusChannel(DataModel.StatusRole status, ulong channelId)
+    public async Task<bool> SetStatusChannel(StatusRole status, ulong channelId)
     {
         return await UpdateStatusRoleConfig(status, s => s.StatusChannelId = channelId);
     }
@@ -318,7 +320,7 @@ public class StatusRolesService : INService
     /// <param name="status">The status role configuration.</param>
     /// <param name="embedText">The embed text to set.</param>
     /// <returns>True if the embed text was successfully set; otherwise, false.</returns>
-    public async Task<bool> SetStatusEmbed(DataModel.StatusRole status, string embedText)
+    public async Task<bool> SetStatusEmbed(StatusRole status, string embedText)
     {
         return await UpdateStatusRoleConfig(status, s => s.StatusEmbed = embedText);
     }
@@ -328,7 +330,7 @@ public class StatusRolesService : INService
     /// </summary>
     /// <param name="status">The status role configuration.</param>
     /// <returns>True if the toggle was successful; otherwise, false.</returns>
-    public async Task<bool> ToggleRemoveAdded(DataModel.StatusRole status)
+    public async Task<bool> ToggleRemoveAdded(StatusRole status)
     {
         return await UpdateStatusRoleConfig(status, s => s.RemoveAdded = !s.RemoveAdded);
     }
@@ -338,12 +340,12 @@ public class StatusRolesService : INService
     /// </summary>
     /// <param name="status">The status role configuration.</param>
     /// <returns>True if the toggle was successful; otherwise, false.</returns>
-    public async Task<bool> ToggleAddRemoved(DataModel.StatusRole status)
+    public async Task<bool> ToggleAddRemoved(StatusRole status)
     {
         return await UpdateStatusRoleConfig(status, s => s.ReaddRemoved = !s.ReaddRemoved);
     }
 
-    private async Task<bool> UpdateStatusRoleConfig(DataModel.StatusRole status, Action<DataModel.StatusRole> updateAction)
+    private async Task<bool> UpdateStatusRoleConfig(StatusRole status, Action<StatusRole> updateAction)
     {
         await using var dbContext = await dbFactory.CreateConnectionAsync();
 

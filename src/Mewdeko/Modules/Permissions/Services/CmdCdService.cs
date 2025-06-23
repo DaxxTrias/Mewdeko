@@ -15,7 +15,7 @@ public class CmdCdService : ILateBlocker, INService
     private readonly IDataConnectionFactory dbFactory;
 
     /// <summary>
-    ///     Initializes a new instance of the <see cref="CmdCdService"/> class.
+    ///     Initializes a new instance of the <see cref="CmdCdService" /> class.
     /// </summary>
     /// <param name="dbFactory">The database connection factory.</param>
     public CmdCdService(IDataConnectionFactory dbFactory)
@@ -119,8 +119,7 @@ public class CmdCdService : ILateBlocker, INService
 
         activeCdsForGuild.Add(new ActiveCooldown
         {
-            UserId = user.Id,
-            Command = commandName
+            UserId = user.Id, Command = commandName
         });
 
         _ = Task.Run(async () =>

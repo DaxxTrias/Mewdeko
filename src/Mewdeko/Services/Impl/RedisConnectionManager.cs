@@ -9,7 +9,7 @@ namespace Mewdeko.Services.Impl;
 public static class RedisConnectionManager
 {
     /// <summary>
-    /// Ze redis
+    ///     Ze redis
     /// </summary>
     public static ConnectionMultiplexer? Connection;
 
@@ -28,10 +28,10 @@ public static class RedisConnectionManager
         {
             AbortOnConnectFail = false,
             SocketManager = new SocketManager("", true),
-            AsyncTimeout = 30000,        // Increase timeout
-            SyncTimeout = 30000,         // Increase timeout
-            ConnectTimeout = 30000,      // Increase timeout
-            ConnectRetry = 5,            // Add retry count
+            AsyncTimeout = 30000, // Increase timeout
+            SyncTimeout = 30000, // Increase timeout
+            ConnectTimeout = 30000, // Increase timeout
+            ConnectRetry = 5, // Add retry count
             ReconnectRetryPolicy = new ExponentialRetry(5000), // Add retry policy
             DefaultDatabase = shardCount > 1 ? 8 : 0
         };
@@ -46,11 +46,13 @@ public static class RedisConnectionManager
         {
             Connection = ConnectionMultiplexer.Connect(configurationOptions);
 
-            Connection.ConnectionFailed += (sender, args) => {
+            Connection.ConnectionFailed += (sender, args) =>
+            {
                 Log.Warning("Redis connection failed: {0}", args.Exception.Message);
             };
 
-            Connection.ConnectionRestored += (sender, args) => {
+            Connection.ConnectionRestored += (sender, args) =>
+            {
                 Log.Information("Redis connection restored");
             };
         }

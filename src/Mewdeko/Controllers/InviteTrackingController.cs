@@ -1,22 +1,22 @@
-﻿using Microsoft.AspNetCore.Authorization;
+﻿using Mewdeko.Modules.Utility.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Mewdeko.Modules.Utility.Services;
 
 namespace Mewdeko.Controllers;
 
 /// <summary>
-/// Controller for managing invite tracking and statistics
+///     Controller for managing invite tracking and statistics
 /// </summary>
 [ApiController]
 [Route("botapi/[controller]/{guildId}")]
 [Authorize("ApiKeyPolicy")]
 public class InviteTrackingController : Controller
 {
-    private readonly InviteCountService inviteService;
     private readonly DiscordShardedClient client;
+    private readonly InviteCountService inviteService;
 
     /// <summary>
-    /// Initializes a new instance of the InviteTrackingController
+    ///     Initializes a new instance of the InviteTrackingController
     /// </summary>
     public InviteTrackingController(InviteCountService inviteService, DiscordShardedClient client)
     {
@@ -25,7 +25,7 @@ public class InviteTrackingController : Controller
     }
 
     /// <summary>
-    /// Gets invite tracking settings for a guild
+    ///     Gets invite tracking settings for a guild
     /// </summary>
     [HttpGet("settings")]
     public async Task<IActionResult> GetSettings(ulong guildId)
@@ -35,7 +35,7 @@ public class InviteTrackingController : Controller
     }
 
     /// <summary>
-    /// Enables or disables invite tracking for a guild
+    ///     Enables or disables invite tracking for a guild
     /// </summary>
     [HttpPost("toggle")]
     public async Task<IActionResult> ToggleInviteTracking(ulong guildId, [FromBody] bool enabled)
@@ -45,7 +45,7 @@ public class InviteTrackingController : Controller
     }
 
     /// <summary>
-    /// Sets whether invites should be removed when users leave
+    ///     Sets whether invites should be removed when users leave
     /// </summary>
     [HttpPost("remove-on-leave")]
     public async Task<IActionResult> SetRemoveOnLeave(ulong guildId, [FromBody] bool removeOnLeave)
@@ -55,7 +55,7 @@ public class InviteTrackingController : Controller
     }
 
     /// <summary>
-    /// Sets minimum account age for invite counting
+    ///     Sets minimum account age for invite counting
     /// </summary>
     [HttpPost("min-age")]
     public async Task<IActionResult> SetMinAccountAge(ulong guildId, [FromBody] string minAge)
@@ -66,7 +66,7 @@ public class InviteTrackingController : Controller
     }
 
     /// <summary>
-    /// Gets invites for a specific user
+    ///     Gets invites for a specific user
     /// </summary>
     [HttpGet("count/{userId}")]
     public async Task<IActionResult> GetInviteCount(ulong guildId, ulong userId)
@@ -76,7 +76,7 @@ public class InviteTrackingController : Controller
     }
 
     /// <summary>
-    /// Gets who invited a specific user
+    ///     Gets who invited a specific user
     /// </summary>
     [HttpGet("inviter/{userId}")]
     public async Task<IActionResult> GetInviter(ulong guildId, ulong userId)
@@ -91,15 +91,12 @@ public class InviteTrackingController : Controller
 
         return Ok(new
         {
-            inviter.Id,
-            inviter.Username,
-            inviter.Discriminator,
-            AvatarUrl = inviter.GetAvatarUrl()
+            inviter.Id, inviter.Username, inviter.Discriminator, AvatarUrl = inviter.GetAvatarUrl()
         });
     }
 
     /// <summary>
-    /// Gets all users invited by a specific user
+    ///     Gets all users invited by a specific user
     /// </summary>
     [HttpGet("invited/{userId}")]
     public async Task<IActionResult> GetInvitedUsers(ulong guildId, ulong userId)
@@ -111,20 +108,18 @@ public class InviteTrackingController : Controller
         var invitedUsers = await inviteService.GetInvitedUsers(userId, guild);
         var result = invitedUsers.Select(user => new
         {
-            user.Id,
-            user.Username,
-            user.Discriminator,
-            AvatarUrl = user.GetAvatarUrl()
+            user.Id, user.Username, user.Discriminator, AvatarUrl = user.GetAvatarUrl()
         });
 
         return Ok(result);
     }
 
     /// <summary>
-    /// Gets the invite leaderboard for a guild
+    ///     Gets the invite leaderboard for a guild
     /// </summary>
     [HttpGet("leaderboard")]
-    public async Task<IActionResult> GetLeaderboard(ulong guildId, [FromQuery] int page = 1, [FromQuery] int pageSize = 10)
+    public async Task<IActionResult> GetLeaderboard(ulong guildId, [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10)
     {
         var guild = client.GetGuild(guildId);
         if (guild == null)
@@ -133,9 +128,7 @@ public class InviteTrackingController : Controller
         var leaderboard = await inviteService.GetInviteLeaderboardAsync(guild, page, pageSize);
         return Ok(leaderboard.Select(entry => new
         {
-            entry.UserId,
-            entry.Username,
-            entry.InviteCount
+            entry.UserId, entry.Username, entry.InviteCount
         }));
     }
 }

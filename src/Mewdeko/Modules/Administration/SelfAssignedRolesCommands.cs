@@ -155,7 +155,8 @@ public partial class Administration
             if (!success)
                 await ReplyErrorAsync(Strings.SelfAssignNot(ctx.Guild.Id)).ConfigureAwait(false);
             else
-                await ReplyConfirmAsync(Strings.SelfAssignRem(ctx.Guild.Id, Format.Bold(role.Name))).ConfigureAwait(false);
+                await ReplyConfirmAsync(Strings.SelfAssignRem(ctx.Guild.Id, Format.Bold(role.Name)))
+                    .ConfigureAwait(false);
         }
 
         /// <summary>
@@ -304,7 +305,8 @@ public partial class Administration
                 SelfAssignedRolesService.AssignResult.ErrAlreadyHave => await ReplyErrorAsync(
                         Strings.SelfAssignAlready(ctx.Guild.Id, Format.Bold(role.Name)))
                     .ConfigureAwait(false),
-                SelfAssignedRolesService.AssignResult.ErrNotPerms => await ReplyErrorAsync(Strings.SelfAssignPerms(ctx.Guild.Id))
+                SelfAssignedRolesService.AssignResult.ErrNotPerms => await ReplyErrorAsync(
+                        Strings.SelfAssignPerms(ctx.Guild.Id))
                     .ConfigureAwait(false),
                 _ => await ReplyConfirmAsync(Strings.SelfAssignSuccess(ctx.Guild.Id, Format.Bold(role.Name)))
                     .ConfigureAwait(false)

@@ -10,5 +10,5 @@ public interface IApiKeyValidation
     /// </summary>
     /// <param name="userApiKey">The key to check</param>
     /// <returns>True/False depending on if its correct</returns>
-    bool IsValidApiKey(string userApiKey);
+    public bool IsValidApiKey(string userApiKey);
 }

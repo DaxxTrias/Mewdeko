@@ -3,7 +3,6 @@ using Humanizer;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Common.TypeReaders.Models;
 using Mewdeko.Modules.Moderation.Services;
-using Serilog;
 using PermValue = Discord.PermValue;
 
 namespace Mewdeko.Modules.Moderation;
@@ -17,7 +16,7 @@ public partial class Moderation
     ///     Module for muting and unmuting users.
     /// </summary>
     [Group]
-    public class MuteCommands : MewdekoSubmodule<MuteService>
+    public class MuteCommands(ILogger<MuteCommands> logger) : MewdekoSubmodule<MuteService>
     {
         /// <summary>
         ///     Whats there not to understand? Shuts a user the fuck up.
@@ -58,7 +57,8 @@ public partial class Moderation
             }
             else
             {
-                await ctx.Channel.SendErrorAsync(Strings.RemoveRolesMuteInvalid(ctx.Guild.Id), Config).ConfigureAwait(false);
+                await ctx.Channel.SendErrorAsync(Strings.RemoveRolesMuteInvalid(ctx.Guild.Id), Config)
+                    .ConfigureAwait(false);
             }
         }
 
@@ -86,7 +86,9 @@ public partial class Moderation
             {
                 await channel.AddPermissionOverwriteAsync(user, currentPerms.Modify(sendMessages: PermValue.Deny))
                     .ConfigureAwait(false);
-                await ctx.Channel.SendConfirmAsync(Strings.UserChannelMutedTime(ctx.Guild.Id, user, time.Time.Humanize())).ConfigureAwait(false);
+                await ctx.Channel
+                    .SendConfirmAsync(Strings.UserChannelMutedTime(ctx.Guild.Id, user, time.Time.Humanize()))
+                    .ConfigureAwait(false);
                 await Task.Delay((int)time.Time.TotalMilliseconds).ConfigureAwait(false);
                 try
                 {
@@ -126,14 +128,15 @@ public partial class Moderation
                 if (reason is null)
                 {
                     if (await PromptUserConfirmAsync(
-                            new EmbedBuilder().WithOkColor()
-                                .WithDescription(Strings.UnmuteAllReasonPrompt(ctx.Guild.Id)), ctx.User.Id)
+                                new EmbedBuilder().WithOkColor()
+                                    .WithDescription(Strings.UnmuteAllReasonPrompt(ctx.Guild.Id)), ctx.User.Id)
                             .ConfigureAwait(false))
                     {
                         var msg = await ctx.Channel.SendMessageAsync(Strings.UnmuteAllReasonRequest(ctx.Guild.Id));
 
                         reason = await NextMessageAsync(ctx.Channel.Id, ctx.User.Id).ConfigureAwait(false);
-                        var eb = new EmbedBuilder().WithDescription(Strings.UnmuteAllProgress(ctx.Guild.Id, users.Count()));
+                        var eb = new EmbedBuilder().WithDescription(
+                            Strings.UnmuteAllProgress(ctx.Guild.Id, users.Count()));
                         await msg.ModifyAsync(x => x.Embed = eb.Build()).ConfigureAwait(false);
                         foreach (var i in users)
                         {
@@ -179,7 +182,8 @@ public partial class Moderation
                     {
                         try
                         {
-                            await Service.UnmuteUser(i.GuildId, i.Id, ctx.User, MuteType.All, reason).ConfigureAwait(false);
+                            await Service.UnmuteUser(i.GuildId, i.Id, ctx.User, MuteType.All, reason)
+                                .ConfigureAwait(false);
                         }
                         catch
                         {
@@ -264,7 +268,7 @@ public partial class Moderation
             }
             catch (Exception ex)
             {
-                Log.Warning(ex.ToString());
+                logger.LogWarning(ex.ToString());
                 await ReplyErrorAsync(Strings.MuteError(ctx.Guild.Id)).ConfigureAwait(false);
             }
         }
@@ -312,7 +316,7 @@ public partial class Moderation
             }
             catch (Exception ex)
             {
-                Log.Warning(ex, "Error in mute command");
+                logger.LogWarning(ex, "Error in mute command");
                 await ReplyErrorAsync(Strings.MuteError(ctx.Guild.Id)).ConfigureAwait(false);
             }
         }
@@ -365,7 +369,7 @@ public partial class Moderation
             }
             catch (Exception ex)
             {
-                Log.Warning(ex.ToString());
+                logger.LogWarning(ex.ToString());
                 await ReplyErrorAsync(Strings.MuteError(ctx.Guild.Id)).ConfigureAwait(false);
             }
         }
@@ -452,7 +456,7 @@ public partial class Moderation
             }
             catch (Exception ex)
             {
-                Log.Warning(ex.ToString());
+                logger.LogWarning(ex.ToString());
                 await ReplyErrorAsync(Strings.MuteError(ctx.Guild.Id)).ConfigureAwait(false);
             }
         }

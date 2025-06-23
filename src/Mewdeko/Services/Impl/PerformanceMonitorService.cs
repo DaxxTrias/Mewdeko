@@ -3,24 +3,25 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading;
-using Serilog;
 
 namespace Mewdeko.Services.Impl;
 
 /// <summary>
-/// Service that automatically monitors performance across entire namespaces and assemblies.
+///     Service that automatically monitors performance across entire namespaces and assemblies.
 /// </summary>
 public class PerformanceMonitorService : INService, IDisposable
 {
+    private readonly ILogger<PerformanceMonitorService> logger;
     private readonly ConcurrentDictionary<string, MethodPerformanceData> methodPerformanceData = new();
     private bool initialized;
     private Timer? performanceTimer;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="PerformanceMonitorService"/> class.
+    ///     Initializes a new instance of the <see cref="PerformanceMonitorService" /> class.
     /// </summary>
-    public PerformanceMonitorService()
+    public PerformanceMonitorService(ILogger<PerformanceMonitorService> logger)
     {
+        this.logger = logger;
         Process.GetCurrentProcess();
 
         // Log performance data every 5 minutes
@@ -28,7 +29,7 @@ public class PerformanceMonitorService : INService, IDisposable
     }
 
     /// <summary>
-    /// Disposes the performance monitor service and cleans up resources.
+    ///     Disposes the performance monitor service and cleans up resources.
     /// </summary>
     public void Dispose()
     {
@@ -37,7 +38,7 @@ public class PerformanceMonitorService : INService, IDisposable
     }
 
     /// <summary>
-    /// Initializes performance monitoring for the specified namespace in the given assembly.
+    ///     Initializes performance monitoring for the specified namespace in the given assembly.
     /// </summary>
     /// <param name="assembly">The assembly to monitor.</param>
     /// <param name="namespaceToMonitor">The namespace to monitor (can be a parent namespace).</param>
@@ -46,7 +47,7 @@ public class PerformanceMonitorService : INService, IDisposable
         if (initialized)
             return;
 
-        Log.Information(
+        logger.LogInformation(
             $"Initializing performance monitoring for namespace {namespaceToMonitor} in assembly {assembly.GetName().Name}");
 
         try
@@ -60,7 +61,7 @@ public class PerformanceMonitorService : INService, IDisposable
                                type.IsClass)
                 .ToList();
 
-            Log.Information($"Found {types.Count} types to monitor in namespace {namespaceToMonitor}");
+            logger.LogInformation($"Found {types.Count} types to monitor in namespace {namespaceToMonitor}");
 
             // Register for dynamic proxy creation
             foreach (var type in types)
@@ -72,14 +73,14 @@ public class PerformanceMonitorService : INService, IDisposable
         }
         catch (Exception ex)
         {
-            Log.Error(ex, $"Error initializing performance monitoring for namespace {namespaceToMonitor}");
+            logger.LogError(ex, $"Error initializing performance monitoring for namespace {namespaceToMonitor}");
         }
     }
 
     /// <summary>
-    /// Uses reflection to hook into methods for performance monitoring.
-    /// Note: This is a basic implementation. For production use, consider
-    /// using library-based interception like Castle DynamicProxy.
+    ///     Uses reflection to hook into methods for performance monitoring.
+    ///     Note: This is a basic implementation. For production use, consider
+    ///     using library-based interception like Castle DynamicProxy.
     /// </summary>
     /// <param name="type">The type to instrument.</param>
     private void InstrumentTypeWithReflection(Type type)
@@ -92,7 +93,7 @@ public class PerformanceMonitorService : INService, IDisposable
                         !m.GetCustomAttributes(typeof(CompilerGeneratedAttribute), true).Any())
             .ToList();
 
-        Log.Debug($"Instrumenting {methods.Count} methods in type {type.FullName}");
+        logger.LogDebug($"Instrumenting {methods.Count} methods in type {type.FullName}");
 
         // Record the type and its methods for monitoring
         foreach (var method in methods)
@@ -103,7 +104,7 @@ public class PerformanceMonitorService : INService, IDisposable
     }
 
     /// <summary>
-    /// Manually tracks method execution for methods that can't be auto-instrumented.
+    ///     Manually tracks method execution for methods that can't be auto-instrumented.
     /// </summary>
     /// <param name="methodName">The name of the method.</param>
     /// <param name="executionTime">The execution time.</param>
@@ -120,7 +121,7 @@ public class PerformanceMonitorService : INService, IDisposable
     }
 
     /// <summary>
-    /// Creates a performance measurement tracker for manually instrumenting methods.
+    ///     Creates a performance measurement tracker for manually instrumenting methods.
     /// </summary>
     /// <param name="methodName">The name of the method to track.</param>
     /// <returns>An IDisposable that will record the execution time when disposed.</returns>
@@ -130,7 +131,7 @@ public class PerformanceMonitorService : INService, IDisposable
     }
 
     /// <summary>
-    /// Gets the top CPU-intensive methods based on execution time.
+    ///     Gets the top CPU-intensive methods based on execution time.
     /// </summary>
     /// <param name="count">The number of methods to return.</param>
     /// <returns>An array of method performance data ordered by execution time.</returns>
@@ -144,7 +145,7 @@ public class PerformanceMonitorService : INService, IDisposable
     }
 
     /// <summary>
-    /// Gets the most frequently called methods.
+    ///     Gets the most frequently called methods.
     /// </summary>
     /// <param name="count">The number of methods to return.</param>
     /// <returns>An array of method performance data ordered by call count.</returns>
@@ -157,7 +158,7 @@ public class PerformanceMonitorService : INService, IDisposable
     }
 
     /// <summary>
-    /// Clears all collected performance data.
+    ///     Clears all collected performance data.
     /// </summary>
     public void ClearPerformanceData()
     {
@@ -168,7 +169,7 @@ public class PerformanceMonitorService : INService, IDisposable
     }
 
     /// <summary>
-    /// Logs the current performance data to the configured logger.
+    ///     Logs the current performance data to the configured logger.
     /// </summary>
     /// <param name="state">The state object passed to the timer callback.</param>
     private void LogPerformanceData(object state)
@@ -190,16 +191,16 @@ public class PerformanceMonitorService : INService, IDisposable
                           $"called {method.CallCount} times");
         }
 
-        Log.Information(sb.ToString());
+        logger.LogInformation(sb.ToString());
     }
 
     /// <summary>
-    /// Represents performance data for a single method.
+    ///     Represents performance data for a single method.
     /// </summary>
     public class MethodPerformanceData
     {
         /// <summary>
-        /// Initializes a new instance of the <see cref="MethodPerformanceData"/> class.
+        ///     Initializes a new instance of the <see cref="MethodPerformanceData" /> class.
         /// </summary>
         /// <param name="methodName">The name of the method.</param>
         public MethodPerformanceData(string methodName)
@@ -213,7 +214,7 @@ public class PerformanceMonitorService : INService, IDisposable
         }
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="MethodPerformanceData"/> class with an initial execution.
+        ///     Initializes a new instance of the <see cref="MethodPerformanceData" /> class with an initial execution.
         /// </summary>
         /// <param name="methodName">The name of the method.</param>
         /// <param name="initialExecutionTime">The execution time of the first call.</param>
@@ -223,42 +224,42 @@ public class PerformanceMonitorService : INService, IDisposable
         }
 
         /// <summary>
-        /// Gets the name of the method being tracked.
+        ///     Gets the name of the method being tracked.
         /// </summary>
         public string MethodName { get; }
 
         /// <summary>
-        /// Gets the number of times this method has been called.
+        ///     Gets the number of times this method has been called.
         /// </summary>
         public int CallCount { get; private set; }
 
         /// <summary>
-        /// Gets the total execution time across all calls to this method.
+        ///     Gets the total execution time across all calls to this method.
         /// </summary>
         public TimeSpan TotalExecutionTime { get; private set; }
 
         /// <summary>
-        /// Gets the timestamp of the last execution of this method.
+        ///     Gets the timestamp of the last execution of this method.
         /// </summary>
         public DateTime LastExecuted { get; private set; }
 
         /// <summary>
-        /// Gets the maximum execution time observed for this method.
+        ///     Gets the maximum execution time observed for this method.
         /// </summary>
         public TimeSpan MaxExecutionTime { get; private set; }
 
         /// <summary>
-        /// Gets the minimum execution time observed for this method.
+        ///     Gets the minimum execution time observed for this method.
         /// </summary>
         public TimeSpan MinExecutionTime { get; private set; }
 
         /// <summary>
-        /// Gets the average execution time per call in milliseconds.
+        ///     Gets the average execution time per call in milliseconds.
         /// </summary>
         public double AvgExecutionTime => CallCount > 0 ? TotalExecutionTime.TotalMilliseconds / CallCount : 0;
 
         /// <summary>
-        /// Records an additional execution of this method.
+        ///     Records an additional execution of this method.
         /// </summary>
         /// <param name="executionTime">The execution time of the additional call.</param>
         public void AddExecution(TimeSpan executionTime)
@@ -277,7 +278,7 @@ public class PerformanceMonitorService : INService, IDisposable
         }
 
         /// <summary>
-        /// Resets the performance data.
+        ///     Resets the performance data.
         /// </summary>
         public void Reset()
         {
@@ -290,7 +291,7 @@ public class PerformanceMonitorService : INService, IDisposable
     }
 
     /// <summary>
-    /// Tracks the execution time of a method and reports it when disposed.
+    ///     Tracks the execution time of a method and reports it when disposed.
     /// </summary>
     private class MethodPerformanceTracker : IDisposable
     {
@@ -299,7 +300,7 @@ public class PerformanceMonitorService : INService, IDisposable
         private readonly Stopwatch stopwatch;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="MethodPerformanceTracker"/> class.
+        ///     Initializes a new instance of the <see cref="MethodPerformanceTracker" /> class.
         /// </summary>
         /// <param name="service">The performance monitor service.</param>
         /// <param name="methodName">The name of the method being tracked.</param>
@@ -311,7 +312,7 @@ public class PerformanceMonitorService : INService, IDisposable
         }
 
         /// <summary>
-        /// Records the method execution time when disposed.
+        ///     Records the method execution time when disposed.
         /// </summary>
         public void Dispose()
         {

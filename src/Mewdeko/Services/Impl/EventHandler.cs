@@ -1,7 +1,6 @@
 ﻿using System.Diagnostics;
 using System.Threading;
 using Discord.Rest;
-using Microsoft.Extensions.Logging;
 using Serilog;
 
 namespace Mewdeko.Services.Impl;
@@ -16,6 +15,7 @@ public sealed class EventHandler : IDisposable
 
     // Metrics tracking
     private readonly ConcurrentDictionary<string, EventMetrics> eventMetrics = new();
+    private readonly ILogger<EventHandler> logger;
     private readonly BatchedEventProcessor<SocketMessage> messageProcessor;
     private readonly Timer metricsResetTimer;
     private readonly ConcurrentDictionary<string, ModuleMetrics> moduleMetrics = new();
@@ -53,6 +53,7 @@ public sealed class EventHandler : IDisposable
     {
         this.client = client ?? throw new ArgumentNullException(nameof(client));
         this.perfService = perfService ?? throw new ArgumentNullException(nameof(perfService));
+        this.logger = logger;
         this.options = options ?? throw new ArgumentNullException(nameof(options));
 
         // Initialize rate limiters
@@ -74,7 +75,7 @@ public sealed class EventHandler : IDisposable
         RegisterEvents();
         StartBatchProcessors();
 
-        Log.Information("EventHandler initialized with {Options}", this.options);
+        logger.LogInformation("EventHandler initialized with {Options}", this.options);
     }
 
     #region Event Execution
@@ -703,7 +704,7 @@ public sealed class EventHandler : IDisposable
                 break;
 
             default:
-                Log.Warning("Unknown event type for execution: {EventType}", eventType);
+                logger.LogWarning("Unknown event type for execution: {EventType}", eventType);
                 break;
         }
     }
@@ -742,7 +743,7 @@ public sealed class EventHandler : IDisposable
                 return newList;
             });
 
-        Log.Warning("Module {ModuleName} subscribed to string event {EventName} with priority {Priority}",
+        logger.LogWarning("Module {ModuleName} subscribed to string event {EventName} with priority {Priority}",
             moduleName, eventName, priority);
     }
 
@@ -863,7 +864,7 @@ public sealed class EventHandler : IDisposable
         catch (Exception ex)
         {
             Interlocked.Increment(ref metrics.TotalErrors);
-            Log.Error(ex, "Error processing batch for {EventType}", eventType);
+            logger.LogError(ex, "Error processing batch for {EventType}", eventType);
         }
     }
 
@@ -897,7 +898,7 @@ public sealed class EventHandler : IDisposable
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Error executing batch handler for {EventType} in module {ModuleName}", eventType,
+                logger.LogError(ex, "Error executing batch handler for {EventType} in module {ModuleName}", eventType,
                     moduleName);
             }
         }
@@ -941,7 +942,7 @@ public sealed class EventHandler : IDisposable
         var moduleMetrics = GetOrCreateModuleMetrics(subscription.ModuleName);
         Interlocked.Increment(ref moduleMetrics.Errors);
 
-        Log.Error(ex,
+        logger.LogError(ex,
             "Error in {ModuleName} handler for {EventType}: {ErrorMessage}",
             subscription.ModuleName, eventType, ex.Message);
     }
@@ -1158,22 +1159,22 @@ public sealed class EventHandler : IDisposable
 
     private Task ProcessDirectEvent<T>(string eventType, T args)
     {
-        Log.Debug("ProcessDirectEvent called for {EventType}, disposed: {Disposed}", eventType, disposed);
+        logger.LogDebug("ProcessDirectEvent called for {EventType}, disposed: {Disposed}", eventType, disposed);
 
         if (disposed)
         {
-            Log.Warning("EventHandler is disposed, skipping event {EventType}", eventType);
+            logger.LogWarning("EventHandler is disposed, skipping event {EventType}", eventType);
             return Task.CompletedTask;
         }
 
         if (!stringEventSubscriptions.TryGetValue(eventType, out var handlers))
         {
-            Log.Debug("No subscriptions found for event type {EventType}. Available event types: {EventTypes}",
+            logger.LogDebug("No subscriptions found for event type {EventType}. Available event types: {EventTypes}",
                 eventType, string.Join(", ", stringEventSubscriptions.Keys));
             return Task.CompletedTask;
         }
 
-        Log.Debug("Found {SubscriptionCount} string-based subscriptions for event {EventType}", handlers.Count,
+        logger.LogDebug("Found {SubscriptionCount} string-based subscriptions for event {EventType}", handlers.Count,
             eventType);
         _ = Task.Run(async () =>
         {
@@ -1185,7 +1186,8 @@ public sealed class EventHandler : IDisposable
                 }
                 catch (Exception ex)
                 {
-                    Log.Error(ex, "Error executing subscription for {EventType} in module {ModuleName}", eventType,
+                    logger.LogError(ex, "Error executing subscription for {EventType} in module {ModuleName}",
+                        eventType,
                         moduleName);
                 }
             }
@@ -1256,7 +1258,7 @@ public sealed class EventHandler : IDisposable
             Interlocked.Exchange(ref metric.TotalExecutionTime, 0);
         }
 
-        Log.Warning("Event and module metrics reset");
+        logger.LogWarning("Event and module metrics reset");
     }
 
     #endregion
@@ -1935,18 +1937,18 @@ public sealed class EventHandler : IDisposable
                     }
                     catch (Exception ex)
                     {
-                        Log.Error(ex, "Error unsubscribing {ModuleName} from {EventName}", moduleName, eventName);
+                        logger.LogError(ex, "Error unsubscribing {ModuleName} from {EventName}", moduleName, eventName);
                     }
                 }
             }
 
             stringEventSubscriptions.Clear();
 
-            Log.Information("EventHandler disposed successfully");
+            logger.LogInformation("EventHandler disposed successfully");
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error occurred while disposing EventHandler");
+            logger.LogError(ex, "Error occurred while disposing EventHandler");
         }
     }
 
@@ -2057,7 +2059,7 @@ public interface IEventFilter
     /// <param name="channelId">The channel ID associated with the event, if any.</param>
     /// <param name="userId">The user ID associated with the event, if any.</param>
     /// <returns>True if the event should be processed, false otherwise.</returns>
-    bool ShouldProcess(ulong? guildId, ulong? channelId, ulong? userId);
+    public bool ShouldProcess(ulong? guildId, ulong? channelId, ulong? userId);
 }
 
 /// <summary>
@@ -2068,12 +2070,12 @@ public interface IEventSubscription
     /// <summary>
     ///     Gets the priority of this subscription.
     /// </summary>
-    int Priority { get; }
+    public int Priority { get; }
 
     /// <summary>
     ///     Gets the name of the module that owns this subscription.
     /// </summary>
-    string ModuleName { get; }
+    public string ModuleName { get; }
 }
 
 /// <summary>

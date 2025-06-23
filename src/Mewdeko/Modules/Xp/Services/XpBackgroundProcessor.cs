@@ -6,7 +6,6 @@ using LinqToDB;
 using LinqToDB.Data;
 using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.Xp.Models;
-using Serilog;
 using StackExchange.Redis;
 
 namespace Mewdeko.Modules.Xp.Services;
@@ -35,6 +34,7 @@ public class XpBackgroundProcessor : INService, IDisposable
     private readonly IDataConnectionFactory dbFactory;
     private readonly SemaphoreSlim dbThrottle;
     private readonly Timer decayTimer;
+    private readonly ILogger<XpBackgroundProcessor> logger;
     private readonly TimeSpan maxProcessingInterval = TimeSpan.FromSeconds(5);
     private readonly Timer memoryMonitorTimer;
 
@@ -68,13 +68,14 @@ public class XpBackgroundProcessor : INService, IDisposable
         IDataConnectionFactory dbFactory,
         XpCacheManager cacheManager,
         XpRewardManager rewardManager,
-        XpCompetitionManager competitionManager, DiscordShardedClient client)
+        XpCompetitionManager competitionManager, DiscordShardedClient client, ILogger<XpBackgroundProcessor> logger)
     {
         this.dbFactory = dbFactory;
         this.cacheManager = cacheManager;
         this.rewardManager = rewardManager;
         this.competitionManager = competitionManager;
         this.client = client;
+        this.logger = logger;
 
         // Initialize thread-safe bounded queue with reduced capacity
         xpQueue = new BlockingCollection<XpGainItem>(QueueCapacity);
@@ -88,7 +89,7 @@ public class XpBackgroundProcessor : INService, IDisposable
         cleanupTimer = new Timer(CleanupCaches, null, TimeSpan.FromHours(2), TimeSpan.FromHours(2));
         memoryMonitorTimer = new Timer(LogMemoryStats, null, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5));
 
-        Log.Information(
+        logger.LogInformation(
             "XP Background Processor initialized with queue capacity {Capacity} and {Concurrency} concurrent DB operations",
             QueueCapacity, MaxConcurrentDbOps);
 
@@ -126,11 +127,11 @@ public class XpBackgroundProcessor : INService, IDisposable
             dbThrottle.Dispose();
             xpQueue.Dispose();
 
-            Log.Information("XP Background Processor successfully disposed");
+            logger.LogInformation("XP Background Processor successfully disposed");
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error during XP Background Processor disposal");
+            logger.LogError(ex, "Error during XP Background Processor disposal");
         }
     }
 
@@ -151,14 +152,14 @@ public class XpBackgroundProcessor : INService, IDisposable
                     // Check for memory pressure and force cleanup
                     if (batchingBuffer.Count > MaxBatchingBufferSize)
                     {
-                        Log.Warning("Batching buffer exceeded max size ({MaxSize}), forcing processing",
+                        logger.LogWarning("Batching buffer exceeded max size ({MaxSize}), forcing processing",
                             MaxBatchingBufferSize);
                         ProcessXpBatches(null);
 
                         // If still too large after processing, start dropping items
                         if (batchingBuffer.Count > MaxBatchingBufferSize * 1.5)
                         {
-                            Log.Warning("Dropping XP item due to memory pressure");
+                            logger.LogWarning("Dropping XP item due to memory pressure");
                             continue;
                         }
                     }
@@ -192,7 +193,7 @@ public class XpBackgroundProcessor : INService, IDisposable
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Error in XP background consumer");
+                logger.LogError(ex, "Error in XP background consumer");
             }
         }
     }
@@ -240,7 +241,8 @@ public class XpBackgroundProcessor : INService, IDisposable
                     // If we can't add to the queue and no existing batch, log warning
                     if (Random.Shared.Next(100) == 0) // Only log occasionally to prevent log spam
                     {
-                        Log.Warning("XP queue at capacity ({QueueSize}), using fallback buffering", xpQueue.Count);
+                        logger.LogWarning("XP queue at capacity ({QueueSize}), using fallback buffering",
+                            xpQueue.Count);
                     }
 
                     // Create new batch (could still fail but last resort)
@@ -255,7 +257,7 @@ public class XpBackgroundProcessor : INService, IDisposable
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error queueing XP gain for user {UserId} in guild {GuildId}", userId, guildId);
+            logger.LogError(ex, "Error queueing XP gain for user {UserId} in guild {GuildId}", userId, guildId);
         }
     }
 
@@ -373,7 +375,7 @@ public class XpBackgroundProcessor : INService, IDisposable
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error processing XP batches");
+            logger.LogError(ex, "Error processing XP batches");
         }
         finally
         {
@@ -631,7 +633,7 @@ public class XpBackgroundProcessor : INService, IDisposable
                 }
                 catch (Exception ex)
                 {
-                    Log.Error(ex, "Error processing XP for user {UserId} in guild {GuildId}", userId, guildId);
+                    logger.LogError(ex, "Error processing XP for user {UserId} in guild {GuildId}", userId, guildId);
                 }
             }
 
@@ -650,7 +652,7 @@ public class XpBackgroundProcessor : INService, IDisposable
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error processing guild XP batch for {GuildId}", guildId);
+            logger.LogError(ex, "Error processing guild XP batch for {GuildId}", guildId);
             return 0;
         }
     }
@@ -864,7 +866,7 @@ public class XpBackgroundProcessor : INService, IDisposable
                 {
                     if (attempt == DbMaxRetries - 1)
                     {
-                        Log.Error(ex, "Failed to insert XP records for guild {GuildId} after {Attempts} attempts",
+                        logger.LogError(ex, "Failed to insert XP records for guild {GuildId} after {Attempts} attempts",
                             guildId, DbMaxRetries);
                     }
                     else
@@ -913,7 +915,7 @@ public class XpBackgroundProcessor : INService, IDisposable
                 {
                     if (attempt == DbMaxRetries - 1)
                     {
-                        Log.Error(ex, "Failed to update XP records for guild {GuildId} after {Attempts} attempts",
+                        logger.LogError(ex, "Failed to update XP records for guild {GuildId} after {Attempts} attempts",
                             guildId, DbMaxRetries);
                     }
                     else
@@ -933,7 +935,7 @@ public class XpBackgroundProcessor : INService, IDisposable
     {
         try
         {
-            Log.Information("Starting XP decay processing");
+            logger.LogInformation("Starting XP decay processing");
             var startTime = DateTime.UtcNow;
             var totalGuildsProcessed = 0;
             var totalUsersDecayed = 0;
@@ -949,7 +951,7 @@ public class XpBackgroundProcessor : INService, IDisposable
             if (guildsWithDecay.Count == 0)
                 return;
 
-            Log.Information("Processing XP decay for {Count} guilds with decay enabled", guildsWithDecay.Count);
+            logger.LogInformation("Processing XP decay for {Count} guilds with decay enabled", guildsWithDecay.Count);
 
             // Process guilds sequentially with throttling
             foreach (var settings in guildsWithDecay)
@@ -1015,13 +1017,13 @@ public class XpBackgroundProcessor : INService, IDisposable
                     {
                         totalGuildsProcessed++;
                         totalUsersDecayed += guildDecayed;
-                        Log.Information("Applied XP decay to {Count} inactive users in guild {GuildId}",
+                        logger.LogInformation("Applied XP decay to {Count} inactive users in guild {GuildId}",
                             guildDecayed, settings.GuildId);
                     }
                 }
                 catch (Exception ex)
                 {
-                    Log.Error(ex, "Error processing XP decay for guild {GuildId}", settings.GuildId);
+                    logger.LogError(ex, "Error processing XP decay for guild {GuildId}", settings.GuildId);
                 }
                 finally
                 {
@@ -1030,13 +1032,13 @@ public class XpBackgroundProcessor : INService, IDisposable
             }
 
             var elapsedTime = DateTime.UtcNow - startTime;
-            Log.Information("XP decay processing completed in {ElapsedTime}s. " +
-                            "Processed {Guilds} guilds and decayed {Users} users.",
+            logger.LogInformation("XP decay processing completed in {ElapsedTime}s. " +
+                                  "Processed {Guilds} guilds and decayed {Users} users.",
                 elapsedTime.TotalSeconds, totalGuildsProcessed, totalUsersDecayed);
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error in XP decay processing");
+            logger.LogError(ex, "Error in XP decay processing");
         }
     }
 
@@ -1048,7 +1050,7 @@ public class XpBackgroundProcessor : INService, IDisposable
     {
         try
         {
-            Log.Debug("Running cache cleanup task");
+            logger.LogDebug("Running cache cleanup task");
 
             // Clean up Redis caches
             var cleanupStats = await cacheManager.CleanupCachesAsync().ConfigureAwait(false);
@@ -1074,19 +1076,19 @@ public class XpBackgroundProcessor : INService, IDisposable
 
                 lastActiveUserCleanup = DateTime.UtcNow;
 
-                Log.Debug("Cleared {Count} inactive users from tracking (had {OldCount} entries, now {NewCount})",
+                logger.LogDebug("Cleared {Count} inactive users from tracking (had {OldCount} entries, now {NewCount})",
                     inactiveUsers.Count, oldCount, activeUserIds.Count);
             }
 
             // Log statistics
-            Log.Information("XP Background Processor stats: Queue size: {QueueSize}, " +
-                            "Total processed: {TotalProcessed}, Active users tracked: {ActiveUsers}, " +
-                            "Redis cache entries cleaned: {RedisCachesCleared}",
+            logger.LogInformation("XP Background Processor stats: Queue size: {QueueSize}, " +
+                                  "Total processed: {TotalProcessed}, Active users tracked: {ActiveUsers}, " +
+                                  "Redis cache entries cleaned: {RedisCachesCleared}",
                 xpQueue.Count, totalProcessed, activeUserIds.Count, cleanupStats.keysRemoved);
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error cleaning up caches");
+            logger.LogError(ex, "Error cleaning up caches");
         }
     }
 
@@ -1125,28 +1127,28 @@ public class XpBackgroundProcessor : INService, IDisposable
 
             var bufferItemCount = batchingBuffer.Sum(kvp => kvp.Value.Count);
 
-            Log.Information("XP Processor Memory Stats: Working Set: {MemoryMB}MB, " +
-                            "Queue: {QueueSize}, Batching Buffer Items: {BufferItems} (Keys: {BufferKeys}), " +
-                            "Active Users: {ActiveUsers}, Processing: {IsProcessing}, " +
-                            "GC Gen0: {Gen0}, Gen1: {Gen1}, Gen2: {Gen2}",
+            logger.LogInformation("XP Processor Memory Stats: Working Set: {MemoryMB}MB, " +
+                                  "Queue: {QueueSize}, Batching Buffer Items: {BufferItems} (Keys: {BufferKeys}), " +
+                                  "Active Users: {ActiveUsers}, Processing: {IsProcessing}, " +
+                                  "GC Gen0: {Gen0}, Gen1: {Gen1}, Gen2: {Gen2}",
                 memoryMb, xpQueue.Count, bufferItemCount, batchingBuffer.Count,
                 activeUserIds.Count, isProcessing == 1,
                 gen0, gen1, gen2);
 
-            Log.Information(
+            logger.LogInformation(
                 "Discord Cache: Guilds: {Guilds}, Users: {Users}, Channels: {Channels}, Messages: {Messages}",
                 client.Guilds.Count, cachedUsers, cachedChannels, cachedMessages);
 
             // Force a Gen0 collection to see if memory can be reclaimed
             if (memoryMb > 600)
             {
-                Log.Warning("High memory usage detected, forcing GC");
+                logger.LogWarning("High memory usage detected, forcing GC");
                 GC.Collect(0, GCCollectionMode.Forced);
             }
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error logging memory stats");
+            logger.LogError(ex, "Error logging memory stats");
         }
     }
 }

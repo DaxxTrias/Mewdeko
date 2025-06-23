@@ -84,12 +84,12 @@ public class BotCredentials : IBotCredentials
     public string PsqlConnectionString { get; set; }
 
     /// <summary>
-    /// Gets or sets whether this is the master mewdeko instance
+    ///     Gets or sets whether this is the master mewdeko instance
     /// </summary>
-    public bool IsMasterInstance { get; set; } = false;
+    public bool IsMasterInstance { get; set; }
 
     /// <summary>
-    /// Gets or sets the url used for libretranslate.
+    ///     Gets or sets the url used for libretranslate.
     /// </summary>
     public string LibreTranslateUrl { get; set; } = "http://localhost:5000";
 
@@ -130,12 +130,12 @@ public class BotCredentials : IBotCredentials
     public ulong GlobalBanReportChannelId { get; set; }
 
     /// <summary>
-    /// Gets or sets whether grafana metrics are enabled.
+    ///     Gets or sets whether grafana metrics are enabled.
     /// </summary>
     public bool EnableMetrics { get; set; } = true;
 
     /// <summary>
-    /// Sets the port used for grafana metrics.
+    ///     Sets the port used for grafana metrics.
     /// </summary>
     public int MetricsPort { get; set; } = 9090;
 

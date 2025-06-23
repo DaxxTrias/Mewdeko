@@ -14,9 +14,9 @@ public class RepeatRunner : IDisposable
     private readonly DiscordShardedClient client;
     private readonly MessageRepeaterService mrs;
     private readonly SemaphoreSlim triggerLock = new(1, 1);
+    private bool disposed;
     private TimeSpan initialInterval;
     private Timer? timer;
-    private bool disposed;
 
     /// <summary>
     ///     Initializes a new instance of the RepeatRunner class with the specified parameters.
@@ -69,6 +69,20 @@ public class RepeatRunner : IDisposable
     ///     Gets the next scheduled execution time.
     /// </summary>
     public DateTime NextDateTime { get; private set; }
+
+    /// <summary>
+    ///     Disposes the repeater resources.
+    /// </summary>
+    public void Dispose()
+    {
+        if (disposed) return;
+
+        disposed = true;
+        timer?.Dispose();
+        triggerLock.Dispose();
+
+        GC.SuppressFinalize(this);
+    }
 
     private void Run()
     {
@@ -274,20 +288,7 @@ public class RepeatRunner : IDisposable
     public override string ToString()
     {
         TimeSpan.TryParse(Repeater.Interval, out var interval);
-        return $"{Channel?.Mention ?? $"⚠<#{Repeater.ChannelId}>"} {(Repeater.NoRedundant ? "| ✍" : "")}| {interval.TotalHours}:{interval:mm} | {Repeater.Message.TrimTo(33)}";
-    }
-
-    /// <summary>
-    ///     Disposes the repeater resources.
-    /// </summary>
-    public void Dispose()
-    {
-        if (disposed) return;
-
-        disposed = true;
-        timer?.Dispose();
-        triggerLock.Dispose();
-
-        GC.SuppressFinalize(this);
+        return
+            $"{Channel?.Mention ?? $"⚠<#{Repeater.ChannelId}>"} {(Repeater.NoRedundant ? "| ✍" : "")}| {interval.TotalHours}:{interval:mm} | {Repeater.Message.TrimTo(33)}";
     }
 }

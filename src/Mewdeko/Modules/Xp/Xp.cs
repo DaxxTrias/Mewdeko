@@ -9,14 +9,17 @@ using Mewdeko.Common.TypeReaders.Models;
 using Mewdeko.Modules.Currency.Services;
 using Mewdeko.Modules.Xp.Models;
 using Mewdeko.Modules.Xp.Services;
-using Serilog;
 
 namespace Mewdeko.Modules.Xp;
 
 /// <summary>
 ///     Module for managing XP system functionality.
 /// </summary>
-public class Xp(InteractiveService serv, ICurrencyService currencyService, XpRoleSyncService roleSyncService)
+public class Xp(
+    InteractiveService serv,
+    ICurrencyService currencyService,
+    XpRoleSyncService roleSyncService,
+    ILogger<Xp> logger)
     : MewdekoModuleBase<XpService>
 {
     /// <summary>
@@ -61,7 +64,7 @@ public class Xp(InteractiveService serv, ICurrencyService currencyService, XpRol
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error getting XP card for {UserId} in {GuildId}", user.Id, ctx.Guild.Id);
+            logger.LogError(ex, "Error getting XP card for {UserId} in {GuildId}", user.Id, ctx.Guild.Id);
             await ReplyErrorAsync(Strings.XpErrorGettingCard(ctx.Guild.Id));
         }
     }
@@ -124,7 +127,7 @@ public class Xp(InteractiveService serv, ICurrencyService currencyService, XpRol
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error getting text XP stats for {UserId} in {GuildId}", user.Id, ctx.Guild.Id);
+            logger.LogError(ex, "Error getting text XP stats for {UserId} in {GuildId}", user.Id, ctx.Guild.Id);
             await ReplyErrorAsync(Strings.XpErrorGettingStats(ctx.Guild.Id));
         }
     }
@@ -532,7 +535,7 @@ public class Xp(InteractiveService serv, ICurrencyService currencyService, XpRol
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Error recomputing levels for guild {GuildId}", ctx.Guild.Id);
+                logger.LogError(ex, "Error recomputing levels for guild {GuildId}", ctx.Guild.Id);
 
                 var channel = await ctx.Guild.GetTextChannelAsync(ctx.Channel.Id);
                 if (channel != null)
@@ -1392,7 +1395,7 @@ public class Xp(InteractiveService serv, ICurrencyService currencyService, XpRol
                 }
                 catch (HttpException ex) when (ex.DiscordCode == DiscordErrorCode.WriteRatelimitReached)
                 {
-                    Log.Debug("Hit rate limit updating progress message for guild {GuildId}", ctx.Guild.Id);
+                    logger.LogDebug("Hit rate limit updating progress message for guild {GuildId}", ctx.Guild.Id);
                 }
                 catch
                 {
@@ -1423,7 +1426,7 @@ public class Xp(InteractiveService serv, ICurrencyService currencyService, XpRol
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error during role sync for guild {GuildId}", ctx.Guild.Id);
+            logger.LogError(ex, "Error during role sync for guild {GuildId}", ctx.Guild.Id);
             await ReplyErrorAsync(Strings.XpRoleSyncError(ctx.Guild.Id)).ConfigureAwait(false);
         }
     }
@@ -1473,7 +1476,7 @@ public class Xp(InteractiveService serv, ICurrencyService currencyService, XpRol
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error syncing roles for user {UserId} in guild {GuildId}", ctx.User.Id, ctx.Guild.Id);
+            logger.LogError(ex, "Error syncing roles for user {UserId} in guild {GuildId}", ctx.User.Id, ctx.Guild.Id);
             await ReplyErrorAsync(Strings.XpRoleSyncMyError(ctx.Guild.Id)).ConfigureAwait(false);
         }
     }
@@ -1518,7 +1521,7 @@ public class Xp(InteractiveService serv, ICurrencyService currencyService, XpRol
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error syncing roles for user {UserId} in guild {GuildId}", user.Id, ctx.Guild.Id);
+            logger.LogError(ex, "Error syncing roles for user {UserId} in guild {GuildId}", user.Id, ctx.Guild.Id);
             await ReplyErrorAsync(Strings.XpRoleSyncUserError(ctx.Guild.Id)).ConfigureAwait(false);
         }
     }

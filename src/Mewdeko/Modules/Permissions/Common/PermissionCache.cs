@@ -1,6 +1,4 @@
-﻿
-
-using DataModel;
+﻿using DataModel;
 
 namespace Mewdeko.Modules.Permissions.Common;
 

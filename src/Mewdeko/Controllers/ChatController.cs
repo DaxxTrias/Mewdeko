@@ -2,12 +2,13 @@ using Mewdeko.Modules.Utility.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Newtonsoft.Json;
+
 // ReSharper disable PossibleInvalidOperationException
 
 namespace Mewdeko.Controllers;
 
 /// <summary>
-/// Controller for chat message management
+///     Controller for chat message management
 /// </summary>
 [ApiController]
 [Route("botapi/[controller]/{guildId}")]
@@ -15,7 +16,7 @@ namespace Mewdeko.Controllers;
 public class ChatController(DiscordShardedClient client, ChatLogService chatLogService) : Controller
 {
     /// <summary>
-    /// Gets chat messages from a channel within a specified time range
+    ///     Gets chat messages from a channel within a specified time range
     /// </summary>
     [HttpGet("{channelId}/messages")]
     public async Task<IActionResult> GetChatMessages(ulong guildId, ulong channelId, [FromQuery] string after)
@@ -49,30 +50,34 @@ public class ChatController(DiscordShardedClient client, ChatLogService chatLogS
         // Sort messages by timestamp (oldest first)
         messagesResult = messagesResult.OrderBy(m => m.Timestamp).ToList();
 
-        var messageData = messagesResult.Select(m => new {
+        var messageData = messagesResult.Select(m => new
+        {
             Id = m.Id.ToString(),
             m.Content,
-            Author = new {
+            Author = new
+            {
                 Id = m.Author.Id.ToString(),
                 m.Author.Username,
                 AvatarUrl = m.Author.GetAvatarUrl() ?? m.Author.GetDefaultAvatarUrl()
             },
             Timestamp = m.Timestamp.ToString("o"),
-            Attachments = m.Attachments.Select(a => new {
-                a.Url,
-                a.ProxyUrl,
-                a.Filename,
-                FileSize = a.Size
+            Attachments = m.Attachments.Select(a => new
+            {
+                a.Url, a.ProxyUrl, a.Filename, FileSize = a.Size
             }),
-            Embeds = m.Embeds.Select(e => new {
+            Embeds = m.Embeds.Select(e => new
+            {
                 Type = e.Type.ToString(),
                 e.Title,
                 e.Description,
                 e.Url,
                 Thumbnail = e.Thumbnail.HasValue ? e.Thumbnail.Value.Url : null,
-                Author = e.Author.HasValue ? new {
-                    e.Author.Value.Name, e.Author.Value.IconUrl
-                } : null
+                Author = e.Author.HasValue
+                    ? new
+                    {
+                        e.Author.Value.Name, e.Author.Value.IconUrl
+                    }
+                    : null
             })
         });
 
@@ -80,7 +85,7 @@ public class ChatController(DiscordShardedClient client, ChatLogService chatLogS
     }
 
     /// <summary>
-    /// Gets all saved chat logs for a guild
+    ///     Gets all saved chat logs for a guild
     /// </summary>
     [HttpGet("logs")]
     public async Task<IActionResult> GetChatLogs(ulong guildId)
@@ -91,7 +96,8 @@ public class ChatController(DiscordShardedClient client, ChatLogService chatLogS
 
         var logs = await chatLogService.GetChatLogsForGuildAsync(guildId);
 
-        var response = logs.Select(l => new {
+        var response = logs.Select(l => new
+        {
             Id = l.Id.ToString(),
             ChannelId = l.ChannelId.ToString(),
             l.ChannelName,
@@ -105,7 +111,7 @@ public class ChatController(DiscordShardedClient client, ChatLogService chatLogS
     }
 
     /// <summary>
-    /// Gets a specific chat log by id
+    ///     Gets a specific chat log by id
     /// </summary>
     [HttpGet("logs/{logId}")]
     public async Task<IActionResult> GetChatLog(ulong guildId, int logId)
@@ -123,7 +129,8 @@ public class ChatController(DiscordShardedClient client, ChatLogService chatLogS
 
         var messages = JsonConvert.DeserializeObject(log.Messages);
 
-        var response = new {
+        var response = new
+        {
             Id = log.Id.ToString(),
             GuildId = log.GuildId.ToString(),
             ChannelId = log.ChannelId.ToString(),
@@ -139,7 +146,7 @@ public class ChatController(DiscordShardedClient client, ChatLogService chatLogS
     }
 
     /// <summary>
-    /// Saves a chat log
+    ///     Saves a chat log
     /// </summary>
     [HttpPost("logs")]
     public async Task<IActionResult> SaveChatLog(ulong guildId, [FromBody] SaveChatLogRequest? request)
@@ -165,7 +172,10 @@ public class ChatController(DiscordShardedClient client, ChatLogService chatLogS
                 request.Messages
             );
 
-            return Ok(new { Id = logId });
+            return Ok(new
+            {
+                Id = logId
+            });
         }
         catch (Exception ex)
         {
@@ -174,10 +184,11 @@ public class ChatController(DiscordShardedClient client, ChatLogService chatLogS
     }
 
     /// <summary>
-    /// Updates a chat log's name
+    ///     Updates a chat log's name
     /// </summary>
     [HttpPatch("logs/{logId}")]
-    public async Task<IActionResult> UpdateChatLogName(ulong guildId, int logId, [FromBody] UpdateChatLogNameRequest? request)
+    public async Task<IActionResult> UpdateChatLogName(ulong guildId, int logId,
+        [FromBody] UpdateChatLogNameRequest? request)
     {
         if (request == null || string.IsNullOrWhiteSpace(request.Name))
             return BadRequest("Invalid request data");
@@ -195,7 +206,7 @@ public class ChatController(DiscordShardedClient client, ChatLogService chatLogS
     }
 
     /// <summary>
-    /// Deletes a chat log
+    ///     Deletes a chat log
     /// </summary>
     [HttpDelete("logs/{logId}")]
     public async Task<IActionResult> DeleteChatLog(ulong guildId, int logId)
@@ -213,35 +224,31 @@ public class ChatController(DiscordShardedClient client, ChatLogService chatLogS
     }
 
     /// <summary>
-    ///
     /// </summary>
     public class SaveChatLogRequest
     {
         /// <summary>
-        ///
         /// </summary>
         public ulong ChannelId { get; set; }
+
         /// <summary>
-        ///
         /// </summary>
         public string Name { get; set; }
+
         /// <summary>
-        ///
         /// </summary>
         public ulong CreatedBy { get; set; }
+
         /// <summary>
-        ///
         /// </summary>
         public object[] Messages { get; set; }
     }
 
     /// <summary>
-    ///
     /// </summary>
     public class UpdateChatLogNameRequest
     {
         /// <summary>
-        ///
         /// </summary>
         public string Name { get; set; }
     }

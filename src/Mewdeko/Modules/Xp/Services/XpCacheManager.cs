@@ -5,7 +5,6 @@ using LinqToDB;
 using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.Xp.Models;
 using Microsoft.Extensions.Caching.Memory;
-using Serilog;
 using StackExchange.Redis;
 
 namespace Mewdeko.Modules.Xp.Services;
@@ -50,6 +49,7 @@ public class XpCacheManager : INService
 
     // Small hot cache for frequently accessed guilds only
     private readonly MemoryCache hotGuildCache;
+    private readonly ILogger<XpCacheManager> logger;
     private readonly IDatabase redisCache;
 
     /// <summary>
@@ -61,11 +61,12 @@ public class XpCacheManager : INService
     public XpCacheManager(
         IDataCache dataCache,
         IDataConnectionFactory dbFactory,
-        DiscordShardedClient client)
+        DiscordShardedClient client, ILogger<XpCacheManager> logger)
     {
         this.dataCache = dataCache;
         this.dbFactory = dbFactory;
         this.client = client;
+        this.logger = logger;
         redisCache = dataCache.Redis.GetDatabase();
 
         // Initialize small hot cache for frequently accessed guilds
@@ -104,7 +105,7 @@ public class XpCacheManager : INService
             }
             catch (Exception ex)
             {
-                Log.Warning(ex, "Failed to deserialize user XP data from Redis");
+                logger.LogWarning(ex, "Failed to deserialize user XP data from Redis");
             }
         }
 
@@ -151,7 +152,7 @@ public class XpCacheManager : INService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error updating XP cache for user {UserId} in guild {GuildId}",
+            logger.LogError(ex, "Error updating XP cache for user {UserId} in guild {GuildId}",
                 userXp.UserId, userXp.GuildId);
         }
     }
@@ -192,7 +193,7 @@ public class XpCacheManager : INService
             }
             catch (Exception ex)
             {
-                Log.Warning(ex, "Failed to deserialize guild settings from Redis");
+                logger.LogWarning(ex, "Failed to deserialize guild settings from Redis");
             }
         }
 
@@ -379,7 +380,7 @@ public class XpCacheManager : INService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error calculating effective multiplier");
+            logger.LogError(ex, "Error calculating effective multiplier");
             return 1.0; // Default multiplier on error
         }
     }
@@ -488,7 +489,7 @@ public class XpCacheManager : INService
             {
                 // Remove only expired entries instead of clearing all
                 hotGuildCache.Compact(0.25);
-                Log.Debug("Compacted hot guild cache");
+                logger.LogDebug("Compacted hot guild cache");
             }
 
             // Process Redis keys in batches to prevent long-running operations
@@ -498,12 +499,12 @@ public class XpCacheManager : INService
             keysRemoved = disconnectedStats.keysRemoved + multiplierStats.keysRemoved;
             keysExamined = disconnectedStats.keysExamined + multiplierStats.keysExamined;
 
-            Log.Debug("Cache cleanup stats: {Removed} keys removed, {Examined} keys examined",
+            logger.LogDebug("Cache cleanup stats: {Removed} keys removed, {Examined} keys examined",
                 keysRemoved, keysExamined);
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error cleaning up caches");
+            logger.LogError(ex, "Error cleaning up caches");
         }
 
         return (keysRemoved, keysExamined);
@@ -548,7 +549,7 @@ public class XpCacheManager : INService
             if (keysToDelete.Count < MaxBatchSize) continue;
             await redisCache.KeyDeleteAsync(keysToDelete.ToArray()).ConfigureAwait(false);
             keysRemoved += keysToDelete.Count;
-            Log.Debug("Deleted {Count} Redis keys for disconnected guilds", keysToDelete.Count);
+            logger.LogDebug("Deleted {Count} Redis keys for disconnected guilds", keysToDelete.Count);
             keysToDelete.Clear();
         }
 
@@ -556,7 +557,7 @@ public class XpCacheManager : INService
         if (keysToDelete.Count <= 0) return (keysRemoved, keysExamined);
         await redisCache.KeyDeleteAsync(keysToDelete.ToArray()).ConfigureAwait(false);
         keysRemoved += keysToDelete.Count;
-        Log.Debug("Deleted {Count} Redis keys for disconnected guilds", keysToDelete.Count);
+        logger.LogDebug("Deleted {Count} Redis keys for disconnected guilds", keysToDelete.Count);
 
         return (keysRemoved, keysExamined);
     }
@@ -636,7 +637,7 @@ public class XpCacheManager : INService
                     if (redisKeysToDelete.Count >= MaxBatchSize)
                     {
                         await redisCache.KeyDeleteAsync(redisKeysToDelete.ToArray()).ConfigureAwait(false);
-                        Log.Debug("Deleted {Count} Redis keys for guild {GuildId}",
+                        logger.LogDebug("Deleted {Count} Redis keys for guild {GuildId}",
                             redisKeysToDelete.Count, guildId);
                         redisKeysToDelete.Clear();
                     }
@@ -647,13 +648,13 @@ public class XpCacheManager : INService
             if (redisKeysToDelete.Count > 0)
             {
                 await redisCache.KeyDeleteAsync(redisKeysToDelete.ToArray()).ConfigureAwait(false);
-                Log.Debug("Deleted {Count} remaining Redis keys for guild {GuildId}",
+                logger.LogDebug("Deleted {Count} remaining Redis keys for guild {GuildId}",
                     redisKeysToDelete.Count, guildId);
             }
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error clearing XP caches for guild {GuildId}", guildId);
+            logger.LogError(ex, "Error clearing XP caches for guild {GuildId}", guildId);
         }
     }
 
@@ -664,7 +665,7 @@ public class XpCacheManager : INService
     {
         try
         {
-            Log.Information("Starting role reward cache preload...");
+            logger.LogInformation("Starting role reward cache preload...");
             var startTime = DateTime.UtcNow;
 
             await using var db = await dbFactory.CreateConnectionAsync();
@@ -673,11 +674,11 @@ public class XpCacheManager : INService
 
             if (allRoleRewards.Count == 0)
             {
-                Log.Information("No role rewards found to preload");
+                logger.LogInformation("No role rewards found to preload");
                 return;
             }
 
-            Log.Information("Preloading {Count} role rewards into cache", allRoleRewards.Count);
+            logger.LogInformation("Preloading {Count} role rewards into cache", allRoleRewards.Count);
 
             var redis = GetRedisDatabase();
             var cacheOperations = new List<Task>();
@@ -701,12 +702,12 @@ public class XpCacheManager : INService
             }
 
             var elapsedTime = DateTime.UtcNow - startTime;
-            Log.Information("Successfully preloaded {Count} role rewards into cache in {ElapsedMs}ms",
+            logger.LogInformation("Successfully preloaded {Count} role rewards into cache in {ElapsedMs}ms",
                 allRoleRewards.Count, elapsedTime.TotalMilliseconds);
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error preloading role rewards into cache");
+            logger.LogError(ex, "Error preloading role rewards into cache");
         }
     }
 
@@ -717,7 +718,7 @@ public class XpCacheManager : INService
     {
         try
         {
-            Log.Information("Starting currency reward cache preload...");
+            logger.LogInformation("Starting currency reward cache preload...");
             var startTime = DateTime.UtcNow;
 
             await using var db = await dbFactory.CreateConnectionAsync();
@@ -727,11 +728,11 @@ public class XpCacheManager : INService
 
             if (allCurrencyRewards.Count == 0)
             {
-                Log.Information("No currency rewards found to preload");
+                logger.LogInformation("No currency rewards found to preload");
                 return;
             }
 
-            Log.Information("Preloading {Count} currency rewards into cache", allCurrencyRewards.Count);
+            logger.LogInformation("Preloading {Count} currency rewards into cache", allCurrencyRewards.Count);
 
             var redis = GetRedisDatabase();
             var cacheOperations = new List<Task>();
@@ -756,12 +757,12 @@ public class XpCacheManager : INService
             }
 
             var elapsedTime = DateTime.UtcNow - startTime;
-            Log.Information("Successfully preloaded {Count} currency rewards into cache in {ElapsedMs}ms",
+            logger.LogInformation("Successfully preloaded {Count} currency rewards into cache in {ElapsedMs}ms",
                 allCurrencyRewards.Count, elapsedTime.TotalMilliseconds);
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error preloading currency rewards into cache");
+            logger.LogError(ex, "Error preloading currency rewards into cache");
         }
     }
 
@@ -770,7 +771,7 @@ public class XpCacheManager : INService
     /// </summary>
     public async Task PreloadAllRewardCachesAsync()
     {
-        Log.Information("Starting reward cache preload...");
+        logger.LogInformation("Starting reward cache preload...");
         var startTime = DateTime.UtcNow;
 
         await Task.WhenAll(
@@ -779,6 +780,6 @@ public class XpCacheManager : INService
         ).ConfigureAwait(false);
 
         var elapsedTime = DateTime.UtcNow - startTime;
-        Log.Information("Completed reward cache preload in {ElapsedMs}ms", elapsedTime.TotalMilliseconds);
+        logger.LogInformation("Completed reward cache preload in {ElapsedMs}ms", elapsedTime.TotalMilliseconds);
     }
 }

@@ -5,42 +5,78 @@ using Color = System.Drawing.Color;
 namespace Mewdeko.Common;
 
 /// <summary>
-/// Tries to parse colors
+///     Tries to parse colors
 /// </summary>
 public static class ColorUtils
 {
     private static readonly Dictionary<string, Color> NamedColors = new(StringComparer.OrdinalIgnoreCase)
     {
         // Discord standard colors
-        { "default", Color.FromArgb(0, 0, 0) },
-        { "teal", Color.FromArgb(29, 147, 171) },
-        { "green", Color.FromArgb(67, 181, 129) },
-        { "blue", Color.FromArgb(114, 137, 218) },
-        { "purple", Color.FromArgb(80, 44, 169) },
-        { "magenta", Color.FromArgb(255, 0, 255) },
-        { "gold", Color.FromArgb(250, 166, 26) },
-        { "orange", Color.FromArgb(255, 140, 0) },
-        { "red", Color.FromArgb(238, 66, 77) },
+        {
+            "default", Color.FromArgb(0, 0, 0)
+        },
+        {
+            "teal", Color.FromArgb(29, 147, 171)
+        },
+        {
+            "green", Color.FromArgb(67, 181, 129)
+        },
+        {
+            "blue", Color.FromArgb(114, 137, 218)
+        },
+        {
+            "purple", Color.FromArgb(80, 44, 169)
+        },
+        {
+            "magenta", Color.FromArgb(255, 0, 255)
+        },
+        {
+            "gold", Color.FromArgb(250, 166, 26)
+        },
+        {
+            "orange", Color.FromArgb(255, 140, 0)
+        },
+        {
+            "red", Color.FromArgb(238, 66, 77)
+        },
 
         // Additional common colors
-        { "yellow", Color.FromArgb(255, 255, 0) },
-        { "pink", Color.FromArgb(255, 192, 203) },
-        { "cyan", Color.FromArgb(0, 255, 255) },
-        { "brown", Color.FromArgb(165, 42, 42) },
-        { "white", Color.FromArgb(255, 255, 255) },
-        { "black", Color.FromArgb(0, 0, 0) },
-        { "gray", Color.FromArgb(128, 128, 128) },
-        { "grey", Color.FromArgb(128, 128, 128) },
-        { "transparent", Color.FromArgb(0, 0, 0, 0) }
+        {
+            "yellow", Color.FromArgb(255, 255, 0)
+        },
+        {
+            "pink", Color.FromArgb(255, 192, 203)
+        },
+        {
+            "cyan", Color.FromArgb(0, 255, 255)
+        },
+        {
+            "brown", Color.FromArgb(165, 42, 42)
+        },
+        {
+            "white", Color.FromArgb(255, 255, 255)
+        },
+        {
+            "black", Color.FromArgb(0, 0, 0)
+        },
+        {
+            "gray", Color.FromArgb(128, 128, 128)
+        },
+        {
+            "grey", Color.FromArgb(128, 128, 128)
+        },
+        {
+            "transparent", Color.FromArgb(0, 0, 0, 0)
+        }
     };
 
     /// <summary>
-    /// Tries to parse a color from various formats into a Discord.Color.
-    /// Supports:
-    /// - Named colors (red, blue, etc.)
-    /// - Hex codes (#FF0000 or FF0000)
-    /// - RGB format (rgb(255,0,0))
-    /// - Comma separated values (255,0,0)
+    ///     Tries to parse a color from various formats into a Discord.Color.
+    ///     Supports:
+    ///     - Named colors (red, blue, etc.)
+    ///     - Hex codes (#FF0000 or FF0000)
+    ///     - RGB format (rgb(255,0,0))
+    ///     - Comma separated values (255,0,0)
     /// </summary>
     public static bool TryParseColor(string input, out Discord.Color color)
     {
@@ -120,7 +156,7 @@ public static class ColorUtils
     }
 
     /// <summary>
-    /// Converts a Discord.Color to its hex string representation.
+    ///     Converts a Discord.Color to its hex string representation.
     /// </summary>
     public static string ToHex(this Discord.Color color)
     {
@@ -128,7 +164,7 @@ public static class ColorUtils
     }
 
     /// <summary>
-    /// Converts a Discord.Color to an RGB string representation.
+    ///     Converts a Discord.Color to an RGB string representation.
     /// </summary>
     public static string ToRgb(this Discord.Color color)
     {
@@ -136,7 +172,7 @@ public static class ColorUtils
     }
 
     /// <summary>
-    /// Gets a random Discord.Color.
+    ///     Gets a random Discord.Color.
     /// </summary>
     public static Discord.Color Random()
     {
@@ -145,7 +181,7 @@ public static class ColorUtils
     }
 
     /// <summary>
-    /// Gets a lighter version of the color.
+    ///     Gets a lighter version of the color.
     /// </summary>
     public static Discord.Color Lighten(this Discord.Color color, float amount = 0.2f)
     {
@@ -159,7 +195,7 @@ public static class ColorUtils
     }
 
     /// <summary>
-    /// Gets a darker version of the color.
+    ///     Gets a darker version of the color.
     /// </summary>
     public static Discord.Color Darken(this Discord.Color color, float amount = 0.2f)
     {

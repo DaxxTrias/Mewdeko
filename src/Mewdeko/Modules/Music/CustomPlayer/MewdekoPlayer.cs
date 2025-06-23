@@ -14,7 +14,6 @@ using Mewdeko.Common.Configs;
 using Mewdeko.Modules.Music.Common;
 using Mewdeko.Services.Strings;
 using Microsoft.Extensions.DependencyInjection;
-using Serilog;
 using SpotifyAPI.Web;
 using Embed = Discord.Embed;
 
@@ -34,6 +33,7 @@ public sealed class MewdekoPlayer : LavalinkPlayer
     private readonly IBotCredentials creds;
     private readonly IDataConnectionFactory dbFactory;
     private readonly HttpClient httpClient;
+    private readonly ILogger<MewdekoPlayer> logger;
     private readonly Random random = new();
 
     private readonly string[] soundIds =
@@ -41,9 +41,10 @@ public sealed class MewdekoPlayer : LavalinkPlayer
         "1356473693294825603", "1356473638899159050", "1356473603775922256"
     ];
 
+    private readonly PlayerStateTracker stateTracker;
+
     private readonly GeneratedBotStrings Strings;
     private bool isAprilFoolsJokeRunning;
-    private readonly PlayerStateTracker stateTracker;
 
     /// <summary>
     ///     Initializes a new instance of <see cref="MewdekoPlayer" />.
@@ -60,6 +61,7 @@ public sealed class MewdekoPlayer : LavalinkPlayer
         dbFactory = properties.ServiceProvider.GetRequiredService<IDataConnectionFactory>();
         cache = properties.ServiceProvider.GetRequiredService<IDataCache>();
         Strings = properties.ServiceProvider.GetRequiredService<GeneratedBotStrings>();
+        logger = properties.ServiceProvider.GetRequiredService<ILogger<MewdekoPlayer>>();
         stateTracker = new PlayerStateTracker(this, cache);
     }
 
@@ -536,7 +538,7 @@ public sealed class MewdekoPlayer : LavalinkPlayer
             // Initialize Last.fm client using API key from credentials
             if (string.IsNullOrEmpty(creds.LastFmApiKey))
             {
-                Log.Warning("Last.fm API key is not configured. AutoPlay cannot function.");
+                logger.LogWarning("Last.fm API key is not configured. AutoPlay cannot function.");
                 return false;
             }
 
@@ -546,7 +548,7 @@ public sealed class MewdekoPlayer : LavalinkPlayer
             var similarTracks = await lastfmClient.Track.GetSimilarAsync(trackTitle, artistName, autoPlay * 2);
             if (similarTracks == null || !similarTracks.Any())
             {
-                Log.Warning($"No similar tracks found for {trackTitle} by {artistName}");
+                logger.LogWarning($"No similar tracks found for {trackTitle} by {artistName}");
                 return true;
             }
 
@@ -561,7 +563,7 @@ public sealed class MewdekoPlayer : LavalinkPlayer
 
             var toTake = Math.Min(autoPlay, filteredTracks.Count);
 
-            Log.Information($"Last.fm AutoPlay found {filteredTracks.Count} potential tracks, adding {toTake}");
+            logger.LogInformation($"Last.fm AutoPlay found {filteredTracks.Count} potential tracks, adding {toTake}");
 
             foreach (var track in filteredTracks.Take(toTake))
             {
@@ -571,7 +573,7 @@ public sealed class MewdekoPlayer : LavalinkPlayer
                 var trackToLoad = await audioService.Tracks.LoadTrackAsync(searchQuery, TrackSearchMode.YouTube);
                 if (trackToLoad is null)
                 {
-                    Log.Debug($"Could not load track: {searchQuery}");
+                    logger.LogDebug($"Could not load track: {searchQuery}");
                     continue;
                 }
 
@@ -582,7 +584,7 @@ public sealed class MewdekoPlayer : LavalinkPlayer
                     Id = client.CurrentUser.Id
                 }));
 
-                Log.Debug($"Added track to queue: {trackToLoad.Title}");
+                logger.LogDebug($"Added track to queue: {trackToLoad.Title}");
             }
 
             await cache.SetMusicQueue(GuildId, queue);
@@ -592,7 +594,7 @@ public sealed class MewdekoPlayer : LavalinkPlayer
         }
         catch (Exception e)
         {
-            Log.Error(e, "Last.fm AutoPlay error");
+            logger.LogError(e, "Last.fm AutoPlay error");
             return false;
         }
     }

@@ -4,7 +4,6 @@ using DataModel;
 using LinqToDB;
 using Mewdeko.Modules.Xp.Models;
 using Microsoft.Extensions.Caching.Memory;
-using Serilog;
 
 namespace Mewdeko.Modules.Xp.Services;
 
@@ -32,6 +31,7 @@ public class XpVoiceTracker : INService, IDisposable
 
     // Cache TTLs
     private readonly TimeSpan eligibilityCacheTtl = TimeSpan.FromMinutes(2);
+    private readonly ILogger<XpVoiceTracker> logger;
 
     // Session validation interval
     private readonly TimeSpan validationInterval = TimeSpan.FromMinutes(5);
@@ -54,11 +54,12 @@ public class XpVoiceTracker : INService, IDisposable
     public XpVoiceTracker(
         DiscordShardedClient client,
         IDataConnectionFactory dbFactory,
-        XpCacheManager cacheManager)
+        XpCacheManager cacheManager, ILogger<XpVoiceTracker> logger)
     {
         this.client = client;
         this.dbFactory = dbFactory;
         this.cacheManager = cacheManager;
+        this.logger = logger;
 
         // Initialize memory cache for channel eligibility only
         channelEligibilityCache = new MemoryCache(cacheOptions);
@@ -75,7 +76,7 @@ public class XpVoiceTracker : INService, IDisposable
         diagnosticsTimer = new Timer(_ => LogDiagnostics(), null,
             TimeSpan.FromMinutes(10), TimeSpan.FromHours(1));
 
-        Log.Information(
+        logger.LogInformation(
             "Voice XP Tracker initialized with memory optimization - Max sessions: {MaxSessions}, Cleanup interval: {CleanupInterval}min",
             MaxConcurrentSessions, 3);
     }
@@ -153,7 +154,7 @@ public class XpVoiceTracker : INService, IDisposable
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error handling voice state update for {UserId} in {GuildId}",
+            logger.LogError(ex, "Error handling voice state update for {UserId} in {GuildId}",
                 user.Id, guildUser.Guild.Id);
         }
     }
@@ -211,7 +212,7 @@ public class XpVoiceTracker : INService, IDisposable
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error scanning voice channels for guild {GuildId}", guild.Id);
+            logger.LogError(ex, "Error scanning voice channels for guild {GuildId}", guild.Id);
         }
     }
 
@@ -233,7 +234,7 @@ public class XpVoiceTracker : INService, IDisposable
             // Check session limit before adding new sessions
             if (voiceSessions.Count >= MaxConcurrentSessions)
             {
-                Log.Warning("Voice session limit reached ({Limit}), skipping new session", MaxConcurrentSessions);
+                logger.LogWarning("Voice session limit reached ({Limit}), skipping new session", MaxConcurrentSessions);
                 return;
             }
 
@@ -248,7 +249,8 @@ public class XpVoiceTracker : INService, IDisposable
             // Pre-validate: Check if user is participating (not muted/deafened)
             if (!IsParticipatingInVoice(user))
             {
-                Log.Debug("Skipping voice session creation for non-participating user {UserId} in channel {ChannelId}",
+                logger.LogDebug(
+                    "Skipping voice session creation for non-participating user {UserId} in channel {ChannelId}",
                     userId, channelId);
                 return;
             }
@@ -257,7 +259,7 @@ public class XpVoiceTracker : INService, IDisposable
             var eligibleUserCount = voiceChannel.Users.Count(u => !u.IsBot && IsParticipatingInVoice(u));
             if (eligibleUserCount < MinUsersForXp)
             {
-                Log.Debug(
+                logger.LogDebug(
                     "Skipping voice session creation - channel {ChannelId} has only {Count} eligible users (minimum {Min})",
                     channelId, eligibleUserCount, MinUsersForXp);
                 return;
@@ -284,14 +286,14 @@ public class XpVoiceTracker : INService, IDisposable
             // Log session creation for monitoring
             if (voiceSessions.Count % 1000 == 0 || voiceSessions.Count > MaxConcurrentSessions * 0.8)
             {
-                Log.Information(
+                logger.LogInformation(
                     "Voice session created - Active sessions: {ActiveSessions}/{MaxSessions} ({Percentage:F1}%)",
                     voiceSessions.Count, MaxConcurrentSessions, (voiceSessions.Count * 100.0) / MaxConcurrentSessions);
             }
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error starting voice session for user {UserId} in guild {GuildId}",
+            logger.LogError(ex, "Error starting voice session for user {UserId} in guild {GuildId}",
                 userId, guildId);
         }
     }
@@ -342,7 +344,7 @@ public class XpVoiceTracker : INService, IDisposable
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error updating session eligibility for user {UserId} in guild {GuildId}",
+            logger.LogError(ex, "Error updating session eligibility for user {UserId} in guild {GuildId}",
                 userId, guildId);
         }
     }
@@ -404,7 +406,8 @@ public class XpVoiceTracker : INService, IDisposable
             var backgroundProcessor = XpService.Instance?.GetBackgroundProcessor();
             if (backgroundProcessor == null)
             {
-                Log.Warning("XpService background processor not available for user {UserId} in guild {GuildId}", userId,
+                logger.LogWarning("XpService background processor not available for user {UserId} in guild {GuildId}",
+                    userId,
                     guildId);
                 return;
             }
@@ -421,16 +424,17 @@ public class XpVoiceTracker : INService, IDisposable
             // Log significant XP awards
             if (xpAmount > 50)
             {
-                Log.Information(
+                logger.LogInformation(
                     "Awarded {XpAmount} voice XP to user {UserId} in guild {GuildId} for {Minutes:F1} minutes",
                     xpAmount, userId, guildId, cappedMinutes);
             }
         }
         catch (Exception ex)
         {
-            Log.Information("{GuildId}|{UserId}|{XpAmount}|{ChannelId}|{VoiceXpMinutes}", guildId, userId, xpAmount,
+            logger.LogInformation("{GuildId}|{UserId}|{XpAmount}|{ChannelId}|{VoiceXpMinutes}", guildId, userId,
+                xpAmount,
                 channelId, JsonSerializer.Serialize(settings));
-            Log.Error(ex, "Error calculating XP for user {UserId} in guild {GuildId}",
+            logger.LogError(ex, "Error calculating XP for user {UserId} in guild {GuildId}",
                 userId, guildId);
         }
     }
@@ -522,14 +526,14 @@ public class XpVoiceTracker : INService, IDisposable
                         }
                         catch (Exception ex)
                         {
-                            Log.Error(ex, "Error updating session for user {UserId} in guild {GuildId}",
+                            logger.LogError(ex, "Error updating session for user {UserId} in guild {GuildId}",
                                 session.UserId, guildId);
                         }
                     }
                 }
                 catch (Exception ex)
                 {
-                    Log.Error(ex, "Error validating channel {ChannelId} in guild {GuildId}",
+                    logger.LogError(ex, "Error validating channel {ChannelId} in guild {GuildId}",
                         channelId, guildId);
                 }
 
@@ -544,13 +548,13 @@ public class XpVoiceTracker : INService, IDisposable
             if (sessionsUpdated > 0)
             {
                 var elapsedMs = (DateTime.UtcNow - startTime).TotalMilliseconds;
-                Log.Debug("Updated eligibility for {Count} voice sessions in {Time:F1}ms",
+                logger.LogDebug("Updated eligibility for {Count} voice sessions in {Time:F1}ms",
                     sessionsUpdated, elapsedMs);
             }
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error validating voice sessions");
+            logger.LogError(ex, "Error validating voice sessions");
         }
         finally
         {
@@ -621,7 +625,8 @@ public class XpVoiceTracker : INService, IDisposable
                         var sessionAge = DateTime.UtcNow - session.JoinTime;
                         if (sessionAge.TotalHours > 6)
                         {
-                            Log.Debug("Removing stale voice session for user {UserId} - session age: {Hours:F1} hours",
+                            logger.LogDebug(
+                                "Removing stale voice session for user {UserId} - session age: {Hours:F1} hours",
                                 session.UserId, sessionAge.TotalHours);
                             voiceSessions.TryRemove(key, out _);
                             sessionsRemoved++;
@@ -655,14 +660,14 @@ public class XpVoiceTracker : INService, IDisposable
             if (sessionsRemoved > 0)
             {
                 var utilizationPercent = (voiceSessions.Count * 100.0) / MaxConcurrentSessions;
-                Log.Information("Aggressive voice tracker cleanup: removed {Count} stale sessions, " +
-                                "active sessions: {Active}/{Max} ({Percentage:F1}%)",
+                logger.LogInformation("Aggressive voice tracker cleanup: removed {Count} stale sessions, " +
+                                      "active sessions: {Active}/{Max} ({Percentage:F1}%)",
                     sessionsRemoved, voiceSessions.Count, MaxConcurrentSessions, utilizationPercent);
             }
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error in aggressive voice tracker cleanup");
+            logger.LogError(ex, "Error in aggressive voice tracker cleanup");
         }
     }
 
@@ -810,15 +815,16 @@ public class XpVoiceTracker : INService, IDisposable
         var utilizationPercent = (voiceSessions.Count * 100.0) / MaxConcurrentSessions;
         var eligibleSessions = voiceSessions.Values.Count(s => s.CurrentlyEligible);
 
-        Log.Information("XpVoiceTracker stats: Active sessions: {SessionCount}/{MaxSessions} ({Percentage:F1}%), " +
-                        "Eligible sessions: {EligibleCount}, Channel eligibility cache: {ChannelCount}",
+        logger.LogInformation(
+            "XpVoiceTracker stats: Active sessions: {SessionCount}/{MaxSessions} ({Percentage:F1}%), " +
+            "Eligible sessions: {EligibleCount}, Channel eligibility cache: {ChannelCount}",
             voiceSessions.Count, MaxConcurrentSessions, utilizationPercent,
             eligibleSessions, channelEligibilityCache.Count);
 
         // Warning if utilization is high
         if (utilizationPercent > 80)
         {
-            Log.Warning(
+            logger.LogWarning(
                 "Voice session utilization is high ({Percentage:F1}%) - consider monitoring for potential issues",
                 utilizationPercent);
         }

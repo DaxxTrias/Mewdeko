@@ -15,7 +15,7 @@ public class PronounsService : INService
     private readonly HttpClient http;
 
     /// <summary>
-    ///     Initializes a new instance of the <see cref="PronounsService"/> class.
+    ///     Initializes a new instance of the <see cref="PronounsService" /> class.
     /// </summary>
     /// <param name="dbFactory">The database connection factory.</param>
     /// <param name="http">The HTTP client for API requests.</param>
@@ -46,7 +46,8 @@ public class PronounsService : INService
         // Otherwise, fetch from the PronounDB API
         try
         {
-            var result = await http.GetStringAsync($"https://pronoundb.org/api/v1/lookup?platform=discord&id={discordId}")
+            var result = await http
+                .GetStringAsync($"https://pronoundb.org/api/v1/lookup?platform=discord&id={discordId}")
                 .ConfigureAwait(false);
 
             var pronouns = JsonSerializer.Deserialize<PronounDbResult>(result);

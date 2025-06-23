@@ -5,7 +5,6 @@ using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Modules.Music.CustomPlayer;
 using Mewdeko.Services.Strings;
 using Microsoft.Extensions.Options;
-using Serilog;
 
 namespace Mewdeko.Modules.Music.Services;
 
@@ -17,6 +16,7 @@ public class MusicPlayerRecoveryService : INService, IReadyExecutor
     private readonly IAudioService audioService;
     private readonly IDataCache cache;
     private readonly DiscordShardedClient client;
+    private readonly ILogger<MusicPlayerRecoveryService> logger;
     private readonly GeneratedBotStrings strings;
 
     /// <summary>
@@ -32,12 +32,13 @@ public class MusicPlayerRecoveryService : INService, IReadyExecutor
         IAudioService audioService,
         DiscordShardedClient client,
         IServiceProvider services,
-        GeneratedBotStrings strings)
+        GeneratedBotStrings strings, ILogger<MusicPlayerRecoveryService> logger)
     {
         this.cache = cache;
         this.audioService = audioService;
         this.client = client;
         this.strings = strings;
+        this.logger = logger;
     }
 
     /// <summary>
@@ -48,12 +49,12 @@ public class MusicPlayerRecoveryService : INService, IReadyExecutor
     {
         try
         {
-            Log.Information("Starting music player recovery process");
+            logger.LogInformation("Starting music player recovery process");
             await RecoverPlayersAsync();
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Failed to execute player recovery");
+            logger.LogError(ex, "Failed to execute player recovery");
         }
     }
 
@@ -65,7 +66,7 @@ public class MusicPlayerRecoveryService : INService, IReadyExecutor
     {
         // Process guilds in batches to avoid rate limiting
         var guilds = client.Guilds.ToList();
-        Log.Information("Checking {Count} guilds for music player recovery", guilds.Count);
+        logger.LogInformation("Checking {Count} guilds for music player recovery", guilds.Count);
 
         // Process up to 5 guilds concurrently
         var tasks = new List<Task>();
@@ -89,7 +90,7 @@ public class MusicPlayerRecoveryService : INService, IReadyExecutor
         }
 
         await Task.WhenAll(tasks);
-        Log.Information("Music player recovery completed");
+        logger.LogInformation("Music player recovery completed");
     }
 
     /// <summary>
@@ -105,14 +106,14 @@ public class MusicPlayerRecoveryService : INService, IReadyExecutor
             var state = await cache.GetPlayerState(guild.Id);
             if (state == null)
             {
-                Log.Debug("No saved player state found for guild {GuildId}", guild.Id);
+                logger.LogDebug("No saved player state found for guild {GuildId}", guild.Id);
                 return;
             }
 
             // Check if state is too old (more than 15 minutes)
             if (DateTime.UtcNow - state.LastUpdateTime > TimeSpan.FromMinutes(15))
             {
-                Log.Warning("Skipping recovery for guild {GuildId} - state too old ({LastUpdate})",
+                logger.LogWarning("Skipping recovery for guild {GuildId} - state too old ({LastUpdate})",
                     guild.Id, state.LastUpdateTime);
                 await cache.RemovePlayerState(guild.Id);
                 return;
@@ -122,7 +123,7 @@ public class MusicPlayerRecoveryService : INService, IReadyExecutor
             var voiceChannel = guild.GetVoiceChannel(state.VoiceChannelId);
             if (voiceChannel == null)
             {
-                Log.Warning("Skipping recovery for guild {GuildId} - voice channel {ChannelId} no longer exists",
+                logger.LogWarning("Skipping recovery for guild {GuildId} - voice channel {ChannelId} no longer exists",
                     guild.Id, state.VoiceChannelId);
                 await cache.RemovePlayerState(guild.Id);
                 return;
@@ -134,12 +135,12 @@ public class MusicPlayerRecoveryService : INService, IReadyExecutor
 
             if (currentTrack == null || queue.Count == 0)
             {
-                Log.Warning("Skipping recovery for guild {GuildId} - no current track or empty queue", guild.Id);
+                logger.LogWarning("Skipping recovery for guild {GuildId} - no current track or empty queue", guild.Id);
                 await cache.RemovePlayerState(guild.Id);
                 return;
             }
 
-            Log.Information("Recovering player for guild {GuildId}, track: {TrackTitle}, position: {Position}",
+            logger.LogInformation("Recovering player for guild {GuildId}, track: {TrackTitle}, position: {Position}",
                 guild.Id, currentTrack.Track.Title, state.CurrentPosition);
 
             // Get the music channel
@@ -152,7 +153,7 @@ public class MusicPlayerRecoveryService : INService, IReadyExecutor
             }
             catch (Exception ex)
             {
-                Log.Warning(ex, "Could not get configured music channel for guild {GuildId}", guild.Id);
+                logger.LogWarning(ex, "Could not get configured music channel for guild {GuildId}", guild.Id);
             }
 
             // Fallback to first text channel if needed
@@ -166,7 +167,8 @@ public class MusicPlayerRecoveryService : INService, IReadyExecutor
 
                 if (messageChannel == null)
                 {
-                    Log.Warning("Skipping recovery for guild {GuildId} - cannot find valid text channel", guild.Id);
+                    logger.LogWarning("Skipping recovery for guild {GuildId} - cannot find valid text channel",
+                        guild.Id);
                     return;
                 }
             }
@@ -196,13 +198,13 @@ public class MusicPlayerRecoveryService : INService, IReadyExecutor
 
 
             await player.Player.SeekAsync(state.CurrentPosition);
-            Log.Debug("Seeking to position {Position} for guild {GuildId}", state.CurrentPosition, guild.Id);
+            logger.LogDebug("Seeking to position {Position} for guild {GuildId}", state.CurrentPosition, guild.Id);
 
             // Restore pause state if needed
             if (state.IsPaused)
             {
                 await player.Player.PauseAsync();
-                Log.Debug("Restoring paused state for guild {GuildId}", guild.Id);
+                logger.LogDebug("Restoring paused state for guild {GuildId}", guild.Id);
             }
 
             // Send notification to channel
@@ -220,16 +222,16 @@ public class MusicPlayerRecoveryService : INService, IReadyExecutor
             }
             catch (Exception ex)
             {
-                Log.Warning(ex, "Could not send recovery notification to channel in guild {GuildId}", guild.Id);
+                logger.LogWarning(ex, "Could not send recovery notification to channel in guild {GuildId}", guild.Id);
             }
 
             // Clean up state as we've recovered it
             await cache.RemovePlayerState(guild.Id);
-            Log.Information("Successfully recovered player for guild {GuildId}", guild.Id);
+            logger.LogInformation("Successfully recovered player for guild {GuildId}", guild.Id);
         }
         catch (Exception ex)
         {
-            Log.Error("Failed to recover player for guild {GuildId}:{ex}", guild.Id, ex);
+            logger.LogError("Failed to recover player for guild {GuildId}:{ex}", guild.Id, ex);
 
             // Try to clean up the failed state
             try

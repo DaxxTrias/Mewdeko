@@ -6,7 +6,6 @@ using Mewdeko.Modules.Administration.Services;
 using Mewdeko.Modules.Permissions.Common;
 using Mewdeko.Modules.Permissions.Services;
 using Mewdeko.Services.Strings;
-using Serilog;
 using Embed = Discord.Embed;
 
 namespace Mewdeko.Modules.Suggestions.Services;
@@ -53,10 +52,11 @@ public class SuggestionsService : INService
     private readonly BotConfig config;
     private readonly IDataConnectionFactory dbFactory;
     private readonly GuildSettingsService guildSettings;
+    private readonly ILogger<SuggestionsService> logger;
     private readonly PermissionService perms;
     private readonly List<ulong> repostChecking;
     private readonly List<ulong> spamCheck;
-    private readonly GeneratedBotStrings Strings;
+    private readonly GeneratedBotStrings strings;
 
     /// <summary>
     ///     Initializes a new instance of the SuggestionsService class.
@@ -74,12 +74,14 @@ public class SuggestionsService : INService
         DiscordShardedClient client,
         AdministrationService aserv,
         PermissionService permserv,
-        GuildSettingsService guildSettings, EventHandler eventHandler, BotConfig config, GeneratedBotStrings strings)
+        GuildSettingsService guildSettings, EventHandler eventHandler, BotConfig config, GeneratedBotStrings strings,
+        ILogger<SuggestionsService> logger)
     {
         perms = permserv;
         this.guildSettings = guildSettings;
         this.config = config;
-        Strings = strings;
+        this.strings = strings;
+        this.logger = logger;
         repostChecking = [];
         spamCheck = [];
         adminserv = aserv;
@@ -139,7 +141,7 @@ public class SuggestionsService : INService
             }
             catch (HttpException)
             {
-                Log.Error($"Button Repost will not work because of missing permissions in guild {channel.Guild}");
+                logger.LogError($"Button Repost will not work because of missing permissions in guild {channel.Guild}");
                 repostChecking.Remove(channel.Id);
                 return;
             }
@@ -148,7 +150,7 @@ public class SuggestionsService : INService
         var message = await GetSuggestButtonMessage(channel.Guild);
         if (string.IsNullOrWhiteSpace(message) || message is "disabled" or "-")
         {
-            var eb = new EmbedBuilder().WithOkColor().WithDescription(Strings.MakeSuggestionPrompt(channel.Guild.Id));
+            var eb = new EmbedBuilder().WithOkColor().WithDescription(strings.MakeSuggestionPrompt(channel.Guild.Id));
             var toAdd = await channel
                 .SendMessageAsync(embed: eb.Build(), components: (await GetSuggestButton(channel.Guild)).Build())
                 .ConfigureAwait(false);
@@ -690,7 +692,7 @@ public class SuggestionsService : INService
                 if (code is "-")
                 {
                     var eb = new EmbedBuilder().WithOkColor()
-                        .WithDescription(Strings.MakeSuggestionPrompt(channel.Guild.Id));
+                        .WithDescription(strings.MakeSuggestionPrompt(channel.Guild.Id));
                     var toadd = await channel.SendMessageAsync(plainText, embed: eb.Build(),
                         components: (await GetSuggestButton(channel.Guild)).Build()).ConfigureAwait(false);
                     await SetSuggestionButtonId(channel.Guild, toadd.Id).ConfigureAwait(false);
@@ -709,7 +711,7 @@ public class SuggestionsService : INService
             if (code is "-")
             {
                 var eb = new EmbedBuilder().WithOkColor()
-                    .WithDescription(Strings.MakeSuggestionPrompt(channel.Guild.Id));
+                    .WithDescription(strings.MakeSuggestionPrompt(channel.Guild.Id));
                 try
                 {
                     await ((IUserMessage)message).ModifyAsync(async x =>
@@ -1760,10 +1762,10 @@ public class SuggestionsService : INService
     {
         return state switch
         {
-            SuggestState.Denied => Strings.SuggestionDenied(guildId, suggestionId),
-            SuggestState.Considered => Strings.SuggestionConsidered(guildId, suggestionId),
-            SuggestState.Implemented => Strings.SuggestionImplemented(guildId, suggestionId),
-            SuggestState.Accepted => Strings.SuggestionAccepted(guildId, suggestionId),
+            SuggestState.Denied => strings.SuggestionDenied(guildId, suggestionId),
+            SuggestState.Considered => strings.SuggestionConsidered(guildId, suggestionId),
+            SuggestState.Implemented => strings.SuggestionImplemented(guildId, suggestionId),
+            SuggestState.Accepted => strings.SuggestionAccepted(guildId, suggestionId),
             _ => $"Suggestion #{suggestionId} {state}"
         };
     }
@@ -1793,7 +1795,7 @@ public class SuggestionsService : INService
             {
                 var msg = await channel
                     .SendErrorAsync(
-                        Strings.NoSuggestionChannelSet(guild.Id),
+                        strings.NoSuggestionChannelSet(guild.Id),
                         config)
                     .ConfigureAwait(false);
                 msg.DeleteAfter(3);
@@ -1802,7 +1804,7 @@ public class SuggestionsService : INService
 
             await interaction
                 .SendEphemeralErrorAsync(
-                    Strings.NoSuggestionChannelSet(guild.Id),
+                    strings.NoSuggestionChannelSet(guild.Id),
                     config)
                 .ConfigureAwait(false);
             return;
@@ -1863,7 +1865,7 @@ public class SuggestionsService : INService
             var t = await (await guild.GetTextChannelAsync(await GetSuggestionChannel(guild.Id)).ConfigureAwait(false))
                 .SendMessageAsync(
                     embed: new EmbedBuilder().WithAuthor(user)
-                        .WithTitle(Strings.SuggestionNumber(channel.Guild.Id, sugnum1))
+                        .WithTitle(strings.SuggestionNumber(channel.Guild.Id, sugnum1))
                         .WithDescription(suggestion).WithOkColor().Build(),
                     components: builder.Build()).ConfigureAwait(false);
             if (await GetEmoteMode(guild) == 0)
@@ -1883,7 +1885,7 @@ public class SuggestionsService : INService
             await Sugnum(guild, sugnum1 + 1).ConfigureAwait(false);
             await Suggest(guild, sugnum1, t.Id, user.Id, suggestion).ConfigureAwait(false);
             if (interaction is not null)
-                await interaction.SendEphemeralFollowupConfirmAsync(Strings.SuggestionSent(guild.Id))
+                await interaction.SendEphemeralFollowupConfirmAsync(strings.SuggestionSent(guild.Id))
                     .ConfigureAwait(false);
         }
         else
@@ -1935,9 +1937,9 @@ public class SuggestionsService : INService
             await Suggest(guild, sugnum1, msg.Id, user.Id, suggestion).ConfigureAwait(false);
 
             if (interaction is not null)
-                await interaction.SendEphemeralFollowupConfirmAsync(Strings.SuggestionSent(guild.Id));
+                await interaction.SendEphemeralFollowupConfirmAsync(strings.SuggestionSent(guild.Id));
             else
-                await channel.SendConfirmAsync(Strings.SuggestionSent(guild.Id)).ConfigureAwait(false);
+                await channel.SendConfirmAsync(strings.SuggestionSent(guild.Id)).ConfigureAwait(false);
         }
     }
 

@@ -1,7 +1,7 @@
 ﻿using DataModel;
-using LinqToDB;
 using Discord.Commands;
 using Discord.Interactions;
+using LinqToDB;
 using Mewdeko.Common.Configs;
 using Mewdeko.Common.ModuleBehaviors;
 using CommandInfo = Discord.Commands.CommandInfo;
@@ -94,7 +94,7 @@ public class DiscordPermOverrideService : INService, ILateBlocker
         }
         catch
         {
-             overrides ??= new ConcurrentDictionary<(ulong, string), DiscordPermOverride>();
+            overrides ??= new ConcurrentDictionary<(ulong, string), DiscordPermOverride>();
         }
     }
 
@@ -173,9 +173,7 @@ public class DiscordPermOverrideService : INService, ILateBlocker
         {
             over = new DiscordPermOverride
             {
-                Command = commandName,
-                Perm = (ulong)perm,
-                GuildId = guildId
+                Command = commandName, Perm = (ulong)perm, GuildId = guildId
             };
             await db.InsertAsync(over).ConfigureAwait(false);
         }

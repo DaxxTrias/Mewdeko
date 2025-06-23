@@ -6,7 +6,6 @@ using Mewdeko.Common.TypeReaders;
 using Mewdeko.Common.TypeReaders.Models;
 using Mewdeko.Modules.Utility.Common;
 using Mewdeko.Modules.Utility.Services;
-using Serilog;
 
 namespace Mewdeko.Modules.Utility;
 
@@ -17,7 +16,8 @@ public partial class Utility
     ///     Allows for creating, modifying, and removing automated repeating messages.
     /// </summary>
     [Group]
-    public class RepeatCommands(InteractiveService interactivity) : MewdekoSubmodule<MessageRepeaterService>
+    public class RepeatCommands(InteractiveService interactivity, ILogger<RepeatCommands> logger)
+        : MewdekoSubmodule<MessageRepeaterService>
     {
         /// <summary>
         ///     Immediately triggers a repeater by its index number.
@@ -252,10 +252,11 @@ public partial class Utility
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Error creating repeater");
+                logger.LogError(ex, "Error creating repeater");
                 await ReplyErrorAsync(Strings.ErrorCreatingRepeater(ctx.Guild.Id)).ConfigureAwait(false);
             }
         }
+
         /// <summary>
         ///     Lists all active repeaters in the guild.
         /// </summary>
@@ -316,6 +317,7 @@ public partial class Utility
                 return pageBuilder;
             }
         }
+
         /// <summary>
         ///     Updates the message of an existing repeater.
         /// </summary>
