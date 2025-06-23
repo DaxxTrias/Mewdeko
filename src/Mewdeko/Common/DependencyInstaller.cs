@@ -24,7 +24,7 @@ public static class DependencyInstaller
         {
             LinuxDistro.Ubuntu, [
                 "sudo apt update",
-                "sudo apt install -y postgresql postgresql-contrib",
+                "sudo apt install -y postgresql-17 postgresql-contrib",
                 "sudo systemctl start postgresql",
                 "sudo systemctl enable postgresql",
                 "sudo apt install -y redis-server",
@@ -35,7 +35,7 @@ public static class DependencyInstaller
         {
             LinuxDistro.Debian, [
                 "sudo apt update",
-                "sudo apt install -y postgresql postgresql-contrib",
+                "sudo apt install -y postgresql-17 postgresql-contrib",
                 "sudo systemctl start postgresql",
                 "sudo systemctl enable postgresql",
                 "sudo apt install -y redis-server",
