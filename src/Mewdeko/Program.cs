@@ -58,8 +58,12 @@ public class Program
     {
         AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
         var log = LogSetup.SetupLogger("Startup"); // Initial logger name
+
+        // Check and install dependencies FIRST (with null connection string to trigger setup)
+        DependencyInstaller.CheckAndInstallDependencies(null);
+
+        // THEN load credentials (dependencies should be ready now)
         var credentials = new BotCredentials();
-        DependencyInstaller.CheckAndInstallDependencies(credentials.PsqlConnectionString);
         var dbUpgrader = new DatabaseUpgrader(credentials.PsqlConnectionString);
 
         // Test connection first
