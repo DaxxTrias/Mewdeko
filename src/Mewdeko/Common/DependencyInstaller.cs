@@ -417,9 +417,17 @@ public static class DependencyInstaller
 
     private static bool PromptForDatabaseSetup()
     {
-        Log.Information("Would you like to set up a PostgreSQL database? (y/n)");
-        var response = Console.ReadLine()?.ToLower();
-        return response is "y" or "yes";
+        Log.Information("Would you like to set up a PostgreSQL database? (y/n) [timeout: 10s]");
+
+        var task = Task.Run(() => Console.ReadLine()?.ToLower());
+        if (task.Wait(TimeSpan.FromSeconds(10)))
+        {
+            var response = task.Result;
+            return response is "y" or "yes";
+        }
+
+        Log.Information("No response received within 10 seconds. Skipping database setup.");
+        return false;
     }
 
     private static (string dbName, string dbUser, string dbPassword) GetDatabaseDetails()
@@ -588,6 +596,7 @@ public static class DependencyInstaller
                         2. Redis is running: sudo systemctl status redis
                         """);
     }
+
 
     private enum LinuxDistro
     {
