@@ -6,7 +6,6 @@ using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Modules.Administration.Services;
-using Serilog;
 using SkiaSharp;
 
 namespace Mewdeko.Modules.Administration;
@@ -18,7 +17,7 @@ public partial class Administration
     /// </summary>
     /// <param name="services">Main services provider for the bot.</param>
     /// <param name="intserv">Interactive service used for paginated embeds.</param>
-    public class RoleCommands(IServiceProvider services, InteractiveService intserv)
+    public class RoleCommands(IServiceProvider services, InteractiveService intserv, ILogger<RoleCommands> logger)
         : MewdekoSubmodule<RoleCommandsService>
     {
         /// <summary>
@@ -53,7 +52,7 @@ public partial class Administration
                     var roleResult = await roleReader.ReadAsync(ctx, inputRoleStr, services).ConfigureAwait(false);
                     if (!roleResult.IsSuccess)
                     {
-                        Log.Warning("Role {0} not found", inputRoleStr);
+                        logger.LogWarning("Role {0} not found", inputRoleStr);
                         return null;
                     }
 
@@ -341,7 +340,7 @@ public partial class Administration
             }
             catch (Exception ex)
             {
-                Log.Warning(ex, "Error in setrole command");
+                logger.LogWarning(ex, "Error in setrole command");
                 await ReplyErrorAsync(Strings.SetroleErr(ctx.Guild.Id)).ConfigureAwait(false);
             }
         }
@@ -377,7 +376,7 @@ public partial class Administration
             }
             catch (Exception ex)
             {
-                Log.Warning(ex, "Error in setrole command");
+                logger.LogWarning(ex, "Error in setrole command");
                 await ReplyErrorAsync(Strings.SetroleErr(ctx.Guild.Id)).ConfigureAwait(false);
             }
         }

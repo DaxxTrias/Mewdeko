@@ -5,7 +5,6 @@ using Fergun.Interactive.Pagination;
 using Mewdeko.Common.Attributes.InteractionCommands;
 using Mewdeko.Modules.Tickets.Common;
 using Mewdeko.Modules.Tickets.Services;
-using Serilog;
 
 namespace Mewdeko.Modules.Tickets;
 
@@ -55,16 +54,18 @@ public partial class TicketsSlash
     {
         private readonly IDataCache cache;
         private readonly InteractiveService interactivity;
+        private readonly ILogger<TicketSetupWizard> logger;
 
         /// <summary>
         ///     Initializes a new instance of the <see cref="TicketSetupWizard" /> class
         /// </summary>
         /// <param name="interactivity">The interactive service</param>
         /// <param name="cache">The cache service</param>
-        public TicketSetupWizard(InteractiveService interactivity, IDataCache cache)
+        public TicketSetupWizard(InteractiveService interactivity, IDataCache cache, ILogger<TicketSetupWizard> logger)
         {
             this.interactivity = interactivity;
             this.cache = cache;
+            this.logger = logger;
         }
 
         /// <summary>
@@ -235,7 +236,7 @@ public partial class TicketsSlash
                             var label = parts[0];
                             var emoji = parts.Length > 1 ? parts[1] : null;
                             var description = parts.Length > 2 ? parts[2] : null;
-                            Log.Information(label);
+                            logger.LogInformation(label);
                             await Service.AddSelectOptionAsync(menu, label, $"option_{Guid.NewGuid():N}", description,
                                 emoji, updateComponents: false);
                         }
@@ -258,7 +259,7 @@ public partial class TicketsSlash
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Error creating panel from template {TemplateId}", templateId);
+                logger.LogError(ex, "Error creating panel from template {TemplateId}", templateId);
                 await FollowupAsync($"{Config.ErrorEmote} An error occurred while creating the panel from template.",
                     ephemeral: true);
             }
@@ -540,17 +541,15 @@ public partial class TicketsSlash
                             null, // Can be set later via commands
                             null, // Can be set later via commands
                             autoCloseTime,
-                            responseTime,
-                            1, // Default value
-                            null, // Can be set later via commands
-                            null // Can be set later via commands
+                            responseTime // Can be set later via commands
                         );
 
                         createdComponents.Add($"🔘 {buttonTemplate.Label}");
                     }
                     catch (Exception ex)
                     {
-                        Log.Error(ex, "Error adding button {Label} to panel {PanelId}", buttonTemplate.Label, panel.Id);
+                        logger.LogError(ex, "Error adding button {Label} to panel {PanelId}", buttonTemplate.Label,
+                            panel.Id);
                         createdComponents.Add($"{Config.ErrorEmote} {buttonTemplate.Label} (failed)");
                     }
                 }
@@ -571,7 +570,7 @@ public partial class TicketsSlash
                                 var label = parts[0];
                                 var emoji = parts.Length > 1 ? parts[1] : null;
                                 var description = parts.Length > 2 ? parts[2] : null;
-                                Log.Information(label);
+                                logger.LogInformation(label);
                                 await Service.AddSelectOptionAsync(menu, label, $"option_{Guid.NewGuid():N}",
                                     description, emoji);
                             }
@@ -581,7 +580,7 @@ public partial class TicketsSlash
                     }
                     catch (Exception ex)
                     {
-                        Log.Error(ex, "Error adding select menu {Placeholder} to panel {PanelId}",
+                        logger.LogError(ex, "Error adding select menu {Placeholder} to panel {PanelId}",
                             menuTemplate.Placeholder, panel.Id);
                         createdComponents.Add($"{Config.ErrorEmote} {menuTemplate.Placeholder} (failed)");
                     }
@@ -608,7 +607,7 @@ public partial class TicketsSlash
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Error creating panel from template in wizard");
+                logger.LogError(ex, "Error creating panel from template in wizard");
                 await FollowupAsync($"{Config.ErrorEmote} An error occurred while creating the panel.",
                     ephemeral: true);
             }
@@ -718,7 +717,7 @@ public partial class TicketsSlash
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Error processing quick button modal for panel {PanelId}", panelId);
+                logger.LogError(ex, "Error processing quick button modal for panel {PanelId}", panelId);
                 await FollowupAsync(
                     $"{Config.ErrorEmote} An error occurred while processing your button configuration.",
                     ephemeral: true);
@@ -792,7 +791,7 @@ public partial class TicketsSlash
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Error processing quick select menu modal for panel {PanelId}", panelId);
+                logger.LogError(ex, "Error processing quick select menu modal for panel {PanelId}", panelId);
                 await FollowupAsync(
                     $"{Config.ErrorEmote} An error occurred while processing your select menu configuration.",
                     ephemeral: true);
@@ -894,7 +893,7 @@ public partial class TicketsSlash
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Error creating panel from quick wizard");
+                logger.LogError(ex, "Error creating panel from quick wizard");
                 await FollowupAsync($"{Config.ErrorEmote} An error occurred while creating the panel.",
                     ephemeral: true);
             }
@@ -1012,10 +1011,7 @@ public partial class TicketsSlash
                     supportRoles,
                     viewerRoles,
                     autoCloseTime,
-                    responseTime,
-                    1, // Default value
-                    null, // Can be set later
-                    null // Can be set later
+                    responseTime // Can be set later
                 );
 
                 await FollowupAsync($"{Config.SuccessEmote} Button '{label}' added successfully to panel {panelId}!",
@@ -1027,7 +1023,7 @@ public partial class TicketsSlash
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Error confirming button creation");
+                logger.LogError(ex, "Error confirming button creation");
                 await FollowupAsync($"{Config.ErrorEmote} An error occurred while creating the button.",
                     ephemeral: true);
             }
@@ -1096,7 +1092,7 @@ public partial class TicketsSlash
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Error confirming menu creation");
+                logger.LogError(ex, "Error confirming menu creation");
                 await FollowupAsync($"{Config.ErrorEmote} An error occurred while creating the select menu.",
                     ephemeral: true);
             }

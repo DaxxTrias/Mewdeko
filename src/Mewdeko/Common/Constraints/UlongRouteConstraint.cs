@@ -4,12 +4,12 @@ using Microsoft.AspNetCore.Routing;
 namespace Mewdeko.Common.Constraints;
 
 /// <summary>
-/// Route constraint for ulong parameters
+///     Route constraint for ulong parameters
 /// </summary>
 public class UlongRouteConstraint : IRouteConstraint
 {
     /// <summary>
-    /// Determines whether the route parameter satisfies the constraint
+    ///     Determines whether the route parameter satisfies the constraint
     /// </summary>
     /// <param name="httpContext">The HTTP context</param>
     /// <param name="route">The route the constraint is associated with</param>

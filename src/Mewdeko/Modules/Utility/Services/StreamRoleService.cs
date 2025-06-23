@@ -6,7 +6,6 @@ using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Common.TypeReaders;
 using Mewdeko.Modules.Utility.Common;
 using Mewdeko.Modules.Utility.Common.Exceptions;
-using Serilog;
 
 namespace Mewdeko.Modules.Utility.Services;
 
@@ -19,7 +18,7 @@ public class StreamRoleService : INService, IUnloadableService, IReadyExecutor
     private readonly DiscordShardedClient client;
     private readonly IDataConnectionFactory dbFactory;
     private readonly EventHandler eventHandler;
-    private readonly GuildSettingsService gss;
+    private readonly ILogger<StreamRoleService> logger;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="StreamRoleService" />.
@@ -27,14 +26,13 @@ public class StreamRoleService : INService, IUnloadableService, IReadyExecutor
     /// <param name="client">The Discord client used to access guild and user information.</param>
     /// <param name="dbFactory">The database service for storing and retrieving stream role settings.</param>
     /// <param name="eventHandler">Event handler for capturing and responding to guild member updates.</param>
-    /// <param name="gss">The guild settings service for retrieving guild-specific settings.</param>
     public StreamRoleService(DiscordShardedClient client, IDataConnectionFactory dbFactory, EventHandler eventHandler,
-        GuildSettingsService gss)
+        ILogger<StreamRoleService> logger)
     {
         this.client = client;
         this.dbFactory = dbFactory;
         this.eventHandler = eventHandler;
-        this.gss = gss;
+        this.logger = logger;
 
         eventHandler.GuildMemberUpdated += Client_GuildMemberUpdated;
     }
@@ -328,25 +326,25 @@ public class StreamRoleService : INService, IUnloadableService, IReadyExecutor
                 if (addRole == null)
                 {
                     await StopStreamRole(user.Guild).ConfigureAwait(false);
-                    Log.Warning("Stream role in server {0} no longer exists. Stopping", setting.AddRoleId);
+                    logger.LogWarning("Stream role in server {0} no longer exists. Stopping", setting.AddRoleId);
                     return;
                 }
 
                 //check if he doesn't have addrole already, to avoid errors
                 if (!user.RoleIds.Contains(setting.AddRoleId))
                     await user.AddRoleAsync(addRole).ConfigureAwait(false);
-                Log.Information("Added stream role to user {0} in {1} server", user.ToString(),
+                logger.LogInformation("Added stream role to user {0} in {1} server", user.ToString(),
                     user.Guild.ToString());
             }
             catch (HttpException ex) when (ex.HttpCode == HttpStatusCode.Forbidden)
             {
                 await StopStreamRole(user.Guild).ConfigureAwait(false);
-                Log.Warning(ex, "Error adding stream role(s). Forcibly disabling stream role feature");
+                logger.LogWarning(ex, "Error adding stream role(s). Forcibly disabling stream role feature");
                 throw new StreamRolePermissionException();
             }
             catch (Exception ex)
             {
-                Log.Warning(ex, "Failed adding stream role");
+                logger.LogWarning(ex, "Failed adding stream role");
             }
         }
         else
@@ -361,13 +359,13 @@ public class StreamRoleService : INService, IUnloadableService, IReadyExecutor
                         throw new StreamRoleNotFoundException();
 
                     await user.RemoveRoleAsync(addRole).ConfigureAwait(false);
-                    Log.Information("Removed stream role from the user {0} in {1} server", user.ToString(),
+                    logger.LogInformation("Removed stream role from the user {0} in {1} server", user.ToString(),
                         user.Guild.ToString());
                 }
                 catch (HttpException ex) when (ex.HttpCode == HttpStatusCode.Forbidden)
                 {
                     await StopStreamRole(user.Guild).ConfigureAwait(false);
-                    Log.Warning(ex, "Error removing stream role(s). Forcibly disabling stream role feature");
+                    logger.LogWarning(ex, "Error removing stream role(s). Forcibly disabling stream role feature");
                     throw new StreamRolePermissionException();
                 }
             }

@@ -2,26 +2,34 @@ using DataModel;
 using Discord.Commands;
 using LinqToDB;
 using Microsoft.Extensions.DependencyInjection;
-using Serilog;
 
 namespace Mewdeko.Common.Attributes.TextCommands;
 
 /// <summary>
-/// Attribute to require a user to be in dragon mode to execute a command or method. Used rarely, but mostly in beta commands.
+///     Attribute to require a user to be in dragon mode to execute a command or method. Used rarely, but mostly in beta
+///     commands.
 /// </summary>
 public class RequireDragonAttribute : PreconditionAttribute
 {
     /// <summary>
-    /// Checks the permissions of the command or method before execution.
-    /// Verifies if the user associated with the command context has the 'IsDragon' flag set in the database.
+    ///     Checks the permissions of the command or method before execution.
+    ///     Verifies if the user associated with the command context has the 'IsDragon' flag set in the database.
     /// </summary>
     /// <param name="context">The command context, containing user and guild information.</param>
     /// <param name="command">The command being executed.</param>
-    /// <param name="services">The service provider used to resolve dependencies like the database factory and settings service.</param>
-    /// <returns>A task that represents the asynchronous operation. The task result contains the precondition result (<see cref="PreconditionResult.FromSuccess"/> if the user is a dragon, <see cref="PreconditionResult.FromError(string)"/> otherwise).</returns>
+    /// <param name="services">
+    ///     The service provider used to resolve dependencies like the database factory and settings
+    ///     service.
+    /// </param>
+    /// <returns>
+    ///     A task that represents the asynchronous operation. The task result contains the precondition result (
+    ///     <see cref="PreconditionResult.FromSuccess" /> if the user is a dragon,
+    ///     <see cref="PreconditionResult.FromError(string)" /> otherwise).
+    /// </returns>
     public override async Task<PreconditionResult> CheckPermissionsAsync(ICommandContext context, CommandInfo command,
         IServiceProvider services)
     {
+        var logger = services.GetRequiredService<ILogger<RequireDragonAttribute>>();
         var dbFactory = services.GetRequiredService<IDataConnectionFactory>();
         var guildConfigService = services.GetRequiredService<GuildSettingsService>();
 
@@ -54,7 +62,8 @@ public class RequireDragonAttribute : PreconditionAttribute
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Failed to insert new DiscordUser for UserId {UserId} in RequireDragonAttribute", userId);
+            logger.LogError(ex, "Failed to insert new DiscordUser for UserId {UserId} in RequireDragonAttribute",
+                userId);
             return PreconditionResult.FromError("Database error checking permissions.");
         }
 

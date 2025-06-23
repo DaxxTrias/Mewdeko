@@ -6,7 +6,6 @@ using System.Text.Json.Serialization;
 using System.Threading;
 using System.Xml;
 using Mewdeko.Modules.Utility.Common;
-
 using StackExchange.Redis;
 
 namespace Mewdeko.Modules.Utility.Services;

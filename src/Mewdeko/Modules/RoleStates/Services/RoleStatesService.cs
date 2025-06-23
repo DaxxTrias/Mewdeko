@@ -1,6 +1,5 @@
 using DataModel;
 using LinqToDB;
-using Serilog;
 
 namespace Mewdeko.Modules.RoleStates.Services;
 
@@ -11,15 +10,18 @@ namespace Mewdeko.Modules.RoleStates.Services;
 public class RoleStatesService : INService
 {
     private readonly IDataConnectionFactory dbFactory;
+    private readonly ILogger<RoleStatesService> logger;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="RoleStatesService" /> class.
     /// </summary>
     /// <param name="dbFactory">The database service to interact with stored data.</param>
     /// <param name="eventHandler">The event handler to subscribe to guild member events.</param>
-    public RoleStatesService(IDataConnectionFactory dbFactory, EventHandler eventHandler)
+    public RoleStatesService(IDataConnectionFactory dbFactory, EventHandler eventHandler,
+        ILogger<RoleStatesService> logger)
     {
         this.dbFactory = dbFactory;
+        this.logger = logger;
         eventHandler.UserLeft += OnUserLeft;
         eventHandler.UserBanned += OnUserBanned;
         eventHandler.UserJoined += OnUserJoined;
@@ -77,7 +79,8 @@ public class RoleStatesService : INService
             }
             catch (Exception ex)
             {
-                Log.Error("Failed to assign roles to {User} in {Guild}. Most likely missing permissions\n{Exception}",
+                logger.LogError(
+                    "Failed to assign roles to {User} in {Guild}. Most likely missing permissions\n{Exception}",
                     usr.Username, usr.Guild, ex);
             }
         }
@@ -394,7 +397,7 @@ public class RoleStatesService : INService
         }
         catch
         {
-            Log.Error("Failed to assign roles to user {User}", targetUser.Username);
+            logger.LogError("Failed to assign roles to user {User}", targetUser.Username);
         }
 
         return true;
@@ -506,7 +509,7 @@ public class RoleStatesService : INService
         }
 
         // Log the role mapping results
-        Log.Information("Found {MappedRoles} matching roles between guilds by name", roleMapping.Count);
+        logger.LogInformation("Found {MappedRoles} matching roles between guilds by name", roleMapping.Count);
 
         var transferCount = 0;
         var skippedCount = 0;

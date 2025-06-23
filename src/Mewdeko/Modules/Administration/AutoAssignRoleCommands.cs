@@ -43,7 +43,8 @@ public partial class Administration
             else if (roles.Contains(role.Id))
                 await AutoAssignRole().ConfigureAwait(false);
             else
-                await ReplyConfirmAsync(Strings.AarRoleRemoved(ctx.Guild.Id, Format.Bold(role.Mention))).ConfigureAwait(false);
+                await ReplyConfirmAsync(Strings.AarRoleRemoved(ctx.Guild.Id, Format.Bold(role.Mention)))
+                    .ConfigureAwait(false);
         }
 
         /// <summary>
@@ -108,7 +109,8 @@ public partial class Administration
             else if (roles.Contains(role.Id))
                 await AutoAssignBotRole().ConfigureAwait(false);
             else
-                await ReplyConfirmAsync(Strings.AabrRoleRemoved(ctx.Guild.Id, Format.Bold(role.Mention))).ConfigureAwait(false);
+                await ReplyConfirmAsync(Strings.AabrRoleRemoved(ctx.Guild.Id, Format.Bold(role.Mention)))
+                    .ConfigureAwait(false);
         }
 
         /// <summary>

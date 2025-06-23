@@ -6,7 +6,6 @@ using LinqToDB;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Modules.Searches.Services;
 
-
 namespace Mewdeko.Modules.Searches;
 
 public partial class Searches

@@ -3,7 +3,6 @@ using System.Text.Json;
 using Discord.Commands;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Modules.Searches.Common;
-using Serilog;
 
 namespace Mewdeko.Modules.Searches;
 
@@ -13,7 +12,8 @@ public partial class Searches
     ///     Module for interacting with osu! APIs and retrieving user data.
     /// </summary>
     [Group]
-    public class OsuCommands(IBotCredentials creds, IHttpClientFactory factory) : MewdekoSubmodule
+    public class OsuCommands(IBotCredentials creds, IHttpClientFactory factory, ILogger<OsuCommands> logger)
+        : MewdekoSubmodule
     {
         /// <summary>
         ///     Retrieves osu! user profile information.
@@ -83,7 +83,7 @@ public partial class Searches
             catch (Exception ex)
             {
                 await ReplyErrorAsync(Strings.OsuFailed(ctx.Guild.Id)).ConfigureAwait(false);
-                Log.Warning(ex, "Osu command failed");
+                logger.LogWarning(ex, "Osu command failed");
             }
         }
 

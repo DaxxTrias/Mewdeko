@@ -1,6 +1,5 @@
 using DataModel;
 using LinqToDB;
-using Serilog;
 
 namespace Mewdeko.Modules.Utility.Services;
 
@@ -12,6 +11,7 @@ public class AutoPublishService : INService
 {
     private readonly DiscordShardedClient client;
     private readonly IDataConnectionFactory dbFactory;
+    private readonly ILogger<AutoPublishService> logger;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="AutoPublishService" /> class.
@@ -19,10 +19,12 @@ public class AutoPublishService : INService
     /// <param name="dbFactory">The database service for accessing and storing configuration.</param>
     /// <param name="handler">The event handler for subscribing to message received events.</param>
     /// <param name="client">The Discord client for interacting with the Discord API.</param>
-    public AutoPublishService(IDataConnectionFactory dbFactory, EventHandler handler, DiscordShardedClient client)
+    public AutoPublishService(IDataConnectionFactory dbFactory, EventHandler handler, DiscordShardedClient client,
+        ILogger<AutoPublishService> logger)
     {
         this.dbFactory = dbFactory;
         this.client = client;
+        this.logger = logger;
         handler.MessageReceived += AutoPublish;
     }
 
@@ -70,7 +72,7 @@ public class AutoPublishService : INService
         }
         catch (Exception e)
         {
-            Log.Error(e, "Unable to publish message:");
+            logger.LogError(e, "Unable to publish message:");
         }
     }
 

@@ -1,8 +1,7 @@
-﻿using Mewdeko.Common.ModuleBehaviors;
-using Mewdeko.Modules.Utility.Common;
-using DataModel;
+﻿using DataModel;
 using LinqToDB;
-using Serilog;
+using Mewdeko.Common.ModuleBehaviors;
+using Mewdeko.Modules.Utility.Common;
 
 namespace Mewdeko.Modules.Utility.Services;
 
@@ -12,11 +11,40 @@ namespace Mewdeko.Modules.Utility.Services;
 /// </summary>
 public class MessageRepeaterService : INService, IReadyExecutor, IDisposable
 {
+    private readonly Mewdeko bot;
     private readonly DiscordShardedClient client;
     private readonly IDataConnectionFactory dbFactory;
-    private readonly Mewdeko bot;
     private readonly GuildSettingsService gss;
     private readonly EventHandler handler;
+    private readonly ILogger<MessageRepeaterService> logger;
+
+    /// <summary>
+    ///     Initializes a new instance of the MessageRepeaterService class.
+    ///     Sets up event handlers for guild-related events and initializes the service dependencies.
+    /// </summary>
+    /// <param name="client">The Discord client instance used for sending messages and handling events.</param>
+    /// <param name="dbFactory">Provider for database context access.</param>
+    /// <param name="bot">The main bot instance.</param>
+    /// <param name="gss">Service for accessing guild settings.</param>
+    /// <param name="handler">Service for handling Discord events asynchronously</param>
+    public MessageRepeaterService(
+        DiscordShardedClient client,
+        IDataConnectionFactory dbFactory,
+        Mewdeko bot,
+        GuildSettingsService gss, EventHandler handler, ILogger<MessageRepeaterService> logger)
+    {
+        this.client = client;
+        this.dbFactory = dbFactory;
+        this.bot = bot;
+        this.gss = gss;
+        this.handler = handler;
+        this.logger = logger;
+
+        handler.GuildAvailable += OnGuildAvailable;
+        handler.GuildUnavailable += OnGuildUnavailable;
+        handler.JoinedGuild += OnJoinedGuild;
+        handler.LeftGuild += OnLeftGuild;
+    }
 
     /// <summary>
     ///     Gets the collection of active repeaters organized by guild ID and repeater ID.
@@ -33,30 +61,23 @@ public class MessageRepeaterService : INService, IReadyExecutor, IDisposable
     public bool RepeaterReady { get; private set; }
 
     /// <summary>
-    ///     Initializes a new instance of the MessageRepeaterService class.
-    ///     Sets up event handlers for guild-related events and initializes the service dependencies.
+    ///     Performs cleanup of resources used by the service.
+    ///     Stops all active repeaters and unsubscribes from Discord client events.
     /// </summary>
-    /// <param name="client">The Discord client instance used for sending messages and handling events.</param>
-    /// <param name="dbFactory">Provider for database context access.</param>
-    /// <param name="bot">The main bot instance.</param>
-    /// <param name="gss">Service for accessing guild settings.</param>
-    /// <param name="handler">Service for handling Discord events asynchronously</param>
-    public MessageRepeaterService(
-        DiscordShardedClient client,
-        IDataConnectionFactory dbFactory,
-        Mewdeko bot,
-        GuildSettingsService gss, EventHandler handler)
+    public void Dispose()
     {
-        this.client = client;
-        this.dbFactory = dbFactory;
-        this.bot = bot;
-        this.gss = gss;
-        this.handler = handler;
+        foreach (var guildRepeaters in Repeaters.Values)
+        {
+            foreach (var runner in guildRepeaters.Values)
+            {
+                runner.Stop();
+            }
+        }
 
-        handler.GuildAvailable += OnGuildAvailable;
-        handler.GuildUnavailable += OnGuildUnavailable;
-        handler.JoinedGuild += OnJoinedGuild;
-        handler.LeftGuild += OnLeftGuild;
+        handler.GuildAvailable -= OnGuildAvailable;
+        handler.GuildUnavailable -= OnGuildUnavailable;
+        handler.JoinedGuild -= OnJoinedGuild;
+        handler.LeftGuild -= OnLeftGuild;
     }
 
 
@@ -65,9 +86,9 @@ public class MessageRepeaterService : INService, IReadyExecutor, IDisposable
     {
         try
         {
-            Log.Information($"Starting {GetType()} Cache");
+            logger.LogInformation($"Starting {GetType()} Cache");
             await bot.Ready.Task.ConfigureAwait(false);
-            Log.Information("Loading message repeaters");
+            logger.LogInformation("Loading message repeaters");
 
             foreach (var guild in client.Guilds)
             {
@@ -78,7 +99,7 @@ public class MessageRepeaterService : INService, IReadyExecutor, IDisposable
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error during repeater initialization");
+            logger.LogError(ex, "Error during repeater initialization");
             RepeaterReady = false;
         }
     }
@@ -108,7 +129,6 @@ public class MessageRepeaterService : INService, IReadyExecutor, IDisposable
         if (toDelete != null)
         {
             await dbContext.DeleteAsync(toDelete);
-
         }
     }
 
@@ -130,7 +150,7 @@ public class MessageRepeaterService : INService, IReadyExecutor, IDisposable
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Failed to update last message for repeater {RepeaterId}", repeaterId);
+            logger.LogError(ex, "Failed to update last message for repeater {RepeaterId}", repeaterId);
         }
     }
 
@@ -156,7 +176,7 @@ public class MessageRepeaterService : INService, IReadyExecutor, IDisposable
                 }
                 catch (Exception ex)
                 {
-                    Log.Error(ex, "Failed to initialize repeater {RepeaterId} for guild {GuildId}",
+                    logger.LogError(ex, "Failed to initialize repeater {RepeaterId} for guild {GuildId}",
                         repeater.Id, guild.Id);
                 }
             }
@@ -174,7 +194,7 @@ public class MessageRepeaterService : INService, IReadyExecutor, IDisposable
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Failed to load repeaters for Guild {GuildId}", guild.Id);
+            logger.LogError(ex, "Failed to load repeaters for Guild {GuildId}", guild.Id);
         }
     }
 
@@ -279,7 +299,6 @@ public class MessageRepeaterService : INService, IReadyExecutor, IDisposable
         await dbContext.UpdateAsync(item);
 
 
-
         if (Repeaters.TryGetValue(guildId, out var guildRepeaters) &&
             guildRepeaters.TryGetValue(repeaterId, out var runner))
         {
@@ -333,7 +352,6 @@ public class MessageRepeaterService : INService, IReadyExecutor, IDisposable
         await dbContext.UpdateAsync(item);
 
 
-
         if (Repeaters.TryGetValue(guildId, out var guildRepeaters) &&
             guildRepeaters.TryGetValue(repeaterId, out var runner))
         {
@@ -367,25 +385,5 @@ public class MessageRepeaterService : INService, IReadyExecutor, IDisposable
             return [];
 
         return guildRepeaters.Values.ToList();
-    }
-
-    /// <summary>
-    ///     Performs cleanup of resources used by the service.
-    ///     Stops all active repeaters and unsubscribes from Discord client events.
-    /// </summary>
-    public void Dispose()
-    {
-        foreach (var guildRepeaters in Repeaters.Values)
-        {
-            foreach (var runner in guildRepeaters.Values)
-            {
-                runner.Stop();
-            }
-        }
-
-        handler.GuildAvailable -= OnGuildAvailable;
-        handler.GuildUnavailable -= OnGuildUnavailable;
-        handler.JoinedGuild -= OnJoinedGuild;
-        handler.LeftGuild -= OnLeftGuild;
     }
 }

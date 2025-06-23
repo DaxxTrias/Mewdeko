@@ -253,7 +253,8 @@ public partial class Moderation
                     break;
                 case > 0 when failCount > 0:
                     await ctx.Channel.SendConfirmAsync(
-                        Strings.PurgeUserPartial(ctx.Guild.Id, deletedMessageCount, user.Mention, successCount, failCount));
+                        Strings.PurgeUserPartial(ctx.Guild.Id, deletedMessageCount, user.Mention, successCount,
+                            failCount));
                     break;
                 case 0 when failCount > 0:
                     await ctx.Channel.SendErrorAsync(

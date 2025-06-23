@@ -2,7 +2,6 @@ using System.Net.Http;
 using Mewdeko.Modules.Currency.Services;
 using Mewdeko.Modules.Xp.Models;
 using Mewdeko.Services.Strings;
-using Serilog;
 
 namespace Mewdeko.Modules.Xp.Services;
 
@@ -56,6 +55,8 @@ public partial class XpService : INService, IUnloadableService
     internal readonly IDataConnectionFactory DbFactory;
     internal readonly EventHandler EventHandler;
     internal readonly IHttpClientFactory HttpClientFactory;
+    private readonly ILogger<XpService> logger;
+    private readonly IServiceProvider serviceProvider;
 
 
     // Core components
@@ -78,28 +79,38 @@ public partial class XpService : INService, IUnloadableService
     /// <param name="eventHandler">The Discord event handler.</param>
     /// <param name="currencyService">The currency service.</param>
     /// <param name="httpClientFactory">The http client factory</param>
+    /// <param name="cacheManager">The XP cache manager.</param>
+    /// <param name="rewardManager">The XP reward manager.</param>
+    /// <param name="competitionManager">The XP competition manager.</param>
+    /// <param name="voiceTracker">The XP voice tracker.</param>
+    /// <param name="backgroundProcessor">The XP background processor.</param>
     public XpService(
         DiscordShardedClient client,
         IDataConnectionFactory dbFactory,
         IDataCache dataCache,
         EventHandler eventHandler,
-        ICurrencyService currencyService, IHttpClientFactory httpClientFactory, GeneratedBotStrings strings)
+        ICurrencyService currencyService,
+        IHttpClientFactory httpClientFactory,
+        GeneratedBotStrings strings,
+        XpCacheManager cacheManager,
+        XpRewardManager rewardManager,
+        XpCompetitionManager competitionManager,
+        XpVoiceTracker voiceTracker,
+        XpBackgroundProcessor backgroundProcessor, ILogger<XpService> logger, IServiceProvider serviceProvider)
     {
         Client = client;
         DbFactory = dbFactory;
         EventHandler = eventHandler;
         HttpClientFactory = httpClientFactory;
 
-        // Initialize sub-components
-        cacheManager = new XpCacheManager(dataCache, dbFactory, client);
-        rewardManager = new XpRewardManager(client, dbFactory, currencyService, cacheManager, strings);
-        competitionManager = new XpCompetitionManager(client, dbFactory, strings);
-        voiceTracker = new XpVoiceTracker(client, dbFactory, cacheManager);
-        backgroundProcessor = new XpBackgroundProcessor(
-            dbFactory,
-            cacheManager,
-            rewardManager,
-            competitionManager, client);
+        // Assign injected sub-components
+        this.cacheManager = cacheManager;
+        this.rewardManager = rewardManager;
+        this.competitionManager = competitionManager;
+        this.voiceTracker = voiceTracker;
+        this.backgroundProcessor = backgroundProcessor;
+        this.logger = logger;
+        this.serviceProvider = serviceProvider;
 
         // Register event handlers
         EventHandler.MessageReceived += HandleMessageXp;
@@ -116,11 +127,11 @@ public partial class XpService : INService, IUnloadableService
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Error during reward cache preload");
+                logger.LogError(ex, "Error during reward cache preload");
             }
         });
 
-        Log.Information("XP Service initialized");
+        logger.LogInformation("XP Service initialized");
     }
 
     /// <summary>
@@ -139,7 +150,7 @@ public partial class XpService : INService, IUnloadableService
         voiceTracker.Dispose();
         competitionManager.Dispose();
 
-        Log.Information("XP Service unloaded");
+        logger.LogInformation("XP Service unloaded");
         return Task.CompletedTask;
     }
 
@@ -179,7 +190,7 @@ public partial class XpService : INService, IUnloadableService
         }
         catch (Exception ex)
         {
-            Log.Error($"Error handling message XP for {user.Id} in {user.Guild.Id}\n{ex}");
+            logger.LogError($"Error handling message XP for {user.Id} in {user.Guild.Id}\n{ex}");
         }
     }
 
@@ -201,7 +212,7 @@ public partial class XpService : INService, IUnloadableService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error handling guild available for {GuildId}", guild.Id);
+            logger.LogError(ex, "Error handling guild available for {GuildId}", guild.Id);
         }
     }
 
@@ -220,7 +231,8 @@ public partial class XpService : INService, IUnloadableService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error handling first message of day for {UserId} in {GuildId}", user.Id, user.Guild.Id);
+            logger.LogError(ex, "Error handling first message of day for {UserId} in {GuildId}", user.Id,
+                user.Guild.Id);
         }
     }
 

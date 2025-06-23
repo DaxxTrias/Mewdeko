@@ -10,5 +10,5 @@ public interface IImageData
     /// </summary>
     /// <param name="type">The type of Booru the image belongs to.</param>
     /// <returns>The cached image data.</returns>
-    ImageData ToCachedImageData(Booru type);
+    public ImageData ToCachedImageData(Booru type);
 }

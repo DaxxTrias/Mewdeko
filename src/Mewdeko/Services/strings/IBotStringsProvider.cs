@@ -13,25 +13,25 @@ public interface IBotStringsProvider
     /// <param name="localeName">Language name</param>
     /// <param name="key">String key</param>
     /// <returns>Localized string</returns>
-    string? GetText(string localeName, string? key);
+    public string? GetText(string localeName, string? key);
 
     /// <summary>
     ///     Reloads string cache
     /// </summary>
-    void Reload();
+    public void Reload();
 
     /// <summary>
     ///     Gets command arg examples and description
     /// </summary>
     /// <param name="localeName">Language name</param>
     /// <param name="commandName">Command name</param>
-    CommandStrings? GetCommandStrings(string localeName, string commandName);
+    public CommandStrings? GetCommandStrings(string localeName, string commandName);
 
     /// <summary>
-    /// Gets overloads for commands, if any.
+    ///     Gets overloads for commands, if any.
     /// </summary>
     /// <param name="lang"></param>
     /// <param name="commandName"></param>
     /// <returns></returns>
-    List<CommandOverload> GetCommandOverloads(string lang, string commandName);
+    public List<CommandOverload> GetCommandOverloads(string lang, string commandName);
 }

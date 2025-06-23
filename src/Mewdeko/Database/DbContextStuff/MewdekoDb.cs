@@ -10,13 +10,13 @@ using SelectMenuOption = DataModel.SelectMenuOption;
 namespace Mewdeko.Database.DbContextStuff;
 
 /// <summary>
-/// Main data access class for Mewdeko using LinqToDB.
-/// Provides access to all database tables.
+///     Main data access class for Mewdeko using LinqToDB.
+///     Provides access to all database tables.
 /// </summary>
 public class MewdekoDb : DataConnection
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="MewdekoDb"/> class using pre-configured options.
+    ///     Initializes a new instance of the <see cref="MewdekoDb" /> class using pre-configured options.
     /// </summary>
     /// <param name="options">The configured LinqToDB data options.</param>
     public MewdekoDb(DataOptions options)
@@ -27,712 +27,712 @@ public class MewdekoDb : DataConnection
     }
 
     /// <summary>
-    /// Table for accessing scheduled ticket deletions
+    ///     Table for accessing scheduled ticket deletions
     /// </summary>
     public ITable<ScheduledTicketDeletion> ScheduledTicketDeletions => this.GetTable<ScheduledTicketDeletion>();
 
     /// <summary>
-    /// Gets the global user balances table.
+    ///     Gets the global user balances table.
     /// </summary>
     public ITable<GlobalUserBalance> GlobalUserBalances => this.GetTable<GlobalUserBalance>();
 
     /// <summary>
-    /// Gets the invite counts table.
+    ///     Gets the invite counts table.
     /// </summary>
     public ITable<InviteCount> InviteCounts => this.GetTable<InviteCount>();
 
     /// <summary>
-    /// Gets the tickets table.
+    ///     Gets the tickets table.
     /// </summary>
     public ITable<Ticket> Tickets => this.GetTable<Ticket>();
 
     /// <summary>
-    /// Gets the custom voice channels table.
+    ///     Gets the custom voice channels table.
     /// </summary>
     public ITable<CustomVoiceChannel> CustomVoiceChannels => this.GetTable<CustomVoiceChannel>();
 
     /// <summary>
-    /// Gets the custom voice configs table.
+    ///     Gets the custom voice configs table.
     /// </summary>
     public ITable<CustomVoiceConfig> CustomVoiceConfigs => this.GetTable<CustomVoiceConfig>();
 
     /// <summary>
-    /// Gets the user voice preferences table.
+    ///     Gets the user voice preferences table.
     /// </summary>
     public ITable<UserVoicePreference> UserVoicePreferences => this.GetTable<UserVoicePreference>();
 
     /// <summary>
-    /// Gets the case notes table.
+    ///     Gets the case notes table.
     /// </summary>
     public ITable<CaseNote> CaseNotes => this.GetTable<CaseNote>();
 
     /// <summary>
-    /// Gets the chat logs table.
+    ///     Gets the chat logs table.
     /// </summary>
     public ITable<ChatLog> ChatLogs => this.GetTable<ChatLog>();
 
     /// <summary>
-    /// Gets the ticket cases table.
+    ///     Gets the ticket cases table.
     /// </summary>
     public ITable<TicketCase> TicketCases => this.GetTable<TicketCase>();
 
     /// <summary>
-    /// Gets the guild user XP data table.
+    ///     Gets the guild user XP data table.
     /// </summary>
     public ITable<GuildUserXp> GuildUserXps => this.GetTable<GuildUserXp>();
 
     /// <summary>
-    /// Gets the guild XP settings table.
+    ///     Gets the guild XP settings table.
     /// </summary>
     public ITable<GuildXpSetting> GuildXpSettings => this.GetTable<GuildXpSetting>();
 
     /// <summary>
-    /// Gets the XP boost events table.
+    ///     Gets the XP boost events table.
     /// </summary>
     public ITable<XpBoostEvent> XpBoostEvents => this.GetTable<XpBoostEvent>();
 
     /// <summary>
-    /// Gets the XP channel multipliers table.
+    ///     Gets the XP channel multipliers table.
     /// </summary>
     public ITable<XpChannelMultiplier> XpChannelMultipliers => this.GetTable<XpChannelMultiplier>();
 
     /// <summary>
-    /// Gets the XP competition entries table.
+    ///     Gets the XP competition entries table.
     /// </summary>
     public ITable<XpCompetitionEntry> XpCompetitionEntries => this.GetTable<XpCompetitionEntry>();
 
     /// <summary>
-    /// Gets the XP competition rewards table.
+    ///     Gets the XP competition rewards table.
     /// </summary>
     public ITable<XpCompetitionReward> XpCompetitionRewards => this.GetTable<XpCompetitionReward>();
 
     /// <summary>
-    /// Gets the XP competitions table.
+    ///     Gets the XP competitions table.
     /// </summary>
     public ITable<XpCompetition> XpCompetitions => this.GetTable<XpCompetition>();
 
     /// <summary>
-    /// Gets the guild configurations table.
+    ///     Gets the guild configurations table.
     /// </summary>
     public ITable<GuildConfig> GuildConfigs => this.GetTable<GuildConfig>();
 
     /// <summary>
-    /// Gets the AFK table.
+    ///     Gets the AFK table.
     /// </summary>
     public ITable<Afk> Afks => this.GetTable<Afk>();
 
     /// <summary>
-    /// Gets the AI conversations table.
+    ///     Gets the AI conversations table.
     /// </summary>
     public ITable<AiConversation> AiConversations => this.GetTable<AiConversation>();
 
     /// <summary>
-    /// Gets the AI messages table.
+    ///     Gets the AI messages table.
     /// </summary>
     public ITable<AiMessage> AiMessages => this.GetTable<AiMessage>();
 
     /// <summary>
-    /// Gets the anti-alt settings table.
+    ///     Gets the anti-alt settings table.
     /// </summary>
     public ITable<AntiAltSetting> AntiAltSettings => this.GetTable<AntiAltSetting>();
 
     /// <summary>
-    /// Gets the anti-mass mention settings table.
+    ///     Gets the anti-mass mention settings table.
     /// </summary>
     public ITable<AntiMassMentionSetting> AntiMassMentionSettings => this.GetTable<AntiMassMentionSetting>();
 
     /// <summary>
-    /// Gets the anti-raid settings table.
+    ///     Gets the anti-raid settings table.
     /// </summary>
     public ITable<AntiRaidSetting> AntiRaidSettings => this.GetTable<AntiRaidSetting>();
 
     /// <summary>
-    /// Gets the anti-spam ignores table.
+    ///     Gets the anti-spam ignores table.
     /// </summary>
     public ITable<AntiSpamIgnore> AntiSpamIgnores => this.GetTable<AntiSpamIgnore>();
 
     /// <summary>
-    /// Gets the anti-spam settings table.
+    ///     Gets the anti-spam settings table.
     /// </summary>
     public ITable<AntiSpamSetting> AntiSpamSettings => this.GetTable<AntiSpamSetting>();
 
     /// <summary>
-    /// Gets the auth codes table.
+    ///     Gets the auth codes table.
     /// </summary>
     public ITable<AuthCode> AuthCodes => this.GetTable<AuthCode>();
 
     /// <summary>
-    /// Gets the auto-ban roles table.
+    ///     Gets the auto-ban roles table.
     /// </summary>
     public ITable<AutoBanRole> AutoBanRoles => this.GetTable<AutoBanRole>();
 
     /// <summary>
-    /// Gets the auto-ban words table.
+    ///     Gets the auto-ban words table.
     /// </summary>
     public ITable<AutoBanWord> AutoBanWords => this.GetTable<AutoBanWord>();
 
     /// <summary>
-    /// Gets the auto commands table.
+    ///     Gets the auto commands table.
     /// </summary>
     public ITable<AutoCommand> AutoCommands => this.GetTable<AutoCommand>();
 
     /// <summary>
-    /// Gets the auto publish table.
+    ///     Gets the auto publish table.
     /// </summary>
     public ITable<AutoPublish> AutoPublishes => this.GetTable<AutoPublish>();
 
     /// <summary>
-    /// Gets the ban templates table.
+    ///     Gets the ban templates table.
     /// </summary>
     public ITable<BanTemplate> BanTemplates => this.GetTable<BanTemplate>();
 
     /// <summary>
-    /// Gets the blacklist table.
+    ///     Gets the blacklist table.
     /// </summary>
     public ITable<Blacklist> Blacklists => this.GetTable<Blacklist>();
 
     /// <summary>
-    /// Gets the blacklisted permissions table.
+    ///     Gets the blacklisted permissions table.
     /// </summary>
     public ITable<BlacklistedPermission> BlacklistedPermissions => this.GetTable<BlacklistedPermission>();
 
     /// <summary>
-    /// Gets the blacklisted roles table.
+    ///     Gets the blacklisted roles table.
     /// </summary>
     public ITable<BlacklistedRole> BlacklistedRoles => this.GetTable<BlacklistedRole>();
 
     /// <summary>
-    /// Gets the bot instances table.
+    ///     Gets the bot instances table.
     /// </summary>
     public ITable<BotInstance> BotInstances => this.GetTable<BotInstance>();
 
     /// <summary>
-    /// Gets the bot reviews table.
+    ///     Gets the bot reviews table.
     /// </summary>
     public ITable<BotReview> BotReviews => this.GetTable<BotReview>();
 
     /// <summary>
-    /// Gets the chat triggers table.
+    ///     Gets the chat triggers table.
     /// </summary>
     public ITable<ChatTrigger> ChatTriggers => this.GetTable<ChatTrigger>();
 
     /// <summary>
-    /// Gets the command aliases table.
+    ///     Gets the command aliases table.
     /// </summary>
     public ITable<CommandAlias> CommandAliases => this.GetTable<CommandAlias>();
 
     /// <summary>
-    /// Gets the command cooldowns table.
+    ///     Gets the command cooldowns table.
     /// </summary>
     public ITable<CommandCooldown> CommandCooldowns => this.GetTable<CommandCooldown>();
 
     /// <summary>
-    /// Gets the command stats table.
+    ///     Gets the command stats table.
     /// </summary>
     public ITable<CommandStat> CommandStats => this.GetTable<CommandStat>();
 
     /// <summary>
-    /// Gets the confessions table.
+    ///     Gets the confessions table.
     /// </summary>
     public ITable<Confession> Confessions => this.GetTable<Confession>();
 
     /// <summary>
-    /// Gets the delete message on command channels table.
+    ///     Gets the delete message on command channels table.
     /// </summary>
     public ITable<DelMsgOnCmdChannel> DelMsgOnCmdChannels => this.GetTable<DelMsgOnCmdChannel>();
 
     /// <summary>
-    /// Gets the Discord permission overrides table.
+    ///     Gets the Discord permission overrides table.
     /// </summary>
     public ITable<DiscordPermOverride> DiscordPermOverrides => this.GetTable<DiscordPermOverride>();
 
     /// <summary>
-    /// Gets the Discord users table.
+    ///     Gets the Discord users table.
     /// </summary>
     public ITable<DiscordUser> DiscordUsers => this.GetTable<DiscordUser>();
 
     /// <summary>
-    /// Gets the embeds table.
+    ///     Gets the embeds table.
     /// </summary>
     public ITable<Embed> Embeds => this.GetTable<Embed>();
 
     /// <summary>
-    /// Gets the feed subscriptions table.
+    ///     Gets the feed subscriptions table.
     /// </summary>
     public ITable<FeedSub> FeedSubs => this.GetTable<FeedSub>();
 
     /// <summary>
-    /// Gets the filter invites channel IDs table.
+    ///     Gets the filter invites channel IDs table.
     /// </summary>
     public ITable<FilterInvitesChannelId> FilterInvitesChannelIds => this.GetTable<FilterInvitesChannelId>();
 
     /// <summary>
-    /// Gets the filter links channel IDs table.
+    ///     Gets the filter links channel IDs table.
     /// </summary>
     public ITable<FilterLinksChannelId> FilterLinksChannelIds => this.GetTable<FilterLinksChannelId>();
 
     /// <summary>
-    /// Gets the filter words channel IDs table.
+    ///     Gets the filter words channel IDs table.
     /// </summary>
     public ITable<FilterWordsChannelId> FilterWordsChannelIds => this.GetTable<FilterWordsChannelId>();
 
     /// <summary>
-    /// Gets the filtered words table.
+    ///     Gets the filtered words table.
     /// </summary>
     public ITable<FilteredWord> FilteredWords => this.GetTable<FilteredWord>();
 
     /// <summary>
-    /// Gets the followed streams table.
+    ///     Gets the followed streams table.
     /// </summary>
     public ITable<FollowedStream> FollowedStreams => this.GetTable<FollowedStream>();
 
     /// <summary>
-    /// Gets the giveaway users table.
+    ///     Gets the giveaway users table.
     /// </summary>
     public ITable<GiveawayUser> GiveawayUsers => this.GetTable<GiveawayUser>();
 
     /// <summary>
-    /// Gets the giveaways table.
+    ///     Gets the giveaways table.
     /// </summary>
     public ITable<Giveaway> Giveaways => this.GetTable<Giveaway>();
 
     /// <summary>
-    /// Gets the group names table.
+    ///     Gets the group names table.
     /// </summary>
     public ITable<GroupName> GroupNames => this.GetTable<GroupName>();
 
     /// <summary>
-    /// Gets the guild AI configs table.
+    ///     Gets the guild AI configs table.
     /// </summary>
     public ITable<GuildAiConfig> GuildAiConfigs => this.GetTable<GuildAiConfig>();
 
     /// <summary>
-    /// Gets the guild repeaters table.
+    ///     Gets the guild repeaters table.
     /// </summary>
     public ITable<GuildRepeater> GuildRepeaters => this.GetTable<GuildRepeater>();
 
     /// <summary>
-    /// Gets the guild ticket settings table.
+    ///     Gets the guild ticket settings table.
     /// </summary>
     public ITable<GuildTicketSetting> GuildTicketSettings => this.GetTable<GuildTicketSetting>();
 
     /// <summary>
-    /// Gets the guild user balances table.
+    ///     Gets the guild user balances table.
     /// </summary>
     public ITable<GuildUserBalance> GuildUserBalances => this.GetTable<GuildUserBalance>();
 
     /// <summary>
-    /// Gets the highlight settings table.
+    ///     Gets the highlight settings table.
     /// </summary>
     public ITable<HighlightSetting> HighlightSettings => this.GetTable<HighlightSetting>();
 
     /// <summary>
-    /// Gets the highlights table.
+    ///     Gets the highlights table.
     /// </summary>
     public ITable<Highlight> Highlights => this.GetTable<Highlight>();
 
     /// <summary>
-    /// Gets the ignored log channels table.
+    ///     Gets the ignored log channels table.
     /// </summary>
     public ITable<IgnoredLogChannel> IgnoredLogChannels => this.GetTable<IgnoredLogChannel>();
 
     /// <summary>
-    /// Gets the invite count settings table.
+    ///     Gets the invite count settings table.
     /// </summary>
     public ITable<InviteCountSetting> InviteCountSettings => this.GetTable<InviteCountSetting>();
 
     /// <summary>
-    /// Gets the invited by table.
+    ///     Gets the invited by table.
     /// </summary>
     public ITable<InvitedBy> InvitedBies => this.GetTable<InvitedBy>();
 
     /// <summary>
-    /// Gets the join/leave logs table.
+    ///     Gets the join/leave logs table.
     /// </summary>
     public ITable<JoinLeaveLog> JoinLeaveLogs => this.GetTable<JoinLeaveLog>();
 
     /// <summary>
-    /// Gets the lockdown channel permissions table.
+    ///     Gets the lockdown channel permissions table.
     /// </summary>
     public ITable<LockdownChannelPermission> LockdownChannelPermissions => this.GetTable<LockdownChannelPermission>();
 
     /// <summary>
-    /// Gets the LoggingV2 table.
+    ///     Gets the LoggingV2 table.
     /// </summary>
     public ITable<LoggingV2> LoggingV2 => this.GetTable<LoggingV2>();
 
     /// <summary>
-    /// Gets the message counts table.
+    ///     Gets the message counts table.
     /// </summary>
     public ITable<MessageCount> MessageCounts => this.GetTable<MessageCount>();
 
     /// <summary>
-    /// Gets the message timestamps table.
+    ///     Gets the message timestamps table.
     /// </summary>
     public ITable<MessageTimestamp> MessageTimestamps => this.GetTable<MessageTimestamp>();
 
     /// <summary>
-    /// Gets the multi-greets table.
+    ///     Gets the multi-greets table.
     /// </summary>
     public ITable<MultiGreet> MultiGreets => this.GetTable<MultiGreet>();
 
     /// <summary>
-    /// Gets the music player settings table.
+    ///     Gets the music player settings table.
     /// </summary>
     public ITable<MusicPlayerSetting> MusicPlayerSettings => this.GetTable<MusicPlayerSetting>();
 
     /// <summary>
-    /// Gets the music playlist tracks table.
+    ///     Gets the music playlist tracks table.
     /// </summary>
     public ITable<MusicPlaylistTrack> MusicPlaylistTracks => this.GetTable<MusicPlaylistTrack>();
 
     /// <summary>
-    /// Gets the music playlists table.
+    ///     Gets the music playlists table.
     /// </summary>
     public ITable<MusicPlaylist> MusicPlaylists => this.GetTable<MusicPlaylist>();
 
     /// <summary>
-    /// Gets the muted user IDs table.
+    ///     Gets the muted user IDs table.
     /// </summary>
     public ITable<MutedUserId> MutedUserIds => this.GetTable<MutedUserId>();
 
     /// <summary>
-    /// Gets the note edits table.
+    ///     Gets the note edits table.
     /// </summary>
     public ITable<NoteEdit> NoteEdits => this.GetTable<NoteEdit>();
 
     /// <summary>
-    /// Gets the NSFW blacklisted tags table.
+    ///     Gets the NSFW blacklisted tags table.
     /// </summary>
     public ITable<NsfwBlacklistedTag> NsfwBlacklistedTags => this.GetTable<NsfwBlacklistedTag>();
 
     /// <summary>
-    /// Gets the owner only settings table.
+    ///     Gets the owner only settings table.
     /// </summary>
     public ITable<OwnerOnly> OwnerOnlies => this.GetTable<OwnerOnly>();
 
     /// <summary>
-    /// Gets the panel buttons table.
+    ///     Gets the panel buttons table.
     /// </summary>
     public ITable<PanelButton> PanelButtons => this.GetTable<PanelButton>();
 
     /// <summary>
-    /// Gets the panel select menus table.
+    ///     Gets the panel select menus table.
     /// </summary>
     public ITable<PanelSelectMenu> PanelSelectMenus => this.GetTable<PanelSelectMenu>();
 
     /// <summary>
-    /// Gets the Permission table.
+    ///     Gets the Permission table.
     /// </summary>
     public ITable<Permission> Permissions => this.GetTable<Permission>();
 
     /// <summary>
-    /// Gets the Permissions1 table.
+    ///     Gets the Permissions1 table.
     /// </summary>
     public ITable<Permission1> Permissions1 => this.GetTable<Permission1>();
 
     /// <summary>
-    /// Gets the playlist songs table.
+    ///     Gets the playlist songs table.
     /// </summary>
     public ITable<PlaylistSong> PlaylistSongs => this.GetTable<PlaylistSong>();
 
     /// <summary>
-    /// Gets the polls table.
+    ///     Gets the polls table.
     /// </summary>
     public ITable<Poll> Polls => this.GetTable<Poll>();
 
     /// <summary>
-    /// Gets the poll answers table.
+    ///     Gets the poll answers table.
     /// </summary>
     public ITable<PollAnswer> PollAnswers => this.GetTable<PollAnswer>();
 
     /// <summary>
-    /// Gets the poll votes table.
+    ///     Gets the poll votes table.
     /// </summary>
     public ITable<PollVote> PollVotes => this.GetTable<PollVote>();
 
     /// <summary>
-    /// Gets the publish user blacklist table.
+    ///     Gets the publish user blacklist table.
     /// </summary>
     public ITable<PublishUserBlacklist> PublishUserBlacklists => this.GetTable<PublishUserBlacklist>();
 
     /// <summary>
-    /// Gets the publish word blacklist table.
+    ///     Gets the publish word blacklist table.
     /// </summary>
     public ITable<PublishWordBlacklist> PublishWordBlacklists => this.GetTable<PublishWordBlacklist>();
 
     /// <summary>
-    /// Gets the quotes table.
+    ///     Gets the quotes table.
     /// </summary>
     public ITable<Quote> Quotes => this.GetTable<Quote>();
 
     /// <summary>
-    /// Gets the reaction roles table.
+    ///     Gets the reaction roles table.
     /// </summary>
     public ITable<ReactionRole> ReactionRoles => this.GetTable<ReactionRole>();
 
     /// <summary>
-    /// Gets the reaction role messages table.
+    ///     Gets the reaction role messages table.
     /// </summary>
     public ITable<ReactionRoleMessage> ReactionRoleMessages => this.GetTable<ReactionRoleMessage>();
 
     /// <summary>
-    /// Gets the reminders table.
+    ///     Gets the reminders table.
     /// </summary>
     public ITable<Reminder> Reminders => this.GetTable<Reminder>();
 
     /// <summary>
-    /// Gets the role greets table.
+    ///     Gets the role greets table.
     /// </summary>
     public ITable<RoleGreet> RoleGreets => this.GetTable<RoleGreet>();
 
     /// <summary>
-    /// Gets the role monitoring settings table.
+    ///     Gets the role monitoring settings table.
     /// </summary>
     public ITable<RoleMonitoringSetting> RoleMonitoringSettings => this.GetTable<RoleMonitoringSetting>();
 
     /// <summary>
-    /// Gets the role state settings table.
+    ///     Gets the role state settings table.
     /// </summary>
     public ITable<RoleStateSetting> RoleStateSettings => this.GetTable<RoleStateSetting>();
 
     /// <summary>
-    /// Gets the rotating statuses table.
+    ///     Gets the rotating statuses table.
     /// </summary>
     public ITable<RotatingStatus> RotatingStatuses => this.GetTable<RotatingStatus>();
 
     /// <summary>
-    /// Gets the select menu options table.
+    ///     Gets the select menu options table.
     /// </summary>
     public ITable<SelectMenuOption> SelectMenuOptions => this.GetTable<SelectMenuOption>();
 
     /// <summary>
-    /// Gets the self-assignable roles table.
+    ///     Gets the self-assignable roles table.
     /// </summary>
     public ITable<SelfAssignableRole> SelfAssignableRoles => this.GetTable<SelfAssignableRole>();
 
     /// <summary>
-    /// Gets the server recovery stores table.
+    ///     Gets the server recovery stores table.
     /// </summary>
     public ITable<ServerRecoveryStore> ServerRecoveryStores => this.GetTable<ServerRecoveryStore>();
 
     /// <summary>
-    /// Gets the starboard posts table.
+    ///     Gets the starboard posts table.
     /// </summary>
     public ITable<StarboardPost> StarboardPosts => this.GetTable<StarboardPost>();
 
     /// <summary>
-    /// Gets the starboards table.
+    ///     Gets the starboards table.
     /// </summary>
     public ITable<Starboard> Starboards => this.GetTable<Starboard>();
 
     /// <summary>
-    /// Gets the status roles table.
+    ///     Gets the status roles table.
     /// </summary>
     public ITable<StatusRole> StatusRoles => this.GetTable<StatusRole>();
 
     /// <summary>
-    /// Gets the stream role blacklisted users table.
+    ///     Gets the stream role blacklisted users table.
     /// </summary>
     public ITable<StreamRoleBlacklistedUser> StreamRoleBlacklistedUsers => this.GetTable<StreamRoleBlacklistedUser>();
 
     /// <summary>
-    /// Gets the stream role settings table.
+    ///     Gets the stream role settings table.
     /// </summary>
     public ITable<StreamRoleSetting> StreamRoleSettings => this.GetTable<StreamRoleSetting>();
 
     /// <summary>
-    /// Gets the stream role whitelisted users table.
+    ///     Gets the stream role whitelisted users table.
     /// </summary>
     public ITable<StreamRoleWhitelistedUser> StreamRoleWhitelistedUsers => this.GetTable<StreamRoleWhitelistedUser>();
 
     /// <summary>
-    /// Gets the suggest threads table.
+    ///     Gets the suggest threads table.
     /// </summary>
     public ITable<SuggestThread> SuggestThreads => this.GetTable<SuggestThread>();
 
     /// <summary>
-    /// Gets the suggest votes table.
+    ///     Gets the suggest votes table.
     /// </summary>
     public ITable<SuggestVote> SuggestVotes => this.GetTable<SuggestVote>();
 
     /// <summary>
-    /// Gets the suggestions table.
+    ///     Gets the suggestions table.
     /// </summary>
     public ITable<Suggestion> Suggestions => this.GetTable<Suggestion>();
 
     /// <summary>
-    /// Gets the template table.
+    ///     Gets the template table.
     /// </summary>
     public ITable<Template> Templates => this.GetTable<Template>();
 
     /// <summary>
-    /// Gets the template bars table.
+    ///     Gets the template bars table.
     /// </summary>
     public ITable<TemplateBar> TemplateBars => this.GetTable<TemplateBar>();
 
     /// <summary>
-    /// Gets the template clubs table.
+    ///     Gets the template clubs table.
     /// </summary>
     public ITable<TemplateClub> TemplateClubs => this.GetTable<TemplateClub>();
 
     /// <summary>
-    /// Gets the template guilds table.
+    ///     Gets the template guilds table.
     /// </summary>
     public ITable<TemplateGuild> TemplateGuilds => this.GetTable<TemplateGuild>();
 
     /// <summary>
-    /// Gets the template users table.
+    ///     Gets the template users table.
     /// </summary>
     public ITable<TemplateUser> TemplateUsers => this.GetTable<TemplateUser>();
 
     /// <summary>
-    /// Gets the ticket notes table.
+    ///     Gets the ticket notes table.
     /// </summary>
     public ITable<TicketNote> TicketNotes => this.GetTable<TicketNote>();
 
     /// <summary>
-    /// Gets the ticket panels table.
+    ///     Gets the ticket panels table.
     /// </summary>
     public ITable<TicketPanel> TicketPanels => this.GetTable<TicketPanel>();
 
     /// <summary>
-    /// Gets the ticket priorities table.
+    ///     Gets the ticket priorities table.
     /// </summary>
     public ITable<TicketPriority> TicketPriorities => this.GetTable<TicketPriority>();
 
     /// <summary>
-    /// Gets the ticket tags table.
+    ///     Gets the ticket tags table.
     /// </summary>
     public ITable<TicketTag> TicketTags => this.GetTable<TicketTag>();
 
     /// <summary>
-    /// Gets the transaction history table.
+    ///     Gets the transaction history table.
     /// </summary>
     public ITable<TransactionHistory> TransactionHistories => this.GetTable<TransactionHistory>();
 
     /// <summary>
-    /// Gets the daily challenges table.
+    ///     Gets the daily challenges table.
     /// </summary>
     public ITable<DailyChallenge> DailyChallenges => this.GetTable<DailyChallenge>();
 
     /// <summary>
-    /// Gets the unban timers table.
+    ///     Gets the unban timers table.
     /// </summary>
     public ITable<UnbanTimer> UnbanTimers => this.GetTable<UnbanTimer>();
 
     /// <summary>
-    /// Gets the unmute timers table.
+    ///     Gets the unmute timers table.
     /// </summary>
     public ITable<UnmuteTimer> UnmuteTimers => this.GetTable<UnmuteTimer>();
 
     /// <summary>
-    /// Gets the unrole timers table.
+    ///     Gets the unrole timers table.
     /// </summary>
     public ITable<UnroleTimer> UnroleTimers => this.GetTable<UnroleTimer>();
 
     /// <summary>
-    /// Gets the user role states table.
+    ///     Gets the user role states table.
     /// </summary>
     public ITable<UserRoleState> UserRoleStates => this.GetTable<UserRoleState>();
 
     /// <summary>
-    /// Gets the user XP stats table.
+    ///     Gets the user XP stats table.
     /// </summary>
     public ITable<UserXpStat> UserXpStats => this.GetTable<UserXpStat>();
 
     /// <summary>
-    /// Gets the VC roles table.
+    ///     Gets the VC roles table.
     /// </summary>
     public ITable<VcRole> VcRoles => this.GetTable<VcRole>();
 
     /// <summary>
-    /// Gets the vote roles table.
+    ///     Gets the vote roles table.
     /// </summary>
     public ITable<VoteRole> VoteRoles => this.GetTable<VoteRole>();
 
     /// <summary>
-    /// Gets the votes table.
+    ///     Gets the votes table.
     /// </summary>
     public ITable<Vote> Votes => this.GetTable<Vote>();
 
     /// <summary>
-    /// Gets the warning punishments table.
+    ///     Gets the warning punishments table.
     /// </summary>
     public ITable<WarningPunishment> WarningPunishments => this.GetTable<WarningPunishment>();
 
     /// <summary>
-    /// Gets the warning punishments 2 table.
+    ///     Gets the warning punishments 2 table.
     /// </summary>
     public ITable<WarningPunishment2> WarningPunishment2s => this.GetTable<WarningPunishment2>();
 
     /// <summary>
-    /// Gets the warnings table.
+    ///     Gets the warnings table.
     /// </summary>
     public ITable<Warning> Warnings => this.GetTable<Warning>();
 
     /// <summary>
-    /// Gets the warnings 2 table.
+    ///     Gets the warnings 2 table.
     /// </summary>
     public ITable<Warnings2> Warnings2s => this.GetTable<Warnings2>();
 
     /// <summary>
-    /// Gets the whitelisted roles table.
+    ///     Gets the whitelisted roles table.
     /// </summary>
     public ITable<WhitelistedRole> WhitelistedRoles => this.GetTable<WhitelistedRole>();
 
     /// <summary>
-    /// Gets the whitelisted users table.
+    ///     Gets the whitelisted users table.
     /// </summary>
     public ITable<WhitelistedUser> WhitelistedUsers => this.GetTable<WhitelistedUser>();
 
     /// <summary>
-    /// Gets the XP currency rewards table.
+    ///     Gets the XP currency rewards table.
     /// </summary>
     public ITable<XpCurrencyReward> XpCurrencyRewards => this.GetTable<XpCurrencyReward>();
 
     /// <summary>
-    /// Gets the XP excluded items table.
+    ///     Gets the XP excluded items table.
     /// </summary>
     public ITable<XpExcludedItem> XpExcludedItems => this.GetTable<XpExcludedItem>();
 
     /// <summary>
-    /// Gets the XP role multipliers table.
+    ///     Gets the XP role multipliers table.
     /// </summary>
     public ITable<XpRoleMultiplier> XpRoleMultipliers => this.GetTable<XpRoleMultiplier>();
 
     /// <summary>
-    /// Gets the XP role rewards table.
+    ///     Gets the XP role rewards table.
     /// </summary>
     public ITable<XpRoleReward> XpRoleRewards => this.GetTable<XpRoleReward>();
 
     /// <summary>
-    /// Gets the XP role trackings table.
+    ///     Gets the XP role trackings table.
     /// </summary>
     public ITable<XpRoleTracking> XpRoleTrackings => this.GetTable<XpRoleTracking>();
 
     /// <summary>
-    /// Gets the XP user snapshots table.
+    ///     Gets the XP user snapshots table.
     /// </summary>
     public ITable<XpUserSnapshot> XpUserSnapshots => this.GetTable<XpUserSnapshot>();
 
     /// <summary>
-    /// Gets the EF migrations history table.
+    ///     Gets the EF migrations history table.
     /// </summary>
     public ITable<EfMigrationsHistory> EfMigrationsHistories => this.GetTable<EfMigrationsHistory>();
 
     /// <summary>
-    /// Gets the Patreon supporters table.
+    ///     Gets the Patreon supporters table.
     /// </summary>
     public ITable<PatreonSupporter> PatreonSupporters => this.GetTable<PatreonSupporter>();
 
     /// <summary>
-    /// Gets the Patreon tiers table.
+    ///     Gets the Patreon tiers table.
     /// </summary>
     public ITable<PatreonTier> PatreonTiers => this.GetTable<PatreonTier>();
 
     /// <summary>
-    /// Gets the Patreon goals table.
+    ///     Gets the Patreon goals table.
     /// </summary>
     public ITable<PatreonGoal> PatreonGoals => this.GetTable<PatreonGoal>();
 }

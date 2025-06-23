@@ -1,7 +1,7 @@
 using LinqToDB;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Modules.Games.Common;
-using Serilog;
+using Poll = DataModel.Poll;
 using PollAnswer = DataModel.PollAnswer;
 
 namespace Mewdeko.Modules.Games.Services;
@@ -12,14 +12,17 @@ namespace Mewdeko.Modules.Games.Services;
 public class PollService : INService, IReadyExecutor
 {
     private readonly IDataConnectionFactory dbFactory;
+    private readonly ILogger<PollService> logger;
+
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="PollService" /> class.
     /// </summary>
     /// <param name="dbFactory">The database service.</param>
-    public PollService(IDataConnectionFactory dbFactory)
+    public PollService(IDataConnectionFactory dbFactory, ILogger<PollService> logger)
     {
         this.dbFactory = dbFactory;
+        this.logger = logger;
     }
 
     /// <summary>
@@ -55,7 +58,7 @@ public class PollService : INService, IReadyExecutor
         }
         catch (Exception ex)
         {
-            Log.Warning(ex, "Error voting");
+            logger.LogWarning(ex, "Error voting");
         }
 
         return (true, (PollType)poll.Polls.PollType);
@@ -69,7 +72,7 @@ public class PollService : INService, IReadyExecutor
     /// <param name="input">The input string for creating the poll.</param>
     /// <param name="type">The type of the poll.</param>
     /// <returns>The created poll.</returns>
-    public static DataModel.Poll? CreatePoll(ulong guildId, ulong channelId, string input, PollType type)
+    public static Poll? CreatePoll(ulong guildId, ulong channelId, string input, PollType type)
     {
         if (string.IsNullOrWhiteSpace(input) || !input.Contains(';'))
             return null;
@@ -83,7 +86,7 @@ public class PollService : INService, IReadyExecutor
                 Text = x
             }));
 
-        return new DataModel.Poll
+        return new Poll
         {
             PollAnswers = col,
             Question = data[0],
@@ -99,7 +102,7 @@ public class PollService : INService, IReadyExecutor
     /// </summary>
     /// <param name="p">The poll to start.</param>
     /// <returns>True if the poll started successfully, otherwise false.</returns>
-    public async Task<bool> StartPoll(DataModel.Poll p)
+    public async Task<bool> StartPoll(Poll p)
     {
         await using var dbContext = await dbFactory.CreateConnectionAsync();
 
@@ -115,7 +118,7 @@ public class PollService : INService, IReadyExecutor
     /// </summary>
     /// <param name="guildId">The ID of the guild where the poll is taking place.</param>
     /// <returns>The stopped poll.</returns>
-    public async Task<DataModel.Poll?> StopPoll(ulong guildId)
+    public async Task<Poll?> StopPoll(ulong guildId)
     {
         await using var dbContext = await dbFactory.CreateConnectionAsync();
 

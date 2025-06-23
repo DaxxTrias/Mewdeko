@@ -6,7 +6,6 @@ using Mewdeko.Modules.Giveaways.Services;
 using Mewdeko.Services.Impl;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Serilog;
 
 namespace Mewdeko.Controllers;
 
@@ -18,10 +17,11 @@ namespace Mewdeko.Controllers;
 [Authorize("ApiKeyPolicy")]
 public class GiveawaysController : Controller
 {
-    private readonly GiveawayService service;
-    private readonly BotCredentials creds;
     private readonly HttpClient client;
+    private readonly BotCredentials creds;
     private readonly IDataConnectionFactory dbFactory;
+    private readonly ILogger<GiveawaysController> logger;
+    private readonly GiveawayService service;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="GiveawaysController" /> class.
@@ -34,12 +34,13 @@ public class GiveawaysController : Controller
         GiveawayService service,
         BotCredentials creds,
         HttpClient client,
-        IDataConnectionFactory dbFactory)
+        IDataConnectionFactory dbFactory, ILogger<GiveawaysController> logger)
     {
         this.service = service;
         this.creds = creds;
         this.client = client;
         this.dbFactory = dbFactory;
+        this.logger = logger;
     }
 
     /// <summary>
@@ -104,7 +105,7 @@ public class GiveawaysController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Failed to retrieve giveaways for guild {GuildId}", guildId);
+            logger.LogError(ex, "Failed to retrieve giveaways for guild {GuildId}", guildId);
             return NotFound(
                 "Failed to retrieve giveaways for the specified guild.");
         }
@@ -129,7 +130,7 @@ public class GiveawaysController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Failed to create dashboard giveaway for guild {GuildId}", guildId);
+            logger.LogError(ex, "Failed to create dashboard giveaway for guild {GuildId}", guildId);
             return BadRequest(ex.Message);
         }
     }
@@ -157,7 +158,7 @@ public class GiveawaysController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Failed to end giveaway {GiveawayId} for guild {GuildId}", giveawayId, guildId);
+            logger.LogError(ex, "Failed to end giveaway {GiveawayId} for guild {GuildId}", giveawayId, guildId);
             return BadRequest(ex.Message);
         }
     }
@@ -193,7 +194,7 @@ public class GiveawaysController : Controller
         }
         catch (HttpRequestException httpEx)
         {
-            Log.Error(httpEx, "HTTP error verifying Turnstile token");
+            logger.LogError(httpEx, "HTTP error verifying Turnstile token");
             return new TurnstileVerificationResponse
             {
                 Success = false
@@ -201,7 +202,7 @@ public class GiveawaysController : Controller
         }
         catch (JsonException jsonEx)
         {
-            Log.Error(jsonEx, "JSON error deserializing Turnstile response");
+            logger.LogError(jsonEx, "JSON error deserializing Turnstile response");
             return new TurnstileVerificationResponse
             {
                 Success = false
@@ -209,7 +210,7 @@ public class GiveawaysController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Generic error verifying Turnstile token");
+            logger.LogError(ex, "Generic error verifying Turnstile token");
             return new TurnstileVerificationResponse
             {
                 Success = false

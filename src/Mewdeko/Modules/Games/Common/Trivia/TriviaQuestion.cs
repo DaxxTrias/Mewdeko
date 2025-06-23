@@ -22,8 +22,8 @@ public class TriviaQuestion
     private string? cleanAnswer;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="TriviaQuestion"/> class.
-    /// Used for JSON deserialization.
+    ///     Initializes a new instance of the <see cref="TriviaQuestion" /> class.
+    ///     Used for JSON deserialization.
     /// </summary>
     public TriviaQuestion()
     {
@@ -35,13 +35,16 @@ public class TriviaQuestion
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="TriviaQuestion"/> class with specified values.
+    ///     Initializes a new instance of the <see cref="TriviaQuestion" /> class with specified values.
     /// </summary>
     /// <param name="q">The question text.</param>
     /// <param name="a">The answer text.</param>
     /// <param name="c">The category of the question.</param>
     /// <param name="img">Optional URL for an image associated with the question.</param>
-    /// <param name="answerImage">Optional URL for an image associated with the answer. If not provided, uses the question image URL.</param>
+    /// <param name="answerImage">
+    ///     Optional URL for an image associated with the answer. If not provided, uses the question
+    ///     image URL.
+    /// </param>
     public TriviaQuestion(string q, string a, string c, string? img = null, string? answerImage = null)
     {
         Question = q;

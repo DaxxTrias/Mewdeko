@@ -10,5 +10,5 @@ public interface ILocalDataCache
     /// <summary>
     ///     Gets the array of trivia questions.
     /// </summary>
-    TriviaQuestion[] TriviaQuestions { get; }
+    public TriviaQuestion[] TriviaQuestions { get; }
 }

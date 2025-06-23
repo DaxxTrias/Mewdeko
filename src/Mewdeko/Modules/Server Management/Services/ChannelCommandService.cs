@@ -2,7 +2,6 @@
 using LinqToDB;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Modules.Administration.Common;
-
 using StackExchange.Redis;
 
 namespace Mewdeko.Modules.Server_Management.Services;
@@ -46,7 +45,7 @@ public class ChannelCommandService : INService, IReadyExecutor
         var redisDb = dataCache.Redis.GetDatabase();
         var redisJoinBlockedGuilds = await redisDb.SetMembersAsync("join-blocked-guilds").ConfigureAwait(false);
 
-         await using var context = await dbFactory.CreateConnectionAsync();
+        await using var context = await dbFactory.CreateConnectionAsync();
 
         // Fetch all guilds from the database that have lockdown channel permissions stored
         var dbLockdownGuilds = await context.LockdownChannelPermissions
@@ -74,7 +73,7 @@ public class ChannelCommandService : INService, IReadyExecutor
             };
         }
 
-        if (redisJoinBlockedGuilds.Length==0)
+        if (redisJoinBlockedGuilds.Length == 0)
             return;
 
         // If there are guilds in Redis but not in lockdownGuilds (not recognized during the loop), remove them from Redis
@@ -197,7 +196,7 @@ public class ChannelCommandService : INService, IReadyExecutor
     /// <returns>A task that represents the asynchronous operation.</returns>
     public async Task StoreOriginalPermissions(IGuild guild)
     {
-         await using var context = await dbFactory.CreateConnectionAsync();
+        await using var context = await dbFactory.CreateConnectionAsync();
         var channels = await guild.GetChannelsAsync();
 
         var existingPermissions = await context.LockdownChannelPermissions
@@ -266,7 +265,7 @@ public class ChannelCommandService : INService, IReadyExecutor
         var everyoneRole = guild.EveryoneRole;
         var channels = await guild.GetChannelsAsync();
 
-         await using var context = await dbFactory.CreateConnectionAsync();
+        await using var context = await dbFactory.CreateConnectionAsync();
 
         var relevantChannels = channels.Where(IsRelevantChannel).ToList();
         var channelPermissions = new List<(IGuildChannel Channel, OverwritePermissions Permissions)>();
@@ -283,7 +282,8 @@ public class ChannelCommandService : INService, IReadyExecutor
 
             var lockdownPerms = channel switch
             {
-                IVoiceChannel => existingPerms.Modify(connect: PermValue.Deny, speak: PermValue.Deny, sendMessages: PermValue.Deny, sendMessagesInThreads: PermValue.Deny),
+                IVoiceChannel => existingPerms.Modify(connect: PermValue.Deny, speak: PermValue.Deny,
+                    sendMessages: PermValue.Deny, sendMessagesInThreads: PermValue.Deny),
                 IForumChannel => existingPerms.Modify(sendMessagesInThreads: PermValue.Deny,
                     createPublicThreads: PermValue.Deny,
                     createPrivateThreads: PermValue.Deny,
@@ -371,7 +371,7 @@ public class ChannelCommandService : INService, IReadyExecutor
     /// <returns>A task that represents the asynchronous operation.</returns>
     public async Task RestoreOriginalPermissions(IGuild guild)
     {
-         await using var context = await dbFactory.CreateConnectionAsync();
+        await using var context = await dbFactory.CreateConnectionAsync();
         var channels = await guild.GetChannelsAsync();
 
         var relevantChannels = channels.Where(IsRelevantChannel).ToList();

@@ -5,16 +5,11 @@ WHERE "IsDeleted" IS NULL;
 
 -- Update existing buttons with sensible defaults
 UPDATE "PanelButtons"
-SET
-    "DeleteOnClose" = FALSE,
-    "LockOnClose" = TRUE,
+SET "DeleteOnClose" = FALSE,
+    "LockOnClose"   = TRUE,
     "RenameOnClose" = TRUE,
     "RemoveCreatorOnClose" = TRUE,
-    "DeleteDelay" = INTERVAL '5 minutes',
-    "LockOnArchive" = TRUE,
-    "RenameOnArchive" = TRUE,
-    "RemoveCreatorOnArchive" = FALSE,
-    "AutoArchiveOnClose" = FALSE
+    "DeleteDelay"   = INTERVAL '5 minutes', "LockOnArchive" = TRUE, "RenameOnArchive" = TRUE, "RemoveCreatorOnArchive" = FALSE, "AutoArchiveOnClose" = FALSE
 WHERE
     "DeleteOnClose" IS NULL
    OR "LockOnClose" IS NULL
@@ -22,16 +17,11 @@ WHERE
 
 -- Update existing select menu options with sensible defaults
 UPDATE "SelectMenuOptions"
-SET
-    "DeleteOnClose" = FALSE,
-    "LockOnClose" = TRUE,
+SET "DeleteOnClose" = FALSE,
+    "LockOnClose"   = TRUE,
     "RenameOnClose" = TRUE,
     "RemoveCreatorOnClose" = TRUE,
-    "DeleteDelay" = INTERVAL '5 minutes',
-    "LockOnArchive" = TRUE,
-    "RenameOnArchive" = TRUE,
-    "RemoveCreatorOnArchive" = FALSE,
-    "AutoArchiveOnClose" = FALSE
+    "DeleteDelay"   = INTERVAL '5 minutes', "LockOnArchive" = TRUE, "RenameOnArchive" = TRUE, "RemoveCreatorOnArchive" = FALSE, "AutoArchiveOnClose" = FALSE
 WHERE
     "DeleteOnClose" IS NULL
    OR "LockOnClose" IS NULL
@@ -39,16 +29,11 @@ WHERE
 
 -- Update existing guild settings with sensible defaults
 UPDATE "GuildTicketSettings"
-SET
-    "DeleteTicketsOnClose" = FALSE,
-    "LockTicketsOnClose" = TRUE,
+SET "DeleteTicketsOnClose" = FALSE,
+    "LockTicketsOnClose"   = TRUE,
     "RenameTicketsOnClose" = TRUE,
     "RemoveCreatorOnClose" = TRUE,
-    "DeleteDelay" = INTERVAL '5 minutes',
-    "LockTicketsOnArchive" = TRUE,
-    "RenameTicketsOnArchive" = TRUE,
-    "RemoveCreatorOnArchive" = FALSE,
-    "AutoArchiveOnClose" = FALSE
+    "DeleteDelay"          = INTERVAL '5 minutes', "LockTicketsOnArchive" = TRUE, "RenameTicketsOnArchive" = TRUE, "RemoveCreatorOnArchive" = FALSE, "AutoArchiveOnClose" = FALSE
 WHERE
     "DeleteTicketsOnClose" IS NULL
    OR "LockTicketsOnClose" IS NULL

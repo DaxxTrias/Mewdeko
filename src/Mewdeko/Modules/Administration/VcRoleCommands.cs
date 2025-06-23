@@ -59,7 +59,8 @@ public partial class Administration
                 else
                 {
                     await Service.AddVcRole(ctx.Guild.Id, role, chan.Id);
-                    await ReplyConfirmAsync(Strings.VcroleAdded(ctx.Guild.Id, Format.Bold(chan.Name), Format.Bold(role.Name)))
+                    await ReplyConfirmAsync(Strings.VcroleAdded(ctx.Guild.Id, Format.Bold(chan.Name),
+                            Format.Bold(role.Name)))
                         .ConfigureAwait(false);
                 }
             }
@@ -93,7 +94,8 @@ public partial class Administration
             if (role == null)
             {
                 if (await Service.RemoveVcRole(ctx.Guild.Id, vc.Id))
-                    await ReplyConfirmAsync(Strings.VcroleRemoved(ctx.Guild.Id, Format.Bold(vc.Name))).ConfigureAwait(false);
+                    await ReplyConfirmAsync(Strings.VcroleRemoved(ctx.Guild.Id, Format.Bold(vc.Name)))
+                        .ConfigureAwait(false);
             }
             else
             {

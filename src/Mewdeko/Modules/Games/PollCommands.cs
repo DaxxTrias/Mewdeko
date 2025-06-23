@@ -3,6 +3,7 @@ using Discord.Commands;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Modules.Games.Common;
 using Mewdeko.Modules.Games.Services;
+using Poll = DataModel.Poll;
 
 namespace Mewdeko.Modules.Games;
 
@@ -73,7 +74,8 @@ public partial class Games
             if (await Service.StartPoll(poll))
             {
                 // Constructs an embed for the poll
-                var eb = new EmbedBuilder().WithOkColor().WithTitle(Strings.PollCreated(ctx.Guild.Id, ctx.User.ToString()))
+                var eb = new EmbedBuilder().WithOkColor()
+                    .WithTitle(Strings.PollCreated(ctx.Guild.Id, ctx.User.ToString()))
                     .WithDescription(
                         $"{Format.Bold(poll.Question)}\n\n{string.Join("\n", poll.PollAnswers.Select(x => $"`{x.Index + 1}.` {Format.Bold(x.Text)}"))}");
 
@@ -130,7 +132,8 @@ public partial class Games
                 return;
 
             // Sends an embed with the current poll statistics to the channel
-            await ctx.Channel.EmbedAsync(GetStats(pr.Polls, Strings.CurrentPollResults(ctx.Guild.Id))).ConfigureAwait(false);
+            await ctx.Channel.EmbedAsync(GetStats(pr.Polls, Strings.CurrentPollResults(ctx.Guild.Id)))
+                .ConfigureAwait(false);
         }
 
         /// <summary>
@@ -144,7 +147,7 @@ public partial class Games
         [RequireContext(ContextType.Guild)]
         public async Task Pollend()
         {
-            DataModel.Poll p;
+            Poll p;
             // Stops the current poll in the guild and retrieves its information
             if ((p = await Service.StopPoll(ctx.Guild.Id)) == null)
                 return;
@@ -161,7 +164,7 @@ public partial class Games
         /// <param name="polls">The poll to generate statistics for.</param>
         /// <param name="title">The title of the embed.</param>
         /// <returns>The embed containing the poll statistics.</returns>
-        public EmbedBuilder GetStats(DataModel.Poll polls, string? title)
+        public EmbedBuilder GetStats(Poll polls, string? title)
         {
             // Group the votes by their corresponding answer index and calculate the total votes cast for each answer
             var results = polls.PollVotes.GroupBy(kvp => kvp.VoteIndex)

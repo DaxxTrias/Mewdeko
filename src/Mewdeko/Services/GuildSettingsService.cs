@@ -5,7 +5,6 @@ using Mewdeko.Common.Configs;
 using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Services.Impl;
 using Microsoft.Extensions.Caching.Memory;
-using Serilog;
 
 namespace Mewdeko.Services;
 
@@ -19,9 +18,11 @@ public class GuildSettingsService
     private readonly IMemoryCache cache;
     private readonly IDataConnectionFactory dbFactory;
     private readonly TimeSpan defaultCacheExpiration = TimeSpan.FromMinutes(30);
+    private readonly ILogger<GuildSettingsService> logger;
     private readonly PerformanceMonitorService perfService;
     private readonly TimeSpan slidingCacheExpiration = TimeSpan.FromMinutes(10);
     private readonly ConcurrentDictionary<ulong, SemaphoreSlim> updateLocks; // Use ulong as key
+
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="GuildSettingsService" /> class.
@@ -35,12 +36,13 @@ public class GuildSettingsService
         IDataConnectionFactory dbFactory,
         BotConfig botSettings,
         IMemoryCache memoryCache,
-        PerformanceMonitorService perfService)
+        PerformanceMonitorService perfService, ILogger<GuildSettingsService> logger)
     {
         this.dbFactory = dbFactory ?? throw new ArgumentNullException(nameof(dbFactory));
         this.botSettings = botSettings ?? throw new ArgumentNullException(nameof(botSettings));
         cache = memoryCache ?? throw new ArgumentNullException(nameof(memoryCache));
         this.perfService = perfService ?? throw new ArgumentNullException(nameof(perfService));
+        this.logger = logger;
         updateLocks = new ConcurrentDictionary<ulong, SemaphoreSlim>(); // Use ulong as key
     }
 
@@ -88,7 +90,7 @@ public class GuildSettingsService
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Failed to retrieve prefix for guild {GuildId}", guildId);
+                logger.LogError(ex, "Failed to retrieve prefix for guild {GuildId}", guildId);
                 return botSettings.Prefix;
             }
 
@@ -146,7 +148,7 @@ public class GuildSettingsService
                 catch (Exception ex)
                 {
                     await tx.RollbackAsync();
-                    Log.Error(ex, "Failed to set prefix for guild {GuildId} in transaction", guildId);
+                    logger.LogError(ex, "Failed to set prefix for guild {GuildId} in transaction", guildId);
                     throw;
                 }
             }
@@ -193,7 +195,7 @@ public class GuildSettingsService
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Failed to get or create guild config for {GuildId}", guildId);
+                logger.LogError(ex, "Failed to get or create guild config for {GuildId}", guildId);
                 return null;
             }
         }
@@ -236,13 +238,13 @@ public class GuildSettingsService
 
                     if (existingConfig == null)
                     {
-                        Log.Warning("GuildConfig with ID {Id} not found in database", toUpdate.Id);
+                        logger.LogWarning("GuildConfig with ID {Id} not found in database", toUpdate.Id);
                         existingConfig = await db.GuildConfigs
                             .FirstOrDefaultAsync(x => x.GuildId == guildId);
 
                         if (existingConfig == null)
                         {
-                            Log.Warning("No GuildConfig found for GuildId {GuildId}, creating new one", guildId);
+                            logger.LogWarning("No GuildConfig found for GuildId {GuildId}, creating new one", guildId);
                             existingConfig = await GetOrCreateGuildConfigInternal(db, guildId);
                         }
                     }
@@ -294,9 +296,9 @@ public class GuildSettingsService
                 catch (Exception ex)
                 {
                     await tx.RollbackAsync();
-                    Log.Error(ex, "Exception type: {Type}, Message: {Message}", ex.GetType().Name, ex.Message);
-                    Log.Error(ex, "Stack trace: {StackTrace}", ex.StackTrace);
-                    Log.Error(ex, "Failed to update guild config for {GuildId} in transaction", guildId);
+                    logger.LogError(ex, "Exception type: {Type}, Message: {Message}", ex.GetType().Name, ex.Message);
+                    logger.LogError(ex, "Stack trace: {StackTrace}", ex.StackTrace);
+                    logger.LogError(ex, "Failed to update guild config for {GuildId} in transaction", guildId);
                     throw;
                 }
             }
@@ -316,7 +318,7 @@ public class GuildSettingsService
         cache.Remove(GetPrefixCacheKey(guildId));
         cache.Remove(GetGuildConfigCacheKey(guildId));
         cache.Remove(GetReactionRolesCacheKey(guildId));
-        Log.Information("Cache cleared for GuildId {GuildId}", guildId);
+        logger.LogInformation("Cache cleared for GuildId {GuildId}", guildId);
     }
 
     /// <summary>
@@ -351,7 +353,7 @@ public class GuildSettingsService
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Failed to get reaction roles for {GuildId}", guildId);
+                logger.LogError(ex, "Failed to get reaction roles for {GuildId}", guildId);
                 return null;
             }
 
@@ -380,7 +382,7 @@ public class GuildSettingsService
 
         if (config == null)
         {
-            Log.Information("Creating new GuildConfig for GuildId {GuildId}", guildId);
+            logger.LogInformation("Creating new GuildConfig for GuildId {GuildId}", guildId);
             config = new GuildConfig
             {
                 GuildId = guildId, DateAdded = DateTime.UtcNow

@@ -6,7 +6,6 @@ using Fergun.Interactive.Pagination;
 using Mewdeko.Common.Attributes.InteractionCommands;
 using Mewdeko.Common.Modals;
 using Mewdeko.Modules.Tickets.Services;
-using Serilog;
 
 namespace Mewdeko.Modules.Tickets;
 
@@ -18,16 +17,18 @@ public partial class TicketsSlash : MewdekoSlashModuleBase<TicketService>
 {
     private readonly IDataCache cache;
     private readonly InteractiveService interactivity;
+    private readonly ILogger<TicketsSlash> logger;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="TicketsSlash" /> class.
     /// </summary>
     /// <param name="interactivity">The interactive service.</param>
     /// <param name="cache">The cache service.</param>
-    public TicketsSlash(InteractiveService interactivity, IDataCache cache)
+    public TicketsSlash(InteractiveService interactivity, IDataCache cache, ILogger<TicketsSlash> logger)
     {
         this.interactivity = interactivity;
         this.cache = cache;
+        this.logger = logger;
     }
 
     /// <summary>
@@ -133,7 +134,7 @@ public partial class TicketsSlash : MewdekoSlashModuleBase<TicketService>
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error listing panel components for panel {PanelId}", panelId);
+            logger.LogError(ex, "Error listing panel components for panel {PanelId}", panelId);
             await RespondAsync("An error occurred while listing panel components.", ephemeral: true);
         }
     }
@@ -224,7 +225,7 @@ public partial class TicketsSlash : MewdekoSlashModuleBase<TicketService>
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error listing panels");
+            logger.LogError(ex, "Error listing panels");
             await RespondAsync("An error occurred while listing panels.", ephemeral: true);
         }
     }
@@ -324,7 +325,7 @@ public partial class TicketsSlash : MewdekoSlashModuleBase<TicketService>
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error claiming ticket in channel {ChannelId}", channel.Id);
+            logger.LogError(ex, "Error claiming ticket in channel {ChannelId}", channel.Id);
             await RespondAsync("An error occurred while claiming the ticket.", ephemeral: true);
         }
     }
@@ -350,7 +351,7 @@ public partial class TicketsSlash : MewdekoSlashModuleBase<TicketService>
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error closing ticket in channel {ChannelId}", ctx.Channel.Id);
+            logger.LogError(ex, "Error closing ticket in channel {ChannelId}", ctx.Channel.Id);
             await RespondAsync("An error occurred while closing the ticket.", ephemeral: true);
         }
     }
@@ -388,7 +389,7 @@ public partial class TicketsSlash : MewdekoSlashModuleBase<TicketService>
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error closing ticket in channel {ChannelId}", channel.Id);
+            logger.LogError(ex, "Error closing ticket in channel {ChannelId}", channel.Id);
             await RespondAsync("An error occurred while closing the ticket.", ephemeral: true);
         }
     }
@@ -438,7 +439,7 @@ public partial class TicketsSlash : MewdekoSlashModuleBase<TicketService>
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error unclaiming ticket {TicketId}", ticketId);
+            logger.LogError(ex, "Error unclaiming ticket {TicketId}", ticketId);
             await RespondAsync("An error occurred while unclaiming the ticket.", ephemeral: true);
         }
     }
@@ -552,7 +553,7 @@ public partial class TicketsSlash : MewdekoSlashModuleBase<TicketService>
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error handling select menu interaction for menuId {MenuId}", menuId);
+            logger.LogError(ex, "Error handling select menu interaction for menuId {MenuId}", menuId);
             await RespondAsync("An error occurred while creating your ticket.", ephemeral: true);
         }
     }
@@ -972,7 +973,7 @@ public partial class TicketsSlash : MewdekoSlashModuleBase<TicketService>
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error claiming ticket in channel {ChannelId}", ctx.Channel.Id);
+            logger.LogError(ex, "Error claiming ticket in channel {ChannelId}", ctx.Channel.Id);
             await RespondAsync("An error occurred while claiming the ticket.", ephemeral: true);
         }
     }
@@ -1023,7 +1024,7 @@ public partial class TicketsSlash : MewdekoSlashModuleBase<TicketService>
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error handling ticket button for buttonId {ButtonId}", buttonId);
+            logger.LogError(ex, "Error handling ticket button for buttonId {ButtonId}", buttonId);
             await RespondAsync("An error occurred while creating your ticket.", ephemeral: true);
         }
     }
@@ -1067,7 +1068,7 @@ public partial class TicketsSlash : MewdekoSlashModuleBase<TicketService>
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error handling button style selection for panel {PanelId}", panelId);
+            logger.LogError(ex, "Error handling button style selection for panel {PanelId}", panelId);
             await RespondAsync("An error occurred during button creation.", ephemeral: true);
         }
     }
@@ -1101,7 +1102,7 @@ public partial class TicketsSlash : MewdekoSlashModuleBase<TicketService>
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error handling emoji choice for panel {PanelId}", panelId);
+            logger.LogError(ex, "Error handling emoji choice for panel {PanelId}", panelId);
             await RespondAsync("An error occurred during button creation.", ephemeral: true);
         }
     }
@@ -1160,7 +1161,7 @@ public partial class TicketsSlash : MewdekoSlashModuleBase<TicketService>
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error handling category selection for panel {PanelId}", panelId);
+            logger.LogError(ex, "Error handling category selection for panel {PanelId}", panelId);
             await FollowupAsync("An error occurred during button creation.", ephemeral: true);
         }
     }
@@ -1203,7 +1204,7 @@ public partial class TicketsSlash : MewdekoSlashModuleBase<TicketService>
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error handling role selection for panel {PanelId}", panelId);
+            logger.LogError(ex, "Error handling role selection for panel {PanelId}", panelId);
             await RespondAsync("An error occurred during button creation.", ephemeral: true);
         }
     }
@@ -1240,7 +1241,7 @@ public partial class TicketsSlash : MewdekoSlashModuleBase<TicketService>
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error transitioning to viewer role selection for panel {PanelId}", panelId);
+            logger.LogError(ex, "Error transitioning to viewer role selection for panel {PanelId}", panelId);
             await RespondAsync("An error occurred during button creation.", ephemeral: true);
         }
     }
@@ -1319,7 +1320,7 @@ public partial class TicketsSlash : MewdekoSlashModuleBase<TicketService>
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error handling viewer role selection for panel {PanelId}", panelId);
+            logger.LogError(ex, "Error handling viewer role selection for panel {PanelId}", panelId);
             await RespondAsync("An error occurred during button creation.", ephemeral: true);
         }
     }
@@ -1352,7 +1353,7 @@ public partial class TicketsSlash : MewdekoSlashModuleBase<TicketService>
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error handling response time selection for panel {PanelId}", panelId);
+            logger.LogError(ex, "Error handling response time selection for panel {PanelId}", panelId);
             await RespondAsync("An error occurred during button creation.", ephemeral: true);
         }
     }
@@ -1378,7 +1379,7 @@ public partial class TicketsSlash : MewdekoSlashModuleBase<TicketService>
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error handling response time skip for panel {PanelId}", panelId);
+            logger.LogError(ex, "Error handling response time skip for panel {PanelId}", panelId);
             await RespondAsync("An error occurred during button creation.", ephemeral: true);
         }
     }
@@ -1411,7 +1412,7 @@ public partial class TicketsSlash : MewdekoSlashModuleBase<TicketService>
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error handling auto-close selection for panel {PanelId}", panelId);
+            logger.LogError(ex, "Error handling auto-close selection for panel {PanelId}", panelId);
             await RespondAsync("An error occurred during button creation.", ephemeral: true);
         }
     }
@@ -1437,7 +1438,7 @@ public partial class TicketsSlash : MewdekoSlashModuleBase<TicketService>
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error handling auto-close skip for panel {PanelId}", panelId);
+            logger.LogError(ex, "Error handling auto-close skip for panel {PanelId}", panelId);
             await RespondAsync("An error occurred during button creation.", ephemeral: true);
         }
     }
@@ -1513,7 +1514,7 @@ public partial class TicketsSlash : MewdekoSlashModuleBase<TicketService>
                 }
                 catch (Exception ex)
                 {
-                    Log.Warning(ex, "Failed to parse support roles");
+                    logger.LogWarning(ex, "Failed to parse support roles");
                 }
             }
 
@@ -1527,7 +1528,7 @@ public partial class TicketsSlash : MewdekoSlashModuleBase<TicketService>
                 }
                 catch (Exception ex)
                 {
-                    Log.Warning(ex, "Failed to parse viewer roles");
+                    logger.LogWarning(ex, "Failed to parse viewer roles");
                 }
             }
 
@@ -1540,7 +1541,7 @@ public partial class TicketsSlash : MewdekoSlashModuleBase<TicketService>
                 }
                 catch (Exception ex)
                 {
-                    Log.Warning(ex, "Failed to parse priorities");
+                    logger.LogWarning(ex, "Failed to parse priorities");
                 }
             }
 
@@ -1577,7 +1578,7 @@ public partial class TicketsSlash : MewdekoSlashModuleBase<TicketService>
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error confirming button creation for panel {PanelId}", panelId);
+            logger.LogError(ex, "Error confirming button creation for panel {PanelId}", panelId);
             await FollowupAsync($"Error creating button: {ex.Message}", ephemeral: true);
         }
         finally
@@ -1622,7 +1623,7 @@ public partial class TicketsSlash : MewdekoSlashModuleBase<TicketService>
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error cancelling button creation for panel {PanelId}", panelId);
+            logger.LogError(ex, "Error cancelling button creation for panel {PanelId}", panelId);
             await RespondAsync("An error occurred while cancelling button creation.", ephemeral: true);
         }
     }
@@ -1653,7 +1654,7 @@ public partial class TicketsSlash : MewdekoSlashModuleBase<TicketService>
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error creating case with title {Title}", modal.CaseTitle);
+            logger.LogError(ex, "Error creating case with title {Title}", modal.CaseTitle);
             await RespondAsync("Failed to create case. Please try again.", ephemeral: true);
         }
     }
@@ -1682,7 +1683,7 @@ public partial class TicketsSlash : MewdekoSlashModuleBase<TicketService>
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error updating case {CaseId}", caseId);
+            logger.LogError(ex, "Error updating case {CaseId}", caseId);
             await RespondAsync("Failed to update case. Please try again.", ephemeral: true);
         }
     }
@@ -1723,7 +1724,7 @@ public partial class TicketsSlash : MewdekoSlashModuleBase<TicketService>
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error creating select menu for panel {PanelId}", panelId);
+            logger.LogError(ex, "Error creating select menu for panel {PanelId}", panelId);
             await RespondAsync("Failed to create select menu. Please try again.", ephemeral: true);
         }
     }
@@ -1774,20 +1775,20 @@ public partial class TicketsSlash : MewdekoSlashModuleBase<TicketService>
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error prompting ticket settings for panel {PanelId}", panelId);
+            logger.LogError(ex, "Error prompting ticket settings for panel {PanelId}", panelId);
             await FollowupAsync("An error occurred during button creation.", ephemeral: true);
         }
     }
 
     /// <summary>
-    /// Handles custom modals for ticket creation.
+    ///     Handles custom modals for ticket creation.
     /// </summary>
     /// <param name="buttonId">The buttons db ID</param>
     /// <param name="unused">Unused modal parameter</param>
     [ModalInteraction("ticket_modal:*", true)]
     public async Task HandleTicketModalSubmission(string buttonId, SimpleInputModal unused)
     {
-        await DeferAsync(ephemeral: true);
+        await DeferAsync(true);
 
         try
         {
@@ -1831,13 +1832,13 @@ public partial class TicketsSlash : MewdekoSlashModuleBase<TicketService>
         }
         catch (Exception ex)
         {
-            Log.Error($"Error handling ticket modal submission: {ex}");
+            logger.LogError($"Error handling ticket modal submission: {ex}");
             await FollowupAsync($"{Config.ErrorEmote} An error occurred while creating your ticket.", ephemeral: true);
         }
     }
 
     /// <summary>
-    /// Extracts modal responses into a dictionary format
+    ///     Extracts modal responses into a dictionary format
     /// </summary>
     /// <param name="components">The submitted modal components</param>
     /// <returns>Dictionary with field IDs as keys and user responses as values</returns>

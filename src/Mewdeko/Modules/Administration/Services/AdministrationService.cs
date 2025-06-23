@@ -223,9 +223,7 @@ public class AdministrationService : INService
             {
                 await db.InsertAsync(new DelMsgOnCmdChannel
                 {
-                    GuildId = guildId,
-                    ChannelId = chId,
-                    State = targetState
+                    GuildId = guildId, ChannelId = chId, State = targetState
                 });
             }
         }

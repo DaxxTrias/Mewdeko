@@ -1,6 +1,5 @@
 ﻿using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Modules.Utility.Services;
-using Serilog;
 using Color = System.Drawing.Color;
 
 namespace Mewdeko.Modules.Utility;
@@ -10,7 +9,7 @@ public partial class Utility
     /// <summary>
     ///     Commands for managing join and leave statistics.
     /// </summary>
-    public class JoinLeaveStats : MewdekoSubmodule<JoinLeaveLoggerService>
+    public class JoinLeaveStats(ILogger<JoinLeaveStats> logger) : MewdekoSubmodule<JoinLeaveLoggerService>
     {
         /// <summary>
         ///     Generates and sends a graph displaying the join statistics of the server.
@@ -29,7 +28,7 @@ public partial class Utility
             }
             catch (Exception e)
             {
-                Log.Error(e, "Error generating join stats:");
+                logger.LogError(e, "Error generating join stats:");
             }
         }
 
@@ -50,7 +49,7 @@ public partial class Utility
             }
             catch (Exception e)
             {
-                Log.Error(e, "Error generating leave stats:");
+                logger.LogError(e, "Error generating leave stats:");
             }
         }
 

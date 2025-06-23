@@ -5,12 +5,10 @@ using Mewdeko.Database.DbContextStuff;
 namespace Mewdeko.Database.Extensions;
 
 /// <summary>
-///
 /// </summary>
 public static class WarnExtensions
 {
     /// <summary>
-    ///
     /// </summary>
     /// <param name="set"></param>
     /// <param name="db"></param>
@@ -30,7 +28,6 @@ public static class WarnExtensions
     }
 
     /// <summary>
-    ///
     /// </summary>
     /// <param name="set"></param>
     /// <param name="db"></param>
@@ -59,7 +56,6 @@ public static class WarnExtensions
     }
 
     /// <summary>
-    ///
     /// </summary>
     /// <param name="set"></param>
     /// <param name="db"></param>
@@ -80,7 +76,6 @@ public static class WarnExtensions
     }
 
     /// <summary>
-    ///
     /// </summary>
     /// <param name="set"></param>
     /// <param name="db"></param>

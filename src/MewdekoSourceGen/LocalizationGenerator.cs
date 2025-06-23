@@ -26,18 +26,18 @@ namespace MewdekoSourceGen;
 ///     5. Provide comprehensive documentation about locale support
 /// </remarks>
 [Generator]
-public partial class LocalizationGenerator : IIncrementalGenerator
+public class LocalizationGenerator : IIncrementalGenerator
 {
     /// <summary>
     ///     Regular expression pattern to match locale files and extract the culture code.
     ///     Matches files named 'responses.LOCALE.json' where LOCALE is the culture code.
     /// </summary>
-    private static readonly Regex LangFilePattern = new Regex(@"responses\.(.+)\.json$");
+    private static readonly Regex LangFilePattern = new(@"responses\.(.+)\.json$");
 
-    private static readonly Regex InvalidCharsRegex = new Regex(@"[^A-Za-z0-9_]");
-    private static readonly Regex StartsWithDigitRegex = new Regex(@"^\d+");
-    private static readonly Regex ContainsDigitRegex = new Regex(@"\d");
-    private static readonly Regex FormatArgsRegex = new Regex(@"\{(\d+)\}");
+    private static readonly Regex InvalidCharsRegex = new(@"[^A-Za-z0-9_]");
+    private static readonly Regex StartsWithDigitRegex = new(@"^\d+");
+    private static readonly Regex ContainsDigitRegex = new(@"\d");
+    private static readonly Regex FormatArgsRegex = new(@"\{(\d+)\}");
 
     /// <summary>
     ///     Initializes the incremental source generator.
@@ -454,8 +454,8 @@ public partial class LocalizationGenerator : IIncrementalGenerator
     }
 
     /// <summary>
-    /// Simple JSON parser that extracts string key-value pairs from a JSON object.
-    /// This is a minimal implementation for source generators targeting netstandard2.0.
+    ///     Simple JSON parser that extracts string key-value pairs from a JSON object.
+    ///     This is a minimal implementation for source generators targeting netstandard2.0.
     /// </summary>
     /// <param name="json">The JSON string to parse.</param>
     /// <returns>A dictionary of string keys to string values.</returns>
@@ -569,7 +569,6 @@ public partial class LocalizationGenerator : IIncrementalGenerator
                 currentKey = "";
                 currentValue = "";
                 parsingKey = true;
-                continue;
             }
         }
 

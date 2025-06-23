@@ -1,25 +1,25 @@
 ﻿using System.IO;
 using System.Net.Http;
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
 using Mewdeko.Common.TypeReaders.Models;
 using Mewdeko.Modules.MultiGreets.Services;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 
 namespace Mewdeko.Controllers;
 
 /// <summary>
-/// Controller for managing MultiGreet functionality within the Discord bot
+///     Controller for managing MultiGreet functionality within the Discord bot
 /// </summary>
 [ApiController]
 [Route("botapi/[controller]/{guildId}")]
 [Authorize("ApiKeyPolicy")]
 public class MultiGreetController : Controller
 {
-    private readonly MultiGreetService multiGreetService;
     private readonly DiscordShardedClient client;
+    private readonly MultiGreetService multiGreetService;
 
     /// <summary>
-    /// Initializes a new instance of the MultiGreetController
+    ///     Initializes a new instance of the MultiGreetController
     /// </summary>
     /// <param name="multiGreetService">Service for managing MultiGreet operations</param>
     /// <param name="client">Discord client instance</param>
@@ -30,7 +30,7 @@ public class MultiGreetController : Controller
     }
 
     /// <summary>
-    /// Retrieves all MultiGreet configurations for a guild
+    ///     Retrieves all MultiGreet configurations for a guild
     /// </summary>
     /// <param name="guildId">The ID of the guild to get MultiGreets for</param>
     /// <returns>List of MultiGreet configurations with resolved channel information</returns>
@@ -66,7 +66,7 @@ public class MultiGreetController : Controller
 
 
     /// <summary>
-    /// Adds a new MultiGreet configuration to a guild
+    ///     Adds a new MultiGreet configuration to a guild
     /// </summary>
     /// <param name="guildId">The ID of the guild to add the MultiGreet to</param>
     /// <param name="channelId">The ID of the channel for the MultiGreet</param>
@@ -82,7 +82,7 @@ public class MultiGreetController : Controller
     }
 
     /// <summary>
-    /// Removes a MultiGreet configuration from a guild
+    ///     Removes a MultiGreet configuration from a guild
     /// </summary>
     /// <param name="guildId">The ID of the guild containing the MultiGreet</param>
     /// <param name="greetId">The ID of the MultiGreet to remove</param>
@@ -103,7 +103,7 @@ public class MultiGreetController : Controller
     }
 
     /// <summary>
-    /// Updates the message content of a MultiGreet
+    ///     Updates the message content of a MultiGreet
     /// </summary>
     /// <param name="guildId">The ID of the guild containing the MultiGreet</param>
     /// <param name="greetId">The ID of the MultiGreet to update</param>
@@ -125,7 +125,7 @@ public class MultiGreetController : Controller
     }
 
     /// <summary>
-    /// Updates the deletion time for a MultiGreet message
+    ///     Updates the deletion time for a MultiGreet message
     /// </summary>
     /// <param name="guildId">The ID of the guild containing the MultiGreet</param>
     /// <param name="greetId">The ID of the MultiGreet to update</param>
@@ -148,7 +148,7 @@ public class MultiGreetController : Controller
     }
 
     /// <summary>
-    /// Updates whether a MultiGreet should greet bots
+    ///     Updates whether a MultiGreet should greet bots
     /// </summary>
     /// <param name="guildId">The ID of the guild containing the MultiGreet</param>
     /// <param name="greetId">The ID of the MultiGreet to update</param>
@@ -170,7 +170,7 @@ public class MultiGreetController : Controller
     }
 
     /// <summary>
-    /// Updates the webhook configuration for a MultiGreet
+    ///     Updates the webhook configuration for a MultiGreet
     /// </summary>
     /// <param name="guildId">The ID of the guild containing the MultiGreet</param>
     /// <param name="greetId">The ID of the MultiGreet to update</param>
@@ -210,7 +210,7 @@ public class MultiGreetController : Controller
     }
 
     /// <summary>
-    /// Updates whether a MultiGreet is disabled
+    ///     Updates whether a MultiGreet is disabled
     /// </summary>
     /// <param name="guildId">The ID of the guild containing the MultiGreet</param>
     /// <param name="greetId">The ID of the MultiGreet to update</param>
@@ -233,7 +233,7 @@ public class MultiGreetController : Controller
 
 
     /// <summary>
-    /// Updates the MultiGreet type for a guild
+    ///     Updates the MultiGreet type for a guild
     /// </summary>
     /// <param name="guildId">The ID of the guild to update</param>
     /// <param name="type">The new MultiGreet type (0: MultiGreet, 1: RandomGreet, 3: Off)</param>
@@ -250,7 +250,7 @@ public class MultiGreetController : Controller
     }
 
     /// <summary>
-    /// Gets the current MultiGreet type for a guild
+    ///     Gets the current MultiGreet type for a guild
     /// </summary>
     /// <param name="guildId">The ID of the guild to check</param>
     /// <returns>The current MultiGreet type</returns>
@@ -271,16 +271,17 @@ public class MultiGreetController : Controller
 }
 
 /// <summary>
-/// Request model for webhook updates
+///     Request model for webhook updates
 /// </summary>
 public class WebhookUpdateRequest
 {
     /// <summary>
-    /// The name of the webhook
+    ///     The name of the webhook
     /// </summary>
     public string? Name { get; set; }
+
     /// <summary>
-    /// The URL of the webhook's avatar image
+    ///     The URL of the webhook's avatar image
     /// </summary>
     public string? AvatarUrl { get; set; }
 }

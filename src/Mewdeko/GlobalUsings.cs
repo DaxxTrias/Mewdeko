@@ -15,3 +15,4 @@ global using Mewdeko.Extensions;
 global using Mewdeko.Services;
 global using NonBlocking;
 global using EventHandler = Mewdeko.Services.Impl.EventHandler;
+global using Microsoft.Extensions.Logging;

@@ -4,7 +4,6 @@ using LinqToDB;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Modules.Moderation.Services;
 using Mewdeko.Services.Strings;
-using Serilog;
 using DiscordShardedClient = Discord.WebSocket.DiscordShardedClient;
 
 namespace Mewdeko.Modules.Administration.Services;
@@ -22,7 +21,8 @@ public class LogCommandService(
     DiscordShardedClient client,
     EventHandler handler,
     MuteService muteService,
-    GeneratedBotStrings strings) : INService, IReadyExecutor
+    GeneratedBotStrings strings,
+    ILogger<LogCommandService> logger) : INService, IReadyExecutor
 {
     /// <summary>
     ///     Log category types.
@@ -158,7 +158,7 @@ public class LogCommandService(
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Failed to load LoggingV2 settings on ready.");
+            logger.LogError(ex, "Failed to load LoggingV2 settings on ready.");
             GuildLogSettings = new ConcurrentDictionary<ulong, LoggingV2>();
         }
 
@@ -216,7 +216,7 @@ public class LogCommandService(
     /// <returns>A task that represents the asynchronous operation.</returns>
     private async Task OnRoleCreated(SocketRole args)
     {
-        Log.Debug("LogCommandService.OnRoleCreated called for role {RoleName} in guild {GuildId}", args.Name,
+        logger.LogDebug("LogCommandService.OnRoleCreated called for role {RoleName} in guild {GuildId}", args.Name,
             args.Guild.Id);
         if (GuildLogSettings.TryGetValue(args.Guild.Id, out var logSetting))
         {
@@ -866,7 +866,7 @@ public class LogCommandService(
     /// <param name="guildUser">The user that joined the guild.</param>
     private async Task OnUserJoined(IGuildUser guildUser)
     {
-        Log.Debug("LogCommandService.OnUserJoined called for user {UserId} in guild {GuildId}", guildUser.Id,
+        logger.LogDebug("LogCommandService.OnUserJoined called for user {UserId} in guild {GuildId}", guildUser.Id,
             guildUser.Guild.Id);
         if (GuildLogSettings.TryGetValue(guildUser.Guild.Id, out var logSetting))
         {
@@ -1537,7 +1537,7 @@ public class LogCommandService(
         }
         catch (Exception e)
         {
-            Log.Error(e, "There was an issue setting log settings for Guild {GuildId}", guildId);
+            logger.LogError(e, "There was an issue setting log settings for Guild {GuildId}", guildId);
         }
     }
 
@@ -1680,7 +1680,7 @@ public class LogCommandService(
         }
         catch (Exception e)
         {
-            Log.Error(e, "There was an issue setting log settings by type for Guild {GuildId}", guildId);
+            logger.LogError(e, "There was an issue setting log settings by type for Guild {GuildId}", guildId);
         }
     }
 }

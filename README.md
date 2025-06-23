@@ -14,14 +14,23 @@
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/B0B03QN1K)
 
 # Table of Contents
+
 ### - [About Mewdeko](About-Mewdeko.md)
+
 ### - [Selfhost Guide (Windows)](Selfhost-Windows.md)
+
 ### - [Commands](https://mewdeko.tech/commands)
+
 ### - [Selfhost Guide (Linux)](Selfhost-Linux.md)
+
 ### - [Code of Conduct](CODE_OF_CONDUCT.md)
+
 ### - [Contribution Guide](CONTRIBUTING.md)
+
 ### - [Discord Server](https://discord.gg/mewdeko)
+
 ### - [Top.gg Link](https://top.gg/bot/752236274261426212)
+
 ### - [License](LICENSE.md)
 
 ## If you have any questions please join the discord server above or open an issue here.

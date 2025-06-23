@@ -2,267 +2,266 @@ using Mewdeko.Services.Impl;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
-namespace Mewdeko.Controllers
+namespace Mewdeko.Controllers;
+
+/// <summary>
+///     Controller providing API endpoints for accessing performance monitoring data.
+///     Only accessible to bot owners.
+/// </summary>
+[ApiController]
+[Route("botapi/[controller]")]
+[Authorize("ApiKeyPolicy")]
+public class PerformanceController : ControllerBase
 {
+    private readonly BotCredentials credentials;
+    private readonly EventHandler eventHandler;
+    private readonly PerformanceMonitorService performanceService;
+
     /// <summary>
-    /// Controller providing API endpoints for accessing performance monitoring data.
-    /// Only accessible to bot owners.
+    ///     Initializes a new instance of the <see cref="PerformanceController" /> class.
     /// </summary>
-    [ApiController]
-    [Route("botapi/[controller]")]
-    [Authorize("ApiKeyPolicy")]
-    public class PerformanceController : ControllerBase
+    /// <param name="performanceService">The performance monitoring service.</param>
+    /// <param name="eventHandler">The event handler for accessing event metrics.</param>
+    /// <param name="credentials">The bot credentials for owner verification.</param>
+    public PerformanceController(
+        PerformanceMonitorService performanceService,
+        EventHandler eventHandler,
+        BotCredentials credentials)
     {
-        private readonly BotCredentials credentials;
-        private readonly EventHandler eventHandler;
-        private readonly PerformanceMonitorService performanceService;
+        this.performanceService = performanceService;
+        this.eventHandler = eventHandler;
+        this.credentials = credentials;
+    }
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="PerformanceController"/> class.
-        /// </summary>
-        /// <param name="performanceService">The performance monitoring service.</param>
-        /// <param name="eventHandler">The event handler for accessing event metrics.</param>
-        /// <param name="credentials">The bot credentials for owner verification.</param>
-        public PerformanceController(
-            PerformanceMonitorService performanceService,
-            EventHandler eventHandler,
-            BotCredentials credentials)
+    /// <summary>
+    ///     Gets the performance data for methods tracked by the performance monitoring service.
+    /// </summary>
+    /// <param name="userId">The Discord user ID to verify for owner permissions.</param>
+    /// <returns>An array of performance data for the top CPU-intensive methods.</returns>
+    [HttpGet("methods")]
+    public IActionResult GetPerformanceData([FromQuery] ulong userId)
+    {
+        if (!credentials.IsOwner(userId))
         {
-            this.performanceService = performanceService;
-            this.eventHandler = eventHandler;
-            this.credentials = credentials;
+            return Forbid();
         }
 
-        /// <summary>
-        /// Gets the performance data for methods tracked by the performance monitoring service.
-        /// </summary>
-        /// <param name="userId">The Discord user ID to verify for owner permissions.</param>
-        /// <returns>An array of performance data for the top CPU-intensive methods.</returns>
-        [HttpGet("methods")]
-        public IActionResult GetPerformanceData([FromQuery] ulong userId)
+        var topMethods = performanceService.GetTopCpuMethods();
+
+        var result = topMethods.Select(m => new
         {
-            if (!credentials.IsOwner(userId))
-            {
-                return Forbid();
-            }
+            methodName = m.MethodName,
+            callCount = m.CallCount,
+            totalTime = m.TotalExecutionTime.TotalMilliseconds,
+            avgExecutionTime = m.AvgExecutionTime,
+            lastExecuted = m.LastExecuted
+        }).ToArray();
 
-            var topMethods = performanceService.GetTopCpuMethods();
+        return Ok(result);
+    }
 
-            var result = topMethods.Select(m => new
-            {
-                methodName = m.MethodName,
-                callCount = m.CallCount,
-                totalTime = m.TotalExecutionTime.TotalMilliseconds,
-                avgExecutionTime = m.AvgExecutionTime,
-                lastExecuted = m.LastExecuted
-            }).ToArray();
-
-            return Ok(result);
+    /// <summary>
+    ///     Gets event metrics from the EventHandler.
+    /// </summary>
+    /// <param name="userId">The Discord user ID to verify for owner permissions.</param>
+    /// <returns>Event metrics data including processing counts, execution times, and error rates.</returns>
+    [HttpGet("events")]
+    public IActionResult GetEventMetrics([FromQuery] ulong userId)
+    {
+        if (!credentials.IsOwner(userId))
+        {
+            return Forbid();
         }
 
-        /// <summary>
-        ///     Gets event metrics from the EventHandler.
-        /// </summary>
-        /// <param name="userId">The Discord user ID to verify for owner permissions.</param>
-        /// <returns>Event metrics data including processing counts, execution times, and error rates.</returns>
-        [HttpGet("events")]
-        public IActionResult GetEventMetrics([FromQuery] ulong userId)
+        var eventMetrics = eventHandler.GetEventMetrics();
+
+        var result = eventMetrics.Select(kvp => new
         {
-            if (!credentials.IsOwner(userId))
-            {
-                return Forbid();
-            }
+            eventType = kvp.Key,
+            totalProcessed = kvp.Value.TotalProcessed,
+            totalErrors = kvp.Value.TotalErrors,
+            totalExecutionTime = kvp.Value.TotalExecutionTime,
+            averageExecutionTime = kvp.Value.AverageExecutionTime,
+            errorRate = kvp.Value.ErrorRate
+        }).OrderByDescending(x => x.totalProcessed).ToArray();
 
-            var eventMetrics = eventHandler.GetEventMetrics();
+        return Ok(result);
+    }
 
-            var result = eventMetrics.Select(kvp => new
+    /// <summary>
+    ///     Gets module metrics from the EventHandler.
+    /// </summary>
+    /// <param name="userId">The Discord user ID to verify for owner permissions.</param>
+    /// <returns>Module metrics data including events processed, execution times, and error rates.</returns>
+    [HttpGet("modules")]
+    public IActionResult GetModuleMetrics([FromQuery] ulong userId)
+    {
+        if (!credentials.IsOwner(userId))
+        {
+            return Forbid();
+        }
+
+        var moduleMetrics = eventHandler.GetModuleMetrics();
+
+        var result = moduleMetrics.Select(kvp => new
+        {
+            moduleName = kvp.Key,
+            eventsProcessed = kvp.Value.EventsProcessed,
+            errors = kvp.Value.Errors,
+            totalExecutionTime = kvp.Value.TotalExecutionTime,
+            averageExecutionTime = kvp.Value.AverageExecutionTime,
+            errorRate = kvp.Value.ErrorRate
+        }).OrderByDescending(x => x.eventsProcessed).ToArray();
+
+        return Ok(result);
+    }
+
+    /// <summary>
+    ///     Gets comprehensive performance overview including methods, events, and modules.
+    /// </summary>
+    /// <param name="userId">The Discord user ID to verify for owner permissions.</param>
+    /// <returns>A comprehensive performance overview.</returns>
+    [HttpGet("overview")]
+    public IActionResult GetPerformanceOverview([FromQuery] ulong userId)
+    {
+        if (!credentials.IsOwner(userId))
+        {
+            return Forbid();
+        }
+
+        var topMethods = performanceService.GetTopCpuMethods();
+        var eventMetrics = eventHandler.GetEventMetrics();
+        var moduleMetrics = eventHandler.GetModuleMetrics();
+
+        // Get top 10 for overview
+        var topEvents = eventMetrics
+            .OrderByDescending(x => x.Value.TotalProcessed)
+            .Take(10)
+            .Select(kvp => new
             {
                 eventType = kvp.Key,
                 totalProcessed = kvp.Value.TotalProcessed,
-                totalErrors = kvp.Value.TotalErrors,
-                totalExecutionTime = kvp.Value.TotalExecutionTime,
                 averageExecutionTime = kvp.Value.AverageExecutionTime,
                 errorRate = kvp.Value.ErrorRate
-            }).OrderByDescending(x => x.totalProcessed).ToArray();
+            });
 
-            return Ok(result);
-        }
-
-        /// <summary>
-        ///     Gets module metrics from the EventHandler.
-        /// </summary>
-        /// <param name="userId">The Discord user ID to verify for owner permissions.</param>
-        /// <returns>Module metrics data including events processed, execution times, and error rates.</returns>
-        [HttpGet("modules")]
-        public IActionResult GetModuleMetrics([FromQuery] ulong userId)
-        {
-            if (!credentials.IsOwner(userId))
-            {
-                return Forbid();
-            }
-
-            var moduleMetrics = eventHandler.GetModuleMetrics();
-
-            var result = moduleMetrics.Select(kvp => new
+        var topModules = moduleMetrics
+            .OrderByDescending(x => x.Value.EventsProcessed)
+            .Take(10)
+            .Select(kvp => new
             {
                 moduleName = kvp.Key,
                 eventsProcessed = kvp.Value.EventsProcessed,
-                errors = kvp.Value.Errors,
-                totalExecutionTime = kvp.Value.TotalExecutionTime,
                 averageExecutionTime = kvp.Value.AverageExecutionTime,
                 errorRate = kvp.Value.ErrorRate
-            }).OrderByDescending(x => x.eventsProcessed).ToArray();
-
-            return Ok(result);
-        }
-
-        /// <summary>
-        ///     Gets comprehensive performance overview including methods, events, and modules.
-        /// </summary>
-        /// <param name="userId">The Discord user ID to verify for owner permissions.</param>
-        /// <returns>A comprehensive performance overview.</returns>
-        [HttpGet("overview")]
-        public IActionResult GetPerformanceOverview([FromQuery] ulong userId)
-        {
-            if (!credentials.IsOwner(userId))
-            {
-                return Forbid();
-            }
-
-            var topMethods = performanceService.GetTopCpuMethods();
-            var eventMetrics = eventHandler.GetEventMetrics();
-            var moduleMetrics = eventHandler.GetModuleMetrics();
-
-            // Get top 10 for overview
-            var topEvents = eventMetrics
-                .OrderByDescending(x => x.Value.TotalProcessed)
-                .Take(10)
-                .Select(kvp => new
-                {
-                    eventType = kvp.Key,
-                    totalProcessed = kvp.Value.TotalProcessed,
-                    averageExecutionTime = kvp.Value.AverageExecutionTime,
-                    errorRate = kvp.Value.ErrorRate
-                });
-
-            var topModules = moduleMetrics
-                .OrderByDescending(x => x.Value.EventsProcessed)
-                .Take(10)
-                .Select(kvp => new
-                {
-                    moduleName = kvp.Key,
-                    eventsProcessed = kvp.Value.EventsProcessed,
-                    averageExecutionTime = kvp.Value.AverageExecutionTime,
-                    errorRate = kvp.Value.ErrorRate
-                });
-
-            var result = new
-            {
-                summary = new
-                {
-                    totalEvents = eventMetrics.Sum(x => x.Value.TotalProcessed),
-                    totalEventErrors = eventMetrics.Sum(x => x.Value.TotalErrors),
-                    totalModules = moduleMetrics.Count,
-                    activeEventTypes = eventMetrics.Count
-                },
-                topMethods = topMethods.Take(10).Select(m => new
-                {
-                    methodName = m.MethodName, callCount = m.CallCount, avgExecutionTime = m.AvgExecutionTime
-                }),
-                topEvents,
-                topModules
-            };
-
-            return Ok(result);
-        }
-
-        /// <summary>
-        ///     Gets metrics for a specific event type.
-        /// </summary>
-        /// <param name="eventType">The event type to get metrics for.</param>
-        /// <param name="userId">The Discord user ID to verify for owner permissions.</param>
-        /// <returns>Detailed metrics for the specified event type.</returns>
-        [HttpGet("events/{eventType}")]
-        public IActionResult GetEventMetric(string eventType, [FromQuery] ulong userId)
-        {
-            if (!credentials.IsOwner(userId))
-            {
-                return Forbid();
-            }
-
-            var eventMetrics = eventHandler.GetEventMetrics();
-
-            if (!eventMetrics.TryGetValue(eventType, out var metrics))
-            {
-                return NotFound($"Event type '{eventType}' not found");
-            }
-
-            var result = new
-            {
-                eventType,
-                totalProcessed = metrics.TotalProcessed,
-                totalErrors = metrics.TotalErrors,
-                totalExecutionTime = metrics.TotalExecutionTime,
-                averageExecutionTime = metrics.AverageExecutionTime,
-                errorRate = metrics.ErrorRate
-            };
-
-            return Ok(result);
-        }
-
-        /// <summary>
-        ///     Gets metrics for a specific module.
-        /// </summary>
-        /// <param name="moduleName">The module name to get metrics for.</param>
-        /// <param name="userId">The Discord user ID to verify for owner permissions.</param>
-        /// <returns>Detailed metrics for the specified module.</returns>
-        [HttpGet("modules/{moduleName}")]
-        public IActionResult GetModuleMetric(string moduleName, [FromQuery] ulong userId)
-        {
-            if (!credentials.IsOwner(userId))
-            {
-                return Forbid();
-            }
-
-            var moduleMetrics = eventHandler.GetModuleMetrics();
-
-            if (!moduleMetrics.TryGetValue(moduleName, out var metrics))
-            {
-                return NotFound($"Module '{moduleName}' not found");
-            }
-
-            var result = new
-            {
-                moduleName,
-                eventsProcessed = metrics.EventsProcessed,
-                errors = metrics.Errors,
-                totalExecutionTime = metrics.TotalExecutionTime,
-                averageExecutionTime = metrics.AverageExecutionTime,
-                errorRate = metrics.ErrorRate
-            };
-
-            return Ok(result);
-        }
-
-        /// <summary>
-        /// Clears all performance monitoring data.
-        /// </summary>
-        /// <param name="userId">The Discord user ID to verify for owner permissions.</param>
-        /// <returns>An action result indicating success or failure.</returns>
-        [HttpPost("clear")]
-        public IActionResult ClearPerformanceData([FromQuery] ulong userId)
-        {
-            if (!credentials.IsOwner(userId))
-            {
-                return Forbid();
-            }
-
-            performanceService.ClearPerformanceData();
-
-            return Ok(new
-            {
-                message = "Performance data cleared. Event metrics reset automatically every hour."
             });
+
+        var result = new
+        {
+            summary = new
+            {
+                totalEvents = eventMetrics.Sum(x => x.Value.TotalProcessed),
+                totalEventErrors = eventMetrics.Sum(x => x.Value.TotalErrors),
+                totalModules = moduleMetrics.Count,
+                activeEventTypes = eventMetrics.Count
+            },
+            topMethods = topMethods.Take(10).Select(m => new
+            {
+                methodName = m.MethodName, callCount = m.CallCount, avgExecutionTime = m.AvgExecutionTime
+            }),
+            topEvents,
+            topModules
+        };
+
+        return Ok(result);
+    }
+
+    /// <summary>
+    ///     Gets metrics for a specific event type.
+    /// </summary>
+    /// <param name="eventType">The event type to get metrics for.</param>
+    /// <param name="userId">The Discord user ID to verify for owner permissions.</param>
+    /// <returns>Detailed metrics for the specified event type.</returns>
+    [HttpGet("events/{eventType}")]
+    public IActionResult GetEventMetric(string eventType, [FromQuery] ulong userId)
+    {
+        if (!credentials.IsOwner(userId))
+        {
+            return Forbid();
         }
+
+        var eventMetrics = eventHandler.GetEventMetrics();
+
+        if (!eventMetrics.TryGetValue(eventType, out var metrics))
+        {
+            return NotFound($"Event type '{eventType}' not found");
+        }
+
+        var result = new
+        {
+            eventType,
+            totalProcessed = metrics.TotalProcessed,
+            totalErrors = metrics.TotalErrors,
+            totalExecutionTime = metrics.TotalExecutionTime,
+            averageExecutionTime = metrics.AverageExecutionTime,
+            errorRate = metrics.ErrorRate
+        };
+
+        return Ok(result);
+    }
+
+    /// <summary>
+    ///     Gets metrics for a specific module.
+    /// </summary>
+    /// <param name="moduleName">The module name to get metrics for.</param>
+    /// <param name="userId">The Discord user ID to verify for owner permissions.</param>
+    /// <returns>Detailed metrics for the specified module.</returns>
+    [HttpGet("modules/{moduleName}")]
+    public IActionResult GetModuleMetric(string moduleName, [FromQuery] ulong userId)
+    {
+        if (!credentials.IsOwner(userId))
+        {
+            return Forbid();
+        }
+
+        var moduleMetrics = eventHandler.GetModuleMetrics();
+
+        if (!moduleMetrics.TryGetValue(moduleName, out var metrics))
+        {
+            return NotFound($"Module '{moduleName}' not found");
+        }
+
+        var result = new
+        {
+            moduleName,
+            eventsProcessed = metrics.EventsProcessed,
+            errors = metrics.Errors,
+            totalExecutionTime = metrics.TotalExecutionTime,
+            averageExecutionTime = metrics.AverageExecutionTime,
+            errorRate = metrics.ErrorRate
+        };
+
+        return Ok(result);
+    }
+
+    /// <summary>
+    ///     Clears all performance monitoring data.
+    /// </summary>
+    /// <param name="userId">The Discord user ID to verify for owner permissions.</param>
+    /// <returns>An action result indicating success or failure.</returns>
+    [HttpPost("clear")]
+    public IActionResult ClearPerformanceData([FromQuery] ulong userId)
+    {
+        if (!credentials.IsOwner(userId))
+        {
+            return Forbid();
+        }
+
+        performanceService.ClearPerformanceData();
+
+        return Ok(new
+        {
+            message = "Performance data cleared. Event metrics reset automatically every hour."
+        });
     }
 }

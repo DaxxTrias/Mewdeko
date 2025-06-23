@@ -19,7 +19,6 @@ namespace Mewdeko.Controllers;
 public class BotStatus(DiscordShardedClient client, StatsService statsService, CommandService commandService)
     : Controller
 {
-
     private static readonly JsonSerializerOptions Options = new()
     {
         ReferenceHandler = ReferenceHandler.IgnoreCycles
@@ -171,7 +170,7 @@ public class BotStatus(DiscordShardedClient client, StatsService statsService, C
         public ulong BotId { get; set; }
 
         /// <summary>
-        /// The api url of this instance.
+        ///     The api url of this instance.
         /// </summary>
         public string InstanceUrl { get; set; }
     }

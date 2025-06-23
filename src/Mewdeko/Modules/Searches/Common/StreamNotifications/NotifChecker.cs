@@ -4,7 +4,6 @@ using System.Text.Json;
 using Mewdeko.Database.Common;
 using Mewdeko.Modules.Searches.Common.StreamNotifications.Models;
 using Mewdeko.Modules.Searches.Common.StreamNotifications.Providers;
-using Serilog;
 
 namespace Mewdeko.Modules.Searches.Common.StreamNotifications;
 
@@ -20,6 +19,7 @@ public class NotifChecker
     };
 
     private readonly string key;
+    private readonly ILogger<NotifChecker> logger;
     private readonly HashSet<(FType, string)> offlineBuffer;
     private readonly ConcurrentDictionary<string, StreamData?> streamCache = new();
     private readonly Dictionary<FType, Provider> streamProviders;
@@ -35,8 +35,9 @@ public class NotifChecker
         IHttpClientFactory httpClientFactory,
         IBotCredentials credsProvider,
         string uniqueCacheKey,
-        bool isMaster)
+        bool isMaster, ILogger<NotifChecker> logger)
     {
+        this.logger = logger;
         key = $"{uniqueCacheKey}_followed_streams_data";
         streamProviders = new Dictionary<FType, Provider>
         {
@@ -199,7 +200,7 @@ public class NotifChecker
                 }
                 catch (Exception ex)
                 {
-                    Log.Error(ex, "Error getting stream notifications: {ErrorMessage}", ex.Message);
+                    logger.LogError(ex, "Error getting stream notifications: {ErrorMessage}", ex.Message);
                 }
             }
         });
@@ -252,7 +253,7 @@ public class NotifChecker
         var result = streamCache
             .Select(pair => (
                 Key: JsonSerializer.Deserialize<StreamDataKey>(pair.Key, CachedJsonOptions),
-                Value: pair.Value))
+                pair.Value))
             .Where(item => item.Key.Name is not null)
             .ToDictionary(item => item.Key, item => item.Value);
 

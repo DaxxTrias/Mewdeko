@@ -1,7 +1,6 @@
 ﻿using System.Net.Http;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-
 using Mewdeko.Modules.Searches.Common.StreamNotifications.Models;
 using Serilog;
 using TwitchLib.Api;

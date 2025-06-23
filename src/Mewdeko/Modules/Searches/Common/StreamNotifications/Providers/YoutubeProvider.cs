@@ -81,7 +81,7 @@
 //         {
 //             if (youtubeService.ApiKey == null)
 //             {
-//                 Log.Warning("YouTube API key is not set, skipping YouTube stream notifications");
+//                 logger.LogWarning("YouTube API key is not set, skipping YouTube stream notifications");
 //                 return new List<StreamData>();
 //             }
 //             var httpClient = new HttpClient();
@@ -163,3 +163,4 @@
 //     }
 // }
 //
+

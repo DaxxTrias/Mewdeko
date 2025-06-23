@@ -21,7 +21,8 @@ public class CommentsObjectGraphVisitor : ChainedObjectGraphVisitor
 
 
     /// <inheritdoc />
-    public override bool EnterMapping(IObjectDescriptor key, IObjectDescriptor value, IEmitter context, ObjectSerializer serializer)
+    public override bool EnterMapping(IObjectDescriptor key, IObjectDescriptor value, IEmitter context,
+        ObjectSerializer serializer)
     {
         if (value is CommentsObjectDescriptor commentsDescriptor &&
             !string.IsNullOrWhiteSpace(commentsDescriptor.Comment))

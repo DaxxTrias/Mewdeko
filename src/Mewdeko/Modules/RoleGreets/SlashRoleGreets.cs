@@ -34,7 +34,8 @@ public class SlashRoleGreets(InteractiveService interactivity, HttpClient httpCl
         switch (await Service.AddRoleGreet(ctx.Guild.Id, channel.Id, role.Id))
         {
             case true:
-                await ctx.Channel.SendConfirmAsync(Strings.RolegreetAddSuccess(ctx.Guild.Id, role.Mention, channel.Mention))
+                await ctx.Channel
+                    .SendConfirmAsync(Strings.RolegreetAddSuccess(ctx.Guild.Id, role.Mention, channel.Mention))
                     .ConfigureAwait(false);
                 break;
             case false:
@@ -64,7 +65,8 @@ public class SlashRoleGreets(InteractiveService interactivity, HttpClient httpCl
 
         await Service.ChangeRgGb(greet, enabled).ConfigureAwait(false);
         await ctx.Interaction.SendConfirmAsync(Strings.RolegreetGreetbotsSet(ctx.Guild.Id, num, enabled))
-            .ConfigureAwait(false);    }
+            .ConfigureAwait(false);
+    }
 
     /// <summary>
     ///     Removes a greet message by its ID.
@@ -171,9 +173,9 @@ public class SlashRoleGreets(InteractiveService interactivity, HttpClient httpCl
         }
 
         await Service.RoleGreetDisable(greet, enabled).ConfigureAwait(false);
-        await ctx.Interaction.SendConfirmAsync(Strings.RolegreetDisableStatus(ctx.Guild.Id, num, enabled ? "Enabled" : "Disabled"))
+        await ctx.Interaction
+            .SendConfirmAsync(Strings.RolegreetDisableStatus(ctx.Guild.Id, num, enabled ? "Enabled" : "Disabled"))
             .ConfigureAwait(false);
-
     }
 
     /// <summary>

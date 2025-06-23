@@ -16,7 +16,6 @@ using Mewdeko.Modules.Permissions.Common;
 using Mewdeko.Modules.Permissions.Services;
 using Mewdeko.Services.Settings;
 using Microsoft.Extensions.DependencyInjection;
-using Serilog;
 using ExecuteResult = Discord.Commands.ExecuteResult;
 using IResult = Discord.Interactions.IResult;
 
@@ -42,9 +41,10 @@ public class CommandHandler : INService
     private readonly IDataConnectionFactory dbFactory;
     private readonly GuildSettingsService gss;
     private readonly InteractionService interactionService;
+    private readonly ILogger<CommandHandler> logger;
 
     /// <summary>
-    /// Services stuffs
+    ///     Services stuffs
     /// </summary>
     public readonly IServiceProvider Services;
 
@@ -64,11 +64,12 @@ public class CommandHandler : INService
     public CommandHandler(DiscordShardedClient client, IDataConnectionFactory dbFactory, CommandService commandService,
         BotConfigService bss, Mewdeko bot, IServiceProvider services,
         InteractionService interactionService,
-        GuildSettingsService gss, EventHandler eventHandler, IDataCache cache)
+        GuildSettingsService gss, EventHandler eventHandler, IDataCache cache, ILogger<CommandHandler> logger)
     {
         this.interactionService = interactionService;
         this.gss = gss;
         this.cache = cache;
+        this.logger = logger;
         this.client = client;
         this.commandService = commandService;
         this.bss = bss;
@@ -147,7 +148,7 @@ public class CommandHandler : INService
                     .SendEphemeralErrorAsync($"Command failed for the following reason:\n{result.ErrorReason}",
                         bss.Data)
                     .ConfigureAwait(false);
-                Log.Warning(
+                logger.LogWarning(
                     "Slash Command Errored\n\t" + "User: {0}\n\t" + "Server: {1}\n\t" + "Channel: {2}\n\t" +
                     "Message: {3}\n\t" + "Error: {4}",
                     $"{ctx.User} [{ctx.User.Id}]", // {0}
@@ -197,7 +198,7 @@ public class CommandHandler : INService
             }
 
             var chan = ctx.Channel as ITextChannel;
-            Log.Information(
+            logger.LogInformation(
                 "Slash Command Executed" + "\n\t" + "User: {0}\n\t" + "Server: {1}\n\t" + "Channel: {2}\n\t" +
                 "Module: {3}\n\t" + "Command: {4}",
                 $"{ctx.User} [{ctx.User.Id}]", // {0}
@@ -280,7 +281,7 @@ public class CommandHandler : INService
                     .SendEphemeralErrorAsync($"Command failed for the following reason:\n{result.ErrorReason}",
                         bss.Data)
                     .ConfigureAwait(false);
-                Log.Warning(
+                logger.LogWarning(
                     "Slash Command Errored\n\t" + "User: {0}\n\t" + "Server: {1}\n\t" + "Channel: {2}\n\t" +
                     "Message: {3}\n\t" + "Error: {4}",
                     $"{ctx.User} [{ctx.User.Id}]", // {0}
@@ -331,7 +332,7 @@ public class CommandHandler : INService
             }
 
             var chan = ctx.Channel as ITextChannel;
-            Log.Information(
+            logger.LogInformation(
                 "Slash Command Executed" + "\n\t" + "User: {0}\n\t" + "Server: {1}\n\t" + "Channel: {2}\n\t" +
                 "Module: {3}\n\t" + "Command: {4}",
                 $"{ctx.User} [{ctx.User.Id}]", // {0}
@@ -424,12 +425,12 @@ public class CommandHandler : INService
             var ctx = new ShardedInteractionContext(client, interaction);
             var result = await interactionService.ExecuteCommandAsync(ctx, Services).ConfigureAwait(false);
 #if DEBUG
-            Log.Information($"Button was executed:{result.IsSuccess}\nReason:{result.ErrorReason}");
+            logger.LogInformation($"Button was executed:{result.IsSuccess}\nReason:{result.ErrorReason}");
 #endif
         }
         catch (Exception e)
         {
-            Log.Error(e, "Interaction failed to execute");
+            logger.LogError(e, "Interaction failed to execute");
             throw;
         }
     }
@@ -448,7 +449,7 @@ public class CommandHandler : INService
             var guild = client.GetGuild(guildId.Value);
             if (guild?.GetChannel(channelId) is not SocketTextChannel channel)
             {
-                Log.Warning("Channel for external execution not found");
+                logger.LogWarning("Channel for external execution not found");
                 return;
             }
 
@@ -483,9 +484,9 @@ public class CommandHandler : INService
         }
         catch (Exception ex)
         {
-            Log.Warning(ex, "Error in CommandHandler");
+            logger.LogWarning(ex, "Error in CommandHandler");
             if (ex.InnerException != null)
-                Log.Warning(ex.InnerException, "Inner Exception of the error in CommandHandler");
+                logger.LogWarning(ex.InnerException, "Inner Exception of the error in CommandHandler");
         }
     }
 
@@ -528,7 +529,7 @@ public class CommandHandler : INService
                 }
                 catch (Exception e)
                 {
-                    Log.Error("Error occured in the handler: {E}", e);
+                    logger.LogError("Error occured in the handler: {E}", e);
                 }
             }
 
@@ -556,7 +557,7 @@ public class CommandHandler : INService
         foreach (var beh in earlyBehaviors)
         {
             if (!await beh.RunBehavior(client, guild, usrMsg).ConfigureAwait(false)) continue;
-            Log.Information("Executed {BehaviorType} behavior: {BehaviorName} for user: {User} in: {Guild}",
+            logger.LogInformation("Executed {BehaviorType} behavior: {BehaviorName} for user: {User} in: {Guild}",
                 beh.BehaviorType, beh.GetType().Name, $"{usrMsg.Author} | {usrMsg.Id}", $"{guild} | {guild.Id}");
             return;
         }
@@ -684,7 +685,7 @@ public class CommandHandler : INService
                 DiscordCode: DiscordErrorCode.InsufficientPermissions
             })
         {
-            Log.Warning(executeResult.Exception, "Command execution error");
+            logger.LogWarning(executeResult.Exception, "Command execution error");
         }
 
         return (executeResult.IsSuccess, executeResult.ErrorReason, cmd);
@@ -705,9 +706,9 @@ public class CommandHandler : INService
             logBuilder.AppendLine($"Error: {errorMessage}");
 
         if (success)
-            Log.Information(logBuilder.ToString());
+            logger.LogInformation(logBuilder.ToString());
         else
-            Log.Warning(logBuilder.ToString());
+            logger.LogWarning(logBuilder.ToString());
 
 
         var embed = new EmbedBuilder()

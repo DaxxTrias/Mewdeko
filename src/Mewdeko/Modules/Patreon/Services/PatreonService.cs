@@ -7,12 +7,11 @@ using Mewdeko.Modules.Patreon.Common;
 using Mewdeko.Modules.Patreon.Extensions;
 using Mewdeko.Services.Strings;
 using Microsoft.Extensions.Hosting;
-using Serilog;
 
 namespace Mewdeko.Modules.Patreon.Services;
 
 /// <summary>
-/// Service for managing Patreon integration and monthly announcements.
+///     Service for managing Patreon integration and monthly announcements.
 /// </summary>
 public class PatreonService : BackgroundService, INService, IReadyExecutor
 {
@@ -21,10 +20,11 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
     private readonly IBotCredentials creds;
     private readonly IDataConnectionFactory db;
     private readonly GuildSettingsService guildSettings;
+    private readonly ILogger<PatreonService> logger;
     private readonly GeneratedBotStrings strings;
 
     /// <summary>
-    /// Initializes a new instance of the PatreonService class.
+    ///     Initializes a new instance of the PatreonService class.
     /// </summary>
     /// <param name="client">The Discord sharded client.</param>
     /// <param name="db">The database connection factory.</param>
@@ -38,7 +38,7 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
         GuildSettingsService guildSettings,
         GeneratedBotStrings strings,
         IBotCredentials creds,
-        PatreonApiClient apiClient)
+        PatreonApiClient apiClient, ILogger<PatreonService> logger)
     {
         this.client = client;
         this.db = db;
@@ -46,21 +46,22 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
         this.strings = strings;
         this.creds = creds;
         this.apiClient = apiClient;
+        this.logger = logger;
     }
 
     /// <summary>
-    /// Initializes the service when the bot is ready
+    ///     Initializes the service when the bot is ready
     /// </summary>
     public async Task OnReadyAsync()
     {
-        Log.Information("PatreonService ready - checking for overdue announcements");
+        logger.LogInformation("PatreonService ready - checking for overdue announcements");
 
         // Check for any overdue announcements on startup
         await CheckForOverdueAnnouncements();
     }
 
     /// <summary>
-    /// Background service execution for monthly announcements
+    ///     Background service execution for monthly announcements
     /// </summary>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -75,7 +76,7 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Error in PatreonService background task");
+                logger.LogError(ex, "Error in PatreonService background task");
 
                 // Wait 5 minutes before retrying on error
                 await Task.Delay(TimeSpan.FromMinutes(5), stoppingToken);
@@ -84,7 +85,7 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
     }
 
     /// <summary>
-    /// Sets the Patreon announcement channel for a guild
+    ///     Sets the Patreon announcement channel for a guild
     /// </summary>
     public async Task<bool> SetPatreonChannel(ulong guildId, ulong channelId)
     {
@@ -96,12 +97,12 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
 
         await guildSettings.UpdateGuildConfig(guildId, config);
 
-        Log.Information("Patreon channel set to {ChannelId} for guild {GuildId}", channelId, guildId);
+        logger.LogInformation("Patreon channel set to {ChannelId} for guild {GuildId}", channelId, guildId);
         return true;
     }
 
     /// <summary>
-    /// Sets a custom announcement message for a guild
+    ///     Sets a custom announcement message for a guild
     /// </summary>
     public async Task SetPatreonMessage(ulong guildId, string? message)
     {
@@ -112,11 +113,11 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
 
         await guildSettings.UpdateGuildConfig(guildId, config);
 
-        Log.Information("Patreon message updated for guild {GuildId}", guildId);
+        logger.LogInformation("Patreon message updated for guild {GuildId}", guildId);
     }
 
     /// <summary>
-    /// Sets the day of the month for announcements
+    ///     Sets the day of the month for announcements
     /// </summary>
     public async Task<bool> SetAnnouncementDay(ulong guildId, int day)
     {
@@ -130,12 +131,12 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
 
         await guildSettings.UpdateGuildConfig(guildId, config);
 
-        Log.Information("Patreon announcement day set to {Day} for guild {GuildId}", day, guildId);
+        logger.LogInformation("Patreon announcement day set to {Day} for guild {GuildId}", day, guildId);
         return true;
     }
 
     /// <summary>
-    /// Toggles Patreon announcements for a guild
+    ///     Toggles Patreon announcements for a guild
     /// </summary>
     public async Task<bool> TogglePatreonAnnouncements(ulong guildId)
     {
@@ -146,14 +147,14 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
 
         await guildSettings.UpdateGuildConfig(guildId, config);
 
-        Log.Information("Patreon announcements {Status} for guild {GuildId}",
+        logger.LogInformation("Patreon announcements {Status} for guild {GuildId}",
             config.PatreonEnabled ? "enabled" : "disabled", guildId);
 
         return config.PatreonEnabled;
     }
 
     /// <summary>
-    /// Gets the current Patreon configuration for a guild
+    ///     Gets the current Patreon configuration for a guild
     /// </summary>
     public async Task<(ulong channelId, string? message, int day, bool enabled, DateTime? lastAnnouncement)>
         GetPatreonConfig(ulong guildId)
@@ -165,7 +166,7 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
     }
 
     /// <summary>
-    /// Gets the extended Patreon configuration for a guild including OAuth details
+    ///     Gets the extended Patreon configuration for a guild including OAuth details
     /// </summary>
     public async Task<(ulong channelId, string? message, int day, bool enabled, DateTime? lastAnnouncement,
         string? accessToken, string? refreshToken, string? campaignId, DateTime? tokenExpiry)> GetPatreonOAuthConfig(
@@ -179,7 +180,7 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
     }
 
     /// <summary>
-    /// Manually triggers a Patreon announcement for a guild
+    ///     Manually triggers a Patreon announcement for a guild
     /// </summary>
     public async Task<bool> TriggerManualAnnouncement(ulong guildId)
     {
@@ -201,7 +202,7 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
     }
 
     /// <summary>
-    /// Checks for monthly announcements that need to be sent
+    ///     Checks for monthly announcements that need to be sent
     /// </summary>
     private async Task CheckMonthlyAnnouncements()
     {
@@ -228,13 +229,13 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Error processing Patreon announcement for guild {GuildId}", config.GuildId);
+                logger.LogError(ex, "Error processing Patreon announcement for guild {GuildId}", config.GuildId);
             }
         }
     }
 
     /// <summary>
-    /// Checks for overdue announcements on startup
+    ///     Checks for overdue announcements on startup
     /// </summary>
     private async Task CheckForOverdueAnnouncements()
     {
@@ -252,7 +253,7 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
                          x.PatreonLastAnnouncement.Value.Year != now.Year))
             .ToListAsync();
 
-        Log.Information("Found {Count} overdue Patreon announcements", configs.Count);
+        logger.LogInformation("Found {Count} overdue Patreon announcements", configs.Count);
 
         foreach (var config in configs)
         {
@@ -262,27 +263,28 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Error processing overdue Patreon announcement for guild {GuildId}", config.GuildId);
+                logger.LogError(ex, "Error processing overdue Patreon announcement for guild {GuildId}",
+                    config.GuildId);
             }
         }
     }
 
     /// <summary>
-    /// Processes a single guild's Patreon announcement
+    ///     Processes a single guild's Patreon announcement
     /// </summary>
     private async Task ProcessGuildAnnouncement(GuildConfig config)
     {
         var guild = client.GetGuild(config.GuildId);
         if (guild == null)
         {
-            Log.Warning("Guild {GuildId} not found for Patreon announcement", config.GuildId);
+            logger.LogWarning("Guild {GuildId} not found for Patreon announcement", config.GuildId);
             return;
         }
 
         var channel = guild.GetTextChannel(config.PatreonChannelId);
         if (channel == null)
         {
-            Log.Warning("Patreon channel {ChannelId} not found in guild {GuildId}",
+            logger.LogWarning("Patreon channel {ChannelId} not found in guild {GuildId}",
                 config.PatreonChannelId, config.GuildId);
             return;
         }
@@ -291,7 +293,7 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
     }
 
     /// <summary>
-    /// Sends the actual Patreon announcement message
+    ///     Sends the actual Patreon announcement message
     /// </summary>
     private async Task SendPatreonAnnouncement(IGuild guild, ITextChannel channel, GuildConfig config, bool isManual)
     {
@@ -302,7 +304,7 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
 
             if (!perms.SendMessages)
             {
-                Log.Warning("No permission to send messages in Patreon channel {ChannelId} for guild {GuildId}",
+                logger.LogWarning("No permission to send messages in Patreon channel {ChannelId} for guild {GuildId}",
                     channel.Id, guild.Id);
                 return;
             }
@@ -315,7 +317,7 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
             }
             catch (Exception ex)
             {
-                Log.Warning(ex, "Failed to get Patreon analytics for announcement in guild {GuildId}", guild.Id);
+                logger.LogWarning(ex, "Failed to get Patreon analytics for announcement in guild {GuildId}", guild.Id);
             }
 
             // Prepare the message
@@ -360,17 +362,18 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
             config.PatreonLastAnnouncement = DateTime.UtcNow;
             await guildSettings.UpdateGuildConfig(guild.Id, config);
 
-            Log.Information("Patreon announcement sent for guild {GuildId} in channel {ChannelId} (Manual: {IsManual})",
+            logger.LogInformation(
+                "Patreon announcement sent for guild {GuildId} in channel {ChannelId} (Manual: {IsManual})",
                 guild.Id, channel.Id, isManual);
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error sending Patreon announcement for guild {GuildId}", guild.Id);
+            logger.LogError(ex, "Error sending Patreon announcement for guild {GuildId}", guild.Id);
         }
     }
 
     /// <summary>
-    /// Gets statistics about Patreon announcements
+    ///     Gets statistics about Patreon announcements
     /// </summary>
     public async Task<(int enabledGuilds, int totalAnnouncements)> GetPatreonStats()
     {
@@ -386,7 +389,7 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
     }
 
     /// <summary>
-    /// Fetches and updates supporter data for a guild from Patreon API
+    ///     Fetches and updates supporter data for a guild from Patreon API
     /// </summary>
     /// <param name="guildId">Discord guild ID</param>
     /// <returns>Number of supporters updated, or -1 if failed</returns>
@@ -399,7 +402,7 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
 
             if (guildConfig?.PatreonAccessToken == null || guildConfig.PatreonCampaignId == null)
             {
-                Log.Warning("No Patreon access token or campaign ID found for guild {GuildId}", guildId);
+                logger.LogWarning("No Patreon access token or campaign ID found for guild {GuildId}", guildId);
                 return -1;
             }
 
@@ -409,7 +412,7 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
                 var refreshedToken = await RefreshTokenAsync(guildId);
                 if (refreshedToken == null)
                 {
-                    Log.Error("Failed to refresh Patreon token for guild {GuildId}", guildId);
+                    logger.LogError("Failed to refresh Patreon token for guild {GuildId}", guildId);
                     return -1;
                 }
 
@@ -440,7 +443,7 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
 
                 if (response?.Data == null)
                 {
-                    Log.Warning("Failed to fetch supporters for guild {GuildId}", guildId);
+                    logger.LogWarning("Failed to fetch supporters for guild {GuildId}", guildId);
                     break;
                 }
 
@@ -511,12 +514,13 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
                 }
                 catch (Exception ex)
                 {
-                    Log.Error(ex, "Error updating supporter {SupporterId} for guild {GuildId}", supporter.Id, guildId);
+                    logger.LogError(ex, "Error updating supporter {SupporterId} for guild {GuildId}", supporter.Id,
+                        guildId);
                 }
             }
 
             // Mark inactive supporters (not in current API response)
-            Log.Information(JsonSerializer.Serialize(supporters));
+            logger.LogInformation(JsonSerializer.Serialize(supporters));
             var supporterIds = supporters.Select(s => s.Id).ToList();
             await uow.PatreonSupporters
                 .Where(x => x.GuildId == guildId && !supporterIds.Contains(x.PatreonUserId))
@@ -525,18 +529,18 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
                     PatronStatus = "former_patron", LastUpdated = DateTime.UtcNow
                 });
 
-            Log.Information("Updated {Count} supporters for guild {GuildId}", updatedCount, guildId);
+            logger.LogInformation("Updated {Count} supporters for guild {GuildId}", updatedCount, guildId);
             return updatedCount;
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error updating supporters for guild {GuildId}", guildId);
+            logger.LogError(ex, "Error updating supporters for guild {GuildId}", guildId);
             return -1;
         }
     }
 
     /// <summary>
-    /// Refreshes Patreon access token for a guild
+    ///     Refreshes Patreon access token for a guild
     /// </summary>
     /// <param name="guildId">Discord guild ID</param>
     /// <returns>New token response, or null if failed</returns>
@@ -549,7 +553,7 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
 
             if (guildConfig?.PatreonRefreshToken == null)
             {
-                Log.Warning("No Patreon refresh token found for guild {GuildId}", guildId);
+                logger.LogWarning("No Patreon refresh token found for guild {GuildId}", guildId);
                 return null;
             }
 
@@ -566,14 +570,14 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
                         PatreonTokenExpiry = DateTime.UtcNow.AddSeconds(tokenResponse.ExpiresIn)
                     });
 
-                Log.Information("Successfully refreshed Patreon token for guild {GuildId}", guildId);
+                logger.LogInformation("Successfully refreshed Patreon token for guild {GuildId}", guildId);
             }
 
             return tokenResponse;
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error refreshing Patreon token for guild {GuildId}", guildId);
+            logger.LogError(ex, "Error refreshing Patreon token for guild {GuildId}", guildId);
             return null;
         }
     }
@@ -584,20 +588,20 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
     /// <param name="guildId">The Discord guild ID to sync.</param>
     public async Task SyncAllAsync(ulong guildId)
     {
-        Log.Information("Starting full Patreon data sync for guild {GuildId}", guildId);
+        logger.LogInformation("Starting full Patreon data sync for guild {GuildId}", guildId);
 
         // Refresh token first to ensure all subsequent API calls are authenticated.
         var refreshedToken = await RefreshTokenAsync(guildId);
         if (refreshedToken == null)
         {
-            Log.Error("Could not refresh token for guild {GuildId}. Aborting full sync.", guildId);
+            logger.LogError("Could not refresh token for guild {GuildId}. Aborting full sync.", guildId);
             return;
         }
 
         await UpdateSupportersAsync(guildId);
         await UpdateTiersAndGoalsAsync(guildId);
 
-        Log.Information("Full Patreon data sync completed for guild {GuildId}", guildId);
+        logger.LogInformation("Full Patreon data sync completed for guild {GuildId}", guildId);
     }
 
     /// <summary>
@@ -615,7 +619,7 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
 
             if (guildConfig?.PatreonAccessToken == null || guildConfig.PatreonCampaignId == null)
             {
-                Log.Warning("No Patreon access token or campaign ID found for tier/goal sync in guild {GuildId}",
+                logger.LogWarning("No Patreon access token or campaign ID found for tier/goal sync in guild {GuildId}",
                     guildId);
                 return -1;
             }
@@ -624,7 +628,7 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
                 await apiClient.GetCampaignAsync(guildConfig.PatreonAccessToken, guildConfig.PatreonCampaignId);
             if (campaignResponse?.Included == null)
             {
-                Log.Warning("Failed to fetch campaign data with includes for guild {GuildId}", guildId);
+                logger.LogWarning("Failed to fetch campaign data with includes for guild {GuildId}", guildId);
                 return -1;
             }
 
@@ -670,7 +674,7 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
                 }
             }
 
-            Log.Information("Updated {Count} tiers for guild {GuildId}", apiTiers.Count, guildId);
+            logger.LogInformation("Updated {Count} tiers for guild {GuildId}", apiTiers.Count, guildId);
 
             // Process Goals
             var apiGoals = includedData.Where(x => x.Type == "goal").ToList();
@@ -715,19 +719,19 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
                 }
             }
 
-            Log.Information("Updated {Count} goals for guild {GuildId}", apiGoals.Count, guildId);
+            logger.LogInformation("Updated {Count} goals for guild {GuildId}", apiGoals.Count, guildId);
 
             return updatedCount;
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error updating tiers and goals for guild {GuildId}", guildId);
+            logger.LogError(ex, "Error updating tiers and goals for guild {GuildId}", guildId);
             return -1;
         }
     }
 
     /// <summary>
-    /// Gets active supporters for a guild
+    ///     Gets active supporters for a guild
     /// </summary>
     /// <param name="guildId">Discord guild ID</param>
     /// <returns>List of active supporters</returns>
@@ -744,7 +748,7 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
     }
 
     /// <summary>
-    /// Gets Patreon tiers configured for a guild
+    ///     Gets Patreon tiers configured for a guild
     /// </summary>
     /// <param name="guildId">Discord guild ID</param>
     /// <returns>List of configured tiers</returns>
@@ -758,7 +762,7 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
     }
 
     /// <summary>
-    /// Gets Patreon goals for a guild
+    ///     Gets Patreon goals for a guild
     /// </summary>
     /// <param name="guildId">Discord guild ID</param>
     /// <returns>List of goals</returns>
@@ -772,7 +776,7 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
     }
 
     /// <summary>
-    /// Links a Discord user to a Patreon supporter
+    ///     Links a Discord user to a Patreon supporter
     /// </summary>
     /// <param name="guildId">Discord guild ID</param>
     /// <param name="discordUserId">Discord user ID</param>
@@ -809,14 +813,14 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error linking user {DiscordUserId} to Patreon {PatreonUserId} for guild {GuildId}",
+            logger.LogError(ex, "Error linking user {DiscordUserId} to Patreon {PatreonUserId} for guild {GuildId}",
                 discordUserId, patreonUserId, guildId);
             return false;
         }
     }
 
     /// <summary>
-    /// Synchronizes Discord roles for all linked Patreon supporters in a guild
+    ///     Synchronizes Discord roles for all linked Patreon supporters in a guild
     /// </summary>
     /// <param name="guildId">Discord guild ID</param>
     /// <returns>Number of users updated</returns>
@@ -827,7 +831,7 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
             var guild = client.GetGuild(guildId);
             if (guild == null)
             {
-                Log.Warning("Guild {GuildId} not found for role sync", guildId);
+                logger.LogWarning("Guild {GuildId} not found for role sync", guildId);
                 return 0;
             }
 
@@ -837,7 +841,7 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
             var config = await uow.GuildConfigs.FirstOrDefaultAsync(x => x.GuildId == guildId);
             if (config?.PatreonRoleSync != true)
             {
-                Log.Information("Patreon role sync is disabled for guild {GuildId}", guildId);
+                logger.LogInformation("Patreon role sync is disabled for guild {GuildId}", guildId);
                 return 0;
             }
 
@@ -856,7 +860,7 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
 
             if (!tiers.Any())
             {
-                Log.Warning("No Patreon tier role mappings configured for guild {GuildId}", guildId);
+                logger.LogWarning("No Patreon tier role mappings configured for guild {GuildId}", guildId);
                 return 0;
             }
 
@@ -872,23 +876,24 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
                 }
                 catch (Exception ex)
                 {
-                    Log.Error(ex, "Error syncing roles for user {UserId} in guild {GuildId}", supporter.DiscordUserId,
+                    logger.LogError(ex, "Error syncing roles for user {UserId} in guild {GuildId}",
+                        supporter.DiscordUserId,
                         guildId);
                 }
             }
 
-            Log.Information("Synchronized roles for {Count} users in guild {GuildId}", updatedCount, guildId);
+            logger.LogInformation("Synchronized roles for {Count} users in guild {GuildId}", updatedCount, guildId);
             return updatedCount;
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error syncing all roles for guild {GuildId}", guildId);
+            logger.LogError(ex, "Error syncing all roles for guild {GuildId}", guildId);
             return 0;
         }
     }
 
     /// <summary>
-    /// Synchronizes Discord roles for a specific user based on their Patreon support
+    ///     Synchronizes Discord roles for a specific user based on their Patreon support
     /// </summary>
     /// <param name="guildId">Discord guild ID</param>
     /// <param name="discordUserId">Discord user ID</param>
@@ -943,12 +948,12 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
                 try
                 {
                     await user.RemoveRoleAsync(role);
-                    Log.Information("Removed Patreon role {RoleName} from user {UserId} in guild {GuildId}",
+                    logger.LogInformation("Removed Patreon role {RoleName} from user {UserId} in guild {GuildId}",
                         role.Name, discordUserId, guildId);
                 }
                 catch (Exception ex)
                 {
-                    Log.Warning(ex, "Failed to remove role {RoleId} from user {UserId} in guild {GuildId}",
+                    logger.LogWarning(ex, "Failed to remove role {RoleId} from user {UserId} in guild {GuildId}",
                         role.Id, discordUserId, guildId);
                 }
             }
@@ -959,12 +964,12 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
                 try
                 {
                     await user.AddRoleAsync(targetRole);
-                    Log.Information("Added Patreon role {RoleName} to user {UserId} in guild {GuildId}",
+                    logger.LogInformation("Added Patreon role {RoleName} to user {UserId} in guild {GuildId}",
                         targetRole.Name, discordUserId, guildId);
                 }
                 catch (Exception ex)
                 {
-                    Log.Warning(ex, "Failed to add role {RoleId} to user {UserId} in guild {GuildId}",
+                    logger.LogWarning(ex, "Failed to add role {RoleId} to user {UserId} in guild {GuildId}",
                         targetRole.Id, discordUserId, guildId);
                     return false;
                 }
@@ -974,13 +979,13 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error syncing roles for user {UserId} in guild {GuildId}", discordUserId, guildId);
+            logger.LogError(ex, "Error syncing roles for user {UserId} in guild {GuildId}", discordUserId, guildId);
             return false;
         }
     }
 
     /// <summary>
-    /// Maps a Patreon tier to a Discord role
+    ///     Maps a Patreon tier to a Discord role
     /// </summary>
     /// <param name="guildId">Discord guild ID</param>
     /// <param name="tierId">Patreon tier ID</param>
@@ -997,7 +1002,7 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
 
             if (tier == null)
             {
-                Log.Warning("Patreon tier {TierId} not found for guild {GuildId}", tierId, guildId);
+                logger.LogWarning("Patreon tier {TierId} not found for guild {GuildId}", tierId, guildId);
                 return false;
             }
 
@@ -1008,20 +1013,20 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
                     DiscordRoleId = roleId
                 });
 
-            Log.Information("Mapped Patreon tier {TierId} to Discord role {RoleId} for guild {GuildId}",
+            logger.LogInformation("Mapped Patreon tier {TierId} to Discord role {RoleId} for guild {GuildId}",
                 tierId, roleId, guildId);
             return true;
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error mapping tier {TierId} to role {RoleId} for guild {GuildId}",
+            logger.LogError(ex, "Error mapping tier {TierId} to role {RoleId} for guild {GuildId}",
                 tierId, roleId, guildId);
             return false;
         }
     }
 
     /// <summary>
-    /// Toggles role synchronization for a guild
+    ///     Toggles role synchronization for a guild
     /// </summary>
     /// <param name="guildId">Discord guild ID</param>
     /// <returns>New role sync status</returns>
@@ -1042,19 +1047,19 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
                     PatreonRoleSync = newStatus
                 });
 
-            Log.Information("Patreon role sync {Status} for guild {GuildId}",
+            logger.LogInformation("Patreon role sync {Status} for guild {GuildId}",
                 newStatus ? "enabled" : "disabled", guildId);
             return newStatus;
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error toggling role sync for guild {GuildId}", guildId);
+            logger.LogError(ex, "Error toggling role sync for guild {GuildId}", guildId);
             return false;
         }
     }
 
     /// <summary>
-    /// Gets the current tier ID for a supporter from included relationships
+    ///     Gets the current tier ID for a supporter from included relationships
     /// </summary>
     /// <param name="supporter">Patreon supporter data</param>
     /// <returns>Current tier ID or null</returns>
@@ -1066,7 +1071,7 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
     }
 
     /// <summary>
-    /// Gets detailed analytics for Patreon supporters
+    ///     Gets detailed analytics for Patreon supporters
     /// </summary>
     /// <param name="guildId">Discord guild ID</param>
     /// <returns>Analytics data</returns>
@@ -1125,13 +1130,13 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error getting analytics for guild {GuildId}", guildId);
+            logger.LogError(ex, "Error getting analytics for guild {GuildId}", guildId);
             return new PatreonAnalytics();
         }
     }
 
     /// <summary>
-    /// Gets tier group name based on amount
+    ///     Gets tier group name based on amount
     /// </summary>
     /// <param name="amountCents">Amount in cents</param>
     /// <returns>Tier group name</returns>
@@ -1150,7 +1155,7 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
     }
 
     /// <summary>
-    /// Updates supporter recognition features like thank you messages
+    ///     Updates supporter recognition features like thank you messages
     /// </summary>
     /// <param name="guildId">Discord guild ID</param>
     /// <param name="channelId">Channel to send thank you messages</param>
@@ -1208,23 +1213,24 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
                 }
                 catch (Exception ex)
                 {
-                    Log.Warning(ex, "Failed to send recognition message for supporter {SupporterId}",
+                    logger.LogWarning(ex, "Failed to send recognition message for supporter {SupporterId}",
                         supporter.PatreonUserId);
                 }
             }
 
-            Log.Information("Sent {Count} supporter recognition messages in guild {GuildId}", messagesSent, guildId);
+            logger.LogInformation("Sent {Count} supporter recognition messages in guild {GuildId}", messagesSent,
+                guildId);
             return messagesSent;
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error sending supporter recognition for guild {GuildId}", guildId);
+            logger.LogError(ex, "Error sending supporter recognition for guild {GuildId}", guildId);
             return 0;
         }
     }
 
     /// <summary>
-    /// Parses ISO datetime string to DateTime
+    ///     Parses ISO datetime string to DateTime
     /// </summary>
     /// <param name="dateString">ISO datetime string</param>
     /// <returns>Parsed DateTime or null</returns>
@@ -1237,7 +1243,7 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
     }
 
     /// <summary>
-    /// Stores OAuth tokens and campaign information for a guild
+    ///     Stores OAuth tokens and campaign information for a guild
     /// </summary>
     /// <param name="guildId">Discord guild ID</param>
     /// <param name="accessToken">Patreon access token</param>
@@ -1260,91 +1266,91 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
 
             await guildSettings.UpdateGuildConfig(guildId, config);
 
-            Log.Information("Stored Patreon OAuth tokens for guild {GuildId} with campaign {CampaignId}",
+            logger.LogInformation("Stored Patreon OAuth tokens for guild {GuildId} with campaign {CampaignId}",
                 guildId, campaignId);
             return true;
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error storing Patreon OAuth tokens for guild {GuildId}", guildId);
+            logger.LogError(ex, "Error storing Patreon OAuth tokens for guild {GuildId}", guildId);
             return false;
         }
     }
 }
 
 /// <summary>
-/// Patreon analytics data
+///     Patreon analytics data
 /// </summary>
 public class PatreonAnalytics
 {
     /// <summary>
-    /// Total number of supporters (all statuses)
+    ///     Total number of supporters (all statuses)
     /// </summary>
     public int TotalSupporters { get; set; }
 
     /// <summary>
-    /// Number of active supporters
+    ///     Number of active supporters
     /// </summary>
     public int ActiveSupporters { get; set; }
 
     /// <summary>
-    /// Number of former supporters
+    ///     Number of former supporters
     /// </summary>
     public int FormerSupporters { get; set; }
 
     /// <summary>
-    /// Number of supporters linked to Discord
+    ///     Number of supporters linked to Discord
     /// </summary>
     public int LinkedSupporters { get; set; }
 
     /// <summary>
-    /// Total monthly revenue from active supporters
+    ///     Total monthly revenue from active supporters
     /// </summary>
     public double TotalMonthlyRevenue { get; set; }
 
     /// <summary>
-    /// Average support amount
+    ///     Average support amount
     /// </summary>
     public double AverageSupport { get; set; }
 
     /// <summary>
-    /// Total lifetime revenue from all supporters
+    ///     Total lifetime revenue from all supporters
     /// </summary>
     public double LifetimeRevenue { get; set; }
 
     /// <summary>
-    /// Number of new supporters this month
+    ///     Number of new supporters this month
     /// </summary>
     public int NewSupportersThisMonth { get; set; }
 
     /// <summary>
-    /// Distribution of supporters by tier groups
+    ///     Distribution of supporters by tier groups
     /// </summary>
     public Dictionary<string, int> TierDistribution { get; set; } = new();
 
     /// <summary>
-    /// Top 5 supporters
+    ///     Top 5 supporters
     /// </summary>
     public List<TopSupporter> TopSupporters { get; set; } = new();
 }
 
 /// <summary>
-/// Top supporter information
+///     Top supporter information
 /// </summary>
 public class TopSupporter
 {
     /// <summary>
-    /// Supporter name
+    ///     Supporter name
     /// </summary>
     public string Name { get; set; } = null!;
 
     /// <summary>
-    /// Monthly support amount
+    ///     Monthly support amount
     /// </summary>
     public double Amount { get; set; }
 
     /// <summary>
-    /// Whether supporter is linked to Discord
+    ///     Whether supporter is linked to Discord
     /// </summary>
     public bool IsLinked { get; set; }
 }

@@ -61,6 +61,7 @@ public static class SmartEmbed
                             endIndex = i;
                             i = input.Length; // Break the loop
                         }
+
                         break;
                 }
             }
@@ -73,9 +74,12 @@ public static class SmartEmbed
             NewEmbed newEmbed;
             try
             {
-                newEmbed = JsonSerializer.Deserialize<NewEmbed>(jsonString, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                newEmbed = JsonSerializer.Deserialize<NewEmbed>(jsonString, new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
                 Log.Information(ex, "Failed to parse JSON");
                 return false;

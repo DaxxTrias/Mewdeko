@@ -4,7 +4,6 @@ using LinqToDB.Data;
 using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.Xp.Models;
 using Mewdeko.Services.Strings;
-using Serilog;
 
 namespace Mewdeko.Modules.Xp.Services;
 
@@ -17,20 +16,22 @@ public class XpCompetitionManager : INService, IDisposable
     private readonly ConcurrentDictionary<ulong, List<XpCompetition>> activeCompetitions = new();
     private readonly DiscordShardedClient client;
     private readonly IDataConnectionFactory dbFactory;
+    private readonly ILogger<XpCompetitionManager> logger;
     private readonly GeneratedBotStrings Strings;
 
     /// <summary>
-    ///     Initializes a new instance of the <see cref="XpCompetitionManager"/> class.
+    ///     Initializes a new instance of the <see cref="XpCompetitionManager" /> class.
     /// </summary>
     /// <param name="client">The Discord client.</param>
     /// <param name="dbFactory">The database context provider.</param>
     public XpCompetitionManager(
         DiscordShardedClient client,
-        IDataConnectionFactory dbFactory, GeneratedBotStrings strings)
+        IDataConnectionFactory dbFactory, GeneratedBotStrings strings, ILogger<XpCompetitionManager> logger)
     {
         this.client = client;
         this.dbFactory = dbFactory;
         Strings = strings;
+        this.logger = logger;
     }
 
     /// <summary>
@@ -189,7 +190,7 @@ public class XpCompetitionManager : INService, IDisposable
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error updating competition entries");
+            logger.LogError(ex, "Error updating competition entries");
         }
     }
 
@@ -347,7 +348,7 @@ public class XpCompetitionManager : INService, IDisposable
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error starting competition {CompetitionId}", competitionId);
+            logger.LogError(ex, "Error starting competition {CompetitionId}", competitionId);
         }
     }
 
@@ -515,7 +516,7 @@ public class XpCompetitionManager : INService, IDisposable
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error finalizing competition {CompetitionId}", competitionId);
+            logger.LogError(ex, "Error finalizing competition {CompetitionId}", competitionId);
         }
     }
 }

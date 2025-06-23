@@ -2,7 +2,6 @@
 using DataModel;
 using LinqToDB;
 using Mewdeko.Common.ModuleBehaviors;
-using Serilog;
 using ZiggyCreatures.Caching.Fusion;
 
 namespace Mewdeko.Modules.Highlights.Services;
@@ -17,11 +16,14 @@ public class HighlightsService : INService, IReadyExecutor, IUnloadableService
     private readonly IDataConnectionFactory dbFactory;
     private readonly EventHandler eventHandler;
 
+
     private readonly Channel<(SocketMessage, TaskCompletionSource<bool>)> highlightQueue =
         Channel.CreateBounded<(SocketMessage, TaskCompletionSource<bool>)>(new BoundedChannelOptions(60)
         {
             FullMode = BoundedChannelFullMode.DropNewest
         });
+
+    private readonly ILogger<HighlightsService> logger;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="HighlightsService" /> class.
@@ -31,12 +33,13 @@ public class HighlightsService : INService, IReadyExecutor, IUnloadableService
     /// <param name="dbFactory">The database provider</param>
     /// <param name="eventHandler">Async event handler because discord stoopid</param>
     public HighlightsService(DiscordShardedClient client, IFusionCache cache, IDataConnectionFactory dbFactory,
-        EventHandler eventHandler)
+        EventHandler eventHandler, ILogger<HighlightsService> logger)
     {
         this.client = client;
         this.cache = cache;
         this.dbFactory = dbFactory;
         this.eventHandler = eventHandler;
+        this.logger = logger;
         eventHandler.MessageReceived += StaggerHighlights;
         eventHandler.UserIsTyping += AddHighlightTimer;
         _ = HighlightLoop();
@@ -48,7 +51,7 @@ public class HighlightsService : INService, IReadyExecutor, IUnloadableService
     /// <returns></returns>
     public async Task OnReadyAsync()
     {
-        Log.Information($"Starting {GetType()} Cache");
+        logger.LogInformation($"Starting {GetType()} Cache");
         await using var dbContext = await dbFactory.CreateConnectionAsync();
 
         var allHighlights = dbContext.Highlights.ToHashSet();
@@ -74,7 +77,7 @@ public class HighlightsService : INService, IReadyExecutor, IUnloadableService
             }
         }
 
-        Log.Information("Highlights Cached");
+        logger.LogInformation("Highlights Cached");
     }
 
     /// <summary>

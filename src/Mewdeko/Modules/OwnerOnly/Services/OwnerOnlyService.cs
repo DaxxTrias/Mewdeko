@@ -11,7 +11,6 @@ using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Services.Settings;
 using Mewdeko.Services.Strings;
 using Octokit;
-using Serilog;
 using StackExchange.Redis;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
@@ -36,6 +35,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
     private readonly IDataConnectionFactory dbFactory;
     private readonly GuildSettingsService guildSettings;
     private readonly IHttpClientFactory httpFactory;
+    private readonly ILogger<OwnerOnlyService> logger;
     private readonly Replacer rep;
     private readonly GeneratedBotStrings strings;
 
@@ -75,7 +75,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
     public OwnerOnlyService(DiscordShardedClient client, CommandHandler cmdHandler, IDataConnectionFactory dbFactory,
         GeneratedBotStrings strings, IBotCredentials creds, IDataCache cache, IHttpClientFactory factory,
         BotConfigService bss, IEnumerable<IPlaceholderProvider> phProviders, Mewdeko bot,
-        GuildSettingsService guildSettings, EventHandler handler)
+        GuildSettingsService guildSettings, EventHandler handler, ILogger<OwnerOnlyService> logger)
     {
         var redis = cache.Redis;
         this.cmdHandler = cmdHandler;
@@ -86,6 +86,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         this.cache = cache;
         this.bot = bot;
         this.guildSettings = guildSettings;
+        this.logger = logger;
         var imgs = cache.LocalImages;
         httpFactory = factory;
         this.bss = bss;
@@ -117,12 +118,12 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
                 if (server.OwnerId != this.client.CurrentUser.Id)
                 {
                     await server.LeaveAsync().ConfigureAwait(false);
-                    Log.Information("Left server {ServerName} [{ServerId}]", server.Name, server.Id);
+                    logger.LogInformation("Left server {ServerName} [{ServerId}]", server.Name, server.Id);
                 }
                 else
                 {
                     await server.DeleteAsync().ConfigureAwait(false);
-                    Log.Information("Deleted server {ServerName} [{ServerId}]", server.Name, server.Id);
+                    logger.LogInformation("Deleted server {ServerName} [{ServerId}]", server.Name, server.Id);
                 }
             }
             catch
@@ -175,7 +176,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
                     }
                     catch
                     {
-                        Log.Warning("Can't contact owner with id {0}", ownerCh.Recipient.Id);
+                        logger.LogWarning("Can't contact owner with id {0}", ownerCh.Recipient.Id);
                     }
                 }
             }
@@ -207,7 +208,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
     /// </remarks>
     public async Task OnReadyAsync()
     {
-        Log.Information($"Starting {GetType()} Cache");
+        logger.LogInformation($"Starting {GetType()} Cache");
 
         await using var dbContext = await dbFactory.CreateConnectionAsync();
 
@@ -247,12 +248,12 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
 
         if (ownerChannels.Count == 0)
         {
-            Log.Warning(
+            logger.LogWarning(
                 "No owner channels created! Make sure you've specified the correct OwnerId in the credentials.json file and invited the bot to a Discord server");
         }
         else
         {
-            Log.Information(
+            logger.LogInformation(
                 $"Created {ownerChannels.Count} out of {creds.OwnerIds.Length} owner message channels.");
         }
     }
@@ -334,14 +335,14 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
                     {
                         await redis.StringSetAsync($"{creds.RedisKey()}_ReleaseList",
                             JsonSerializer.Serialize(latestRelease));
-                        Log.Information("Setting latest release to {ReleaseTag}", latestRelease.TagName);
+                        logger.LogInformation("Setting latest release to {ReleaseTag}", latestRelease.TagName);
                     }
                     else
                     {
                         var release = JsonSerializer.Deserialize<Release>((string)list);
                         if (release.TagName != latestRelease.TagName)
                         {
-                            Log.Information("New release found: {ReleaseTag}", latestRelease.TagName);
+                            logger.LogInformation("New release found: {ReleaseTag}", latestRelease.TagName);
                             await redis.StringSetAsync($"{creds.RedisKey()}_ReleaseList",
                                 JsonSerializer.Serialize(latestRelease));
                             if (bss.Data.ForwardToAllOwners)
@@ -372,7 +373,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
                         await github.Repository.Commit.Get("SylveonDeko", "Mewdeko", bss.Data.UpdateBranch);
                     if (latestCommit is null)
                     {
-                        Log.Warning(
+                        logger.LogWarning(
                             "Failed to get latest commit, make sure you have the correct branch set in bot.yml");
                         break;
                     }
@@ -382,13 +383,13 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
                     {
                         await redis.StringSetAsync($"{creds.RedisKey()}_CommitList",
                             latestCommit.Sha);
-                        Log.Information("Setting latest commit to {CommitSha}", latestCommit.Sha);
+                        logger.LogInformation("Setting latest commit to {CommitSha}", latestCommit.Sha);
                     }
                     else
                     {
                         if (redisCommit.ToString() != latestCommit.Sha)
                         {
-                            Log.Information("New commit found: {CommitSha}", latestCommit.Sha);
+                            logger.LogInformation("New commit found: {CommitSha}", latestCommit.Sha);
                             await redis.StringSetAsync($"{creds.RedisKey()}_CommitList",
                                 latestCommit.Sha);
                             if (bss.Data.ForwardToAllOwners)
@@ -419,7 +420,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
                 case UpdateCheckType.None:
                     break;
                 default:
-                    Log.Error("Invalid UpdateCheckType {UpdateCheckType}", bss.Data.CheckForUpdates);
+                    logger.LogError("Invalid UpdateCheckType {UpdateCheckType}", bss.Data.CheckForUpdates);
                     break;
             }
         } while (await timer.WaitForNextTickAsync());
@@ -451,7 +452,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
             }
             catch (Exception ex)
             {
-                Log.Warning(ex, "Rotating playing status errored: {ErrorMessage}", ex.Message);
+                logger.LogWarning(ex, "Rotating playing status errored: {ErrorMessage}", ex.Message);
             }
         }
     }
@@ -543,7 +544,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         }
         catch (Exception ex)
         {
-            Log.Warning(ex, "Error in SelfService ExecuteCommand");
+            logger.LogWarning(ex, "Error in SelfService ExecuteCommand");
         }
     }
 
@@ -765,7 +766,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         }
 
         this.sourceDirectory = sourceDirectory;
-        Log.Information("Source directory set to: {SourceDirectory}", sourceDirectory);
+        logger.LogInformation("Source directory set to: {SourceDirectory}", sourceDirectory);
     }
 
     /// <summary>
@@ -786,11 +787,11 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
                     "Source directory not set. Please set a source directory using SetSourceDirectory or provide it as a parameter.");
             }
 
-            Log.Information("Generating command documentation from source directory: {SourceDir}", sourceDir);
+            logger.LogInformation("Generating command documentation from source directory: {SourceDir}", sourceDir);
 
             if (!Directory.Exists(sourceDir))
             {
-                Log.Error("Source directory not found: {SourceDir}", sourceDir);
+                logger.LogError("Source directory not found: {SourceDir}", sourceDir);
                 throw new DirectoryNotFoundException($"Source directory not found: {sourceDir}");
             }
 
@@ -820,16 +821,16 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
             await WriteEnumsYamlFileAsync(enums, enumsPath);
             await WriteAliasesYamlFileAsync(deduplicatedAliases, aliasesPath);
 
-            Log.Information(
+            logger.LogInformation(
                 "Documentation generated successfully. Found {TotalCommands} commands, {TotalEnums} enums, and {TotalAliases} alias entries.",
                 totalCommands, enums.Count, deduplicatedAliases.Count);
-            Log.Information("Commands: {CommandsPath}", Path.GetFullPath(commandsPath));
-            Log.Information("Enums: {EnumsPath}", Path.GetFullPath(enumsPath));
-            Log.Information("Aliases: {AliasesPath}", Path.GetFullPath(aliasesPath));
+            logger.LogInformation("Commands: {CommandsPath}", Path.GetFullPath(commandsPath));
+            logger.LogInformation("Enums: {EnumsPath}", Path.GetFullPath(enumsPath));
+            logger.LogInformation("Aliases: {AliasesPath}", Path.GetFullPath(aliasesPath));
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error generating documentation");
+            logger.LogError(ex, "Error generating documentation");
             throw;
         }
     }
@@ -859,13 +860,13 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
                 }
                 catch (Exception ex)
                 {
-                    Log.Warning(ex, "Error processing file: {FilePath}", file);
+                    logger.LogWarning(ex, "Error processing file: {FilePath}", file);
                 }
             }
         }
         catch (Exception ex)
         {
-            Log.Warning(ex, "Error processing directory: {Directory}", directory);
+            logger.LogWarning(ex, "Error processing directory: {Directory}", directory);
         }
     }
 
@@ -892,7 +893,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         var content = File.ReadAllText(filePath);
         var filename = Path.GetFileName(filePath);
 
-        Log.Debug("Checking file: {FilePath}", filePath);
+        logger.LogDebug("Checking file: {FilePath}", filePath);
 
         // Extract enums first
         ExtractEnums(content, enums);
@@ -911,7 +912,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         // Log results
         if (moduleClassesCount > 0 || cmdMethodsCount > 0)
         {
-            Log.Debug("Found {ClassCount} module classes and {MethodCount} command methods in {FilePath}",
+            logger.LogDebug("Found {ClassCount} module classes and {MethodCount} command methods in {FilePath}",
                 moduleClassesCount, cmdMethodsCount, filename);
         }
     }
@@ -977,7 +978,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
             };
 
             enums[enumName] = enumInfo;
-            Log.Debug("Extracted enum: {EnumName} with {ValueCount} values", enumName, enumInfo.Values.Count);
+            logger.LogDebug("Extracted enum: {EnumName} with {ValueCount} values", enumName, enumInfo.Values.Count);
         }
     }
 
@@ -1124,7 +1125,8 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
                         methodName.Contains("(") ||
                         methodName.Contains(" "))
                     {
-                        Log.Warning("Skipping invalid method name: '{MethodName}' from pattern: {Pattern}", methodName,
+                        logger.LogWarning("Skipping invalid method name: '{MethodName}' from pattern: {Pattern}",
+                            methodName,
                             pattern);
                         continue;
                     }
@@ -1148,7 +1150,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
                 }
                 catch (Exception ex)
                 {
-                    Log.Warning(ex, "Error extracting command from match: {ErrorMessage}", ex.Message);
+                    logger.LogWarning(ex, "Error extracting command from match: {ErrorMessage}", ex.Message);
                 }
             }
         }
@@ -1335,7 +1337,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
             methodName.Contains("(") ||
             methodName.Length > 50)
         {
-            Log.Warning("Refusing to create command with invalid method name: '{MethodName}'", methodName);
+            logger.LogWarning("Refusing to create command with invalid method name: '{MethodName}'", methodName);
             return;
         }
 
@@ -1407,7 +1409,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
                 match = Regex.Match(param.Trim(), @"([A-Za-z_]\w*[?]?)\s+([A-Za-z_]\w*)(?:\s*=\s*(.+?))?");
                 if (!match.Success)
                 {
-                    Log.Warning("Failed to parse parameter: {Parameter}", param);
+                    logger.LogWarning("Failed to parse parameter: {Parameter}", param);
                     continue;
                 }
             }
@@ -2177,7 +2179,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
     }
 
     /// <summary>
-    /// Removes duplicate aliases that would conflict across different commands
+    ///     Removes duplicate aliases that would conflict across different commands
     /// </summary>
     private Dictionary<string, List<string>> DeduplicateAliases(Dictionary<string, List<string>> aliases)
     {
@@ -2206,14 +2208,14 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
 
         if (duplicateAliases.Count > 0)
         {
-            Log.Information("Found {DuplicateCount} duplicate aliases that will be removed: {Duplicates}",
+            logger.LogInformation("Found {DuplicateCount} duplicate aliases that will be removed: {Duplicates}",
                 duplicateAliases.Count, string.Join(", ", duplicateAliases));
 
             // Log which commands are affected
             foreach (var duplicateAlias in duplicateAliases)
             {
                 var affectedCommands = aliasToCommands[duplicateAlias];
-                Log.Debug("Alias '{Alias}' used by commands: {Commands}",
+                logger.LogDebug("Alias '{Alias}' used by commands: {Commands}",
                     duplicateAlias, string.Join(", ", affectedCommands));
             }
         }
@@ -2242,7 +2244,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
     }
 
     /// <summary>
-    /// Normalizes and deduplicates commands before writing to YAML
+    ///     Normalizes and deduplicates commands before writing to YAML
     /// </summary>
     private Dictionary<string, CommandInfo> NormalizeCommands(Dictionary<string, CommandInfo> commands)
     {

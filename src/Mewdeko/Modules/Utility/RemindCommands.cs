@@ -30,8 +30,8 @@ public partial class Utility
             Here
         }
 
-       /// <summary>
-        /// Creates a reminder for the user or the current channel.
+        /// <summary>
+        ///     Creates a reminder for the user or the current channel.
         /// </summary>
         /// <param name="meorhere">Specifies whether to send the reminder to the user or the channel.</param>
         /// <param name="remindString">The reminder message and timing information.</param>
@@ -69,7 +69,7 @@ public partial class Utility
         }
 
         /// <summary>
-        /// Creates a reminder for a specific text channel.
+        ///     Creates a reminder for a specific text channel.
         /// </summary>
         /// <param name="channel">The text channel to send the reminder to.</param>
         /// <param name="remindString">The reminder message and timing information.</param>
@@ -112,7 +112,7 @@ public partial class Utility
         }
 
         /// <summary>
-        /// Lists all reminders for the current user.
+        ///     Lists all reminders for the current user.
         /// </summary>
         /// <returns>A task representing the asynchronous operation.</returns>
         [Cmd]
@@ -121,7 +121,7 @@ public partial class Utility
         {
             var reminders = await Service.GetUserRemindersAsync(ctx.User.Id);
 
-            if (reminders.Count==0)
+            if (reminders.Count == 0)
             {
                 await ReplyErrorAsync(Strings.RemindersNone(ctx.Guild.Id)).ConfigureAwait(false);
                 return;
@@ -169,7 +169,7 @@ public partial class Utility
         }
 
         /// <summary>
-        /// Deletes a specific reminder.
+        ///     Deletes a specific reminder.
         /// </summary>
         /// <param name="index">The index of the reminder to delete.</param>
         /// <returns>A task representing the asynchronous operation.</returns>

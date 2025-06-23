@@ -406,7 +406,8 @@ public partial class Utility
                 (null, null) => Strings.ConfirmResetMessageCountGuild(ctx.Guild.Id),
                 (not null, null) => Strings.ConfirmResetMessageCountUser(ctx.Guild.Id, user.Mention),
                 (null, not null) => Strings.ConfirmResetMessageCountChannel(ctx.Guild.Id, channel.Mention),
-                (not null, not null) => Strings.ConfirmResetMessageCountUserChannel(ctx.Guild.Id, user.Mention, channel.Mention)
+                (not null, not null) => Strings.ConfirmResetMessageCountUserChannel(ctx.Guild.Id, user.Mention,
+                    channel.Mention)
             };
 
             if (!await PromptUserConfirmAsync(confirmMessage, ctx.User.Id))
@@ -419,14 +420,18 @@ public partial class Utility
                 (null, null, true) => Strings.ResetMessageCountSuccessGuild(ctx.Guild.Id),
                 (not null, null, true) => Strings.ResetMessageCountSuccessUser(ctx.Guild.Id, user.Mention),
                 (null, not null, true) => Strings.ResetMessageCountSuccessChannel(ctx.Guild.Id, channel.Mention),
-                (not null, not null, true) => Strings.ResetMessageCountSuccessUserChannel(ctx.Guild.Id, user.Mention, channel.Mention),
+                (not null, not null, true) => Strings.ResetMessageCountSuccessUserChannel(ctx.Guild.Id, user.Mention,
+                    channel.Mention),
                 (null, null, false) => Strings.ResetMessageCountFailGuild(ctx.Guild.Id),
                 (not null, null, false) => Strings.ResetMessageCountFailUser(ctx.Guild.Id, user.Mention),
                 (null, not null, false) => Strings.ResetMessageCountFailChannel(ctx.Guild.Id, channel.Mention),
-                (not null, not null, false) => Strings.ResetMessageCountFailUserChannel(ctx.Guild.Id, user.Mention, channel.Mention)
+                (not null, not null, false) => Strings.ResetMessageCountFailUserChannel(ctx.Guild.Id, user.Mention,
+                    channel.Mention)
             };
 
-            await (result ? ctx.Channel.SendConfirmAsync(responseMessage) : ctx.Channel.SendErrorAsync(responseMessage, Config));
+            await (result
+                ? ctx.Channel.SendConfirmAsync(responseMessage)
+                : ctx.Channel.SendErrorAsync(responseMessage, Config));
         }
 
         /// <summary>

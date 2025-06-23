@@ -128,26 +128,24 @@ public class TriviaChainService(GeneratedBotStrings strings) : ITriviaChainServi
 
             return nextQuestionResult;
         }
-        else
-        {
-            // Wrong answer - game failed
-            await currencyService.AddUserBalanceAsync(user.Id, -chainState.BetAmount, guild.Id);
-            await currencyService.AddTransactionAsync(user.Id, -chainState.BetAmount,
-                strings.TriviaChainTransactionFailed(guild.Id), guild.Id);
 
-            var failEmbed = new EmbedBuilder()
-                .WithTitle(strings.TriviaChainTitle(guild.Id))
-                .WithDescription(strings.TriviaChainFailed(guild.Id, chainState.CorrectAnswer, chainState.BetAmount,
-                    await currencyService.GetCurrencyEmote(guild.Id)))
-                .WithColor(Color.Red);
+        // Wrong answer - game failed
+        await currencyService.AddUserBalanceAsync(user.Id, -chainState.BetAmount, guild.Id);
+        await currencyService.AddTransactionAsync(user.Id, -chainState.BetAmount,
+            strings.TriviaChainTransactionFailed(guild.Id), guild.Id);
 
-            TriviaChainStates.Remove(user.Id);
+        var failEmbed = new EmbedBuilder()
+            .WithTitle(strings.TriviaChainTitle(guild.Id))
+            .WithDescription(strings.TriviaChainFailed(guild.Id, chainState.CorrectAnswer, chainState.BetAmount,
+                await currencyService.GetCurrencyEmote(guild.Id)))
+            .WithColor(Color.Red);
 
-            return new TriviaAnswerResult(
-                false, false, true, null,
-                strings.TriviaChainWrongAnswer(guild.Id, chainState.BetAmount),
-                failEmbed.Build(), null);
-        }
+        TriviaChainStates.Remove(user.Id);
+
+        return new TriviaAnswerResult(
+            false, false, true, null,
+            strings.TriviaChainWrongAnswer(guild.Id, chainState.BetAmount),
+            failEmbed.Build(), null);
     }
 
     /// <summary>

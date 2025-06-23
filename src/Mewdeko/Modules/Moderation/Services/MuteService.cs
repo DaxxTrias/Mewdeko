@@ -6,7 +6,6 @@ using LinqToDB.Data;
 using Mewdeko.Common.Collections;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Services.Strings;
-using Serilog;
 
 namespace Mewdeko.Modules.Moderation.Services;
 
@@ -62,17 +61,19 @@ public class MuteService : INService, IReadyExecutor, IDisposable
             attachFiles: PermValue.Deny, sendMessagesInThreads: PermValue.Deny, createPublicThreads: PermValue.Deny);
 
     private readonly TimeSpan _checkInterval = TimeSpan.FromSeconds(30);
+    private readonly Timer? _processingTimer = null;
 
     private readonly ConcurrentDictionary<TimerKey, TimerQueueItem> _scheduledItems = new();
     private readonly object _timerLock = new();
 
     private readonly DiscordShardedClient client;
+
     private readonly IDataConnectionFactory dbFactory;
 
     private readonly GuildSettingsService guildSettings;
+    private readonly ILogger<MuteService> logger;
     private readonly GeneratedBotStrings strings;
     private bool _isProcessing;
-    private Timer? _processingTimer = null;
 
 
     /// <summary>
@@ -91,12 +92,13 @@ public class MuteService : INService, IReadyExecutor, IDisposable
     /// <param name="strings">The localization service</param>
     public MuteService(DiscordShardedClient client, IDataConnectionFactory dbFactory,
         GuildSettingsService guildSettings,
-        EventHandler eventHandler, Mewdeko bot, GeneratedBotStrings strings)
+        EventHandler eventHandler, Mewdeko bot, GeneratedBotStrings strings, ILogger<MuteService> logger)
     {
         this.client = client;
         this.dbFactory = dbFactory;
         this.guildSettings = guildSettings;
         this.strings = strings;
+        this.logger = logger;
         eventHandler.UserJoined += Client_UserJoined;
         UserMuted += OnUserMuted;
         UserUnmuted += OnUserUnmuted;
@@ -149,7 +151,7 @@ public class MuteService : INService, IReadyExecutor, IDisposable
                 mutedUsersList
                     .GroupBy(x =>
                     {
-                        Debug.Assert(x.GuildId != null, "x.GuildId != null");
+                        Debug.Assert(x.GuildId != null);
                         return x.GuildId.Value;
                     })
                     .ToDictionary(
@@ -205,13 +207,13 @@ public class MuteService : INService, IReadyExecutor, IDisposable
                 _scheduledItems[key] = item;
             }
 
-            Log.Information(
+            logger.LogInformation(
                 "Loaded {UnmuteCount} unmute timers, {UnbanCount} unban timers, and {UnroleCount} unrole timers",
                 unmuteTimers.Count, unbanTimers.Count, unroleTimers.Count);
         }
         catch (Exception e)
         {
-            Log.Error(e, "Error in MuteService.OnReadyAsync");
+            logger.LogError(e, "Error in MuteService.OnReadyAsync");
         }
     }
 
@@ -244,7 +246,7 @@ public class MuteService : INService, IReadyExecutor, IDisposable
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error processing timer items");
+            logger.LogError(ex, "Error processing timer items");
         }
         finally
         {
@@ -266,7 +268,7 @@ public class MuteService : INService, IReadyExecutor, IDisposable
             if (expiredItems.Count == 0)
                 return;
 
-            Log.Information("Processing {Count} expired timer items", expiredItems.Count);
+            logger.LogInformation("Processing {Count} expired timer items", expiredItems.Count);
 
             // Process items by type in batches
             var muteItems = expiredItems.Where(x => x.Key.Type == TimerType.Mute).ToList();
@@ -291,7 +293,7 @@ public class MuteService : INService, IReadyExecutor, IDisposable
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error processing expired items");
+            logger.LogError(ex, "Error processing expired items");
 
             // Clean up database connections
             await CleanupDatabaseConnections();
@@ -326,7 +328,7 @@ public class MuteService : INService, IReadyExecutor, IDisposable
                 }
                 catch (Exception ex)
                 {
-                    Log.Warning(ex, "Error processing mute timer for guild {GuildId}, user {UserId}",
+                    logger.LogWarning(ex, "Error processing mute timer for guild {GuildId}, user {UserId}",
                         item.Key.GuildId, item.Key.UserId);
                 }
             }
@@ -361,7 +363,7 @@ public class MuteService : INService, IReadyExecutor, IDisposable
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error in batch processing of mute timers");
+            logger.LogError(ex, "Error in batch processing of mute timers");
 
             // Reset processing flag for failed items
             foreach (var item in items.Except(successfulItems))
@@ -399,7 +401,7 @@ public class MuteService : INService, IReadyExecutor, IDisposable
                 }
                 catch (Exception ex)
                 {
-                    Log.Warning(ex, "Error processing ban timer for guild {GuildId}, user {UserId}",
+                    logger.LogWarning(ex, "Error processing ban timer for guild {GuildId}, user {UserId}",
                         item.Key.GuildId, item.Key.UserId);
                 }
             }
@@ -434,7 +436,7 @@ public class MuteService : INService, IReadyExecutor, IDisposable
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error in batch processing of ban timers");
+            logger.LogError(ex, "Error in batch processing of ban timers");
 
             // Reset processing flag for failed items
             foreach (var item in items.Except(successfulItems))
@@ -479,7 +481,8 @@ public class MuteService : INService, IReadyExecutor, IDisposable
                 }
                 catch (Exception ex)
                 {
-                    Log.Warning(ex, "Error processing role timer for guild {GuildId}, user {UserId}, role {RoleId}",
+                    logger.LogWarning(ex,
+                        "Error processing role timer for guild {GuildId}, user {UserId}, role {RoleId}",
                         item.Key.GuildId, item.Key.UserId, item.Key.RoleId);
                 }
             }
@@ -515,7 +518,7 @@ public class MuteService : INService, IReadyExecutor, IDisposable
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error in batch processing of role timers");
+            logger.LogError(ex, "Error in batch processing of role timers");
 
             // Reset processing flag for failed items
             foreach (var item in items.Except(successfulItems))
@@ -544,7 +547,7 @@ public class MuteService : INService, IReadyExecutor, IDisposable
         }
         catch (Exception ex)
         {
-            Log.Warning(ex, "Error during database connection cleanup");
+            logger.LogWarning(ex, "Error during database connection cleanup");
         }
     }
 
@@ -586,7 +589,7 @@ public class MuteService : INService, IReadyExecutor, IDisposable
         }
         catch (Exception ex)
         {
-            Log.Warning(ex, "Error in MuteService UserJoined event");
+            logger.LogWarning(ex, "Error in MuteService UserJoined event");
         }
     }
 
@@ -1013,7 +1016,7 @@ public class MuteService : INService, IReadyExecutor, IDisposable
     }
 
     /// <summary>
-    /// Dispose
+    ///     Dispose
     /// </summary>
     /// <param name="disposing">Depose</param>
     protected virtual void Dispose(bool disposing)

@@ -3,7 +3,6 @@ using System.Threading;
 using DataModel;
 using LinqToDB;
 using Mewdeko.Services.Strings;
-using Serilog;
 
 namespace Mewdeko.Modules.CustomVoice.Services;
 
@@ -19,7 +18,9 @@ public class CustomVoiceService : INService, IUnloadableService
     private readonly ConcurrentDictionary<ulong, Timer> emptyChannelTimers = new();
     private readonly EventHandler eventHandler;
     private readonly SemaphoreSlim @lock = new(1, 1);
+    private readonly ILogger<CustomVoiceService> logger;
     private readonly GeneratedBotStrings strings;
+
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="CustomVoiceService" /> class.
@@ -28,12 +29,13 @@ public class CustomVoiceService : INService, IUnloadableService
         IDataConnectionFactory dbFactory,
         DiscordShardedClient client,
         EventHandler eventHandler,
-        GeneratedBotStrings strings)
+        GeneratedBotStrings strings, ILogger<CustomVoiceService> logger)
     {
         this.dbFactory = dbFactory;
         this.client = client;
         this.eventHandler = eventHandler;
         this.strings = strings;
+        this.logger = logger;
 
         this.eventHandler.UserVoiceStateUpdated += OnUserVoiceStateUpdated;
         this.eventHandler.ChannelDestroyed += OnChannelDestroyed;
@@ -125,7 +127,7 @@ public class CustomVoiceService : INService, IUnloadableService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error loading active voice channels on startup");
+            logger.LogError(ex, "Error loading active voice channels on startup");
         }
     }
 
@@ -486,7 +488,7 @@ public class CustomVoiceService : INService, IUnloadableService
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Error deserializing whitelist JSON for user {UserId}", user.Id);
+                logger.LogError(ex, "Error deserializing whitelist JSON for user {UserId}", user.Id);
             }
         }
 
@@ -499,7 +501,7 @@ public class CustomVoiceService : INService, IUnloadableService
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Error deserializing blacklist JSON for user {UserId}", user.Id);
+                logger.LogError(ex, "Error deserializing blacklist JSON for user {UserId}", user.Id);
             }
         }
 
@@ -544,7 +546,7 @@ public class CustomVoiceService : INService, IUnloadableService
                         }
                         catch (Exception ex)
                         {
-                            Log.Error(ex,
+                            logger.LogError(ex,
                                 "Error setting permissions for allowed user {UserId} in custom voice channel {ChannelId}",
                                 allowedUserId, voiceChannel.Id);
                         }
@@ -565,7 +567,7 @@ public class CustomVoiceService : INService, IUnloadableService
                         }
                         catch (Exception ex)
                         {
-                            Log.Error(ex,
+                            logger.LogError(ex,
                                 "Error setting permissions for denied user {UserId} in custom voice channel {ChannelId}",
                                 deniedUserId, voiceChannel.Id);
                         }
@@ -592,7 +594,7 @@ public class CustomVoiceService : INService, IUnloadableService
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Error setting permissions for custom voice channel {ChannelId}", voiceChannel.Id);
+                logger.LogError(ex, "Error setting permissions for custom voice channel {ChannelId}", voiceChannel.Id);
             }
         }
 
@@ -636,7 +638,7 @@ public class CustomVoiceService : INService, IUnloadableService
                         }
                         catch (Exception ex)
                         {
-                            Log.Error(ex,
+                            logger.LogError(ex,
                                 "Error setting text channel permissions for allowed user {UserId} in custom voice channel {ChannelId}",
                                 allowedUserId, voiceChannel.Id);
                         }
@@ -665,7 +667,7 @@ public class CustomVoiceService : INService, IUnloadableService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error setting up text channel for voice channel {ChannelId}", voiceChannel.Id);
+            logger.LogError(ex, "Error setting up text channel for voice channel {ChannelId}", voiceChannel.Id);
         }
 
         // Keep track of the channel
@@ -684,7 +686,8 @@ public class CustomVoiceService : INService, IUnloadableService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error moving user {UserId} to custom voice channel {ChannelId}", user.Id, voiceChannel.Id);
+            logger.LogError(ex, "Error moving user {UserId} to custom voice channel {ChannelId}", user.Id,
+                voiceChannel.Id);
         }
 
         return voiceChannel;
@@ -739,7 +742,7 @@ public class CustomVoiceService : INService, IUnloadableService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error deleting custom voice channel {ChannelId}", channelId);
+            logger.LogError(ex, "Error deleting custom voice channel {ChannelId}", channelId);
             return false;
         }
     }
@@ -832,7 +835,8 @@ public class CustomVoiceService : INService, IUnloadableService
                     }
                     catch (Exception ex)
                     {
-                        Log.Error(ex, "Error updating text channel permissions for channel {ChannelId}", channelId);
+                        logger.LogError(ex, "Error updating text channel permissions for channel {ChannelId}",
+                            channelId);
                     }
 
                     if (string.IsNullOrEmpty(customChannel.AllowedUsersJson))
@@ -877,7 +881,7 @@ public class CustomVoiceService : INService, IUnloadableService
                             }
                             catch (Exception ex)
                             {
-                                Log.Error(ex,
+                                logger.LogError(ex,
                                     "Error updating text channel permissions for user {UserId} in channel {ChannelId}",
                                     allowedUserId, channelId);
                             }
@@ -926,7 +930,8 @@ public class CustomVoiceService : INService, IUnloadableService
                     }
                     catch (Exception ex)
                     {
-                        Log.Error(ex, "Error updating text channel permissions for channel {ChannelId}", channelId);
+                        logger.LogError(ex, "Error updating text channel permissions for channel {ChannelId}",
+                            channelId);
                     }
                 }
 
@@ -938,7 +943,7 @@ public class CustomVoiceService : INService, IUnloadableService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error updating custom voice channel {ChannelId}", channelId);
+            logger.LogError(ex, "Error updating custom voice channel {ChannelId}", channelId);
             return false;
         }
     }
@@ -1027,7 +1032,8 @@ public class CustomVoiceService : INService, IUnloadableService
                 }
                 catch (Exception ex)
                 {
-                    Log.Error(ex, "Error updating text channel permissions for user {UserId} in channel {ChannelId}",
+                    logger.LogError(ex,
+                        "Error updating text channel permissions for user {UserId} in channel {ChannelId}",
                         userId, channelId);
                 }
             }
@@ -1141,7 +1147,7 @@ public class CustomVoiceService : INService, IUnloadableService
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Error updating text channel permissions for user {UserId} in channel {ChannelId}",
+                logger.LogError(ex, "Error updating text channel permissions for user {UserId} in channel {ChannelId}",
                     userId, channelId);
             }
 
@@ -1154,7 +1160,8 @@ public class CustomVoiceService : INService, IUnloadableService
                 }
                 catch (Exception ex)
                 {
-                    Log.Error(ex, "Error disconnecting denied user {UserId} from voice channel {ChannelId}", userId,
+                    logger.LogError(ex, "Error disconnecting denied user {UserId} from voice channel {ChannelId}",
+                        userId,
                         channelId);
                 }
             }
@@ -1252,7 +1259,7 @@ public class CustomVoiceService : INService, IUnloadableService
                 }
                 catch (Exception ex)
                 {
-                    Log.Error(ex,
+                    logger.LogError(ex,
                         "Error updating text channel permissions for old owner {UserId} in channel {ChannelId}",
                         oldOwnerId, channelId);
                 }
@@ -1287,13 +1294,15 @@ public class CustomVoiceService : INService, IUnloadableService
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Error updating text channel permissions for new owner {UserId} in channel {ChannelId}",
+                logger.LogError(ex,
+                    "Error updating text channel permissions for new owner {UserId} in channel {ChannelId}",
                     newOwnerId, channelId);
             }
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error updating permissions during ownership transfer for channel {ChannelId}", channelId);
+            logger.LogError(ex, "Error updating permissions during ownership transfer for channel {ChannelId}",
+                channelId);
         }
 
         // Save changes
@@ -1424,7 +1433,7 @@ public class CustomVoiceService : INService, IUnloadableService
                                         }
                                         catch (Exception ex)
                                         {
-                                            Log.Error(ex, "Timer callback failed for channel {ChannelId}",
+                                            logger.LogError(ex, "Timer callback failed for channel {ChannelId}",
                                                 oldState.VoiceChannel.Id);
                                         }
                                     });
@@ -1444,7 +1453,8 @@ public class CustomVoiceService : INService, IUnloadableService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error handling voice state update for user {UserId} in guild {GuildId}", user.Id, guild.Id);
+            logger.LogError(ex, "Error handling voice state update for user {UserId} in guild {GuildId}", user.Id,
+                guild.Id);
         }
     }
 
@@ -1487,7 +1497,8 @@ public class CustomVoiceService : INService, IUnloadableService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error handling channel deletion for channel {ChannelId} in guild {GuildId}", channel.Id,
+            logger.LogError(ex, "Error handling channel deletion for channel {ChannelId} in guild {GuildId}",
+                channel.Id,
                 guild.Id);
         }
     }
@@ -1511,7 +1522,7 @@ public class CustomVoiceService : INService, IUnloadableService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error handling guild join for guild {GuildId}", guild.Id);
+            logger.LogError(ex, "Error handling guild join for guild {GuildId}", guild.Id);
         }
     }
 
@@ -1527,7 +1538,7 @@ public class CustomVoiceService : INService, IUnloadableService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error handling guild leave for guild {GuildId}", guild.Id);
+            logger.LogError(ex, "Error handling guild leave for guild {GuildId}", guild.Id);
         }
 
         return Task.CompletedTask;
@@ -1611,7 +1622,7 @@ public class CustomVoiceService : INService, IUnloadableService
                         }
                         catch (Exception ex)
                         {
-                            Log.Error(ex, "Error cleaning up empty channel {ChannelId}", channelId);
+                            logger.LogError(ex, "Error cleaning up empty channel {ChannelId}", channelId);
                         }
                     }
                 }
@@ -1622,7 +1633,7 @@ public class CustomVoiceService : INService, IUnloadableService
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Error in empty channel cleanup task");
+                logger.LogError(ex, "Error in empty channel cleanup task");
             }
         }
     }

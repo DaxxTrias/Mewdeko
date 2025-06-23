@@ -6,7 +6,6 @@ using Fergun.Interactive.Pagination;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Modules.Tickets.Common;
 using Mewdeko.Modules.Tickets.Services;
-using Serilog;
 
 namespace Mewdeko.Modules.Tickets;
 
@@ -24,14 +23,16 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
     public class TicketConfig : MewdekoSubmodule<TicketService>
     {
         private readonly InteractiveService interactivity;
+        private readonly ILogger<TicketConfig> logger;
 
         /// <summary>
         ///     Initializes a new instance of the <see cref="TicketConfig" /> class.
         /// </summary>
         /// <param name="interactivity">The service used for interactive commands.</param>
-        public TicketConfig(InteractiveService interactivity)
+        public TicketConfig(InteractiveService interactivity, ILogger<TicketConfig> logger)
         {
             this.interactivity = interactivity;
+            this.logger = logger;
         }
 
         /// <summary>
@@ -322,7 +323,7 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
             }
             catch (Exception ex)
             {
-                Log.Error($"Error creating select menu: {ex}");
+                logger.LogError($"Error creating select menu: {ex}");
                 await ctx.Channel.SendErrorAsync(Strings.SelectMenuCreateFailed(ctx.Guild.Id), Config);
             }
         }
@@ -373,7 +374,7 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Error adding select menu option");
+                logger.LogError(ex, "Error adding select menu option");
                 await ctx.Channel.SendErrorAsync(Strings.OptionAddFailed(ctx.Guild.Id), Config);
             }
         }
@@ -992,7 +993,7 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Error listing panel components for panel {PanelId}", panelId);
+                logger.LogError(ex, "Error listing panel components for panel {PanelId}", panelId);
                 await ctx.Channel.SendErrorAsync(Strings.PanelComponentsError(ctx.Guild.Id), Config);
             }
         }
@@ -1084,7 +1085,7 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Error listing panels");
+                logger.LogError(ex, "Error listing panels");
                 await ctx.Channel.SendErrorAsync(Strings.PanelsListError(ctx.Guild.Id), Config);
             }
         }

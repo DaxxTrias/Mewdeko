@@ -11,7 +11,6 @@ using Mewdeko.Modules.Permissions.Services;
 using Mewdeko.Services.Impl;
 using Mewdeko.Services.Settings;
 using Mewdeko.Services.strings;
-using Serilog;
 using Swan;
 
 namespace Mewdeko.Modules.Help;
@@ -33,7 +32,8 @@ public class Help(
     IBotStrings strings,
     InteractiveService serv,
     GuildSettingsService guildSettings,
-    BotConfigService config)
+    BotConfigService config,
+    ILogger<Help> logger)
     : MewdekoModuleBase<HelpService>
 {
     /// <summary>
@@ -100,7 +100,7 @@ public class Help(
         catch (Exception e)
         {
             await ctx.Channel.SendErrorAsync(Strings.CommandsExportError(ctx.Guild.Id), Config);
-            Log.Error(e, "An error has occured while dumping commands to json");
+            logger.LogError(e, "An error has occured while dumping commands to json");
         }
     }
 
@@ -155,7 +155,7 @@ public class Help(
         {
             await ctx.Channel.SendErrorAsync(Strings.HelpError(ctx.Guild?.Id ?? 0), Config);
 
-            Log.Error(e, "There was an issue embedding the help command");
+            logger.LogError(e, "There was an issue embedding the help command");
         }
     }
 

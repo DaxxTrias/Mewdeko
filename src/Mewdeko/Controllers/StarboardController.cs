@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace Mewdeko.Controllers;
 
 /// <summary>
-/// Controller for managing starboard configurations in guilds
+///     Controller for managing starboard configurations in guilds
 /// </summary>
 [ApiController]
 [Route("botapi/[controller]/{guildId}")]
@@ -16,7 +16,7 @@ public class StarboardController : Controller
     private readonly StarboardService starboardService;
 
     /// <summary>
-    /// Initializes a new instance of the StarboardController
+    ///     Initializes a new instance of the StarboardController
     /// </summary>
     public StarboardController(StarboardService starboardService, DiscordShardedClient client)
     {
@@ -25,7 +25,7 @@ public class StarboardController : Controller
     }
 
     /// <summary>
-    /// Gets all starboard configurations for a guild
+    ///     Gets all starboard configurations for a guild
     /// </summary>
     [HttpGet("all")]
     public IActionResult GetStarboards(ulong guildId)
@@ -35,7 +35,7 @@ public class StarboardController : Controller
     }
 
     /// <summary>
-    /// Creates a new starboard for a guild
+    ///     Creates a new starboard for a guild
     /// </summary>
     [HttpPost]
     public async Task<IActionResult> CreateStarboard(ulong guildId, [FromBody] StarboardCreateRequest request)
@@ -50,7 +50,7 @@ public class StarboardController : Controller
     }
 
     /// <summary>
-    /// Deletes a starboard configuration
+    ///     Deletes a starboard configuration
     /// </summary>
     [HttpDelete("{starboardId}")]
     public async Task<IActionResult> DeleteStarboard(ulong guildId, int starboardId)
@@ -67,7 +67,7 @@ public class StarboardController : Controller
     }
 
     /// <summary>
-    /// Sets whether bots are allowed to be starred for a specific starboard
+    ///     Sets whether bots are allowed to be starred for a specific starboard
     /// </summary>
     [HttpPost("{starboardId}/allow-bots")]
     public async Task<IActionResult> SetAllowBots(ulong guildId, int starboardId, [FromBody] bool allowed)
@@ -84,7 +84,7 @@ public class StarboardController : Controller
     }
 
     /// <summary>
-    /// Sets whether to remove starred messages when the original is deleted
+    ///     Sets whether to remove starred messages when the original is deleted
     /// </summary>
     [HttpPost("{starboardId}/remove-on-delete")]
     public async Task<IActionResult> SetRemoveOnDelete(ulong guildId, int starboardId, [FromBody] bool removeOnDelete)
@@ -101,7 +101,7 @@ public class StarboardController : Controller
     }
 
     /// <summary>
-    /// Sets whether to remove starred messages when reactions are cleared
+    ///     Sets whether to remove starred messages when reactions are cleared
     /// </summary>
     [HttpPost("{starboardId}/remove-on-clear")]
     public async Task<IActionResult> SetRemoveOnClear(ulong guildId, int starboardId, [FromBody] bool removeOnClear)
@@ -118,7 +118,7 @@ public class StarboardController : Controller
     }
 
     /// <summary>
-    /// Sets whether to remove starred messages when they fall below threshold
+    ///     Sets whether to remove starred messages when they fall below threshold
     /// </summary>
     [HttpPost("{starboardId}/remove-below-threshold")]
     public async Task<IActionResult> SetRemoveBelowThreshold(ulong guildId, int starboardId,
@@ -136,7 +136,7 @@ public class StarboardController : Controller
     }
 
     /// <summary>
-    /// Sets the repost threshold for a starboard
+    ///     Sets the repost threshold for a starboard
     /// </summary>
     [HttpPost("{starboardId}/repost-threshold")]
     public async Task<IActionResult> SetRepostThreshold(ulong guildId, int starboardId, [FromBody] int threshold)
@@ -153,7 +153,7 @@ public class StarboardController : Controller
     }
 
     /// <summary>
-    /// Sets the star threshold for a starboard
+    ///     Sets the star threshold for a starboard
     /// </summary>
     [HttpPost("{starboardId}/star-threshold")]
     public async Task<IActionResult> SetStarThreshold(ulong guildId, int starboardId, [FromBody] int threshold)
@@ -170,7 +170,7 @@ public class StarboardController : Controller
     }
 
     /// <summary>
-    /// Sets whether to use blacklist mode for channel checking
+    ///     Sets whether to use blacklist mode for channel checking
     /// </summary>
     [HttpPost("{starboardId}/use-blacklist")]
     public async Task<IActionResult> SetUseBlacklist(ulong guildId, int starboardId, [FromBody] bool useBlacklist)
@@ -187,7 +187,7 @@ public class StarboardController : Controller
     }
 
     /// <summary>
-    /// Toggles a channel in the starboard's check list
+    ///     Toggles a channel in the starboard's check list
     /// </summary>
     [HttpPost("{starboardId}/toggle-channel")]
     public async Task<IActionResult> ToggleChannel(ulong guildId, int starboardId, [FromBody] ulong channelId)
@@ -222,22 +222,22 @@ public class StarboardController : Controller
 }
 
 /// <summary>
-/// Request model for creating a new starboard
+///     Request model for creating a new starboard
 /// </summary>
 public class StarboardCreateRequest
 {
     /// <summary>
-    /// The channel ID where starred messages will be posted
+    ///     The channel ID where starred messages will be posted
     /// </summary>
     public ulong ChannelId { get; set; }
 
     /// <summary>
-    /// The emote to use for this starboard
+    ///     The emote to use for this starboard
     /// </summary>
     public string Emote { get; set; } = "⭐";
 
     /// <summary>
-    /// The number of reactions required to post a message
+    ///     The number of reactions required to post a message
     /// </summary>
     public int Threshold { get; set; } = 1;
 }

@@ -1,4 +1,5 @@
 ﻿// ReSharper disable NotNullOrRequiredMemberIsNotInitialized
+
 namespace Mewdeko.Common;
 
 /// <summary>

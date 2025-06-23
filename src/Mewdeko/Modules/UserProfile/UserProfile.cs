@@ -30,7 +30,8 @@ public class UserProfile(IDataConnectionFactory dbFactory) : MewdekoModuleBase<U
     }
 
     /// <summary>
-    /// Allows a user to toggle opting out of greet dms. Only works if the server they are joining uses mewdeko for dm greets.
+    ///     Allows a user to toggle opting out of greet dms. Only works if the server they are joining uses mewdeko for dm
+    ///     greets.
     /// </summary>
     [Cmd]
     [Aliases]

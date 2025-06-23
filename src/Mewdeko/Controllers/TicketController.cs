@@ -3,8 +3,6 @@ using DataModel;
 using Mewdeko.Modules.Tickets.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Serilog;
-using Embed = Discord.Embed;
 
 namespace Mewdeko.Controllers;
 
@@ -17,17 +15,20 @@ namespace Mewdeko.Controllers;
 public class TicketController : Controller
 {
     private readonly DiscordShardedClient client;
+    private readonly ILogger<TicketController> logger;
     private readonly TicketService ticketService;
+
 
     /// <summary>
     ///     Initializes a new instance of the TicketController
     /// </summary>
     /// <param name="ticketService">Service for managing ticket operations</param>
     /// <param name="client">Discord client instance</param>
-    public TicketController(TicketService ticketService, DiscordShardedClient client)
+    public TicketController(TicketService ticketService, DiscordShardedClient client, ILogger<TicketController> logger)
     {
         this.ticketService = ticketService;
         this.client = client;
+        this.logger = logger;
     }
 
     #region Panel Management
@@ -51,7 +52,7 @@ public class TicketController : Controller
             var result = await Task.WhenAll(panels.Select(async panel =>
             {
                 var channel = await guild.GetTextChannelAsync(panel.ChannelId);
-                SmartEmbed.TryParse(panel.EmbedJson, guildId, out Embed[]? embeds, out string? text, out var builder);
+                SmartEmbed.TryParse(panel.EmbedJson, guildId, out var embeds, out var text, out var builder);
                 return new
                 {
                     panel.Id,
@@ -70,7 +71,7 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error retrieving panels for guild {GuildId}", guildId);
+            logger.LogError(ex, "Error retrieving panels for guild {GuildId}", guildId);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -90,7 +91,7 @@ public class TicketController : Controller
             if (guild == null)
                 return NotFound("Guild not found");
 
-            Log.Information(JsonSerializer.Serialize(request));
+            logger.LogInformation(JsonSerializer.Serialize(request));
             var channel = await guild.GetTextChannelAsync(request.ChannelId);
             if (channel == null)
                 return NotFound("Channel not found");
@@ -117,7 +118,7 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error creating panel in guild {GuildId}", guildId);
+            logger.LogError(ex, "Error creating panel in guild {GuildId}", guildId);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -158,7 +159,7 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error deleting panel {PanelId} in guild {GuildId}", panelId, guildId);
+            logger.LogError(ex, "Error deleting panel {PanelId} in guild {GuildId}", panelId, guildId);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -187,7 +188,7 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error updating panel {PanelId} embed in guild {GuildId}", panelId, guildId);
+            logger.LogError(ex, "Error updating panel {PanelId} embed in guild {GuildId}", panelId, guildId);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -216,7 +217,7 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error moving panel {PanelId} in guild {GuildId}", panelId, guildId);
+            logger.LogError(ex, "Error moving panel {PanelId} in guild {GuildId}", panelId, guildId);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -257,7 +258,7 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error duplicating panel {PanelId} in guild {GuildId}", panelId, guildId);
+            logger.LogError(ex, "Error duplicating panel {PanelId} in guild {GuildId}", panelId, guildId);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -291,7 +292,7 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error recreating panel {PanelId} in guild {GuildId}", panelId, guildId);
+            logger.LogError(ex, "Error recreating panel {PanelId} in guild {GuildId}", panelId, guildId);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -311,7 +312,7 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error checking panel status for guild {GuildId}", guildId);
+            logger.LogError(ex, "Error checking panel status for guild {GuildId}", guildId);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -335,7 +336,7 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error recreating all panels for guild {GuildId}", guildId);
+            logger.LogError(ex, "Error recreating all panels for guild {GuildId}", guildId);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -360,7 +361,7 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error getting buttons for panel {PanelId} in guild {GuildId}", panelId, guildId);
+            logger.LogError(ex, "Error getting buttons for panel {PanelId} in guild {GuildId}", panelId, guildId);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -410,7 +411,7 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error adding button to panel {PanelId} in guild {GuildId}", panelId, guildId);
+            logger.LogError(ex, "Error adding button to panel {PanelId} in guild {GuildId}", panelId, guildId);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -473,7 +474,7 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error getting button {ButtonId} in guild {GuildId}", buttonId, guildId);
+            logger.LogError(ex, "Error getting button {ButtonId} in guild {GuildId}", buttonId, guildId);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -533,7 +534,7 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error updating button {ButtonId} in guild {GuildId}", buttonId, guildId);
+            logger.LogError(ex, "Error updating button {ButtonId} in guild {GuildId}", buttonId, guildId);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -560,7 +561,7 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error deleting button {ButtonId} in guild {GuildId}", buttonId, guildId);
+            logger.LogError(ex, "Error deleting button {ButtonId} in guild {GuildId}", buttonId, guildId);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -585,7 +586,7 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error getting select menus for panel {PanelId} in guild {GuildId}", panelId, guildId);
+            logger.LogError(ex, "Error getting select menus for panel {PanelId} in guild {GuildId}", panelId, guildId);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -621,7 +622,7 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error adding select menu to panel {PanelId} in guild {GuildId}", panelId, guildId);
+            logger.LogError(ex, "Error adding select menu to panel {PanelId} in guild {GuildId}", panelId, guildId);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -649,7 +650,7 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error updating select menu {MenuId} placeholder in guild {GuildId}", menuId, guildId);
+            logger.LogError(ex, "Error updating select menu {MenuId} placeholder in guild {GuildId}", menuId, guildId);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -701,7 +702,7 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error adding option to select menu {MenuId} in guild {GuildId}", menuId, guildId);
+            logger.LogError(ex, "Error adding option to select menu {MenuId} in guild {GuildId}", menuId, guildId);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -729,7 +730,7 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error deleting select menu {MenuId} in guild {GuildId}", menuId, guildId);
+            logger.LogError(ex, "Error deleting select menu {MenuId} in guild {GuildId}", menuId, guildId);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -757,7 +758,7 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error deleting select option {OptionId} in guild {GuildId}", optionId, guildId);
+            logger.LogError(ex, "Error deleting select option {OptionId} in guild {GuildId}", optionId, guildId);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -812,7 +813,7 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error getting ticket {TicketId} in guild {GuildId}", ticketId, guildId);
+            logger.LogError(ex, "Error getting ticket {TicketId} in guild {GuildId}", ticketId, guildId);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -863,7 +864,7 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error getting ticket by channel {ChannelId} in guild {GuildId}", channelId, guildId);
+            logger.LogError(ex, "Error getting ticket by channel {ChannelId} in guild {GuildId}", channelId, guildId);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -896,7 +897,7 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error claiming ticket in channel {ChannelId} in guild {GuildId}", channelId, guildId);
+            logger.LogError(ex, "Error claiming ticket in channel {ChannelId} in guild {GuildId}", channelId, guildId);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -930,7 +931,8 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error unclaiming ticket in channel {ChannelId} in guild {GuildId}", channelId, guildId);
+            logger.LogError(ex, "Error unclaiming ticket in channel {ChannelId} in guild {GuildId}", channelId,
+                guildId);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -959,7 +961,7 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error closing ticket in channel {ChannelId} in guild {GuildId}", channelId, guildId);
+            logger.LogError(ex, "Error closing ticket in channel {ChannelId} in guild {GuildId}", channelId, guildId);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -984,7 +986,7 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error archiving ticket {TicketId} in guild {GuildId}", ticketId, guildId);
+            logger.LogError(ex, "Error archiving ticket {TicketId} in guild {GuildId}", ticketId, guildId);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -1018,7 +1020,8 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error setting priority for ticket in channel {ChannelId} in guild {GuildId}", channelId,
+            logger.LogError(ex, "Error setting priority for ticket in channel {ChannelId} in guild {GuildId}",
+                channelId,
                 guildId);
             return StatusCode(500, "Internal server error");
         }
@@ -1052,7 +1055,8 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error adding tags to ticket in channel {ChannelId} in guild {GuildId}", channelId, guildId);
+            logger.LogError(ex, "Error adding tags to ticket in channel {ChannelId} in guild {GuildId}", channelId,
+                guildId);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -1086,7 +1090,7 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error removing tags from ticket in channel {ChannelId} in guild {GuildId}", channelId,
+            logger.LogError(ex, "Error removing tags from ticket in channel {ChannelId} in guild {GuildId}", channelId,
                 guildId);
             return StatusCode(500, "Internal server error");
         }
@@ -1120,7 +1124,8 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error adding note to ticket in channel {ChannelId} in guild {GuildId}", channelId, guildId);
+            logger.LogError(ex, "Error adding note to ticket in channel {ChannelId} in guild {GuildId}", channelId,
+                guildId);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -1164,7 +1169,7 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error getting cases for guild {GuildId}", guildId);
+            logger.LogError(ex, "Error getting cases for guild {GuildId}", guildId);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -1223,7 +1228,7 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error getting case {CaseId} in guild {GuildId}", caseId, guildId);
+            logger.LogError(ex, "Error getting case {CaseId} in guild {GuildId}", caseId, guildId);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -1260,7 +1265,7 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error creating case in guild {GuildId}", guildId);
+            logger.LogError(ex, "Error creating case in guild {GuildId}", guildId);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -1286,7 +1291,7 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error updating case {CaseId} in guild {GuildId}", caseId, guildId);
+            logger.LogError(ex, "Error updating case {CaseId} in guild {GuildId}", caseId, guildId);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -1312,7 +1317,7 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error closing case {CaseId} in guild {GuildId}", caseId, guildId);
+            logger.LogError(ex, "Error closing case {CaseId} in guild {GuildId}", caseId, guildId);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -1337,7 +1342,7 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error reopening case {CaseId} in guild {GuildId}", caseId, guildId);
+            logger.LogError(ex, "Error reopening case {CaseId} in guild {GuildId}", caseId, guildId);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -1363,7 +1368,7 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error linking tickets to case {CaseId} in guild {GuildId}", caseId, guildId);
+            logger.LogError(ex, "Error linking tickets to case {CaseId} in guild {GuildId}", caseId, guildId);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -1388,7 +1393,7 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error unlinking tickets in guild {GuildId}", guildId);
+            logger.LogError(ex, "Error unlinking tickets in guild {GuildId}", guildId);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -1420,7 +1425,7 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error adding note to case {CaseId} in guild {GuildId}", caseId, guildId);
+            logger.LogError(ex, "Error adding note to case {CaseId} in guild {GuildId}", caseId, guildId);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -1444,7 +1449,7 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error getting guild statistics for guild {GuildId}", guildId);
+            logger.LogError(ex, "Error getting guild statistics for guild {GuildId}", guildId);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -1465,7 +1470,7 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error getting user statistics for user {UserId} in guild {GuildId}", userId, guildId);
+            logger.LogError(ex, "Error getting user statistics for user {UserId} in guild {GuildId}", userId, guildId);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -1486,7 +1491,7 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error getting activity summary for guild {GuildId}", guildId);
+            logger.LogError(ex, "Error getting activity summary for guild {GuildId}", guildId);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -1519,7 +1524,7 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error getting staff response metrics for guild {GuildId}", guildId);
+            logger.LogError(ex, "Error getting staff response metrics for guild {GuildId}", guildId);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -1543,7 +1548,7 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error getting priorities for guild {GuildId}", guildId);
+            logger.LogError(ex, "Error getting priorities for guild {GuildId}", guildId);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -1575,7 +1580,7 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error creating priority in guild {GuildId}", guildId);
+            logger.LogError(ex, "Error creating priority in guild {GuildId}", guildId);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -1599,7 +1604,7 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error deleting priority {PriorityId} in guild {GuildId}", priorityId, guildId);
+            logger.LogError(ex, "Error deleting priority {PriorityId} in guild {GuildId}", priorityId, guildId);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -1619,7 +1624,7 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error getting tags for guild {GuildId}", guildId);
+            logger.LogError(ex, "Error getting tags for guild {GuildId}", guildId);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -1648,7 +1653,7 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error creating tag in guild {GuildId}", guildId);
+            logger.LogError(ex, "Error creating tag in guild {GuildId}", guildId);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -1672,7 +1677,7 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error deleting tag {TagId} in guild {GuildId}", tagId, guildId);
+            logger.LogError(ex, "Error deleting tag {TagId} in guild {GuildId}", tagId, guildId);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -1707,7 +1712,7 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error getting blacklisted users for guild {GuildId}", guildId);
+            logger.LogError(ex, "Error getting blacklisted users for guild {GuildId}", guildId);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -1736,7 +1741,7 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error blacklisting user {UserId} in guild {GuildId}", userId, guildId);
+            logger.LogError(ex, "Error blacklisting user {UserId} in guild {GuildId}", userId, guildId);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -1764,7 +1769,7 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error unblacklisting user {UserId} in guild {GuildId}", userId, guildId);
+            logger.LogError(ex, "Error unblacklisting user {UserId} in guild {GuildId}", userId, guildId);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -1797,7 +1802,7 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error closing inactive tickets in guild {GuildId}", guildId);
+            logger.LogError(ex, "Error closing inactive tickets in guild {GuildId}", guildId);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -1827,7 +1832,7 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error moving tickets in guild {GuildId}", guildId);
+            logger.LogError(ex, "Error moving tickets in guild {GuildId}", guildId);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -1860,7 +1865,7 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error adding role to tickets in guild {GuildId}", guildId);
+            logger.LogError(ex, "Error adding role to tickets in guild {GuildId}", guildId);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -1890,7 +1895,7 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error transferring tickets in guild {GuildId}", guildId);
+            logger.LogError(ex, "Error transferring tickets in guild {GuildId}", guildId);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -1915,7 +1920,7 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error setting transcript channel for guild {GuildId}", guildId);
+            logger.LogError(ex, "Error setting transcript channel for guild {GuildId}", guildId);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -1936,7 +1941,7 @@ public class TicketController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error setting log channel for guild {GuildId}", guildId);
+            logger.LogError(ex, "Error setting log channel for guild {GuildId}", guildId);
             return StatusCode(500, "Internal server error");
         }
     }

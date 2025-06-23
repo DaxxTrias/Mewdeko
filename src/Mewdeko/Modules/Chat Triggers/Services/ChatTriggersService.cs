@@ -14,7 +14,6 @@ using Mewdeko.Modules.Permissions.Common;
 using Mewdeko.Modules.Permissions.Services;
 using Mewdeko.Services.Settings;
 using Mewdeko.Services.Strings;
-using Serilog;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
 using CTModel = DataModel.ChatTrigger;
@@ -128,10 +127,12 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
     private readonly object gcrWriteLock = new();
     private readonly GlobalPermissionService gperm;
     private readonly GuildSettingsService guildSettings;
+    private readonly ILogger<ChatTriggersService> logger;
     private readonly PermissionService perms;
     private readonly IPubSub pubSub;
     private readonly Random rng;
     private readonly GeneratedBotStrings strings;
+
 
     // it is perfectly fine to have global chattriggers as an array
     // 1. custom reactions are almost never added (compared to how many times they are being looped through)
@@ -170,7 +171,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
         GuildSettingsService guildSettings,
         BotConfigService configService,
         IBotCredentials creds, GeneratedBotStrings strings,
-        EventHandler eventHandler)
+        EventHandler eventHandler, ILogger<ChatTriggersService> logger)
     {
         this.dbFactory = dbFactory;
         this.client = client;
@@ -184,6 +185,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
         this.creds = creds;
         this.strings = strings;
         this.eventHandler = eventHandler;
+        this.logger = logger;
         rng = new MewdekoRandom();
 
         pubSub.Sub(crsReloadedKey, OnCrsShouldReload);
@@ -271,7 +273,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
                             // Ignored
                         }
 
-                        Log.Information(returnMsg);
+                        logger.LogInformation(returnMsg);
                     }
 
                     return true;
@@ -283,7 +285,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
                     var user = msg.Author as IGuildUser;
                     if (!user.GuildPermissions.Has(guildPermission))
                     {
-                        Log.Information(
+                        logger.LogInformation(
                             "Chat Trigger {CtTrigger} Blocked for {MsgAuthor} in {Guild} due to them missing {Perms}",
                             ct.Trigger, msg.Author, guild, guildPermission);
                         return false;
@@ -323,7 +325,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
                 }
                 catch
                 {
-                    Log.Warning("Unable to add reactions to message {Message} in server {GuildId}", sentMsg.Id,
+                    logger.LogWarning("Unable to add reactions to message {Message} in server {GuildId}", sentMsg.Id,
                         ct.GuildId);
                     break;
                 }
@@ -371,7 +373,8 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
                     }
                     catch
                     {
-                        Log.Warning("Unable to modify the roles of {User} in {GuildId}", guildUser.Id, ct.GuildId);
+                        logger.LogWarning("Unable to modify the roles of {User} in {GuildId}", guildUser.Id,
+                            ct.GuildId);
                     }
                 }
             }
@@ -380,7 +383,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
         }
         catch (Exception ex)
         {
-            Log.Warning(ex.Message);
+            logger.LogWarning(ex.Message);
         }
 
         return false;
@@ -424,7 +427,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
         }
         catch (Exception e)
         {
-            Log.Error(e, "error adding trigger");
+            logger.LogError(e, "error adding trigger");
             throw;
         }
     }
@@ -496,7 +499,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
                                 // ignored
                             }
 
-                            Log.Information(returnMsg);
+                            logger.LogInformation(returnMsg);
 
                             return;
                         }
@@ -507,7 +510,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
                             var user = inter.User as IGuildUser;
                             if (!user.GuildPermissions.Has(guildPermission))
                             {
-                                Log.Information(
+                                logger.LogInformation(
                                     $"Chat Trigger {ct.Trigger} Blocked for {inter.User} in {guild} due to them missing {guildPermission}.");
                                 return;
                             }
@@ -552,7 +555,8 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
                         }
                         catch
                         {
-                            Log.Warning("Unable to add reactions to message {Message} in server {GuildId}", sentMsg.Id,
+                            logger.LogWarning("Unable to add reactions to message {Message} in server {GuildId}",
+                                sentMsg.Id,
                                 ct.GuildId);
                             break;
                         }
@@ -597,17 +601,15 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
                             }
                             catch
                             {
-                                Log.Warning("Unable to modify the roles of {User} in {GuildId}", guildUser.Id,
+                                logger.LogWarning("Unable to modify the roles of {User} in {GuildId}", guildUser.Id,
                                     ct.GuildId);
                             }
                         }
                     }
-
-                    return;
                 }
                 catch (Exception ex)
                 {
-                    Log.Warning(ex.Message);
+                    logger.LogWarning(ex.Message);
                 }
 
                 return;
@@ -657,7 +659,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
             catch (Exception ex)
             {
                 // Log and return false if deserialization fails
-                Log.Error(ex.ToString());
+                logger.LogError(ex.ToString());
                 return false;
             }
 
@@ -695,7 +697,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
         catch (Exception ex)
         {
             // Log and return false if an exception occurs
-            Log.Error(ex.ToString());
+            logger.LogError(ex.ToString());
             return false;
         }
 
@@ -709,14 +711,14 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
     /// <param name="allGuildIds">A list of all guild IDs.</param>
     private async Task ReloadInternal(IReadOnlyList<ulong> allGuildIds)
     {
-        Log.Information($"Starting {GetType()} Cache");
+        logger.LogInformation($"Starting {GetType()} Cache");
         await using var dbContext = await dbFactory.CreateConnectionAsync();
 
         // Add logging to debug the query
-        Log.Information("Retrieving guild chat triggers...");
+        logger.LogInformation("Retrieving guild chat triggers...");
         var guildItems = await dbContext.ChatTriggers
             .ToListAsync();
-        Log.Information($"Retrieved {guildItems.Count} total triggers");
+        logger.LogInformation($"Retrieved {guildItems.Count} total triggers");
 
         // More detailed logging
         newGuildReactions = guildItems
@@ -730,7 +732,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
                 }).ToArray())
             .ToConcurrent();
 
-        Log.Information($"Loaded {newGuildReactions.Count} guild trigger groups");
+        logger.LogInformation($"Loaded {newGuildReactions.Count} guild trigger groups");
 
         globalReactions = (await dbContext.ChatTriggers
                 .Where(x => x.GuildId == null || x.GuildId == 0)
@@ -742,7 +744,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
             })
             .ToArray();
 
-        Log.Information($"Loaded {globalReactions.Length} global triggers");
+        logger.LogInformation($"Loaded {globalReactions.Length} global triggers");
 
         ready = true;
     }
@@ -858,7 +860,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
                     // If the trigger has ContainsAnywhere enabled, check if it is contained as a word within the content
                     if (ct.ContainsAnywhere)
                     {
-                        var wp = Extensions.Extensions.GetWordPosition(content, trigger);
+                        var wp = content.GetWordPosition(trigger);
                         if (wp != WordPosition.None)
                             result.Add(ct);
                         continue;
@@ -1804,7 +1806,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error");
+            logger.LogError(ex, "Error");
         }
 
         try
@@ -1830,7 +1832,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error");
+            logger.LogError(ex, "Error");
         }
 
         if (!string.IsNullOrWhiteSpace(ct.ApplicationCommandDescription))
@@ -1978,7 +1980,8 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
     /// </summary>
     /// <param name="guildId">The ID of the guild.</param>
     /// <returns>
-    ///     A tuple containing a boolean indicating success and the application command properties if successful, otherwise null.
+    ///     A tuple containing a boolean indicating success and the application command properties if successful, otherwise
+    ///     null.
     /// </returns>
     public async Task<(bool, List<ApplicationCommandProperties>? props)> TryGetApplicationCommandProperties(
         ulong guildId)
@@ -2223,7 +2226,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
             }
             catch (Exception ex)
             {
-                Log.Warning(ex, "Error in reaction trigger {TriggerId} for guild {GuildId}", ct.Id, guild.Id);
+                logger.LogWarning(ex, "Error in reaction trigger {TriggerId} for guild {GuildId}", ct.Id, guild.Id);
             }
         }
     }
@@ -2298,7 +2301,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
             }
             catch
             {
-                Log.Warning("Unable to add reactions to message {Message} in server {GuildId}", sentMsg?.Id,
+                logger.LogWarning("Unable to add reactions to message {Message} in server {GuildId}", sentMsg?.Id,
                     ct.GuildId);
                 break;
             }
@@ -2326,7 +2329,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
         }
         catch (Exception ex)
         {
-            Log.Warning(ex, "Failed to increment usage count for trigger {TriggerId}", ct.Id);
+            logger.LogWarning(ex, "Failed to increment usage count for trigger {TriggerId}", ct.Id);
         }
     }
 
@@ -2344,7 +2347,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
     {
         try
         {
-            var guildUser = await guild.GetUserAsync(user.Id).ConfigureAwait(false) as IGuildUser;
+            var guildUser = await guild.GetUserAsync(user.Id).ConfigureAwait(false);
             if (guildUser is null)
                 return;
 
@@ -2362,7 +2365,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
                     var mentionedUserIds = message.Content?.GetUserMentions() ?? Enumerable.Empty<ulong>();
                     foreach (var userId in mentionedUserIds)
                     {
-                        var mentionedGuildUser = await guild.GetUserAsync(userId).ConfigureAwait(false) as IGuildUser;
+                        var mentionedGuildUser = await guild.GetUserAsync(userId).ConfigureAwait(false);
                         if (mentionedGuildUser is not null)
                             targetUsers.Add(mentionedGuildUser);
                     }
@@ -2373,7 +2376,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
                     var mentionedUserIds2 = message.Content?.GetUserMentions() ?? Enumerable.Empty<ulong>();
                     foreach (var userId in mentionedUserIds2)
                     {
-                        var mentionedGuildUser = await guild.GetUserAsync(userId).ConfigureAwait(false) as IGuildUser;
+                        var mentionedGuildUser = await guild.GetUserAsync(userId).ConfigureAwait(false);
                         if (mentionedGuildUser is not null && !targetUsers.Contains(mentionedGuildUser))
                             targetUsers.Add(mentionedGuildUser);
                     }
@@ -2421,7 +2424,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
         }
         catch (Exception ex)
         {
-            Log.Warning(ex, "Failed to handle role operations for trigger {TriggerId}", ct.Id);
+            logger.LogWarning(ex, "Failed to handle role operations for trigger {TriggerId}", ct.Id);
         }
     }
 

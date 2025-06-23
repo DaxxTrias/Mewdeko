@@ -4,7 +4,6 @@ using LinqToDB;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Modules.Administration.Common;
 using Mewdeko.Modules.Moderation.Services;
-using Serilog;
 
 namespace Mewdeko.Modules.Administration.Services;
 
@@ -23,6 +22,7 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
     private readonly IDataConnectionFactory dbFactory;
     private readonly EventHandler eventHandler;
     private readonly GuildSettingsService gss;
+    private readonly ILogger<ProtectionService> logger;
     private readonly MuteService mute;
     private readonly UserPunishService punishService;
 
@@ -47,13 +47,14 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
     /// <param name="gss">The guild settings service.</param>
     public ProtectionService(DiscordShardedClient client, Mewdeko bot,
         MuteService mute, IDataConnectionFactory dbFactory, UserPunishService punishService, EventHandler eventHandler,
-        GuildSettingsService gss)
+        GuildSettingsService gss, ILogger<ProtectionService> logger)
     {
         this.client = client;
         this.mute = mute;
         this.dbFactory = dbFactory;
         this.punishService = punishService;
         this.gss = gss;
+        this.logger = logger;
         this.eventHandler = eventHandler;
         this.bot = bot;
 
@@ -78,7 +79,7 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
             }
             catch (Exception ex)
             {
-                Log.Warning(ex, "Error initializing protections for Guild {GuildId}", guild.Id);
+                logger.LogWarning(ex, "Error initializing protections for Guild {GuildId}", guild.Id);
             }
         }
     }
@@ -121,7 +122,7 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
                 var currentUser = client.CurrentUser;
                 if (currentUser == null)
                 {
-                    Log.Warning("Cannot apply punishment; CurrentUser is null.");
+                    logger.LogWarning("Cannot apply punishment; CurrentUser is null.");
                     continue;
                 }
 
@@ -132,7 +133,7 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
             }
             catch (Exception ex)
             {
-                Log.Warning(ex, "Error in punish queue: {Message}", ex.Message);
+                logger.LogWarning(ex, "Error in punish queue: {Message}", ex.Message);
                 await Task.Delay(5000);
             }
         }
@@ -279,7 +280,7 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
             }
             catch (Exception ex)
             {
-                Log.Warning(ex, "Error processing anti-raid for user {UserId}", user.Id);
+                logger.LogWarning(ex, "Error processing anti-raid for user {UserId}", user.Id);
             }
         }
     }
@@ -329,7 +330,7 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
             }
             catch (Exception ex)
             {
-                Log.Warning(ex, "Error processing anti-spam for user {UserId}", msg.Author.Id);
+                logger.LogWarning(ex, "Error processing anti-spam for user {UserId}", msg.Author.Id);
             }
         });
         return Task.CompletedTask;
@@ -348,7 +349,8 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
     {
         if (gus == null || gus.Length == 0 || gus[0] == null) return;
 
-        Log.Information("[{PunishType}] - Punishing [{Count}] users with [{PunishAction}] in {GuildName} guild", pt,
+        logger.LogInformation("[{PunishType}] - Punishing [{Count}] users with [{PunishAction}] in {GuildName} guild",
+            pt,
             gus.Length, action, gus[0].Guild.Name);
 
         foreach (var gu in gus)
@@ -468,7 +470,7 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
             }
             catch (Exception ex)
             {
-                Log.Warning(ex, "Error processing anti-mass-mention for user {UserId}", msg.Author.Id);
+                logger.LogWarning(ex, "Error processing anti-mass-mention for user {UserId}", msg.Author.Id);
             }
         });
         return Task.CompletedTask;
@@ -581,7 +583,10 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
     /// <param name="guildId">The ID of the guild to start the protection for.</param>
     /// <param name="mentionThreshold">The number of mentions allowed in a single message before triggering protection.</param>
     /// <param name="timeWindowSeconds">The time window in seconds during which mentions are tracked.</param>
-    /// <param name="maxMentionsInTimeWindow">The maximum number of mentions allowed within the specified time window before triggering protection.</param>
+    /// <param name="maxMentionsInTimeWindow">
+    ///     The maximum number of mentions allowed within the specified time window before
+    ///     triggering protection.
+    /// </param>
     /// <param name="ignoreBots">Whether to ignore bots.</param>
     /// <param name="action">The punishment action to be applied when the protection is triggered.</param>
     /// <param name="muteTime">The duration of the mute punishment in minutes, if applicable.</param>
@@ -660,7 +665,7 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
 
         if (spamSettingId is null)
         {
-            Log.Warning("Attempted to modify AntiSpamIgnore for non-existent AntiSpamSetting GuildId: {GuildId}",
+            logger.LogWarning("Attempted to modify AntiSpamIgnore for non-existent AntiSpamSetting GuildId: {GuildId}",
                 guildId);
             return null;
         }

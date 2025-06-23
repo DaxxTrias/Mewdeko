@@ -3,12 +3,11 @@ using DataModel;
 using LinqToDB;
 using LinqToDB.Data;
 using Mewdeko.Common.ModuleBehaviors;
-using Serilog;
 
 namespace Mewdeko.Modules.Utility.Services;
 
 /// <summary>
-/// Invite Count Service
+///     Invite Count Service
 /// </summary>
 public class InviteCountService : INService, IReadyExecutor
 {
@@ -16,17 +15,20 @@ public class InviteCountService : INService, IReadyExecutor
     private readonly IDataConnectionFactory dbFactory;
     private readonly ConcurrentDictionary<ulong, ConcurrentDictionary<string, IInviteMetadata>> guildInvites = new();
     private readonly ConcurrentDictionary<ulong, InviteCountSetting> inviteCountSettings = new();
+    private readonly ILogger<InviteCountService> logger;
 
     /// <summary>
-    /// Service for counting invites
+    ///     Service for counting invites
     /// </summary>
     /// <param name="handler"></param>
     /// <param name="dbFactory"></param>
     /// <param name="client"></param>
-    public InviteCountService(EventHandler handler, IDataConnectionFactory dbFactory, DiscordShardedClient client)
+    public InviteCountService(EventHandler handler, IDataConnectionFactory dbFactory, DiscordShardedClient client,
+        ILogger<InviteCountService> logger)
     {
         this.dbFactory = dbFactory;
         this.client = client;
+        this.logger = logger;
 
         handler.JoinedGuild += UpdateGuildInvites;
         handler.UserJoined += OnUserJoined;
@@ -69,7 +71,7 @@ public class InviteCountService : INService, IReadyExecutor
         {
             var table = uow.GetTable<InviteCountSetting>();
             await table.BulkCopyAsync(newSettingsList);
-            Log.Information("Bulk inserted {Count} new invite settings", newSettingsList.Count);
+            logger.LogInformation("Bulk inserted {Count} new invite settings", newSettingsList.Count);
         }
 
 
@@ -110,7 +112,7 @@ public class InviteCountService : INService, IReadyExecutor
     }
 
     /// <summary>
-    /// Gets invite count settings for the guild
+    ///     Gets invite count settings for the guild
     /// </summary>
     /// <param name="guildId"></param>
     /// <returns></returns>
@@ -159,7 +161,7 @@ public class InviteCountService : INService, IReadyExecutor
     }
 
     /// <summary>
-    /// Sets whether invite tracking is enabled or disabled
+    ///     Sets whether invite tracking is enabled or disabled
     /// </summary>
     /// <param name="guildId"></param>
     /// <param name="isEnabled"></param>
@@ -171,7 +173,7 @@ public class InviteCountService : INService, IReadyExecutor
     }
 
     /// <summary>
-    /// Sets whether invite count gets removed when a user leaves
+    ///     Sets whether invite count gets removed when a user leaves
     /// </summary>
     /// <param name="guildId"></param>
     /// <param name="removeOnLeave"></param>
@@ -183,7 +185,7 @@ public class InviteCountService : INService, IReadyExecutor
     }
 
     /// <summary>
-    /// Sets the minimum account age for an invite to get counted
+    ///     Sets the minimum account age for an invite to get counted
     /// </summary>
     /// <param name="guildId"></param>
     /// <param name="minAge"></param>
@@ -299,7 +301,7 @@ public class InviteCountService : INService, IReadyExecutor
     }
 
     /// <summary>
-    /// Gets the invite count for a user
+    ///     Gets the invite count for a user
     /// </summary>
     /// <param name="userId"></param>
     /// <param name="guildId"></param>
@@ -316,7 +318,7 @@ public class InviteCountService : INService, IReadyExecutor
     }
 
     /// <summary>
-    /// Gets who invited a user
+    ///     Gets who invited a user
     /// </summary>
     /// <param name="userId"></param>
     /// <param name="guild"></param>
@@ -333,7 +335,7 @@ public class InviteCountService : INService, IReadyExecutor
     }
 
     /// <summary>
-    /// Gets all users invited by a user
+    ///     Gets all users invited by a user
     /// </summary>
     /// <param name="inviterId"></param>
     /// <param name="guild"></param>
@@ -358,7 +360,7 @@ public class InviteCountService : INService, IReadyExecutor
     }
 
     /// <summary>
-    /// Gets the invite leaderboard
+    ///     Gets the invite leaderboard
     /// </summary>
     /// <param name="guild"></param>
     /// <param name="page"></param>

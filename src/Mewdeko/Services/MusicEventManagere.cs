@@ -7,41 +7,45 @@ using Lavalink4NET.Events.Players;
 using Lavalink4NET.Players;
 using Mewdeko.Modules.Music.CustomPlayer;
 using Microsoft.AspNetCore.Http;
-using Serilog;
 
 namespace Mewdeko.Services;
 
 /// <summary>
-/// Manages real-time music event notifications for WebSockets and SSE
+///     Manages real-time music event notifications for WebSockets and SSE
 /// </summary>
 public class MusicEventManager : INService, IDisposable
 {
-    private readonly IDataCache cache;
     private readonly IAudioService audioService;
+
+    // Semaphore to prevent simultaneous broadcasts
+    private readonly SemaphoreSlim broadcastSemaphore = new(1, 1);
+    private readonly IDataCache cache;
     private readonly DiscordShardedClient client;
-
-    // Track WebSocket connections by guild ID - store both WebSocket and userId
-    private readonly ConcurrentDictionary<ulong, ConcurrentDictionary<string, (WebSocket Socket, ulong UserId)>> webSocketConnections = new();
-
-    // Track SSE connections by guild ID - store both callback and userId
-    private readonly ConcurrentDictionary<ulong, ConcurrentDictionary<string, (Func<object, Task> Callback, ulong UserId)>> sseCallbacks = new();
+    private readonly ILogger<MusicEventManager> logger;
 
     // Track active guilds with music players
     private readonly ConcurrentDictionary<ulong, Timer> positionUpdateTimers = new();
 
-    // Semaphore to prevent simultaneous broadcasts
-    private readonly SemaphoreSlim broadcastSemaphore = new(1, 1);
+    // Track SSE connections by guild ID - store both callback and userId
+    private readonly
+        ConcurrentDictionary<ulong, ConcurrentDictionary<string, (Func<object, Task> Callback, ulong UserId)>>
+        sseCallbacks = new();
+
+    // Track WebSocket connections by guild ID - store both WebSocket and userId
+    private readonly ConcurrentDictionary<ulong, ConcurrentDictionary<string, (WebSocket Socket, ulong UserId)>>
+        webSocketConnections = new();
 
     /// <summary>
-    /// Constructor
+    ///     Constructor
     /// </summary>
     public MusicEventManager(
         IDataCache cache,
-        IAudioService audioService, DiscordShardedClient client)
+        IAudioService audioService, DiscordShardedClient client, ILogger<MusicEventManager> logger)
     {
         this.cache = cache;
         this.audioService = audioService;
         this.client = client;
+        this.logger = logger;
 
         // Listen for Lavalink player events
         this.audioService.TrackStarted += OnTrackStarted;
@@ -49,7 +53,26 @@ public class MusicEventManager : INService, IDisposable
     }
 
     /// <summary>
-    /// Handle a new WebSocket connection
+    ///     Cleanup resources
+    /// </summary>
+    public void Dispose()
+    {
+        // Clean up event handlers
+        audioService.TrackStarted -= OnTrackStarted;
+        audioService.TrackEnded -= OnTrackEnded;
+
+        // Dispose all timers
+        foreach (var timer in positionUpdateTimers.Values)
+        {
+            timer.Dispose();
+        }
+
+        positionUpdateTimers.Clear();
+        broadcastSemaphore.Dispose();
+    }
+
+    /// <summary>
+    ///     Handle a new WebSocket connection
     /// </summary>
     public async Task HandleWebSocketConnection(ulong guildId, ulong userId, WebSocket webSocket, HttpContext context)
     {
@@ -89,11 +112,11 @@ public class MusicEventManager : INService, IDisposable
         }
         catch (WebSocketException ex)
         {
-            Log.Debug(ex, "WebSocket closed: {ConnectionId}", connectionId);
+            logger.LogDebug(ex, "WebSocket closed: {ConnectionId}", connectionId);
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error in WebSocket connection for guild {GuildId}", guildId);
+            logger.LogError(ex, "Error in WebSocket connection for guild {GuildId}", guildId);
 
             // Attempt to close socket if still open
             try
@@ -119,19 +142,19 @@ public class MusicEventManager : INService, IDisposable
     }
 
     /// <summary>
-    /// Register a new WebSocket connection
+    ///     Register a new WebSocket connection
     /// </summary>
     private void RegisterWebSocketConnection(ulong guildId, string connectionId, WebSocket webSocket, ulong userId)
     {
         var guildConnections = webSocketConnections.GetOrAdd(guildId, _ =>
             new ConcurrentDictionary<string, (WebSocket, ulong)>());
         guildConnections[connectionId] = (webSocket, userId);
-        Log.Debug("Registered WebSocket connection {ConnectionId} for guild {GuildId} and user {UserId}",
+        logger.LogDebug("Registered WebSocket connection {ConnectionId} for guild {GuildId} and user {UserId}",
             connectionId, guildId, userId);
     }
 
     /// <summary>
-    /// Unregister a WebSocket connection
+    ///     Unregister a WebSocket connection
     /// </summary>
     private void UnregisterWebSocketConnection(ulong guildId, string connectionId)
     {
@@ -146,12 +169,13 @@ public class MusicEventManager : INService, IDisposable
                 StopPositionUpdates(guildId);
             }
 
-            Log.Debug("Unregistered WebSocket connection {ConnectionId} for guild {GuildId}", connectionId, guildId);
+            logger.LogDebug("Unregistered WebSocket connection {ConnectionId} for guild {GuildId}", connectionId,
+                guildId);
         }
     }
 
     /// <summary>
-    /// Register a new SSE connection
+    ///     Register a new SSE connection
     /// </summary>
     public void RegisterSseConnection(ulong guildId, string connectionId, Func<object, Task> callback, ulong userId)
     {
@@ -162,12 +186,12 @@ public class MusicEventManager : INService, IDisposable
         // Ensure position updates are active for this guild
         EnsurePositionUpdatesActive(guildId);
 
-        Log.Debug("Registered SSE connection {ConnectionId} for guild {GuildId} and user {UserId}",
+        logger.LogDebug("Registered SSE connection {ConnectionId} for guild {GuildId} and user {UserId}",
             connectionId, guildId, userId);
     }
 
     /// <summary>
-    /// Unregister an SSE connection
+    ///     Unregister an SSE connection
     /// </summary>
     public void UnregisterSseConnection(ulong guildId, string connectionId)
     {
@@ -187,12 +211,12 @@ public class MusicEventManager : INService, IDisposable
                 }
             }
 
-            Log.Debug("Unregistered SSE connection {ConnectionId} for guild {GuildId}", connectionId, guildId);
+            logger.LogDebug("Unregistered SSE connection {ConnectionId} for guild {GuildId}", connectionId, guildId);
         }
     }
 
     /// <summary>
-    /// Ensure position updates are active for a guild
+    ///     Ensure position updates are active for a guild
     /// </summary>
     private void EnsurePositionUpdatesActive(ulong guildId)
     {
@@ -208,29 +232,30 @@ public class MusicEventManager : INService, IDisposable
             500);
 
         positionUpdateTimers[guildId] = timer;
-        Log.Debug("Started position updates for guild {GuildId}", guildId);
+        logger.LogDebug("Started position updates for guild {GuildId}", guildId);
     }
 
     /// <summary>
-    /// Stop position updates for a guild
+    ///     Stop position updates for a guild
     /// </summary>
     private void StopPositionUpdates(ulong guildId)
     {
         if (positionUpdateTimers.TryRemove(guildId, out var timer))
         {
             timer.Dispose();
-            Log.Debug("Stopped position updates for guild {GuildId}", guildId);
+            logger.LogDebug("Stopped position updates for guild {GuildId}", guildId);
         }
     }
 
     /// <summary>
-    /// Broadcast position updates for a guild
+    ///     Broadcast position updates for a guild
     /// </summary>
     private async Task BroadcastPositionUpdate(ulong guildId)
     {
         try
         {
-            var hasWebSocketClients = webSocketConnections.TryGetValue(guildId, out var connections) && connections.Count > 0;
+            var hasWebSocketClients =
+                webSocketConnections.TryGetValue(guildId, out var connections) && connections.Count > 0;
             var hasSseClients = sseCallbacks.TryGetValue(guildId, out var callbacks) && callbacks.Count > 0;
 
             // Skip if no clients
@@ -277,9 +302,9 @@ public class MusicEventManager : INService, IDisposable
                             {
                                 CurrentTrack = currentTrack,
                                 Queue = queue,
-                                State = player.State,
-                                Volume = player.Volume,
-                                Position = player.Position,
+                                player.State,
+                                player.Volume,
+                                player.Position,
                                 RepeatMode = settings.PlayerRepeat,
                                 Filters = new
                                 {
@@ -307,7 +332,7 @@ public class MusicEventManager : INService, IDisposable
                         }
                         catch (Exception ex)
                         {
-                            Log.Error(ex, "Error sending position update to WebSocket client {ConnectionId}", id);
+                            logger.LogError(ex, "Error sending position update to WebSocket client {ConnectionId}", id);
                             deadConnections.Add(id);
                         }
                     }
@@ -353,9 +378,9 @@ public class MusicEventManager : INService, IDisposable
                         {
                             CurrentTrack = currentTrack,
                             Queue = queue,
-                            State = player.State,
-                            Volume = player.Volume,
-                            Position = player.Position,
+                            player.State,
+                            player.Volume,
+                            player.Position,
                             RepeatMode = settings.PlayerRepeat,
                             Filters = new
                             {
@@ -376,7 +401,7 @@ public class MusicEventManager : INService, IDisposable
                     }
                     catch (Exception ex)
                     {
-                        Log.Error(ex, "Error sending position update to SSE client {ConnectionId}", id);
+                        logger.LogError(ex, "Error sending position update to SSE client {ConnectionId}", id);
                         deadCallbacks.Add(id);
                     }
                 }
@@ -401,12 +426,12 @@ public class MusicEventManager : INService, IDisposable
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error broadcasting position update for guild {GuildId}", guildId);
+            logger.LogError(ex, "Error broadcasting position update for guild {GuildId}", guildId);
         }
     }
 
     /// <summary>
-    /// Send initial player status to a client
+    ///     Send initial player status to a client
     /// </summary>
     private async Task SendInitialStatus(ulong guildId, ulong userId, WebSocket webSocket)
     {
@@ -424,18 +449,18 @@ public class MusicEventManager : INService, IDisposable
             var queue = await cache.GetMusicQueue(guildId);
             var settings = await cache.GetMusicPlayerSettings(guildId);
 
-            Log.Information("Current track from cache: {Track}",
+            logger.LogInformation("Current track from cache: {Track}",
                 JsonSerializer.Serialize(currentTrack));
-            Log.Information("User in voice channel: {InVoiceChannel}, User: {UserId}, Bot channel: {BotChannel}",
+            logger.LogInformation("User in voice channel: {InVoiceChannel}, User: {UserId}, Bot channel: {BotChannel}",
                 isInVoiceChannel, userId, botVoiceChannel);
 
             var status = new
             {
                 CurrentTrack = currentTrack,
                 Queue = queue,
-                State = player.State,
-                Volume = player.Volume,
-                Position = player.Position,
+                player.State,
+                player.Volume,
+                player.Position,
                 RepeatMode = settings.PlayerRepeat,
                 Filters = new
                 {
@@ -454,16 +479,17 @@ public class MusicEventManager : INService, IDisposable
 
             var jsonString = JsonSerializer.Serialize(status);
             var buffer = Encoding.UTF8.GetBytes(jsonString);
-            await webSocket.SendAsync(new ArraySegment<byte>(buffer), WebSocketMessageType.Text, true, CancellationToken.None);
+            await webSocket.SendAsync(new ArraySegment<byte>(buffer), WebSocketMessageType.Text, true,
+                CancellationToken.None);
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error sending initial status to client for guild {GuildId}", guildId);
+            logger.LogError(ex, "Error sending initial status to client for guild {GuildId}", guildId);
         }
     }
 
     /// <summary>
-    /// Broadcast player update to all connected clients for a guild
+    ///     Broadcast player update to all connected clients for a guild
     /// </summary>
     public async Task BroadcastPlayerUpdate(ulong guildId)
     {
@@ -472,7 +498,8 @@ public class MusicEventManager : INService, IDisposable
 
         try
         {
-            var hasWebSocketClients = webSocketConnections.TryGetValue(guildId, out var connections) && connections.Count > 0;
+            var hasWebSocketClients =
+                webSocketConnections.TryGetValue(guildId, out var connections) && connections.Count > 0;
             var hasSseClients = sseCallbacks.TryGetValue(guildId, out var callbacks) && callbacks.Count > 0;
 
             // Skip if no clients
@@ -506,9 +533,9 @@ public class MusicEventManager : INService, IDisposable
                             {
                                 CurrentTrack = currentTrack,
                                 Queue = queue,
-                                State = player.State,
-                                Volume = player.Volume,
-                                Position = player.Position,
+                                player.State,
+                                player.Volume,
+                                player.Position,
                                 RepeatMode = settings.PlayerRepeat,
                                 Filters = new
                                 {
@@ -536,7 +563,7 @@ public class MusicEventManager : INService, IDisposable
                         }
                         catch (Exception ex)
                         {
-                            Log.Error(ex, "Error sending WebSocket update to client {ConnectionId}", id);
+                            logger.LogError(ex, "Error sending WebSocket update to client {ConnectionId}", id);
                             deadConnections.Add(id);
                         }
                     }
@@ -570,9 +597,9 @@ public class MusicEventManager : INService, IDisposable
                         {
                             CurrentTrack = currentTrack,
                             Queue = queue,
-                            State = player.State,
-                            Volume = player.Volume,
-                            Position = player.Position,
+                            player.State,
+                            player.Volume,
+                            player.Position,
                             RepeatMode = settings.PlayerRepeat,
                             Filters = new
                             {
@@ -593,7 +620,7 @@ public class MusicEventManager : INService, IDisposable
                     }
                     catch (Exception ex)
                     {
-                        Log.Error(ex, "Error sending SSE update to client {ConnectionId}", id);
+                        logger.LogError(ex, "Error sending SSE update to client {ConnectionId}", id);
                         deadCallbacks.Add(id);
                     }
                 }
@@ -607,7 +634,7 @@ public class MusicEventManager : INService, IDisposable
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error broadcasting player update for guild {GuildId}", guildId);
+            logger.LogError(ex, "Error broadcasting player update for guild {GuildId}", guildId);
         }
         finally
         {
@@ -616,7 +643,7 @@ public class MusicEventManager : INService, IDisposable
     }
 
     /// <summary>
-    /// Handle track started events
+    ///     Handle track started events
     /// </summary>
     private async Task OnTrackStarted(object sender, TrackStartedEventArgs eventArgs)
     {
@@ -628,7 +655,7 @@ public class MusicEventManager : INService, IDisposable
     }
 
     /// <summary>
-    /// Handle track ended events
+    ///     Handle track ended events
     /// </summary>
     private async Task OnTrackEnded(object sender, TrackEndedEventArgs eventArgs)
     {
@@ -636,24 +663,5 @@ public class MusicEventManager : INService, IDisposable
         {
             await BroadcastPlayerUpdate(player.GuildId);
         }
-    }
-
-    /// <summary>
-    /// Cleanup resources
-    /// </summary>
-    public void Dispose()
-    {
-        // Clean up event handlers
-        audioService.TrackStarted -= OnTrackStarted;
-        audioService.TrackEnded -= OnTrackEnded;
-
-        // Dispose all timers
-        foreach (var timer in positionUpdateTimers.Values)
-        {
-            timer.Dispose();
-        }
-
-        positionUpdateTimers.Clear();
-        broadcastSemaphore.Dispose();
     }
 }

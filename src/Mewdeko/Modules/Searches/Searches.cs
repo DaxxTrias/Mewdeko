@@ -20,7 +20,6 @@ using Mewdeko.Services.Settings;
 using Microsoft.Extensions.Caching.Memory;
 using Newtonsoft.Json.Linq;
 using Refit;
-using Serilog;
 using SkiaSharp;
 
 namespace Mewdeko.Modules.Searches;
@@ -45,7 +44,8 @@ public partial class Searches(
     InteractiveService serv,
     MartineApi martineApi,
     ToneTagService toneTagService,
-    BotConfigService config)
+    BotConfigService config,
+    ILogger<Searches> logger)
     : MewdekoModuleBase<SearchesService>
 {
     private static readonly ConcurrentDictionary<string, string> CachedShortenedLinks = new();
@@ -128,7 +128,7 @@ public partial class Searches(
         {
             await msg.DeleteAsync().ConfigureAwait(false);
             await ctx.Channel.SendErrorAsync(Strings.SubredditNotFound(ctx.Guild.Id), Config);
-            Log.Error(
+            logger.LogError(
                 $"Seems that Meme fetching has failed. Here's the error:\nCode: {ex.StatusCode}\nContent: {(ex.HasContent ? ex.Content : "No Content.")}");
             return;
         }
@@ -501,7 +501,7 @@ public partial class Searches(
             var errorMsg = await ctx.Channel.SendErrorAsync(Strings.FetchFailed(ctx.Guild.Id), Config);
 
 
-            Log.Error(
+            logger.LogError(
                 "Image fetch failed. Error:\nCode: {StatusCode}\nContent: {Content}",
                 ex.StatusCode,
                 ex.HasContent ? ex.Content : "No Content"
@@ -683,7 +683,7 @@ public partial class Searches(
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Error shortening a link: {Message}", ex.Message);
+                logger.LogError(ex, "Error shortening a link: {Message}", ex.Message);
                 return;
             }
         }
@@ -848,7 +848,7 @@ public partial class Searches(
 
             if (!datas.Any())
             {
-                Log.Warning("Definition not found: {Word}", word);
+                logger.LogWarning("Definition not found: {Word}", word);
                 await ReplyErrorAsync(Strings.DefineUnknown(ctx.Guild.Id)).ConfigureAwait(false);
             }
 
@@ -863,7 +863,7 @@ public partial class Searches(
                 WordType: string.IsNullOrWhiteSpace(tuple.PartOfSpeech) ? "-" : tuple.PartOfSpeech
             )).ToList();
 
-            Log.Information($"Sending {col.Count} definition for: {word}");
+            logger.LogInformation($"Sending {col.Count} definition for: {word}");
 
             var paginator = new LazyPaginatorBuilder()
                 .AddUser(ctx.User)
@@ -895,7 +895,7 @@ public partial class Searches(
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error retrieving definition data for: {Word}", word);
+            logger.LogError(ex, "Error retrieving definition data for: {Word}", word);
         }
     }
 

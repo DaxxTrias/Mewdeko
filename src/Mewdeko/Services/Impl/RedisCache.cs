@@ -252,7 +252,7 @@ public class RedisCache : IDataCache
         return Redis.GetDatabase().StringSetAsync(
             $"{redisKey}:music:player_state:{guildId}",
             JsonSerializer.Serialize(state),
-            expiry: TimeSpan.FromHours(1));
+            TimeSpan.FromHours(1));
     }
 
     /// <summary>

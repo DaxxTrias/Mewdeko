@@ -1,7 +1,6 @@
 ﻿using Mewdeko.Modules.Votes.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Serilog;
 
 namespace Mewdeko.Controllers;
 
@@ -9,7 +8,7 @@ namespace Mewdeko.Controllers;
 [ApiController]
 [Route("votes/")]
 [Authorize("TopggPolicy")]
-public class WebhookController(VoteService service) : Controller
+public class WebhookController(VoteService service, ILogger<WebhookController> logger) : Controller
 {
     /// <summary>
     ///     The vote webhook handler
@@ -19,7 +18,7 @@ public class WebhookController(VoteService service) : Controller
     [HttpPost]
     public async Task<IActionResult> TopggWebhook([FromBody] VoteModel data)
     {
-        Log.Information("User {UserId} has voted for Bot {BotId} on {Platform}",
+        logger.LogInformation("User {UserId} has voted for Bot {BotId} on {Platform}",
             data.User,
             data.Bot,
             "top.gg");

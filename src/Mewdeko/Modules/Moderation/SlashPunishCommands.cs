@@ -1,4 +1,5 @@
-﻿using Discord.Interactions;
+﻿using DataModel;
+using Discord.Interactions;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
 using Humanizer;
@@ -10,8 +11,6 @@ using Mewdeko.Modules.Administration.Common;
 using Mewdeko.Modules.Moderation.Common;
 using Mewdeko.Modules.Moderation.Services;
 using NekosBestApiNet;
-using Serilog;
-using DataModel;
 using Swan;
 
 namespace Mewdeko.Modules.Moderation;
@@ -25,7 +24,9 @@ public class SlashPunishCommands : MewdekoSlashSubmodule<UserPunishService>
 {
     private readonly IDataConnectionFactory dbFactory;
     private readonly InteractiveService interactivity;
+    private readonly ILogger<SlashPunishCommands> logger;
     private readonly NekosBestApi nekos;
+
 
     /// <summary>
     ///     Initializes a new instance of <see cref="SlashPunishCommands" />.
@@ -35,10 +36,11 @@ public class SlashPunishCommands : MewdekoSlashSubmodule<UserPunishService>
     /// <param name="nekos">The service used to get anime gifs from the nekos.best api</param>
     public SlashPunishCommands(IDataConnectionFactory dbFactory,
         InteractiveService serv,
-        NekosBestApi nekos)
+        NekosBestApi nekos, ILogger<SlashPunishCommands> logger)
     {
         interactivity = serv;
         this.nekos = nekos;
+        this.logger = logger;
         this.dbFactory = dbFactory;
     }
 
@@ -172,7 +174,7 @@ public class SlashPunishCommands : MewdekoSlashSubmodule<UserPunishService>
         }
         catch (Exception ex)
         {
-            Log.Warning(ex.Message);
+            logger.LogWarning(ex.Message);
             var errorEmbed = new EmbedBuilder()
                 .WithErrorColor()
                 .WithDescription(Strings.CantApplyPunishment(ctx.Guild.Id));

@@ -22,7 +22,6 @@ using Mewdeko.Services.strings;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Scripting;
 using Microsoft.CodeAnalysis.Scripting;
-using Serilog;
 
 namespace Mewdeko.Modules.OwnerOnly;
 
@@ -59,7 +58,8 @@ public class OwnerOnly(
     CommandHandler commandHandler,
     BotConfig botConfig,
     HttpClient httpClient,
-    Localization localization)
+    Localization localization,
+    ILogger<OwnerOnly> logger)
     : MewdekoModuleBase<OwnerOnlyService>
 {
     /// <summary>
@@ -231,7 +231,7 @@ public class OwnerOnly(
     }
 
     /// <summary>
-    /// Generates command documentation YML files
+    ///     Generates command documentation YML files
     /// </summary>
     [Cmd]
     [Aliases]
@@ -247,7 +247,7 @@ public class OwnerOnly(
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error generating command documentation");
+            logger.LogError(ex, "Error generating command documentation");
             await ctx.Channel.SendMessageAsync(Strings.DocsError(ctx.Guild.Id));
         }
     }
@@ -1174,7 +1174,7 @@ public class OwnerOnly(
         }
         catch (RateLimitedException)
         {
-            Log.Warning("You've been ratelimited. Wait 2 hours to change your name");
+            logger.LogWarning("You've been ratelimited. Wait 2 hours to change your name");
         }
 
         await ReplyConfirmAsync(Strings.BotName(ctx.Guild.Id, Format.Bold(newName))).ConfigureAwait(false);

@@ -4,7 +4,6 @@ using Mewdeko.Common.TypeReaders.Models;
 using Mewdeko.Modules.Afk.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Serilog;
 
 namespace Mewdeko.Controllers;
 
@@ -19,6 +18,7 @@ public class AfkController : Controller
     private readonly AfkService afk;
     private readonly DiscordShardedClient client;
     private readonly IDataConnectionFactory dbFactory;
+    private readonly ILogger<AfkController> logger;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="AfkController" /> class.
@@ -26,11 +26,13 @@ public class AfkController : Controller
     /// <param name="afk">The AFK service instance.</param>
     /// <param name="client">The Discord sharded client instance.</param>
     /// <param name="dbFactory">The factory for creating database connections.</param>
-    public AfkController(AfkService afk, DiscordShardedClient client, IDataConnectionFactory dbFactory)
+    public AfkController(AfkService afk, DiscordShardedClient client, IDataConnectionFactory dbFactory,
+        ILogger<AfkController> logger)
     {
         this.afk = afk;
         this.client = client;
         this.dbFactory = dbFactory;
+        this.logger = logger;
     }
 
     /// <summary>
@@ -116,7 +118,7 @@ public class AfkController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Failed to retrieve AFK statuses for guild {GuildId}", guildId);
+            logger.LogError(ex, "Failed to retrieve AFK statuses for guild {GuildId}", guildId);
             return StatusCode(500, "Failed to retrieve AFK data."); // Internal Server Error
         }
 

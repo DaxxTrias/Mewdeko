@@ -1,9 +1,8 @@
 using System.Net.Http;
 using System.Threading;
-using LinqToDB;
 using DataModel;
+using LinqToDB;
 using Mewdeko.Modules.Nsfw.Common;
-using Serilog;
 
 namespace Mewdeko.Modules.Nsfw;
 
@@ -45,7 +44,7 @@ public class SearchImagesService : ISearchImagesService, INService
 {
     private readonly SearchImageCacher cache;
     private readonly IDataConnectionFactory dbFactory;
-    private readonly GuildSettingsService service;
+    private readonly ILogger<SearchImagesService> logger;
 
     /// <summary>
     ///     Initializes a new instance of the SearchImagesService class.
@@ -57,14 +56,13 @@ public class SearchImagesService : ISearchImagesService, INService
     public SearchImagesService(
         IHttpClientFactory http,
         SearchImageCacher cacher,
-        IDataConnectionFactory dbFactory,
-        GuildSettingsService service)
+        IDataConnectionFactory dbFactory, ILogger<SearchImagesService> logger)
     {
         var http1 = http.CreateClient();
         http1.AddFakeHeaders();
         cache = cacher;
         this.dbFactory = dbFactory;
-        this.service = service;
+        this.logger = logger;
     }
 
     /// <summary>
@@ -260,8 +258,7 @@ public class SearchImagesService : ISearchImagesService, INService
     {
         var tagObj = new NsfwBlacklistedTag
         {
-            GuildId = guildId,
-            Tag = tag
+            GuildId = guildId, Tag = tag
         };
 
         bool added;
@@ -334,7 +331,7 @@ public class SearchImagesService : ISearchImagesService, INService
             };
         }
 #if DEBUG
-        Log.Information("Getting {V} image for Guild: {GuildId}...", dapi.ToString(), guildId);
+        logger.LogInformation("Getting {V} image for Guild: {GuildId}...", dapi.ToString(), guildId);
 #endif
         try
         {
@@ -387,7 +384,7 @@ public class SearchImagesService : ISearchImagesService, INService
         catch (Exception ex)
         {
             if (!ex.Message.Contains("cancelled"))
-                Log.Error(ex, "Failed getting {Dapi} image: {Message}", dapi, ex.Message);
+                logger.LogError(ex, "Failed getting {Dapi} image: {Message}", dapi, ex.Message);
             return new UrlReply
             {
                 Error = ex.Message, Url = ""

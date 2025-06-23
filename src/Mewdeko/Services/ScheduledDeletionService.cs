@@ -8,7 +8,7 @@ using Serilog;
 namespace Mewdeko.Services;
 
 /// <summary>
-/// Background service that processes scheduled ticket deletions
+///     Background service that processes scheduled ticket deletions
 /// </summary>
 public class ScheduledDeletionService : BackgroundService
 {
@@ -17,7 +17,7 @@ public class ScheduledDeletionService : BackgroundService
     private readonly IServiceProvider services;
 
     /// <summary>
-    /// Initializes a new instance of the ScheduledDeletionService
+    ///     Initializes a new instance of the ScheduledDeletionService
     /// </summary>
     /// <param name="services">The service provider</param>
     /// <param name="dbFactory">The database connection factory</param>
@@ -28,7 +28,7 @@ public class ScheduledDeletionService : BackgroundService
     }
 
     /// <summary>
-    /// Executes the background service
+    ///     Executes the background service
     /// </summary>
     /// <param name="stoppingToken">Cancellation token</param>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)

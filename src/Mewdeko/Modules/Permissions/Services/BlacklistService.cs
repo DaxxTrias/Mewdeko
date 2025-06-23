@@ -6,7 +6,6 @@ using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Common.PubSub;
 using Mewdeko.Database.Enums;
 using Mewdeko.Services.Strings;
-using Serilog;
 
 namespace Mewdeko.Modules.Permissions.Services;
 
@@ -22,6 +21,7 @@ public sealed class BlacklistService : IEarlyBehavior, INService
     private readonly DiscordShardedClient client;
     private readonly BotConfig config;
     private readonly IDataConnectionFactory dbFactory;
+    private readonly ILogger<BlacklistService> logger;
     private readonly IPubSub pubSub;
     private readonly GeneratedBotStrings strings;
 
@@ -47,13 +47,14 @@ public sealed class BlacklistService : IEarlyBehavior, INService
     public BlacklistService(IDataConnectionFactory dbFactory, IPubSub pubSub, EventHandler handler,
         DiscordShardedClient client,
         BotConfig config,
-        GeneratedBotStrings strings)
+        GeneratedBotStrings strings, ILogger<BlacklistService> logger)
     {
         this.dbFactory = dbFactory;
         this.pubSub = pubSub;
         this.client = client;
         this.config = config;
         this.strings = strings;
+        this.logger = logger;
         _ = Reload(false);
         this.pubSub.Sub(blPubKey, OnReload);
         this.pubSub.Sub(blPrivKey, ManualCheck);
@@ -189,7 +190,7 @@ public sealed class BlacklistService : IEarlyBehavior, INService
             }
             catch
             {
-                Log.Error($"Unable to send blacklist message to {arg.Name}");
+                logger.LogError($"Unable to send blacklist message to {arg.Name}");
             }
             finally
             {
@@ -217,7 +218,7 @@ public sealed class BlacklistService : IEarlyBehavior, INService
             }
             catch
             {
-                Log.Error($"Unable to send blacklist message to {arg.Name}");
+                logger.LogError($"Unable to send blacklist message to {arg.Name}");
             }
             finally
             {

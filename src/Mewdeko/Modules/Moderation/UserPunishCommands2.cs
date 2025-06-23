@@ -9,7 +9,6 @@ using Mewdeko.Common.TypeReaders.Models;
 using Mewdeko.Modules.Administration.Common;
 using Mewdeko.Modules.Moderation.Common;
 using Mewdeko.Modules.Moderation.Services;
-using Serilog;
 using Swan;
 
 namespace Mewdeko.Modules.Moderation;
@@ -22,7 +21,10 @@ public partial class Moderation
     /// <param name="dbFactory">The db provider</param>
     /// <param name="serv">Fergun.Interactive paginator builder</param>
     [Group]
-    public class UserPunishCommands2(IDataConnectionFactory dbFactory, InteractiveService serv)
+    public class UserPunishCommands2(
+        IDataConnectionFactory dbFactory,
+        InteractiveService serv,
+        ILogger<UserPunishCommands2> logger)
         : MewdekoSubmodule<UserPunishService2>
     {
         /// <summary>
@@ -99,11 +101,11 @@ public partial class Moderation
             try
             {
                 await (await user.CreateDMChannelAsync().ConfigureAwait(false)).EmbedAsync(new EmbedBuilder()
-                    .WithDescription(Strings.MiniWarnedInGuild(ctx.Guild.Id, ctx.Guild))
-                    .AddField(efb => efb.WithName(Strings.MiniWarnModerator(ctx.Guild.Id))
-                        .WithValue(ctx.User.ToString()))
-                    .AddField(efb => efb.WithName(Strings.MiniWarnReason(ctx.Guild.Id))
-                        .WithValue(reason ?? "-")))
+                        .WithDescription(Strings.MiniWarnedInGuild(ctx.Guild.Id, ctx.Guild))
+                        .AddField(efb => efb.WithName(Strings.MiniWarnModerator(ctx.Guild.Id))
+                            .WithValue(ctx.User.ToString()))
+                        .AddField(efb => efb.WithName(Strings.MiniWarnReason(ctx.Guild.Id))
+                            .WithValue(reason ?? "-")))
                     .ConfigureAwait(false);
             }
             catch
@@ -118,7 +120,7 @@ public partial class Moderation
             }
             catch (Exception ex)
             {
-                Log.Warning(ex.Message);
+                logger.LogWarning(ex.Message);
                 await ReplyErrorAsync(Strings.CantApplyPunishment(ctx.Guild.Id)).ConfigureAwait(false);
                 return;
             }
@@ -400,7 +402,8 @@ public partial class Moderation
 
             await ReplyConfirmAsync(
                 time is null
-                    ? Strings.MiniWarnPunishSet(ctx.Guild.Id, Format.Bold(punish.ToString()), Format.Bold(number.ToString()))
+                    ? Strings.MiniWarnPunishSet(ctx.Guild.Id, Format.Bold(punish.ToString()),
+                        Format.Bold(number.ToString()))
                     : Strings.MiniWarnPunishSetTimed(ctx.Guild.Id, Format.Bold(punish.ToString()),
                         Format.Bold(number.ToString()), Format.Bold(time.Input))
             );

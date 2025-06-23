@@ -10,6 +10,36 @@ namespace Mewdeko.Modules.Permissions.Common;
 public static class PermissionExtensions
 {
     /// <summary>
+    ///     Gets the default permission list.
+    /// </summary>
+    public static Permission1 AllowAllPerm
+    {
+        get
+        {
+            return new Permission1
+            {
+                PrimaryTarget = (int)PrimaryPermissionType.Server,
+                PrimaryTargetId = 0,
+                SecondaryTarget = (int)SecondaryPermissionType.AllModules,
+                SecondaryTargetName = "*",
+                State = true,
+                Index = 0
+            };
+        }
+    }
+
+    /// <summary>
+    ///     Gets the default permission list.
+    /// </summary>
+    public static List<Permission1> GetDefaultPermlist
+    {
+        get
+        {
+            return [AllowAllPerm];
+        }
+    }
+
+    /// <summary>
     ///     Checks if the permissions allow for the execution of a specified command within a message context.
     /// </summary>
     /// <param name="permsEnumerable">An enumerable collection of Permission1 objects.</param>
@@ -263,35 +293,5 @@ public static class PermissionExtensions
         {
             yield return perm;
         } while ((perm = perm.Next) != null);
-    }
-
-    /// <summary>
-    ///     Gets the default permission list.
-    /// </summary>
-    public static Permission1 AllowAllPerm
-    {
-        get
-        {
-            return new Permission1
-            {
-                PrimaryTarget = (int)PrimaryPermissionType.Server,
-                PrimaryTargetId = 0,
-                SecondaryTarget = (int)SecondaryPermissionType.AllModules,
-                SecondaryTargetName = "*",
-                State = true,
-                Index = 0
-            };
-        }
-    }
-
-    /// <summary>
-    ///     Gets the default permission list.
-    /// </summary>
-    public static List<Permission1> GetDefaultPermlist
-    {
-        get
-        {
-            return [AllowAllPerm];
-        }
     }
 }

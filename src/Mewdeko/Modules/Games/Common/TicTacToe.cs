@@ -13,6 +13,7 @@ public class TicTacToe
 {
     private readonly ITextChannel channel;
     private readonly BotConfig config;
+    private readonly EventHandler handler;
     private readonly SemaphoreSlim moveLock;
 
     private readonly string[] numbers =
@@ -31,7 +32,6 @@ public class TicTacToe
     private Timer timeoutTimer;
 
     private IGuildUser? winner;
-    private readonly EventHandler handler;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="TicTacToe" /> class with the specified strings, client, channel, first
@@ -151,13 +151,15 @@ public class TicTacToe
     {
         if (phase is Phase.Started or Phase.Ended)
         {
-            await channel.SendErrorAsync(user.Mention + Strings.TttAlreadyRunning(users[0].Guild.Id), config).ConfigureAwait(false);
+            await channel.SendErrorAsync(user.Mention + Strings.TttAlreadyRunning(users[0].Guild.Id), config)
+                .ConfigureAwait(false);
             return;
         }
 
         if (users[0] == user)
         {
-            await channel.SendErrorAsync(user.Mention + Strings.TttAgainstYourself(users[0].Guild.Id), config).ConfigureAwait(false);
+            await channel.SendErrorAsync(user.Mention + Strings.TttAgainstYourself(users[0].Guild.Id), config)
+                .ConfigureAwait(false);
             return;
         }
 
@@ -180,7 +182,8 @@ public class TicTacToe
                     var del = previousMessage?.DeleteAsync();
                     try
                     {
-                        await channel.EmbedAsync(GetEmbed(Strings.TttTimeExpired(users[0].Guild.Id))).ConfigureAwait(false);
+                        await channel.EmbedAsync(GetEmbed(Strings.TttTimeExpired(users[0].Guild.Id)))
+                            .ConfigureAwait(false);
                         if (del != null)
                             await del.ConfigureAwait(false);
                     }
@@ -204,7 +207,8 @@ public class TicTacToe
 
         handler.MessageReceived += Client_MessageReceived;
 
-        previousMessage = await channel.EmbedAsync(GetEmbed(Strings.GameStarted(users[0].Guild.Id))).ConfigureAwait(false);
+        previousMessage =
+            await channel.EmbedAsync(GetEmbed(Strings.GameStarted(users[0].Guild.Id))).ConfigureAwait(false);
     }
 
     private bool IsDraw()

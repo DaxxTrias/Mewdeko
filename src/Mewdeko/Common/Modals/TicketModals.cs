@@ -1,4 +1,5 @@
 ﻿using Discord.Interactions;
+
 // ReSharper disable NotNullOrRequiredMemberIsNotInitialized
 
 namespace Mewdeko.Common.Modals;
@@ -9,16 +10,16 @@ namespace Mewdeko.Common.Modals;
 public class PanelCreationModal : IModal
 {
     /// <summary>
-    ///     Gets the title of the modal.
-    /// </summary>
-    public string Title => "Create Ticket Panel";
-
-    /// <summary>
     ///     Gets or sets the SmartEmbed JSON configuration for the panel.
     /// </summary>
     [InputLabel("Embed Configuration")]
     [ModalTextInput("embed_json", TextInputStyle.Paragraph, "Enter the SmartEmbed JSON configuration")]
     public string EmbedJson { get; set; }
+
+    /// <summary>
+    ///     Gets the title of the modal.
+    /// </summary>
+    public string Title => "Create Ticket Panel";
 }
 
 /// <summary>
@@ -26,11 +27,6 @@ public class PanelCreationModal : IModal
 /// </summary>
 public class ButtonCreationModal : IModal
 {
-    /// <summary>
-    ///     Gets the title of the modal.
-    /// </summary>
-    public string Title => "Create Ticket Button";
-
     /// <summary>
     ///     Gets or sets the SmartEmbed JSON for the ticket opening message.
     /// </summary>
@@ -49,7 +45,8 @@ public class ButtonCreationModal : IModal
     ///     Gets or sets the format string for generated ticket channel names.
     /// </summary>
     [InputLabel("Channel Name Format")]
-    [ModalTextInput("channel_format", TextInputStyle.Short, "Format: {username}, {id}", initValue: "ticket-{username}-{id}")]
+    [ModalTextInput("channel_format", TextInputStyle.Short, "Format: {username}, {id}",
+        initValue: "ticket-{username}-{id}")]
     public string ChannelFormat { get; set; }
 
     /// <summary>
@@ -58,6 +55,11 @@ public class ButtonCreationModal : IModal
     [InputLabel("Settings")]
     [ModalTextInput("settings", TextInputStyle.Paragraph, "JSON: autoCloseHours, responseTimeHours, maxTickets")]
     public string Settings { get; set; }
+
+    /// <summary>
+    ///     Gets the title of the modal.
+    /// </summary>
+    public string Title => "Create Ticket Button";
 }
 
 /// <summary>
@@ -66,16 +68,16 @@ public class ButtonCreationModal : IModal
 public class SelectMenuCreationModal : IModal
 {
     /// <summary>
-    ///     Gets the title of the modal.
-    /// </summary>
-    public string Title => "Create Select Menu";
-
-    /// <summary>
     ///     Gets or sets the placeholder text shown when no option is selected.
     /// </summary>
     [InputLabel("Placeholder Text")]
     [ModalTextInput("placeholder", TextInputStyle.Short, "Text shown when no option is selected")]
     public string Placeholder { get; set; }
+
+    /// <summary>
+    ///     Gets the title of the modal.
+    /// </summary>
+    public string Title => "Create Select Menu";
 }
 
 /// <summary>
@@ -83,11 +85,6 @@ public class SelectMenuCreationModal : IModal
 /// </summary>
 public class SelectOptionCreationModal : IModal
 {
-    /// <summary>
-    ///     Gets the title of the modal.
-    /// </summary>
-    public string Title => "Create Select Option";
-
     /// <summary>
     ///     Gets or sets the label text for the option.
     /// </summary>
@@ -108,6 +105,11 @@ public class SelectOptionCreationModal : IModal
     [InputLabel("Settings")]
     [ModalTextInput("settings", TextInputStyle.Paragraph, "Same settings as button configuration")]
     public string Settings { get; set; }
+
+    /// <summary>
+    ///     Gets the title of the modal.
+    /// </summary>
+    public string Title => "Create Select Option";
 }
 
 /// <summary>
@@ -115,11 +117,6 @@ public class SelectOptionCreationModal : IModal
 /// </summary>
 public class CaseCreationModal : IModal
 {
-    /// <summary>
-    ///     Gets the title of the modal.
-    /// </summary>
-    public string Title => "Create Case";
-
     /// <summary>
     ///     Gets or sets the title of the case.
     /// </summary>
@@ -133,6 +130,11 @@ public class CaseCreationModal : IModal
     [InputLabel("Description")]
     [ModalTextInput("description", TextInputStyle.Paragraph, "Case description")]
     public string Description { get; set; }
+
+    /// <summary>
+    ///     Gets the title of the modal.
+    /// </summary>
+    public string Title => "Create Case";
 }
 
 /// <summary>
@@ -141,16 +143,16 @@ public class CaseCreationModal : IModal
 public class TicketNoteModal : IModal
 {
     /// <summary>
-    ///     Gets the title of the modal.
-    /// </summary>
-    public string Title => "Add Note";
-
-    /// <summary>
     ///     Gets or sets the content of the note.
     /// </summary>
     [InputLabel("Note Content")]
     [ModalTextInput("content", TextInputStyle.Paragraph, "Enter your note")]
     public string Content { get; set; }
+
+    /// <summary>
+    ///     Gets the title of the modal.
+    /// </summary>
+    public string Title => "Add Note";
 }
 
 /// <summary>
@@ -158,11 +160,6 @@ public class TicketNoteModal : IModal
 /// </summary>
 public class TicketPriorityModal : IModal
 {
-    /// <summary>
-    ///     Gets the title of the modal.
-    /// </summary>
-    public string Title => "Set Priority";
-
     /// <summary>
     ///     Gets or sets the priority level.
     /// </summary>
@@ -176,22 +173,27 @@ public class TicketPriorityModal : IModal
     [InputLabel("Reason")]
     [ModalTextInput("reason", TextInputStyle.Paragraph, "Reason for setting this priority")]
     public string Reason { get; set; }
+
+    /// <summary>
+    ///     Gets the title of the modal.
+    /// </summary>
+    public string Title => "Set Priority";
 }
 
 /// <inheritdoc />
 public class PanelUpdateModal : IModal
 {
     /// <summary>
-    ///     Gets the title of the modal.
-    /// </summary>
-    public string Title => "Update Panel";
-
-    /// <summary>
     ///     Gets or sets the SmartEmbed JSON configuration for the panel.
     /// </summary>
     [InputLabel("New Embed Configuration")]
     [ModalTextInput("embed_json", TextInputStyle.Paragraph, "Enter the new SmartEmbed JSON configuration")]
     public string EmbedJson { get; set; }
+
+    /// <summary>
+    ///     Gets the title of the modal.
+    /// </summary>
+    public string Title => "Update Panel";
 }
 
 /// <summary>
@@ -199,11 +201,6 @@ public class PanelUpdateModal : IModal
 /// </summary>
 public class CaseUpdateModal : IModal
 {
-    /// <summary>
-    ///     Gets the title of the modal.
-    /// </summary>
-    public string Title => "Update Case";
-
     /// <summary>
     ///     Gets or sets the new title for the case.
     /// </summary>
@@ -217,6 +214,11 @@ public class CaseUpdateModal : IModal
     [InputLabel("Description")]
     [ModalTextInput("description", TextInputStyle.Paragraph, "Enter new description")]
     public string Description { get; set; }
+
+    /// <summary>
+    ///     Gets the title of the modal.
+    /// </summary>
+    public string Title => "Update Case";
 }
 
 /// <summary>
@@ -225,15 +227,14 @@ public class CaseUpdateModal : IModal
 public class CaseNoteModal : IModal
 {
     /// <summary>
-    ///     Gets the title of the modal.
-    /// </summary>
-    public string Title => "Add Case Note";
-
-    /// <summary>
     ///     Gets or sets the content of the note.
     /// </summary>
     [InputLabel("Note Content")]
-    [ModalTextInput("content", TextInputStyle.Paragraph, "Enter your note", minLength: 1, maxLength: 1000)]
+    [ModalTextInput("content", TextInputStyle.Paragraph, "Enter your note", 1, 1000)]
     public string Content { get; set; }
-}
 
+    /// <summary>
+    ///     Gets the title of the modal.
+    /// </summary>
+    public string Title => "Add Case Note";
+}

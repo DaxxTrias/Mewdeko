@@ -16,7 +16,6 @@ using Mewdeko.Modules.Searches.Common;
 using Mewdeko.Services.Strings;
 using Newtonsoft.Json.Linq;
 using Refit;
-using Serilog;
 using SkiaSharp;
 
 namespace Mewdeko.Modules.Searches.Services;
@@ -75,6 +74,7 @@ public class SearchesService : INService, IUnloadableService
 
     private readonly ConcurrentDictionary<ulong, SearchImageCacher> imageCacher = new();
     private readonly IImageCache imgs;
+    private readonly ILogger<SearchesService> logger;
     private readonly MartineApi martineApi;
     private readonly List<string> nsfwreddits;
     private readonly MewdekoRandom rng;
@@ -97,7 +97,7 @@ public class SearchesService : INService, IUnloadableService
     public SearchesService(IGoogleApiService google, IDataCache cache,
         IHttpClientFactory factory,
         IBotCredentials creds, EventHandler handler, MartineApi martineApi, IDataConnectionFactory dbFactory,
-        GeneratedBotStrings strings)
+        GeneratedBotStrings strings, ILogger<SearchesService> logger)
     {
         httpFactory = factory;
         this.google = google;
@@ -107,6 +107,7 @@ public class SearchesService : INService, IUnloadableService
         this.martineApi = martineApi;
         this.dbFactory = dbFactory;
         this.strings = strings;
+        this.logger = logger;
         rng = new MewdekoRandom();
 
         //translate commands
@@ -166,12 +167,12 @@ public class SearchesService : INService, IUnloadableService
         if (File.Exists("data/wowjokes.json"))
             WowJokes = JsonSerializer.Deserialize<List<WoWJoke>>(File.ReadAllText("data/wowjokes.json"));
         else
-            Log.Warning("data/wowjokes.json is missing. WOW Jokes are not loaded");
+            logger.LogWarning("data/wowjokes.json is missing. WOW Jokes are not loaded");
 
         if (File.Exists("data/magicitems.json"))
             MagicItems = JsonSerializer.Deserialize<List<MagicItem>>(File.ReadAllText("data/magicitems.json"));
         else
-            Log.Warning("data/magicitems.json is missing. Magic items are not loaded");
+            logger.LogWarning("data/magicitems.json is missing. Magic items are not loaded");
 
         if (File.Exists("data/yomama.txt"))
         {
@@ -412,7 +413,7 @@ public class SearchesService : INService, IUnloadableService
         }
         catch (Exception ex)
         {
-            Log.Warning(ex.Message);
+            logger.LogWarning(ex.Message);
             return null;
         }
     }
@@ -462,7 +463,7 @@ public class SearchesService : INService, IUnloadableService
                 var responses = JsonSerializer.Deserialize<LocationIqResponse[]>(res);
                 if (responses is null || responses.Length == 0)
                 {
-                    Log.Warning("Geocode lookup failed for: {Query}", query);
+                    logger.LogWarning("Geocode lookup failed for: {Query}", query);
                     return (default, TimeErrors.NotFound);
                 }
 
@@ -486,7 +487,7 @@ public class SearchesService : INService, IUnloadableService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Weather error: {Message}", ex.Message);
+            logger.LogError(ex, "Weather error: {Message}", ex.Message);
             return (default, TimeErrors.NotFound);
         }
 
@@ -550,7 +551,7 @@ public class SearchesService : INService, IUnloadableService
         }
         catch (ApiException ex)
         {
-            Log.Error("Failed to fetch image from Martine API for tag {Tag} (subreddit: r/{Subreddit}): {Error}",
+            logger.LogError("Failed to fetch image from Martine API for tag {Tag} (subreddit: r/{Subreddit}): {Error}",
                 tag,
                 subreddit,
                 ex.HasContent ? ex.Content : "No Content");
@@ -866,7 +867,7 @@ public class SearchesService : INService, IUnloadableService
         using var response = await http.SendAsync(msg).ConfigureAwait(false);
         var content = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
         sw.Stop();
-        Log.Information("Took {Miliseconds}ms to parse results", sw.ElapsedMilliseconds);
+        logger.LogInformation("Took {Miliseconds}ms to parse results", sw.ElapsedMilliseconds);
 
         using var document = await GoogleParser.ParseDocumentAsync(content).ConfigureAwait(false);
         var elems = document.QuerySelectorAll("div.g > div > div");

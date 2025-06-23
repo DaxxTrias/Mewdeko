@@ -11,7 +11,6 @@ using Mewdeko.Common.Collections;
 using Newtonsoft.Json.Linq;
 using NHentaiAPI;
 using Refit;
-using Serilog;
 
 namespace Mewdeko.Modules.Nsfw;
 
@@ -28,7 +27,8 @@ public class Nsfw(
     MartineApi martineApi,
     GuildSettingsService guildSettings,
     HttpClient client,
-    IBotCredentials credentials)
+    IBotCredentials credentials,
+    ILogger<Nsfw> logger)
     : MewdekoModuleBase<ISearchImagesService>
 {
     private static readonly ConcurrentHashSet<ulong> HentaiBombBlacklist = [];
@@ -65,7 +65,7 @@ public class Nsfw(
             catch (ApiException ex)
             {
                 await msg.DeleteAsync();
-                Log.Error(
+                logger.LogError(
                     "Seems that NSFW Subreddit fetching has failed. Here\'s the error:\\nCode:{ExStatusCode}\\nContent: {ExContent}",
                     ex.StatusCode, ex.HasContent ? ex.Content : "No Content.");
                 await ctx.Channel.SendErrorAsync(
@@ -884,7 +884,7 @@ public class Nsfw(
         }
         catch (HttpRequestException e)
         {
-            Log.Error("Error while fetching RedGif MP4 URL: {0}", e.Message);
+            logger.LogError("Error while fetching RedGif MP4 URL: {0}", e.Message);
             return null;
         }
     }

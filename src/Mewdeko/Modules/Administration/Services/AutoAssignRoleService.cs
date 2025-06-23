@@ -2,7 +2,6 @@
 using DataModel;
 using Discord.Net;
 using LinqToDB;
-using Serilog;
 
 namespace Mewdeko.Modules.Administration.Services;
 
@@ -22,6 +21,7 @@ public sealed class AutoAssignRoleService : INService
 
     private readonly IDataConnectionFactory dbFactory;
     private readonly GuildSettingsService guildSettings;
+    private readonly ILogger<AutoAssignRoleService> logger;
 
     /// <summary>
     ///     Constructs a new instance of the AutoAssignRoleService.
@@ -30,10 +30,11 @@ public sealed class AutoAssignRoleService : INService
     /// <param name="guildSettings">The guild settings service.</param>
     /// <param name="eventHandler">The event handler.</param>
     public AutoAssignRoleService(IDataConnectionFactory dbFactory,
-        GuildSettingsService guildSettings, EventHandler eventHandler)
+        GuildSettingsService guildSettings, EventHandler eventHandler, ILogger<AutoAssignRoleService> logger)
     {
         this.dbFactory = dbFactory;
         this.guildSettings = guildSettings;
+        this.logger = logger;
         _ = RunAutoLoop();
 
         eventHandler.UserJoined += OnClientOnUserJoined;
@@ -73,7 +74,7 @@ public sealed class AutoAssignRoleService : INService
                         continue;
                     }
 
-                    Log.Warning(
+                    logger.LogWarning(
                         "Disabled 'Auto assign bot role' feature on {GuildName} [{GuildId}] server the roles dont exist",
                         user.Guild.Name,
                         user.Guild.Id);
@@ -83,7 +84,7 @@ public sealed class AutoAssignRoleService : INService
                 }
                 catch (HttpException ex) when (ex.HttpCode == HttpStatusCode.Forbidden)
                 {
-                    Log.Warning(
+                    logger.LogWarning(
                         "Disabled 'Auto assign bot role' feature on {GuildName} [{GuildId}] server because I don't have role management permissions",
                         user.Guild.Name,
                         user.Guild.Id);
@@ -93,7 +94,7 @@ public sealed class AutoAssignRoleService : INService
                 }
                 catch
                 {
-                    Log.Warning("Error in aar. Probably one of the roles doesn't exist");
+                    logger.LogWarning("Error in aar. Probably one of the roles doesn't exist");
                     continue;
                 }
             }
@@ -114,7 +115,7 @@ public sealed class AutoAssignRoleService : INService
                         continue;
                     }
 
-                    Log.Warning(
+                    logger.LogWarning(
                         "Disabled 'Auto assign  role' feature on {GuildName} [{GuildId}] server the roles dont exist",
                         user.Guild.Name,
                         user.Guild.Id);
@@ -123,7 +124,7 @@ public sealed class AutoAssignRoleService : INService
                 }
                 catch (HttpException ex) when (ex.HttpCode == HttpStatusCode.Forbidden)
                 {
-                    Log.Warning(
+                    logger.LogWarning(
                         "Disabled 'Auto assign bot role' feature on {GuildName} [{GuildId}] server because I don't have role management permissions",
                         user.Guild.Name,
                         user.Guild.Id);
@@ -132,7 +133,7 @@ public sealed class AutoAssignRoleService : INService
                 }
                 catch
                 {
-                    Log.Warning("Error in aar. Probably one of the roles doesn't exist");
+                    logger.LogWarning("Error in aar. Probably one of the roles doesn't exist");
                 }
             }
         }

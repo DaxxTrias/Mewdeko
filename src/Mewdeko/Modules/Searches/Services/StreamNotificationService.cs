@@ -9,7 +9,6 @@ using Mewdeko.Modules.Searches.Common.StreamNotifications;
 using Mewdeko.Modules.Searches.Common.StreamNotifications.Models;
 using Mewdeko.Modules.Searches.Services.Common;
 using Mewdeko.Services.strings;
-using Serilog;
 
 namespace Mewdeko.Modules.Searches.Services;
 
@@ -20,6 +19,7 @@ public class StreamNotificationService : IReadyExecutor, INService
 {
     private readonly DiscordShardedClient client;
     private readonly IDataConnectionFactory dbFactory;
+    private readonly ILogger<StreamNotificationService> logger;
     private readonly Random rng = new MewdekoRandom();
     private readonly object shardLock = new();
     private readonly NotifChecker streamTracker;
@@ -45,12 +45,13 @@ public class StreamNotificationService : IReadyExecutor, INService
         IBotCredentials creds,
         IHttpClientFactory httpFactory,
         Mewdeko bot,
-        EventHandler eventHandler)
+        EventHandler eventHandler, ILogger<StreamNotificationService> logger, ILogger<NotifChecker> logger2)
     {
         this.dbFactory = dbFactory;
         this.client = client;
         this.strings = strings;
-        streamTracker = new NotifChecker(httpFactory, creds, creds.RedisKey(), true);
+        this.logger = logger;
+        streamTracker = new NotifChecker(httpFactory, creds, creds.RedisKey(), true, logger2);
 
         // Load all followed streams from database
         _ = Task.Run(async () =>
@@ -126,7 +127,7 @@ public class StreamNotificationService : IReadyExecutor, INService
 
                     foreach (var kvp in deleteGroups)
                     {
-                        Log.Information(
+                        logger.LogInformation(
                             "Deleting {StreamCount} {Platform} streams because they've been erroring for more than {ErrorLimit}: {RemovedList}",
                             kvp.Value.Count,
                             kvp.Key,
@@ -147,7 +148,7 @@ public class StreamNotificationService : IReadyExecutor, INService
                 }
                 catch (Exception ex)
                 {
-                    Log.Error(ex, "Error cleaning up FollowedStreams");
+                    logger.LogError(ex, "Error cleaning up FollowedStreams");
                 }
             }
         });

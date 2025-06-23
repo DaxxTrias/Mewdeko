@@ -2,7 +2,6 @@
 using LinqToDB;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Services.Strings;
-using Serilog;
 
 namespace Mewdeko.Modules.Starboard.Services;
 
@@ -14,6 +13,7 @@ public class StarboardService : INService, IReadyExecutor, IUnloadableService
     private readonly DiscordShardedClient client;
     private readonly IDataConnectionFactory dbFactory;
     private readonly EventHandler eventHandler;
+    private readonly ILogger<StarboardService> logger;
     private readonly GeneratedBotStrings strings;
     private List<DataModel.Starboard> starboardConfigs = [];
 
@@ -26,12 +26,13 @@ public class StarboardService : INService, IReadyExecutor, IUnloadableService
     /// <param name="dbFactory">The database context provider.</param>
     /// <param name="eventHandler">The event handler.</param>
     public StarboardService(DiscordShardedClient client, IDataConnectionFactory dbFactory,
-        EventHandler eventHandler, GeneratedBotStrings strings)
+        EventHandler eventHandler, GeneratedBotStrings strings, ILogger<StarboardService> logger)
     {
         this.client = client;
         this.dbFactory = dbFactory;
         this.eventHandler = eventHandler;
         this.strings = strings;
+        this.logger = logger;
         eventHandler.ReactionAdded += OnReactionAddedAsync;
         eventHandler.MessageDeleted += OnMessageDeletedAsync;
         eventHandler.ReactionRemoved += OnReactionRemoveAsync;
@@ -41,12 +42,12 @@ public class StarboardService : INService, IReadyExecutor, IUnloadableService
     /// <inheritdoc />
     public async Task OnReadyAsync()
     {
-        Log.Information($"Starting {GetType()} Cache");
+        logger.LogInformation($"Starting {GetType()} Cache");
         await using var dbContext = await dbFactory.CreateConnectionAsync();
 
         starboardPosts = await dbContext.StarboardPosts.ToListAsync();
         starboardConfigs = await dbContext.Starboards.ToListAsync();
-        Log.Information("Starboard Cache Ready");
+        logger.LogInformation("Starboard Cache Ready");
     }
 
     /// <summary>
@@ -211,7 +212,7 @@ public class StarboardService : INService, IReadyExecutor, IUnloadableService
             catch (Exception ex)
             {
                 // Log error but continue processing other messages
-                Log.Warning($"Failed to process starboard highlight for post {post.Id}: {ex.Message}");
+                logger.LogWarning($"Failed to process starboard highlight for post {post.Id}: {ex.Message}");
             }
         }
 

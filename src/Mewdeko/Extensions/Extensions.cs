@@ -59,12 +59,12 @@ public static partial class Extensions
     }
 
     /// <summary>
-    /// SOmething that really should already have been in dnet.
+    ///     SOmething that really should already have been in dnet.
     /// </summary>
     /// <param name="guild"></param>
     /// <param name="categoryId"></param>
     /// <returns></returns>
-    public async static Task<ICategoryChannel?> GetCategoryChannelAsync(this IGuild guild, ulong categoryId)
+    public static async Task<ICategoryChannel?> GetCategoryChannelAsync(this IGuild guild, ulong categoryId)
     {
         var cats = await guild.GetCategoriesAsync();
         return cats.FirstOrDefault(x => x.Id == categoryId);

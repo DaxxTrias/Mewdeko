@@ -37,22 +37,59 @@ public class MessageCountService : INService
         User
     }
 
-    private readonly IDataConnectionFactory dbFactory;
-    private readonly ConcurrentDictionary<ulong, int> minCounts = [];
-    private readonly HashSet<ulong> countGuilds = [];
+    private const int CacheMinutes = 30;
+    private const int BatchSize = 100;
+
+    private static readonly AsyncCircuitBreakerPolicy<MessageCount> CircuitBreaker =
+        Policy<MessageCount>
+            .Handle<Exception>()
+            .CircuitBreakerAsync(
+                10,
+                TimeSpan.FromSeconds(30),
+                (ex, duration) =>
+                    Log.Error("Circuit breaker opened for {Duration}s due to: {Error}",
+                        duration.TotalSeconds, ex.Exception.Message),
+                () =>
+                    Log.Information("Circuit breaker reset"),
+                () =>
+                    Log.Information("Circuit breaker half-open"));
+
+    private static readonly IAsyncPolicy<MessageCount> DatabasePolicy =
+        Policy<MessageCount>
+            .Handle<LinqToDBException>()
+            .Or<TimeoutRejectedException>()
+            .WaitAndRetryAsync(3,
+                retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)),
+                (exception, timeSpan, retryCount, context) =>
+                {
+                    Log.Warning(
+                        "Retry {RetryCount} after {Delay}ms for {Key}. Error: {Error}",
+                        retryCount,
+                        timeSpan.TotalMilliseconds,
+                        context["CacheKey"],
+                        exception.Exception.Message);
+                })
+            .WrapAsync(Policy.TimeoutAsync<MessageCount>(TimeSpan.FromSeconds(30)))
+            .WrapAsync(Policy.BulkheadAsync<MessageCount>(100, 500));
+
     private readonly IMemoryCache cache;
+    private readonly HashSet<ulong> countGuilds = [];
+    private readonly CancellationTokenSource cts = new();
+
+    private readonly IDataConnectionFactory dbFactory;
+    private readonly ILogger<MessageCountService> logger;
+    private readonly ConcurrentDictionary<ulong, int> minCounts = [];
     private readonly Channel<(ulong GuildId, ulong ChannelId, ulong UserId, DateTime Timestamp)> updateChannel;
     private readonly SemaphoreSlim updateLock = new(1);
-    private const int CacheMinutes = 30;
-    private readonly CancellationTokenSource cts = new();
-    private const int BatchSize = 100;
 
     /// <summary>
     /// </summary>
-    public MessageCountService(IDataConnectionFactory dbFactory, EventHandler handler, IMemoryCache cache)
+    public MessageCountService(IDataConnectionFactory dbFactory, EventHandler handler, IMemoryCache cache,
+        ILogger<MessageCountService> logger)
     {
         this.dbFactory = dbFactory;
         this.cache = cache;
+        this.logger = logger;
         _ = InitializeGuildSettings();
         handler.MessageReceived += HandleCount;
         updateChannel = Channel.CreateUnbounded<(ulong, ulong, ulong, DateTime)>();
@@ -66,7 +103,10 @@ public class MessageCountService : INService
             await using var db = await dbFactory.CreateConnectionAsync();
             var enabledGuilds = await db.GuildConfigs
                 .Where(gc => gc.UseMessageCount)
-                .Select(gc => new { gc.GuildId, gc.MinMessageLength })
+                .Select(gc => new
+                {
+                    gc.GuildId, gc.MinMessageLength
+                })
                 .ToListAsync();
 
             foreach (var guild in enabledGuilds)
@@ -77,41 +117,9 @@ public class MessageCountService : INService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Failed to initialize guild message count settings");
+            logger.LogError(ex, "Failed to initialize guild message count settings");
         }
     }
-
-    private static readonly AsyncCircuitBreakerPolicy<MessageCount> CircuitBreaker =
-        Policy<MessageCount>
-            .Handle<Exception>()
-            .CircuitBreakerAsync(
-                handledEventsAllowedBeforeBreaking: 10,
-                durationOfBreak: TimeSpan.FromSeconds(30),
-                onBreak: (ex, duration) =>
-                    Log.Error("Circuit breaker opened for {Duration}s due to: {Error}",
-                        duration.TotalSeconds, ex.Exception.Message),
-                onReset: () =>
-                    Log.Information("Circuit breaker reset"),
-                onHalfOpen: () =>
-                    Log.Information("Circuit breaker half-open"));
-
-    private static readonly IAsyncPolicy<MessageCount> DatabasePolicy =
-        Policy<MessageCount>
-            .Handle<LinqToDBException>()
-            .Or<TimeoutRejectedException>()
-            .WaitAndRetryAsync(3,
-                retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)),
-                onRetry: (exception, timeSpan, retryCount, context) =>
-                {
-                    Log.Warning(
-                        "Retry {RetryCount} after {Delay}ms for {Key}. Error: {Error}",
-                        retryCount,
-                        timeSpan.TotalMilliseconds,
-                        context["CacheKey"],
-                        exception.Exception.Message);
-                })
-            .WrapAsync(Policy.TimeoutAsync<MessageCount>(TimeSpan.FromSeconds(30)))
-            .WrapAsync(Policy.BulkheadAsync<MessageCount>(maxParallelization: 100, maxQueuingActions: 500));
 
     private async Task ProcessUpdatesAsync()
     {
@@ -133,71 +141,73 @@ public class MessageCountService : INService
             }
         }
         catch (OperationCanceledException)
-        {}
-    }
-
-private async Task ProcessBatchAsync(List<(ulong GuildId, ulong ChannelId, ulong UserId, DateTime Timestamp)> batch)
-{
-    await updateLock.WaitAsync();
-    try
-    {
-        var updates = batch.GroupBy(x => (x.GuildId, x.ChannelId, x.UserId))
-            .ToDictionary(g => g.Key, g => g.Count());
-
-        // Dictionary to store MessageCount objects that need updating
-        var messageCountsToUpdate = new List<MessageCount>();
-        var messageCountIds = new Dictionary<(ulong GuildId, ulong ChannelId, ulong UserId), long>();
-
-        // First, process each group to get the corresponding MessageCount
-        foreach (var ((guildId, channelId, userId), count) in updates)
         {
-            var key = $"msgcount:{guildId}:{channelId}:{userId}";
-            var current = await GetOrCreateMessageCountAsync(guildId, channelId, userId);
-
-            // Update the count
-            current.Count += (ulong)count;
-
-            // Add to list for database update
-            messageCountsToUpdate.Add(current);
-
-            // Update the cache
-            cache.Set(key, current, TimeSpan.FromMinutes(CacheMinutes));
-
-            // Store the ID for timestamps
-            messageCountIds[(guildId, channelId, userId)] = current.Id;
         }
+    }
 
-        // Update the database
-        await using var db = await dbFactory.CreateConnectionAsync();
-
-        // Bulk update the message counts
-        foreach (var countRecord in messageCountsToUpdate)
+    private async Task ProcessBatchAsync(List<(ulong GuildId, ulong ChannelId, ulong UserId, DateTime Timestamp)> batch)
+    {
+        await updateLock.WaitAsync();
+        try
         {
-            await db.UpdateAsync(countRecord);
+            var updates = batch.GroupBy(x => (x.GuildId, x.ChannelId, x.UserId))
+                .ToDictionary(g => g.Key, g => g.Count());
+
+            // Dictionary to store MessageCount objects that need updating
+            var messageCountsToUpdate = new List<MessageCount>();
+            var messageCountIds = new Dictionary<(ulong GuildId, ulong ChannelId, ulong UserId), long>();
+
+            // First, process each group to get the corresponding MessageCount
+            foreach (var ((guildId, channelId, userId), count) in updates)
+            {
+                var key = $"msgcount:{guildId}:{channelId}:{userId}";
+                var current = await GetOrCreateMessageCountAsync(guildId, channelId, userId);
+
+                // Update the count
+                current.Count += (ulong)count;
+
+                // Add to list for database update
+                messageCountsToUpdate.Add(current);
+
+                // Update the cache
+                cache.Set(key, current, TimeSpan.FromMinutes(CacheMinutes));
+
+                // Store the ID for timestamps
+                messageCountIds[(guildId, channelId, userId)] = current.Id;
+            }
+
+            // Update the database
+            await using var db = await dbFactory.CreateConnectionAsync();
+
+            // Bulk update the message counts
+            foreach (var countRecord in messageCountsToUpdate)
+            {
+                await db.UpdateAsync(countRecord);
+            }
+
+            // Create and insert timestamps
+            var timestamps = batch.Select(x => new MessageTimestamp
+            {
+                GuildId = x.GuildId,
+                ChannelId = x.ChannelId,
+                UserId = x.UserId,
+                Timestamp = x.Timestamp,
+                MessageCountId = messageCountIds[(x.GuildId, x.ChannelId, x.UserId)]
+            }).ToList();
+
+            // Use bulk insert for timestamps
+            await db.BulkCopyAsync(timestamps);
         }
-
-        // Create and insert timestamps
-        var timestamps = batch.Select(x => new MessageTimestamp
+        catch (Exception ex)
         {
-            GuildId = x.GuildId,
-            ChannelId = x.ChannelId,
-            UserId = x.UserId,
-            Timestamp = x.Timestamp,
-            MessageCountId = messageCountIds[(x.GuildId, x.ChannelId, x.UserId)]
-        }).ToList();
+            logger.LogError(ex, "Error processing message count batch: {ErrorMessage}", ex.Message);
+        }
+        finally
+        {
+            updateLock.Release();
+        }
+    }
 
-        // Use bulk insert for timestamps
-        await db.BulkCopyAsync(timestamps);
-    }
-    catch (Exception ex)
-    {
-        Log.Error(ex, "Error processing message count batch: {ErrorMessage}", ex.Message);
-    }
-    finally
-    {
-        updateLock.Release();
-    }
-}
     private async Task HandleCount(SocketMessage msg)
     {
         if (!IsValidMessage(msg))
@@ -233,11 +243,11 @@ private async Task ProcessBatchAsync(List<(ulong GuildId, ulong ChannelId, ulong
             // Try cache first, outside of retry policy
             if (cache.TryGetValue(key, out MessageCount cachedCount))
             {
-                Log.Debug("Cache hit for key {Key}", key);
+                logger.LogDebug("Cache hit for key {Key}", key);
                 return cachedCount;
             }
 
-            Log.Debug("Cache miss for key {Key}", key);
+            logger.LogDebug("Cache miss for key {Key}", key);
 
             // Combine policies
             var policy = DatabasePolicy.WrapAsync(CircuitBreaker);
@@ -268,7 +278,7 @@ private async Task ProcessBatchAsync(List<(ulong GuildId, ulong ChannelId, ulong
                 var cacheEntryOptions = new MemoryCacheEntryOptions()
                     .SetSlidingExpiration(TimeSpan.FromMinutes(CacheMinutes))
                     .RegisterPostEvictionCallback((k, v, r, s) =>
-                        Log.Debug("Cache entry {Key} evicted due to {Reason}", k, r));
+                        logger.LogDebug("Cache entry {Key} evicted due to {Reason}", k, r));
 
                 cache.Set(key, record, cacheEntryOptions);
 
@@ -282,12 +292,12 @@ private async Task ProcessBatchAsync(List<(ulong GuildId, ulong ChannelId, ulong
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            Log.Error(ex, "Failed to get/create message count for {Key}", key);
+            logger.LogError(ex, "Failed to get/create message count for {Key}", key);
             throw;
         }
         catch (Exception ex)
         {
-            Log.Error($"This shouldnt happen in message counts: {ex}");
+            logger.LogError($"This shouldnt happen in message counts: {ex}");
             throw;
         }
     }
@@ -337,7 +347,7 @@ private async Task ProcessBatchAsync(List<(ulong GuildId, ulong ChannelId, ulong
 
             if (guildConfig == null)
             {
-                Log.Warning("Attempted to toggle message count for non-existent guild {GuildId}", guildId);
+                logger.LogWarning("Attempted to toggle message count for non-existent guild {GuildId}", guildId);
                 return false;
             }
 
@@ -381,7 +391,7 @@ private async Task ProcessBatchAsync(List<(ulong GuildId, ulong ChannelId, ulong
         catch (Exception ex)
         {
             await transaction.RollbackAsync();
-            Log.Error(ex, "Failed to toggle message count for guild {GuildId}", guildId);
+            logger.LogError(ex, "Failed to toggle message count for guild {GuildId}", guildId);
 
             // Revert memory state if transaction failed
             if (wasAdded)
@@ -426,10 +436,12 @@ private async Task ProcessBatchAsync(List<(ulong GuildId, ulong ChannelId, ulong
                 query = db.MessageCounts.LoadWithAsTable(x => x.MessageTimestamps).Where(x => x.GuildId == snowflakeId);
                 break;
             case CountQueryType.Channel:
-                query = db.MessageCounts.LoadWithAsTable(x => x.MessageTimestamps).Where(x => x.ChannelId == snowflakeId && x.GuildId == guildId);
+                query = db.MessageCounts.LoadWithAsTable(x => x.MessageTimestamps)
+                    .Where(x => x.ChannelId == snowflakeId && x.GuildId == guildId);
                 break;
             case CountQueryType.User:
-                query = db.MessageCounts.LoadWithAsTable(x => x.MessageTimestamps).Where(x => x.UserId == snowflakeId && x.GuildId == guildId);
+                query = db.MessageCounts.LoadWithAsTable(x => x.MessageTimestamps)
+                    .Where(x => x.UserId == snowflakeId && x.GuildId == guildId);
                 break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(queryType), queryType, null);
@@ -443,7 +455,8 @@ private async Task ProcessBatchAsync(List<(ulong GuildId, ulong ChannelId, ulong
             var timestampQuery = queryType switch
             {
                 CountQueryType.Guild => db.MessageTimestamps.Where(x => x.GuildId == snowflakeId),
-                CountQueryType.Channel => db.MessageTimestamps.Where(x => x.ChannelId == snowflakeId && x.GuildId == guildId),
+                CountQueryType.Channel => db.MessageTimestamps.Where(x =>
+                    x.ChannelId == snowflakeId && x.GuildId == guildId),
                 CountQueryType.User => db.MessageTimestamps.Where(x => x.UserId == snowflakeId && x.GuildId == guildId),
                 _ => throw new ArgumentOutOfRangeException(nameof(queryType), queryType, null)
             };
@@ -454,7 +467,10 @@ private async Task ProcessBatchAsync(List<(ulong GuildId, ulong ChannelId, ulong
             var timestampGroups = timestamps.GroupBy(
                 t => (t.GuildId, t.ChannelId, t.UserId),
                 t => t,
-                (key, group) => new { Key = key, Timestamps = group.ToList() }
+                (key, group) => new
+                {
+                    Key = key, Timestamps = group.ToList()
+                }
             ).ToDictionary(g => g.Key, g => g.Timestamps);
 
             // Assign timestamps to their corresponding message counts
@@ -615,7 +631,7 @@ private async Task ProcessBatchAsync(List<(ulong GuildId, ulong ChannelId, ulong
         catch (Exception ex)
         {
             await transaction.RollbackAsync();
-            Log.Error(ex, "Failed to reset message counts for guild {GuildId}", guildId);
+            logger.LogError(ex, "Failed to reset message counts for guild {GuildId}", guildId);
             return false;
         }
     }

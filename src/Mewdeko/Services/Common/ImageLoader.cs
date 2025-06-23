@@ -1,7 +1,6 @@
 using System.IO;
 using System.Net.Http;
 using Newtonsoft.Json.Linq;
-using Serilog;
 using StackExchange.Redis;
 
 namespace Mewdeko.Services.Common;
@@ -13,6 +12,7 @@ public class ImageLoader
 {
     private readonly ConnectionMultiplexer con;
     private readonly HttpClient http;
+    private readonly ILogger<ImageLoader> logger;
     private readonly List<Task<KeyValuePair<RedisKey, RedisValue>>> uriTasks = [];
 
     /// <summary>
@@ -21,11 +21,13 @@ public class ImageLoader
     /// <param name="http">The HTTP client.</param>
     /// <param name="con">The Redis connection multiplexer.</param>
     /// <param name="getKey">The function to get the Redis key.</param>
-    public ImageLoader(HttpClient http, ConnectionMultiplexer con, Func<string, RedisKey> getKey)
+    public ImageLoader(HttpClient http, ConnectionMultiplexer con, Func<string, RedisKey> getKey,
+        ILogger<ImageLoader> logger)
     {
         this.http = http;
         this.con = con;
         GetKey = getKey;
+        this.logger = logger;
     }
 
     /// <summary>
@@ -50,7 +52,7 @@ public class ImageLoader
         }
         catch (Exception ex)
         {
-            Log.Warning(ex, "Failed reading image bytes");
+            logger.LogWarning(ex, "Failed reading image bytes");
             return null;
         }
     }
@@ -66,7 +68,7 @@ public class ImageLoader
                 }
                 catch
                 {
-                    Log.Error("Error retrieving image for key {Key}: {Data}", key, x);
+                    logger.LogError("Error retrieving image for key {Key}: {Data}", key, x);
                     return null;
                 }
             });
@@ -81,7 +83,7 @@ public class ImageLoader
 
         if (arr.Count != vals.Length)
         {
-            Log.Information(
+            logger.LogInformation(
                 "{2}/{1} URIs for the key '{0}' have been loaded. Some of the supplied URIs are either unavailable or invalid.",
                 key, arr.Count, vals.Length);
         }
@@ -96,7 +98,7 @@ public class ImageLoader
         }
         catch
         {
-            Log.Information("Setting '{0}' image failed. The URI you provided is either unavailable or invalid.",
+            logger.LogInformation("Setting '{0}' image failed. The URI you provided is either unavailable or invalid.",
                 key.ToLowerInvariant());
             return new KeyValuePair<RedisKey, RedisValue>("", "");
         }

@@ -1,6 +1,4 @@
-﻿using Serilog;
-
-namespace Mewdeko.Modules.Administration.Services;
+﻿namespace Mewdeko.Modules.Administration.Services;
 
 /// <summary>
 ///     Service for managing game voice channels.
@@ -9,6 +7,8 @@ public class GameVoiceChannelService : INService
 {
     private readonly IDataConnectionFactory dbFactory;
     private readonly GuildSettingsService guildSettings;
+    private readonly ILogger<GameVoiceChannelService> logger;
+
 
     /// <summary>
     ///     Constructs a new instance of the GameVoiceChannelService.
@@ -17,10 +17,11 @@ public class GameVoiceChannelService : INService
     /// <param name="guildSettings">The guild settings service.</param>
     /// <param name="eventHandler">The event handler.</param>
     public GameVoiceChannelService(IDataConnectionFactory dbFactory,
-        GuildSettingsService guildSettings, EventHandler eventHandler)
+        GuildSettingsService guildSettings, EventHandler eventHandler, ILogger<GameVoiceChannelService> logger)
     {
         this.dbFactory = dbFactory;
         this.guildSettings = guildSettings;
+        this.logger = logger;
 
         eventHandler.UserVoiceStateUpdated += Client_UserVoiceStateUpdated;
         eventHandler.GuildMemberUpdated += _client_GuildMemberUpdated;
@@ -58,7 +59,7 @@ public class GameVoiceChannelService : INService
         }
         catch (Exception ex)
         {
-            Log.Warning(ex, "Error running GuildMemberUpdated in gvc");
+            logger.LogWarning(ex, "Error running GuildMemberUpdated in gvc");
         }
     }
 
@@ -78,8 +79,8 @@ public class GameVoiceChannelService : INService
 
         if (gc == null)
         {
-             Log.Warning("GuildConfig is null for GuildId {GuildId} in ToggleGameVoiceChannel", guildId);
-             return null;
+            logger.LogWarning("GuildConfig is null for GuildId {GuildId} in ToggleGameVoiceChannel", guildId);
+            return null;
         }
 
         if (gc.GameVoiceChannel == vchId)
@@ -130,7 +131,7 @@ public class GameVoiceChannelService : INService
         }
         catch (Exception ex)
         {
-            Log.Warning(ex, "Error running VoiceStateUpdate in gvc");
+            logger.LogWarning(ex, "Error running VoiceStateUpdate in gvc");
         }
     }
 

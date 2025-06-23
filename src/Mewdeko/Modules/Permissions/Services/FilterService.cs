@@ -9,7 +9,6 @@ using Mewdeko.Common.PubSub;
 using Mewdeko.Modules.Administration.Services;
 using Mewdeko.Modules.Moderation.Services;
 using Mewdeko.Services.Strings;
-using Serilog;
 
 namespace Mewdeko.Modules.Permissions.Services;
 
@@ -26,6 +25,7 @@ public class FilterService : IEarlyBehavior, INService
     private readonly CultureInfo? cultureInfo = new("en-US");
     private readonly IDataConnectionFactory dbFactory;
     private readonly GuildSettingsService gss;
+    private readonly ILogger<FilterService> logger;
 
     // Cache for compiled regex patterns to avoid repeated compilation
     private readonly ConcurrentDictionary<string, Regex> regexCache = new();
@@ -40,7 +40,7 @@ public class FilterService : IEarlyBehavior, INService
     /// </remarks>
     public FilterService(DiscordShardedClient client, IDataConnectionFactory dbFactory, IPubSub pubSub,
         UserPunishService upun2, GeneratedBotStrings strng, AdministrationService ass,
-        GuildSettingsService gss, EventHandler eventHandler, BotConfig config)
+        GuildSettingsService gss, EventHandler eventHandler, BotConfig config, ILogger<FilterService> logger)
     {
         this.dbFactory = dbFactory;
         this.client = client;
@@ -49,6 +49,7 @@ public class FilterService : IEarlyBehavior, INService
         this.ass = ass;
         this.gss = gss;
         this.config = config;
+        this.logger = logger;
 
         eventHandler.MessageUpdated += (_, newMsg, channel) =>
         {
@@ -372,7 +373,7 @@ public class FilterService : IEarlyBehavior, INService
 
     private async Task RemoveInvalidBannedRegex(string word, ulong guildId)
     {
-        Log.Error("Invalid regex, removing.: {Word}", word);
+        logger.LogError("Invalid regex, removing.: {Word}", word);
         await using var db = await dbFactory.CreateConnectionAsync();
 
         await db.AutoBanWords
@@ -415,7 +416,7 @@ public class FilterService : IEarlyBehavior, INService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, Strings.AutobanError(guild.Id, msg.Channel.Name));
+            logger.LogError(ex, Strings.AutobanError(guild.Id, msg.Channel.Name));
             return false;
         }
     }
@@ -445,7 +446,7 @@ public class FilterService : IEarlyBehavior, INService
 
     private async Task RemoveInvalidRegex(string word, ulong guildId)
     {
-        Log.Error("Invalid regex, removing: {Word}", word);
+        logger.LogError("Invalid regex, removing: {Word}", word);
         await using var db = await dbFactory.CreateConnectionAsync();
 
         await db.FilteredWords
@@ -467,7 +468,7 @@ public class FilterService : IEarlyBehavior, INService
         }
         catch (HttpException ex)
         {
-            Log.Warning(ex, Strings.FilterError(guild.Id, usrMsg.Channel.Id));
+            logger.LogWarning(ex, Strings.FilterError(guild.Id, usrMsg.Channel.Id));
             return false;
         }
     }
@@ -519,12 +520,12 @@ public class FilterService : IEarlyBehavior, INService
         }
         catch (HttpException ex)
         {
-            Log.Warning(ex, Strings.InviteFilterError(guild.Id, usrMsg.Channel.Id));
+            logger.LogWarning(ex, Strings.InviteFilterError(guild.Id, usrMsg.Channel.Id));
             return false;
         }
         catch (Exception ex)
         {
-            Log.Error(ex, Strings.InviteFilterUnexpected(guild.Id, usrMsg.Channel.Id));
+            logger.LogError(ex, Strings.InviteFilterUnexpected(guild.Id, usrMsg.Channel.Id));
             return false;
         }
     }
@@ -567,12 +568,12 @@ public class FilterService : IEarlyBehavior, INService
         }
         catch (HttpException ex)
         {
-            Log.Warning(ex, Strings.LinkFilterError(guild.Id, usrMsg.Channel.Id));
+            logger.LogWarning(ex, Strings.LinkFilterError(guild.Id, usrMsg.Channel.Id));
             return false;
         }
         catch (Exception ex)
         {
-            Log.Error(ex, Strings.LinkFilterUnexpected(guild.Id, usrMsg.Channel.Id));
+            logger.LogError(ex, Strings.LinkFilterUnexpected(guild.Id, usrMsg.Channel.Id));
             return false;
         }
     }

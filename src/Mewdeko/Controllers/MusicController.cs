@@ -9,7 +9,6 @@ using Mewdeko.Modules.Music.CustomPlayer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Serilog;
 
 namespace Mewdeko.Controllers;
 
@@ -24,6 +23,7 @@ public class MusicController : Controller
     private readonly IDataCache cache;
     private readonly DiscordShardedClient client;
     private readonly MusicEventManager eventManager;
+    private readonly ILogger<MusicController> logger;
 
     /// <summary>
     ///     Controller for managing music playback and settings
@@ -36,12 +36,13 @@ public class MusicController : Controller
         IAudioService audioService,
         IDataCache cache,
         DiscordShardedClient client,
-        MusicEventManager eventManager)
+        MusicEventManager eventManager, ILogger<MusicController> logger)
     {
         this.audioService = audioService;
         this.cache = cache;
         this.client = client;
         this.eventManager = eventManager;
+        this.logger = logger;
     }
 
     /// <summary>
@@ -156,7 +157,7 @@ public class MusicController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error searching for tracks with query: {Query}", query);
+            logger.LogError(ex, "Error searching for tracks with query: {Query}", query);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -209,7 +210,7 @@ public class MusicController : Controller
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error extracting track info from URL: {Url}", url);
+            logger.LogError(ex, "Error extracting track info from URL: {Url}", url);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -276,7 +277,7 @@ public class MusicController : Controller
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Error sending SSE update");
+                logger.LogError(ex, "Error sending SSE update");
                 completion.TrySetResult(false);
             }
         }, userId);
@@ -311,7 +312,7 @@ public class MusicController : Controller
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Error in SSE heartbeat");
+                logger.LogError(ex, "Error in SSE heartbeat");
             }
         });
 

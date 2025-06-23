@@ -10,7 +10,6 @@ using LinqToDB;
 using Mewdeko.Common.Configs;
 using Mewdeko.Modules.Utility.Services.Impl;
 using Mewdeko.Services.Strings;
-using Serilog;
 using Embed = Discord.Embed;
 
 namespace Mewdeko.Modules.Utility.Services;
@@ -46,6 +45,7 @@ public class AiService : INService
     private readonly DiscordShardedClient client;
     private readonly IDataConnectionFactory dbFactory;
     private readonly IHttpClientFactory httpFactory;
+    private readonly ILogger<AiService> logger;
     private readonly ConcurrentDictionary<AiProvider, List<AiModel>> modelCache;
     private readonly TimeSpan modelCacheExpiry = TimeSpan.FromHours(24);
     private readonly GeneratedBotStrings strings;
@@ -55,13 +55,15 @@ public class AiService : INService
     ///     Initializes a new instance of the <see cref="AiService" /> class.
     /// </summary>
     public AiService(IDataConnectionFactory dbFactory, IHttpClientFactory httpFactory,
-        GeneratedBotStrings strings, BotConfig config, EventHandler handler, DiscordShardedClient client)
+        GeneratedBotStrings strings, BotConfig config, EventHandler handler, DiscordShardedClient client,
+        ILogger<AiService> logger)
     {
         this.dbFactory = dbFactory;
         this.httpFactory = httpFactory;
         this.strings = strings;
         botConfig = config;
         this.client = client;
+        this.logger = logger;
         aiClientFactory = new AiClientFactory(httpFactory);
         handler.MessageReceived += HandleMessage;
         modelCache = new ConcurrentDictionary<AiProvider, List<AiModel>>();
@@ -168,7 +170,7 @@ public class AiService : INService
         }
         catch (Exception ex)
         {
-            Log.Warning(ex, "Error in AI processing");
+            logger.LogWarning(ex, "Error in AI processing");
             if (webhook != null && webhookMessageId.HasValue)
             {
                 await webhook.ModifyMessageAsync(webhookMessageId.Value, x =>
@@ -222,7 +224,7 @@ public class AiService : INService
             }
             catch (Exception e)
             {
-                Log.Error(e, "There was an issue deleting the conversation");
+                logger.LogError(e, "There was an issue deleting the conversation");
             }
         }
     }
@@ -309,7 +311,7 @@ public class AiService : INService
 
         if (toRemove.Any())
         {
-            Log.Information($"Removing {toRemove.Count} older messages from conversation to manage payload size");
+            logger.LogInformation($"Removing {toRemove.Count} older messages from conversation to manage payload size");
             await db.AiMessages
                 .Where(m =>
                     m.ConversationId == conversation.Id &&
@@ -355,14 +357,14 @@ public class AiService : INService
             if (string.IsNullOrEmpty(rawJson)) continue;
 
             // Log raw response for debugging
-            Log.Information($"Claude raw response: {rawJson}");
+            logger.LogInformation($"Claude raw response: {rawJson}");
 
             // IMPORTANT: Parse the delta to extract just the content
             var contentDelta = streamParser.ParseDelta(rawJson, (AiProvider)config.Provider);
             if (!string.IsNullOrEmpty(contentDelta))
             {
                 responseBuilder.Append(contentDelta);
-                Log.Information($"Added content delta: {contentDelta}");
+                logger.LogInformation($"Added content delta: {contentDelta}");
             }
 
             // Check for usage information
@@ -370,7 +372,7 @@ public class AiService : INService
             if (usage.HasValue)
             {
                 tokenCount = usage.Value.TotalTokens;
-                Log.Information($"Updated token count: {tokenCount}");
+                logger.LogInformation($"Updated token count: {tokenCount}");
             }
 
             // Update UI more frequently during stream
@@ -384,13 +386,13 @@ public class AiService : INService
             // Check if stream is finished
             if (streamParser.IsStreamFinished(rawJson, (AiProvider)config.Provider))
             {
-                Log.Information("AI stream finished");
+                logger.LogInformation("AI stream finished");
                 break;
             }
 
             // Safety timeout
             if (DateTime.UtcNow <= timeout) continue;
-            Log.Warning("AI stream timed out");
+            logger.LogWarning("AI stream timed out");
             break;
         }
 
@@ -479,8 +481,8 @@ public class AiService : INService
                     }
                     catch (Exception ex)
                     {
-                        Log.Warning($"Error parsing JSON embed: {ex.Message}");
-                        Log.Warning("Failed to parse JSON, falling back to standard embeds");
+                        logger.LogWarning($"Error parsing JSON embed: {ex.Message}");
+                        logger.LogWarning("Failed to parse JSON, falling back to standard embeds");
                         // Fall through to standard embed handling
                     }
                 }
@@ -720,7 +722,7 @@ public class AiService : INService
                     }
                     catch (Exception ex)
                     {
-                        Log.Warning($"Error creating JSON embed for chunk {i + 1}: {ex.Message}");
+                        logger.LogWarning($"Error creating JSON embed for chunk {i + 1}: {ex.Message}");
 
                         // Fallback for this chunk
                         var fallbackEmbed = new EmbedBuilder()
@@ -1037,7 +1039,7 @@ public class AiService : INService
         http.DefaultRequestHeaders.Add("anthropic-version", "2023-06-01");
         var response = await http.GetStringAsync("https://api.anthropic.com/v1/models");
         var data = JsonSerializer.Deserialize<ClaudeModelsResponse>(response);
-        Log.Information(response);
+        logger.LogInformation(response);
 
         return data.Data
             .Select(m => new AiModel

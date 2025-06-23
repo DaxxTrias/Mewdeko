@@ -33,13 +33,16 @@ public class Mewdeko
         PropertyNameCaseInsensitive = true
     };
 
+    private readonly ILogger<Mewdeko> logger;
+
     /// <summary>
     ///     Initializes a new instance of the Mewdeko class.
     /// </summary>
     /// <param name="services">The service provider for dependency injection.</param>
-    public Mewdeko(IServiceProvider services)
+    public Mewdeko(IServiceProvider services, ILogger<Mewdeko> logger)
     {
         Services = services;
+        this.logger = logger;
         Credentials = Services.GetRequiredService<BotCredentials>();
         Cache = Services.GetRequiredService<IDataCache>();
         Client = Services.GetRequiredService<DiscordShardedClient>();
@@ -102,7 +105,7 @@ public class Mewdeko
         }
         catch (ReflectionTypeLoadException ex)
         {
-            Log.Warning(ex.LoaderExceptions[0], "Error getting types");
+            logger.LogWarning(ex.LoaderExceptions[0], "Error getting types");
             return;
         }
 
@@ -131,7 +134,7 @@ public class Mewdeko
 
 
         sw.Stop();
-        Log.Information("TypeReaders loaded in {ElapsedTotalSeconds}s", sw.Elapsed.TotalSeconds);
+        logger.LogInformation("TypeReaders loaded in {ElapsedTotalSeconds}s", sw.Elapsed.TotalSeconds);
     }
 
     private async Task LoginAsync(string token)
@@ -142,15 +145,15 @@ public class Mewdeko
         Task SetClientReady(DiscordSocketClient unused)
         {
             ReadyCount++;
-            Log.Information($"Shard {unused.ShardId} is ready");
-            Log.Information($"{ReadyCount}/{Client.Shards.Count} shards connected");
+            logger.LogInformation($"Shard {unused.ShardId} is ready");
+            logger.LogInformation($"{ReadyCount}/{Client.Shards.Count} shards connected");
             if (ReadyCount != Client.Shards.Count)
                 return Task.CompletedTask;
             _ = Task.Run(() => clientReady.TrySetResult(true));
             return Task.CompletedTask;
         }
 
-        Log.Information("Logging in...");
+        logger.LogInformation("Logging in...");
         try
         {
             // Login but don't start shards yet
@@ -161,7 +164,7 @@ public class Mewdeko
 
             // Start shards in rate-limited batches according to max concurrency
             var totalShards = Client.Shards.Count;
-            Log.Information($"Starting {totalShards} shards with max concurrency of {maxConcurrency}");
+            logger.LogInformation($"Starting {totalShards} shards with max concurrency of {maxConcurrency}");
 
             // Group shards by their rate limit bucket using the formula from Discord docs
             var shardGroups = Client.Shards
@@ -173,7 +176,7 @@ public class Mewdeko
             foreach (var group in shardGroups)
             {
                 var tasks = group.Select(shard => shard.StartAsync()).ToList();
-                Log.Information($"Starting shard bucket {group.Key} with {tasks.Count} shards");
+                logger.LogInformation($"Starting shard bucket {group.Key} with {tasks.Count} shards");
                 await Task.WhenAll(tasks);
 
                 // If not the last group, add a small delay between buckets
@@ -197,8 +200,8 @@ public class Mewdeko
         Client.ShardReady -= SetClientReady;
         Client.JoinedGuild += Client_JoinedGuild;
         Client.LeftGuild += Client_LeftGuild;
-        Log.Information("Logged in.");
-        Log.Information("Logged in as:");
+        logger.LogInformation("Logged in.");
+        logger.LogInformation("Logged in as:");
         Console.WriteLine(FiggleFonts.Digital.Render(Client.CurrentUser.Username));
     }
 
@@ -220,7 +223,7 @@ public class Mewdeko
                 //ignored
             }
 
-            Log.Information("Left server: {0} [{1}]", arg.Name, arg.Id);
+            logger.LogInformation("Left server: {0} [{1}]", arg.Name, arg.Id);
         });
         return Task.CompletedTask;
     }
@@ -229,7 +232,7 @@ public class Mewdeko
     {
         _ = Task.Run(async () =>
         {
-            Log.Information("Joined server: {0} [{1}]", arg.Name, arg.Id);
+            logger.LogInformation("Joined server: {0} [{1}]", arg.Name, arg.Id);
 
             var gc = await GuildSettingsService.GetGuildConfig(arg.Id).ConfigureAwait(false);
 
@@ -264,20 +267,20 @@ public class Mewdeko
 
         if (circularDependencies.Count > 0)
         {
-            Log.Error("Circular dependencies found:");
+            logger.LogError("Circular dependencies found:");
             foreach (var dependency in circularDependencies)
             {
-                Log.Error(dependency);
+                logger.LogError(dependency);
             }
         }
         else
         {
-            Log.Information("No circular dependencies found.");
+            logger.LogInformation("No circular dependencies found.");
         }
 
         await LoginAsync(Credentials.Token).ConfigureAwait(false);
 
-        Log.Information("Loading Services...");
+        logger.LogInformation("Loading Services...");
         try
         {
             LoadTypeReaders(typeof(Mewdeko).Assembly);
@@ -288,7 +291,7 @@ public class Mewdeko
             }
             catch (Exception e)
             {
-                Log.Error("Unable to start audio service: {Message}", e.Message);
+                logger.LogError("Unable to start audio service: {Message}", e.Message);
             }
 
             var dbProvider = Services.GetRequiredService<IDataConnectionFactory>();
@@ -298,13 +301,13 @@ public class Mewdeko
         }
         catch (Exception ex)
         {
-            Log.Error($"Error adding services: {ex}");
+            logger.LogError($"Error adding services: {ex}");
             Helpers.ReadErrorAndExit(9);
         }
 
 
         sw.Stop();
-        Log.Information("Connected in {Elapsed:F2}s", sw.Elapsed.TotalSeconds);
+        logger.LogInformation("Connected in {Elapsed:F2}s", sw.Elapsed.TotalSeconds);
         var commandService = Services.GetService<CommandService>();
         commandService.Log += LogCommandsService;
         var interactionService = Services.GetRequiredService<InteractionService>();
@@ -331,12 +334,12 @@ public class Mewdeko
         var performanceMonitor = Services.GetRequiredService<PerformanceMonitorService>();
         performanceMonitor.Initialize(typeof(Mewdeko).Assembly, "Mewdeko");
         Ready.TrySetResult(true);
-        Log.Information("Ready.");
+        logger.LogInformation("Ready.");
     }
 
-    private static Task LogCommandsService(LogMessage arg)
+    private Task LogCommandsService(LogMessage arg)
     {
-        Log.Information(arg.ToString());
+        logger.LogInformation(arg.ToString());
         return Task.CompletedTask;
     }
 
@@ -351,14 +354,15 @@ public class Mewdeko
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Failed running OnReadyAsync method on {Type} type: {Message}", toExec.GetType().Name,
+                logger.LogError(ex, "Failed running OnReadyAsync method on {Type} type: {Message}",
+                    toExec.GetType().Name,
                     ex.Message);
             }
         });
         await tasks.WhenAll();
     }
 
-    private async static Task Client_Log(LogMessage arg)
+    private async Task Client_Log(LogMessage arg)
     {
         var severity = arg.Severity switch
         {
@@ -388,7 +392,7 @@ public class Mewdeko
             }
             catch (Exception ex)
             {
-                Log.Warning(ex, "Error setting game");
+                logger.LogWarning(ex, "Error setting game");
             }
         }, CommandFlags.FireAndForget);
 
@@ -402,7 +406,7 @@ public class Mewdeko
             }
             catch (Exception ex)
             {
-                Log.Warning(ex, "Error setting stream");
+                logger.LogWarning(ex, "Error setting stream");
             }
         }, CommandFlags.FireAndForget);
     }

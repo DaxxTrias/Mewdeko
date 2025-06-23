@@ -12,7 +12,6 @@ using Lavalink4NET.Tracks;
 using Mewdeko.Common.Attributes.InteractionCommands;
 using Mewdeko.Modules.Music.Common;
 using Mewdeko.Modules.Music.CustomPlayer;
-using Serilog;
 using SpotifyAPI.Web;
 using Swan;
 
@@ -26,7 +25,8 @@ public class SlashMusic(
     IAudioService service,
     IDataCache cache,
     InteractiveService interactiveService,
-    GuildSettingsService guildSettingsService) : MewdekoSlashCommandModule
+    GuildSettingsService guildSettingsService,
+    ILogger<SlashMusic> logger) : MewdekoSlashCommandModule
 {
     /// <summary>
     ///     Joins the voice channel.
@@ -186,7 +186,7 @@ public class SlashMusic(
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error in Play command with query: {Query}", query);
+            logger.LogError(ex, "Error in Play command with query: {Query}", query);
             await FollowupAsync(embed: new EmbedBuilder()
                 .WithErrorColor()
                 .WithDescription(Strings.MusicGenericError(Context.Guild.Id))
@@ -263,7 +263,7 @@ public class SlashMusic(
         }
         catch (Exception e)
         {
-            Log.Error("Failed to get now playing track: {Message}", e.Message);
+            logger.LogError("Failed to get now playing track: {Message}", e.Message);
         }
     }
 
@@ -800,7 +800,7 @@ public class SlashMusic(
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error processing URL: {Url}", url);
+            logger.LogError(ex, "Error processing URL: {Url}", url);
             await FollowupAsync(embed: new EmbedBuilder()
                 .WithErrorColor()
                 .WithDescription(Strings.MusicUrlProcessError(Context.Guild.Id))
@@ -857,7 +857,7 @@ public class SlashMusic(
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error processing search query: {Query}", query);
+            logger.LogError(ex, "Error processing search query: {Query}", query);
             await FollowupAsync(embed: new EmbedBuilder()
                 .WithErrorColor()
                 .WithDescription(Strings.MusicSearchError(Context.Guild.Id))
@@ -1025,7 +1025,7 @@ public class SlashMusic(
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error processing Spotify URL: {Url}", url);
+            logger.LogError(ex, "Error processing Spotify URL: {Url}", url);
             throw; // Rethrow to be handled by caller
         }
 
@@ -1256,7 +1256,7 @@ public class SlashMusic(
         }
         catch (Exception ex)
         {
-            Log.Error($"Error in music control button handler {ex}");
+            logger.LogError($"Error in music control button handler {ex}");
             await FollowupAsync(Strings.MusicControlError(ctx.Guild.Id));
         }
     }

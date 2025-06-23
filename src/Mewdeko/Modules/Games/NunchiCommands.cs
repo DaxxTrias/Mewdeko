@@ -37,7 +37,8 @@ public partial class Games
                     return;
                 }
 
-                await ReplyConfirmAsync(Strings.NunchiJoined(ctx.Guild.Id, nunchi.ParticipantCount)).ConfigureAwait(false);
+                await ReplyConfirmAsync(Strings.NunchiJoined(ctx.Guild.Id, nunchi.ParticipantCount))
+                    .ConfigureAwait(false);
                 return;
             }
 
@@ -67,19 +68,19 @@ public partial class Games
 
             async Task ClientMessageReceived(SocketMessage arg)
             {
-                    if (arg.Channel.Id != ctx.Channel.Id)
-                        return;
+                if (arg.Channel.Id != ctx.Channel.Id)
+                    return;
 
-                    if (!int.TryParse(arg.Content, out var number))
-                        return;
-                    try
-                    {
-                        await nunchi.Input(arg.Author.Id, arg.Author.ToString(), number).ConfigureAwait(false);
-                    }
-                    catch
-                    {
-                        // Ignored
-                    }
+                if (!int.TryParse(arg.Content, out var number))
+                    return;
+                try
+                {
+                    await nunchi.Input(arg.Author.Id, arg.Author.ToString(), number).ConfigureAwait(false);
+                }
+                catch
+                {
+                    // Ignored
+                }
             }
 
             async Task NunchiOnGameEnded(NunchiGame arg1, string? arg2)

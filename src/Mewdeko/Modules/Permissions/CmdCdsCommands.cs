@@ -1,4 +1,5 @@
-﻿using Discord.Commands;
+﻿using DataModel;
+using Discord.Commands;
 using Humanizer;
 using LinqToDB;
 using Mewdeko.Common.Attributes.TextCommands;
@@ -6,7 +7,6 @@ using Mewdeko.Common.Collections;
 using Mewdeko.Common.TypeReaders;
 using Mewdeko.Common.TypeReaders.Models;
 using Mewdeko.Modules.Permissions.Services;
-using DataModel;
 
 namespace Mewdeko.Modules.Permissions;
 
@@ -78,9 +78,7 @@ public partial class Permissions
                 // Add new cooldown
                 await db.InsertAsync(new CommandCooldown
                 {
-                    GuildId = guildId,
-                    CommandName = name,
-                    Seconds = Convert.ToInt32(time.Time.TotalSeconds)
+                    GuildId = guildId, CommandName = name, Seconds = Convert.ToInt32(time.Time.TotalSeconds)
                 });
             }
 

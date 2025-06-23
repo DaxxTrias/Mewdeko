@@ -65,7 +65,8 @@ public partial class Giveaways(
             {
                 gc.GiveawayEndMessage = null;
                 await guildSettings.UpdateGuildConfig(Context.Guild.Id, gc);
-                await ctx.Channel.SendConfirmAsync(Strings.GiveawayHostMessageRemoved(ctx.Guild.Id)).ConfigureAwait(false);
+                await ctx.Channel.SendConfirmAsync(Strings.GiveawayHostMessageRemoved(ctx.Guild.Id))
+                    .ConfigureAwait(false);
             }
         }
         else
@@ -96,7 +97,6 @@ public partial class Giveaways(
         gc.GiveawayBanner = banner;
         await guildSettings.UpdateGuildConfig(Context.Guild.Id, gc);
         await ctx.Channel.SendConfirmAsync(Strings.GiveawayBannerSet(ctx.Guild.Id)).ConfigureAwait(false);
-
     }
 
     /// <summary>
@@ -121,12 +121,10 @@ public partial class Giveaways(
             gc.GiveawayEmbedColor = colorVal;
             await guildSettings.UpdateGuildConfig(Context.Guild.Id, gc);
             await ctx.Channel.SendConfirmAsync(Strings.GiveawayWinEmbedColorSet(ctx.Guild.Id)).ConfigureAwait(false);
-
         }
         else
         {
             await ctx.Channel.SendErrorAsync(Strings.GiveawayInvalidColor(ctx.Guild.Id), Config).ConfigureAwait(false);
-
         }
     }
 
@@ -152,12 +150,10 @@ public partial class Giveaways(
             gc.GiveawayEmbedColor = colorVal;
             await guildSettings.UpdateGuildConfig(Context.Guild.Id, gc);
             await ctx.Channel.SendConfirmAsync(Strings.GiveawayEmbedColorSet(ctx.Guild.Id)).ConfigureAwait(false);
-
         }
         else
         {
             await ctx.Channel.SendErrorAsync(Strings.GiveawayInvalidColor(ctx.Guild.Id), Config).ConfigureAwait(false);
-
         }
     }
 
@@ -172,8 +168,8 @@ public partial class Giveaways(
         var gc = await guildSettings.GetGuildConfig(Context.Guild.Id);
         gc.DmOnGiveawayWin = !gc.DmOnGiveawayWin;
         await guildSettings.UpdateGuildConfig(Context.Guild.Id, gc);
-        await ctx.Channel.SendConfirmAsync(Strings.GiveawayDmStatus(ctx.Guild.Id, gc.DmOnGiveawayWin)).ConfigureAwait(false);
-
+        await ctx.Channel.SendConfirmAsync(Strings.GiveawayDmStatus(ctx.Guild.Id, gc.DmOnGiveawayWin))
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -198,7 +194,6 @@ public partial class Giveaways(
 
         await Service.SetGiveawayEmote(ctx.Guild, emote.ToString()).ConfigureAwait(false);
         await ctx.Channel.SendConfirmAsync(Strings.GiveawayEmoteSet(ctx.Guild.Id, emote)).ConfigureAwait(false);
-
     }
 
     /// <summary>
@@ -243,7 +238,8 @@ public partial class Giveaways(
         var gways = dbContext.Giveaways.Where(x => x.ServerId == ctx.Guild.Id);
         if (!gways.Any())
         {
-            await ctx.Channel.SendErrorAsync(Strings.GiveawayNoStatsAvailable(ctx.Guild.Id), Config).ConfigureAwait(false);
+            await ctx.Channel.SendErrorAsync(Strings.GiveawayNoStatsAvailable(ctx.Guild.Id), Config)
+                .ConfigureAwait(false);
         }
         else
         {
@@ -289,7 +285,8 @@ public partial class Giveaways(
         }
         catch
         {
-            await ctx.Channel.SendErrorAsync(Strings.GiveawayInvalidEmoteCurrent(ctx.Guild.Id), Config).ConfigureAwait(false);
+            await ctx.Channel.SendErrorAsync(Strings.GiveawayInvalidEmoteCurrent(ctx.Guild.Id), Config)
+                .ConfigureAwait(false);
 
             return;
         }
@@ -298,13 +295,15 @@ public partial class Giveaways(
         var perms = user.GetPermissions(chan);
         if (!perms.Has(ChannelPermission.AddReactions))
         {
-            await ctx.Channel.SendErrorAsync(Strings.GiveawayNoReactionPermission(ctx.Guild.Id), Config).ConfigureAwait(false);
+            await ctx.Channel.SendErrorAsync(Strings.GiveawayNoReactionPermission(ctx.Guild.Id), Config)
+                .ConfigureAwait(false);
             return;
         }
 
         if (!perms.Has(ChannelPermission.UseExternalEmojis) && !ctx.Guild.Emotes.Contains(emote))
         {
-            await ctx.Channel.SendErrorAsync(Strings.GiveawayNoExternalEmotes(ctx.Guild.Id), Config).ConfigureAwait(false);
+            await ctx.Channel.SendErrorAsync(Strings.GiveawayNoExternalEmotes(ctx.Guild.Id), Config)
+                .ConfigureAwait(false);
             return;
         }
 
@@ -327,7 +326,8 @@ public partial class Giveaways(
         }
         catch
         {
-            await ctx.Channel.SendErrorAsync(Strings.GiveawayInvalidEmoteCurrent(ctx.Guild.Id), Config).ConfigureAwait(false);
+            await ctx.Channel.SendErrorAsync(Strings.GiveawayInvalidEmoteCurrent(ctx.Guild.Id), Config)
+                .ConfigureAwait(false);
 
             return;
         }
@@ -378,13 +378,15 @@ public partial class Giveaways(
         var permissions = botUser.GetPermissions(channel);
         if (!permissions.Has(ChannelPermission.AddReactions))
         {
-            await ctx.Channel.SendErrorAsync(Strings.GiveawayNoReactionPermission(ctx.Guild.Id), Config).ConfigureAwait(false);
+            await ctx.Channel.SendErrorAsync(Strings.GiveawayNoReactionPermission(ctx.Guild.Id), Config)
+                .ConfigureAwait(false);
             return;
         }
 
         if (!permissions.Has(ChannelPermission.UseExternalEmojis) && !ctx.Guild.Emotes.Contains(emote))
         {
-            await ctx.Channel.SendErrorAsync(Strings.GiveawayNoExternalEmotes(ctx.Guild.Id), Config).ConfigureAwait(false);
+            await ctx.Channel.SendErrorAsync(Strings.GiveawayNoExternalEmotes(ctx.Guild.Id), Config)
+                .ConfigureAwait(false);
             return;
         }
 
@@ -576,7 +578,6 @@ public partial class Giveaways(
         if (response.Equals("yes", StringComparison.OrdinalIgnoreCase) ||
             response.Equals("y", StringComparison.OrdinalIgnoreCase))
         {
-
             await msg.ModifyAsync(x => x.Embed = promptEmbed
                 .WithDescription(Strings.GiveawayStartRolesPrompt(ctx.Guild.Id))
                 .Build()).ConfigureAwait(false);
@@ -588,7 +589,6 @@ public partial class Giveaways(
             }
             else
             {
-
                 await msg.ModifyAsync(x => x.Embed = promptEmbed
                     .WithDescription(Strings.GiveawayStartNoRoles(ctx.Guild.Id))
                     .Build()).ConfigureAwait(false);
@@ -682,7 +682,6 @@ public partial class Giveaways(
         if (gway is null)
         {
             await ctx.Channel.SendErrorAsync(Strings.GiveawayNotFound(ctx.Guild.Id), Config).ConfigureAwait(false);
-
         }
 
         if (gway.Ended == 1)

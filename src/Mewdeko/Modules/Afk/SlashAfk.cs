@@ -196,7 +196,8 @@ public class SlashAfk : MewdekoSlashModuleBase<AfkService>
         async Task<PageBuilder> PageFactory(int page)
         {
             await Task.CompletedTask.ConfigureAwait(false);
-            return new PageBuilder().WithOkColor().WithTitle(Strings.ActiveAfksTitle(ctx.Guild.Id, afks.ToArray().Length))
+            return new PageBuilder().WithOkColor()
+                .WithTitle(Strings.ActiveAfksTitle(ctx.Guild.Id, afks.ToArray().Length))
                 .WithDescription(string.Join("\n", afks.ToArray().Skip(page * 20).Take(20)));
         }
     }
@@ -224,7 +225,8 @@ public class SlashAfk : MewdekoSlashModuleBase<AfkService>
         }
 
         var msg = await Service.GetAfk(user.Guild.Id, user.Id);
-        await ctx.Interaction.SendConfirmAsync(Strings.AfkViewMessage(ctx.Guild.Id, user, msg.Message)).ConfigureAwait(false);
+        await ctx.Interaction.SendConfirmAsync(Strings.AfkViewMessage(ctx.Guild.Id, user, msg.Message))
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -475,7 +477,8 @@ public class SlashAfk : MewdekoSlashModuleBase<AfkService>
             }
 
             await Service.AfkDisabledSet(ctx.Guild, string.Join(",", list)).ConfigureAwait(false);
-            await ConfirmAsync(Strings.AfkChannelsUpdated(ctx.Guild.Id, string.Join(",", mentions))).ConfigureAwait(false);
+            await ConfirmAsync(Strings.AfkChannelsUpdated(ctx.Guild.Id, string.Join(",", mentions)))
+                .ConfigureAwait(false);
         }
     }
 

@@ -4,7 +4,6 @@ using Discord.Interactions;
 using Discord.Net;
 using Mewdeko.Common.Attributes.InteractionCommands;
 using Mewdeko.Services.Settings;
-using Serilog;
 using Image = Discord.Image;
 
 namespace Mewdeko.Modules.Server_Management;
@@ -12,7 +11,8 @@ namespace Mewdeko.Modules.Server_Management;
 /// <summary>
 ///     A module for stealing emotes and stickers from messages and adding them to the server.
 /// </summary>
-public class EmoteStealer(IHttpClientFactory httpFactory, BotConfigService config) : MewdekoSlashCommandModule
+public class EmoteStealer(IHttpClientFactory httpFactory, BotConfigService config, ILogger<EmoteStealer> logger)
+    : MewdekoSlashCommandModule
 {
     /// <summary>
     ///     Steals emotes from a message and adds them to the server's emote collection.
@@ -168,7 +168,7 @@ public class EmoteStealer(IHttpClientFactory httpFactory, BotConfigService confi
                 }
                 catch (Exception ex)
                 {
-                    Log.Error(ex.ToString());
+                    logger.LogError(ex.ToString());
                     errored.Add($"{i.Name} | [Url]({i.GetStickerUrl()})");
                 }
             }

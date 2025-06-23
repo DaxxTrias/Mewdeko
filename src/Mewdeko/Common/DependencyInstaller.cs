@@ -6,32 +6,19 @@ using Serilog;
 namespace Mewdeko.Common;
 
 /// <summary>
-/// Dependency installer for PostgreSQL and Redis across different operating systems.
-/// Handles detection, installation, and configuration of required services.
+///     Dependency installer for PostgreSQL and Redis across different operating systems.
+///     Handles detection, installation, and configuration of required services.
 /// </summary>
 /// <remarks>
-/// Core functionality:
-/// - Detects and installs dependencies on supported Linux distributions
-/// - Provides guided installation for Windows systems
-/// - Configures database users and permissions
-/// - Generates connection strings
-/// - Verifies service status
+///     Core functionality:
+///     - Detects and installs dependencies on supported Linux distributions
+///     - Provides guided installation for Windows systems
+///     - Configures database users and permissions
+///     - Generates connection strings
+///     - Verifies service status
 /// </remarks>
 public static class DependencyInstaller
 {
-    private enum LinuxDistro
-    {
-        Ubuntu,
-        Debian,
-        Fedora,
-        Rhel,
-        CentOs,
-        Arch,
-        OpenSuse,
-        Alpine,
-        Unknown
-    }
-
     private static readonly Dictionary<LinuxDistro, string[]> InstallCommands = new()
     {
         {
@@ -133,31 +120,45 @@ public static class DependencyInstaller
 
     private static readonly Dictionary<LinuxDistro, (string pgCheck, string redisCheck)> PackageChecks = new()
     {
-        { LinuxDistro.Ubuntu, ("dpkg -l | grep postgresql", "dpkg -l | grep redis-server") },
-        { LinuxDistro.Debian, ("dpkg -l | grep postgresql", "dpkg -l | grep redis-server") },
-        { LinuxDistro.Fedora, ("rpm -q postgresql-server", "rpm -q redis") },
-        { LinuxDistro.Rhel, ("rpm -q postgresql-server", "rpm -q redis") },
-        { LinuxDistro.CentOs, ("rpm -q postgresql-server", "rpm -q redis") },
-        { LinuxDistro.Arch, ("pacman -Qi postgresql", "pacman -Qi redis") },
-        { LinuxDistro.OpenSuse, ("rpm -q postgresql-server", "rpm -q redis") },
-        { LinuxDistro.Alpine, ("apk info postgresql", "apk info redis") }
+        {
+            LinuxDistro.Ubuntu, ("dpkg -l | grep postgresql", "dpkg -l | grep redis-server")
+        },
+        {
+            LinuxDistro.Debian, ("dpkg -l | grep postgresql", "dpkg -l | grep redis-server")
+        },
+        {
+            LinuxDistro.Fedora, ("rpm -q postgresql-server", "rpm -q redis")
+        },
+        {
+            LinuxDistro.Rhel, ("rpm -q postgresql-server", "rpm -q redis")
+        },
+        {
+            LinuxDistro.CentOs, ("rpm -q postgresql-server", "rpm -q redis")
+        },
+        {
+            LinuxDistro.Arch, ("pacman -Qi postgresql", "pacman -Qi redis")
+        },
+        {
+            LinuxDistro.OpenSuse, ("rpm -q postgresql-server", "rpm -q redis")
+        },
+        {
+            LinuxDistro.Alpine, ("apk info postgresql", "apk info redis")
+        }
     };
 
     /// <summary>
-    /// Detects operating system, checks for existing installations, and manages dependency setup.
+    ///     Detects operating system, checks for existing installations, and manages dependency setup.
     /// </summary>
     /// <remarks>
-    /// For Linux:
-    /// - Automatically detects distribution
-    /// - Installs using appropriate package manager
-    /// - Configures services and database
-    ///
-    /// For Windows:
-    /// - Checks existing installations
-    /// - Provides manual installation guidance
-    /// - Assists with database setup
-    ///
-    /// Throws no exceptions - all errors are logged.
+    ///     For Linux:
+    ///     - Automatically detects distribution
+    ///     - Installs using appropriate package manager
+    ///     - Configures services and database
+    ///     For Windows:
+    ///     - Checks existing installations
+    ///     - Provides manual installation guidance
+    ///     - Assists with database setup
+    ///     Throws no exceptions - all errors are logged.
     /// </remarks>
     public static void CheckAndInstallDependencies(string psqlString)
     {
@@ -205,15 +206,15 @@ public static class DependencyInstaller
                 else
                 {
                     Log.Information("PostgreSQL and Redis are already installed.");
-                        if (!string.IsNullOrWhiteSpace(psqlString))
-                        {
-                            Log.Information("PSQL string is already set.");
-                            return;
-                        }
+                    if (!string.IsNullOrWhiteSpace(psqlString))
+                    {
+                        Log.Information("PSQL string is already set.");
+                        return;
+                    }
 
-                        if (!PromptForDatabaseSetup()) return;
-                        var (dbName, dbUser, dbPassword) = GetDatabaseDetails();
-                        ShowWindowsDatabaseSetup(dbName, dbUser, dbPassword);
+                    if (!PromptForDatabaseSetup()) return;
+                    var (dbName, dbUser, dbPassword) = GetDatabaseDetails();
+                    ShowWindowsDatabaseSetup(dbName, dbUser, dbPassword);
                 }
 
                 break;
@@ -392,6 +393,7 @@ public static class DependencyInstaller
                     Log.Error($"Error executing {command}: {error}");
                     return;
                 }
+
                 Log.Information($"Successfully executed: {command}");
             }
             catch (Exception ex)
@@ -483,6 +485,7 @@ public static class DependencyInstaller
                     Log.Error($"Error executing {command}: {error}");
                     return;
                 }
+
                 Log.Information($"Successfully executed: {command}");
             }
             catch (Exception ex)
@@ -493,7 +496,8 @@ public static class DependencyInstaller
         }
 
         Log.Information($"Database {dbName} created successfully with user {dbUser}");
-        Log.Information($"Your connection string will be: \"Host=localhost;Database={dbName};Username={dbUser};Password={dbPassword}\"");
+        Log.Information(
+            $"Your connection string will be: \"Host=localhost;Database={dbName};Username={dbUser};Password={dbPassword}\"");
     }
 
     private static void ShowWindowsInstructions(bool postgresInstalled = false, bool redisInstalled = false)
@@ -501,34 +505,34 @@ public static class DependencyInstaller
         if (!postgresInstalled)
         {
             Log.Information("""
-                PostgreSQL is not installed. Please install:
-                1. Download from: https://www.postgresql.org/download/windows/
-                2. Run installer and follow setup wizard
-                3. Note down postgres user password
-                4. Verify by opening Command Prompt and typing: psql -V
-                """);
+                            PostgreSQL is not installed. Please install:
+                            1. Download from: https://www.postgresql.org/download/windows/
+                            2. Run installer and follow setup wizard
+                            3. Note down postgres user password
+                            4. Verify by opening Command Prompt and typing: psql -V
+                            """);
         }
 
         if (!redisInstalled)
         {
             Log.Information("""
-                Redis is not installed. Please install:
-                1. Download from: https://github.com/microsoftarchive/redis/releases
-                2. Run the .msi installer
-                3. Service should start automatically
-                4. Verify by opening Command Prompt and typing: redis-cli ping
-                """);
+                            Redis is not installed. Please install:
+                            1. Download from: https://github.com/microsoftarchive/redis/releases
+                            2. Run the .msi installer
+                            3. Service should start automatically
+                            4. Verify by opening Command Prompt and typing: redis-cli ping
+                            """);
         }
 
         if (!postgresInstalled || !redisInstalled)
         {
             Log.Information("""
-                After installing, ensure services are running:
-                1. Open Services (services.msc)
-                2. Look for 'postgresql' and 'redis' services
-                3. Set both to 'Automatic' startup
-                4. Ensure both are 'Running'
-                """);
+                            After installing, ensure services are running:
+                            1. Open Services (services.msc)
+                            2. Look for 'postgresql' and 'redis' services
+                            3. Set both to 'Automatic' startup
+                            4. Ensure both are 'Running'
+                            """);
         }
 
         if (PromptForDatabaseSetup())
@@ -537,7 +541,8 @@ public static class DependencyInstaller
         }
     }
 
-    private static void ShowWindowsDatabaseSetup(string? dbName = null, string? dbUser = null, string? dbPassword = null)
+    private static void ShowWindowsDatabaseSetup(string? dbName = null, string? dbUser = null,
+        string? dbPassword = null)
     {
         if (dbName == null || dbUser == null || dbPassword == null)
         {
@@ -545,42 +550,55 @@ public static class DependencyInstaller
         }
 
         Log.Information($"""
-            To create your database:
-            1. Open Command Prompt as Administrator
-            2. Type: psql -U postgres
-            3. Enter postgres password
-            4. Run these commands:
+                         To create your database:
+                         1. Open Command Prompt as Administrator
+                         2. Type: psql -U postgres
+                         3. Enter postgres password
+                         4. Run these commands:
 
-                CREATE USER {dbUser} WITH PASSWORD '{dbPassword}';
-                CREATE DATABASE {dbName} OWNER {dbUser};
-                GRANT ALL PRIVILEGES ON DATABASE {dbName} TO {dbUser};
-                \c {dbName}
-                GRANT ALL ON SCHEMA public TO {dbUser};
+                             CREATE USER {dbUser} WITH PASSWORD '{dbPassword}';
+                             CREATE DATABASE {dbName} OWNER {dbUser};
+                             GRANT ALL PRIVILEGES ON DATABASE {dbName} TO {dbUser};
+                             \c {dbName}
+                             GRANT ALL ON SCHEMA public TO {dbUser};
 
-            5. Type \q to exit
+                         5. Type \q to exit
 
-            Connection string: Host=localhost;Database={dbName};Username={dbUser};Password={dbPassword}
-            """);
+                         Connection string: Host=localhost;Database={dbName};Username={dbUser};Password={dbPassword}
+                         """);
     }
 
     private static void ShowManualInstructions()
     {
         Log.Information("""
-            Please install PostgreSQL and Redis manually:
+                        Please install PostgreSQL and Redis manually:
 
-            1. PostgreSQL:
-               - Visit: https://www.postgresql.org/download/
-               - Follow installation instructions for your system
-               - Start and enable PostgreSQL service
+                        1. PostgreSQL:
+                           - Visit: https://www.postgresql.org/download/
+                           - Follow installation instructions for your system
+                           - Start and enable PostgreSQL service
 
-            2. Redis:
-               - Visit: https://redis.io/download
-               - Follow installation instructions for your system
-               - Start and enable Redis service
+                        2. Redis:
+                           - Visit: https://redis.io/download
+                           - Follow installation instructions for your system
+                           - Start and enable Redis service
 
-            After installation, verify:
-            1. PostgreSQL is running: sudo systemctl status postgresql
-            2. Redis is running: sudo systemctl status redis
-            """);
+                        After installation, verify:
+                        1. PostgreSQL is running: sudo systemctl status postgresql
+                        2. Redis is running: sudo systemctl status redis
+                        """);
+    }
+
+    private enum LinuxDistro
+    {
+        Ubuntu,
+        Debian,
+        Fedora,
+        Rhel,
+        CentOs,
+        Arch,
+        OpenSuse,
+        Alpine,
+        Unknown
     }
 }

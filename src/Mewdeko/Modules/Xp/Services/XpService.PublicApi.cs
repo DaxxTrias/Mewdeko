@@ -3,7 +3,7 @@ using System.Text.Json;
 using DataModel;
 using LinqToDB;
 using Mewdeko.Modules.Xp.Models;
-using Serilog;
+using Microsoft.Extensions.DependencyInjection;
 using StackExchange.Redis;
 using UserXpStats = Mewdeko.Modules.Xp.Models.UserXpStats;
 using XpNotificationType = Mewdeko.Modules.Xp.Models.XpNotificationType;
@@ -57,7 +57,7 @@ public partial class XpService
     /// <returns>A task representing the asynchronous operation and the number of affected users.</returns>
     public async Task<int> RecomputeAllLevelsAsync(ulong guildId, XpCurveType newCurveType)
     {
-        Log.Information("Recomputing levels for all users in guild {GuildId} with curve type {CurveType}",
+        logger.LogInformation("Recomputing levels for all users in guild {GuildId} with curve type {CurveType}",
             guildId, newCurveType);
 
         await using var db = await DbFactory.CreateConnectionAsync();
@@ -91,11 +91,11 @@ public partial class XpService
         if (keysToDelete.Count > 0)
         {
             await redis.KeyDeleteAsync(keysToDelete.ToArray());
-            Log.Debug("Deleted {Count} leaderboard cache keys for guild {GuildId}",
+            logger.LogDebug("Deleted {Count} leaderboard cache keys for guild {GuildId}",
                 keysToDelete.Count, guildId);
         }
 
-        Log.Information("Recomputed levels for {Count} users in guild {GuildId}",
+        logger.LogInformation("Recomputed levels for {Count} users in guild {GuildId}",
             users.Count, guildId);
 
         return users.Count;
@@ -209,7 +209,7 @@ public partial class XpService
             }
             catch (Exception ex)
             {
-                Log.Warning(ex, "Failed to deserialize leaderboard data for guild {GuildId}", guildId);
+                logger.LogWarning(ex, "Failed to deserialize leaderboard data for guild {GuildId}", guildId);
             }
         }
 
@@ -416,7 +416,7 @@ public partial class XpService
     /// <returns>A task representing the asynchronous operation and the number of affected users.</returns>
     public async Task<int> ResetGuildXp(ulong guildId, bool resetBonusXp = false)
     {
-        Log.Information("Resetting XP for all users in guild {GuildId}", guildId);
+        logger.LogInformation("Resetting XP for all users in guild {GuildId}", guildId);
 
         await using var db = await DbFactory.CreateConnectionAsync();
 
@@ -448,7 +448,7 @@ public partial class XpService
         // Clear all caches for this guild using the cache manager
         await cacheManager.ClearGuildXpCachesAsync(guildId);
 
-        Log.Information("Successfully reset XP for {UserCount} users in guild {GuildId}", affectedUsers, guildId);
+        logger.LogInformation("Successfully reset XP for {UserCount} users in guild {GuildId}", affectedUsers, guildId);
 
         return affectedUsers;
     }
@@ -904,7 +904,7 @@ public partial class XpService
                 throw new ArgumentException($"User {userId} not found in guild {guildId}");
 
             // Generate XP card using the specialized service
-            var cardGenerator = new XpCardGenerator(DbFactory, this, HttpClientFactory);
+            var cardGenerator = serviceProvider.GetRequiredService<XpCardGenerator>();
             var cardStream = await cardGenerator.GenerateXpImageAsync(user);
 
             // Reset the stream position so it can be read
@@ -914,7 +914,7 @@ public partial class XpService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error generating XP card for {UserId} in {GuildId}", userId, guildId);
+            logger.LogError(ex, "Error generating XP card for {UserId} in {GuildId}", userId, guildId);
             throw;
         }
     }
