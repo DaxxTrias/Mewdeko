@@ -132,11 +132,7 @@ public class XpVoiceTracker : INService, IDisposable
                         session.EndEligiblePeriod(now);
                     }
 
-                    // Additional null check to prevent null reference exception
-                    if (before.VoiceChannel != null)
-                    {
-                        await CalculateAndAwardXp(guildUser, before.VoiceChannel, session).ConfigureAwait(false);
-                    }
+                    await CalculateAndAwardXp(guildUser, before.VoiceChannel, session).ConfigureAwait(false);
                 }
             }
 
@@ -405,7 +401,13 @@ public class XpVoiceTracker : INService, IDisposable
                 return;
 
             // Get background processor from XpService
-            var backgroundProcessor = XpService.Instance.GetBackgroundProcessor();
+            var backgroundProcessor = XpService.Instance?.GetBackgroundProcessor();
+            if (backgroundProcessor == null)
+            {
+                Log.Warning("XpService background processor not available for user {UserId} in guild {GuildId}", userId,
+                    guildId);
+                return;
+            }
 
             // Queue XP gain
             backgroundProcessor.QueueXpGain(
@@ -796,7 +798,8 @@ public class XpVoiceTracker : INService, IDisposable
     /// <returns>True if the user is participating, false otherwise.</returns>
     private static bool IsParticipatingInVoice(IVoiceState user)
     {
-        return !user.IsDeafened && !user.IsMuted && !user.IsSelfDeafened && !user.IsSelfMuted;
+        return !user.IsDeafened && !user.IsMuted && !user.IsSelfDeafened && !user.IsSelfMuted &&
+               user.VoiceChannel is not null;
     }
 
     /// <summary>
