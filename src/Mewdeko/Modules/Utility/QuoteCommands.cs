@@ -370,7 +370,7 @@ public partial class Utility
         }
 
         /// <summary>
-        ///     Exports all quotes from the guild in YAML format.
+        ///     Exports all quotes from the guild in JSON format.
         /// </summary>
         /// <returns>A task that represents the asynchronous operation of exporting quotes.</returns>
         [Cmd]
