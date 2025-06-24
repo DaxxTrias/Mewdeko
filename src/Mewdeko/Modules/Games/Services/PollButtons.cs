@@ -16,7 +16,7 @@ public class PollButtons(PollService pollService, BotConfig config) : MewdekoSla
     [ComponentInteraction("pollbutton:*")]
     public async Task Pollbutton(string num)
     {
-        var (allowed, type) = await pollService.TryVote(ctx.Guild, int.Parse(num) - 1, ctx.User);
+        var (allowed, type) = pollService.TryVote(ctx.Guild, int.Parse(num) - 1, ctx.User);
         switch (type)
         {
             case PollType.PollEnded:

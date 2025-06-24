@@ -740,4 +740,19 @@ public class MewdekoDb : DataConnection
     ///     Gets the Patreon goals table.
     /// </summary>
     public ITable<PatreonGoal> PatreonGoals => this.GetTable<PatreonGoal>();
+
+    /// <summary>
+    ///     Gets the todo lists table.
+    /// </summary>
+    public ITable<TodoList> TodoLists => this.GetTable<TodoList>();
+
+    /// <summary>
+    ///     Gets the todo items table.
+    /// </summary>
+    public ITable<TodoItem> TodoItems => this.GetTable<TodoItem>();
+
+    /// <summary>
+    ///     Gets the todo list permissions table.
+    /// </summary>
+    public ITable<TodoListPermission> TodoListPermissions => this.GetTable<TodoListPermission>();
 }
