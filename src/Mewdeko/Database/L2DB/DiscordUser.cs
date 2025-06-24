@@ -39,5 +39,7 @@ namespace DataModel
 		[Column("StatsOptOut"                                                                                            )] public bool      StatsOptOut           { get; set; } // boolean
 		[Column("DateAdded"                                                                                              )] public DateTime? DateAdded             { get; set; } // timestamp (6) without time zone
 		[Column("GreetDmsOptOut"                                                                                         )] public bool      GreetDmsOptOut        { get; set; } // boolean
+		[Column("BirthdayAnnouncementsEnabled"                                                                           )] public bool      BirthdayAnnouncementsEnabled { get; set; } // boolean
+		[Column("BirthdayTimezone"                                                                                       )] public string?   BirthdayTimezone      { get; set; } // text
 	}
 }

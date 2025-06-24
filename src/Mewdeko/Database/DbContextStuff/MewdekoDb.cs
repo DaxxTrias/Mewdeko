@@ -187,6 +187,11 @@ public class MewdekoDb : DataConnection
     public ITable<BanTemplate> BanTemplates => this.GetTable<BanTemplate>();
 
     /// <summary>
+    ///     Gets the birthday configurations table.
+    /// </summary>
+    public ITable<BirthdayConfig> BirthdayConfigs => this.GetTable<BirthdayConfig>();
+
+    /// <summary>
     ///     Gets the blacklist table.
     /// </summary>
     public ITable<Blacklist> Blacklists => this.GetTable<Blacklist>();

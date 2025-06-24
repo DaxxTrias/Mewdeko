@@ -3187,5 +3187,22 @@
   "tags_removed_by": "Tags removed by {0}:\n",
   "user_unblacklisted_from_tickets": "<@{0}> has been removed from the ticket blacklist.",
   "ticket_auto_closed_inactivity": "This ticket has been automatically closed due to {0} hours of inactivity.",
-  "ticket_transferred_to": "This ticket has been transferred to {0}"
+  "ticket_transferred_to": "This ticket has been transferred to {0}",
+  "birthday_announcements_enabled": "🎉 Birthday announcements enabled! You'll receive birthday wishes when your special day arrives.",
+  "birthday_announcements_disabled": "🔕 Birthday announcements disabled. Your birthday will not be announced.",
+  "birthday_no_birthday_set": "You must set your birthday first using the profile commands!",
+  "birthday_profile_private": "You cannot enable birthday announcements while your profile is private!",
+  "birthday_display_disabled": "You cannot enable birthday announcements while your birthday display is disabled!",
+  "birthday_timezone_set": "🌍 Timezone set to {0}. Your birthday will be calculated using this timezone.",
+  "birthday_timezone_invalid": "❌ Invalid timezone! Please use a valid timezone like 'America/New_York' or 'Europe/London'.",
+  "birthday_no_upcoming": "No upcoming birthdays found in the next {0} days.",
+  "birthday_no_today": "No birthdays today! 🎂",
+  "birthday_channel_set": "🎂 Birthday announcements will now be posted in {0}!",
+  "birthday_role_disabled": "🚫 Birthday role disabled.",
+  "birthday_role_set": "🎭 Users will now receive the {0} role on their birthday!",
+  "birthday_message_current": "Current birthday message: {0}",
+  "birthday_message_updated": "🎉 Birthday message updated! Preview: {0}",
+  "birthday_ping_role_disabled": "🔕 Birthday ping role disabled.",
+  "birthday_ping_role_set": "📢 {0} will be pinged for birthday announcements!",
+  "birthday_config_reset": "🔄 Birthday configuration has been reset to defaults."
 }
