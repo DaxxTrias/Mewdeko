@@ -53,6 +53,7 @@ namespace DataModel
 		public ITable<AutoCommand>               AutoCommands               => this.GetTable<AutoCommand>();
 		public ITable<AutoPublish>               AutoPublishes              => this.GetTable<AutoPublish>();
 		public ITable<BanTemplate>               BanTemplates               => this.GetTable<BanTemplate>();
+		public ITable<BirthdayConfig>            BirthdayConfigs            => this.GetTable<BirthdayConfig>();
 		public ITable<Blacklist>                 Blacklists                 => this.GetTable<Blacklist>();
 		public ITable<BlacklistedPermission>     BlacklistedPermissions     => this.GetTable<BlacklistedPermission>();
 		public ITable<BlacklistedRole>           BlacklistedRoles           => this.GetTable<BlacklistedRole>();
