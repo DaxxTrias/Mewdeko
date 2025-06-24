@@ -1,3 +1,72 @@
+birthdayannouncements:
+  desc: Toggles birthday announcements for yourself.
+  args:
+    - ''
+  params: [ ]
+birthdaytimezone:
+  desc: Sets your personal timezone for birthday calculations.
+  args:
+    - "timezone"
+  params:
+    - name: timezone
+      desc: The timezone to set (e.g., "America/New_York").
+      type: string
+      optional: false
+birthdaylist:
+  desc: Shows upcoming birthdays in the server.
+  args:
+    - "days"
+  params:
+    - name: days
+      desc: How many days to look ahead. Default is 7, max is 30.
+      type: int
+      optional: true
+birthdaytoday:
+  desc: Shows today's birthdays in the server.
+  args:
+    - ''
+  params: [ ]
+birthdaychannel:
+  desc: Sets the channel for birthday announcements.
+  args:
+    - "#channel"
+  params:
+    - name: channel
+      desc: The text channel to use for announcements. Defaults to the current channel if not specified.
+      type: ITextChannel
+      optional: true
+birthdayrole:
+  desc: Sets the role to be given to users on their birthday.
+  args:
+    - "@role"
+  params:
+    - name: role
+      desc: The role to assign on a user's birthday. Provide no role to disable it.
+      type: IRole
+      optional: true
+birthdaymessage:
+  desc: Sets the custom message for birthday announcements.
+  args:
+    - "message"
+  params:
+    - name: message
+      desc: The message template. Use {user} to mention the user. Shows the current message if left empty.
+      type: string
+      optional: true
+birthdaypingrole:
+  desc: Sets a role to be pinged during birthday announcements.
+  args:
+    - "@role"
+  params:
+    - name: role
+      desc: The role to ping. Provide no role to disable it.
+      type: IRole
+      optional: true
+birthdayconfig:
+  desc: Displays the current birthday configuration for the server.
+  args:
+    - ''
+  params: [ ]
 adsarm:
   desc: Toggles the auto delete of server advertisement messages.
   args:

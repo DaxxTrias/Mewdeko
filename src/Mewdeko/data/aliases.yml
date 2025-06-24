@@ -12,6 +12,35 @@ saveallrolestates:
   - saveallrolestates
   - saveserverstates
   - backuprolestates
+birthdayannouncements:
+  - birthdayannouncements
+  - bdayann
+birthdaytimezone:
+  - birthdaytimezone
+  - bdaytz
+birthdaylist:
+  - birthdaylist
+  - bdaylist
+  - upcomingbirthdays
+birthdaytoday:
+  - birthdaytoday
+  - todaysbirthdays
+birthdaychannel:
+  - birthdaychannel
+  - bdaychannel
+  - bdaychan
+birthdayrole:
+  - birthdayrole
+  - bdayrole
+birthdaymessage:
+  - birthdaymessage
+  - bdaymsg
+birthdaypingrole:
+  - birthdaypingrole
+  - bdayping
+birthdayconfig:
+  - birthdayconfig
+  - bdaycfg
 transferrolestates:
   - transferrolestates
   - copyrolestates
