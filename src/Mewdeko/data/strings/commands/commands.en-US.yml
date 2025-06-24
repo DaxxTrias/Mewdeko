@@ -28207,3 +28207,354 @@ deleteselectoption:
       desc: The ID of the select menu option to delete.
       type: int
       optional: false
+
+# Todo Commands
+todocreatelist:
+  desc: Creates a new personal todo list.
+  args:
+    - "name"
+    - "description"
+  params:
+    - name: name
+      desc: The name of the todo list.
+      type: string
+      optional: false
+    - name: description
+      desc: Optional description for the list.
+      type: string
+      optional: true
+
+todocreateserverlist:
+  desc: Creates a new server-wide todo list (requires Manage Server permission).
+  args:
+    - "name"
+    - "description"
+  params:
+    - name: name
+      desc: The name of the server todo list.
+      type: string
+      optional: false
+    - name: description
+      desc: Optional description for the list.
+      type: string
+      optional: true
+
+todolists:
+  desc: Shows all your accessible todo lists.
+  args:
+    - "includeServer"
+  params:
+    - name: includeServer
+      desc: Whether to include server-wide lists.
+      type: bool
+      optional: true
+
+todoadd:
+  desc: Adds a new todo item to a list.
+  args:
+    - "listId"
+    - "title"
+    - "description"
+  params:
+    - name: listId
+      desc: The ID of the todo list.
+      type: int
+      optional: false
+    - name: title
+      desc: The title of the todo item.
+      type: string
+      optional: false
+    - name: description
+      desc: Optional description for the item.
+      type: string
+      optional: true
+
+todoaddpriority:
+  desc: Adds a todo item with priority level.
+  args:
+    - "listId"
+    - "priority"
+    - "title"
+    - "description"
+  params:
+    - name: listId
+      desc: The ID of the todo list.
+      type: int
+      optional: false
+    - name: priority
+      desc: Priority level (1=Low, 2=Medium, 3=High, 4=Critical).
+      type: int
+      optional: false
+    - name: title
+      desc: The title of the todo item.
+      type: string
+      optional: false
+    - name: description
+      desc: Optional description for the item.
+      type: string
+      optional: true
+
+todoshow:
+  desc: Shows all items in a todo list.
+  args:
+    - "listId"
+    - "includeCompleted"
+  params:
+    - name: listId
+      desc: The ID of the todo list.
+      type: int
+      optional: false
+    - name: includeCompleted
+      desc: Whether to include completed items.
+      type: bool
+      optional: true
+
+todocomplete:
+  desc: Marks a todo item as completed.
+  args:
+    - "itemId"
+  params:
+    - name: itemId
+      desc: The ID of the todo item.
+      type: int
+      optional: false
+
+tododelete:
+  desc: Deletes a todo item.
+  args:
+    - "itemId"
+  params:
+    - name: itemId
+      desc: The ID of the todo item.
+      type: int
+      optional: false
+
+tododeletelist:
+  desc: Deletes an entire todo list.
+  args:
+    - "listId"
+  params:
+    - name: listId
+      desc: The ID of the todo list.
+      type: int
+      optional: false
+
+todogrant:
+  desc: Grants permissions to a user for a todo list.
+  args:
+    - "listId"
+    - "@user"
+    - "permissions"
+  params:
+    - name: listId
+      desc: The ID of the todo list.
+      type: int
+      optional: false
+    - name: user
+      desc: The user to grant permissions to.
+      type: IUser
+      optional: false
+    - name: permissions
+      desc: Comma-separated permissions (view,add,edit,complete,delete,manage,all).
+      type: string
+      optional: false
+
+todosetdue:
+  desc: Sets the due date for a todo item.
+  args:
+    - "itemId"
+    - "dateString"
+  params:
+    - name: itemId
+      desc: The ID of the todo item.
+      type: int
+      optional: false
+    - name: dateString
+      desc: The due date and time.
+      type: string
+      optional: false
+
+todocleardue:
+  desc: Removes the due date from a todo item.
+  args:
+    - "itemId"
+  params:
+    - name: itemId
+      desc: The ID of the todo item.
+      type: int
+      optional: false
+
+todosetreminder:
+  desc: Sets a reminder time for a todo item.
+  args:
+    - "itemId"
+    - "dateString"
+  params:
+    - name: itemId
+      desc: The ID of the todo item.
+      type: int
+      optional: false
+    - name: dateString
+      desc: The reminder date and time.
+      type: string
+      optional: false
+
+todoclearreminder:
+  desc: Removes the reminder from a todo item.
+  args:
+    - "itemId"
+  params:
+    - name: itemId
+      desc: The ID of the todo item.
+      type: int
+      optional: false
+
+todoaddtag:
+  desc: Adds a tag to a todo item.
+  args:
+    - "itemId"
+    - "tag"
+  params:
+    - name: itemId
+      desc: The ID of the todo item.
+      type: int
+      optional: false
+    - name: tag
+      desc: The tag to add.
+      type: string
+      optional: false
+
+todoremovetag:
+  desc: Removes a tag from a todo item.
+  args:
+    - "itemId"
+    - "tag"
+  params:
+    - name: itemId
+      desc: The ID of the todo item.
+      type: int
+      optional: false
+    - name: tag
+      desc: The tag to remove.
+      type: string
+      optional: false
+
+todoedit:
+  desc: Edits a todo item's title and description.
+  args:
+    - "itemId"
+    - "title"
+    - "description"
+  params:
+    - name: itemId
+      desc: The ID of the todo item.
+      type: int
+      optional: false
+    - name: title
+      desc: The new title.
+      type: string
+      optional: false
+    - name: description
+      desc: The new description.
+      type: string
+      optional: true
+
+todoreorder:
+  desc: Reorders a todo item to a new position.
+  args:
+    - "itemId"
+    - "newPosition"
+  params:
+    - name: itemId
+      desc: The ID of the todo item.
+      type: int
+      optional: false
+    - name: newPosition
+      desc: The new position (1-based).
+      type: int
+      optional: false
+
+todosetcolor:
+  desc: Sets the color for a todo list.
+  args:
+    - "listId"
+    - "color"
+  params:
+    - name: listId
+      desc: The ID of the todo list.
+      type: int
+      optional: false
+    - name: color
+      desc: Hex color code (e.g., #ff0000).
+      type: string
+      optional: false
+
+todotoggleprivacy:
+  desc: Toggles the privacy setting for a todo list.
+  args:
+    - "listId"
+  params:
+    - name: listId
+      desc: The ID of the todo list.
+      type: int
+      optional: false
+
+todopermissions:
+  desc: Shows all permissions for a todo list.
+  args:
+    - "listId"
+  params:
+    - name: listId
+      desc: The ID of the todo list.
+      type: int
+      optional: false
+
+todorevoke:
+  desc: Revokes all permissions for a user on a todo list.
+  args:
+    - "listId"
+    - "@user"
+  params:
+    - name: listId
+      desc: The ID of the todo list.
+      type: int
+      optional: false
+    - name: user
+      desc: The user to revoke permissions from.
+      type: IUser
+      optional: false
+
+todosearch:
+  desc: Searches for todo items within a list.
+  args:
+    - "listId"
+    - "query"
+  params:
+    - name: listId
+      desc: The ID of the todo list.
+      type: int
+      optional: false
+    - name: query
+      desc: The search query.
+      type: string
+      optional: false
+
+todofilter:
+  desc: Filters todo items by tag or priority.
+  args:
+    - "listId"
+    - "filter"
+    - "value"
+  params:
+    - name: listId
+      desc: The ID of the todo list.
+      type: int
+      optional: false
+    - name: filter
+      desc: Filter type (tag or priority).
+      type: string
+      optional: false
+    - name: value
+      desc: The value to filter by.
+      type: string
+      optional: true

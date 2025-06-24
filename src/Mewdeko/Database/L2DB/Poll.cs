@@ -35,7 +35,7 @@ namespace DataModel
 		/// FK_PollVote_Poll_PollsId backreference
 		/// </summary>
 		[Association(ThisKey = nameof(Id), OtherKey = nameof(PollVote.PollsId))]
-		public IEnumerable<PollVote>? PollVotes { get; set; } = null!;
+		public ICollection<PollVote>? PollVotes { get; set; } = null!;
 		#endregion
 	}
 }
