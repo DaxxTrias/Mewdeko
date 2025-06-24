@@ -1480,7 +1480,12 @@ quotesearch:
   - qsearch
 quoteshow:
   - quoteshow
-  - qshow
+quoteexport:
+  - quoteexport
+  - qexport
+quoteimport:
+  - quoteimport
+  - qimport
 randjoke:
   - randjoke
 randombird:

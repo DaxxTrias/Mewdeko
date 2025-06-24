@@ -21895,6 +21895,14 @@ delallquotes:
       desc: The keyword whose associated quotes will be deleted.
       type: string
       optional: false
+quoteexport:
+  desc: Exports all quotes from the guild in JSON format.
+  args: [ ]
+  params: [ ]
+quoteimport:
+  desc: Imports quotes from a JSON file attachment. Duplicate quotes are allowed.
+  args: [ ]
+  params: [ ]
 listquotes_=:
   desc: Lists quotes in the guild. Quotes can be ordered by keyword or date added.
   args:
