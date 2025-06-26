@@ -28,8 +28,8 @@ public class RoleCommandsService : INService
         this.guildSettings = guildSettings;
         this.logger = logger;
 
-        eventHandler.ReactionAdded += HandleReactionAdded;
-        eventHandler.ReactionRemoved += HandleReactionRemoved;
+        eventHandler.Subscribe("ReactionAdded", "RoleCommandsService", HandleReactionAdded);
+        eventHandler.Subscribe("ReactionRemoved", "RoleCommandsService", HandleReactionRemoved);
     }
 
     /// <summary>

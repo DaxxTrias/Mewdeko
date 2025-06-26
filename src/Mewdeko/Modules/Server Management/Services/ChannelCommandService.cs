@@ -32,7 +32,7 @@ public class ChannelCommandService : INService, IReadyExecutor
         this.dataCache = dataCache;
         this.dbFactory = dbFactory;
         this.client = client;
-        handler.UserJoined += HandleUserJoinDuringLockdown;
+        handler.Subscribe("UserJoined", "ChannelCommandService", HandleUserJoinDuringLockdown);
     }
 
     /// <summary>

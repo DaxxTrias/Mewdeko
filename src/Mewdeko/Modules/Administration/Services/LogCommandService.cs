@@ -163,12 +163,12 @@ public class LogCommandService(
         }
 
         // yeaaaa would be a good idea to add events AFTER we get all guild settings.
-        handler.Subscribe("SocketGuildEvent", "LogCommandService", OnEventCreated);
+        handler.Subscribe("GuildScheduledEventCreated", "LogCommandService", OnEventCreated);
         handler.Subscribe("RoleUpdated", "LogCommandService", OnRoleUpdated);
-        handler.Subscribe("SocketRole", "LogCommandService", OnRoleCreated);
-        handler.Subscribe("SocketRole", "LogCommandService", OnRoleDeleted);
+        handler.Subscribe("RoleCreated", "LogCommandService", OnRoleCreated);
+        handler.Subscribe("RoleDeleted", "LogCommandService", OnRoleDeleted);
         handler.Subscribe("GuildUpdated", "LogCommandService", OnGuildUpdated);
-        handler.Subscribe("SocketThreadChannel", "LogCommandService", OnThreadCreated);
+        handler.Subscribe("ThreadCreated", "LogCommandService", OnThreadCreated);
         handler.Subscribe("GuildMemberUpdated", "LogCommandService", OnUserRoleAdded);
         handler.Subscribe("GuildMemberUpdated", "LogCommandService", OnUserRoleRemoved);
         handler.Subscribe("UserUpdated", "LogCommandService", OnUsernameUpdated);
@@ -177,9 +177,9 @@ public class LogCommandService(
         handler.Subscribe("ThreadUpdated", "LogCommandService", OnThreadUpdated);
         handler.Subscribe("MessageUpdated", "LogCommandService", OnMessageUpdated);
         handler.Subscribe("MessageDeleted", "LogCommandService", OnMessageDeleted);
-        handler.Subscribe("IGuildUser", "LogCommandService", OnUserJoined);
+        handler.Subscribe("UserJoined", "LogCommandService", OnUserJoined);
         handler.Subscribe("UserLeft", "LogCommandService", OnUserLeft);
-        handler.Subscribe("SocketChannel", "LogCommandService", OnChannelCreated);
+        handler.Subscribe("ChannelCreated", "LogCommandService", OnChannelCreated);
         handler.Subscribe("ChannelDestroyed", "LogCommandService", OnChannelDestroyed);
         handler.Subscribe("ChannelUpdated", "LogCommandService", OnChannelUpdated);
         handler.Subscribe("UserVoiceStateUpdated", "LogCommandService", OnVoicePresence);

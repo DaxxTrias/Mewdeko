@@ -76,12 +76,12 @@ public class CommandHandler : INService
         this.bot = bot;
         this.dbFactory = dbFactory;
         this.Services = services;
-        eventHandler.InteractionCreated += TryRunInteraction;
+        eventHandler.Subscribe("InteractionCreated", "CommandHandler", TryRunInteraction);
         this.interactionService.SlashCommandExecuted += HandleCommands;
         this.interactionService.ContextCommandExecuted += HandleContextCommands;
         clearUsersOnShortCooldown = new Timer(_ => UsersOnShortCooldown.Clear(), null, GlobalCommandsCooldown,
             GlobalCommandsCooldown);
-        eventHandler.MessageReceived += MessageReceivedHandler;
+        eventHandler.Subscribe("MessageReceived", "CommandHandler", MessageReceivedHandler);
     }
 
     /// <summary>

@@ -20,7 +20,7 @@ public class AutoBanRoleService : INService
     {
         this.dbFactory = dbFactory;
         this.eventHandler = eventHandler;
-        this.eventHandler.GuildMemberUpdated += OnGuildMemberUpdated;
+        this.eventHandler.Subscribe("GuildMemberUpdated", "AutoBanRoleService", OnGuildMemberUpdated);
     }
 
 

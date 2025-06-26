@@ -71,8 +71,8 @@ public class HelpService : INService
         this.blacklistService = blacklistService;
         this.cmds = cmds;
         this.bss = bss;
-        eventHandler.MessageReceived += HandlePing;
-        eventHandler.JoinedGuild += HandleJoin;
+        eventHandler.Subscribe("MessageReceived", "HelpService", HandlePing);
+        eventHandler.Subscribe("JoinedGuild", "HelpService", HandleJoin);
         this.perms = perms;
         this.nPerms = nPerms;
         this.interactionService = interactionService;

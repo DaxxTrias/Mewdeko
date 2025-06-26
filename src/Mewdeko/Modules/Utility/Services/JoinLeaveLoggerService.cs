@@ -20,6 +20,7 @@ public class JoinLeaveLoggerService : INService, IDisposable
     private readonly CancellationTokenSource cancellationTokenSource = new();
     private readonly IBotCredentials credentials;
     private readonly IDataConnectionFactory dbFactory;
+    private readonly EventHandler eventHandler;
     private readonly Timer flushTimer;
     private readonly GuildSettingsService guildSettingsService;
     private readonly ILogger<JoinLeaveLoggerService> logger;
@@ -51,8 +52,9 @@ public class JoinLeaveLoggerService : INService, IDisposable
             await FlushDataToSqliteAsync();
         }, null, flushInterval, flushInterval);
 
-        eventHandler.UserJoined += LogUserJoined;
-        eventHandler.UserLeft += LogUserLeft;
+        this.eventHandler = eventHandler;
+        eventHandler.Subscribe("UserJoined", "JoinLeaveLoggerService", LogUserJoined);
+        eventHandler.Subscribe("UserLeft", "JoinLeaveLoggerService", LogUserLeft);
     }
 
     /// <summary>
@@ -60,6 +62,8 @@ public class JoinLeaveLoggerService : INService, IDisposable
     /// </summary>
     public void Dispose()
     {
+        eventHandler.Unsubscribe("UserJoined", "JoinLeaveLoggerService", LogUserJoined);
+        eventHandler.Unsubscribe("UserLeft", "JoinLeaveLoggerService", LogUserLeft);
         flushTimer.Dispose();
         cancellationTokenSource.Cancel();
         cancellationTokenSource.Dispose();

@@ -133,7 +133,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         }, CommandFlags.FireAndForget);
 
         _ = CheckUpdateTimer();
-        handler.GuildMemberUpdated += QuarantineCheck;
+        handler.Subscribe("GuildMemberUpdated", "OwnerOnlyService", QuarantineCheck);
     }
 
     /// <summary>

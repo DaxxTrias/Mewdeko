@@ -32,10 +32,10 @@ public partial class UtilityService : INService
         EventHandler eventHandler,
         DiscordShardedClient client)
     {
-        eventHandler.MessageDeleted += MsgStore;
-        eventHandler.MessageUpdated += MsgStore2;
-        eventHandler.MessageReceived += MsgReciev;
-        eventHandler.MessagesBulkDeleted += BulkMsgStore;
+        eventHandler.Subscribe("MessageDeleted", "UtilityService", MsgStore);
+        eventHandler.Subscribe("MessageUpdated", "UtilityService", MsgStore2);
+        eventHandler.Subscribe("MessageReceived", "UtilityService", MsgReciev);
+        eventHandler.Subscribe("MessagesBulkDeleted", "UtilityService", BulkMsgStore);
         this.dbFactory = dbFactory;
         this.cache = cache;
         this.guildSettings = guildSettings;

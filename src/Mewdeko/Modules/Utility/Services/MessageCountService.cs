@@ -91,7 +91,7 @@ public class MessageCountService : INService
         this.cache = cache;
         this.logger = logger;
         _ = InitializeGuildSettings();
-        handler.MessageReceived += HandleCount;
+        handler.Subscribe("MessageReceived", "MessageCountService", HandleCount);
         updateChannel = Channel.CreateUnbounded<(ulong, ulong, ulong, DateTime)>();
         _ = ProcessUpdatesAsync(); // Start background processor
     }

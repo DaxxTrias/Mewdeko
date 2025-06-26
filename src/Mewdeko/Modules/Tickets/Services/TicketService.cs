@@ -20,6 +20,7 @@ public class TicketService : INService
     private const string CloseButtonId = "ticket_close";
     private readonly DiscordShardedClient client;
     private readonly IDataConnectionFactory dbFactory;
+    private readonly EventHandler eventHandler;
     private readonly ILogger<TicketService> logger;
     private readonly GeneratedBotStrings strings;
 
@@ -34,11 +35,22 @@ public class TicketService : INService
     {
         this.dbFactory = dbFactory;
         this.client = client;
+        this.eventHandler = eventHandler;
         this.strings = strings;
         this.logger = logger;
 
-        eventHandler.MessageDeleted += HandleMessageDeleted;
-        eventHandler.ModalSubmitted += HandleModalSubmitted;
+        eventHandler.Subscribe("MessageDeleted", "TicketService", HandleMessageDeleted);
+        eventHandler.Subscribe("ModalSubmitted", "TicketService", HandleModalSubmitted);
+    }
+
+    /// <summary>
+    ///     Unloads the service and unsubscribes from events.
+    /// </summary>
+    public Task Unload()
+    {
+        eventHandler.Unsubscribe("MessageDeleted", "TicketService", HandleMessageDeleted);
+        eventHandler.Unsubscribe("ModalSubmitted", "TicketService", HandleModalSubmitted);
+        return Task.CompletedTask;
     }
 
     /// <summary>

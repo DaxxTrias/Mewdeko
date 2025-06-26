@@ -29,7 +29,7 @@ public class StatusRolesService : INService
         this.dbFactory = dbFactory;
         this.cache = cache;
         this.logger = logger;
-        eventHandler.PresenceUpdated += EventHandlerOnPresenceUpdated;
+        eventHandler.Subscribe("PresenceUpdated", "StatusRolesService", EventHandlerOnPresenceUpdated);
         _ = OnReadyAsync();
     }
 

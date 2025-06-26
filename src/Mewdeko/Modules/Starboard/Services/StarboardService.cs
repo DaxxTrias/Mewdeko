@@ -33,10 +33,10 @@ public class StarboardService : INService, IReadyExecutor, IUnloadableService
         this.eventHandler = eventHandler;
         this.strings = strings;
         this.logger = logger;
-        eventHandler.ReactionAdded += OnReactionAddedAsync;
-        eventHandler.MessageDeleted += OnMessageDeletedAsync;
-        eventHandler.ReactionRemoved += OnReactionRemoveAsync;
-        eventHandler.ReactionsCleared += OnAllReactionsClearedAsync;
+        eventHandler.Subscribe("ReactionAdded", "StarboardService", OnReactionAddedAsync);
+        eventHandler.Subscribe("MessageDeleted", "StarboardService", OnMessageDeletedAsync);
+        eventHandler.Subscribe("ReactionRemoved", "StarboardService", OnReactionRemoveAsync);
+        eventHandler.Subscribe("ReactionsCleared", "StarboardService", OnAllReactionsClearedAsync);
     }
 
     /// <inheritdoc />
@@ -55,10 +55,10 @@ public class StarboardService : INService, IReadyExecutor, IUnloadableService
     /// </summary>
     public Task Unload()
     {
-        eventHandler.ReactionAdded -= OnReactionAddedAsync;
-        eventHandler.MessageDeleted -= OnMessageDeletedAsync;
-        eventHandler.ReactionRemoved -= OnReactionRemoveAsync;
-        eventHandler.ReactionsCleared -= OnAllReactionsClearedAsync;
+        eventHandler.Unsubscribe("ReactionAdded", "StarboardService", OnReactionAddedAsync);
+        eventHandler.Unsubscribe("MessageDeleted", "StarboardService", OnMessageDeletedAsync);
+        eventHandler.Unsubscribe("ReactionRemoved", "StarboardService", OnReactionRemoveAsync);
+        eventHandler.Unsubscribe("ReactionsCleared", "StarboardService", OnAllReactionsClearedAsync);
         return Task.CompletedTask;
     }
 

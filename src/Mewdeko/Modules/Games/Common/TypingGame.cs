@@ -76,7 +76,7 @@ public class TypingGame
     public async Task<bool> Stop()
     {
         if (!IsActive) return false;
-        handler.MessageReceived -= AnswerReceived;
+        handler.Unsubscribe("MessageReceived", "TypingGame", AnswerReceived);
         finishedUserIds.Clear();
         IsActive = false;
         sw.Stop();
@@ -175,7 +175,7 @@ public class TypingGame
 
     private void HandleAnswers()
     {
-        handler.MessageReceived += AnswerReceived;
+        handler.Subscribe("MessageReceived", "TypingGame", AnswerReceived);
     }
 
     private async Task AnswerReceived(SocketMessage imsg)

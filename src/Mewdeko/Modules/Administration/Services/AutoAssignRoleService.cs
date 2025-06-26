@@ -20,6 +20,7 @@ public sealed class AutoAssignRoleService : INService
         });
 
     private readonly IDataConnectionFactory dbFactory;
+    private readonly EventHandler eventHandler;
     private readonly GuildSettingsService guildSettings;
     private readonly ILogger<AutoAssignRoleService> logger;
 
@@ -35,11 +36,12 @@ public sealed class AutoAssignRoleService : INService
         this.dbFactory = dbFactory;
         this.guildSettings = guildSettings;
         this.logger = logger;
+        this.eventHandler = eventHandler;
         _ = RunAutoLoop();
 
-        eventHandler.UserJoined += OnClientOnUserJoined;
-        eventHandler.GuildMemberUpdated += OnClientOnGuildMemberUpdated;
-        eventHandler.RoleDeleted += OnClientRoleDeleted;
+        eventHandler.Subscribe("UserJoined", "AutoAssignRoleService", OnClientOnUserJoined);
+        eventHandler.Subscribe("GuildMemberUpdated", "AutoAssignRoleService", OnClientOnGuildMemberUpdated);
+        eventHandler.Subscribe("RoleDeleted", "AutoAssignRoleService", OnClientRoleDeleted);
     }
 
     private async Task RunAutoLoop()
@@ -395,6 +397,17 @@ public sealed class AutoAssignRoleService : INService
     {
         var tocheck = (await guildSettings.GetGuildConfig(guildId)).AutoBotRoleIds;
         return string.IsNullOrWhiteSpace(tocheck) ? [] : tocheck.Split(" ").Select(ulong.Parse).ToList();
+    }
+
+    /// <summary>
+    ///     Unloads the service and unsubscribes from events.
+    /// </summary>
+    public Task Unload()
+    {
+        eventHandler.Unsubscribe("UserJoined", "AutoAssignRoleService", OnClientOnUserJoined);
+        eventHandler.Unsubscribe("GuildMemberUpdated", "AutoAssignRoleService", OnClientOnGuildMemberUpdated);
+        eventHandler.Unsubscribe("RoleDeleted", "AutoAssignRoleService", OnClientRoleDeleted);
+        return Task.CompletedTask;
     }
 }
 

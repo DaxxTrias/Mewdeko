@@ -113,10 +113,10 @@ public partial class XpService : INService, IUnloadableService
         this.serviceProvider = serviceProvider;
 
         // Register event handlers
-        EventHandler.MessageReceived += HandleMessageXp;
-        EventHandler.UserVoiceStateUpdated += voiceTracker.HandleVoiceStateUpdate;
-        EventHandler.GuildAvailable += OnGuildAvailable;
-        EventHandler.MessageReceived += OnMessageReceived;
+        EventHandler.Subscribe("MessageReceived", "XpService", HandleMessageXp);
+        EventHandler.Subscribe("UserVoiceStateUpdated", "XpService", voiceTracker.HandleVoiceStateUpdate);
+        EventHandler.Subscribe("GuildAvailable", "XpService", OnGuildAvailable);
+        EventHandler.Subscribe("MessageReceived", "XpService", OnMessageReceived);
 
         _ = Task.Run(async () =>
         {
@@ -140,10 +140,10 @@ public partial class XpService : INService, IUnloadableService
     public Task Unload()
     {
         // Unregister event handlers
-        EventHandler.MessageReceived -= HandleMessageXp;
-        EventHandler.UserVoiceStateUpdated -= voiceTracker.HandleVoiceStateUpdate;
-        EventHandler.GuildAvailable -= OnGuildAvailable;
-        EventHandler.MessageReceived -= OnMessageReceived;
+        EventHandler.Unsubscribe("MessageReceived", "XpService", HandleMessageXp);
+        EventHandler.Unsubscribe("UserVoiceStateUpdated", "XpService", voiceTracker.HandleVoiceStateUpdate);
+        EventHandler.Unsubscribe("GuildAvailable", "XpService", OnGuildAvailable);
+        EventHandler.Unsubscribe("MessageReceived", "XpService", OnMessageReceived);
 
         // Clean up resources
         backgroundProcessor.Dispose();

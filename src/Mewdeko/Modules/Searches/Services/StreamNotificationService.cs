@@ -100,8 +100,8 @@ public class StreamNotificationService : IReadyExecutor, INService
         _ = streamTracker.RunAsync();
 
         // Register guild events
-        bot.JoinedGuild += ClientOnJoinedGuild;
-        eventHandler.LeftGuild += ClientOnLeftGuild;
+        eventHandler.Subscribe("JoinedGuild", "StreamNotificationService", ClientOnJoinedGuild);
+        eventHandler.Subscribe("LeftGuild", "StreamNotificationService", ClientOnLeftGuild);
     }
 
     private List<ulong> OfflineNotificationServers { get; set; } = new();
