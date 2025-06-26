@@ -69,6 +69,7 @@ public class MuteService : INService, IReadyExecutor, IDisposable
     private readonly DiscordShardedClient client;
 
     private readonly IDataConnectionFactory dbFactory;
+    private readonly EventHandler eventHandler;
 
     private readonly GuildSettingsService guildSettings;
     private readonly ILogger<MuteService> logger;
@@ -99,7 +100,8 @@ public class MuteService : INService, IReadyExecutor, IDisposable
         this.guildSettings = guildSettings;
         this.strings = strings;
         this.logger = logger;
-        eventHandler.UserJoined += Client_UserJoined;
+        this.eventHandler = eventHandler;
+        eventHandler.Subscribe("UserJoined", "MuteService", Client_UserJoined);
         UserMuted += OnUserMuted;
         UserUnmuted += OnUserUnmuted;
     }
@@ -1023,6 +1025,7 @@ public class MuteService : INService, IReadyExecutor, IDisposable
     {
         if (disposing)
         {
+            eventHandler.Unsubscribe("UserJoined", "MuteService", Client_UserJoined);
             _processingTimer?.Dispose();
         }
     }

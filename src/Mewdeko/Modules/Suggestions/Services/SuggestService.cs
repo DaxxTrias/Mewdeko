@@ -51,6 +51,7 @@ public class SuggestionsService : INService
     private readonly DiscordShardedClient client;
     private readonly BotConfig config;
     private readonly IDataConnectionFactory dbFactory;
+    private readonly EventHandler eventHandler;
     private readonly GuildSettingsService guildSettings;
     private readonly ILogger<SuggestionsService> logger;
     private readonly PermissionService perms;
@@ -86,10 +87,11 @@ public class SuggestionsService : INService
         spamCheck = [];
         adminserv = aserv;
         this.client = client;
-        eventHandler.MessageReceived += MessageRecieved;
-        eventHandler.ReactionAdded += UpdateCountOnReact;
-        eventHandler.ReactionRemoved += UpdateCountOnRemoveReact;
-        eventHandler.MessageReceived += RepostButton;
+        this.eventHandler = eventHandler;
+        eventHandler.Subscribe("MessageReceived", "SuggestService", MessageRecieved);
+        eventHandler.Subscribe("ReactionAdded", "SuggestService", UpdateCountOnReact);
+        eventHandler.Subscribe("ReactionRemoved", "SuggestService", UpdateCountOnRemoveReact);
+        eventHandler.Subscribe("MessageReceived", "SuggestService", RepostButton);
         this.dbFactory = dbFactory;
     }
 
@@ -2103,6 +2105,18 @@ public class SuggestionsService : INService
         await using var dbContext = await dbFactory.CreateConnectionAsync();
 
         return dbContext.SuggestThreads.FirstOrDefault(x => x.MessageId == messageId)?.ThreadChannelId ?? 0;
+    }
+
+    /// <summary>
+    ///     Unloads the service and unsubscribes from events.
+    /// </summary>
+    public Task Unload()
+    {
+        eventHandler.Unsubscribe("MessageReceived", "SuggestService", MessageRecieved);
+        eventHandler.Unsubscribe("ReactionAdded", "SuggestService", UpdateCountOnReact);
+        eventHandler.Unsubscribe("ReactionRemoved", "SuggestService", UpdateCountOnRemoveReact);
+        eventHandler.Unsubscribe("MessageReceived", "SuggestService", RepostButton);
+        return Task.CompletedTask;
     }
 }
 

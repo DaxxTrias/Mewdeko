@@ -188,7 +188,7 @@ public abstract class MewdekoSlashCommandModule : InteractionModuleBase
         var handler = CmdHandler.Services.GetRequiredService<EventHandler>();
         try
         {
-            handler.InteractionCreated += Interaction;
+            handler.Subscribe("InteractionCreated", "MewdekoSlashModuleBase", Interaction);
             if (await Task.WhenAny(userInputTask.Task, Task.Delay(30000)).ConfigureAwait(false) !=
                 userInputTask.Task)
             {
@@ -199,7 +199,7 @@ public abstract class MewdekoSlashCommandModule : InteractionModuleBase
         }
         finally
         {
-            handler.InteractionCreated -= Interaction;
+            handler.Unsubscribe("InteractionCreated", "MewdekoSlashModuleBase", Interaction);
         }
 
         async Task Interaction(SocketInteraction arg)
@@ -236,7 +236,7 @@ public abstract class MewdekoSlashCommandModule : InteractionModuleBase
         var handler = CmdHandler.Services.GetRequiredService<EventHandler>();
         try
         {
-            handler.MessageReceived += Interaction;
+            handler.Subscribe("MessageReceived", "MewdekoSlashModuleBase", Interaction);
             if (await Task.WhenAny(userInputTask.Task, Task.Delay(60000)).ConfigureAwait(false) !=
                 userInputTask.Task)
             {
@@ -247,7 +247,7 @@ public abstract class MewdekoSlashCommandModule : InteractionModuleBase
         }
         finally
         {
-            dsc.MessageReceived -= Interaction;
+            handler.Unsubscribe("MessageReceived", "MewdekoSlashModuleBase", Interaction);
         }
 
         async Task Interaction(SocketMessage arg)

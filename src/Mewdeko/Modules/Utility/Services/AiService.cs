@@ -65,7 +65,7 @@ public class AiService : INService
         this.client = client;
         this.logger = logger;
         aiClientFactory = new AiClientFactory(httpFactory);
-        handler.MessageReceived += HandleMessage;
+        handler.Subscribe("MessageReceived", "AiService", HandleMessage);
         modelCache = new ConcurrentDictionary<AiProvider, List<AiModel>>();
     }
 

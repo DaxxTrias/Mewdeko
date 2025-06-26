@@ -12,6 +12,7 @@ public class MultiGreetService : INService
 {
     private readonly DiscordShardedClient client;
     private readonly IDataConnectionFactory dbFactory;
+    private readonly EventHandler eventHandler;
     private readonly GuildSettingsService guildSettingsService;
     private readonly InviteCountService inviteCountService;
     private readonly ILogger<MultiGreetService> logger;
@@ -33,7 +34,8 @@ public class MultiGreetService : INService
         this.inviteCountService = inviteCountService;
         this.logger = logger;
         this.dbFactory = dbFactory;
-        eventHandler.UserJoined += DoMultiGreet;
+        this.eventHandler = eventHandler;
+        eventHandler.Subscribe("UserJoined", "MultiGreetService", DoMultiGreet);
     }
 
     /// <summary>
@@ -290,5 +292,14 @@ public class MultiGreetService : INService
                 logger.LogInformation($"MultiGreet disabled in {user.Guild} due to {ex.DiscordCode}.");
             }
         }
+    }
+
+    /// <summary>
+    ///     Unloads the service and unsubscribes from events.
+    /// </summary>
+    public Task Unload()
+    {
+        eventHandler.Unsubscribe("UserJoined", "MultiGreetService", DoMultiGreet);
+        return Task.CompletedTask;
     }
 }

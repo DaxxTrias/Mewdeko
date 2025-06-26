@@ -195,10 +195,10 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
         pubSub.Sub(crAdded, OnCrAdded);
 
         bot.JoinedGuild += OnJoinedGuild;
-        this.client.LeftGuild += OnLeftGuild;
+        eventHandler.Subscribe("LeftGuild", "ChatTriggersService", OnLeftGuild);
 
         // Subscribe to reaction events for reaction triggers
-        eventHandler.ReactionAdded += OnReactionAdded;
+        eventHandler.Subscribe("ReactionAdded", "ChatTriggersService", OnReactionAdded);
     }
 
     /// <summary>
@@ -2428,6 +2428,17 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
         }
     }
 
+
+    /// <summary>
+    ///     Unloads the service and unsubscribes from events.
+    /// </summary>
+    public Task Unload()
+    {
+        eventHandler.Unsubscribe("JoinedGuild", "ChatTriggersService", OnJoinedGuild);
+        eventHandler.Unsubscribe("LeftGuild", "ChatTriggersService", OnLeftGuild);
+        eventHandler.Unsubscribe("ReactionAdded", "ChatTriggersService", OnReactionAdded);
+        return Task.CompletedTask;
+    }
 
     /// <summary>
     ///     Represents the grouping of trigger children for building application command properties.

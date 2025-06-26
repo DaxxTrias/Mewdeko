@@ -40,12 +40,12 @@ public partial class Games
                     game.OnEnded += Game_OnEnded;
                     game.OnVotingStarted += Game_OnVotingStarted;
                     game.OnUserVoted += Game_OnUserVoted;
-                    handler.MessageReceived += ClientMessageReceived;
+                    handler.Subscribe("MessageReceived", "AcropobiaCommands", ClientMessageReceived);
                     await game.Run().ConfigureAwait(false);
                 }
                 finally
                 {
-                    handler.MessageReceived -= ClientMessageReceived;
+                    handler.Unsubscribe("MessageReceived", "AcropobiaCommands", ClientMessageReceived);
                     Service.AcrophobiaGames.TryRemove(channel.Id, out game);
                     game.Dispose();
                 }

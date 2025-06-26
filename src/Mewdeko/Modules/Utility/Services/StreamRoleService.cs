@@ -34,7 +34,7 @@ public class StreamRoleService : INService, IUnloadableService, IReadyExecutor
         this.eventHandler = eventHandler;
         this.logger = logger;
 
-        eventHandler.GuildMemberUpdated += Client_GuildMemberUpdated;
+        eventHandler.Subscribe("GuildMemberUpdated", "StreamRoleService", Client_GuildMemberUpdated);
     }
 
     /// <inheritdoc />
@@ -58,7 +58,7 @@ public class StreamRoleService : INService, IUnloadableService, IReadyExecutor
     /// </summary>
     public Task Unload()
     {
-        eventHandler.GuildMemberUpdated -= Client_GuildMemberUpdated;
+        eventHandler.Unsubscribe("GuildMemberUpdated", "StreamRoleService", Client_GuildMemberUpdated);
         return Task.CompletedTask;
     }
 

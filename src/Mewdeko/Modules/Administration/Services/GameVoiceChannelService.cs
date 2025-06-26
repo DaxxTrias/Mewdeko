@@ -23,8 +23,8 @@ public class GameVoiceChannelService : INService
         this.guildSettings = guildSettings;
         this.logger = logger;
 
-        eventHandler.UserVoiceStateUpdated += Client_UserVoiceStateUpdated;
-        eventHandler.GuildMemberUpdated += _client_GuildMemberUpdated;
+        eventHandler.Subscribe("UserVoiceStateUpdated", "GameVoiceChannelService", Client_UserVoiceStateUpdated);
+        eventHandler.Subscribe("GuildMemberUpdated", "GameVoiceChannelService", _client_GuildMemberUpdated);
     }
 
     /// <summary>

@@ -40,10 +40,10 @@ public class MessageRepeaterService : INService, IReadyExecutor, IDisposable
         this.handler = handler;
         this.logger = logger;
 
-        handler.GuildAvailable += OnGuildAvailable;
-        handler.GuildUnavailable += OnGuildUnavailable;
-        handler.JoinedGuild += OnJoinedGuild;
-        handler.LeftGuild += OnLeftGuild;
+        handler.Subscribe("GuildAvailable", "MessageRepeaterService", OnGuildAvailable);
+        handler.Subscribe("GuildUnavailable", "MessageRepeaterService", OnGuildUnavailable);
+        handler.Subscribe("JoinedGuild", "MessageRepeaterService", OnJoinedGuild);
+        handler.Subscribe("LeftGuild", "MessageRepeaterService", OnLeftGuild);
     }
 
     /// <summary>
@@ -74,10 +74,10 @@ public class MessageRepeaterService : INService, IReadyExecutor, IDisposable
             }
         }
 
-        handler.GuildAvailable -= OnGuildAvailable;
-        handler.GuildUnavailable -= OnGuildUnavailable;
-        handler.JoinedGuild -= OnJoinedGuild;
-        handler.LeftGuild -= OnLeftGuild;
+        handler.Unsubscribe("GuildAvailable", "MessageRepeaterService", OnGuildAvailable);
+        handler.Unsubscribe("GuildUnavailable", "MessageRepeaterService", OnGuildUnavailable);
+        handler.Unsubscribe("JoinedGuild", "MessageRepeaterService", OnJoinedGuild);
+        handler.Unsubscribe("LeftGuild", "MessageRepeaterService", OnLeftGuild);
     }
 
 

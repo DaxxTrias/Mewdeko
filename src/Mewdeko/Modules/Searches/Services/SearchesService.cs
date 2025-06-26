@@ -111,7 +111,7 @@ public class SearchesService : INService, IUnloadableService
         rng = new MewdekoRandom();
 
         //translate commands
-        handler.MessageReceived += async msg =>
+        handler.Subscribe("MessageReceived", "SearchesService", async (SocketMessage msg) =>
         {
             try
             {
@@ -161,7 +161,7 @@ public class SearchesService : INService, IUnloadableService
             {
                 // ignored
             }
-        };
+        });
 
         //joke commands
         if (File.Exists("data/wowjokes.json"))

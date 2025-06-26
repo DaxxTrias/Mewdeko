@@ -22,9 +22,9 @@ public class RoleStatesService : INService
     {
         this.dbFactory = dbFactory;
         this.logger = logger;
-        eventHandler.UserLeft += OnUserLeft;
-        eventHandler.UserBanned += OnUserBanned;
-        eventHandler.UserJoined += OnUserJoined;
+        eventHandler.Subscribe("UserLeft", "RoleStatesService", OnUserLeft);
+        eventHandler.Subscribe("UserBanned", "RoleStatesService", OnUserBanned);
+        eventHandler.Subscribe("UserJoined", "RoleStatesService", OnUserJoined);
     }
 
     private async Task OnUserBanned(SocketUser args, SocketGuild arsg2)

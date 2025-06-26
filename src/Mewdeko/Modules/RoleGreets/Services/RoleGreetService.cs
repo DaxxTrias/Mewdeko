@@ -29,7 +29,7 @@ public class RoleGreetService : INService
         this.inviteCountService = inviteCountService;
         this.logger = logger;
         this.dbFactory = dbFactory;
-        eventHandler.GuildMemberUpdated += DoRoleGreet;
+        eventHandler.Subscribe("GuildMemberUpdated", "RoleGreetService", DoRoleGreet);
     }
 
     /// <summary>

@@ -58,12 +58,12 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
         this.eventHandler = eventHandler;
         this.bot = bot;
 
-        eventHandler.MessageReceived += HandleAntiSpam;
-        eventHandler.UserJoined += HandleUserJoined;
-        eventHandler.MessageReceived += HandleAntiMassMention;
+        eventHandler.Subscribe("MessageReceived", "ProtectionService", HandleAntiSpam);
+        eventHandler.Subscribe("UserJoined", "ProtectionService", HandleUserJoined);
+        eventHandler.Subscribe("MessageReceived", "ProtectionService", HandleAntiMassMention);
 
-        bot.JoinedGuild += _bot_JoinedGuild;
-        this.client.LeftGuild += _client_LeftGuild;
+        eventHandler.Subscribe("JoinedGuild", "ProtectionService", _bot_JoinedGuild);
+        eventHandler.Subscribe("LeftGuild", "ProtectionService", _client_LeftGuild);
 
         _ = Task.Run(RunQueue);
     }
@@ -89,11 +89,11 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
     /// </summary>
     public Task Unload()
     {
-        eventHandler.MessageReceived -= HandleAntiSpam;
-        eventHandler.UserJoined -= HandleUserJoined;
-        eventHandler.MessageReceived -= HandleAntiMassMention;
-        bot.JoinedGuild -= _bot_JoinedGuild;
-        client.LeftGuild -= _client_LeftGuild;
+        eventHandler.Unsubscribe("MessageReceived", "ProtectionService", HandleAntiSpam);
+        eventHandler.Unsubscribe("UserJoined", "ProtectionService", HandleUserJoined);
+        eventHandler.Unsubscribe("MessageReceived", "ProtectionService", HandleAntiMassMention);
+        eventHandler.Unsubscribe("JoinedGuild", "ProtectionService", _bot_JoinedGuild);
+        eventHandler.Unsubscribe("LeftGuild", "ProtectionService", _client_LeftGuild);
         return Task.CompletedTask;
     }
 
@@ -159,9 +159,9 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
     /// </summary>
     /// <param name="gc">The configuration of the guild that the bot has joined.</param>
     /// <returns>A task that represents the asynchronous operation.</returns>
-    private async Task _bot_JoinedGuild(GuildConfig gc)
+    private async Task _bot_JoinedGuild(SocketGuild guild)
     {
-        await Initialize(gc.GuildId);
+        await Initialize(guild.Id);
     }
 
     /// <summary>

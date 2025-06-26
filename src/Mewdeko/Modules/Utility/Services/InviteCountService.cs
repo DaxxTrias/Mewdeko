@@ -30,11 +30,11 @@ public class InviteCountService : INService, IReadyExecutor
         this.client = client;
         this.logger = logger;
 
-        handler.JoinedGuild += UpdateGuildInvites;
-        handler.UserJoined += OnUserJoined;
-        handler.UserLeft += OnUserLeft;
-        handler.InviteCreated += OnInviteCreated;
-        handler.InviteDeleted += OnInviteDeleted;
+        handler.Subscribe("JoinedGuild", "InviteCountService", UpdateGuildInvites);
+        handler.Subscribe("UserJoined", "InviteCountService", OnUserJoined);
+        handler.Subscribe("UserLeft", "InviteCountService", OnUserLeft);
+        handler.Subscribe("InviteCreated", "InviteCountService", OnInviteCreated);
+        handler.Subscribe("InviteDeleted", "InviteCountService", OnInviteDeleted);
     }
 
     /// <inheritdoc />

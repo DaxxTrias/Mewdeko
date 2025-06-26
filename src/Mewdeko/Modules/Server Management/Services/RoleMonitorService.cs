@@ -46,7 +46,7 @@ public class RoleMonitorService : INService, IReadyExecutor
         this.muteService = muteService;
         this.strings = strings;
 
-        handler.AuditLogCreated += OnAuditLogCreatedAsync;
+        handler.Subscribe("AuditLogCreated", "RoleMonitorService", OnAuditLogCreatedAsync);
     }
 
     /// <summary>

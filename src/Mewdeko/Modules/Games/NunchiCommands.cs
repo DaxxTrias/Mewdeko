@@ -56,7 +56,7 @@ public partial class Games
             nunchi.OnRoundEnded += Nunchi_OnRoundEnded;
             nunchi.OnUserGuessed += Nunchi_OnUserGuessed;
             nunchi.OnRoundStarted += Nunchi_OnRoundStarted;
-            handler.MessageReceived += ClientMessageReceived;
+            handler.Subscribe("MessageReceived", "NunchiCommands", ClientMessageReceived);
 
             var success = await nunchi.Initialize().ConfigureAwait(false);
             if (!success)
@@ -87,7 +87,7 @@ public partial class Games
             {
                 if (Service.NunchiGames.TryRemove(ctx.Guild.Id, out var game))
                 {
-                    handler.MessageReceived -= ClientMessageReceived;
+                    handler.Unsubscribe("MessageReceived", "NunchiCommands", ClientMessageReceived);
                     game.Dispose();
                 }
 

@@ -59,9 +59,9 @@ public class AfkService : INService, IReadyExecutor, IDisposable
         this.strings = strings;
         this.logger = logger;
 
-        this.eventHandler.MessageReceived += MessageReceived;
-        this.eventHandler.MessageUpdated += MessageUpdated;
-        this.eventHandler.UserIsTyping += UserTyping;
+        this.eventHandler.Subscribe("MessageReceived", "AFKService", MessageReceived);
+        this.eventHandler.Subscribe("MessageUpdated", "AFKService", MessageUpdated);
+        this.eventHandler.Subscribe("UserIsTyping", "AFKService", UserTyping);
 
         cleanupTimer = new Timer(_ => CleanupTimers(), null, TimeSpan.FromMinutes(30), TimeSpan.FromMinutes(30));
 
@@ -817,9 +817,9 @@ public class AfkService : INService, IReadyExecutor, IDisposable
 
         try
         {
-            eventHandler.MessageReceived -= MessageReceived;
-            eventHandler.MessageUpdated -= MessageUpdated;
-            eventHandler.UserIsTyping -= UserTyping;
+            eventHandler.Unsubscribe("MessageReceived", "AFKService", MessageReceived);
+            eventHandler.Unsubscribe("MessageUpdated", "AFKService", MessageUpdated);
+            eventHandler.Unsubscribe("UserIsTyping", "AFKService", UserTyping);
             // Unsubscribe from Bot Joined/Left Guild events if needed
 
             cleanupTimer?.Dispose();

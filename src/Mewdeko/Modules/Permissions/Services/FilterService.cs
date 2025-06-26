@@ -51,7 +51,7 @@ public class FilterService : IEarlyBehavior, INService
         this.config = config;
         this.logger = logger;
 
-        eventHandler.MessageUpdated += (_, newMsg, channel) =>
+        eventHandler.Subscribe("MessageUpdated", "FilterService", (Cacheable<IMessage, ulong> _, SocketMessage newMsg, ISocketMessageChannel channel) =>
         {
             var guild = (channel as ITextChannel)?.Guild;
 
@@ -59,7 +59,7 @@ public class FilterService : IEarlyBehavior, INService
                 return Task.CompletedTask;
 
             return RunBehavior(null, guild, usrMsg);
-        };
+        });
     }
 
     /// <summary>

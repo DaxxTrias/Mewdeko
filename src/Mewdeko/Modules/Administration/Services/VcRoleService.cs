@@ -15,6 +15,7 @@ public class VcRoleService : INService, IReadyExecutor
 {
     private readonly DiscordShardedClient client;
     private readonly IDataConnectionFactory dbFactory;
+    private readonly EventHandler eventHandler;
     private readonly ILogger<VcRoleService> logger;
 
 
@@ -31,7 +32,8 @@ public class VcRoleService : INService, IReadyExecutor
         this.logger = logger;
         this.client = client;
 
-        eventHandler.UserVoiceStateUpdated += ClientOnUserVoiceStateUpdated;
+        this.eventHandler = eventHandler;
+        eventHandler.Subscribe("UserVoiceStateUpdated", "VcRoleService", ClientOnUserVoiceStateUpdated);
 
         ToAssign = new NonBlocking.ConcurrentDictionary<ulong, ConcurrentQueue<(bool, IGuildUser, IRole)>>();
 
@@ -73,8 +75,8 @@ public class VcRoleService : INService, IReadyExecutor
             }
         });
 
-        eventHandler.LeftGuild += _client_LeftGuild;
-        eventHandler.JoinedGuild += Bot_JoinedGuild;
+        eventHandler.Subscribe("LeftGuild", "VcRoleService", _client_LeftGuild);
+        eventHandler.Subscribe("JoinedGuild", "VcRoleService", Bot_JoinedGuild);
     }
 
     /// <summary>
@@ -115,10 +117,21 @@ public class VcRoleService : INService, IReadyExecutor
     }
 
     /// <summary>
+    ///     Unloads the service and unsubscribes from events.
+    /// </summary>
+    public Task Unload()
+    {
+        eventHandler.Unsubscribe("UserVoiceStateUpdated", "VcRoleService", ClientOnUserVoiceStateUpdated);
+        eventHandler.Unsubscribe("LeftGuild", "VcRoleService", _client_LeftGuild);
+        eventHandler.Unsubscribe("JoinedGuild", "VcRoleService", Bot_JoinedGuild);
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
     ///     Event handler for when the bot joins a guild. Initializes voice channel roles for the guild.
     /// </summary>
     /// <param name="guild">The guild.</param>
-    private async Task Bot_JoinedGuild(IGuild guild)
+    private async Task Bot_JoinedGuild(SocketGuild guild)
     {
         await using var db = await dbFactory.CreateConnectionAsync();
         var conf = await db.GetTable<VcRole>().Where(x => x.GuildId == guild.Id).ToListAsync()

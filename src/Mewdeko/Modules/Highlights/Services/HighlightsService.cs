@@ -40,8 +40,8 @@ public class HighlightsService : INService, IReadyExecutor, IUnloadableService
         this.dbFactory = dbFactory;
         this.eventHandler = eventHandler;
         this.logger = logger;
-        eventHandler.MessageReceived += StaggerHighlights;
-        eventHandler.UserIsTyping += AddHighlightTimer;
+        eventHandler.Subscribe("MessageReceived", "HighlightsService", StaggerHighlights);
+        eventHandler.Subscribe("UserIsTyping", "HighlightsService", AddHighlightTimer);
         _ = HighlightLoop();
     }
 
@@ -85,8 +85,8 @@ public class HighlightsService : INService, IReadyExecutor, IUnloadableService
     /// </summary>
     public Task Unload()
     {
-        eventHandler.MessageReceived -= StaggerHighlights;
-        eventHandler.UserIsTyping -= AddHighlightTimer;
+        eventHandler.Unsubscribe("MessageReceived", "HighlightsService", StaggerHighlights);
+        eventHandler.Unsubscribe("UserIsTyping", "HighlightsService", AddHighlightTimer);
         return Task.CompletedTask;
     }
 

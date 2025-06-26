@@ -37,10 +37,10 @@ public class CustomVoiceService : INService, IUnloadableService
         this.strings = strings;
         this.logger = logger;
 
-        this.eventHandler.UserVoiceStateUpdated += OnUserVoiceStateUpdated;
-        this.eventHandler.ChannelDestroyed += OnChannelDestroyed;
-        this.eventHandler.JoinedGuild += OnJoinedGuild;
-        this.eventHandler.LeftGuild += OnLeftGuild;
+        this.eventHandler.Subscribe("UserVoiceStateUpdated", "CustomVoiceService", OnUserVoiceStateUpdated);
+        this.eventHandler.Subscribe("ChannelDestroyed", "CustomVoiceService", OnChannelDestroyed);
+        this.eventHandler.Subscribe("JoinedGuild", "CustomVoiceService", OnJoinedGuild);
+        this.eventHandler.Subscribe("LeftGuild", "CustomVoiceService", OnLeftGuild);
 
         // Start cleaning task for empty channels
         _ = StartEmptyChannelCleanupTask();
@@ -54,10 +54,10 @@ public class CustomVoiceService : INService, IUnloadableService
     /// </summary>
     public Task Unload()
     {
-        eventHandler.UserVoiceStateUpdated -= OnUserVoiceStateUpdated;
-        eventHandler.ChannelDestroyed -= OnChannelDestroyed;
-        eventHandler.JoinedGuild -= OnJoinedGuild;
-        eventHandler.LeftGuild -= OnLeftGuild;
+        eventHandler.Unsubscribe("UserVoiceStateUpdated", "CustomVoiceService", OnUserVoiceStateUpdated);
+        eventHandler.Unsubscribe("ChannelDestroyed", "CustomVoiceService", OnChannelDestroyed);
+        eventHandler.Unsubscribe("JoinedGuild", "CustomVoiceService", OnJoinedGuild);
+        eventHandler.Unsubscribe("LeftGuild", "CustomVoiceService", OnLeftGuild);
 
         // Dispose all empty channel timers
         foreach (var timer in emptyChannelTimers.Values)

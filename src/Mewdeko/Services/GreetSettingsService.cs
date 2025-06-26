@@ -40,9 +40,9 @@ public class GreetSettingsService : INService
         this.client = client;
         this.gss = gss;
 
-        eventHandler.UserJoined += UserJoined;
-        eventHandler.UserLeft += UserLeft;
-        eventHandler.GuildMemberUpdated += ClientOnGuildMemberUpdated;
+        eventHandler.Subscribe("UserJoined", "GreetSettingsService", UserJoined);
+        eventHandler.Subscribe("UserLeft", "GreetSettingsService", UserLeft);
+        eventHandler.Subscribe("GuildMemberUpdated", "GreetSettingsService", ClientOnGuildMemberUpdated);
         _ = RunGreetLoop();
     }
 

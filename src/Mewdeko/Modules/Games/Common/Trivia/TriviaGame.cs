@@ -140,7 +140,7 @@ public class TriviaGame
             //receive messages
             try
             {
-                handler.MessageReceived += PotentialGuess;
+                handler.Subscribe("MessageReceived", "TriviaGame", PotentialGuess);
 
                 //allow people to guess
                 GameActive = true;
@@ -181,7 +181,7 @@ public class TriviaGame
             finally
             {
                 GameActive = false;
-                handler.MessageReceived -= PotentialGuess;
+                handler.Unsubscribe("MessageReceived", "TriviaGame", PotentialGuess);
             }
 
             if (!triviaCancelSource.IsCancellationRequested)
