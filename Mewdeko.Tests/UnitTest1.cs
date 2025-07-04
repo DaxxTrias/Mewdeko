@@ -22,7 +22,9 @@ public class StringUsageTests
 
 
     private readonly Regex methodCallRegex;
-    private readonly Regex stringLiteralRegex = new(@"""[^""]*""");
+    private readonly Regex stringLiteralRegex = new("""
+                                                    "[^"]*"
+                                                    """);
 
     public StringUsageTests()
     {
@@ -67,34 +69,90 @@ public class StringUsageTests
 
     private bool IsExemptString(string str) => new[]
     {
-        @"""http[s]?://[^""]*""", // URLs
-        @"""\.[\w]+""", // File extensions
-        @"""\s+""", // Whitespace
-        @"""\\n""", // Newlines
-        @"""[\\\/]""", // Path separators
-        @"""\{\d+\}""", // Format placeholders
-        @"""<[^>]+>""", // XML/HTML tags
-        @"""[0-9]+""", // Numbers
-        @"""#.*?#""", // Channel mentions
-        @"""@.*?@""", // User mentions
-        @"""```.*?```""", // Code blocks
-        @"""[\[\]\(\)]""", // Brackets
-        @"""[-_\.,!?]""", // Punctuation
-        @"""(?i)(true|false|null|undefined)""", // Literals
-        @"""\.[a-zA-Z0-9]+$""", // Filenames
-        @"""[a-zA-Z0-9_-]+\.(png|jpg|gif|mp4|mp3|wav|txt|json|yml|yaml|csv|xml)""", // File patterns
-        @"""[\u2600-\u26FF\u2700-\u27BF\u1F300-\u1F9FF]""", // Unicode emojis
-        @"""[✅❌⚙️⭐️✨]""", // Common Discord emotes
-        @"""[\r\n|\n\n|\s]+""", // Multiline whitespace
-        @"""\\[rn]\\[rn]""", // Escaped newlines
-        @"""\$""", // String interpolation markers
-        @"""{[^}]+}""", // Single variable interpolation placeholders
-        @"""^\{[a-zA-Z][a-zA-Z0-9_.]*\}$""", // Pure single variable like "{playlist.Name}"
-        @"""^⏲.*ms$""", // Timing output like "⏲ 123ms"
-        @"""^```.*```$""", // Code block content like "```code```"
-        @"""^[a-zA-Z0-9_\.]+$""", // Simple variable/property names
-        @"""^[a-zA-Z]+://[^""]*$""", // Protocol URLs
-        @"""^Powered by [a-zA-Z0-9\.]+.*$""" // API attribution strings like "Powered by openweathermap.org"
+        """
+        "http[s]?://[^"]*"
+        """, // URLs
+        """
+        "\.[\w]+"
+        """, // File extensions
+        """
+        "\s+"
+        """, // Whitespace
+        """
+        "\\n"
+        """, // Newlines
+        """
+        "[\\\/]"
+        """, // Path separators
+        """
+        "\{\d+\}"
+        """, // Format placeholders
+        """
+        "<[^>]+>"
+        """, // XML/HTML tags
+        """
+        "[0-9]+"
+        """, // Numbers
+        """
+        "#.*?#"
+        """, // Channel mentions
+        """
+        "@.*?@"
+        """, // User mentions
+        """
+        "```.*?```"
+        """, // Code blocks
+        """
+        "[\[\]\(\)]"
+        """, // Brackets
+        """
+        "[-_\.,!?]"
+        """, // Punctuation
+        """
+        "(?i)(true|false|null|undefined)"
+        """, // Literals
+        """
+        "\.[a-zA-Z0-9]+$"
+        """, // Filenames
+        """
+        "[a-zA-Z0-9_-]+\.(png|jpg|gif|mp4|mp3|wav|txt|json|yml|yaml|csv|xml)"
+        """, // File patterns
+        """
+        "[\u2600-\u26FF\u2700-\u27BF\u1F300-\u1F9FF]"
+        """, // Unicode emojis
+        """
+        "[✅❌⚙️⭐️✨]"
+        """, // Common Discord emotes
+        """
+        "[\r\n|\n\n|\s]+"
+        """, // Multiline whitespace
+        """
+        "\\[rn]\\[rn]"
+        """, // Escaped newlines
+        """
+        "\$"
+        """, // String interpolation markers
+        """
+        "{[^}]+}"
+        """, // Single variable interpolation placeholders
+        """
+        "^\{[a-zA-Z][a-zA-Z0-9_.]*\}$"
+        """, // Pure single variable like "{playlist.Name}"
+        """
+        "^⏲.*ms$"
+        """, // Timing output like "⏲ 123ms"
+        """
+        "^```.*```$"
+        """, // Code block content like "```code```"
+        """
+        "^[a-zA-Z0-9_\.]+$"
+        """, // Simple variable/property names
+        """
+        "^[a-zA-Z]+://[^"]*$"
+        """, // Protocol URLs
+        """
+        "^Powered by [a-zA-Z0-9\.]+.*$"
+        """ // API attribution strings like "Powered by openweathermap.org"
     }.Any(pattern => Regex.IsMatch(str, pattern));
 
     [Test]

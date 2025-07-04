@@ -194,9 +194,11 @@ public partial class Searches
                 var mods = ResolveMods(item.EnabledMods);
 
                 var title = $"{map.Artist}-{map.Title} ({map.Version})";
-                var desc = $@"[/b/{item.BeatmapId}](https://osu.ppy.sh/b/{item.BeatmapId})
-{$"{pp}pp",-7} | {$"{acc}%",-7}
-";
+                var desc = $"""
+                            [/b/{item.BeatmapId}](https://osu.ppy.sh/b/{item.BeatmapId})
+                            {$"{pp}pp",-7} | {$"{acc}%",-7}
+
+                            """;
                 if (mods != "+") desc += Format.Bold(mods);
 
                 return (title, desc);

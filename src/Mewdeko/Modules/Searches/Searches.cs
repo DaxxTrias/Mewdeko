@@ -733,8 +733,10 @@ public partial class Searches(
         }
 
         var desc = data.Results.Take(5).Select(res =>
-            $@"[{res.Title}]({res.Link})
-{res.Text.TrimTo(400 - res.Title.Length - res.Link.Length)}");
+            $"""
+             [{res.Title}]({res.Link})
+             {res.Text.TrimTo(400 - res.Title.Length - res.Link.Length)}
+             """);
 
         var descStr = string.Join("\n\n", desc);
 
@@ -1136,8 +1138,10 @@ public partial class Searches(
             }
 
             var url = Uri.EscapeDataString($"https://{target}.fandom.com/wiki/{title}");
-            var response = $@"`{Strings.Title(ctx.Guild.Id)}` {title.SanitizeMentions()}
-`{Strings.Url(ctx.Guild.Id)}:` {url}";
+            var response = $"""
+                            `{Strings.Title(ctx.Guild.Id)}` {title.SanitizeMentions()}
+                            `{Strings.Url(ctx.Guild.Id)}:` {url}
+                            """;
             await ctx.Channel.SendMessageAsync(response).ConfigureAwait(false);
         }
         catch

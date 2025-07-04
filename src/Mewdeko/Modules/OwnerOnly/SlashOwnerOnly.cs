@@ -944,11 +944,13 @@ public class SlashOwnerOnly(
                 var i = 0;
                 await ctx.Interaction.SendConfirmAsync(
                         text: string.Join("\n", scmds
-                            .Select(x => $@"```css
-#{++i}
-[{Strings.Server(ctx.Guild.Id)}]: {(x.GuildId.HasValue ? $"{x.GuildName} #{x.GuildId}" : "-")}
-[{Strings.Channel(ctx.Guild.Id)}]: {x.ChannelName} #{x.ChannelId}
-[{Strings.CommandText(ctx.Guild.Id)}]: {x.CommandText}```")),
+                            .Select(x => $"""
+                                          ```css
+                                          #{++i}
+                                          [{Strings.Server(ctx.Guild.Id)}]: {(x.GuildId.HasValue ? $"{x.GuildName} #{x.GuildId}" : "-")}
+                                          [{Strings.Channel(ctx.Guild.Id)}]: {x.ChannelName} #{x.ChannelId}
+                                          [{Strings.CommandText(ctx.Guild.Id)}]: {x.CommandText}```
+                                          """)),
                         title: string.Empty,
                         footer: Strings.Page(ctx.Guild.Id, page + 1))
                     .ConfigureAwait(false);
@@ -984,12 +986,14 @@ public class SlashOwnerOnly(
                 var i = 0;
                 await ctx.Interaction.SendConfirmAsync(
                         text: string.Join("\n", scmds
-                            .Select(x => $@"```css
-#{++i}
-[{Strings.Server(ctx.Guild.Id)}]: {(x.GuildId.HasValue ? $"{x.GuildName} #{x.GuildId}" : "-")}
-[{Strings.Channel(ctx.Guild.Id)}]: {x.ChannelName} #{x.ChannelId}
-{GetIntervalText(x.Interval)}
-[{Strings.CommandText(ctx.Guild.Id)}]: {x.CommandText}```")),
+                            .Select(x => $"""
+                                          ```css
+                                          #{++i}
+                                          [{Strings.Server(ctx.Guild.Id)}]: {(x.GuildId.HasValue ? $"{x.GuildName} #{x.GuildId}" : "-")}
+                                          [{Strings.Channel(ctx.Guild.Id)}]: {x.ChannelName} #{x.ChannelId}
+                                          {GetIntervalText(x.Interval)}
+                                          [{Strings.CommandText(ctx.Guild.Id)}]: {x.CommandText}```
+                                          """)),
                         title: string.Empty,
                         footer: Strings.Page(ctx.Guild.Id, page + 1))
                     .ConfigureAwait(false);

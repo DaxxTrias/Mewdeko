@@ -259,11 +259,13 @@ public partial class Searches
                         .WithValue(info[2].Item2.TrimTo(20)).WithIsInline(true));
 
             embed
-                .WithDescription($@"
-** https://myanimelist.net/animelist/{name} **
+                .WithDescription($"""
 
-**{Strings.TopThreeFavAnime(ctx.Guild.Id)}**
-{favAnime}"
+                                  ** https://myanimelist.net/animelist/{name} **
+
+                                  **{Strings.TopThreeFavAnime(ctx.Guild.Id)}**
+                                  {favAnime}
+                                  """
                 )
                 .WithUrl(fullQueryLink)
                 .WithImageUrl(imageUrl);
