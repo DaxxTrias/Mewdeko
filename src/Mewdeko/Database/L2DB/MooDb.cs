@@ -114,7 +114,6 @@ namespace DataModel
 		public ITable<Permission1>               Permissions1               => this.GetTable<Permission1>();
 		public ITable<PlaylistSong>              PlaylistSongs              => this.GetTable<PlaylistSong>();
 		public ITable<Poll>                      Polls                      => this.GetTable<Poll>();
-		public ITable<PollAnswer>                PollAnswers                => this.GetTable<PollAnswer>();
 		public ITable<PollVote>                  PollVotes                  => this.GetTable<PollVote>();
 		public ITable<PublishUserBlacklist>      PublishUserBlacklists      => this.GetTable<PublishUserBlacklist>();
 		public ITable<PublishWordBlacklist>      PublishWordBlacklists      => this.GetTable<PublishWordBlacklist>();
@@ -918,16 +917,6 @@ namespace DataModel
 		}
 
 		public static Task<Poll?> FindAsync(this ITable<Poll> table, int id, CancellationToken cancellationToken = default)
-		{
-			return table.FirstOrDefaultAsync(e => e.Id == id, cancellationToken);
-		}
-
-		public static PollAnswer? Find(this ITable<PollAnswer> table, int id)
-		{
-			return table.FirstOrDefault(e => e.Id == id);
-		}
-
-		public static Task<PollAnswer?> FindAsync(this ITable<PollAnswer> table, int id, CancellationToken cancellationToken = default)
 		{
 			return table.FirstOrDefaultAsync(e => e.Id == id, cancellationToken);
 		}

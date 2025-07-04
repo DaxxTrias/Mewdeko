@@ -1,3 +1,4 @@
+using Mewdeko.Controllers.Common.Chat;
 using Mewdeko.Modules.Utility.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -221,35 +222,5 @@ public class ChatController(DiscordShardedClient client, ChatLogService chatLogS
 
         await chatLogService.DeleteChatLogAsync(logId);
         return Ok();
-    }
-
-    /// <summary>
-    /// </summary>
-    public class SaveChatLogRequest
-    {
-        /// <summary>
-        /// </summary>
-        public ulong ChannelId { get; set; }
-
-        /// <summary>
-        /// </summary>
-        public string Name { get; set; }
-
-        /// <summary>
-        /// </summary>
-        public ulong CreatedBy { get; set; }
-
-        /// <summary>
-        /// </summary>
-        public object[] Messages { get; set; }
-    }
-
-    /// <summary>
-    /// </summary>
-    public class UpdateChatLogNameRequest
-    {
-        /// <summary>
-        /// </summary>
-        public string Name { get; set; }
     }
 }

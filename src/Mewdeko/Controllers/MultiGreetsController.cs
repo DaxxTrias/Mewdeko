@@ -1,6 +1,7 @@
 ﻿using System.IO;
 using System.Net.Http;
 using Mewdeko.Common.TypeReaders.Models;
+using Mewdeko.Controllers.Common.MultiGreets;
 using Mewdeko.Modules.MultiGreets.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -268,20 +269,4 @@ public class MultiGreetController : Controller
         var imgData = await response.Content.ReadAsByteArrayAsync();
         return imgData.ToStream();
     }
-}
-
-/// <summary>
-///     Request model for webhook updates
-/// </summary>
-public class WebhookUpdateRequest
-{
-    /// <summary>
-    ///     The name of the webhook
-    /// </summary>
-    public string? Name { get; set; }
-
-    /// <summary>
-    ///     The URL of the webhook's avatar image
-    /// </summary>
-    public string? AvatarUrl { get; set; }
 }

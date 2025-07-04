@@ -3,6 +3,7 @@ using DataModel;
 using Discord.Commands;
 using LinqToDB;
 using Mewdeko.Common.Attributes.TextCommands;
+using Mewdeko.Controllers.Common.Permissions;
 using Mewdeko.Modules.Administration.Services;
 using Mewdeko.Modules.Help;
 using Mewdeko.Modules.Permissions.Services;
@@ -264,37 +265,5 @@ public class PermissionsController(
             logger.LogError(e, "Error fetching commands and modules");
             return StatusCode(500, "Error fetching commands and modules");
         }
-    }
-
-    /// <summary>
-    ///     Request model for Discord permission overrides
-    /// </summary>
-    public class DpoRequest
-    {
-        /// <summary>
-        ///     The command name to apply permissions to
-        /// </summary>
-        public string Command { get; set; }
-
-        /// <summary>
-        ///     The Discord permissions value as a ulong
-        /// </summary>
-        public ulong Permissions { get; set; }
-    }
-
-    /// <summary>
-    ///     Request model for moving permissions
-    /// </summary>
-    public class MovePermRequest
-    {
-        /// <summary>
-        ///     The source index to move from
-        /// </summary>
-        public int From { get; set; }
-
-        /// <summary>
-        ///     The destination index to move to
-        /// </summary>
-        public int To { get; set; }
     }
 }

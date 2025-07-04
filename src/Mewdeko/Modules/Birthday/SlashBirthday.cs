@@ -72,10 +72,10 @@ public class SlashBirthday : MewdekoSlashModuleBase<BirthdayService>
 
         if (success)
             await ctx.Interaction.SendConfirmAsync(
-                $"🌍 Timezone set to {timezone}. Your birthday will be calculated using this timezone.");
+                Strings.BirthdayTimezoneSet(ctx.Guild.Id, timezone));
         else
             await ctx.Interaction.SendErrorAsync(
-                "❌ Invalid timezone! Please use a valid timezone like 'America/New_York' or 'Europe/London'.", Config);
+                Strings.BirthdayInvalidTimezone(ctx.Guild.Id), Config);
     }
 
     /// <summary>
@@ -91,7 +91,7 @@ public class SlashBirthday : MewdekoSlashModuleBase<BirthdayService>
 
         if (!birthdayUsers.Any())
         {
-            await ctx.Interaction.SendErrorAsync($"No upcoming birthdays found in the next {days} days.", Config);
+            await ctx.Interaction.SendErrorAsync(Strings.BirthdayNoUpcoming(ctx.Guild.Id, days), Config);
             return;
         }
 
@@ -145,12 +145,12 @@ public class SlashBirthday : MewdekoSlashModuleBase<BirthdayService>
 
         if (!birthdayUsers.Any())
         {
-            await ctx.Interaction.SendErrorAsync("No birthdays today! 🎂", Config);
+            await ctx.Interaction.SendErrorAsync(Strings.BirthdayNoToday(ctx.Guild.Id), Config);
             return;
         }
 
         var embed = new EmbedBuilder()
-            .WithTitle("🎉 Today's Birthdays! 🎂")
+            .WithTitle(Strings.BirthdayTodayTitle(ctx.Guild.Id))
             .WithColor(Mewdeko.OkColor);
 
         var description = "";
@@ -200,7 +200,7 @@ public class SlashBirthday : MewdekoSlashModuleBase<BirthdayService>
             await Service.EnableBirthdayFeatureAsync(ctx.Guild.Id, BirthdayFeature.Announcements);
 
             await ctx.Interaction.SendConfirmAsync(
-                $"🎂 Birthday announcements will now be posted in {channel.Mention}!");
+                Strings.BirthdayChannelSetMsg(ctx.Guild.Id, channel.Mention));
         }
 
         /// <summary>
@@ -221,7 +221,7 @@ public class SlashBirthday : MewdekoSlashModuleBase<BirthdayService>
                 });
 
                 await Service.DisableBirthdayFeatureAsync(ctx.Guild.Id, BirthdayFeature.BirthdayRole);
-                await ctx.Interaction.SendConfirmAsync("🚫 Birthday role disabled.");
+                await ctx.Interaction.SendConfirmAsync(Strings.BirthdayRoleDisabledMsg(ctx.Guild.Id));
                 return;
             }
 
@@ -233,7 +233,7 @@ public class SlashBirthday : MewdekoSlashModuleBase<BirthdayService>
             await Service.EnableBirthdayFeatureAsync(ctx.Guild.Id, BirthdayFeature.BirthdayRole);
 
             await ctx.Interaction.SendConfirmAsync(
-                $"🎭 Users will now receive the {role.Mention} role on their birthday!");
+                Strings.BirthdayRoleSetMsg(ctx.Guild.Id, role.Mention));
         }
 
         /// <summary>
@@ -251,7 +251,7 @@ public class SlashBirthday : MewdekoSlashModuleBase<BirthdayService>
             {
                 var config = await Service.GetBirthdayConfigAsync(ctx.Guild.Id);
                 var currentMessage = config.BirthdayMessage ?? "🎉 Happy Birthday {user}! 🎂";
-                await ctx.Interaction.SendConfirmAsync($"Current birthday message: {currentMessage}");
+                await ctx.Interaction.SendConfirmAsync(Strings.BirthdayCurrentMessageMsg(ctx.Guild.Id, currentMessage));
                 return;
             }
 
@@ -261,7 +261,7 @@ public class SlashBirthday : MewdekoSlashModuleBase<BirthdayService>
             });
 
             await ctx.Interaction.SendConfirmAsync(
-                $"🎉 Birthday message updated! Preview: {message.Replace("{user}", ctx.User.Mention)}");
+                Strings.BirthdayMessageUpdated(ctx.Guild.Id, message.Replace("{user}", ctx.User.Mention)));
         }
 
         /// <summary>
@@ -282,7 +282,7 @@ public class SlashBirthday : MewdekoSlashModuleBase<BirthdayService>
                 });
 
                 await Service.DisableBirthdayFeatureAsync(ctx.Guild.Id, BirthdayFeature.PingRole);
-                await ctx.Interaction.SendConfirmAsync("🔕 Birthday ping role disabled.");
+                await ctx.Interaction.SendConfirmAsync(Strings.BirthdayPingDisabled(ctx.Guild.Id));
                 return;
             }
 
@@ -293,7 +293,7 @@ public class SlashBirthday : MewdekoSlashModuleBase<BirthdayService>
 
             await Service.EnableBirthdayFeatureAsync(ctx.Guild.Id, BirthdayFeature.PingRole);
 
-            await ctx.Interaction.SendConfirmAsync($"📢 {role.Mention} will be pinged for birthday announcements!");
+            await ctx.Interaction.SendConfirmAsync(Strings.BirthdayPingEnabled(ctx.Guild.Id, role.Mention));
         }
 
         /// <summary>
@@ -306,7 +306,7 @@ public class SlashBirthday : MewdekoSlashModuleBase<BirthdayService>
             var config = await Service.GetBirthdayConfigAsync(ctx.Guild.Id);
 
             var embed = new EmbedBuilder()
-                .WithTitle("🎂 Birthday Configuration")
+                .WithTitle(Strings.BirthdayConfigTitle(ctx.Guild.Id))
                 .WithColor(Mewdeko.OkColor);
 
             var channel = config.BirthdayChannelId.HasValue
@@ -357,7 +357,7 @@ public class SlashBirthday : MewdekoSlashModuleBase<BirthdayService>
                 config.EnabledFeatures = 0;
             });
 
-            await ctx.Interaction.SendConfirmAsync("🔄 Birthday configuration has been reset to defaults.");
+            await ctx.Interaction.SendConfirmAsync(Strings.BirthdayConfigReset(ctx.Guild.Id));
         }
     }
 

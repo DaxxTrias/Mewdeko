@@ -1,4 +1,4 @@
-using Mewdeko.Modules.Administration.Common;
+using Mewdeko.Controllers.Common.Administration;
 using Mewdeko.Modules.Administration.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -231,67 +231,4 @@ public class AdministrationController(
             success
         });
     }
-}
-
-/// <summary>
-///     Request model for anti-raid settings
-/// </summary>
-public class AntiRaidRequest
-{
-    /// <summary>
-    ///     The number of users that triggers the anti-raid protection
-    /// </summary>
-    public int UserThreshold { get; set; }
-
-    /// <summary>
-    ///     The time period in seconds in which the user threshold must be reached
-    /// </summary>
-    public int Seconds { get; set; }
-
-    /// <summary>
-    ///     The punishment action to be applied when the protection is triggered
-    /// </summary>
-    public PunishmentAction Action { get; set; }
-
-    /// <summary>
-    ///     The duration of the punishment in minutes, if applicable
-    /// </summary>
-    public int MinutesDuration { get; set; }
-}
-
-/// <summary>
-///     Request model for anti-spam settings
-/// </summary>
-public class AntiSpamRequest
-{
-    /// <summary>
-    ///     The number of messages that triggers the anti-spam protection
-    /// </summary>
-    public int MessageCount { get; set; }
-
-    /// <summary>
-    ///     The punishment action to be applied when the protection is triggered
-    /// </summary>
-    public PunishmentAction Action { get; set; }
-
-    /// <summary>
-    ///     The duration of the punishment in minutes, if applicable
-    /// </summary>
-    public int PunishDurationMinutes { get; set; }
-
-    /// <summary>
-    ///     The ID of the role to be added as punishment, if applicable
-    /// </summary>
-    public ulong? RoleId { get; set; }
-}
-
-/// <summary>
-///     Request model for adding self-assignable roles
-/// </summary>
-public class AddSelfAssignableRoleRequest
-{
-    /// <summary>
-    ///     The group number for the self-assignable role
-    /// </summary>
-    public int Group { get; set; }
 }

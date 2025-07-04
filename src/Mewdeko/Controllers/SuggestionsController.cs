@@ -1,4 +1,5 @@
 ﻿using LinqToDB;
+using Mewdeko.Controllers.Common.Suggestions;
 using Mewdeko.Modules.Suggestions.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -664,22 +665,5 @@ public class SuggestionsController(
         var guild = client.GetGuild(guildId);
         await service.SetSuggestionEmotes(guild, emotes);
         return Ok("");
-    }
-
-    /// <summary>
-    /// </summary>
-    public class SuggestStateUpdate
-    {
-        /// <summary>
-        /// </summary>
-        public SuggestionsService.SuggestState State { get; set; }
-
-        /// <summary>
-        /// </summary>
-        public string? Reason { get; set; }
-
-        /// <summary>
-        /// </summary>
-        public ulong UserId { get; set; }
     }
 }

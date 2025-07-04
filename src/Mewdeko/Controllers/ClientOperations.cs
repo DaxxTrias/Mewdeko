@@ -1,7 +1,9 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Mewdeko.Controllers.Common.ClientOperations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using ChannelType = Mewdeko.Controllers.Common.ClientOperations.ChannelType;
 
 namespace Mewdeko.Controllers;
 
@@ -13,38 +15,6 @@ namespace Mewdeko.Controllers;
 [Authorize("ApiKeyPolicy")]
 public class ClientOperations(DiscordShardedClient client) : Controller
 {
-    /// <summary>
-    ///     Used for getting a specific channel type in the api
-    /// </summary>
-    [JsonConverter(typeof(JsonStringEnumConverter))]
-    public enum ChannelType
-    {
-        /// <summary>
-        ///     For text channels
-        /// </summary>
-        Text,
-
-        /// <summary>
-        ///     For voice channels
-        /// </summary>
-        Voice,
-
-        /// <summary>
-        ///     For category channels
-        /// </summary>
-        Category,
-
-        /// <summary>
-        ///     FOr announcement channels
-        /// </summary>
-        Announcement,
-
-        /// <summary>
-        ///     None
-        /// </summary>
-        None
-    }
-
     private static readonly JsonSerializerOptions Options = new()
     {
         ReferenceHandler = ReferenceHandler.IgnoreCycles
@@ -257,23 +227,5 @@ public class ClientOperations(DiscordShardedClient client) : Controller
     {
         await Task.CompletedTask;
         return Ok(JsonSerializer.Serialize(client.Guilds.Select(x => x.Id), Options));
-    }
-
-    /// <summary>
-    ///     To avoid stupid errors
-    /// </summary>
-    public class NeededRoleInfo
-    {
-        /// <summary>
-        ///     Name
-        /// </summary>
-        [JsonPropertyName("name")]
-        public string Name { get; set; }
-
-        /// <summary>
-        ///     And badge number
-        /// </summary>
-        [JsonPropertyName("id")]
-        public ulong Id { get; set; }
     }
 }

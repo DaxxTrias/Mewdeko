@@ -85,7 +85,7 @@ public class Birthday : MewdekoModuleBase<BirthdayService>
     {
         if (days < 1 || days > 30)
         {
-            await ctx.Channel.SendErrorAsync("Days must be between 1 and 30!", Config);
+            await ctx.Channel.SendErrorAsync(Strings.BirthdayDaysRangeError(ctx.Guild.Id), Config);
             return;
         }
 
@@ -153,7 +153,7 @@ public class Birthday : MewdekoModuleBase<BirthdayService>
         }
 
         var embed = new EmbedBuilder()
-            .WithTitle("🎉 Today's Birthdays! 🎂")
+            .WithTitle(Strings.BirthdayTodayTitle(ctx.Guild.Id))
             .WithColor(Mewdeko.OkColor);
 
         var description = "";
@@ -246,7 +246,7 @@ public class Birthday : MewdekoModuleBase<BirthdayService>
         {
             var config = await Service.GetBirthdayConfigAsync(ctx.Guild.Id);
             var currentMessage = config.BirthdayMessage ?? "🎉 Happy Birthday {user}! 🎂";
-            await ctx.Channel.SendConfirmAsync($"Current birthday message: {currentMessage}");
+            await ctx.Channel.SendConfirmAsync(Strings.BirthdayCurrentMessage(ctx.Guild.Id, currentMessage));
             return;
         }
 
@@ -256,7 +256,7 @@ public class Birthday : MewdekoModuleBase<BirthdayService>
         });
 
         await ctx.Channel.SendConfirmAsync(
-            $"🎉 Birthday message updated! Preview: {message.Replace("{user}", ctx.User.Mention)}");
+            Strings.BirthdayMessageUpdated(ctx.Guild.Id, message.Replace("{user}", ctx.User.Mention)));
     }
 
     /// <summary>
@@ -277,7 +277,7 @@ public class Birthday : MewdekoModuleBase<BirthdayService>
             });
 
             await Service.DisableBirthdayFeatureAsync(ctx.Guild.Id, BirthdayFeature.PingRole);
-            await ctx.Channel.SendConfirmAsync("🔕 Birthday ping role disabled.");
+            await ctx.Channel.SendConfirmAsync(Strings.BirthdayPingDisabled(ctx.Guild.Id));
             return;
         }
 
@@ -288,7 +288,7 @@ public class Birthday : MewdekoModuleBase<BirthdayService>
 
         await Service.EnableBirthdayFeatureAsync(ctx.Guild.Id, BirthdayFeature.PingRole);
 
-        await ctx.Channel.SendConfirmAsync($"📢 {role.Mention} will be pinged for birthday announcements!");
+        await ctx.Channel.SendConfirmAsync(Strings.BirthdayPingEnabled(ctx.Guild.Id, role.Mention));
     }
 
     /// <summary>
@@ -303,7 +303,7 @@ public class Birthday : MewdekoModuleBase<BirthdayService>
         var config = await Service.GetBirthdayConfigAsync(ctx.Guild.Id);
 
         var embed = new EmbedBuilder()
-            .WithTitle("🎂 Birthday Configuration")
+            .WithTitle(Strings.BirthdayConfigTitle(ctx.Guild.Id))
             .WithColor(Mewdeko.OkColor);
 
         var channel = config.BirthdayChannelId.HasValue

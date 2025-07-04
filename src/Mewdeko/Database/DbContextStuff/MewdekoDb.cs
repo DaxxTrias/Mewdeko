@@ -4,7 +4,6 @@ using LinqToDB.Data;
 using Mewdeko.Database.L2DB;
 using Embed = DataModel.Embed;
 using Poll = DataModel.Poll;
-using PollAnswer = DataModel.PollAnswer;
 using SelectMenuOption = DataModel.SelectMenuOption;
 
 namespace Mewdeko.Database.DbContextStuff;
@@ -447,14 +446,19 @@ public class MewdekoDb : DataConnection
     public ITable<Poll> Polls => this.GetTable<Poll>();
 
     /// <summary>
-    ///     Gets the poll answers table.
-    /// </summary>
-    public ITable<PollAnswer> PollAnswers => this.GetTable<PollAnswer>();
-
-    /// <summary>
     ///     Gets the poll votes table.
     /// </summary>
     public ITable<PollVote> PollVotes => this.GetTable<PollVote>();
+
+    /// <summary>
+    ///     Gets the poll options table.
+    /// </summary>
+    public ITable<PollOption> PollOptions => this.GetTable<PollOption>();
+
+    /// <summary>
+    ///     Gets the scheduled polls table.
+    /// </summary>
+    public ITable<ScheduledPoll> ScheduledPolls => this.GetTable<ScheduledPoll>();
 
     /// <summary>
     ///     Gets the publish user blacklist table.

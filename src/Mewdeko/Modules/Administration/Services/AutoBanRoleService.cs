@@ -4,12 +4,11 @@ using LinqToDB;
 namespace Mewdeko.Modules.Administration.Services;
 
 /// <summary>
-///     Service for automatically banning users who add a specified AutoBanRole.
+///     Service for automatically banning users who are assigned a specified AutoBanRole.
 /// </summary>
 public class AutoBanRoleService : INService
 {
     private readonly IDataConnectionFactory dbFactory;
-    private readonly EventHandler eventHandler;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="AutoBanRoleService" /> class.
@@ -19,73 +18,108 @@ public class AutoBanRoleService : INService
     public AutoBanRoleService(EventHandler eventHandler, IDataConnectionFactory dbFactory)
     {
         this.dbFactory = dbFactory;
-        this.eventHandler = eventHandler;
-        this.eventHandler.Subscribe("GuildMemberUpdated", "AutoBanRoleService", OnGuildMemberUpdated);
+        var eventHandler1 = eventHandler;
+        eventHandler1.Subscribe("GuildMemberUpdated", "AutoBanRoleService", OnGuildMemberUpdated);
     }
 
-
-    private async Task OnGuildMemberUpdated(Cacheable<SocketGuildUser, ulong> args, SocketGuildUser arsg2)
+    /// <summary>
+    ///     Handles the GuildMemberUpdated event to check for auto-ban roles.
+    /// </summary>
+    /// <param name="before">The cached state of the user before the update</param>
+    /// <param name="after">The current state of the user after the update</param>
+    private async Task OnGuildMemberUpdated(Cacheable<SocketGuildUser, ulong> before, SocketGuildUser after)
     {
-        var before = args.HasValue ? args.Value : null;
-        if (before == null)
+        // Ensure we have the before state
+        var beforeUser = before.HasValue ? before.Value : null;
+        if (beforeUser == null)
             return;
 
-        var addedRoles = arsg2.Roles.Except(before.Roles);
-        if (!addedRoles.Any()) return;
+        // Get newly added roles
+        var addedRoles = after.Roles.Except(beforeUser.Roles).ToList();
+        if (!addedRoles.Any())
+            return;
 
-        await using var db = await dbFactory.CreateConnectionAsync();
+        // Get auto-ban roles for this guild
+        await using var db = await dbFactory.CreateConnectionAsync().ConfigureAwait(false);
         var autoBanRoleIds = await db.AutoBanRoles
-            .Where(x => x.GuildId == arsg2.Guild.Id)
+            .Where(x => x.GuildId == after.Guild.Id)
             .Select(x => x.RoleId)
-            .ToListAsync();
+            .ToListAsync()
+            .ConfigureAwait(false);
 
+        // Check if any added role is an auto-ban role
         var rolesSet = autoBanRoleIds.ToHashSet();
+        if (!addedRoles.Any(x => rolesSet.Contains(x.Id)))
+            return;
 
-        if (!addedRoles.Any(x => rolesSet.Contains(x.Id))) return;
-
+        // Ban the user
         try
         {
-            await arsg2.Guild.AddBanAsync(arsg2, 0, "Auto-ban role");
+            await after.Guild.AddBanAsync(after, 0, "Auto-ban role assigned").ConfigureAwait(false);
         }
         catch
         {
-            // ignored
+            // Log error if needed, but don't throw
         }
+    }
+
+    /// <summary>
+    ///     Gets all AutoBanRole IDs for a specific guild.
+    /// </summary>
+    /// <param name="guildId">The guild ID to get auto-ban roles for</param>
+    /// <returns>A list of role IDs that trigger auto-ban</returns>
+    public async Task<List<ulong>> GetAutoBanRoles(ulong guildId)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync().ConfigureAwait(false);
+        return await db.AutoBanRoles
+            .Where(x => x.GuildId == guildId)
+            .Select(x => x.RoleId)
+            .ToListAsync()
+            .ConfigureAwait(false);
     }
 
     /// <summary>
     ///     Adds a role to the list of AutoBanRoles.
     /// </summary>
-    /// <param name="guildId">The guild id</param>
-    /// <param name="roleId">The role to add to autoban</param>
-    /// <returns>A bool depending on whether the role was added</returns>
+    /// <param name="guildId">The guild ID</param>
+    /// <param name="roleId">The role ID to add to auto-ban list</param>
+    /// <returns>True if the role was added successfully, false if it already exists</returns>
     public async Task<bool> AddAutoBanRole(ulong guildId, ulong roleId)
     {
-        await using var db = await dbFactory.CreateConnectionAsync();
+        await using var db = await dbFactory.CreateConnectionAsync().ConfigureAwait(false);
+
+        // Check if already exists
         var exists = await db.AutoBanRoles
-            .AnyAsync(x => x.GuildId == guildId && x.RoleId == roleId);
+            .AnyAsync(x => x.GuildId == guildId && x.RoleId == roleId)
+            .ConfigureAwait(false);
 
-        if (exists) return false;
+        if (exists)
+            return false;
 
+        // Insert new auto-ban role
         await db.InsertAsync(new AutoBanRole
         {
             GuildId = guildId, RoleId = roleId
-        });
+        }).ConfigureAwait(false);
+
         return true;
     }
 
     /// <summary>
     ///     Removes a role from the list of AutoBanRoles.
     /// </summary>
-    /// <param name="guildId">The guild id</param>
-    /// <param name="roleId">The role to remove</param>
-    /// <returns>A bool depending on whether the role was removed</returns>
+    /// <param name="guildId">The guild ID</param>
+    /// <param name="roleId">The role ID to remove from auto-ban list</param>
+    /// <returns>True if the role was removed successfully, false if it didn't exist</returns>
     public async Task<bool> RemoveAutoBanRole(ulong guildId, ulong roleId)
     {
-        await using var db = await dbFactory.CreateConnectionAsync();
+        await using var db = await dbFactory.CreateConnectionAsync().ConfigureAwait(false);
+
         var deletedRows = await db.AutoBanRoles
             .Where(x => x.GuildId == guildId && x.RoleId == roleId)
-            .DeleteAsync();
+            .DeleteAsync()
+            .ConfigureAwait(false);
+
         return deletedRows > 0;
     }
 }

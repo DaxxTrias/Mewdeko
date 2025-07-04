@@ -3391,6 +3391,20 @@ logevents:
   args:
     - ''
   params: [ ]
+logignore:
+  desc: Sets a channel to be ignored from logging.
+  args:
+    - channel
+  params:
+    - name: channel
+      desc: The channel to ignore or unignore from logging. If not specified, uses current channel.
+      type: ITextChannel
+      optional: true
+logignorelist:
+  desc: Shows all channels currently ignored from logging.
+  args:
+    - ''
+  params: [ ]
 log_LogType_=:
   desc: Sets the logging channel for a specific event type.
   args:
@@ -5656,16 +5670,47 @@ poll_PollType_string:
       desc: The input string for the poll.
       type: string
       optional: false
-pollstats:
-  desc: Displays the current statistics of the active poll in the guild.
+pollc:
+  desc: Creates a custom poll with specific options.
+  args:
+    - input
+  params:
+    - name: input
+      desc: Poll question and options separated by semicolons.
+      type: string
+      optional: false
+pollm:
+  desc: Creates a multi-choice poll where users can select multiple options.
+  args:
+    - input
+  params:
+    - name: input
+      desc: Poll question and options separated by semicolons.
+      type: string
+      optional: false
+polltemplates:
+  desc: Shows available poll templates in the server.
   args:
     - ''
   params: [ ]
-pollend:
-  desc: Ends the current poll in the guild and displays the final statistics.
+polla:
+  desc: Creates an anonymous poll where users can vote privately.
   args:
-    - ''
-  params: [ ]
+    - input
+  params:
+    - name: input
+      desc: Poll question and options separated by semicolons.
+      type: string
+      optional: false
+polltemplate:
+  desc: Creates a poll from a saved template.
+  args:
+    - templateName
+  params:
+    - name: templateName
+      desc: The name of the template to use.
+      type: string
+      optional: false
 poll_string:
   desc: Starts a poll with a single answer type.
   args:
@@ -5679,16 +5724,6 @@ poll_PollType_string_1:
   params:
     - *o149
     - *o150
-pollstats_noparams:
-  desc: Displays the current statistics of the active poll in the guild.
-  args:
-    - ''
-  params: [ ]
-pollend_noparams:
-  desc: Ends the current poll in the guild and displays the final statistics.
-  args:
-    - ''
-  params: [ ]
 poll_string_1:
   desc: A module containing poll commands.
   args:
@@ -5702,16 +5737,6 @@ poll_PollType_string_2:
   params:
     - *o149
     - *o150
-pollstats_noparams_1:
-  desc: Displays the current statistics of the active poll in the guild.
-  args:
-    - ''
-  params: [ ]
-pollend_noparams_1:
-  desc: Ends the current poll in the guild and displays the final statistics.
-  args:
-    - ''
-  params: [ ]
 poll_string_2:
   desc: Starts a poll with a single answer type.
   args:
@@ -5725,16 +5750,6 @@ poll_PollType_string_3:
   params:
     - *o149
     - *o150
-pollstats_noparams_2:
-  desc: Displays the current statistics of the active poll in the guild.
-  args:
-    - ''
-  params: [ ]
-pollend_noparams_2:
-  desc: Ends the current poll in the guild and displays the final statistics.
-  args:
-    - ''
-  params: [ ]
 typestart:
   desc: Initializes a new instance of SpeedTypingCommands.
   args:

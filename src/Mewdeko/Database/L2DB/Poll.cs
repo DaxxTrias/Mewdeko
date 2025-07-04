@@ -14,28 +14,96 @@ using System.Collections.Generic;
 
 namespace DataModel
 {
-	[Table("Poll")]
-	public class Poll
-	{
-		[Column("Id"       , IsPrimaryKey = true, IsIdentity = true, SkipOnInsert = true, SkipOnUpdate = true)] public int       Id        { get; set; } // integer
-		[Column("GuildId"                                                                                    )] public ulong   GuildId   { get; set; } // numeric(20,0)
-		[Column("ChannelId"                                                                                  )] public ulong   ChannelId { get; set; } // numeric(20,0)
-		[Column("Question"                                                                                   )] public string?   Question  { get; set; } // text
-		[Column("PollType"                                                                                   )] public int       PollType  { get; set; } // integer
-		[Column("DateAdded"                                                                                  )] public DateTime? DateAdded { get; set; } // timestamp (6) without time zone
+    /// <summary>
+    /// Represents a poll created in a Discord guild.
+    /// </summary>
+    [Table("Polls")]
+    public class Poll
+    {
+        /// <summary>
+        /// Gets or sets the unique identifier for the poll.
+        /// </summary>
+        [Column("Id", IsPrimaryKey = true, IsIdentity = true, SkipOnInsert = true, SkipOnUpdate = true)]
+        public int Id { get; set; }
 
-		#region Associations
-		/// <summary>
-		/// FK_PollAnswer_Poll_PollsId backreference
-		/// </summary>
-		[Association(ThisKey = nameof(Id), OtherKey = nameof(PollAnswer.PollsId))]
-		public IEnumerable<PollAnswer> PollAnswers { get; set; } = null!;
+        /// <summary>
+        /// Gets or sets the Discord guild ID where the poll was created.
+        /// </summary>
+        [Column("GuildId")]
+        public ulong GuildId { get; set; }
 
-		/// <summary>
-		/// FK_PollVote_Poll_PollsId backreference
-		/// </summary>
-		[Association(ThisKey = nameof(Id), OtherKey = nameof(PollVote.PollsId))]
-		public ICollection<PollVote>? PollVotes { get; set; } = null!;
-		#endregion
-	}
+        /// <summary>
+        /// Gets or sets the Discord channel ID where the poll message is posted.
+        /// </summary>
+        [Column("ChannelId")]
+        public ulong ChannelId { get; set; }
+
+        /// <summary>
+        /// Gets or sets the Discord message ID of the poll message.
+        /// </summary>
+        [Column("MessageId")]
+        public ulong MessageId { get; set; }
+
+        /// <summary>
+        /// Gets or sets the Discord user ID of the poll creator.
+        /// </summary>
+        [Column("CreatorId")]
+        public ulong CreatorId { get; set; }
+
+        /// <summary>
+        /// Gets or sets the poll question text.
+        /// </summary>
+        [Column("Question")]
+        public string Question { get; set; } = null!;
+
+        /// <summary>
+        /// Gets or sets the type of poll.
+        /// </summary>
+        [Column("Type")]
+        public int Type { get; set; }
+
+        /// <summary>
+        /// Gets or sets the poll configuration settings as JSON.
+        /// </summary>
+        [Column("Settings")]
+        public string? Settings { get; set; }
+
+        /// <summary>
+        /// Gets or sets when the poll was created.
+        /// </summary>
+        [Column("CreatedAt")]
+        public DateTime CreatedAt { get; set; }
+
+        /// <summary>
+        /// Gets or sets when the poll expires and auto-closes.
+        /// </summary>
+        [Column("ExpiresAt")]
+        public DateTime? ExpiresAt { get; set; }
+
+        /// <summary>
+        /// Gets or sets when the poll was manually closed.
+        /// </summary>
+        [Column("ClosedAt")]
+        public DateTime? ClosedAt { get; set; }
+
+        /// <summary>
+        /// Gets or sets whether the poll is currently active and accepting votes.
+        /// </summary>
+        [Column("IsActive")]
+        public bool IsActive { get; set; }
+
+        #region Associations
+        /// <summary>
+        /// Gets or sets the collection of options for this poll.
+        /// </summary>
+        [Association(ThisKey = nameof(Id), OtherKey = nameof(PollOption.PollId))]
+        public IEnumerable<PollOption> PollOptions { get; set; } = null!;
+
+        /// <summary>
+        /// Gets or sets the collection of votes cast on this poll.
+        /// </summary>
+        [Association(ThisKey = nameof(Id), OtherKey = nameof(PollVote.PollId))]
+        public IEnumerable<PollVote> PollVotes { get; set; } = null!;
+        #endregion
+    }
 }
