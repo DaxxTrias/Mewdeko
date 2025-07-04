@@ -6,6 +6,8 @@ using Mewdeko.Modules.Moderation.Services;
 using Mewdeko.Services.Strings;
 using DiscordShardedClient = Discord.WebSocket.DiscordShardedClient;
 
+// ReSharper disable GrammarMistakeInComment
+
 namespace Mewdeko.Modules.Administration.Services;
 
 /// <summary>
@@ -24,6 +26,21 @@ public class LogCommandService(
     GeneratedBotStrings strings,
     ILogger<LogCommandService> logger) : INService, IReadyExecutor
 {
+    /// <summary>
+    ///     Result of toggling a channel's ignore status
+    /// </summary>
+    public enum IgnoreResult
+    {
+        /// <summary>Channel was added to ignore list</summary>
+        Added,
+
+        /// <summary>Channel was removed from ignore list</summary>
+        Removed,
+
+        /// <summary>An error occurred</summary>
+        Error
+    }
+
     /// <summary>
     ///     Log category types.
     /// </summary>
@@ -142,9 +159,15 @@ public class LogCommandService(
     }
 
     /// <summary>
+    ///     Cache of ignored channels per guild
+    /// </summary>
+    private readonly ConcurrentDictionary<ulong, HashSet<ulong>> ignoredChannelsCache = new();
+
+    /// <summary>
     ///     Dictionary of log settings for each guild.
     /// </summary>
     public ConcurrentDictionary<ulong, LoggingV2> GuildLogSettings { get; set; }
+
 
     /// <inheritdoc />
     public async Task OnReadyAsync()
@@ -155,6 +178,16 @@ public class LogCommandService(
             var logSettingsList = await db.LoggingV2.ToListAsync().ConfigureAwait(false);
             var dict = logSettingsList.ToDictionary(g => g.GuildId, g => g);
             GuildLogSettings = new ConcurrentDictionary<ulong, LoggingV2>(dict);
+
+            // Load ignored channels
+            var allIgnoredChannels = await db.GetTable<LogIgnoredChannel>()
+                .ToListAsync()
+                .ConfigureAwait(false);
+
+            foreach (var group in allIgnoredChannels.GroupBy(ic => ic.GuildId))
+            {
+                ignoredChannelsCache[group.Key] = group.Select(ic => ic.ChannelId).ToHashSet();
+            }
         }
         catch (Exception ex)
         {
@@ -487,6 +520,12 @@ public class LogCommandService(
     /// <param name="socketThreadChannel">The created thread channel.</param>
     private async Task OnThreadCreated(SocketThreadChannel socketThreadChannel)
     {
+        // Check if thread or its parent channel is ignored
+        if (IsChannelIgnored(socketThreadChannel.Guild.Id, socketThreadChannel.Id) ||
+            (socketThreadChannel.ParentChannel != null &&
+             IsChannelIgnored(socketThreadChannel.Guild.Id, socketThreadChannel.ParentChannel.Id)))
+            return;
+
         if (GuildLogSettings.TryGetValue(socketThreadChannel.Guild.Id, out var logSetting))
         {
             if (logSetting.ThreadCreatedId is null or 0)
@@ -663,6 +702,13 @@ public class LogCommandService(
     {
         if (!args.HasValue) return;
         var deletedThread = args.Value;
+
+        // Check if thread or its parent channel is ignored
+        if (IsChannelIgnored(deletedThread.Guild.Id, deletedThread.Id) ||
+            (deletedThread.ParentChannel != null &&
+             IsChannelIgnored(deletedThread.Guild.Id, deletedThread.ParentChannel.Id)))
+            return;
+
         if (GuildLogSettings.TryGetValue(deletedThread.Guild.Id, out var logSetting))
         {
             if (logSetting.ThreadDeletedId is null or 0)
@@ -699,6 +745,12 @@ public class LogCommandService(
     {
         if (!cacheable.HasValue) return;
         var oldThread = cacheable.Value;
+
+        // Check if thread or its parent channel is ignored
+        if (IsChannelIgnored(arsg2.Guild.Id, arsg2.Id) ||
+            (arsg2.ParentChannel != null && IsChannelIgnored(arsg2.Guild.Id, arsg2.ParentChannel.Id)))
+            return;
+
         if (GuildLogSettings.TryGetValue(arsg2.Guild.Id, out var logSetting))
         {
             if (logSetting.ThreadUpdatedId is null or 0)
@@ -758,6 +810,10 @@ public class LogCommandService(
         if (args3 is not SocketTextChannel guildChannel) return;
         if (oldMessage.Content == args2.Content) return; // Compare content directly
 
+        // Check if channel is ignored
+        if (IsChannelIgnored(guildChannel.Guild.Id, guildChannel.Id))
+            return;
+
         if (GuildLogSettings.TryGetValue(guildChannel.Guild.Id, out var logSetting))
         {
             if (logSetting.MessageUpdatedId is null or 0)
@@ -798,6 +854,10 @@ public class LogCommandService(
         // Get channel from cache if available
         var messageChannel = arsg2.HasValue ? arsg2.Value : null;
         if (messageChannel is not SocketTextChannel guildChannel) return; // Ensure it's a guild channel
+
+        // Check if channel is ignored
+        if (IsChannelIgnored(guildChannel.Guild.Id, guildChannel.Id))
+            return;
 
         if (GuildLogSettings.TryGetValue(guildChannel.Guild.Id, out var logSetting))
         {
@@ -1093,6 +1153,10 @@ public class LogCommandService(
     {
         if (args is not SocketGuildChannel channel) return;
 
+        // Check if channel is ignored
+        if (IsChannelIgnored(channel.Guild.Id, channel.Id))
+            return;
+
         if (GuildLogSettings.TryGetValue(channel.Guild.Id, out var logSetting))
         {
             if (logSetting.ChannelCreatedId is null or 0)
@@ -1137,6 +1201,10 @@ public class LogCommandService(
     private async Task OnChannelDestroyed(SocketChannel args)
     {
         if (args is not SocketGuildChannel channel) return;
+
+        // Check if channel is ignored
+        if (IsChannelIgnored(channel.Guild.Id, channel.Id))
+            return;
 
         if (GuildLogSettings.TryGetValue(channel.Guild.Id, out var logSetting))
         {
@@ -1184,6 +1252,10 @@ public class LogCommandService(
     {
         if (args is not SocketGuildChannel channel || arsg2 is not SocketGuildChannel channel2) return;
         if (channel.Id != channel2.Id) return; // Should be the same channel
+
+        // Check if channel is ignored
+        if (IsChannelIgnored(channel.Guild.Id, channel.Id))
+            return;
 
         if (GuildLogSettings.TryGetValue(channel.Guild.Id, out var logSetting))
         {
@@ -1304,6 +1376,11 @@ public class LogCommandService(
         if (user.IsBot || user is not IGuildUser guildUser)
             return;
 
+        // Check if old or new channel is ignored
+        if ((oldState.VoiceChannel != null && IsChannelIgnored(guildUser.Guild.Id, oldState.VoiceChannel.Id)) ||
+            (newState.VoiceChannel != null && IsChannelIgnored(guildUser.Guild.Id, newState.VoiceChannel.Id)))
+            return;
+
         if (GuildLogSettings.TryGetValue(guildUser.Guild.Id, out var logSetting))
         {
             if (logSetting.LogVoicePresenceId is null or 0)
@@ -1397,6 +1474,11 @@ public class LogCommandService(
     private async Task OnVoicePresenceTts(SocketUser user, SocketVoiceState oldState, SocketVoiceState newState)
     {
         if (user.IsBot || user is not IGuildUser guildUser)
+            return;
+
+        // Check if old or new channel is ignored
+        if ((oldState.VoiceChannel != null && IsChannelIgnored(guildUser.Guild.Id, oldState.VoiceChannel.Id)) ||
+            (newState.VoiceChannel != null && IsChannelIgnored(guildUser.Guild.Id, newState.VoiceChannel.Id)))
             return;
 
         if (GuildLogSettings.TryGetValue(guildUser.Guild.Id, out var logSetting))
@@ -1681,6 +1763,120 @@ public class LogCommandService(
         catch (Exception e)
         {
             logger.LogError(e, "There was an issue setting log settings by type for Guild {GuildId}", guildId);
+        }
+    }
+
+    /// <summary>
+    ///     Toggles whether a channel is ignored for logging
+    /// </summary>
+    public async Task<IgnoreResult> LogIgnore(ulong guildId, ulong channelId)
+    {
+        try
+        {
+            await using var db = await dbFactory.CreateConnectionAsync();
+
+            // Get or create the ignored channels set for this guild
+            var ignoredChannels = ignoredChannelsCache.GetOrAdd(guildId, _ => new HashSet<ulong>());
+
+            // Check if channel is already ignored
+            var existing = await db.GetTable<LogIgnoredChannel>()
+                .FirstOrDefaultAsync(lic => lic.GuildId == guildId && lic.ChannelId == channelId);
+
+            if (existing != null)
+            {
+                // Remove from database
+                await db.DeleteAsync(existing);
+
+                // Remove from cache
+                ignoredChannels.Remove(channelId);
+
+                return IgnoreResult.Removed;
+            }
+            else
+            {
+                // Add to database
+                await db.InsertAsync(new LogIgnoredChannel
+                {
+                    GuildId = guildId, ChannelId = channelId, DateAdded = DateTime.UtcNow
+                });
+
+                // Add to cache
+                ignoredChannels.Add(channelId);
+
+                return IgnoreResult.Added;
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error toggling ignore status for channel {ChannelId} in guild {GuildId}",
+                channelId, guildId);
+            return IgnoreResult.Error;
+        }
+    }
+
+    /// <summary>
+    ///     Gets all ignored channels for a guild
+    /// </summary>
+    public async Task<HashSet<ulong>> GetIgnoredChannels(ulong guildId)
+    {
+        try
+        {
+            await using var db = await dbFactory.CreateConnectionAsync();
+
+            var ignoredChannels = await db.GetTable<LogIgnoredChannel>()
+                .Where(lic => lic.GuildId == guildId)
+                .Select(lic => lic.ChannelId)
+                .ToListAsync();
+
+            return ignoredChannels.ToHashSet();
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error getting ignored channels for guild {GuildId}", guildId);
+            return new HashSet<ulong>();
+        }
+    }
+
+    /// <summary>
+    ///     Checks if a channel is ignored for logging
+    /// </summary>
+    public bool IsChannelIgnored(ulong guildId, ulong channelId)
+    {
+        if (ignoredChannelsCache.TryGetValue(guildId, out var ignoredChannels))
+            return ignoredChannels.Contains(channelId);
+
+        return false;
+    }
+
+    /// <summary>
+    ///     Updates the ignored channels for a guild and fires events
+    /// </summary>
+    public async Task UpdateIgnoredChannelsAsync(ulong guildId, HashSet<ulong> channels)
+    {
+        try
+        {
+            await using var db = await dbFactory.CreateConnectionAsync();
+
+            // Remove existing entries
+            await db.GetTable<LogIgnoredChannel>()
+                .Where(lic => lic.GuildId == guildId)
+                .DeleteAsync();
+
+            // Add new entries
+            foreach (var channelId in channels)
+            {
+                await db.InsertAsync(new LogIgnoredChannel
+                {
+                    GuildId = guildId, ChannelId = channelId, DateAdded = DateTime.UtcNow
+                }).ConfigureAwait(false);
+            }
+
+            // Update cache
+            ignoredChannelsCache[guildId] = new HashSet<ulong>(channels);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error updating ignored channels for guild {GuildId}", guildId);
         }
     }
 }

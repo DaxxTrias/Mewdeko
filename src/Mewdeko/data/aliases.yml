@@ -1251,6 +1251,12 @@ logcategory:
   - logcat
 logevents:
   - logevents
+logignore:
+  - logignore
+  - lignore
+logignorelist:
+  - logignorelist
+  - lignorel
 loop:
   - loop
   - queuerepeat
@@ -1427,10 +1433,18 @@ pokemon:
 poll:
   - poll
   - ppoll
-pollend:
-  - pollend
-pollstats:
-  - pollstats
+pollc:
+  - pollc
+pollm:
+  - pollm
+polltemplates:
+  - polltemplates
+  - ptemplates
+polla:
+  - polla
+polltemplate:
+  - polltemplate
+  - ptemplate
 pout:
   - pout
 prefixcommand:
@@ -2497,6 +2511,78 @@ patreonanalytics:
 patreonrecognize:
   - patreonrecognize
   - ptrecognize
+todocreatelist:
+  - todocreatelist
+  - tcl
+todocreateserverlist:
+  - todocreateserverlist
+  - tcsl
+todolists:
+  - todolists
+  - tl
+todoadd:
+  - todoadd
+  - ta
+todoaddpriority:
+  - todoaddpriority
+  - tap
+todoshow:
+  - todoshow
+  - ts
+todocomplete:
+  - todocomplete
+  - tc
+tododelete:
+  - tododelete
+  - td
+tododeletelist:
+  - tododeletelist
+  - tdl
+todogrant:
+  - todogrant
+  - tg
+todosetdue:
+  - todosetdue
+  - tsd
+todocleardue:
+  - todocleardue
+  - tcd
+todosetreminder:
+  - todosetreminder
+  - tsr
+todoclearreminder:
+  - todoclearreminder
+  - tcr
+todoaddtag:
+  - todoaddtag
+  - tat
+todoremovetag:
+  - todoremovetag
+  - trt
+todoedit:
+  - todoedit
+  - te
+todoreorder:
+  - todoreorder
+  - tr
+todosetcolor:
+  - todosetcolor
+  - tsc
+todotoggleprivacy:
+  - todotoggleprivacy
+  - ttp
+todopermissions:
+  - todopermissions
+  - tp
+todorevoke:
+  - todorevoke
+  - trv
+todosearch:
+  - todosearch
+  - tsearch
+todofilter:
+  - todofilter
+  - tf
 addinstance:
   - addinstance
   - addins

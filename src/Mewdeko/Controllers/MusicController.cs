@@ -4,6 +4,7 @@ using Lavalink4NET;
 using Lavalink4NET.Filters;
 using Lavalink4NET.Players;
 using Lavalink4NET.Rest.Entities.Tracks;
+using Mewdeko.Controllers.Common.Music;
 using Mewdeko.Modules.Music.Common;
 using Mewdeko.Modules.Music.CustomPlayer;
 using Microsoft.AspNetCore.Authorization;
@@ -855,32 +856,5 @@ public class MusicController : Controller
         {
             Filter = filterName, Enabled = enable
         });
-    }
-
-    /// <summary>
-    ///     A song request
-    /// </summary>
-    public class PlayRequest
-    {
-        /// <summary>
-        ///     The requested url
-        /// </summary>
-        public string Url { get; set; }
-
-        /// <summary>
-        ///     Who requested
-        /// </summary>
-        public PartialUser Requester { get; set; }
-    }
-
-    /// <summary>
-    ///     Seek request
-    /// </summary>
-    public class SeekRequest
-    {
-        /// <summary>
-        ///     Position in seconds
-        /// </summary>
-        public double Position { get; set; }
     }
 }

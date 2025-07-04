@@ -180,7 +180,7 @@ public class Todo(ILogger<Todo> logger) : MewdekoModuleBase<TodoService>
         if (items.Count == 0)
         {
             var embedBuilder = new EmbedBuilder()
-                .WithTitle($"📝 {list.Name}")
+                .WithTitle(Strings.TodoListTitle(ctx.Guild.Id, list.Name))
                 .WithDescription(Strings.TodoListEmpty(ctx.Guild.Id))
                 .WithColor(Color.LightGrey);
             await ctx.Channel.SendMessageAsync(embed: embedBuilder.Build());
@@ -228,7 +228,7 @@ public class Todo(ILogger<Todo> logger) : MewdekoModuleBase<TodoService>
         }
 
         var embed = new EmbedBuilder()
-            .WithTitle($"📝 {list.Name}")
+            .WithTitle(Strings.TodoListTitle(ctx.Guild.Id, list.Name))
             .WithDescription(sb.ToString())
             .WithColor(Color.Parse(list.Color ?? "#7289da"))
             .WithFooter(Strings.TodoShowFooter(ctx.Guild.Id, listId));

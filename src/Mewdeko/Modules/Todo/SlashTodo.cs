@@ -225,7 +225,7 @@ public class TodoSlash : MewdekoSlashModuleBase<TodoService>
         if (items.Count == 0)
         {
             var embed = new EmbedBuilder()
-                .WithTitle($"📝 {list.Name}")
+                .WithTitle(Strings.TodoListTitle(ctx.Guild.Id, list.Name))
                 .WithDescription(Strings.TodoListEmpty(ctx.Guild.Id))
                 .WithColor(Color.LightGrey);
             await FollowupAsync(embed: embed.Build());
@@ -265,7 +265,7 @@ public class TodoSlash : MewdekoSlashModuleBase<TodoService>
                 }
 
                 var page = new PageBuilder()
-                    .WithTitle($"📝 {list.Name}")
+                    .WithTitle(Strings.TodoListTitle(ctx.Guild.Id, list.Name))
                     .WithDescription(sb.ToString())
                     .WithColor(Color.Parse(list.Color ?? "#7289da"))
                     .WithFooter($"Pending Page {(i / itemsPerPage) + 1}");
@@ -289,10 +289,10 @@ public class TodoSlash : MewdekoSlashModuleBase<TodoService>
                 sb.AppendLine($"... {Strings.TodoAndMore(ctx.Guild.Id, completedItems.Count - 10)}");
 
             var completedPage = new PageBuilder()
-                .WithTitle($"📝 {list.Name}")
+                .WithTitle(Strings.TodoListTitle(ctx.Guild.Id, list.Name))
                 .WithDescription(sb.ToString())
                 .WithColor(Color.Parse(list.Color ?? "#7289da"))
-                .WithFooter("Completed Items");
+                .WithFooter(Strings.TodoCompletedItems(ctx.Guild.Id));
 
             pages.Add(completedPage);
         }
@@ -300,7 +300,7 @@ public class TodoSlash : MewdekoSlashModuleBase<TodoService>
         if (pages.Count == 0)
         {
             var embed = new EmbedBuilder()
-                .WithTitle($"📝 {list.Name}")
+                .WithTitle(Strings.TodoListTitle(ctx.Guild.Id, list.Name))
                 .WithDescription(Strings.TodoListEmpty(ctx.Guild.Id))
                 .WithColor(Color.LightGrey);
             await FollowupAsync(embed: embed.Build());

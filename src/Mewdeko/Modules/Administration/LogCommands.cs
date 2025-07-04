@@ -396,5 +396,87 @@ public partial class Administration
 
             LogSlashCommands.LogSelectMessages[Context.Channel.Id] = msg;
         }
+
+        /// <summary>
+        ///     Toggles a channel as ignored for logging events.
+        /// </summary>
+        /// <remarks>
+        ///     When a channel is ignored, no log events that occur in that channel will be logged.
+        ///     This command is restricted to users with Administrator permissions.
+        /// </remarks>
+        /// <param name="channel">The channel to toggle ignore status for. If not specified, uses the current channel.</param>
+        /// <example>.logignore #general</example>
+        /// <example>.logignore</example>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.Administrator)]
+        public async Task LogIgnore(ITextChannel? channel = null)
+        {
+            channel ??= (ITextChannel)ctx.Channel;
+
+            var result = await Service.LogIgnore(ctx.Guild.Id, channel.Id);
+
+            switch (result)
+            {
+                case LogCommandService.IgnoreResult.Added:
+                    await ctx.Channel.SendConfirmAsync(
+                            Strings.LogIgnoreChannelAdded(ctx.Guild.Id, channel.Mention))
+                        .ConfigureAwait(false);
+                    break;
+                case LogCommandService.IgnoreResult.Removed:
+                    await ctx.Channel.SendConfirmAsync(
+                            Strings.LogIgnoreChannelRemoved(ctx.Guild.Id, channel.Mention))
+                        .ConfigureAwait(false);
+                    break;
+                default:
+                    await ErrorAsync(
+                            Strings.LogIgnoreError(ctx.Guild.Id))
+                        .ConfigureAwait(false);
+                    break;
+            }
+        }
+
+        /// <summary>
+        ///     Lists all channels that are currently ignored for logging.
+        /// </summary>
+        /// <remarks>
+        ///     This command is restricted to users with Administrator permissions.
+        /// </remarks>
+        /// <example>.logignorelist</example>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.Administrator)]
+        public async Task LogIgnoreList()
+        {
+            var ignoredChannels = await Service.GetIgnoredChannels(ctx.Guild.Id);
+
+            if (!ignoredChannels.Any())
+            {
+                await ctx.Channel.SendConfirmAsync(Strings.LogIgnoreListEmpty(ctx.Guild.Id))
+                    .ConfigureAwait(false);
+                return;
+            }
+
+            var channelMentions = ignoredChannels
+                .Select(channelId => ctx.Guild.GetChannelAsync(channelId).GetAwaiter().GetResult())
+                .Where(ch => ch != null)
+                .OfType<ITextChannel>()
+                .Select(ch => ch.Mention)
+                .ToList();
+
+            if (!channelMentions.Any())
+            {
+                await ctx.Channel.SendConfirmAsync(Strings.LogIgnoreListEmpty(ctx.Guild.Id))
+                    .ConfigureAwait(false);
+                return;
+            }
+
+            await ctx.Channel.SendConfirmAsync(
+                    Strings.LogIgnoreList(ctx.Guild.Id),
+                    string.Join("\n", channelMentions))
+                .ConfigureAwait(false);
+        }
     }
 }

@@ -583,7 +583,7 @@ public class MessageCountService : INService
     /// <param name="userId">Optional user ID to reset counts for</param>
     /// <param name="channelId">Optional channel ID to reset counts for</param>
     /// <returns>True if any records were found and removed, false otherwise</returns>
-    public async Task<bool> ResetCount(ulong guildId, ulong userId = 0, ulong channelId = 0)
+    public async Task<bool> ResetCount(ulong guildId, ulong? userId = 0, ulong? channelId = 0)
     {
         await using var db = await dbFactory.CreateConnectionAsync();
         await using var transaction = await db.BeginTransactionAsync(

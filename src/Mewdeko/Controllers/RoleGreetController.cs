@@ -1,4 +1,5 @@
-﻿using Mewdeko.Modules.RoleGreets.Services;
+﻿using Mewdeko.Controllers.Common.RoleGreet;
+using Mewdeko.Modules.RoleGreets.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -138,15 +139,4 @@ public class RoleGreetController : Controller
         await roleGreetService.RoleGreetDisable(greet, disabled);
         return Ok();
     }
-}
-
-/// <summary>
-///     Webhook update request
-/// </summary>
-public class WebhookUpdateRequestRole
-{
-    /// <summary>
-    ///     ze url
-    /// </summary>
-    public string? WebhookUrl { get; set; }
 }

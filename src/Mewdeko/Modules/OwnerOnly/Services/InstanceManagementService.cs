@@ -4,7 +4,7 @@ using System.Threading;
 using DataModel;
 using LinqToDB;
 using Mewdeko.Common.ModuleBehaviors;
-using Mewdeko.Controllers;
+using Mewdeko.Controllers.Common.Bot;
 using Mewdeko.Services.Impl;
 
 namespace Mewdeko.Modules.OwnerOnly.Services;
@@ -110,7 +110,7 @@ public class InstanceManagementService : INService, IReadyExecutor
     /// </returns>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when port number is invalid.</exception>
     /// <exception cref="InvalidOperationException">Thrown when not running on master instance.</exception>
-    public async Task<(bool Success, BotStatus.BotStatusModel? Status, string? Reason)> AddInstanceAsync(int port)
+    public async Task<(bool Success, BotStatusModel? Status, string? Reason)> AddInstanceAsync(int port)
     {
         if (!new BotCredentials().IsMasterInstance)
             throw new InvalidOperationException("Can only add instances from master bot.");
@@ -145,7 +145,7 @@ public class InstanceManagementService : INService, IReadyExecutor
     /// <param name="port">The port number of the bot instance.</param>
     /// <returns>The bot's status information if available, null if the instance is unreachable.</returns>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when port number is invalid.</exception>
-    public async Task<BotStatus.BotStatusModel?> GetInstanceStatusAsync(int port)
+    public async Task<BotStatusModel?> GetInstanceStatusAsync(int port)
     {
         if (port is < 1024 or > 65535)
             throw new ArgumentOutOfRangeException(nameof(port), "Port must be between 1024 and 65535");
@@ -159,7 +159,7 @@ public class InstanceManagementService : INService, IReadyExecutor
                 return null;
 
             var actuResponse = await response.Content.ReadAsStringAsync();
-            return JsonSerializer.Deserialize<BotStatus.BotStatusModel>(actuResponse, CachedJsonOptions);
+            return JsonSerializer.Deserialize<BotStatusModel>(actuResponse, CachedJsonOptions);
         }
         catch (Exception ex)
         {

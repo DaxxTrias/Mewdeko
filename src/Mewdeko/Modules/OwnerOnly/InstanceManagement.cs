@@ -1,7 +1,7 @@
 ﻿using Discord.Commands;
 using LinqToDB;
 using Mewdeko.Common.Attributes.TextCommands;
-using Mewdeko.Controllers;
+using Mewdeko.Controllers.Common.Bot;
 using Mewdeko.Modules.OwnerOnly.Services;
 
 namespace Mewdeko.Modules.OwnerOnly;
@@ -165,7 +165,7 @@ public class InstanceManagement(IDataConnectionFactory dbFactory) : MewdekoModul
         }
     }
 
-    private string GetInstanceDescription(BotStatus.BotStatusModel status) =>
+    private string GetInstanceDescription(BotStatusModel status) =>
         $"{Strings.InstanceStatus(ctx.Guild.Id)} {status.BotStatus}\n" +
         $"{Strings.InstanceVersion(ctx.Guild.Id, status.BotVersion)}\n" +
         $"{Strings.InstanceCommandCount(ctx.Guild.Id, status.CommandsCount)}\n" +

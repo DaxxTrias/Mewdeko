@@ -13,22 +13,54 @@ using System;
 
 namespace DataModel
 {
-	[Table("PollVote")]
-	public class PollVote
-	{
-		[Column("Id"       , IsPrimaryKey = true, IsIdentity = true, SkipOnInsert = true, SkipOnUpdate = true)] public int       Id        { get; set; } // integer
-		[Column("UserId"                                                                                     )] public ulong   UserId    { get; set; } // numeric(20,0)
-		[Column("VoteIndex"                                                                                  )] public int       VoteIndex { get; set; } // integer
-		[Column("PollId"                                                                                     )] public int       PollId    { get; set; } // integer
-		[Column("DateAdded"                                                                                  )] public DateTime? DateAdded { get; set; } // timestamp (6) without time zone
-		[Column("PollsId"                                                                                    )] public int?      PollsId   { get; set; } // integer
+    /// <summary>
+    /// Represents a user's vote on a poll.
+    /// </summary>
+    [Table("PollVotes")]
+    public class PollVote
+    {
+        /// <summary>
+        /// Gets or sets the unique identifier for the vote.
+        /// </summary>
+        [Column("Id", IsPrimaryKey = true, IsIdentity = true, SkipOnInsert = true, SkipOnUpdate = true)]
+        public int Id { get; set; }
 
-		#region Associations
-		/// <summary>
-		/// FK_PollVote_Poll_PollsId
-		/// </summary>
-		[Association(ThisKey = nameof(PollsId), OtherKey = nameof(Poll.Id))]
-		public Poll? Polls { get; set; }
-		#endregion
-	}
+        /// <summary>
+        /// Gets or sets the ID of the poll this vote belongs to.
+        /// </summary>
+        [Column("PollId")]
+        public int PollId { get; set; }
+
+        /// <summary>
+        /// Gets or sets the Discord user ID of the voter.
+        /// </summary>
+        [Column("UserId")]
+        public ulong UserId { get; set; }
+
+        /// <summary>
+        /// Gets or sets the selected option indices as a JSON array.
+        /// </summary>
+        [Column("OptionIndices")]
+        public string OptionIndices { get; set; } = null!;
+
+        /// <summary>
+        /// Gets or sets when the vote was cast.
+        /// </summary>
+        [Column("VotedAt")]
+        public DateTime VotedAt { get; set; }
+
+        /// <summary>
+        /// Gets or sets whether this vote was cast anonymously.
+        /// </summary>
+        [Column("IsAnonymous")]
+        public bool IsAnonymous { get; set; }
+
+        #region Associations
+        /// <summary>
+        /// Gets or sets the poll this vote belongs to.
+        /// </summary>
+        [Association(ThisKey = nameof(PollId), OtherKey = nameof(Poll.Id))]
+        public Poll Poll { get; set; } = null!;
+        #endregion
+    }
 }
