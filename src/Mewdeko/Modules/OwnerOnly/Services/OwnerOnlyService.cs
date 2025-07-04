@@ -1021,7 +1021,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
             {
                 // Look for potential XML doc for this value
                 var xmlValueMatch = Regex.Match(fullContent,
-                    $@"<member name=""{enumName}\.{valueName}"">\s*<summary>([\s\S]*?)<\/summary>");
+                    $"""<member name="{enumName}\.{valueName}">\s*<summary>([\s\S]*?)<\/summary>""");
 
                 if (xmlValueMatch.Success)
                 {
@@ -1287,7 +1287,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         var searchArea = content.Substring(searchStart, searchLength);
 
         // Find all param tags with improved regex
-        var paramMatches = Regex.Matches(searchArea, @"///\s*<param\s+name=[""']([^""']+)[""']>([\s\S]*?)<\/param>");
+        var paramMatches = Regex.Matches(searchArea, """///\s*<param\s+name=["']([^"']+)["']>([\s\S]*?)<\/param>""");
 
         foreach (Match match in paramMatches)
         {
@@ -1847,7 +1847,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         description = description.Replace("///", "").Replace("/*", "").Replace("*/", "");
 
         // Handle common XML references
-        description = Regex.Replace(description, @"<see\s+cref=[""']([^""']+)[""']\s*/>", m =>
+        description = Regex.Replace(description, """<see\s+cref=["']([^"']+)["']\s*/>""", m =>
             m.Groups[1].Value.Split('.').Last());
 
         // Remove other XML tags but preserve content
@@ -1873,7 +1873,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         summary = summary.Replace("///", "").Replace("/*", "").Replace("*/", "");
 
         // Remove XML tags
-        summary = Regex.Replace(summary, @"<see\s+cref=""([^""]+)""\s*/>", m =>
+        summary = Regex.Replace(summary, """<see\s+cref="([^"]+)"\s*/>""", m =>
             m.Groups[1].Value.Split('.').Last());
 
         summary = Regex.Replace(summary, @"<[^>]+>", "");

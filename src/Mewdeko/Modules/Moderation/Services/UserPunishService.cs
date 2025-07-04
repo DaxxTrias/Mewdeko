@@ -435,17 +435,21 @@ public class UserPunishService : INService, IDisposable
         switch ((WarnExpireAction)config.WarnExpireAction)
         {
             case WarnExpireAction.Clear:
-                await dbContext.ExecuteAsync($@"UPDATE ""Warnings""
-            SET ""Forgiven"" = 1,
-                ""ForgivenBy"" = 'Expiry'
-            WHERE ""GuildId""={guildId}
-                AND ""Forgiven"" = 0
-                AND ""DateAdded"" < NOW() - MAKE_INTERVAL(hours := {interval})").ConfigureAwait(false);
+                await dbContext.ExecuteAsync($"""
+                                              UPDATE "Warnings"
+                                                          SET "Forgiven" = 1,
+                                                              "ForgivenBy" = 'Expiry'
+                                                          WHERE "GuildId"={guildId}
+                                                              AND "Forgiven" = 0
+                                                              AND "DateAdded" < NOW() - MAKE_INTERVAL(hours := {interval})
+                                              """).ConfigureAwait(false);
                 break;
             case WarnExpireAction.Delete:
-                await dbContext.ExecuteAsync($@"DELETE FROM ""Warnings""
-            WHERE ""GuildId""={guildId}
-                AND ""DateAdded"" < NOW() - MAKE_INTERVAL(hours := {interval})").ConfigureAwait(false);
+                await dbContext.ExecuteAsync($"""
+                                              DELETE FROM "Warnings"
+                                                          WHERE "GuildId"={guildId}
+                                                              AND "DateAdded" < NOW() - MAKE_INTERVAL(hours := {interval})
+                                              """).ConfigureAwait(false);
                 break;
         }
     }

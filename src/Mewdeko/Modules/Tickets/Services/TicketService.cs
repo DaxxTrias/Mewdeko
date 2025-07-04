@@ -2742,13 +2742,15 @@ public class TicketService : INService
             var guildUser = msg.Author as IGuildUser;
             var colorHex = guildUser != null ? GetUserColor(guildUser) : "#7289da";
 
-            html.AppendLine($@"<div class='message'>
-            <div class='message-info'>
-                <img class='avatar' src='{msg.Author.GetAvatarUrl() ?? msg.Author.GetDefaultAvatarUrl()}' />
-                <span class='username' style='color: {colorHex}'>{msg.Author.Username}</span>
-                <span class='timestamp'>{msg.Timestamp.ToString("f")}</span>
-            </div>
-            <div class='content'>");
+            html.AppendLine($"""
+                             <div class='message'>
+                                         <div class='message-info'>
+                                             <img class='avatar' src='{msg.Author.GetAvatarUrl() ?? msg.Author.GetDefaultAvatarUrl()}' />
+                                             <span class='username' style='color: {colorHex}'>{msg.Author.Username}</span>
+                                             <span class='timestamp'>{msg.Timestamp.ToString("f")}</span>
+                                         </div>
+                                         <div class='content'>
+                             """);
 
             // [Rest of message formatting remains the same]
         }

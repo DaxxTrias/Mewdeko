@@ -80,20 +80,22 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
     private const string MentionPh = "%bot.mention%";
 
     private const string PrependExport =
-        @"# WARNING: crossposting information is not saved.
-# Keys are triggers, Each key has a LIST of custom reactions in the following format:
-# - res: Response string
-#   react:
-#     - <List
-#     -  of
-#     - reactions>
-#   at: Whether custom reaction allows targets (see .h .crat)
-#   ca: Whether custom reaction expects trigger anywhere (see .h .crca)
-#   dm: Whether custom reaction DMs the response (see .h .crdm)
-#   ad: Whether custom reaction automatically deletes triggering message (see .h .crad)
-#   rtt: Whether custom reaction emotes are added to the response or trigger
+        """
+        # WARNING: crossposting information is not saved.
+        # Keys are triggers, Each key has a LIST of custom reactions in the following format:
+        # - res: Response string
+        #   react:
+        #     - <List
+        #     -  of
+        #     - reactions>
+        #   at: Whether custom reaction allows targets (see .h .crat)
+        #   ca: Whether custom reaction expects trigger anywhere (see .h .crca)
+        #   dm: Whether custom reaction DMs the response (see .h .crdm)
+        #   ad: Whether custom reaction automatically deletes triggering message (see .h .crad)
+        #   rtt: Whether custom reaction emotes are added to the response or trigger
 
-";
+
+        """;
 
     private static readonly ISerializer ExportSerializer = new SerializerBuilder()
         .WithEventEmitter(args => new MultilineScalarFlowStyleEmitter(args))

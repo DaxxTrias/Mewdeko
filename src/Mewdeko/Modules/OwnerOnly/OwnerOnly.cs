@@ -22,6 +22,7 @@ using Mewdeko.Services.strings;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Scripting;
 using Microsoft.CodeAnalysis.Scripting;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Mewdeko.Modules.OwnerOnly;
 
@@ -836,11 +837,13 @@ public class OwnerOnly(
             var i = 0;
             await ctx.Channel.SendConfirmAsync(
                     text: string.Join("\n", scmds
-                        .Select(x => $@"```css
-#{++i}
-[{Strings.Server(ctx.Guild.Id)}]: {(x.GuildId.HasValue ? $"{x.GuildName} #{x.GuildId}" : "-")}
-[{Strings.Channel(ctx.Guild.Id)}]: {x.ChannelName} #{x.ChannelId}
-[{Strings.CommandText(ctx.Guild.Id)}]: {x.CommandText}```")),
+                        .Select(x => $"""
+                                      ```css
+                                      #{++i}
+                                      [{Strings.Server(ctx.Guild.Id)}]: {(x.GuildId.HasValue ? $"{x.GuildName} #{x.GuildId}" : "-")}
+                                      [{Strings.Channel(ctx.Guild.Id)}]: {x.ChannelName} #{x.ChannelId}
+                                      [{Strings.CommandText(ctx.Guild.Id)}]: {x.CommandText}```
+                                      """)),
                     title: string.Empty,
                     footer: Strings.Page(ctx.Guild.Id, page + 1))
                 .ConfigureAwait(false);
@@ -879,12 +882,14 @@ public class OwnerOnly(
             var i = 0;
             await ctx.Channel.SendConfirmAsync(
                     text: string.Join("\n", scmds
-                        .Select(x => $@"```css
-#{++i}
-[{Strings.Server(ctx.Guild.Id)}]: {(x.GuildId.HasValue ? $"{x.GuildName} #{x.GuildId}" : "-")}
-[{Strings.Channel(ctx.Guild.Id)}]: {x.ChannelName} #{x.ChannelId}
-{GetIntervalText(x.Interval)}
-[{Strings.CommandText(ctx.Guild.Id)}]: {x.CommandText}```")),
+                        .Select(x => $"""
+                                      ```css
+                                      #{++i}
+                                      [{Strings.Server(ctx.Guild.Id)}]: {(x.GuildId.HasValue ? $"{x.GuildName} #{x.GuildId}" : "-")}
+                                      [{Strings.Channel(ctx.Guild.Id)}]: {x.ChannelName} #{x.ChannelId}
+                                      {GetIntervalText(x.Interval)}
+                                      [{Strings.CommandText(ctx.Guild.Id)}]: {x.CommandText}```
+                                      """)),
                     title: string.Empty,
                     footer: Strings.Page(ctx.Guild.Id, page + 1))
                 .ConfigureAwait(false);
@@ -1597,41 +1602,92 @@ public class OwnerOnly(
         };
         var msg = await Context.Channel.SendMessageAsync(embed: embed.Build()).ConfigureAwait(false);
 
-        // Set up the script options with necessary imports and references
-        var globals = new EvaluationEnvironment((CommandContext)Context);
+        // Get all namespaces from loaded assemblies
+        var allNamespaces = new HashSet<string>();
+        var assemblies = AppDomain.CurrentDomain.GetAssemblies()
+            .Where(xa => !xa.IsDynamic && !string.IsNullOrWhiteSpace(xa.Location));
+
+        foreach (var assembly in assemblies)
+        {
+            try
+            {
+                var types = assembly.GetExportedTypes();
+                foreach (var type in types)
+                {
+                    if (!string.IsNullOrWhiteSpace(type.Namespace))
+                    {
+                        allNamespaces.Add(type.Namespace);
+                    }
+                }
+            }
+            catch
+            {
+                // Some assemblies might not allow us to get types
+            }
+        }
+
+        // Add commonly used namespaces explicitly (in case they were missed)
+        var additionalNamespaces = new[]
+        {
+            "System", "System.Collections", "System.Collections.Generic", "System.Collections.Concurrent",
+            "System.Diagnostics", "System.Dynamic", "System.IO", "System.Linq", "System.Linq.Expressions", "System.Net",
+            "System.Net.Http", "System.Net.Http.Headers", "System.Reflection", "System.Runtime.CompilerServices",
+            "System.Text", "System.Text.RegularExpressions", "System.Threading", "System.Threading.Tasks",
+            "System.Globalization", "Discord", "Discord.Net", "Discord.Commands", "Discord.WebSocket", "Discord.Rest",
+            "LinqToDB", "LinqToDB.Linq", "Microsoft.Extensions.DependencyInjection", "Newtonsoft.Json",
+            "Newtonsoft.Json.Linq"
+        };
+
+        foreach (var ns in additionalNamespaces)
+        {
+            allNamespaces.Add(ns);
+        }
+
+        // Filter out problematic namespaces
+        var filteredNamespaces = allNamespaces
+            .Where(ns => !ns.StartsWith("Internal.") &&
+                         !ns.StartsWith("Microsoft.CodeAnalysis") &&
+                         !ns.Contains("Private") &&
+                         !ns.Contains("<"))
+            .OrderBy(ns => ns)
+            .ToList();
+
+        // Create globals with access to all major services
+        var globals = new EvaluationEnvironment((CommandContext)Context)
+        {
+            // Add references to commonly used services
+            Client = client,
+            Services = services,
+            DbFactory = dbFactory,
+            Cache = cache,
+            CommandService = commandService,
+            GuildSettings = guildSettings,
+            BotConfig = botConfig,
+            Http = httpClient,
+            Strings = strings,
+            Bot = bot
+        };
+
+        // Set up the script options with all imports and references
         var scriptOptions = ScriptOptions.Default
-            .WithImports(
-                "System",
-                "System.Collections.Generic",
-                "System.Diagnostics",
-                "System.Linq",
-                "System.Net.Http",
-                "System.Net.Http.Headers",
-                "System.Reflection",
-                "System.Text",
-                "System.Threading.Tasks",
-                "Discord.Net",
-                "Discord",
-                "Discord.WebSocket",
-                "Mewdeko.Modules",
-                "Mewdeko.Services",
-                "Mewdeko.Extensions",
-                "Mewdeko.Modules.Administration",
-                "Mewdeko.Modules.Chat_Triggers",
-                "Mewdeko.Modules",
-                "Mewdeko.Modules.Games",
-                "Mewdeko.Modules.Help",
-                "Mewdeko.Modules.Music",
-                "Mewdeko.Modules.Nsfw",
-                "Mewdeko.Modules.Permissions",
-                "Mewdeko.Modules.Searches",
-                "Mewdeko.Modules.Server_Management")
-            .WithReferences(AppDomain.CurrentDomain.GetAssemblies()
-                .Where(xa => !xa.IsDynamic && !string.IsNullOrWhiteSpace(xa.Location)));
+            .WithImports(filteredNamespaces)
+            .WithReferences(assemblies)
+            .WithAllowUnsafe(true);
+
+        // Add a preprocessor to the code to include commonly used extension methods
+        var preprocessedCode = $"""
+
+                                // Auto-imported extension methods and helpers
+                                using static System.Math;
+                                using static System.Console;
+                                using static Newtonsoft.Json.JsonConvert;
+
+                                {codeToEvaluate}
+                                """;
 
         // Start measuring compilation time
         var compilationStopwatch = Stopwatch.StartNew();
-        var script = CSharpScript.Create(codeToEvaluate, scriptOptions, typeof(EvaluationEnvironment));
+        var script = CSharpScript.Create(preprocessedCode, scriptOptions, typeof(EvaluationEnvironment));
         var compilationDiagnostics = script.Compile();
         compilationStopwatch.Stop();
 
@@ -1718,93 +1774,118 @@ public class OwnerOnly(
 }
 
 /// <summary>
-///     Represents an environment encapsulating common entities used during command evaluation.
+///     Evaluation environment with additional service references for use in eval commands
 /// </summary>
-/// <remarks>
-///     This class provides quick access to frequently needed Discord entities such as the message,
-///     channel, guild, user, and client related to the current command context. It's designed to
-///     simplify command handling by centralizing access to these entities.
-/// </remarks>
 public sealed class EvaluationEnvironment
 {
     /// <summary>
-    ///     Initializes a new instance of the <see cref="EvaluationEnvironment" /> class with the specified command context.
+    ///     Initializes a new instance of the <see cref="EvaluationEnvironment"/> class with the specified command context
     /// </summary>
-    /// <param name="ctx">The command context associated with the current command execution.</param>
+    /// <param name="ctx">The command context associated with the current eval command execution</param>
     public EvaluationEnvironment(CommandContext ctx)
     {
         Ctx = ctx;
     }
 
     /// <summary>
-    ///     Gets the command context associated with the current command execution.
+    ///     Gets the command context associated with the current eval execution
     /// </summary>
     public CommandContext Ctx { get; }
 
     /// <summary>
-    ///     Gets the message that triggered the current command execution.
+    ///     Gets the message that triggered the current eval command
     /// </summary>
-    public IUserMessage Message
+    public IUserMessage Message => Ctx.Message;
+
+    /// <summary>
+    ///     Gets the channel in which the eval command was executed
+    /// </summary>
+    public IMessageChannel Channel => Ctx.Channel;
+
+    /// <summary>
+    ///     Gets the guild in which the eval command was executed. May be null for commands executed in DMs
+    /// </summary>
+    public IGuild Guild => Ctx.Guild;
+
+    /// <summary>
+    ///     Gets the user who executed the eval command
+    /// </summary>
+    public IUser User => Ctx.User;
+
+    /// <summary>
+    ///     Gets the guild member who executed the eval command. This is a convenience property for accessing the user as an IGuildUser
+    /// </summary>
+    public IGuildUser Member => (IGuildUser)Ctx.User;
+
+    /// <summary>
+    ///     Gets or sets the Discord sharded client instance for interacting with the Discord API
+    /// </summary>
+    public DiscordShardedClient Client { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the service provider for dependency injection and service resolution
+    /// </summary>
+    public IServiceProvider Services { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the database connection factory for creating database connections
+    /// </summary>
+    public IDataConnectionFactory DbFactory { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the cache service for Redis operations and data caching
+    /// </summary>
+    public IDataCache Cache { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the command service for command registration and execution
+    /// </summary>
+    public CommandService CommandService { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the guild settings service for managing guild-specific configurations
+    /// </summary>
+    public GuildSettingsService GuildSettings { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the bot configuration containing global bot settings
+    /// </summary>
+    public BotConfig BotConfig { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the HTTP client for making web requests
+    /// </summary>
+    public HttpClient Http { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the bot strings service for localization and string resources
+    /// </summary>
+    public IBotStrings Strings { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the main Mewdeko bot instance
+    /// </summary>
+    public Mewdeko Bot { get; set; }
+
+    /// <summary>
+    ///     Executes a database operation within a managed connection scope
+    /// </summary>
+    /// <typeparam name="T">The return type of the database operation</typeparam>
+    /// <param name="func">The async function to execute with the database connection</param>
+    /// <returns>The result of the database operation</returns>
+    /// <remarks>
+    ///     This method automatically handles connection lifecycle, ensuring the connection is properly disposed after use
+    /// </remarks>
+    public async Task<T> Db<T>(Func<DataConnection, Task<T>> func)
     {
-        get
-        {
-            return Ctx.Message;
-        }
+        await using var db = await DbFactory.CreateConnectionAsync();
+        return await func(db);
     }
 
     /// <summary>
-    ///     Gets the channel in which the current command was executed.
+    ///     Retrieves a service of the specified type from the dependency injection container
     /// </summary>
-    public IMessageChannel Channel
-    {
-        get
-        {
-            return Ctx.Channel;
-        }
-    }
-
-    /// <summary>
-    ///     Gets the guild in which the current command was executed. May be null for commands executed in direct messages.
-    /// </summary>
-    public IGuild Guild
-    {
-        get
-        {
-            return Ctx.Guild;
-        }
-    }
-
-    /// <summary>
-    ///     Gets the user who executed the current command.
-    /// </summary>
-    public IUser User
-    {
-        get
-        {
-            return Ctx.User;
-        }
-    }
-
-    /// <summary>
-    ///     Gets the guild member who executed the current command. This is a convenience property for accessing the user as an
-    ///     IGuildUser.
-    /// </summary>
-    public IGuildUser Member
-    {
-        get
-        {
-            return (IGuildUser)Ctx.User;
-        }
-    }
-
-    /// <summary>
-    ///     Gets the Discord client instance associated with the current command execution.
-    /// </summary>
-    public DiscordShardedClient Client
-    {
-        get
-        {
-            return Ctx.Client as DiscordShardedClient;
-        }
-    }
+    /// <typeparam name="T">The type of service to retrieve</typeparam>
+    /// <returns>The requested service instance, or null if the service is not registered</returns>
+    public T GetService<T>() => Services.GetService<T>();
 }
