@@ -39,7 +39,6 @@
     <PackageReference Include="ZiggyCreatures.FusionCache" Version="1.4.0" />
   </ItemGroup>
 
-
   <ItemGroup>
     <PackageReference Include="AngleSharp" Version="1.2.0-beta.423" />
     <PackageReference Include="Anilist4Net" Version="1.5.0" />
