@@ -767,11 +767,14 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         if (string.IsNullOrWhiteSpace(response))
         {
             var embedBuilder = new EmbedBuilder()
-                .WithDescription("*(No response received)*")
+                .WithDescription("*(No response received (Outage?))*")
                 .WithOkColor();
 
-            embedBuilder.WithAuthor("ChatGPT",
-                "https://seeklogo.com/images/C/chatgpt-logo-02AFA704B5-seeklogo.com.png");
+            //embedBuilder.WithAuthor("ChatGPT",
+            //    "https://seeklogo.com/images/C/chatgpt-logo-02AFA704B5-seeklogo.com.png");
+
+            embedBuilder.WithAuthor("Grok",
+                "https://images.seeklogo.com/logo-png/61/1/grok-logo-png_seeklogo-613403.png");
 
             embedBuilder.WithFooter(
                 $"Requested by {requester.Username} | Total Tokens Used: {totalTokensUsed}");
