@@ -11,7 +11,6 @@ using Mewdeko.Common.Collections;
 using Newtonsoft.Json.Linq;
 using NHentaiAPI;
 using Refit;
-using Serilog;
 
 namespace Mewdeko.Modules.Nsfw;
 
@@ -28,7 +27,8 @@ public class Nsfw(
     MartineApi martineApi,
     GuildSettingsService guildSettings,
     HttpClient client,
-    IBotCredentials credentials)
+    IBotCredentials credentials,
+    ILogger<Nsfw> logger)
     : MewdekoModuleBase<ISearchImagesService>
 {
     private static readonly ConcurrentHashSet<ulong> HentaiBombBlacklist = [];
@@ -65,14 +65,13 @@ public class Nsfw(
             catch (ApiException ex)
             {
                 await msg.DeleteAsync();
-                Log.Error(
+                logger.LogError(
                     "Seems that NSFW Subreddit fetching has failed. Here\'s the error:\\nCode:{ExStatusCode}\\nContent: {ExContent}",
                     ex.StatusCode, ex.HasContent ? ex.Content : "No Content.");
                 await ctx.Channel.SendErrorAsync(
                     Strings.NsfwApiFetchError(ctx.Guild.Id),
                     Config
                 );
-
             }
 
             var eb = new EmbedBuilder
@@ -183,7 +182,7 @@ public class Nsfw(
         {
             await Task.CompletedTask.ConfigureAwait(false);
             return new PageBuilder()
-                .WithTitle($"{Format.Bold($"{title}")} - {book.Images.Pages.Count} pages")
+                .WithTitle(Strings.NsfwTitleFormat(ctx.Guild.Id, Format.Bold($"{title}"), book.Images.Pages.Count))
                 .WithImageUrl(nHentaiClient.GetPictureUrl(book, page + 1))
                 .WithOkColor();
         }
@@ -553,6 +552,7 @@ public class Nsfw(
     [Aliases]
     [RequireNsfw(Group = "nsfw_or_dm")]
     [RequireContext(ContextType.DM, Group = "nsfw_or_dm")]
+    [Ratelimit(5)]
     public Task Hentai(params string[] tags)
     {
         return InternalDapiCommand(tags, true, Service.Hentai);
@@ -882,7 +882,7 @@ public class Nsfw(
         }
         catch (HttpRequestException e)
         {
-            Log.Error("Error while fetching RedGif MP4 URL: {0}", e.Message);
+            logger.LogError("Error while fetching RedGif MP4 URL: {0}", e.Message);
             return null;
         }
     }
@@ -920,7 +920,59 @@ public class Nsfw(
         {
             using var sr = await client.GetAsync(data.Url, HttpCompletionOption.ResponseHeadersRead)
                 .ConfigureAwait(false);
+
+            var fileSize = sr.Content.Headers.ContentLength ?? -1;
+
+            var maxUploadSize = ctx.Guild?.MaxUploadLimit ?? 26214400;
+
+            if (fileSize > (long)maxUploadSize)
+            {
+                await ctx.Channel.SendMessageAsync(
+                    embed: new EmbedBuilder().WithErrorColor()
+                        .WithTitle(Strings.NsfwFileTooLarge(ctx.Guild.Id))
+                        .WithDescription(
+                            $"The file is too large to be uploaded ({fileSize / 1048576.0:F2}MB). [View it here instead]({data.Url})")
+                        .WithFooter(
+                            $"{data.Rating} ({data.Provider}) | {string.Join(" | ", data.Tags.Where(x => !string.IsNullOrWhiteSpace(x)).Take(5))}")
+                        .Build(),
+                    components: Config.ShowInviteButton
+                        ? new ComponentBuilder()
+                            .WithButton(style: ButtonStyle.Link,
+                                url:
+                                "https://discord.com/oauth2/authorize?client_id=752236274261426212&permissions=8&response_type=code&redirect_uri=https%3A%2F%2Fmewdeko.tech&scope=bot%20applications.commands",
+                                label: "Invite Me!",
+                                emote: "<a:HaneMeow:968564817784877066>".ToIEmote())
+                            .WithButton("Support Us!", style: ButtonStyle.Link, url: "https://ko-fi.com/Mewdeko")
+                            .Build()
+                        : null).ConfigureAwait(false);
+                return;
+            }
+
             var imgData = await sr.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
+
+            if (imgData.Length > (int)maxUploadSize)
+            {
+                await ctx.Channel.SendMessageAsync(
+                    embed: new EmbedBuilder().WithErrorColor()
+                        .WithTitle(Strings.NsfwFileTooLarge(ctx.Guild.Id))
+                        .WithDescription(
+                            $"The file is too large to be uploaded ({imgData.Length / 1048576.0:F2}MB). [View it here instead]({data.Url})")
+                        .WithFooter(
+                            $"{data.Rating} ({data.Provider}) | {string.Join(" | ", data.Tags.Where(x => !string.IsNullOrWhiteSpace(x)).Take(5))}")
+                        .Build(),
+                    components: Config.ShowInviteButton
+                        ? new ComponentBuilder()
+                            .WithButton(style: ButtonStyle.Link,
+                                url:
+                                "https://discord.com/oauth2/authorize?client_id=752236274261426212&permissions=8&response_type=code&redirect_uri=https%3A%2F%2Fmewdeko.tech&scope=bot%20applications.commands",
+                                label: "Invite Me!",
+                                emote: "<a:HaneMeow:968564817784877066>".ToIEmote())
+                            .WithButton("Support Us!", style: ButtonStyle.Link, url: "https://ko-fi.com/Mewdeko")
+                            .Build()
+                        : null).ConfigureAwait(false);
+                return;
+            }
+
             var imgStream = imgData.ToStream();
             await using var _ = imgStream.ConfigureAwait(false);
             await ctx.Channel.SendFileAsync(imgStream, "video.mp4",

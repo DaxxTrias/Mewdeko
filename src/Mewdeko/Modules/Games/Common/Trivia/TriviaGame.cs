@@ -13,13 +13,14 @@ namespace Mewdeko.Modules.Games.Common.Trivia;
 public class TriviaGame
 {
     private readonly SemaphoreSlim guessLock = new(1, 1);
+    private readonly IGuild guild;
+    private readonly EventHandler handler;
     private readonly TriviaOptions options;
 
     private readonly TriviaQuestionPool questionPool;
     private readonly string? quitCommand;
     private readonly GeneratedBotStrings Strings;
     private int timeoutCount;
-    private readonly EventHandler handler;
 
     private CancellationTokenSource triviaCancelSource;
 
@@ -39,6 +40,7 @@ public class TriviaGame
     {
         questionPool = new TriviaQuestionPool(cache);
         this.Strings = strings;
+        this.guild = guild;
         this.options = options;
         this.quitCommand = quitCommand;
         this.handler = handler;
@@ -138,7 +140,7 @@ public class TriviaGame
             //receive messages
             try
             {
-                handler.MessageReceived += PotentialGuess;
+                handler.Subscribe("MessageReceived", "TriviaGame", PotentialGuess);
 
                 //allow people to guess
                 GameActive = true;
@@ -179,7 +181,7 @@ public class TriviaGame
             finally
             {
                 GameActive = false;
-                handler.MessageReceived -= PotentialGuess;
+                handler.Unsubscribe("MessageReceived", "TriviaGame", PotentialGuess);
             }
 
             if (!triviaCancelSource.IsCancellationRequested)
@@ -215,8 +217,8 @@ public class TriviaGame
         ShouldStopGame = true;
 
         await Channel.EmbedAsync(new EmbedBuilder().WithOkColor()
-            .WithAuthor(eab => eab.WithName("Trivia Game Ended"))
-            .WithTitle("Final Results")
+            .WithAuthor(eab => eab.WithName(Strings.TriviaGameEnded(guild.Id)))
+            .WithTitle(Strings.FinalResults(guild.Id))
             .WithDescription(GetLeaderboard())).ConfigureAwait(false);
     }
 
@@ -243,71 +245,71 @@ public class TriviaGame
 
     private async Task PotentialGuess(SocketMessage imsg)
     {
+        try
+        {
+            if (imsg.Author.IsBot)
+                return;
+
+            var umsg = imsg as SocketUserMessage;
+
+            if (umsg?.Channel is not ITextChannel textChannel || textChannel.Guild != Guild)
+                return;
+
+            var guildUser = (IGuildUser)umsg.Author;
+
+            var guess = false;
+            await guessLock.WaitAsync().ConfigureAwait(false);
             try
             {
-                if (imsg.Author.IsBot)
-                    return;
+                if (GameActive && CurrentQuestion.IsAnswerCorrect(umsg.Content) &&
+                    !triviaCancelSource.IsCancellationRequested)
+                {
+                    Users.AddOrUpdate(guildUser, 1, (_, old) => ++old);
+                    guess = true;
+                }
+            }
+            finally
+            {
+                guessLock.Release();
+            }
 
-                var umsg = imsg as SocketUserMessage;
+            if (!guess) return;
+            triviaCancelSource.Cancel();
 
-                if (umsg?.Channel is not ITextChannel textChannel || textChannel.Guild != Guild)
-                    return;
-
-                var guildUser = (IGuildUser)umsg.Author;
-
-                var guess = false;
-                await guessLock.WaitAsync().ConfigureAwait(false);
+            if (options.WinRequirement != 0 && Users[guildUser] == options.WinRequirement)
+            {
+                ShouldStopGame = true;
                 try
                 {
-                    if (GameActive && CurrentQuestion.IsAnswerCorrect(umsg.Content) &&
-                        !triviaCancelSource.IsCancellationRequested)
-                    {
-                        Users.AddOrUpdate(guildUser, 1, (_, old) => ++old);
-                        guess = true;
-                    }
+                    var embedS = new EmbedBuilder().WithOkColor()
+                        .WithTitle(Strings.TriviaGame(Guild.Id))
+                        .WithDescription(Strings.TriviaWin(Guild.Id,
+                            guildUser.Mention,
+                            Format.Bold(CurrentQuestion.Answer)));
+                    if (Uri.IsWellFormedUriString(CurrentQuestion.AnswerImageUrl, UriKind.Absolute))
+                        embedS.WithImageUrl(CurrentQuestion.AnswerImageUrl);
+                    await Channel.EmbedAsync(embedS).ConfigureAwait(false);
                 }
-                finally
+                catch
                 {
-                    guessLock.Release();
+                    // ignored
                 }
 
-                if (!guess) return;
-                triviaCancelSource.Cancel();
-
-                if (options.WinRequirement != 0 && Users[guildUser] == options.WinRequirement)
-                {
-                    ShouldStopGame = true;
-                    try
-                    {
-                        var embedS = new EmbedBuilder().WithOkColor()
-                            .WithTitle(Strings.TriviaGame(Guild.Id))
-                            .WithDescription(Strings.TriviaWin(Guild.Id,
-                                guildUser.Mention,
-                                Format.Bold(CurrentQuestion.Answer)));
-                        if (Uri.IsWellFormedUriString(CurrentQuestion.AnswerImageUrl, UriKind.Absolute))
-                            embedS.WithImageUrl(CurrentQuestion.AnswerImageUrl);
-                        await Channel.EmbedAsync(embedS).ConfigureAwait(false);
-                    }
-                    catch
-                    {
-                        // ignored
-                    }
-
-                    return;
-                }
-
-                var embed = new EmbedBuilder().WithOkColor()
-                    .WithTitle(Strings.TriviaGame(Guild.Id))
-                    .WithDescription(
-                        Strings.TriviaGuess(Guild.Id, guildUser.Mention, Format.Bold(CurrentQuestion.Answer)));
-                if (Uri.IsWellFormedUriString(CurrentQuestion.AnswerImageUrl, UriKind.Absolute))
-                    embed.WithImageUrl(CurrentQuestion.AnswerImageUrl);
-                await Channel.EmbedAsync(embed).ConfigureAwait(false);
+                return;
             }
-            catch (Exception ex)
-            {
-                Log.Warning(ex.ToString());
-            }
+
+            var embed = new EmbedBuilder().WithOkColor()
+                .WithTitle(Strings.TriviaGame(Guild.Id))
+                .WithDescription(
+                    Strings.TriviaGuess(Guild.Id, guildUser.Mention, Format.Bold(CurrentQuestion.Answer)));
+            if (Uri.IsWellFormedUriString(CurrentQuestion.AnswerImageUrl, UriKind.Absolute))
+                embed.WithImageUrl(CurrentQuestion.AnswerImageUrl);
+            await Channel.EmbedAsync(embed).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex.ToString());
+        }
     }
 
     /// <summary>

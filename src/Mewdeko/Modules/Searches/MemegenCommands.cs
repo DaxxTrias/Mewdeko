@@ -7,7 +7,6 @@ using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
 using Mewdeko.Common.Attributes.TextCommands;
 
-
 namespace Mewdeko.Modules.Searches;
 
 public partial class Searches

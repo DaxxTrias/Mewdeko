@@ -12,13 +12,10 @@ using LinqToDB;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Common.JsonSettings;
 using Mewdeko.Common.TypeReaders.Models;
-using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.Utility.Common;
 using Mewdeko.Modules.Utility.Services;
 using Mewdeko.Services.Impl;
 using Mewdeko.Services.Settings;
-
-using Serilog;
 using StringExtensions = Mewdeko.Extensions.StringExtensions;
 
 namespace Mewdeko.Modules.Utility;
@@ -31,10 +28,13 @@ namespace Mewdeko.Modules.Utility;
 /// <param name="stats"></param>
 /// <param name="creds"></param>
 /// <param name="tracker"></param>
+/// <param name="cmdServ"></param>
 /// <param name="serv"></param>
 /// <param name="guildSettings"></param>
 /// <param name="httpClient"></param>
 /// <param name="config"></param>
+/// <param name="dbFactory"></param>
+/// <param name="cache"></param>
 public partial class Utility(
     DiscordShardedClient client,
     IStatsService stats,
@@ -45,9 +45,9 @@ public partial class Utility(
     GuildSettingsService guildSettings,
     HttpClient httpClient,
     BotConfigService config,
-    DbContextProvider dbProvider,
+    IDataConnectionFactory dbFactory,
     IDataCache cache,
-    CryptoService cryptoService)
+    ILogger<Utility> logger)
     : MewdekoModuleBase<UtilityService>
 {
     /// <summary>
@@ -68,20 +68,6 @@ public partial class Utility(
 
     private static readonly SemaphoreSlim Sem = new(1, 1);
 
-    /// <summary>
-    ///     Crypto command to generate a chart with the given days
-    /// </summary>
-    /// <param name="cryptoName"></param>
-    /// <param name="time"></param>
-    [Cmd]
-    [Aliases]
-    public async Task Crypto(string cryptoName, StoopidTime? time = null)
-    {
-        var (image, embed) = await cryptoService.GenerateCryptoPriceChartAsync(cryptoName,
-            time is null ? TimeSpan.FromDays(1).Days : time.Time.Days);
-        await ctx.Channel.SendFileAsync(image, "cryptopricechart.png", embed: embed);
-    }
-
 
     /// <summary>
     ///     Debug command to test parsing of embeds.
@@ -100,19 +86,19 @@ public partial class Utility(
             var comps = components?.Build();
             watch.Stop();
             var eb = new EmbedBuilder()
-                .WithTitle("Embed Successfully Parsed")
+                .WithTitle(Strings.EmbedParsed(ctx.Guild.Id))
                 .WithOkColor()
-                .WithDescription($"`PlainText Length:` ***{plainText.Length}***\n" +
+                .WithDescription(Strings.PlaintextLength(ctx.Guild.Id, plainText.Length) +
                                  $"`Embed Count:` ***{embeds?.Length}***\n" +
                                  $"`Component Count:` ***{comps?.Components.Count}")
-                .WithFooter($"Execution Time: {watch.Elapsed}");
+                .WithFooter(Strings.ExecutionTime(ctx.Guild.Id, watch.Elapsed));
             await ctx.Channel.SendMessageAsync(plainText, embeds: embeds, components: comps);
             await ctx.Channel.SendMessageAsync(embed: eb.Build());
         }
         catch (Exception e)
         {
             var eb = new EmbedBuilder()
-                .WithTitle("Error Parsing Embed")
+                .WithTitle(Strings.ErrorParsingEmbed(ctx.Guild.Id))
                 .WithDescription(e.ToString());
             await ctx.Channel.SendMessageAsync(embed: eb.Build());
         }
@@ -173,7 +159,7 @@ public partial class Utility(
         {
             var embed = new PageBuilder()
                 .WithOkColor()
-                .WithTitle("Roles with the specified permissions");
+                .WithTitle(Strings.RolesWithPermissions(ctx.Guild.Id));
 
             if (searchType == PermissionType.And)
             {
@@ -283,7 +269,8 @@ public partial class Utility(
         }
         catch (Exception ex)
         {
-            await ctx.Channel.SendErrorAsync($"Failed to create directory. {ex.Message}", Config).ConfigureAwait(false);
+            await ctx.Channel.SendErrorAsync(Strings.FailedToCreateDirectory(ctx.Guild.Id, ex.Message), Config)
+                .ConfigureAwait(false);
             return;
         }
 
@@ -307,17 +294,21 @@ public partial class Utility(
         {
             process.Start();
             await ctx.Channel.SendConfirmAsync(
-                $"{config.Data.LoadingEmote} Saving chat log, this may take some time...");
+                Strings.SavingChatLog(ctx.Guild.Id, config.Data.LoadingEmote));
         }
 
         await process.WaitForExitAsync().ConfigureAwait(false);
         if (creds.ChatSavePath.Contains("/usr/share/nginx/cdn"))
+        {
+            var fileName =
+                $"{ctx.Guild.Name.Replace(" ", "-")}-{(channel?.Name ?? ctx.Channel.Name).Replace(" ", "-")}-{curTime:yyyy-MM-ddTHH-mm-ssZ}.html";
             await ctx.User.SendConfirmAsync(
-                    $"Your chat log is here: https://cdn.mewdeko.tech/chatlogs/{ctx.Guild.Id}/{secureString}/{ctx.Guild.Name.Replace(" ", "-")}-{(channel?.Name ?? ctx.Channel.Name).Replace(" ", "-")}-{curTime:yyyy-MM-ddTHH-mm-ssZ}.html")
+                    Strings.ChatLogUrlCdn(ctx.Guild.Id, ctx.Guild.Id, secureString, fileName))
                 .ConfigureAwait(false);
+        }
         else
             await ctx.Channel
-                .SendConfirmAsync($"Your chat log is here: {creds.ChatSavePath}/{ctx.Guild.Id}/{secureString}")
+                .SendConfirmAsync(Strings.ChatLogUrlLocal(ctx.Guild.Id, creds.ChatSavePath, ctx.Guild.Id, secureString))
                 .ConfigureAwait(false);
     }
 
@@ -443,7 +434,8 @@ public partial class Utility(
             {
                 IconUrl = ctx.User.GetAvatarUrl(),
                 Text =
-                    Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(), (DateTime.UtcNow - msg.DateAdded).Humanize())
+                    Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(),
+                        (DateTime.UtcNow - msg.DateAdded).Humanize())
             },
             Color = Mewdeko.OkColor
         };
@@ -1004,7 +996,8 @@ public partial class Utility(
             {
                 IconUrl = ctx.User.GetAvatarUrl(),
                 Text =
-                    Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(), (DateTime.UtcNow - msg.DateAdded).Humanize())
+                    Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(),
+                        (DateTime.UtcNow - msg.DateAdded).Humanize())
             },
             Color = Mewdeko.OkColor
         };
@@ -1088,7 +1081,8 @@ public partial class Utility(
             {
                 IconUrl = ctx.User.GetAvatarUrl(),
                 Text =
-                    Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(), (DateTime.UtcNow - msg.DateAdded).Humanize())
+                    Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(),
+                        (DateTime.UtcNow - msg.DateAdded).Humanize())
             },
             Color = Mewdeko.OkColor
         };
@@ -1148,7 +1142,8 @@ public partial class Utility(
                 {
                     IconUrl = ctx.User.GetAvatarUrl(),
                     Text =
-                        Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(), (DateTime.UtcNow - msg.DateAdded).Humanize())
+                        Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(),
+                            (DateTime.UtcNow - msg.DateAdded).Humanize())
                 },
                 Color = Mewdeko.OkColor
             };
@@ -1207,7 +1202,8 @@ public partial class Utility(
             {
                 IconUrl = ctx.User.GetAvatarUrl(),
                 Text =
-                    Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(), (DateTime.UtcNow - msg.DateAdded).Humanize())
+                    Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(),
+                        (DateTime.UtcNow - msg.DateAdded).Humanize())
             },
             Color = Mewdeko.OkColor
         };
@@ -1267,7 +1263,8 @@ public partial class Utility(
                 {
                     IconUrl = ctx.User.GetAvatarUrl(),
                     Text =
-                        Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(), (DateTime.UtcNow - msg.DateAdded).Humanize())
+                        Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(),
+                            (DateTime.UtcNow - msg.DateAdded).Humanize())
                 },
                 Color = Mewdeko.OkColor
             };
@@ -1328,7 +1325,8 @@ public partial class Utility(
                 {
                     IconUrl = ctx.User.GetAvatarUrl(),
                     Text =
-                        Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(), (DateTime.UtcNow - msg.DateAdded).Humanize())
+                        Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(),
+                            (DateTime.UtcNow - msg.DateAdded).Humanize())
                 },
                 Color = Mewdeko.OkColor
             };
@@ -1391,7 +1389,8 @@ public partial class Utility(
                 {
                     IconUrl = ctx.User.GetAvatarUrl(),
                     Text =
-                        Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(), (DateTime.UtcNow - msg.DateAdded).Humanize())
+                        Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(),
+                            (DateTime.UtcNow - msg.DateAdded).Humanize())
                 },
                 Color = Mewdeko.OkColor
             };
@@ -1427,7 +1426,7 @@ public partial class Utility(
 
         if (ctx.Guild is not SocketGuild socketGuild)
         {
-            Log.Warning("Can't cast guild to socket guild");
+            logger.LogWarning("Can't cast guild to socket guild");
             return;
         }
 
@@ -1560,7 +1559,7 @@ public partial class Utility(
             await Task.CompletedTask.ConfigureAwait(false);
             return new PageBuilder().WithOkColor()
                 .WithTitle(Format.Bold(
-                    $"Users in the roles: {role.Name} | {role2.Name} - {roleUsers.Length}"))
+                    Strings.UsersInRoles(ctx.Guild.Id, role.Name, role2.Name, roleUsers.Length)))
                 .WithDescription(string.Join("\n",
                     roleUsers.Skip(page * 20).Take(20)));
         }
@@ -1653,7 +1652,7 @@ public partial class Utility(
                 async Task<PageBuilder> PageFactory(int page)
                 {
                     await Task.CompletedTask;
-                    return new PageBuilder().WithOkColor().WithTitle($"Roles List for {target}")
+                    return new PageBuilder().WithOkColor().WithTitle(Strings.RolesListFor(ctx.Guild.Id, target))
                         .WithDescription(string.Join("\n",
                             roles.Skip(page * 10).Take(10).Select(x =>
                                 $"{x.Mention} | {x.Id} | {x.GetMembersAsync().GetAwaiter().GetResult().Count()} Members")));
@@ -1685,7 +1684,7 @@ public partial class Utility(
                 async Task<PageBuilder> PageFactory(int page)
                 {
                     await Task.CompletedTask;
-                    return new PageBuilder().WithOkColor().WithTitle("Guild Roles List")
+                    return new PageBuilder().WithOkColor().WithTitle(Strings.GuildRolesList(ctx.Guild.Id))
                         .WithDescription(string.Join("\n",
                             roles.Skip(page * 10).Take(10).Select(x => x as SocketRole)
                                 .Select(x =>
@@ -1758,7 +1757,7 @@ public partial class Utility(
                 catch (Exception ex)
                 {
                     await ctx.Channel.SendErrorAsync(Strings.EmbedFailed(ctx.Guild.Id), Config);
-                    Log.Error("Error sending message: {Message}", ex.Message);
+                    logger.LogError("Error sending message: {Message}", ex.Message);
                 }
             }
             else
@@ -1773,7 +1772,7 @@ public partial class Utility(
                 catch (Exception ex)
                 {
                     await ctx.Channel.SendErrorAsync(Strings.EmbedFailed(ctx.Guild.Id), Config);
-                    Log.Error("Error sending message: {Message}", ex.Message);
+                    logger.LogError("Error sending message: {Message}", ex.Message);
                 }
         }
         else if (!string.IsNullOrWhiteSpace(msg))
@@ -1805,7 +1804,7 @@ public partial class Utility(
                 catch (Exception ex)
                 {
                     await ctx.Channel.SendErrorAsync(Strings.EmbedFailed(ctx.Guild.Id), Config);
-                    Log.Error("Error sending message: {Message}", ex.Message);
+                    logger.LogError("Error sending message: {Message}", ex.Message);
                 }
         }
     }
@@ -1863,7 +1862,7 @@ public partial class Utility(
     [Aliases]
     public async Task Stats()
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
         var fiveSecondsAgo = DateTime.Now.AddSeconds(-5);
         var commandStatsTask = dbContext.CommandStats
@@ -1871,8 +1870,7 @@ public partial class Utility(
             .CountAsync();
         var userTasks = new[]
         {
-            client.Rest.GetUserAsync(280835732728184843),
-            client.Rest.GetUserAsync(786375627892064257)
+            client.Rest.GetUserAsync(280835732728184843), client.Rest.GetUserAsync(786375627892064257)
         };
 
         var users = await Task.WhenAll(userTasks);
@@ -1880,7 +1878,8 @@ public partial class Utility(
 
         await ctx.Channel.EmbedAsync(
             new EmbedBuilder().WithOkColor()
-                .WithAuthor($"{client.CurrentUser.Username} v{StatsService.BotVersion}",
+                .WithAuthor(
+                    Strings.BotVersionAuthor(ctx.Guild.Id, client.CurrentUser.Username, StatsService.BotVersion),
                     client.CurrentUser.GetAvatarUrl(), config.Data.SupportServer)
                 .AddField(Strings.Authors(ctx.Guild.Id),
                     $"[{users[0]}](https://github.com/SylveonDeko)\n[{users[1]}](https://github.com/CottageDwellingCat)")
@@ -1888,7 +1887,8 @@ public partial class Utility(
                 .AddField(Strings.CommandCount(ctx.Guild.Id), cmdServ.Commands.DistinctBy(x => x.Name).Count())
                 .AddField("Library", stats.Library)
                 .AddField(Strings.OwnerIds(ctx.Guild.Id), string.Join("\n", creds.OwnerIds.Select(x => $"<@{x}>")))
-                .AddField(Strings.Shard(ctx.Guild.Id), $"#{client.GetShardFor(ctx.Guild).ShardId} / {creds.TotalShards}")
+                .AddField(Strings.Shard(ctx.Guild.Id),
+                    $"#{client.GetShardFor(ctx.Guild).ShardId} / {creds.TotalShards}")
                 .AddField(Strings.Memory(ctx.Guild.Id), $"{stats.Heap} MB")
                 .AddField(Strings.Uptime(ctx.Guild.Id), stats.GetUptimeString("\n"))
                 .AddField("Servers", $"{client.Guilds.Count} Servers"));
@@ -1916,6 +1916,7 @@ public partial class Utility(
     ///     Shows the bot's ping.
     /// </summary>
     [Cmd]
+    [Aliases]
     [Ratelimit(30)]
     public async Task Ping()
     {
@@ -1925,7 +1926,7 @@ public partial class Utility(
             var redisPing = await cache.Redis.GetDatabase().PingAsync();
 
             var sw = Stopwatch.StartNew();
-            var msg = await ctx.Channel.SendMessageAsync("🏓").ConfigureAwait(false);
+            var msg = await ctx.Channel.SendMessageAsync(Strings.PingResponse(ctx.Guild.Id)).ConfigureAwait(false);
             sw.Stop();
             msg.DeleteAfter(0);
 

@@ -81,10 +81,9 @@ public partial class Moderation
 
             var options = new List<Func<IMessage, bool>>();
 
-            var parts = parameters.Split(new[]
-            {
+            var parts = parameters.Split([
                 ' ', ','
-            }, StringSplitOptions.RemoveEmptyEntries);
+            ], StringSplitOptions.RemoveEmptyEntries);
             string input = null;
 
             for (var i = 0; i < parts.Length; i++)
@@ -254,7 +253,8 @@ public partial class Moderation
                     break;
                 case > 0 when failCount > 0:
                     await ctx.Channel.SendConfirmAsync(
-                        Strings.PurgeUserPartial(ctx.Guild.Id, deletedMessageCount, user.Mention, successCount, failCount));
+                        Strings.PurgeUserPartial(ctx.Guild.Id, deletedMessageCount, user.Mention, successCount,
+                            failCount));
                     break;
                 case 0 when failCount > 0:
                     await ctx.Channel.SendErrorAsync(

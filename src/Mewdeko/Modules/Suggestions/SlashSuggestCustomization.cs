@@ -60,7 +60,7 @@ public partial class SlashSuggestions
             }
 
             await Service.SetMinLength(ctx.Guild, length).ConfigureAwait(false);
-            await ctx.Interaction.SendConfirmAsync($"Minimum length set to {length} characters!").ConfigureAwait(false);
+            await ctx.Interaction.SendConfirmAsync(Strings.MinLengthSet(ctx.Guild.Id, length)).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -82,7 +82,7 @@ public partial class SlashSuggestions
             }
 
             await Service.SetMaxLength(ctx.Guild, length).ConfigureAwait(false);
-            await ctx.Interaction.SendConfirmAsync($"Max length set to {length} characters!").ConfigureAwait(false);
+            await ctx.Interaction.SendConfirmAsync(Strings.MaxLengthSet(ctx.Guild.Id, length)).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -193,7 +193,7 @@ public partial class SlashSuggestions
         public async Task SuggestMotesMode(Suggestions.SuggestEmoteModeEnum mode)
         {
             await Service.SetEmoteMode(ctx.Guild, (int)mode).ConfigureAwait(false);
-            await ctx.Interaction.SendConfirmAsync($"Sucessfully set Emote Mode to {mode}").ConfigureAwait(false);
+            await ctx.Interaction.SendConfirmAsync(Strings.EmoteModeSet(ctx.Guild.Id, mode)).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -208,7 +208,8 @@ public partial class SlashSuggestions
         public async Task SuggestButtonColor(Suggestions.ButtonType type)
         {
             await Service.SetSuggestButtonColor(ctx.Guild, (int)type).ConfigureAwait(false);
-            await ctx.Interaction.SendConfirmAsync($"Suggest Button Color will now be `{type}`").ConfigureAwait(false);
+            await ctx.Interaction.SendConfirmAsync(Strings.SuggestButtonColorSet(ctx.Guild.Id, type.ToString()))
+                .ConfigureAwait(false);
             await Service.UpdateSuggestionButtonMessage(ctx.Guild, await Service.GetSuggestButtonMessage(ctx.Guild))
                 .ConfigureAwait(false);
         }
@@ -227,7 +228,8 @@ public partial class SlashSuggestions
             Suggestions.ButtonType type)
         {
             await Service.SetButtonType(ctx.Guild, num, (int)type).ConfigureAwait(false);
-            await ctx.Interaction.SendConfirmAsync($"Suggest Button {num} will now be `{type}`").ConfigureAwait(false);
+            await ctx.Interaction.SendConfirmAsync(Strings.SuggestButtonTypeSet(ctx.Guild.Id, num, type))
+                .ConfigureAwait(false);
             await Service.UpdateSuggestionButtonMessage(ctx.Guild, await Service.GetSuggestButtonMessage(ctx.Guild))
                 .ConfigureAwait(false);
         }
@@ -247,7 +249,7 @@ public partial class SlashSuggestions
             if (channel is null)
                 await ctx.Interaction.SendConfirmAsync(Strings.AcceptChannelDisabled(ctx.Guild.Id));
             else
-                await ctx.Interaction.SendConfirmAsync($"Accept channel set to {channel.Mention}")
+                await ctx.Interaction.SendConfirmAsync(Strings.AcceptChannelSet(ctx.Guild.Id, channel.Mention))
                     .ConfigureAwait(false);
         }
 
@@ -266,7 +268,8 @@ public partial class SlashSuggestions
             if (channel is null)
                 await ctx.Interaction.SendConfirmAsync(Strings.DenyChannelDisabled(ctx.Guild.Id));
             else
-                await ctx.Interaction.SendConfirmAsync($"Deny channel set to {channel.Mention}").ConfigureAwait(false);
+                await ctx.Interaction.SendConfirmAsync(Strings.DenyChannelSet(ctx.Guild.Id, channel.Mention))
+                    .ConfigureAwait(false);
         }
 
         /// <summary>
@@ -284,7 +287,7 @@ public partial class SlashSuggestions
             if (channel is null)
                 await ctx.Interaction.SendConfirmAsync(Strings.ConsiderChannelDisabled(ctx.Guild.Id));
             else
-                await ctx.Interaction.SendConfirmAsync($"Consider channel set to {channel.Mention}")
+                await ctx.Interaction.SendConfirmAsync(Strings.ChannelSetTo(ctx.Guild.Id, channel.Mention))
                     .ConfigureAwait(false);
         }
 
@@ -303,7 +306,7 @@ public partial class SlashSuggestions
             if (channel is null)
                 await ctx.Interaction.SendConfirmAsync(Strings.ImplementChannelDisabled(ctx.Guild.Id));
             else
-                await ctx.Interaction.SendConfirmAsync($"Implement channel set to {channel.Mention}")
+                await ctx.Interaction.SendConfirmAsync(Strings.ImplementChannelSet(ctx.Guild.Id, channel.Mention))
                     .ConfigureAwait(false);
         }
 
@@ -322,7 +325,7 @@ public partial class SlashSuggestions
         public async Task SuggestThreadsType(Suggestions.SuggestThreadType type)
         {
             await Service.SetSuggestThreadsType(ctx.Guild, (int)type).ConfigureAwait(false);
-            await ctx.Interaction.SendConfirmAsync($"Succesfully set Suggestion Threads Type to `{type}`")
+            await ctx.Interaction.SendConfirmAsync(Strings.SuggestionThreadsTypeSet(ctx.Guild.Id, type))
                 .ConfigureAwait(false);
         }
 
@@ -339,7 +342,8 @@ public partial class SlashSuggestions
         {
             var current = await Service.GetArchiveOnDeny(ctx.Guild);
             await Service.SetArchiveOnDeny(ctx.Guild, !current).ConfigureAwait(false);
-            await ctx.Interaction.SendConfirmAsync($"Archive on deny is now set to `{!current}`").ConfigureAwait(false);
+            await ctx.Interaction.SendConfirmAsync(Strings.ArchiveOnDenySet(ctx.Guild.Id, !current))
+                .ConfigureAwait(false);
         }
 
         /// <summary>
@@ -354,7 +358,7 @@ public partial class SlashSuggestions
         {
             var current = await Service.GetArchiveOnAccept(ctx.Guild);
             await Service.SetArchiveOnAccept(ctx.Guild, !current).ConfigureAwait(false);
-            await ctx.Interaction.SendConfirmAsync($"Archive on accept is now set to `{!current}`")
+            await ctx.Interaction.SendConfirmAsync(Strings.ArchiveOnAcceptSet(ctx.Guild.Id, !current))
                 .ConfigureAwait(false);
         }
 
@@ -371,7 +375,7 @@ public partial class SlashSuggestions
         {
             var current = await Service.GetArchiveOnConsider(ctx.Guild);
             await Service.SetArchiveOnConsider(ctx.Guild, !current).ConfigureAwait(false);
-            await ctx.Interaction.SendConfirmAsync($"Archive on consider is now set to `{!current}`")
+            await ctx.Interaction.SendConfirmAsync(Strings.ArchiveOnConsiderSet(ctx.Guild.Id, !current))
                 .ConfigureAwait(false);
         }
 
@@ -387,7 +391,7 @@ public partial class SlashSuggestions
         {
             var current = await Service.GetArchiveOnImplement(ctx.Guild);
             await Service.SetArchiveOnImplement(ctx.Guild, !current).ConfigureAwait(false);
-            await ctx.Interaction.SendConfirmAsync($"Archive on implement is now set to `{!current}`")
+            await ctx.Interaction.SendConfirmAsync(Strings.ArchiveOnImplementSet(ctx.Guild.Id, !current))
                 .ConfigureAwait(false);
         }
     }

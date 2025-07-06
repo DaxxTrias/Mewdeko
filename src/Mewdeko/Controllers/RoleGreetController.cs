@@ -1,22 +1,23 @@
-﻿using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
+﻿using Mewdeko.Controllers.Common.RoleGreet;
 using Mewdeko.Modules.RoleGreets.Services;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 
 namespace Mewdeko.Controllers;
 
 /// <summary>
-/// Controller for managing role-based greetings
+///     Controller for managing role-based greetings
 /// </summary>
 [ApiController]
 [Route("botapi/[controller]/{guildId}")]
 [Authorize("ApiKeyPolicy")]
 public class RoleGreetController : Controller
 {
-    private readonly RoleGreetService roleGreetService;
     private readonly DiscordShardedClient client;
+    private readonly RoleGreetService roleGreetService;
 
     /// <summary>
-    /// Initializes a new instance of the RoleGreetController
+    ///     Initializes a new instance of the RoleGreetController
     /// </summary>
     public RoleGreetController(RoleGreetService roleGreetService, DiscordShardedClient client)
     {
@@ -25,7 +26,7 @@ public class RoleGreetController : Controller
     }
 
     /// <summary>
-    /// Gets all role greets for a specific role
+    ///     Gets all role greets for a specific role
     /// </summary>
     [HttpGet("role/{roleId}")]
     public async Task<IActionResult> GetGreetsForRole(ulong guildId, ulong roleId)
@@ -35,7 +36,7 @@ public class RoleGreetController : Controller
     }
 
     /// <summary>
-    /// Gets all role greets in a guild
+    ///     Gets all role greets in a guild
     /// </summary>
     [HttpGet]
     public async Task<IActionResult> GetAllGreets(ulong guildId)
@@ -45,7 +46,7 @@ public class RoleGreetController : Controller
     }
 
     /// <summary>
-    /// Adds a new role greet
+    ///     Adds a new role greet
     /// </summary>
     [HttpPost("role/{roleId}")]
     public async Task<IActionResult> AddRoleGreet(ulong guildId, ulong roleId, [FromBody] ulong channelId)
@@ -58,7 +59,7 @@ public class RoleGreetController : Controller
     }
 
     /// <summary>
-    /// Updates the message for a role greet
+    ///     Updates the message for a role greet
     /// </summary>
     [HttpPut("{greetId}/message")]
     public async Task<IActionResult> UpdateMessage(ulong guildId, int greetId, [FromBody] string message)
@@ -73,7 +74,7 @@ public class RoleGreetController : Controller
     }
 
     /// <summary>
-    /// Sets the deletion time for a role greet message
+    ///     Sets the deletion time for a role greet message
     /// </summary>
     [HttpPut("{greetId}/delete-time")]
     public async Task<IActionResult> UpdateDeleteTime(ulong guildId, int greetId, [FromBody] int seconds)
@@ -88,10 +89,11 @@ public class RoleGreetController : Controller
     }
 
     /// <summary>
-    /// Updates the webhook for a role greet
+    ///     Updates the webhook for a role greet
     /// </summary>
     [HttpPut("{greetId}/webhook")]
-    public async Task<IActionResult> UpdateWebhook(ulong guildId, int greetId, [FromBody] WebhookUpdateRequestRole request)
+    public async Task<IActionResult> UpdateWebhook(ulong guildId, int greetId,
+        [FromBody] WebhookUpdateRequestRole request)
     {
         var greets = await roleGreetService.GetListGreets(guildId);
         var greet = greets.ElementAtOrDefault(greetId - 1);
@@ -109,7 +111,7 @@ public class RoleGreetController : Controller
     }
 
     /// <summary>
-    /// Enables or disables greeting bots for a role greet
+    ///     Enables or disables greeting bots for a role greet
     /// </summary>
     [HttpPut("{greetId}/greet-bots")]
     public async Task<IActionResult> UpdateGreetBots(ulong guildId, int greetId, [FromBody] bool enabled)
@@ -124,7 +126,7 @@ public class RoleGreetController : Controller
     }
 
     /// <summary>
-    /// Enables or disables a role greet
+    ///     Enables or disables a role greet
     /// </summary>
     [HttpPut("{greetId}/disable")]
     public async Task<IActionResult> DisableRoleGreet(ulong guildId, int greetId, [FromBody] bool disabled)
@@ -137,15 +139,4 @@ public class RoleGreetController : Controller
         await roleGreetService.RoleGreetDisable(greet, disabled);
         return Ok();
     }
-}
-
-/// <summary>
-/// Webhook update request
-/// </summary>
-public class WebhookUpdateRequestRole
-{
-    /// <summary>
-    /// ze url
-    /// </summary>
-    public string? WebhookUrl { get; set; }
 }

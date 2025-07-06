@@ -1,205 +1,634 @@
-﻿using System.Text;
+using System.Text.Json;
 using Discord.Commands;
 using Mewdeko.Common.Attributes.TextCommands;
+using Mewdeko.Modules.Games.Common;
 using Mewdeko.Modules.Games.Services;
+using Embed = Discord.Embed;
 
 namespace Mewdeko.Modules.Games;
 
-public partial class Games
+/// <summary>
+/// Text commands for creating and managing polls.
+/// </summary>
+public class PollCommands : MewdekoModuleBase<PollService>
 {
+    private readonly ILogger<PollCommands> logger;
+    private readonly PollTemplateService templateService;
+
     /// <summary>
-    ///     A module containing poll commands.
+    /// Initializes a new instance of the PollCommands class.
     /// </summary>
-    [Group]
-    public class PollCommands : MewdekoSubmodule<PollService>
+    /// <param name="templateService">The template service.</param>
+    /// <param name="logger">The logger instance.</param>
+    public PollCommands(PollTemplateService templateService, ILogger<PollCommands> logger)
     {
-        /// <summary>
-        ///     Starts a poll with a single answer type.
-        /// </summary>
-        /// <param name="input">The input string for the poll.</param>
-        /// <returns>A task representing the asynchronous operation.</returns>
-        /// <example>.poll "What is your favorite color?";Answer1;2;3;etc</example>
-        [Cmd]
-        [Aliases]
-        [UserPerm(GuildPermission.ManageMessages)]
-        [RequireContext(ContextType.Guild)]
-        public Task Poll([Remainder] string input)
+        this.templateService = templateService;
+        this.logger = logger;
+    }
+
+    /// <summary>
+    /// Creates a simple yes/no poll.
+    /// </summary>
+    /// <param name="question">The poll question.</param>
+    [Cmd, Aliases]
+    [RequireContext(ContextType.Guild)]
+    [UserPerm(GuildPermission.ManageMessages)]
+    public async Task Poll([Remainder] string question)
+    {
+        if (string.IsNullOrWhiteSpace(question))
         {
-            return Poll(PollType.SingleAnswer, input);
+            await ReplyErrorAsync("poll_question_required");
+            return;
         }
 
-        /// <summary>
-        ///     Starts a poll with the specified type and input.
-        /// </summary>
-        /// <param name="type">The type of the poll.</param>
-        /// <param name="arg">The input string for the poll.</param>
-        /// <returns>A task representing the asynchronous operation.</returns>
-        /// <example>.poll MultiAnswer "What is your favorite color?";Answer1;2;3;etc</example>
-        [Cmd]
-        [Aliases]
-        [UserPerm(GuildPermission.ManageMessages)]
-        [RequireContext(ContextType.Guild)]
-        public async Task Poll(PollType type, [Remainder] string arg)
+        try
         {
-            // Checks if the poll type is set to 'PollEnded'
-            if (type == PollType.PollEnded)
-                return;
-
-            // Checks if the input string is null, empty, or whitespace
-            if (string.IsNullOrWhiteSpace(arg))
-                return;
-
-            // Creates a new poll based on the provided parameters
-            var poll = PollService.CreatePoll(ctx.Guild.Id,
-                ctx.Channel.Id, arg, type);
-
-            // Checks if the poll is null
-            if (poll == null)
+            var options = new List<PollOptionData>
             {
-                // Replies with an error message indicating invalid input
-                await ReplyErrorAsync(Strings.PollInvalidInput(ctx.Guild.Id)).ConfigureAwait(false);
-                return;
-            }
-
-            // Checks if the number of poll answers exceeds the limit
-            if (poll.Answers.Count > 25)
-            {
-                await ctx.Channel.SendErrorAsync(Strings.PollOptionLimit(ctx.Guild.Id), Config);
-                return;
-            }
-
-            // Attempts to start the poll
-            if (await Service.StartPoll(poll))
-            {
-                // Constructs an embed for the poll
-                var eb = new EmbedBuilder().WithOkColor().WithTitle(Strings.PollCreated(ctx.Guild.Id, ctx.User.ToString()))
-                    .WithDescription(
-                        $"{Format.Bold(poll.Question)}\n\n{string.Join("\n", poll.Answers.Select(x => $"`{x.Index + 1}.` {Format.Bold(x.Text)}"))}");
-
-                // Constructs a component builder for the poll buttons
-                var count = 1;
-                var builder = new ComponentBuilder();
-                foreach (var _ in poll.Answers)
+                new()
                 {
-                    var component =
-                        new ButtonBuilder(customId: $"pollbutton:{count}", label: count.ToString());
-                    count++;
-                    try
-                    {
-                        builder.WithButton(component);
-                    }
-                    catch (Exception e)
-                    {
-                        Console.WriteLine(e);
-                        throw;
-                    }
+                    Text = "Yes", Emote = "✅"
+                },
+                new()
+                {
+                    Text = "No", Emote = "❌"
                 }
+            };
 
-                // Sends the poll message with the embed and components
-                try
-                {
-                    await ctx.Channel.SendMessageAsync(embed: eb.Build(), components: builder.Build());
-                }
-                catch (Exception e)
-                {
-                    Console.WriteLine(e);
-                    throw;
-                }
-            }
-            else
+            var settings = new PollSettings
             {
-                // Replies with an error message indicating that a poll is already running
-                await ReplyErrorAsync(Strings.PollAlreadyRunning(ctx.Guild.Id)).ConfigureAwait(false);
-            }
-        }
+                AllowVoteChanges = true, ShowResults = true, ShowProgressBars = true
+            };
 
-        /// <summary>
-        ///     Displays the current statistics of the active poll in the guild.
-        /// </summary>
-        /// <returns>A task representing the asynchronous operation.</returns>
-        /// <example>.pollstats</example>
-        [Cmd]
-        [Aliases]
-        [UserPerm(GuildPermission.ManageMessages)]
-        [RequireContext(ContextType.Guild)]
-        public async Task PollStats()
-        {
-            // Tries to get the active poll in the guild
-            if (!Service.ActivePolls.TryGetValue(ctx.Guild.Id, out var pr))
-                return;
+            // Send the poll message first
+            var embed = await BuildPollEmbed(question, options, PollType.YesNo);
+            var components = BuildPollComponents(0, options, PollType.YesNo); // Temporary ID
 
-            // Sends an embed with the current poll statistics to the channel
-            await ctx.Channel.EmbedAsync(GetStats(pr.Polls, Strings.CurrentPollResults(ctx.Guild.Id))).ConfigureAwait(false);
-        }
+            var message = await ctx.Channel.SendMessageAsync(embed: embed, components: components);
 
-        /// <summary>
-        ///     Ends the current poll in the guild and displays the final statistics.
-        /// </summary>
-        /// <returns>A task representing the asynchronous operation.</returns>
-        /// <example>.pollend</example>
-        [Cmd]
-        [Aliases]
-        [UserPerm(GuildPermission.ManageMessages)]
-        [RequireContext(ContextType.Guild)]
-        public async Task Pollend()
-        {
-            Polls p;
-            // Stops the current poll in the guild and retrieves its information
-            if ((p = await Service.StopPoll(ctx.Guild.Id)) == null)
-                return;
+            // Create the poll in the database
+            var poll = await Service.CreatePollAsync(ctx.Guild.Id, ctx.Channel.Id, message.Id,
+                ctx.User.Id, question, options, PollType.YesNo, settings);
 
-            // Constructs an embed with the final poll statistics
-            var embed = GetStats(p, Strings.PollClosed(ctx.Guild.Id));
-            // Sends the embed to the channel
-            await ctx.Channel.EmbedAsync(embed).ConfigureAwait(false);
-        }
+            // Update the message with the correct poll ID
+            var updatedEmbed = await BuildPollEmbed(question, options, PollType.YesNo, poll.Id);
+            var updatedComponents = BuildPollComponents(poll.Id, options, PollType.YesNo);
 
-        /// <summary>
-        ///     Generates an embed containing the statistics of a poll.
-        /// </summary>
-        /// <param name="polls">The poll to generate statistics for.</param>
-        /// <param name="title">The title of the embed.</param>
-        /// <returns>The embed containing the poll statistics.</returns>
-        public EmbedBuilder GetStats(Polls polls, string? title)
-        {
-            // Group the votes by their corresponding answer index and calculate the total votes cast for each answer
-            var results = polls.Votes.GroupBy(kvp => kvp.VoteIndex)
-                .ToDictionary(x => x.Key, x => x.Sum(_ => 1));
-
-            var totalVotesCast = results.Sum(x => x.Value);
-
-            // Create a new EmbedBuilder with the provided title
-            var eb = new EmbedBuilder().WithTitle(title);
-
-            var sb = new StringBuilder()
-                .AppendLine(Format.Bold(polls.Question))
-                .AppendLine();
-
-            // Retrieve the statistics for each answer, ordered by the number of votes in descending order
-            var stats = polls.Answers
-                .Select(x =>
-                {
-                    results.TryGetValue(x.Index, out var votes);
-
-                    return (x.Index, votes, x.Text);
-                })
-                .OrderByDescending(x => x.votes)
-                .ToArray();
-
-            // Append each answer's statistics to the StringBuilder
-            foreach (var t in stats)
+            await message.ModifyAsync(msg =>
             {
-                var (index, votes, text) = t;
-                sb.AppendLine(Strings.PollResult(ctx.Guild.Id,
-                    index + 1,
-                    Format.Bold(text),
-                    Format.Bold(votes.ToString())));
-            }
+                msg.Embed = updatedEmbed;
+                msg.Components = updatedComponents;
+            });
 
-            // Configure the embed with the description, footer, and color
-            return eb.WithDescription(sb.ToString())
-                .WithFooter(efb => efb.WithText(Strings.XVotesCast(ctx.Guild.Id, totalVotesCast)))
-                .WithOkColor();
+            // Delete the command message
+            await ctx.Message.DeleteAsync();
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to create yes/no poll in guild {GuildId}", ctx.Guild.Id);
+            await ReplyErrorAsync("poll_creation_failed");
         }
     }
+
+    /// <summary>
+    /// Creates a custom poll with multiple options.
+    /// </summary>
+    /// <param name="input">The poll input in format: "question;option1;option2;..."</param>
+    [Cmd, Aliases]
+    [RequireContext(ContextType.Guild)]
+    [UserPerm(GuildPermission.ManageMessages)]
+    public async Task Pollc([Remainder] string input)
+    {
+        if (string.IsNullOrWhiteSpace(input))
+        {
+            await ReplyErrorAsync("poll_input_required");
+            return;
+        }
+
+        var parts = input.Split(';');
+        if (parts.Length < 3)
+        {
+            await ReplyErrorAsync("poll_minimum_options");
+            return;
+        }
+
+        if (parts.Length > 26) // Question + 25 options max
+        {
+            await ReplyErrorAsync("poll_maximum_options");
+            return;
+        }
+
+        try
+        {
+            var question = parts[0].Trim();
+            var options = new List<PollOptionData>();
+
+            for (var i = 1; i < parts.Length; i++)
+            {
+                var optionText = parts[i].Trim();
+                if (!string.IsNullOrWhiteSpace(optionText))
+                {
+                    options.Add(new PollOptionData
+                    {
+                        Text = optionText
+                    });
+                }
+            }
+
+            if (options.Count < 2)
+            {
+                await ReplyErrorAsync("poll_minimum_options");
+                return;
+            }
+
+            var settings = new PollSettings
+            {
+                AllowVoteChanges = true, ShowResults = true, ShowProgressBars = true
+            };
+
+            var pollType = PollType.SingleChoice;
+
+            // Send the poll message first
+            var embed = await BuildPollEmbed(question, options, pollType);
+            var components = BuildPollComponents(0, options, pollType); // Temporary ID
+
+            var message = await ctx.Channel.SendMessageAsync(embed: embed, components: components);
+
+            // Create the poll in the database
+            var poll = await Service.CreatePollAsync(ctx.Guild.Id, ctx.Channel.Id, message.Id,
+                ctx.User.Id, question, options, pollType, settings);
+
+            // Update the message with the correct poll ID
+            var updatedEmbed = await BuildPollEmbed(question, options, pollType, poll.Id);
+            var updatedComponents = BuildPollComponents(poll.Id, options, pollType);
+
+            await message.ModifyAsync(msg =>
+            {
+                msg.Embed = updatedEmbed;
+                msg.Components = updatedComponents;
+            });
+
+            // Delete the command message
+            await ctx.Message.DeleteAsync();
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to create custom poll in guild {GuildId}", ctx.Guild.Id);
+            await ReplyErrorAsync("poll_creation_failed");
+        }
+    }
+
+    /// <summary>
+    /// Creates a multi-choice poll where users can select multiple options.
+    /// </summary>
+    /// <param name="input">The poll input in format: "question;option1;option2;..."</param>
+    [Cmd, Aliases]
+    [RequireContext(ContextType.Guild)]
+    [UserPerm(GuildPermission.ManageMessages)]
+    public async Task Pollm([Remainder] string input)
+    {
+        if (string.IsNullOrWhiteSpace(input))
+        {
+            await ReplyErrorAsync("poll_input_required");
+            return;
+        }
+
+        var parts = input.Split(';');
+        if (parts.Length < 3)
+        {
+            await ReplyErrorAsync("poll_minimum_options");
+            return;
+        }
+
+        try
+        {
+            var question = parts[0].Trim();
+            var options = new List<PollOptionData>();
+
+            for (var i = 1; i < parts.Length; i++)
+            {
+                var optionText = parts[i].Trim();
+                if (!string.IsNullOrWhiteSpace(optionText))
+                {
+                    options.Add(new PollOptionData
+                    {
+                        Text = optionText
+                    });
+                }
+            }
+
+            var settings = new PollSettings
+            {
+                AllowMultipleVotes = true, AllowVoteChanges = true, ShowResults = true, ShowProgressBars = true
+            };
+
+            var pollType = PollType.MultiChoice;
+
+            // Send the poll message first
+            var embed = await BuildPollEmbed(question, options, pollType);
+            var components = BuildPollComponents(0, options, pollType); // Temporary ID
+
+            var message = await ctx.Channel.SendMessageAsync(embed: embed, components: components);
+
+            // Create the poll in the database
+            var poll = await Service.CreatePollAsync(ctx.Guild.Id, ctx.Channel.Id, message.Id,
+                ctx.User.Id, question, options, pollType, settings);
+
+            // Update the message with the correct poll ID
+            var updatedEmbed = await BuildPollEmbed(question, options, pollType, poll.Id);
+            var updatedComponents = BuildPollComponents(poll.Id, options, pollType);
+
+            await message.ModifyAsync(msg =>
+            {
+                msg.Embed = updatedEmbed;
+                msg.Components = updatedComponents;
+            });
+
+            // Delete the command message
+            await ctx.Message.DeleteAsync();
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to create multi-choice poll in guild {GuildId}", ctx.Guild.Id);
+            await ReplyErrorAsync("poll_creation_failed");
+        }
+    }
+
+    /// <summary>
+    /// Creates an anonymous poll where voter identities are hidden.
+    /// </summary>
+    /// <param name="input">The poll input in format: "question;option1;option2;..."</param>
+    [Cmd, Aliases]
+    [RequireContext(ContextType.Guild)]
+    [UserPerm(GuildPermission.ManageMessages)]
+    public async Task Polla([Remainder] string input)
+    {
+        if (string.IsNullOrWhiteSpace(input))
+        {
+            await ReplyErrorAsync("poll_input_required");
+            return;
+        }
+
+        var parts = input.Split(';');
+        if (parts.Length < 3)
+        {
+            await ReplyErrorAsync("poll_minimum_options");
+            return;
+        }
+
+        try
+        {
+            var question = parts[0].Trim();
+            var options = new List<PollOptionData>();
+
+            for (var i = 1; i < parts.Length; i++)
+            {
+                var optionText = parts[i].Trim();
+                if (!string.IsNullOrWhiteSpace(optionText))
+                {
+                    options.Add(new PollOptionData
+                    {
+                        Text = optionText
+                    });
+                }
+            }
+
+            var settings = new PollSettings
+            {
+                IsAnonymous = true, AllowVoteChanges = true, ShowResults = true, ShowProgressBars = true
+            };
+
+            var pollType = PollType.Anonymous;
+
+            // Send the poll message first
+            var embed = await BuildPollEmbed(question, options, pollType);
+            var components = BuildPollComponents(0, options, pollType); // Temporary ID
+
+            var message = await ctx.Channel.SendMessageAsync(embed: embed, components: components);
+
+            // Create the poll in the database
+            var poll = await Service.CreatePollAsync(ctx.Guild.Id, ctx.Channel.Id, message.Id,
+                ctx.User.Id, question, options, pollType, settings);
+
+            // Update the message with the correct poll ID
+            var updatedEmbed = await BuildPollEmbed(question, options, pollType, poll.Id);
+            var updatedComponents = BuildPollComponents(poll.Id, options, pollType);
+
+            await message.ModifyAsync(msg =>
+            {
+                msg.Embed = updatedEmbed;
+                msg.Components = updatedComponents;
+            });
+
+            // Delete the command message
+            await ctx.Message.DeleteAsync();
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to create anonymous poll in guild {GuildId}", ctx.Guild.Id);
+            await ReplyErrorAsync("poll_creation_failed");
+        }
+    }
+
+    /// <summary>
+    /// Lists all poll templates available in the guild.
+    /// </summary>
+    [Cmd, Aliases]
+    [RequireContext(ContextType.Guild)]
+    public async Task PollTemplates()
+    {
+        try
+        {
+            var templates = await templateService.GetTemplatesAsync(ctx.Guild.Id);
+
+            if (templates.Count == 0)
+            {
+                await ReplyErrorAsync("poll_no_templates");
+                return;
+            }
+
+            var embed = new EmbedBuilder()
+                .WithTitle(Strings.PollTemplatesTitle(ctx.Guild.Id))
+                .WithColor(Color.Blue)
+                .WithDescription($"Found {templates.Count} template(s)");
+
+            foreach (var template in templates.Take(10)) // Show first 10
+            {
+                var optionsJson = template.Options;
+                var optionCount = 0;
+                try
+                {
+                    var options = JsonSerializer.Deserialize<List<PollOptionData>>(optionsJson);
+                    optionCount = options?.Count ?? 0;
+                }
+                catch
+                {
+                    // Ignore JSON parsing errors
+                }
+
+                embed.AddField(template.Name,
+                    $"Question: {template.Question}\nOptions: {optionCount}\nCreated: {template.CreatedAt:yyyy-MM-dd}",
+                    true);
+            }
+
+            if (templates.Count > 10)
+                embed.WithFooter(Strings.PollShowingTemplates(ctx.Guild.Id, templates.Count));
+
+            await ctx.Channel.SendMessageAsync(embed: embed.Build());
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to list poll templates in guild {GuildId}", ctx.Guild.Id);
+            await ReplyErrorAsync("poll_templates_error");
+        }
+    }
+
+    /// <summary>
+    /// Creates a poll from a template.
+    /// </summary>
+    /// <param name="templateName">The name of the template to use.</param>
+    [Cmd, Aliases]
+    [RequireContext(ContextType.Guild)]
+    [UserPerm(GuildPermission.ManageMessages)]
+    public async Task PollTemplate([Remainder] string templateName)
+    {
+        if (string.IsNullOrWhiteSpace(templateName))
+        {
+            await ReplyErrorAsync("poll_template_name_required");
+            return;
+        }
+
+        try
+        {
+            var template = await templateService.GetTemplateByNameAsync(ctx.Guild.Id, templateName);
+            if (template == null)
+            {
+                await ReplyErrorAsync("poll_template_not_found");
+                return;
+            }
+
+            var options = JsonSerializer.Deserialize<List<PollOptionData>>(template.Options);
+            if (options == null || options.Count == 0)
+            {
+                await ReplyErrorAsync("poll_template_invalid");
+                return;
+            }
+
+            PollSettings? settings = null;
+            if (!string.IsNullOrEmpty(template.Settings))
+            {
+                settings = JsonSerializer.Deserialize<PollSettings>(template.Settings);
+            }
+
+            settings ??= new PollSettings
+            {
+                AllowVoteChanges = true, ShowResults = true, ShowProgressBars = true
+            };
+
+            var pollType = PollType.SingleChoice; // Default type
+
+            // Send the poll message first
+            var embed = await BuildPollEmbed(template.Question, options, pollType);
+            var components = BuildPollComponents(0, options, pollType); // Temporary ID
+
+            var message = await ctx.Channel.SendMessageAsync(embed: embed, components: components);
+
+            // Create the poll in the database
+            var poll = await Service.CreatePollAsync(ctx.Guild.Id, ctx.Channel.Id, message.Id,
+                ctx.User.Id, template.Question, options, pollType, settings);
+
+            // Update the message with the correct poll ID
+            var updatedEmbed = await BuildPollEmbed(template.Question, options, pollType, poll.Id);
+            var updatedComponents = BuildPollComponents(poll.Id, options, pollType);
+
+            await message.ModifyAsync(msg =>
+            {
+                msg.Embed = updatedEmbed;
+                msg.Components = updatedComponents;
+            });
+
+            // Delete the command message
+            await ctx.Message.DeleteAsync();
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to create poll from template '{TemplateName}' in guild {GuildId}", templateName,
+                ctx.Guild.Id);
+            await ReplyErrorAsync("poll_creation_failed");
+        }
+    }
+
+    #region Private Methods
+
+    /// <summary>
+    /// Builds the poll embed for display.
+    /// </summary>
+    /// <param name="question">The poll question.</param>
+    /// <param name="options">The poll options.</param>
+    /// <param name="pollType">The poll type.</param>
+    /// <param name="pollId">The poll ID (optional).</param>
+    /// <returns>The built embed.</returns>
+    private async Task<Embed> BuildPollEmbed(string question, List<PollOptionData> options, PollType pollType,
+        int? pollId = null)
+    {
+        var typeIcon = pollType switch
+        {
+            PollType.YesNo => "✅❌",
+            PollType.SingleChoice => "📊",
+            PollType.MultiChoice => "☑️",
+            PollType.Anonymous => "🔒",
+            PollType.RoleRestricted => "👥",
+            _ => "📊"
+        };
+
+        var embed = new EmbedBuilder()
+            .WithTitle(Strings.PollTitleFormat(ctx.Guild.Id, typeIcon, question))
+            .WithColor(GetPollColor(pollType))
+            .WithTimestamp(DateTimeOffset.UtcNow);
+
+        for (var i = 0; i < options.Count; i++)
+        {
+            var option = options[i];
+            var optionText = $"{i + 1}. {option.Text}";
+            if (!string.IsNullOrEmpty(option.Emote))
+                optionText = $"{option.Emote} {optionText}";
+
+            embed.AddField(optionText, "0 votes (0%)", true);
+        }
+
+        var footerText = pollType switch
+        {
+            PollType.MultiChoice => Strings.PollFooterMultipleChoice(ctx.Guild.Id),
+            PollType.Anonymous => Strings.PollFooterAnonymous(ctx.Guild.Id),
+            PollType.RoleRestricted => Strings.PollFooterRoleRestricted(ctx.Guild.Id),
+            _ => Strings.PollFooterDefault(ctx.Guild.Id)
+        };
+
+        if (pollId.HasValue)
+            footerText += $" • Poll ID: {pollId.Value}";
+
+        embed.WithFooter(footerText);
+
+        return embed.Build();
+    }
+
+    /// <summary>
+    /// Builds the interactive components for the poll.
+    /// </summary>
+    /// <param name="pollId">The poll ID.</param>
+    /// <param name="options">The poll options.</param>
+    /// <param name="pollType">The poll type.</param>
+    /// <returns>The built message component.</returns>
+    private MessageComponent BuildPollComponents(int pollId, List<PollOptionData> options, PollType pollType)
+    {
+        var builder = new ComponentBuilder();
+
+        if (options.Count <= 5)
+        {
+            // Use buttons for 2-5 options
+            for (var i = 0; i < options.Count; i++)
+            {
+                var option = options[i];
+                var label = $"{i + 1}";
+                if (option.Text.Length <= 12)
+                    label = $"{i + 1}. {option.Text}";
+
+                if (label.Length > 80) label = label[..77] + "...";
+
+                IEmote? emote = null;
+                if (!string.IsNullOrEmpty(option.Emote))
+                {
+                    try
+                    {
+                        emote = Emote.Parse(option.Emote);
+                    }
+                    catch
+                    {
+                        // If parsing fails, try as unicode emoji
+                        emote = new Emoji(option.Emote);
+                    }
+                }
+
+                var style = GetButtonStyle(i);
+                builder.WithButton(label, $"poll:vote:{pollId}:{i}", style, emote);
+            }
+        }
+        else
+        {
+            // Use select menu for 6+ options
+            var selectMenuBuilder = new SelectMenuBuilder()
+                .WithCustomId($"poll:select:{pollId}")
+                .WithPlaceholder(Strings.PollSelectPlaceholder(ctx.Guild.Id))
+                .WithMinValues(1)
+                .WithMaxValues(pollType == PollType.MultiChoice ? Math.Min(options.Count, 25) : 1);
+
+            for (var i = 0; i < Math.Min(options.Count, 25); i++)
+            {
+                var option = options[i];
+                var label = $"{i + 1}. {option.Text}";
+                if (label.Length > 100) label = label[..97] + "...";
+
+                IEmote? emote = null;
+                if (!string.IsNullOrEmpty(option.Emote))
+                {
+                    try
+                    {
+                        emote = Emote.Parse(option.Emote);
+                    }
+                    catch
+                    {
+                        emote = new Emoji(option.Emote);
+                    }
+                }
+
+                selectMenuBuilder.AddOption(label, i.ToString(), emote: emote);
+            }
+
+            builder.WithSelectMenu(selectMenuBuilder);
+        }
+
+        // Add management buttons on second row
+        builder.WithButton("📊 Stats", $"poll:manage:{pollId}:stats", ButtonStyle.Secondary)
+            .WithButton("🔒 Close", $"poll:manage:{pollId}:close", ButtonStyle.Secondary)
+            .WithButton("🗑️ Delete", $"poll:manage:{pollId}:delete", ButtonStyle.Danger);
+
+        return builder.Build();
+    }
+
+    /// <summary>
+    /// Gets the color for a poll type.
+    /// </summary>
+    /// <param name="pollType">The poll type.</param>
+    /// <returns>The color for the poll type.</returns>
+    private static Color GetPollColor(PollType pollType)
+    {
+        return pollType switch
+        {
+            PollType.YesNo => Color.Green,
+            PollType.SingleChoice => Color.Blue,
+            PollType.MultiChoice => Color.Purple,
+            PollType.Anonymous => Color.DarkGrey,
+            PollType.RoleRestricted => Color.Orange,
+            _ => Color.Blue
+        };
+    }
+
+    /// <summary>
+    /// Gets the button style based on option index.
+    /// </summary>
+    /// <param name="index">The option index.</param>
+    /// <returns>The button style.</returns>
+    private static ButtonStyle GetButtonStyle(int index)
+    {
+        return index switch
+        {
+            0 => ButtonStyle.Primary,
+            1 => ButtonStyle.Secondary,
+            2 => ButtonStyle.Success,
+            3 => ButtonStyle.Danger,
+            _ => ButtonStyle.Secondary
+        };
+    }
+
+    #endregion
 }

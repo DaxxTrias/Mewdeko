@@ -1,4 +1,5 @@
 ﻿using System.IO;
+using Mewdeko.Controllers.Common.JoinLeave;
 using Mewdeko.Modules.Utility.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -150,64 +151,5 @@ public class JoinLeaveController : Controller
     {
         await joinLeaveService.SetLeaveColorAsync(color, guildId);
         return Ok();
-    }
-
-
-    /// <summary>
-    ///     Response model containing join/leave graph and statistics data
-    /// </summary>
-    public class GraphStatsResponse
-    {
-        /// <summary>
-        ///     Data points for each day in the graph
-        /// </summary>
-        public List<DailyStatDto> DailyStats { get; set; }
-
-        /// <summary>
-        ///     Summary statistics for the timespan
-        /// </summary>
-        public GraphSummaryDto Summary { get; set; }
-    }
-
-    /// <summary>
-    ///     Single data point for a specific day
-    /// </summary>
-    public class DailyStatDto
-    {
-        /// <summary>
-        ///     The date of this data point
-        /// </summary>
-        public DateTime Date { get; set; }
-
-        /// <summary>
-        ///     Number of events on this date
-        /// </summary>
-        public int Count { get; set; }
-    }
-
-    /// <summary>
-    ///     Summary statistics for the graph period
-    /// </summary>
-    public class GraphSummaryDto
-    {
-        /// <summary>
-        ///     Total number of events in the period
-        /// </summary>
-        public int Total { get; set; }
-
-        /// <summary>
-        ///     Average events per day
-        /// </summary>
-        public double Average { get; set; }
-
-        /// <summary>
-        ///     Date with highest number of events
-        /// </summary>
-        public DateTime PeakDate { get; set; }
-
-        /// <summary>
-        ///     Number of events on the peak date
-        /// </summary>
-        public int PeakCount { get; set; }
     }
 }

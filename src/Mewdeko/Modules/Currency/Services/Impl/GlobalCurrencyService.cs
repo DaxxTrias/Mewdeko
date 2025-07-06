@@ -1,5 +1,5 @@
-﻿using Mewdeko.Database.DbContextStuff;
-using Microsoft.EntityFrameworkCore;
+﻿using DataModel;
+using LinqToDB;
 
 namespace Mewdeko.Modules.Currency.Services.Impl;
 
@@ -8,21 +8,21 @@ namespace Mewdeko.Modules.Currency.Services.Impl;
 /// </summary>
 public class GlobalCurrencyService : ICurrencyService
 {
-    private readonly DbContextProvider dbProvider;
+    private readonly IDataConnectionFactory dbFactory;
 
     /// <summary>
-    ///     Initializes a new instance of the <see cref="GlobalCurrencydbContext" /> class.
+    ///     Initializes a new instance of the <see cref="GlobalCurrencyService" /> class.
     /// </summary>
-    /// <param name="dbContext">The database dbContext.</param>
-    public GlobalCurrencyService(DbContextProvider dbProvider)
+    /// <param name="dbFactory">The database dbContext.</param>
+    public GlobalCurrencyService(IDataConnectionFactory dbFactory)
     {
-        this.dbProvider = dbProvider;
+        this.dbFactory = dbFactory;
     }
 
     /// <inheritdoc />
     public async Task AddUserBalanceAsync(ulong userId, long amount, ulong? guildId = null)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
         // Check if the user already has a balance entry
         var existingBalance = await dbContext.GlobalUserBalances
@@ -32,7 +32,7 @@ public class GlobalCurrencyService : ICurrencyService
         {
             // Update the existing balance
             existingBalance.Balance += amount;
-            dbContext.GlobalUserBalances.Update(existingBalance);
+            await dbContext.UpdateAsync(existingBalance);
         }
         else
         {
@@ -41,17 +41,14 @@ public class GlobalCurrencyService : ICurrencyService
             {
                 UserId = userId, Balance = amount
             };
-            dbContext.GlobalUserBalances.Add(globalBalance);
+            await dbContext.InsertAsync(globalBalance);
         }
-
-        // Save changes to the database
-        await dbContext.SaveChangesAsync();
     }
 
     /// <inheritdoc />
     public async Task<long> GetUserBalanceAsync(ulong userId, ulong? guildId = null)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
         // Retrieve user balance from the database
         return await dbContext.GlobalUserBalances
             .Where(x => x.UserId == userId)
@@ -62,7 +59,7 @@ public class GlobalCurrencyService : ICurrencyService
     /// <inheritdoc />
     public async Task AddTransactionAsync(ulong userId, long amount, string description, ulong? guildId = null)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
         // Create a new transaction entry
         var transaction = new TransactionHistory
         {
@@ -70,14 +67,13 @@ public class GlobalCurrencyService : ICurrencyService
         };
 
         // Add transaction to the database
-        dbContext.TransactionHistories.Add(transaction);
-        await dbContext.SaveChangesAsync();
+        await dbContext.InsertAsync(transaction);
     }
 
     /// <inheritdoc />
     public async Task<IEnumerable<TransactionHistory>?> GetTransactionsAsync(ulong userId, ulong? guildId = null)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
         // Retrieve user transactions from the database
         return await dbContext.TransactionHistories
             .Where(x => x.UserId == userId && x.GuildId == 0)?
@@ -87,9 +83,9 @@ public class GlobalCurrencyService : ICurrencyService
     /// <inheritdoc />
     public async Task<string> GetCurrencyEmote(ulong? guildId = null)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
         // Retrieve currency emote from the database
-        return await dbContext.OwnerOnly
+        return await dbContext.OwnerOnlies
             .Select(x => x.CurrencyEmote)
             .FirstOrDefaultAsync();
     }
@@ -97,7 +93,7 @@ public class GlobalCurrencyService : ICurrencyService
     /// <inheritdoc />
     public async Task<IEnumerable<LbCurrency>> GetAllUserBalancesAsync(ulong? _)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
         // Retrieve all user balances from the database
         return dbContext.GlobalUserBalances
             .Select(x => new LbCurrency
@@ -109,21 +105,20 @@ public class GlobalCurrencyService : ICurrencyService
     /// <inheritdoc />
     public async Task SetReward(int amount, int seconds, ulong? _)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
         // Update reward configuration in the database
-        var config = await dbContext.OwnerOnly.FirstOrDefaultAsync();
+        var config = await dbContext.OwnerOnlies.FirstOrDefaultAsync();
         config.RewardAmount = amount;
         config.RewardTimeoutSeconds = seconds;
-        dbContext.OwnerOnly.Update(config);
-        await dbContext.SaveChangesAsync();
+        await dbContext.UpdateAsync(config);
     }
 
     /// <inheritdoc />
     public async Task<(int, int)> GetReward(ulong? _)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
         // Retrieve reward configuration from the database
-        var config = await dbContext.OwnerOnly.FirstOrDefaultAsync();
+        var config = await dbContext.OwnerOnlies.FirstOrDefaultAsync();
         return (config.RewardAmount, config.RewardTimeoutSeconds);
     }
 }

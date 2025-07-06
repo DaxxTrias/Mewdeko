@@ -35,10 +35,6 @@ public sealed class BotConfig
         SupportServer = "https://discord.gg/mewdeko";
         RedirectUrl = "https://mewdeko.tech/auth.html";
         YoutubeSupport = true;
-        ChatGptInitPrompt =
-            "Your name is Mewdeko. You are a discord bot. Your profile picture is of the character Hanekawa Tsubasa in Black Hanekawa form. You were created by sylveondeko";
-        ChatGptMaxTokens = 1000;
-        ChatGptTemperature = 0.9;
         QuarantineNotification = true;
         UpdateBranch = "main";
         CheckForUpdates = UpdateCheckType.None;
@@ -53,12 +49,14 @@ public sealed class BotConfig
     /// <summary>
     ///     Gets or sets the color configuration for the bot. Used for embeds. See <see cref="ColorConfig" />.
     /// </summary>
-    [Comment(@"Most commands, when executed, have a small colored line
-next to the response. The color depends whether the command
-is completed, errored or in progress (pending)
-Color settings below are for the color of those lines.
-To get color's hex, you can go here https://htmlcolorcodes.com/
-and copy the hex code fo your selected color (marked as #)")]
+    [Comment("""
+             Most commands, when executed, have a small colored line
+             next to the response. The color depends whether the command
+             is completed, errored or in progress (pending)
+             Color settings below are for the color of those lines.
+             To get color's hex, you can go here https://htmlcolorcodes.com/
+             and copy the hex code fo your selected color (marked as #)
+             """)]
     public ColorConfig Color { get; set; }
 
     /// <summary>
@@ -70,15 +68,19 @@ and copy the hex code fo your selected color (marked as #)")]
     /// <summary>
     ///     Gets or sets the style in which executed commands will show up in the console.
     /// </summary>
-    [Comment(@"Style in which executed commands will show up in the console.
-Allowed values: Simple, Normal, None")]
+    [Comment("""
+             Style in which executed commands will show up in the console.
+             Allowed values: Simple, Normal, None
+             """)]
     public ConsoleOutputType ConsoleOutputType { get; set; }
 
     /// <summary>
     ///     Gets or sets the type of updates the bot will check for.
     /// </summary>
-    [Comment(@"For what kind of updates will the bot check.
-    Allowed values: Release, Commit, None")]
+    [Comment("""
+             For what kind of updates will the bot check.
+                 Allowed values: Release, Commit, None
+             """)]
     public UpdateCheckType CheckForUpdates { get; set; }
 
     /// <summary>
@@ -103,16 +105,20 @@ Allowed values: Simple, Normal, None")]
     ///     Gets or sets whether messages sent by users in the bot's DM will be forwarded to all owners.
     /// </summary>
     [Comment(
-        @"Do you want the message to be forwarded only to the first owner specified in the list of owners (in creds.yml),
-or all owners? (this might cause the bot to lag if there's a lot of owners specified)")]
+        """
+        Do you want the message to be forwarded only to the first owner specified in the list of owners (in creds.yml),
+        or all owners? (this might cause the bot to lag if there's a lot of owners specified)
+        """)]
     public bool ForwardToAllOwners { get; set; }
 
     /// <summary>
     ///     Gets or sets the message to send to users who DM the bot with a message that is not a command.
     /// </summary>
-    [Comment(@"When a user DMs the bot with a message which is not a command
-they will receive this message. Leave empty for no response. The string which will be sent whenever someone DMs the bot.
-Supports embeds. How it looks: https://puu.sh/B0BLV.png")]
+    [Comment("""
+             When a user DMs the bot with a message which is not a command
+             they will receive this message. Leave empty for no response. The string which will be sent whenever someone DMs the bot.
+             Supports embeds. How it looks: https://puu.sh/B0BLV.png
+             """)]
     [YamlMember(ScalarStyle = ScalarStyle.Literal)]
     public string? DmHelpText { get; set; }
 
@@ -139,23 +145,27 @@ Supports embeds. How it looks: https://puu.sh/B0BLV.png")]
     /// <summary>
     ///     Gets or sets whether the bot will group greet/bye messages into a single message every 5 seconds.
     /// </summary>
-    [Comment(@"Toggles whether your bot will group greet/bye messages into a single message every 5 seconds.
-1st user who joins will get greeted immediately
-If more users join within the next 5 seconds, they will be greeted in groups of 5.
-This will cause %user.mention% and other placeholders to be replaced with multiple users.
-Keep in mind this might break some of your embeds - for example if you have %user.avatar% in the thumbnail,
-it will become invalid, as it will resolve to a list of avatars of grouped users.
-note: This setting is primarily used if you're afraid of raids, or you're running medium/large bots where some
-      servers might get hundreds of people join at once. This is used to prevent the bot from getting ratelimited,
-      and (slightly) reduce the greet spam in those servers.")]
+    [Comment("""
+             Toggles whether your bot will group greet/bye messages into a single message every 5 seconds.
+             1st user who joins will get greeted immediately
+             If more users join within the next 5 seconds, they will be greeted in groups of 5.
+             This will cause %user.mention% and other placeholders to be replaced with multiple users.
+             Keep in mind this might break some of your embeds - for example if you have %user.avatar% in the thumbnail,
+             it will become invalid, as it will resolve to a list of avatars of grouped users.
+             note: This setting is primarily used if you're afraid of raids, or you're running medium/large bots where some
+                   servers might get hundreds of people join at once. This is used to prevent the bot from getting ratelimited,
+                   and (slightly) reduce the greet spam in those servers.
+             """)]
     public bool GroupGreets { get; set; }
 
     /// <summary>
     ///     Gets or sets whether the bot will rotate through all specified statuses.
     /// </summary>
-    [Comment(@"Whether the bot will rotate through all specified statuses.
-This setting can be changed via .rots command.
-See RotatingStatuses submodule in Administration.")]
+    [Comment("""
+             Whether the bot will rotate through all specified statuses.
+             This setting can be changed via .rots command.
+             See RotatingStatuses submodule in Administration.
+             """)]
     public bool RotateStatuses { get; set; }
 
     /// <summary>
@@ -171,52 +181,10 @@ See RotatingStatuses submodule in Administration.")]
     public bool YoutubeSupport { get; set; }
 
     /// <summary>
-    ///     Gets or sets the ChatGPT API key.
-    /// </summary>
-    [Comment("ChatGPT API Key")]
-    public string ChatGptKey { get; set; }
-
-    /// <summary>
-    ///     Gets or sets the ChatGPT Channel ID.
-    /// </summary>
-    [Comment("ChatGPT Channel ID")]
-    public ulong ChatGptChannel { get; set; }
-
-    /// <summary>
-    ///     Gets or sets the ChatGPT Initial prompt when starting a conversation with ChatGPT.
-    /// </summary>
-    [Comment("ChatGPT Init Prompt. Used to set how chatgpt will act.")]
-    public string ChatGptInitPrompt { get; set; }
-
-    /// <summary>
-    ///     Gets or sets the maximum number of tokens that ChatGPT can output.
-    /// </summary>
-    [Comment("Max tokens that chatgpt can output")]
-    public int ChatGptMaxTokens { get; set; }
-
-    /// <summary>
     ///     Gets or sets whether the invite and donation button will be shown on some commands.
     /// </summary>
     [Comment("Used to enable or disable showing the invite button on some commands")]
     public bool ShowInviteButton { get; set; }
-
-    /// <summary>
-    ///     Gets or sets the webhook for ChatGPT.
-    /// </summary>
-    [Comment("ChatGPT Webhook, used if you want to change the appearance of chatgpt messages.")]
-    public string ChatGptWebhook { get; set; }
-
-    /// <summary>
-    ///     Gets or sets the temperature for ChatGPT.
-    /// </summary>
-    [Comment("Sets the temperature for ChatGPT")]
-    public double ChatGptTemperature { get; set; }
-
-    /// <summary>
-    ///     Gets or sets the model to use for ChatGPT.
-    /// </summary>
-    [Comment("The model to use for chatgpt")]
-    public string ChatGptModel { get; set; }
 
     /// <summary>
     ///     Gets or sets the redirect url for the auth command.

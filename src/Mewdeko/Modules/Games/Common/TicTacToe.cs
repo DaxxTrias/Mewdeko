@@ -12,8 +12,8 @@ namespace Mewdeko.Modules.Games.Common;
 public class TicTacToe
 {
     private readonly ITextChannel channel;
-    private readonly DiscordShardedClient client;
     private readonly BotConfig config;
+    private readonly EventHandler handler;
     private readonly SemaphoreSlim moveLock;
 
     private readonly string[] numbers =
@@ -32,25 +32,22 @@ public class TicTacToe
     private Timer timeoutTimer;
 
     private IGuildUser? winner;
-    private readonly EventHandler handler;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="TicTacToe" /> class with the specified strings, client, channel, first
     ///     user, and options.
     /// </summary>
     /// <param name="strings">Localization Strings</param>
-    /// <param name="client">Discord Client</param>
     /// <param name="channel">Channel trivia will run in</param>
     /// <param name="firstUser">User who started tic tac toe</param>
     /// <param name="options">Options along with the game</param>
     /// <param name="config">Bot Configuration</param>
     /// <param name="handler">Event Handler</param>
-    public TicTacToe(GeneratedBotStrings strings, DiscordShardedClient client, ITextChannel channel,
+    public TicTacToe(GeneratedBotStrings strings, ITextChannel channel,
         IGuildUser firstUser, Options options, BotConfig config, EventHandler handler)
     {
         this.channel = channel;
         this.Strings = strings;
-        this.client = client;
         this.options = options;
         this.config = config;
         this.handler = handler;
@@ -154,13 +151,15 @@ public class TicTacToe
     {
         if (phase is Phase.Started or Phase.Ended)
         {
-            await channel.SendErrorAsync(user.Mention + Strings.TttAlreadyRunning(users[0].Guild.Id), config).ConfigureAwait(false);
+            await channel.SendErrorAsync(user.Mention + Strings.TttAlreadyRunning(users[0].Guild.Id), config)
+                .ConfigureAwait(false);
             return;
         }
 
         if (users[0] == user)
         {
-            await channel.SendErrorAsync(user.Mention + Strings.TttAgainstYourself(users[0].Guild.Id), config).ConfigureAwait(false);
+            await channel.SendErrorAsync(user.Mention + Strings.TttAgainstYourself(users[0].Guild.Id), config)
+                .ConfigureAwait(false);
             return;
         }
 
@@ -183,7 +182,8 @@ public class TicTacToe
                     var del = previousMessage?.DeleteAsync();
                     try
                     {
-                        await channel.EmbedAsync(GetEmbed(Strings.TttTimeExpired(users[0].Guild.Id))).ConfigureAwait(false);
+                        await channel.EmbedAsync(GetEmbed(Strings.TttTimeExpired(users[0].Guild.Id)))
+                            .ConfigureAwait(false);
                         if (del != null)
                             await del.ConfigureAwait(false);
                     }
@@ -205,9 +205,10 @@ public class TicTacToe
             }
         }, null, options.TurnTimer * 1000, Timeout.Infinite);
 
-        handler.MessageReceived += Client_MessageReceived;
+        handler.Subscribe("MessageReceived", "TicTacToe", Client_MessageReceived);
 
-        previousMessage = await channel.EmbedAsync(GetEmbed(Strings.GameStarted(users[0].Guild.Id))).ConfigureAwait(false);
+        previousMessage =
+            await channel.EmbedAsync(GetEmbed(Strings.GameStarted(users[0].Guild.Id))).ConfigureAwait(false);
     }
 
     private bool IsDraw()
@@ -284,14 +285,14 @@ public class TicTacToe
                 {
                     reason = Strings.TttMatchedThree(users[0].Guild.Id);
                     winner = users[curUserIndex];
-                    handler.MessageReceived -= Client_MessageReceived;
+                    handler.Unsubscribe("MessageReceived", "TicTacToe", Client_MessageReceived);
                     OnEnded.Invoke(this);
                 }
                 else if (IsDraw())
                 {
                     reason = Strings.TttADraw(users[0].Guild.Id);
                     phase = Phase.Ended;
-                    handler.MessageReceived -= Client_MessageReceived;
+                    handler.Unsubscribe("MessageReceived", "TicTacToe", Client_MessageReceived);
                     OnEnded.Invoke(this);
                 }
 

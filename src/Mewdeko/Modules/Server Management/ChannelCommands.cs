@@ -3,6 +3,7 @@ using Discord.Commands;
 using Humanizer;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Common.TypeReaders.Models;
+using Mewdeko.Modules.Administration.Common;
 using Mewdeko.Modules.Server_Management.Services;
 using Mewdeko.Services.Settings;
 using PermValue = Discord.PermValue;
@@ -222,7 +223,8 @@ public partial class ServerManagement
             }
 
             await user.ModifyAsync(x => x.Channel = new Optional<IVoiceChannel>(channel)).ConfigureAwait(false);
-            await ctx.Channel.SendConfirmAsync(Strings.MoveuserSuccess(ctx.Guild.Id, user.Mention, Format.Bold(channel.Name)))
+            await ctx.Channel
+                .SendConfirmAsync(Strings.MoveuserSuccess(ctx.Guild.Id, user.Mention, Format.Bold(channel.Name)))
                 .ConfigureAwait(false);
         }
 
@@ -250,7 +252,7 @@ public partial class ServerManagement
             }
 
             await user.ModifyAsync(x => x.Channel = new Optional<IVoiceChannel>(vc)).ConfigureAwait(false);
-await ctx.Channel.SendConfirmAsync(Strings.GrabSuccess(ctx.Guild.Id, user.Mention, user.VoiceChannel.Name))
+            await ctx.Channel.SendConfirmAsync(Strings.GrabSuccess(ctx.Guild.Id, user.Mention, user.VoiceChannel.Name))
                 .ConfigureAwait(false);
         }
 
@@ -288,8 +290,7 @@ await ctx.Channel.SendConfirmAsync(Strings.GrabSuccess(ctx.Guild.Id, user.Mentio
         {
             var embed = new EmbedBuilder
             {
-                Color = Mewdeko.ErrorColor,
-                Description = Strings.NukeConfirm(ctx.Guild.Id)
+                Color = Mewdeko.ErrorColor, Description = Strings.NukeConfirm(ctx.Guild.Id)
             };
             if (!await PromptUserConfirmAsync(embed, ctx.User.Id).ConfigureAwait(false)) return;
             ITextChannel chan;
@@ -344,7 +345,8 @@ await ctx.Channel.SendConfirmAsync(Strings.GrabSuccess(ctx.Guild.Id, user.Mentio
                                    new OverwritePermissions();
                 await tch.AddPermissionOverwriteAsync(ctx.Guild.EveryoneRole,
                     currentPerms.Modify(sendMessages: PermValue.Deny)).ConfigureAwait(false);
-                await ctx.Channel.SendMessageAsync(Strings.LockSuccess(ctx.Guild.Id, config.Data.SuccessEmote, tch.Mention))
+                await ctx.Channel
+                    .SendMessageAsync(Strings.LockSuccess(ctx.Guild.Id, config.Data.SuccessEmote, tch.Mention))
                     .ConfigureAwait(false);
             }
             else
@@ -355,7 +357,6 @@ await ctx.Channel.SendConfirmAsync(Strings.GrabSuccess(ctx.Guild.Id, user.Mentio
                     currentPerms.Modify(sendMessages: PermValue.Deny)).ConfigureAwait(false);
                 await ctx.Channel.SendMessageAsync(Strings.LockSuccess(ctx.Guild.Id, config.Data.SuccessEmote,
                     channel.Mention));
-
             }
         }
 
@@ -397,7 +398,8 @@ await ctx.Channel.SendConfirmAsync(Strings.GrabSuccess(ctx.Guild.Id, user.Mentio
             var eb = new EmbedBuilder();
             eb.WithOkColor()
                 .WithDescription(Strings.CreatingCategory(ctx.Guild.Id, config.Data.LoadingEmote, catName,
-                    channels.Length, "Voice"));            var msg = await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
+                    channels.Length, "Voice"));
+            var msg = await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
             var cat = await ctx.Guild.CreateCategoryAsync(catName).ConfigureAwait(false);
             foreach (var i in channels)
                 await ctx.Guild.CreateVoiceChannelAsync(i, x => x.CategoryId = cat.Id).ConfigureAwait(false);
@@ -421,13 +423,13 @@ await ctx.Channel.SendConfirmAsync(Strings.GrabSuccess(ctx.Guild.Id, user.Mentio
             var eb = new EmbedBuilder();
             eb.WithOkColor();
             eb.WithDescription(
-                $"{config.Data.LoadingEmote} Adding {channels.Length} Voice Channels to {chan.Name}");
+                Strings.AddingVoiceChannels(ctx.Guild.Id, config.Data.LoadingEmote, channels.Length, chan.Name));
             var msg = await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
             foreach (var i in channels)
                 await ctx.Guild.CreateVoiceChannelAsync(i, x => x.CategoryId = chan.Id).ConfigureAwait(false);
 
             var eb2 = new EmbedBuilder();
-            eb2.WithDescription($"Added {channels.Length} Voice Channels to {chan.Name}!");
+            eb2.WithDescription(Strings.ChannelsAddedVoice(ctx.Guild.Id, channels.Length, chan.Name));
             eb2.WithOkColor();
             await msg.ModifyAsync(x => x.Embed = eb2.Build()).ConfigureAwait(false);
         }
@@ -445,13 +447,13 @@ await ctx.Channel.SendConfirmAsync(Strings.GrabSuccess(ctx.Guild.Id, user.Mentio
             var eb = new EmbedBuilder();
             eb.WithOkColor();
             eb.WithDescription(
-                $"{config.Data.LoadingEmote} Adding {channels.Length} Text Channels to {chan.Name}");
+                Strings.AddingTextChannels(ctx.Guild.Id, config.Data.LoadingEmote, channels.Length, chan.Name));
             var msg = await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
             foreach (var i in channels)
                 await ctx.Guild.CreateTextChannelAsync(i, x => x.CategoryId = chan.Id).ConfigureAwait(false);
 
             var eb2 = new EmbedBuilder();
-            eb2.WithDescription($"Added {channels.Length} Text Channels to {chan.Name}!");
+            eb2.WithDescription(Strings.AddedTextChannels(ctx.Guild.Id, channels.Length.ToString(), chan.Name));
             eb2.WithOkColor();
             await msg.ModifyAsync(x => x.Embed = eb2.Build()).ConfigureAwait(false);
         }
@@ -474,7 +476,8 @@ await ctx.Channel.SendConfirmAsync(Strings.GrabSuccess(ctx.Guild.Id, user.Mentio
                                    new OverwritePermissions();
                 await tch.AddPermissionOverwriteAsync(ctx.Guild.EveryoneRole,
                     currentPerms.Modify(sendMessages: PermValue.Inherit)).ConfigureAwait(false);
-                await ctx.Channel.SendMessageAsync($"{config.Data.SuccessEmote} Unlocked {tch.Mention}")
+                await ctx.Channel
+                    .SendMessageAsync(Strings.ChannelUnlocked(ctx.Guild.Id, config.Data.SuccessEmote, tch.Mention))
                     .ConfigureAwait(false);
             }
             else
@@ -483,7 +486,8 @@ await ctx.Channel.SendConfirmAsync(Strings.GrabSuccess(ctx.Guild.Id, user.Mentio
                                    new OverwritePermissions();
                 await channel.AddPermissionOverwriteAsync(ctx.Guild.EveryoneRole,
                     currentPerms.Modify(sendMessages: PermValue.Inherit)).ConfigureAwait(false);
-                await ctx.Channel.SendMessageAsync($"{config.Data.SuccessEmote} Unlocked {channel.Mention}")
+                await ctx.Channel
+                    .SendMessageAsync(Strings.ChannelUnlocked(ctx.Guild.Id, config.Data.SuccessEmote, channel.Mention))
                     .ConfigureAwait(false);
             }
         }
@@ -569,12 +573,13 @@ await ctx.Channel.SendConfirmAsync(Strings.GrabSuccess(ctx.Guild.Id, user.Mentio
                     {
                         case 0:
                             await channel.ModifyAsync(x => x.SlowModeInterval = 60).ConfigureAwait(false);
-                            await channel.SendConfirmAsync($"Slowmode enabled in {channel.Mention} for 1 Minute.")
+                            await channel
+                                .SendConfirmAsync(Strings.SlowmodeEnabledOneMinute(ctx.Guild.Id, channel.Mention))
                                 .ConfigureAwait(false);
                             return;
                         case > 0:
                             await channel.ModifyAsync(x => x.SlowModeInterval = 0).ConfigureAwait(false);
-                            await channel.SendConfirmAsync($"Slowmode disabled in {channel.Mention}.")
+                            await channel.SendConfirmAsync(Strings.SlowmodeDisabled(ctx.Guild.Id, channel.Mention))
                                 .ConfigureAwait(false);
                             break;
                     }
@@ -582,7 +587,7 @@ await ctx.Channel.SendConfirmAsync(Strings.GrabSuccess(ctx.Guild.Id, user.Mentio
                     return;
                 case >= 21600:
                     await channel.SendErrorAsync(
-                            "The max discord allows for slowmode is 6 hours! Please try again with a lower value.",
+                            Strings.SlowmodeMax(ctx.Guild.Id),
                             Config)
                         .ConfigureAwait(false);
                     break;
@@ -628,11 +633,11 @@ await ctx.Channel.SendConfirmAsync(Strings.GrabSuccess(ctx.Guild.Id, user.Mentio
                 var wh = await channel.CreateWebhookAsync(name, imgStream).ConfigureAwait(false);
                 await ctx.Channel
                     .SendMessageAsync(
-                        $"{config.Data.SuccessEmote} Created webhook {wh.Name} in {channel.Mention}. The url will be dmed to you.")
+                        Strings.WebhookCreated(ctx.Guild.Id, config.Data.SuccessEmote, wh.Name, channel.Mention))
                     .ConfigureAwait(false);
                 await ctx.User
                     .SendErrorAsync(
-                        $"***DO NOT SHARE THIS WITH ANYONE***\nUrl: https://discordapp.com/api/webhooks/{wh.Id}/{wh.Token}")
+                        Strings.WebhookCreatedDontShare(ctx.Guild.Id, wh.Id, wh.Token))
                     .ConfigureAwait(false);
                 sr.Dispose();
                 await imgStream.DisposeAsync();
@@ -641,11 +646,12 @@ await ctx.Channel.SendConfirmAsync(Strings.GrabSuccess(ctx.Guild.Id, user.Mentio
             {
                 var wh = await channel.CreateWebhookAsync(name).ConfigureAwait(false);
                 await ctx.Channel
-                    .SendMessageAsync($"{config.Data.SuccessEmote} Created webhook {wh.Name} in {channel.Mention}")
+                    .SendMessageAsync(Strings.WebhookCreatedSimple(ctx.Guild.Id, config.Data.SuccessEmote, wh.Name,
+                        channel.Mention))
                     .ConfigureAwait(false);
                 await ctx.User
                     .SendErrorAsync(
-                        $"***DO NOT SHARE THIS WITH ANYONE***\nUrl: https://discordapp.com/api/webhooks/{wh.Id}/{wh.Token}")
+                        Strings.WebhookCreatedDontShare(ctx.Guild.Id, wh.Id, wh.Token))
                     .ConfigureAwait(false);
             }
         }

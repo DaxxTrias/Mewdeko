@@ -12,5 +12,5 @@ public interface ILateExecutor
     /// <param name="guild">The guild in which the message was sent.</param>
     /// <param name="msg">The message that triggered the module.</param>
     /// <returns>A task that represents the asynchronous operation.</returns>
-    Task LateExecute(DiscordShardedClient discordShardedClient, IGuild? guild, IUserMessage msg);
+    public Task LateExecute(DiscordShardedClient discordShardedClient, IGuild? guild, IUserMessage msg);
 }

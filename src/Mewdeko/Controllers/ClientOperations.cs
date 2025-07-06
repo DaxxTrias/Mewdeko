@@ -1,8 +1,9 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Mewdeko.Controllers.Common.ClientOperations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-
+using ChannelType = Mewdeko.Controllers.Common.ClientOperations.ChannelType;
 
 namespace Mewdeko.Controllers;
 
@@ -14,39 +15,7 @@ namespace Mewdeko.Controllers;
 [Authorize("ApiKeyPolicy")]
 public class ClientOperations(DiscordShardedClient client) : Controller
 {
-    /// <summary>
-    ///     Used for getting a specific channel type in the api
-    /// </summary>
-    [JsonConverter(typeof(JsonStringEnumConverter))]
-    public enum ChannelType
-    {
-        /// <summary>
-        ///     For text channels
-        /// </summary>
-        Text,
-
-        /// <summary>
-        ///     For voice channels
-        /// </summary>
-        Voice,
-
-        /// <summary>
-        ///     For category channels
-        /// </summary>
-        Category,
-
-        /// <summary>
-        ///     FOr announcement channels
-        /// </summary>
-        Announcement,
-
-        /// <summary>
-        ///     None
-        /// </summary>
-        None
-    }
-
-    private static readonly JsonSerializerOptions options = new()
+    private static readonly JsonSerializerOptions Options = new()
     {
         ReferenceHandler = ReferenceHandler.IgnoreCycles
     };
@@ -72,6 +41,27 @@ public class ClientOperations(DiscordShardedClient client) : Controller
     }
 
     /// <summary>
+    ///     Gets category channels from a guild
+    /// </summary>
+    /// <param name="guildId">The guild id to get category channels from</param>
+    /// <returns>Category channels or 404 if the guild is not found</returns>
+    [HttpGet("categories/{guildId}")]
+    public async Task<IActionResult> GetCategories(ulong guildId)
+    {
+        await Task.CompletedTask;
+        var guild = client.GetGuild(guildId);
+        if (guild == null)
+            return NotFound();
+
+        var categories = guild.CategoryChannels.Select(x => new NeededRoleInfo
+        {
+            Id = x.Id, Name = x.Name
+        });
+
+        return Ok(categories);
+    }
+
+    /// <summary>
     ///     Gets channels of a specific type from a guildId
     /// </summary>
     /// <param name="guildId">The guild id to get channels from</param>
@@ -91,22 +81,19 @@ public class ClientOperations(DiscordShardedClient client) : Controller
                 .Where(x => x is ITextChannel)
                 .Select(c => new NeededRoleInfo
                 {
-                    Id = c.Id,
-                    Name = c.Name
+                    Id = c.Id, Name = c.Name
                 }),
             ChannelType.Voice => guild.Channels
                 .Where(x => x is IVoiceChannel)
                 .Select(c => new NeededRoleInfo
                 {
-                    Id = c.Id,
-                    Name = c.Name
+                    Id = c.Id, Name = c.Name
                 }),
             // ... similar for other types
             _ => guild.Channels
                 .Select(c => new NeededRoleInfo
                 {
-                    Id = c.Id,
-                    Name = c.Name
+                    Id = c.Id, Name = c.Name
                 })
         };
 
@@ -121,6 +108,7 @@ public class ClientOperations(DiscordShardedClient client) : Controller
     [HttpGet("users/{guildId}")]
     public async Task<IActionResult> GetUsers(ulong guildId)
     {
+        await Task.CompletedTask;
         var guild = client.Guilds.FirstOrDefault(g => g.Id == guildId);
         if (guild == null)
             return NotFound();
@@ -128,12 +116,35 @@ public class ClientOperations(DiscordShardedClient client) : Controller
         return Ok(JsonSerializer.Serialize(guild.Users.Select(x => new
         {
             UserId = x.Id, x.Username, AvatarUrl = x.GetAvatarUrl()
-        }), options));
+        }), Options));
+    }
+
+    /// <summary>
+    ///     Gets all members in a guild
+    /// </summary>
+    /// <param name="guildId">The guild id</param>
+    /// <returns>The list of members in the guild</returns>
+    [HttpGet("members/{guildId}")]
+    public IActionResult GetGuildMembers(ulong guildId)
+    {
+        var guild = client.GetGuild(guildId);
+        if (guild == null) return NotFound("Guild not found");
+
+        var members = guild.Users.Select(user => new
+        {
+            Id = user.Id.ToString(),
+            user.Username,
+            DisplayName = user.Nickname ?? user.Username,
+            AvatarUrl = user.GetAvatarUrl() ?? user.GetDefaultAvatarUrl(),
+            user.IsBot
+        });
+
+        return Ok(members);
     }
 
 
     /// <summary>
-    /// Gets text channels from a guild
+    ///     Gets text channels from a guild
     /// </summary>
     /// <param name="guildId">The guild id to get text channels from</param>
     /// <returns>Text channels or 404 if the guild is not found</returns>
@@ -147,8 +158,7 @@ public class ClientOperations(DiscordShardedClient client) : Controller
 
         var channels = guild.TextChannels.Select(x => new
         {
-            Id = x.Id,
-            Name = x.Name
+            x.Id, x.Name
         });
 
         return Ok(channels);
@@ -158,6 +168,7 @@ public class ClientOperations(DiscordShardedClient client) : Controller
     ///     Gets a single user from a guild.
     /// </summary>
     /// <param name="guildId">The guildId to get the users for</param>
+    /// <param name="userId">The user id of the user to get.</param>
     /// <returns>404 if guild not found or the users if found.</returns>
     [HttpGet("user/{guildId}/{userId}")]
     public async Task<IActionResult> GetUser(ulong guildId, ulong userId)
@@ -185,23 +196,24 @@ public class ClientOperations(DiscordShardedClient client) : Controller
     [HttpGet("mutualguilds/{userId}")]
     public async Task<IActionResult> GetMutualAdminGuilds(ulong userId)
     {
+        await Task.CompletedTask;
         var guilds = client.Guilds;
         var mutuals = guilds
             .Where(x => x.Users.Any(y => y.Id == userId && y.GuildPermissions.Has(GuildPermission.Administrator)))
             .Select(g => new
             {
-
                 id = g.Id,
                 name = g.Name,
                 icon = g.IconId,
                 owner = g.OwnerId == userId,
                 permissions = (int)g.GetUser(userId).GuildPermissions.RawValue,
-                features =  Enum.GetValues(typeof(GuildFeature)).Cast<GuildFeature>().Where(x => g.Features.Value.HasFlag(x)),
-                banner = g.BannerUrl + "?size=4096",
+                features = Enum.GetValues(typeof(GuildFeature)).Cast<GuildFeature>()
+                    .Where(x => g.Features.Value.HasFlag(x)),
+                banner = g.BannerUrl + "?size=4096"
             })
             .ToList();
 
-        if (mutuals.Count!=0)
+        if (mutuals.Count != 0)
             return Ok(mutuals);
         return NotFound();
     }
@@ -214,24 +226,6 @@ public class ClientOperations(DiscordShardedClient client) : Controller
     public async Task<IActionResult> GetGuilds()
     {
         await Task.CompletedTask;
-        return Ok(JsonSerializer.Serialize(client.Guilds.Select(x => x.Id), options));
-    }
-
-    /// <summary>
-    ///     To avoid stupid errors
-    /// </summary>
-    public class NeededRoleInfo
-    {
-        /// <summary>
-        ///     Name
-        /// </summary>
-        [JsonPropertyName("name")]
-        public string Name { get; set; }
-
-        /// <summary>
-        ///     And badge number
-        /// </summary>
-        [JsonPropertyName("id")]
-        public ulong Id { get; set; }
+        return Ok(JsonSerializer.Serialize(client.Guilds.Select(x => x.Id), Options));
     }
 }

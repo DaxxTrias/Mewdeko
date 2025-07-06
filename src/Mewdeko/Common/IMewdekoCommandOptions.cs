@@ -8,5 +8,5 @@ public interface IMewdekoCommandOptions
     /// <summary>
     ///     Normalizes the command options.
     /// </summary>
-    void NormalizeOptions();
+    public void NormalizeOptions();
 }

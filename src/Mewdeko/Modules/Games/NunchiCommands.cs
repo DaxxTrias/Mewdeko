@@ -10,7 +10,7 @@ public partial class Games
     /// <summary>
     ///     A module containing Nunchi commands.
     /// </summary>
-    /// <param name="client"></param>
+    /// <param name="handler">Event handler because discord sucks.</param>
     [Group]
     public class NunchiCommands(EventHandler handler) : MewdekoSubmodule<GamesService>
     {
@@ -37,7 +37,8 @@ public partial class Games
                     return;
                 }
 
-                await ReplyConfirmAsync(Strings.NunchiJoined(ctx.Guild.Id, nunchi.ParticipantCount)).ConfigureAwait(false);
+                await ReplyConfirmAsync(Strings.NunchiJoined(ctx.Guild.Id, nunchi.ParticipantCount))
+                    .ConfigureAwait(false);
                 return;
             }
 
@@ -55,7 +56,7 @@ public partial class Games
             nunchi.OnRoundEnded += Nunchi_OnRoundEnded;
             nunchi.OnUserGuessed += Nunchi_OnUserGuessed;
             nunchi.OnRoundStarted += Nunchi_OnRoundStarted;
-            handler.MessageReceived += ClientMessageReceived;
+            handler.Subscribe("MessageReceived", "NunchiCommands", ClientMessageReceived);
 
             var success = await nunchi.Initialize().ConfigureAwait(false);
             if (!success)
@@ -67,26 +68,26 @@ public partial class Games
 
             async Task ClientMessageReceived(SocketMessage arg)
             {
-                    if (arg.Channel.Id != ctx.Channel.Id)
-                        return;
+                if (arg.Channel.Id != ctx.Channel.Id)
+                    return;
 
-                    if (!int.TryParse(arg.Content, out var number))
-                        return;
-                    try
-                    {
-                        await nunchi.Input(arg.Author.Id, arg.Author.ToString(), number).ConfigureAwait(false);
-                    }
-                    catch
-                    {
-                        // Ignored
-                    }
+                if (!int.TryParse(arg.Content, out var number))
+                    return;
+                try
+                {
+                    await nunchi.Input(arg.Author.Id, arg.Author.ToString(), number).ConfigureAwait(false);
+                }
+                catch
+                {
+                    // Ignored
+                }
             }
 
             async Task NunchiOnGameEnded(NunchiGame arg1, string? arg2)
             {
                 if (Service.NunchiGames.TryRemove(ctx.Guild.Id, out var game))
                 {
-                    handler.MessageReceived -= ClientMessageReceived;
+                    handler.Unsubscribe("MessageReceived", "NunchiCommands", ClientMessageReceived);
                     game.Dispose();
                 }
 

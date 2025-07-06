@@ -1,5 +1,5 @@
-﻿using Mewdeko.Database.DbContextStuff;
-using Microsoft.EntityFrameworkCore;
+﻿using DataModel;
+using LinqToDB;
 
 namespace Mewdeko.Modules.Currency.Services.Impl;
 
@@ -8,17 +8,17 @@ namespace Mewdeko.Modules.Currency.Services.Impl;
 /// </summary>
 public class GuildCurrencyService : ICurrencyService
 {
-    private readonly DbContextProvider dbProvider;
+    private readonly IDataConnectionFactory dbFactory;
     private readonly GuildSettingsService guildSettingsService;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="GuildCurrencyService" /> class.
     /// </summary>
-    /// <param name="dbContext">The database service.</param>
+    /// <param name="dbFactory">The database service.</param>
     /// <param name="guildSettingsService">The guild settings service.</param>
-    public GuildCurrencyService(DbContextProvider dbProvider, GuildSettingsService guildSettingsService)
+    public GuildCurrencyService(IDataConnectionFactory dbFactory, GuildSettingsService guildSettingsService)
     {
-        this.dbProvider = dbProvider;
+        this.dbFactory = dbFactory;
         this.guildSettingsService = guildSettingsService;
     }
 
@@ -26,7 +26,7 @@ public class GuildCurrencyService : ICurrencyService
     public async Task AddUserBalanceAsync(ulong userId, long amount, ulong? guildId)
     {
         if (!guildId.HasValue) throw new ArgumentException("Guild ID must be provided.");
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
         // Check if the user already has a balance entry in the guild
         var existingBalance = await dbContext.GuildUserBalances
@@ -36,7 +36,7 @@ public class GuildCurrencyService : ICurrencyService
         {
             // Update the existing balance
             existingBalance.Balance += amount;
-            dbContext.GuildUserBalances.Update(existingBalance);
+            await dbContext.UpdateAsync(existingBalance);
         }
         else
         {
@@ -45,11 +45,8 @@ public class GuildCurrencyService : ICurrencyService
             {
                 UserId = userId, GuildId = guildId.Value, Balance = amount
             };
-            dbContext.GuildUserBalances.Add(guildBalance);
+            await dbContext.InsertAsync(guildBalance);
         }
-
-        // Save changes to the database
-        await dbContext.SaveChangesAsync();
     }
 
     /// <inheritdoc />
@@ -57,7 +54,7 @@ public class GuildCurrencyService : ICurrencyService
     {
         if (!guildId.HasValue) throw new ArgumentException("Guild ID must be provided.");
 
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
         return await dbContext.GuildUserBalances
             .Where(x => x.UserId == userId && x.GuildId == guildId.Value)
@@ -75,17 +72,16 @@ public class GuildCurrencyService : ICurrencyService
         {
             UserId = userId, GuildId = guildId.Value, Amount = amount, Description = description
         };
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
-        dbContext.TransactionHistories.Add(transaction);
-        await dbContext.SaveChangesAsync();
+        await dbContext.InsertAsync(transaction);
     }
 
     /// <inheritdoc />
     public async Task<IEnumerable<TransactionHistory>?> GetTransactionsAsync(ulong userId, ulong? guildId)
     {
         if (!guildId.HasValue) throw new ArgumentException("Guild ID must be provided.");
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
         return await dbContext.TransactionHistories
             .Where(x => x.UserId == userId && x.GuildId == guildId.Value)?
@@ -97,7 +93,7 @@ public class GuildCurrencyService : ICurrencyService
     {
         if (!guildId.HasValue) throw new ArgumentException("Guild ID must be provided.");
 
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
         return await dbContext.GuildConfigs
             .Where(x => x.GuildId == guildId.Value)
@@ -109,7 +105,7 @@ public class GuildCurrencyService : ICurrencyService
     public async Task<IEnumerable<LbCurrency>> GetAllUserBalancesAsync(ulong? guildId)
     {
         if (!guildId.HasValue) throw new ArgumentException("Guild ID must be provided.");
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
 
         var balances = dbContext.GuildUserBalances

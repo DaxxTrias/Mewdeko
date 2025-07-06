@@ -16,5 +16,5 @@ public interface IUnloadableService
     ///     Asynchronously unloads the service and performs any necessary cleanup.
     /// </summary>
     /// <returns>A task that represents the asynchronous operation.</returns>
-    Task Unload();
+    public Task Unload();
 }

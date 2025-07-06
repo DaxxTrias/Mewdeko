@@ -1,35 +1,25 @@
 ﻿using Discord.Commands;
-using LinqToDB.EntityFrameworkCore;
+using LinqToDB;
 using Mewdeko.Common.Attributes.TextCommands;
-using Mewdeko.Controllers;
-using Mewdeko.Database.DbContextStuff;
+using Mewdeko.Controllers.Common.Bot;
 using Mewdeko.Modules.OwnerOnly.Services;
 
 namespace Mewdeko.Modules.OwnerOnly;
 
 /// <summary>
-/// Commands for managing bot instances that can be controlled via the dashboard.
-/// These commands are only available to the bot owner.
+///     Commands for managing bot instances that can be controlled via the dashboard.
+///     These commands are only available to the bot owner.
 /// </summary>
 [OwnerOnly]
-public class InstanceManagement : MewdekoModuleBase<InstanceManagementService>
+public class InstanceManagement(IDataConnectionFactory dbFactory) : MewdekoModuleBase<InstanceManagementService>
 {
-    private readonly DbContextProvider provider;
-
     /// <summary>
-    /// Initializes a new instance of the InstanceManagement module.
-    /// </summary>
-    public InstanceManagement(DbContextProvider provider)
-    {
-        this.provider = provider;
-    }
-
-    /// <summary>
-    /// Adds a bot instance to be managed from the dashboard.
+    ///     Adds a bot instance to be managed from the dashboard.
     /// </summary>
     /// <param name="instancePort">The port number the instance is running on</param>
     /// <remarks>Only valid port numbers (1024-65535) are accepted</remarks>
-    [Cmd, Aliases]
+    [Cmd]
+    [Aliases]
     [Summary("Adds a bot instance running on the specified port")]
     public async Task AddInstance(int instancePort)
     {
@@ -64,14 +54,15 @@ public class InstanceManagement : MewdekoModuleBase<InstanceManagementService>
     }
 
     /// <summary>
-    /// Lists all registered bot instances and their status.
+    ///     Lists all registered bot instances and their status.
     /// </summary>
-    [Cmd, Aliases]
+    [Cmd]
+    [Aliases]
     [Summary("Lists all registered bot instances")]
     public async Task ListInstances()
     {
-        await using var db = await provider.GetContextAsync();
-        var instances = await db.BotInstances.ToListAsyncLinqToDB();
+        await using var db = await dbFactory.CreateConnectionAsync();
+        var instances = await db.BotInstances.ToListAsync();
 
         if (instances.Count == 0)
         {
@@ -98,10 +89,11 @@ public class InstanceManagement : MewdekoModuleBase<InstanceManagementService>
     }
 
     /// <summary>
-    /// Removes a bot instance from dashboard management.
+    ///     Removes a bot instance from dashboard management.
     /// </summary>
     /// <param name="instancePort">The port number of the instance to remove</param>
-    [Cmd, Aliases]
+    [Cmd]
+    [Aliases]
     [Summary("Removes a bot instance")]
     public async Task RemoveInstance(int instancePort)
     {
@@ -111,7 +103,8 @@ public class InstanceManagement : MewdekoModuleBase<InstanceManagementService>
             return;
         }
 
-        var confirmMessage = await PromptUserConfirmAsync(Strings.RemoveInstanceConfirm(ctx.Guild.Id, instancePort), ctx.User.Id);
+        var confirmMessage =
+            await PromptUserConfirmAsync(Strings.RemoveInstanceConfirm(ctx.Guild.Id, instancePort), ctx.User.Id);
         if (!confirmMessage)
             return;
 
@@ -134,10 +127,11 @@ public class InstanceManagement : MewdekoModuleBase<InstanceManagementService>
     }
 
     /// <summary>
-    /// Checks the status of a specific bot instance.
+    ///     Checks the status of a specific bot instance.
     /// </summary>
     /// <param name="instancePort">The port number of the instance to check</param>
-    [Cmd, Aliases]
+    [Cmd]
+    [Aliases]
     [Summary("Checks the status of a specific instance")]
     public async Task InstanceStatus(int instancePort)
     {
@@ -171,7 +165,7 @@ public class InstanceManagement : MewdekoModuleBase<InstanceManagementService>
         }
     }
 
-    private string GetInstanceDescription(BotStatus.BotStatusModel status) =>
+    private string GetInstanceDescription(BotStatusModel status) =>
         $"{Strings.InstanceStatus(ctx.Guild.Id)} {status.BotStatus}\n" +
         $"{Strings.InstanceVersion(ctx.Guild.Id, status.BotVersion)}\n" +
         $"{Strings.InstanceCommandCount(ctx.Guild.Id, status.CommandsCount)}\n" +

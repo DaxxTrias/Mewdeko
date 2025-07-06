@@ -4,8 +4,6 @@ using Discord.Commands;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Modules.Searches.Common;
 
-using Serilog;
-
 namespace Mewdeko.Modules.Searches;
 
 public partial class Searches
@@ -14,7 +12,8 @@ public partial class Searches
     ///     Module for interacting with osu! APIs and retrieving user data.
     /// </summary>
     [Group]
-    public class OsuCommands(IBotCredentials creds, IHttpClientFactory factory) : MewdekoSubmodule
+    public class OsuCommands(IBotCredentials creds, IHttpClientFactory factory, ILogger<OsuCommands> logger)
+        : MewdekoSubmodule
     {
         /// <summary>
         ///     Retrieves osu! user profile information.
@@ -65,15 +64,16 @@ public partial class Searches
 
                 await ctx.Channel.EmbedAsync(new EmbedBuilder()
                     .WithOkColor()
-                    .WithTitle($"osu! {smode} profile for {user}")
+                    .WithTitle(Strings.OsuProfileTitle(ctx.Guild.Id, smode, user))
                     .WithThumbnailUrl($"https://a.ppy.sh/{userId}")
                     .WithDescription($"https://osu.ppy.sh/u/{userId}")
-                    .AddField("Official Rank", $"#{obj.PpRank}", true)
-                    .AddField("Country Rank", $"#{obj.PpCountryRank} :flag_{obj.Country.ToLower()}:", true)
-                    .AddField("Total PP", Math.Round(obj.PpRaw, 2), true)
-                    .AddField("Accuracy", $"{Math.Round(obj.Accuracy, 2)}%", true)
-                    .AddField("Playcount", obj.Playcount, true)
-                    .AddField("Level", Math.Round(obj.Level), true)
+                    .AddField(Strings.OsuOfficialRank(ctx.Guild.Id), $"#{obj.PpRank}", true)
+                    .AddField(Strings.OsuCountryRank(ctx.Guild.Id),
+                        $"#{obj.PpCountryRank} :flag_{obj.Country.ToLower()}:", true)
+                    .AddField(Strings.OsuTotalPp(ctx.Guild.Id), Math.Round(obj.PpRaw, 2), true)
+                    .AddField(Strings.OsuAccuracy(ctx.Guild.Id), $"{Math.Round(obj.Accuracy, 2)}%", true)
+                    .AddField(Strings.OsuPlaycount(ctx.Guild.Id), obj.Playcount, true)
+                    .AddField(Strings.OsuLevel(ctx.Guild.Id), Math.Round(obj.Level), true)
                 ).ConfigureAwait(false);
             }
             catch (ArgumentOutOfRangeException)
@@ -83,7 +83,7 @@ public partial class Searches
             catch (Exception ex)
             {
                 await ReplyErrorAsync(Strings.OsuFailed(ctx.Guild.Id)).ConfigureAwait(false);
-                Log.Warning(ex, "Osu command failed");
+                logger.LogWarning(ex, "Osu command failed");
             }
         }
 
@@ -128,15 +128,16 @@ public partial class Searches
 
             var embed = new EmbedBuilder()
                 .WithOkColor()
-                .WithTitle($"osu!Gatari {modeStr} profile for {user}")
+                .WithTitle(Strings.OsuProfileTitle(ctx.Guild.Id, $"Gatari {modeStr}", user))
                 .WithThumbnailUrl($"https://a.gatari.pw/{userStats.Id}")
                 .WithDescription($"https://osu.gatari.pw/u/{userStats.Id}")
-                .AddField("Official Rank", $"#{userStats.Rank}", true)
-                .AddField("Country Rank", $"#{userStats.CountryRank} :flag_{userData.Country.ToLower()}:", true)
-                .AddField("Total PP", userStats.Pp, true)
-                .AddField("Accuracy", $"{Math.Round(userStats.AvgAccuracy, 2)}%", true)
-                .AddField("Playcount", userStats.Playcount, true)
-                .AddField("Level", userStats.Level, true);
+                .AddField(Strings.OsuOfficialRank(ctx.Guild.Id), $"#{userStats.Rank}", true)
+                .AddField(Strings.OsuCountryRank(ctx.Guild.Id),
+                    $"#{userStats.CountryRank} :flag_{userData.Country.ToLower()}:", true)
+                .AddField(Strings.OsuTotalPp(ctx.Guild.Id), userStats.Pp, true)
+                .AddField(Strings.OsuAccuracy(ctx.Guild.Id), $"{Math.Round(userStats.AvgAccuracy, 2)}%", true)
+                .AddField(Strings.OsuPlaycount(ctx.Guild.Id), userStats.Playcount, true)
+                .AddField(Strings.OsuLevel(ctx.Guild.Id), userStats.Level, true);
 
             await ctx.Channel.EmbedAsync(embed).ConfigureAwait(false);
         }
@@ -193,9 +194,11 @@ public partial class Searches
                 var mods = ResolveMods(item.EnabledMods);
 
                 var title = $"{map.Artist}-{map.Title} ({map.Version})";
-                var desc = $@"[/b/{item.BeatmapId}](https://osu.ppy.sh/b/{item.BeatmapId})
-{$"{pp}pp",-7} | {$"{acc}%",-7}
-";
+                var desc = $"""
+                            [/b/{item.BeatmapId}](https://osu.ppy.sh/b/{item.BeatmapId})
+                            {$"{pp}pp",-7} | {$"{acc}%",-7}
+
+                            """;
                 if (mods != "+") desc += Format.Bold(mods);
 
                 return (title, desc);
@@ -203,7 +206,7 @@ public partial class Searches
 
             var eb = new EmbedBuilder()
                 .WithOkColor()
-                .WithTitle($"Top 5 plays for {user}");
+                .WithTitle(Strings.OsuTopPlays(ctx.Guild.Id, user));
 
             var mapData = await Task.WhenAll(mapTasks).ConfigureAwait(false);
             foreach (var (title, desc) in mapData.Where(x => x != default)) eb.AddField(title, desc);

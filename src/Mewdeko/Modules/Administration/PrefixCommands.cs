@@ -35,7 +35,8 @@ public partial class Administration
         [Priority(1)]
         public async Task PrefixCommand()
         {
-            await ReplyConfirmAsync(Strings.PrefixCurrent(ctx.Guild.Id, Format.Code(await guildSettings.GetPrefix(ctx.Guild))))
+            await ReplyConfirmAsync(Strings.PrefixCurrent(ctx.Guild.Id,
+                    Format.Code(await guildSettings.GetPrefix(ctx.Guild))))
                 .ConfigureAwait(false);
         }
 
@@ -80,7 +81,7 @@ public partial class Administration
             var newPrefix = await guildSettings.SetPrefix(ctx.Guild, prefix);
 
             await ReplyConfirmAsync(Strings.PrefixNew(ctx.Guild.Id, Format.Code(oldPrefix), Format.Code(newPrefix))
-                ).ConfigureAwait(false);
+            ).ConfigureAwait(false);
         }
     }
 }

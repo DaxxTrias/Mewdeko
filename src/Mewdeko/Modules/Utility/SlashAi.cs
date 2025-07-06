@@ -14,7 +14,6 @@ public partial class SlashUtility
     [Group("ai", "Configure and manage AI settings")]
     public class AiSlashCommands : MewdekoSlashSubmodule<AiService>
     {
-
         /// <summary>
         ///     Handles the button interaction for setting an AI API key, displaying a modal for secure input.
         /// </summary>
@@ -88,6 +87,7 @@ public partial class SlashUtility
                 await ctx.Interaction.SendErrorAsync(Strings.AiNoApiKey(ctx.Guild.Id, provider), Config);
                 return;
             }
+
             var models = await Service.GetSupportedModels(provider, config.ApiKey);
 
             if (model == null)
@@ -109,7 +109,7 @@ public partial class SlashUtility
                 return;
             }
 
-            config.Provider = provider;
+            config.Provider = (int)provider;
             config.Model = model;
             await Service.UpdateConfig(config);
 
@@ -131,7 +131,7 @@ public partial class SlashUtility
             var component = new ComponentBuilder()
                 .WithButton(Strings.AiKeyClickToSet(ctx.Guild.Id), "setaikey")
                 .Build();
-            await ctx.Interaction.RespondAsync("_ _", components: component);
+            await ctx.Interaction.RespondAsync(Strings.EmptyResponse(ctx.Guild.Id), components: component);
         }
 
         /// <summary>

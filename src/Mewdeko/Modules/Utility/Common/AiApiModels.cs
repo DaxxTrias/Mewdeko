@@ -48,6 +48,16 @@ public static class AiResponseParsers
     public class OpenAiResponse
     {
         /// <summary>
+        ///     Gets or sets available choices.
+        /// </summary>
+        public Choice[] Choices { get; set; }
+
+        /// <summary>
+        ///     Gets or sets token usage information.
+        /// </summary>
+        public OpenAiUsage Usage { get; set; }
+
+        /// <summary>
         ///     Represents a choice in the response.
         /// </summary>
         public class Choice
@@ -68,16 +78,6 @@ public static class AiResponseParsers
             /// </summary>
             public string Content { get; set; }
         }
-
-        /// <summary>
-        ///     Gets or sets available choices.
-        /// </summary>
-        public Choice[] Choices { get; set; }
-
-        /// <summary>
-        ///     Gets or sets token usage information.
-        /// </summary>
-        public OpenAiUsage Usage { get; set; }
     }
 
     /// <summary>
@@ -102,6 +102,16 @@ public static class AiResponseParsers
     public class ClaudeResponse
     {
         /// <summary>
+        ///     Gets or sets the content delta.
+        /// </summary>
+        public Content Delta { get; set; }
+
+        /// <summary>
+        ///     Gets or sets token usage information.
+        /// </summary>
+        public ClaudeUsage Usage { get; set; }
+
+        /// <summary>
         ///     Content structure.
         /// </summary>
         public class Content
@@ -111,16 +121,6 @@ public static class AiResponseParsers
             /// </summary>
             public string Text { get; set; }
         }
-
-        /// <summary>
-        ///     Gets or sets the content delta.
-        /// </summary>
-        public Content Delta { get; set; }
-
-        /// <summary>
-        ///     Gets or sets token usage information.
-        /// </summary>
-        public ClaudeUsage Usage { get; set; }
     }
 
     /// <summary>
@@ -145,6 +145,16 @@ public static class AiResponseParsers
     public class GroqResponse
     {
         /// <summary>
+        ///     Gets or sets available choices.
+        /// </summary>
+        public Choice[] Choices { get; set; }
+
+        /// <summary>
+        ///     Gets or sets token usage information.
+        /// </summary>
+        public GroqUsage Usage { get; set; }
+
+        /// <summary>
         ///     Represents a choice in the response.
         /// </summary>
         public class Choice
@@ -165,16 +175,6 @@ public static class AiResponseParsers
             /// </summary>
             public string Content { get; set; }
         }
-
-        /// <summary>
-        ///     Gets or sets available choices.
-        /// </summary>
-        public Choice[] Choices { get; set; }
-
-        /// <summary>
-        ///     Gets or sets token usage information.
-        /// </summary>
-        public GroqUsage Usage { get; set; }
     }
 
     /// <summary>

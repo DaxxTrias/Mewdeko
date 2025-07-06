@@ -1,50 +1,51 @@
 ﻿using System.Net.Http;
 using System.Text.Json;
 using System.Threading;
+using DataModel;
 using LinqToDB;
 using Mewdeko.Common.ModuleBehaviors;
-using Mewdeko.Controllers;
-using Mewdeko.Database.DbContextStuff;
+using Mewdeko.Controllers.Common.Bot;
 using Mewdeko.Services.Impl;
-using Serilog;
 
 namespace Mewdeko.Modules.OwnerOnly.Services;
 
 /// <summary>
-/// Service responsible for managing and monitoring bot instances running on the local machine.
+///     Service responsible for managing and monitoring bot instances running on the local machine.
 /// </summary>
 public class InstanceManagementService : INService, IReadyExecutor
 {
-    private readonly DbContextProvider provider;
-    private readonly IHttpClientFactory factory;
-    private readonly DiscordShardedClient client;
+    // Cached JsonSerializerOptions for performance
+    private static readonly JsonSerializerOptions CachedJsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
+
     private readonly string apiKey;
+    private readonly DiscordShardedClient client;
+    private readonly IDataConnectionFactory dbFactory;
+    private readonly IHttpClientFactory factory;
+    private readonly ILogger<InstanceManagementService> logger;
 
     /// <summary>
-    /// Initializes a new instance of the BotInstanceService.
+    ///     Initializes a new instance of the BotInstanceService.
     /// </summary>
-    /// <param name="provider">The database context provider.</param>
+    /// <param name="dbFactory">The database context provider.</param>
     /// <param name="factory">The HTTP client factory.</param>
+    /// <param name="client">The sharded discord client</param>
     public InstanceManagementService(
-        DbContextProvider provider,
-        IHttpClientFactory factory, DiscordShardedClient client)
+        IDataConnectionFactory dbFactory,
+        IHttpClientFactory factory, DiscordShardedClient client, ILogger<InstanceManagementService> logger)
     {
         var creds = new BotCredentials();
         apiKey = creds.ApiKey;
-        this.provider = provider;
+        this.dbFactory = dbFactory;
         this.factory = factory;
         this.client = client;
-    }
-
-    private HttpClient CreateAuthenticatedClient()
-    {
-        var httpClient = factory.CreateClient();
-        httpClient.DefaultRequestHeaders.Add("X-Api-Key", apiKey);
-        return httpClient;
+        this.logger = logger;
     }
 
     /// <summary>
-    /// Called when bot is ready. Registers itself if master instance.
+    ///     Called when bot is ready. Registers itself if master instance.
     /// </summary>
     public async Task OnReadyAsync()
     {
@@ -55,14 +56,14 @@ public class InstanceManagementService : INService, IReadyExecutor
         {
             try
             {
-                await using var db = await provider.GetContextAsync();
+                await using var db = await dbFactory.CreateConnectionAsync();
                 var exists = await db.BotInstances.AnyAsync(x => x.Port == creds.ApiPort);
 
                 if (!exists)
                 {
-                    Log.Information("Registering self as master instance on port {Port}", creds.ApiPort);
+                    logger.LogInformation("Registering self as master instance on port {Port}", creds.ApiPort);
 
-                    db.BotInstances.Add(new BotInstance
+                    await db.InsertAsync(new BotInstance
                     {
                         Port = creds.ApiPort,
                         BotId = client.CurrentUser.Id,
@@ -71,13 +72,11 @@ public class InstanceManagementService : INService, IReadyExecutor
                         IsActive = true,
                         LastStatusUpdate = DateTime.UtcNow
                     });
-
-                    await db.SaveChangesAsync();
                 }
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Failed to register self as instance");
+                logger.LogError(ex, "Failed to register self as instance");
             }
 
             var periodic = new PeriodicTimer(TimeSpan.FromMinutes(1));
@@ -88,24 +87,30 @@ public class InstanceManagementService : INService, IReadyExecutor
         }
         else
         {
-            Log.Information("Not registering self as instance. Not marked as master instance");
+            logger.LogInformation("Not registering self as instance. Not marked as master instance");
         }
+    }
 
+    private HttpClient CreateAuthenticatedClient()
+    {
+        var httpClient = factory.CreateClient();
+        httpClient.DefaultRequestHeaders.Add("X-Api-Key", apiKey);
+        return httpClient;
     }
 
     /// <summary>
-    /// Registers a new bot instance with the specified port number.
+    ///     Registers a new bot instance with the specified port number.
     /// </summary>
     /// <param name="port">The TCP port number the bot instance is listening on.</param>
     /// <returns>
-    /// A tuple containing:
-    /// - Success: Whether the registration was successful
-    /// - Status: The bot's status information if successful, null otherwise
-    /// - Reason: The reason for failure if not successful, null otherwise
+    ///     A tuple containing:
+    ///     - Success: Whether the registration was successful
+    ///     - Status: The bot's status information if successful, null otherwise
+    ///     - Reason: The reason for failure if not successful, null otherwise
     /// </returns>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when port number is invalid.</exception>
     /// <exception cref="InvalidOperationException">Thrown when not running on master instance.</exception>
-    public async Task<(bool Success, BotStatus.BotStatusModel? Status, string? Reason)> AddInstanceAsync(int port)
+    public async Task<(bool Success, BotStatusModel? Status, string? Reason)> AddInstanceAsync(int port)
     {
         if (!new BotCredentials().IsMasterInstance)
             throw new InvalidOperationException("Can only add instances from master bot.");
@@ -113,7 +118,7 @@ public class InstanceManagementService : INService, IReadyExecutor
         if (port is < 1024 or > 65535)
             throw new ArgumentOutOfRangeException(nameof(port), "Port must be between 1024 and 65535");
 
-        await using var db = await provider.GetContextAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
         if (await db.BotInstances.AnyAsync(x => x.Port == port))
             return (false, null, "instance_already_exists");
 
@@ -121,7 +126,7 @@ public class InstanceManagementService : INService, IReadyExecutor
         if (status == null)
             return (false, null, "instance_not_responding");
 
-        db.BotInstances.Add(new BotInstance
+        await db.InsertAsync(new BotInstance
         {
             Port = port,
             BotId = status.BotId,
@@ -131,17 +136,16 @@ public class InstanceManagementService : INService, IReadyExecutor
             LastStatusUpdate = DateTime.UtcNow
         });
 
-        await db.SaveChangesAsync();
         return (true, status, null);
     }
 
     /// <summary>
-    /// Retrieves the current status of a bot instance.
+    ///     Retrieves the current status of a bot instance.
     /// </summary>
     /// <param name="port">The port number of the bot instance.</param>
     /// <returns>The bot's status information if available, null if the instance is unreachable.</returns>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when port number is invalid.</exception>
-    public async Task<BotStatus.BotStatusModel?> GetInstanceStatusAsync(int port)
+    public async Task<BotStatusModel?> GetInstanceStatusAsync(int port)
     {
         if (port is < 1024 or > 65535)
             throw new ArgumentOutOfRangeException(nameof(port), "Port must be between 1024 and 65535");
@@ -155,58 +159,52 @@ public class InstanceManagementService : INService, IReadyExecutor
                 return null;
 
             var actuResponse = await response.Content.ReadAsStringAsync();
-            return JsonSerializer.Deserialize<BotStatus.BotStatusModel>(
-                actuResponse, new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                }
-            );
+            return JsonSerializer.Deserialize<BotStatusModel>(actuResponse, CachedJsonOptions);
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Failed to get status for instance on port {Port}", port);
+            logger.LogError(ex, "Failed to get status for instance on port {Port}", port);
             return null;
         }
     }
 
     /// <summary>
-    /// Continuously monitors the health of all registered bot instances.
-    /// Updates their active status and last status update timestamp.
+    ///     Continuously monitors the health of all registered bot instances.
+    ///     Updates their active status and last status update timestamp.
     /// </summary>
     /// <returns>A task that completes when monitoring is stopped.</returns>
     private async Task MonitorInstancesAsync()
     {
-        var timer = new PeriodicTimer(TimeSpan.FromMinutes(30));
-        do
+        try
         {
-            try
-            {
-                await using var db = await provider.GetContextAsync();
-                var instances = await db.BotInstances.ToListAsync();
+            await using var db = await dbFactory.CreateConnectionAsync();
 
-                foreach (var instance in instances)
-                {
-                    var status = await GetInstanceStatusAsync(instance.Port);
-                    instance.IsActive = status != null;
-                    instance.LastStatusUpdate = DateTime.UtcNow;
-                }
+            // Actually retrieve the instances from the database
+            var instances = await db.BotInstances.ToListAsync();
 
-                await db.SaveChangesAsync();
-            }
-            catch (Exception ex)
+            foreach (var instance in instances)
             {
-                Log.Error(ex, "Error during instance monitoring");
+                var status = await GetInstanceStatusAsync(instance.Port);
+                instance.IsActive = status != null;
+                instance.LastStatusUpdate = DateTime.UtcNow;
+
+                // Update each instance individually
+                await db.UpdateAsync(instance);
             }
-        } while (await timer.WaitForNextTickAsync());
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error during instance monitoring");
+        }
     }
 
     /// <summary>
-    /// Gets all active bot instances.
+    ///     Gets all active bot instances.
     /// </summary>
     /// <returns>A list of active bot instances.</returns>
     public async Task<List<BotInstance>> GetActiveInstancesAsync()
     {
-        await using var db = await provider.GetContextAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
         return await db.BotInstances
             .Where(x => x.IsActive)
             .OrderBy(x => x.Port)
@@ -214,7 +212,7 @@ public class InstanceManagementService : INService, IReadyExecutor
     }
 
     /// <summary>
-    /// Removes a bot instance from the registry.
+    ///     Removes a bot instance from the registry.
     /// </summary>
     /// <param name="port">The port number of the instance to remove.</param>
     /// <returns>True if the instance was removed, false if it wasn't found.</returns>
@@ -228,14 +226,13 @@ public class InstanceManagementService : INService, IReadyExecutor
         if (port is < 1024 or > 65535)
             throw new ArgumentOutOfRangeException(nameof(port), "Port must be between 1024 and 65535");
 
-        await using var db = await provider.GetContextAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
         var instance = await db.BotInstances.FirstOrDefaultAsync(x => x.Port == port);
 
         if (instance == null)
             return false;
 
-        db.BotInstances.Remove(instance);
-        await db.SaveChangesAsync();
+        await db.DeleteAsync(instance);
         return true;
     }
 }

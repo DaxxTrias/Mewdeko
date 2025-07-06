@@ -9,5 +9,5 @@ public interface IPlaceholderProvider
     ///     Retrieves the list of placeholders along with their corresponding functions.
     /// </summary>
     /// <returns>The list of placeholders and their functions.</returns>
-    IEnumerable<(string Name, Func<string?> Func)> GetPlaceholders();
+    public IEnumerable<(string Name, Func<string?> Func)> GetPlaceholders();
 }

@@ -1,5 +1,4 @@
 ﻿#nullable enable
-using Serilog;
 using StackExchange.Redis;
 
 namespace Mewdeko.Common.PubSub;
@@ -14,6 +13,8 @@ public sealed class RedisPubSub : IPubSub
     /// </summary>
     private readonly IBotCredentials creds;
 
+    private readonly ILogger<RedisPubSub> logger;
+
     /// <summary>
     ///     The Redis connection multiplexer.
     /// </summary>
@@ -24,17 +25,20 @@ public sealed class RedisPubSub : IPubSub
     /// </summary>
     private readonly ISeria serializer;
 
+
     /// <summary>
     ///     Initializes a new instance of the RedisPubSub class.
     /// </summary>
     /// <param name="multi">The Redis connection multiplexer.</param>
     /// <param name="serializer">The serializer for data.</param>
     /// <param name="creds">The bot credentials.</param>
-    public RedisPubSub(ConnectionMultiplexer multi, ISeria serializer, IBotCredentials creds)
+    public RedisPubSub(ConnectionMultiplexer multi, ISeria serializer, IBotCredentials creds,
+        ILogger<RedisPubSub> logger)
     {
         this.multi = multi ?? throw new ArgumentNullException(nameof(multi));
         this.serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
         this.creds = creds ?? throw new ArgumentNullException(nameof(creds));
+        this.logger = logger;
     }
 
     /// <summary>
@@ -49,7 +53,7 @@ public sealed class RedisPubSub : IPubSub
     {
         if (data is null)
         {
-            Log.Warning("Trying to publish a null value for event {EventName}. This is not allowed", key.Key);
+            logger.LogWarning("Trying to publish a null value for event {EventName}. This is not allowed", key.Key);
             return Task.CompletedTask;
         }
 
@@ -85,12 +89,12 @@ public sealed class RedisPubSub : IPubSub
                 }
                 else
                 {
-                    Log.Warning("Received a null value for event {EventName}. This is not allowed", eventName);
+                    logger.LogWarning("Received a null value for event {EventName}. This is not allowed", eventName);
                 }
             }
             catch (Exception ex)
             {
-                Log.Error("Error handling the event {EventName}: {ErrorMessage}", eventName, ex.Message);
+                logger.LogError("Error handling the event {EventName}: {ErrorMessage}", eventName, ex.Message);
             }
         }
     }

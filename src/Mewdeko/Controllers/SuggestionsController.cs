@@ -1,4 +1,5 @@
-﻿using Mewdeko.Database.DbContextStuff;
+﻿using LinqToDB;
+using Mewdeko.Controllers.Common.Suggestions;
 using Mewdeko.Modules.Suggestions.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -9,13 +10,15 @@ namespace Mewdeko.Controllers;
 ///     Service for managing suggestions for guilds
 /// </summary>
 /// <param name="service"></param>
+/// <param name="client"></param>
+/// <param name="dbFactory"></param>
 [ApiController]
 [Route("botapi/[controller]/{guildId}")]
 [Authorize("ApiKeyPolicy")]
 public class SuggestionsController(
     SuggestionsService service,
-    DbContextProvider provider,
-    DiscordShardedClient client)
+    DiscordShardedClient client,
+    IDataConnectionFactory dbFactory)
     : Controller
 {
     /// <summary>
@@ -25,7 +28,7 @@ public class SuggestionsController(
     /// <param name="userId">The user to retrieve suggestions for. (Optional)</param>
     /// <returns>A 404 if data is not found, or an 200 with data if found.</returns>
     [HttpGet("{userId?}")]
-    public async Task<IActionResult> GetSuggestions(ulong guildId, ulong userId = 0)
+    public async Task<IActionResult> GetSuggestions(ulong guildId, ulong? userId = null)
     {
         var suggestions = await service.Suggestions(guildId);
 
@@ -33,7 +36,7 @@ public class SuggestionsController(
         if (suggestions.Count == 0)
             return NotFound("No suggestions for this guild.");
 
-        if (userId == 0) return Ok(suggestions);
+        if (userId is null) return Ok(suggestions);
         var userSuggestions = suggestions.Where(x => x.UserId == userId);
         if (!userSuggestions.Any())
             return NotFound("No suggestions for this user.");
@@ -43,20 +46,24 @@ public class SuggestionsController(
     /// <summary>
     ///     Removes a suggestion by its ID
     /// </summary>
-    /// <param name="guildId"></param>
-    /// <param name="id"></param>
-    /// <returns></returns>
+    /// <param name="guildId">The ID of the guild where the suggestion exists</param>
+    /// <param name="id">The ID of the suggestion to delete</param>
+    /// <returns>OK if deleted successfully, NotFound if suggestion doesn't exist</returns>
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteSuggestion(ulong guildId, ulong id)
     {
-        var context = await provider.GetContextAsync();
+        // We still need the service to check if the suggestion exists
         var suggestion = await service.Suggestions(guildId, id);
 
         if (suggestion == null || suggestion.Length == 0)
             return NotFound();
 
-        context.Suggestions.Remove(suggestion.FirstOrDefault());
-        await context.SaveChangesAsync();
+        // Use linq2db to delete the suggestion
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        await db.Suggestions
+            .Where(s => s.GuildId == guildId && s.SuggestionId == id)
+            .DeleteAsync();
 
         return Ok();
     }
@@ -65,10 +72,8 @@ public class SuggestionsController(
     ///     Updates the status of a suggestion in a guild.
     /// </summary>
     /// <param name="guildId">The ID of the guild where the suggestion was made.</param>
-    /// <param name="userId">The ID of the user updating the suggestion status.</param>
     /// <param name="id">The ID of the suggestion to update.</param>
-    /// <param name="state">The new state of the suggestion.</param>
-    /// <param name="reason">The reason for the status update (optional).</param>
+    /// <param name="update">The new state of the suggestion.</param>
     /// <returns>An IActionResult indicating the result of the operation.</returns>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when the state is not a valid SuggestState value.</exception>
     [HttpPatch("{id}")]
@@ -660,22 +665,5 @@ public class SuggestionsController(
         var guild = client.GetGuild(guildId);
         await service.SetSuggestionEmotes(guild, emotes);
         return Ok("");
-    }
-
-    /// <summary>
-    /// </summary>
-    public class SuggestStateUpdate
-    {
-        /// <summary>
-        /// </summary>
-        public SuggestionsService.SuggestState State { get; set; }
-
-        /// <summary>
-        /// </summary>
-        public string? Reason { get; set; }
-
-        /// <summary>
-        /// </summary>
-        public ulong UserId { get; set; }
     }
 }

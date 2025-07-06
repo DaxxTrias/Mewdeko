@@ -89,7 +89,7 @@ public partial class Utility
             {
                 case null when channel == null:
                     await ctx.Channel.SendErrorAsync(
-                            "You arent in a voice channel, and you haven't mentioned either to use this command!",
+                            Strings.NotInVoice(ctx.Guild.Id),
                             Config)
                         .ConfigureAwait(false);
                     return;
@@ -145,12 +145,12 @@ public partial class Utility
             if (usr is null)
             {
                 await ctx.Channel.SendErrorAsync(
-                    "That user could not be found. Please ensure that was the correct ID.", Config);
+                    Strings.UserNotFoundId(ctx.Guild.Id), Config);
             }
             else
             {
                 var embed = new EmbedBuilder()
-                    .WithTitle("info for fetched user")
+                    .WithTitle(Strings.FetchedUserInfo(ctx.Guild.Id))
                     .AddField("Username", usr)
                     .AddField("Created At", TimestampTag.FromDateTimeOffset(usr.CreatedAt))
                     .AddField("Public Flags", usr.PublicFlags)
@@ -179,15 +179,13 @@ public partial class Utility
             }
             else
             {
-                guild = client.Guilds.FirstOrDefault(
-                    g => string.Equals(g.Name, guildName, StringComparison.InvariantCultureIgnoreCase));
+                guild = client.Guilds.FirstOrDefault(g =>
+                    string.Equals(g.Name, guildName, StringComparison.InvariantCultureIgnoreCase));
             }
 
             if (guild == null)
                 return;
             var ownername = guild.GetUser(guild.OwnerId);
-            var textchn = guild.TextChannels.Count;
-            var voicechn = guild.VoiceChannels.Count;
 
             var component = new ComponentBuilder().WithButton("More Info", "moresinfo");
             var embed = new EmbedBuilder()
@@ -232,7 +230,8 @@ public partial class Utility
                 .WithTitle(ch.Name)
                 .AddField(Strings.Id(ctx.Guild.Id), ch.Id.ToString())
                 .AddField(Strings.CreatedAt(ctx.Guild.Id), TimestampTag.FromDateTimeOffset(ch.CreatedAt))
-                .AddField(Strings.Users(ctx.Guild.Id), (await ch.GetUsersAsync().FlattenAsync().ConfigureAwait(false)).Count())
+                .AddField(Strings.Users(ctx.Guild.Id),
+                    (await ch.GetUsersAsync().FlattenAsync().ConfigureAwait(false)).Count())
                 .AddField("NSFW", ch.IsNsfw)
                 .AddField("Slowmode Interval", TimeSpan.FromSeconds(ch.SlowModeInterval).Humanize())
                 .AddField("Default Thread Archive Duration", ch.DefaultArchiveDuration)

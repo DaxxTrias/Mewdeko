@@ -6,8 +6,6 @@ using Fergun.Interactive.Pagination;
 using Mewdeko.Common.Attributes.InteractionCommands;
 using Mewdeko.Common.Modals;
 using Mewdeko.Modules.Tickets.Services;
-using Serilog;
-using StackExchange.Redis;
 
 namespace Mewdeko.Modules.Tickets;
 
@@ -15,20 +13,22 @@ namespace Mewdeko.Modules.Tickets;
 ///     Provides commands for managing the ticket system.
 /// </summary>
 [Group("tickets", "Manage the ticket system.")]
-public class TicketCommands : MewdekoSlashModuleBase<TicketService>
+public partial class TicketsSlash : MewdekoSlashModuleBase<TicketService>
 {
-    private readonly InteractiveService _interactivity;
     private readonly IDataCache cache;
+    private readonly InteractiveService interactivity;
+    private readonly ILogger<TicketsSlash> logger;
 
     /// <summary>
-    ///     Initializes a new instance of the <see cref="TicketCommands" /> class.
+    ///     Initializes a new instance of the <see cref="TicketsSlash" /> class.
     /// </summary>
     /// <param name="interactivity">The interactive service.</param>
     /// <param name="cache">The cache service.</param>
-    public TicketCommands(InteractiveService interactivity, IDataCache cache)
+    public TicketsSlash(InteractiveService interactivity, IDataCache cache, ILogger<TicketsSlash> logger)
     {
-        _interactivity = interactivity;
+        this.interactivity = interactivity;
         this.cache = cache;
+        this.logger = logger;
     }
 
     /// <summary>
@@ -69,7 +69,7 @@ public class TicketCommands : MewdekoSlashModuleBase<TicketService>
             var menus = await Service.GetPanelSelectMenusAsync(panelId);
 
             var embed = new EmbedBuilder()
-                .WithTitle("Panel Components")
+                .WithTitle(Strings.PanelComponents(ctx.Guild.Id))
                 .WithOkColor();
 
             if (buttons.Any())
@@ -127,14 +127,14 @@ public class TicketCommands : MewdekoSlashModuleBase<TicketService>
 
             if (!buttons.Any() && !menus.Any())
             {
-                embed.WithDescription("No components found on this panel.");
+                embed.WithDescription(Strings.NoPanelComponents(ctx.Guild.Id));
             }
 
             await RespondAsync(embed: embed.Build());
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error listing panel components for panel {PanelId}", panelId);
+            logger.LogError(ex, "Error listing panel components for panel {PanelId}", panelId);
             await RespondAsync("An error occurred while listing panel components.", ephemeral: true);
         }
     }
@@ -173,14 +173,14 @@ public class TicketCommands : MewdekoSlashModuleBase<TicketService>
                 .WithActionOnCancellation(ActionOnStop.DeleteMessage)
                 .Build();
 
-            await _interactivity.SendPaginatorAsync(paginator, Context.Interaction, TimeSpan.FromMinutes(60));
+            await interactivity.SendPaginatorAsync(paginator, Context.Interaction, TimeSpan.FromMinutes(60));
 
             async Task<PageBuilder> PageFactory(int page)
             {
                 await Task.CompletedTask;
                 var pagePanels = panels.Skip(5 * page).Take(5);
                 var pageBuilder = new PageBuilder()
-                    .WithTitle("Ticket Panels")
+                    .WithTitle(Strings.TicketPanels(ctx.Guild.Id))
                     .WithOkColor();
 
                 foreach (var panel in pagePanels)
@@ -225,7 +225,7 @@ public class TicketCommands : MewdekoSlashModuleBase<TicketService>
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error listing panels");
+            logger.LogError(ex, "Error listing panels");
             await RespondAsync("An error occurred while listing panels.", ephemeral: true);
         }
     }
@@ -234,26 +234,62 @@ public class TicketCommands : MewdekoSlashModuleBase<TicketService>
     ///     Deletes a ticket panel.
     /// </summary>
     /// <param name="panelId">The ID of the panel to delete.</param>
+    /// <param name="force">Whether to force deletion even if there are active tickets.</param>
     [SlashCommand("deletepanel", "Deletes a ticket panel")]
     [SlashUserPerm(GuildPermission.Administrator)]
     [RequireContext(ContextType.Guild)]
     public async Task DeletePanel(
         [Summary("panel-id", "Message ID of the panel to delete")]
-        ulong panelId)
+        ulong panelId,
+        [Summary("force", "Force delete even if there are active tickets referencing it")]
+        bool force = false)
     {
-        try
+        var (success, error, activeTickets, deletedTickets) = await Service.DeletePanelAsync(panelId, ctx.Guild, force);
+
+        if (success)
         {
-            await Service.DeletePanelAsync(panelId, ctx.Guild);
-            await RespondAsync("Panel deleted successfully!", ephemeral: true);
+            var totalCleared = (activeTickets?.Count ?? 0) + (deletedTickets?.Count ?? 0);
+            if (totalCleared > 0)
+            {
+                await RespondAsync(
+                    Strings.TicketPanelDeletedWithReferences(ctx.Guild.Id, panelId,
+                        activeTickets?.Count ?? 0, deletedTickets?.Count ?? 0), ephemeral: true);
+            }
+            else
+            {
+                await RespondAsync(Strings.TicketPanelDeleted(ctx.Guild.Id, panelId), ephemeral: true);
+            }
         }
-        catch (InvalidOperationException ex)
+        else
         {
-            await RespondAsync($"Error: {ex.Message}", ephemeral: true);
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "Error deleting panel {PanelId}", panelId);
-            await RespondAsync("An error occurred while deleting the panel.", ephemeral: true);
+            if (activeTickets?.Any() == true || deletedTickets?.Any() == true)
+            {
+                var embed = new EmbedBuilder()
+                    .WithTitle(Strings.CannotDeletePanelTitle(ctx.Guild.Id))
+                    .WithDescription(Strings.CannotDeletePanelDescription(ctx.Guild.Id, activeTickets?.Count ?? 0))
+                    .WithErrorColor();
+
+                if (activeTickets?.Any() == true)
+                {
+                    embed.AddField(Strings.ActiveTickets(ctx.Guild.Id),
+                        string.Join(", ", activeTickets.Select(id => $"#{id}")), true);
+                }
+
+                if (deletedTickets?.Any() == true)
+                {
+                    embed.AddField(Strings.SoftDeletedTickets(ctx.Guild.Id),
+                        string.Join(", ", deletedTickets.Select(id => $"#{id}")), true);
+                }
+
+                embed.AddField(Strings.Options(ctx.Guild.Id),
+                    "Use the `force` parameter to delete anyway (this will unlink all ticket references)");
+
+                await RespondAsync(embed: embed.Build(), ephemeral: true);
+            }
+            else
+            {
+                await RespondAsync(error, ephemeral: true);
+            }
         }
     }
 
@@ -289,7 +325,7 @@ public class TicketCommands : MewdekoSlashModuleBase<TicketService>
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error claiming ticket in channel {ChannelId}", channel.Id);
+            logger.LogError(ex, "Error claiming ticket in channel {ChannelId}", channel.Id);
             await RespondAsync("An error occurred while claiming the ticket.", ephemeral: true);
         }
     }
@@ -315,7 +351,7 @@ public class TicketCommands : MewdekoSlashModuleBase<TicketService>
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error closing ticket in channel {ChannelId}", ctx.Channel.Id);
+            logger.LogError(ex, "Error closing ticket in channel {ChannelId}", ctx.Channel.Id);
             await RespondAsync("An error occurred while closing the ticket.", ephemeral: true);
         }
     }
@@ -353,7 +389,7 @@ public class TicketCommands : MewdekoSlashModuleBase<TicketService>
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error closing ticket in channel {ChannelId}", channel.Id);
+            logger.LogError(ex, "Error closing ticket in channel {ChannelId}", channel.Id);
             await RespondAsync("An error occurred while closing the ticket.", ephemeral: true);
         }
     }
@@ -403,7 +439,7 @@ public class TicketCommands : MewdekoSlashModuleBase<TicketService>
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error unclaiming ticket {TicketId}", ticketId);
+            logger.LogError(ex, "Error unclaiming ticket {TicketId}", ticketId);
             await RespondAsync("An error occurred while unclaiming the ticket.", ephemeral: true);
         }
     }
@@ -457,6 +493,72 @@ public class TicketCommands : MewdekoSlashModuleBase<TicketService>
     {
         return RespondWithModalAsync<TicketPriorityModal>($"ticket_priority:{ticket}");
     }
+
+    #region Select Menu Interaction Handlers
+
+    /// <summary>
+    ///     Handles ticket creation through select menu interactions using wildcard pattern matching.
+    /// </summary>
+    /// <param name="menuId">The unique identifier portion of the select menu's custom ID.</param>
+    /// <param name="values">Array of selected option values from the select menu.</param>
+    /// <remarks>
+    ///     This method handles all ticket creation select menus using a wildcard pattern.
+    ///     If the selected option has a modal configuration, it will display the modal.
+    ///     Otherwise, it creates the ticket immediately.
+    /// </remarks>
+    [ComponentInteraction("ticket_select_*", true)]
+    public async Task HandleTicketSelectMenu(string menuId, string[] values)
+    {
+        try
+        {
+            var selectedValue = values.FirstOrDefault();
+            if (string.IsNullOrEmpty(selectedValue))
+            {
+                await RespondAsync("No option was selected.", ephemeral: true);
+                return;
+            }
+
+            var menu = await Service.GetSelectMenuAsync($"ticket_select_{menuId}");
+            if (menu == null)
+            {
+                await RespondAsync("This ticket menu is no longer available.", ephemeral: true);
+                return;
+            }
+
+            var option = menu.SelectMenuOptions.FirstOrDefault(o => o.Value == selectedValue);
+            if (option == null)
+            {
+                await RespondAsync("The selected option is no longer available.", ephemeral: true);
+                return;
+            }
+
+            if (!string.IsNullOrEmpty(option.ModalJson))
+            {
+                await Service.HandleModalCreation(
+                    ctx.User as IGuildUser,
+                    option.ModalJson,
+                    $"ticket_modal_select:{option.Id}",
+                    ctx.Interaction
+                );
+            }
+            else
+            {
+                await Service.CreateTicketAsync(ctx.Guild, ctx.User, option: option);
+                await RespondAsync("Ticket created successfully!", ephemeral: true);
+            }
+        }
+        catch (InvalidOperationException ex)
+        {
+            await RespondAsync(ex.Message, ephemeral: true);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error handling select menu interaction for menuId {MenuId}", menuId);
+            await RespondAsync("An error occurred while creating your ticket.", ephemeral: true);
+        }
+    }
+
+    #endregion
 
     /// <summary>
     ///     Group for managing ticket panels.
@@ -595,23 +697,23 @@ public class TicketCommands : MewdekoSlashModuleBase<TicketService>
 
                 var creator = await ctx.Guild.GetUserAsync(ticketCase.CreatedBy);
                 var eb = new EmbedBuilder()
-                    .WithTitle($"Case #{ticketCase.Id}: {ticketCase.Title}")
+                    .WithTitle(Strings.TicketCase(ctx.Guild.Id, ticketCase.Id.ToString(), ticketCase.Title))
                     .WithDescription(ticketCase.Description)
                     .AddField("Created By", creator?.Mention ?? "Unknown", true)
                     .AddField("Created At", ticketCase.CreatedAt.ToString("g"), true)
                     .AddField("Status", ticketCase.ClosedAt.HasValue ? "Closed" : "Open", true)
                     .WithOkColor();
 
-                if (ticketCase.LinkedTickets.Any())
+                if (ticketCase.Tickets.Any())
                 {
                     eb.AddField("Linked Tickets",
-                        string.Join("\n", ticketCase.LinkedTickets.Select(t => $"#{t.Id}")));
+                        string.Join("\n", ticketCase.Tickets.Select(t => $"#{t.Id}")));
                 }
 
-                if (ticketCase.Notes.Any())
+                if (ticketCase.CaseNotes.Any())
                 {
                     eb.AddField("Notes",
-                        string.Join("\n\n", ticketCase.Notes
+                        string.Join("\n\n", ticketCase.CaseNotes
                             .OrderByDescending(n => n.CreatedAt)
                             .Take(5)
                             .Select(n => $"{n.Content}\n- <@{n.AuthorId}> at {n.CreatedAt:g}")));
@@ -773,17 +875,17 @@ public class TicketCommands : MewdekoSlashModuleBase<TicketService>
             async Task<PageBuilder> PageFactory(int page)
             {
                 var pageBuilder = new PageBuilder()
-                    .WithTitle("Cases")
+                    .WithTitle(Strings.Cases(ctx.Guild.Id))
                     .WithOkColor();
 
                 foreach (var ticketCase in cases.Skip(page * 10).Take(10))
                 {
                     var creator = await ctx.Guild.GetUserAsync(ticketCase.CreatedBy);
-                    pageBuilder.AddField($"Case #{ticketCase.Id}: {ticketCase.Title}",
+                    pageBuilder.AddField(Strings.TicketCase(ctx.Guild.Id, ticketCase.Id.ToString(), ticketCase.Title),
                         $"Created by: {creator?.Mention ?? "Unknown"}\n" +
                         $"Status: {(ticketCase.ClosedAt.HasValue ? "Closed" : "Open")}\n" +
-                        $"Linked Tickets: {ticketCase.LinkedTickets.Count}\n" +
-                        $"Notes: {ticketCase.Notes.Count}");
+                        $"Linked Tickets: {ticketCase.Tickets.Count()}\n" +
+                        $"Notes: {ticketCase.CaseNotes.Count()}");
                 }
 
                 return pageBuilder;
@@ -820,7 +922,7 @@ public class TicketCommands : MewdekoSlashModuleBase<TicketService>
     public async Task HandlePanelCreation(string channelId, PanelCreationModal modal)
     {
         var channel = await ctx.Guild.GetTextChannelAsync(ulong.Parse(channelId));
-        var panel = await Service.CreatePanelAsync(channel, modal.EmbedJson);
+        await Service.CreatePanelAsync(channel, modal.EmbedJson);
         await RespondAsync("Panel created successfully!", ephemeral: true);
     }
 
@@ -851,108 +953,46 @@ public class TicketCommands : MewdekoSlashModuleBase<TicketService>
     #region Button Style Handlers
 
     /// <summary>
-    ///     Starts the button creation process.
+    ///     Handles the ticket claim button interaction.
     /// </summary>
-    [SlashCommand("addbutton", "Add a button to a ticket panel")]
-    [SlashUserPerm(GuildPermission.Administrator)]
-    public async Task AddButton(
-        [Summary("panel-id")] string panelId)
-    {
-        var components = new ComponentBuilder()
-            .WithButton("Primary", $"btn_style:{panelId}:primary")
-            .WithButton("Success", $"btn_style:{panelId}:success", ButtonStyle.Success)
-            .WithButton("Secondary", $"btn_style:{panelId}:secondary", ButtonStyle.Secondary)
-            .WithButton("Danger", $"btn_style:{panelId}:danger", ButtonStyle.Danger);
-
-        await RespondAsync("Choose the button style:", components: components.Build());
-    }
-
-    /// <summary>
-    ///     Handles button style selection.
-    /// </summary>
-    [ComponentInteraction("btn_style:*:*", true)]
-    public async Task HandleButtonStyle(string panelId, string style)
+    /// <remarks>
+    ///     This method is triggered when a user clicks the claim button on a ticket.
+    ///     It will attempt to claim the ticket for the current user if they have appropriate permissions.
+    /// </remarks>
+    [ComponentInteraction("ticket_claim", true)]
+    public async Task HandleTicketClaim()
     {
         try
         {
-            // Store the selected style
-            await cache.Redis.GetDatabase().StringSetAsync($"btn_creation:{ctx.User.Id}:style", style);
-
-            // Ask for label using NextMessageAsync
-            await ctx.Interaction.SendConfirmAsync(Strings.EnterButtonLabel(ctx.Guild.Id));
-            var label = await NextMessageAsync(ctx.Channel.Id, ctx.User.Id);
-
-            if (string.IsNullOrEmpty(label))
-            {
-                await ctx.Interaction.SendErrorAsync(Strings.ButtonCreationNoLabel(ctx.Guild.Id), Config);
-                return;
-            }
-
-            await cache.Redis.GetDatabase().StringSetAsync($"btn_creation:{ctx.User.Id}:label", label);
-
-            // Ask about emoji
-            var components = new ComponentBuilder()
-                .WithButton("Yes", $"btn_emoji:{panelId}:yes")
-                .WithButton("No", $"btn_emoji:{panelId}:no")
-                .Build();
-
-            await ctx.Interaction.FollowupAsync(
-                embed: new EmbedBuilder().WithDescription("Would you like to add an emoji to the button?").WithOkColor()
-                    .Build(), components: components);
+            var success = await Service.ClaimTicket(ctx.Guild, ctx.Channel.Id, ctx.User as IGuildUser);
+            if (success)
+                await RespondAsync("Ticket claimed successfully!", ephemeral: true);
+            else
+                await RespondAsync("Failed to claim ticket. It may already be claimed or you lack permissions.",
+                    ephemeral: true);
         }
-        catch (Exception e)
+        catch (Exception ex)
         {
-            Log.Error(e, "Error while adding button style");
+            logger.LogError(ex, "Error claiming ticket in channel {ChannelId}", ctx.Channel.Id);
+            await RespondAsync("An error occurred while claiming the ticket.", ephemeral: true);
         }
     }
 
     /// <summary>
-    ///     Handles label input.
+    ///     Handles ticket creation button interactions with wildcard pattern matching.
     /// </summary>
-    [ModalInteraction("btn_label:*", true)]
-    public async Task HandleButtonLabel(string panelId, SimpleInputModal modal)
-    {
-        // Store the label
-        await cache.Redis.GetDatabase().StringSetAsync($"btn_creation:{ctx.User.Id}:label", modal.Input);
-
-        // Ask if they want an emoji
-        var components = new ComponentBuilder()
-            .WithButton("Yes", $"btn_emoji:{panelId}:yes")
-            .WithButton("No", $"btn_emoji:{panelId}:no");
-
-        await RespondAsync("Would you like to add an emoji to the button?", components: components.Build());
-    }
-
-    /// <summary>
-    ///     Handles emoji choice.
-    /// </summary>
-    [ComponentInteraction("btn_emoji:*:*", true)]
-    public async Task HandleEmojiChoice(string panelId, string choice)
-    {
-        if (choice == "yes")
-        {
-            await ctx.Interaction.SendConfirmAsync(Strings.EnterEmoji(ctx.Guild.Id));
-            var emoji = await NextMessageAsync(ctx.Channel.Id, ctx.User.Id);
-
-            if (!string.IsNullOrEmpty(emoji))
-            {
-                await cache.Redis.GetDatabase().StringSetAsync($"btn_creation:{ctx.User.Id}:emoji", emoji);
-            }
-        }
-
-        await PromptTicketSettings(panelId);
-    }
-
-    /// <summary>
-    ///     Handles ticket button clicks and shows modal if configured
-    /// </summary>
+    /// <param name="buttonId">The unique identifier portion of the button's custom ID.</param>
+    /// <remarks>
+    ///     This method handles all ticket creation buttons using a wildcard pattern.
+    ///     If the button has a modal configuration, it will display the modal.
+    ///     Otherwise, it creates the ticket immediately.
+    /// </remarks>
     [ComponentInteraction("ticket_btn_*", true)]
-    [RequireContext(ContextType.Guild)]
-    public async Task HandleTicketButton(string button)
+    public async Task HandleTicketButton(string buttonId)
     {
         try
         {
-            var panelButton = await Service.GetButtonAsync($"ticket_btn_{button}");
+            var panelButton = await Service.GetButtonAsync($"ticket_btn_{buttonId}");
             if (panelButton == null)
             {
                 await RespondAsync("This ticket type is no longer available.", ephemeral: true);
@@ -984,58 +1024,98 @@ public class TicketCommands : MewdekoSlashModuleBase<TicketService>
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error handling ticket button");
+            logger.LogError(ex, "Error handling ticket button for buttonId {ButtonId}", buttonId);
             await RespondAsync("An error occurred while creating your ticket.", ephemeral: true);
         }
     }
 
     /// <summary>
-    ///     Handles emoji input.
+    ///     Handles button style selection during the button creation workflow.
     /// </summary>
-    [ModalInteraction("btn_emoji_input:*", true)]
-    public async Task HandleEmojiInput(string panelId, SimpleInputModal modal)
+    /// <param name="panelId">The ID of the panel the button is being added to.</param>
+    /// <param name="style">The selected button style (primary, success, secondary, or danger).</param>
+    /// <remarks>
+    ///     This method is part of the button creation workflow and stores the selected style
+    ///     in Redis cache for later use when the button is actually created.
+    /// </remarks>
+    [ComponentInteraction("btn_style:*:*", true)]
+    public async Task HandleButtonStyle(string panelId, string style)
     {
-        await cache.Redis.GetDatabase().StringSetAsync($"btn_creation:{ctx.User.Id}:emoji", modal.Input);
-        await PromptTicketSettings(panelId);
-    }
-
-    private async Task PromptTicketSettings(string panelId)
-    {
-        // Get guild categories
-        var categories = await ctx.Guild.GetCategoriesAsync();
-
-        var menuBuilder = new SelectMenuBuilder()
-            .WithPlaceholder("Select Categories")
-            .WithCustomId($"btn_category:{panelId}")
-            .WithMinValues(0)
-            .WithMaxValues(2);
-
-        // Add all categories as options
-        foreach (var category in categories)
+        try
         {
-            menuBuilder.AddOption(
-                $"Create: {category.Name}", // Label
-                $"create:{category.Id}", // Value includes type and ID
-                "Category for new tickets"
-            );
-            menuBuilder.AddOption(
-                $"Archive: {category.Name}", // Label
-                $"archive:{category.Id}", // Value includes type and ID
-                "Category for archived tickets"
-            );
+            await cache.Redis.GetDatabase().StringSetAsync($"btn_creation:{ctx.User.Id}:style", style);
+
+            await ctx.Interaction.SendConfirmAsync(Strings.EnterButtonLabel(ctx.Guild.Id));
+            var label = await NextMessageAsync(ctx.Channel.Id, ctx.User.Id);
+
+            if (string.IsNullOrEmpty(label))
+            {
+                await ctx.Interaction.SendErrorAsync(Strings.ButtonCreationCancelled(ctx.Guild.Id), Config);
+                return;
+            }
+
+            await cache.Redis.GetDatabase().StringSetAsync($"btn_creation:{ctx.User.Id}:label", label);
+
+            var components = new ComponentBuilder()
+                .WithButton("Yes", $"btn_emoji:{panelId}:yes")
+                .WithButton("No", $"btn_emoji:{panelId}:no")
+                .Build();
+
+            await ctx.Interaction.FollowupAsync(
+                embed: new EmbedBuilder().WithDescription(Strings.AddEmojiToButton(ctx.Guild.Id)).WithOkColor()
+                    .Build(),
+                components: components);
         }
-
-        var components = new ComponentBuilder()
-            .WithSelectMenu(menuBuilder)
-            .WithButton("Skip", $"btn_category:{panelId}:skip")
-            .Build();
-
-        await FollowupAsync("Select ticket categories (optional):", components: components);
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error handling button style selection for panel {PanelId}", panelId);
+            await RespondAsync("An error occurred during button creation.", ephemeral: true);
+        }
     }
 
     /// <summary>
-    ///     Handles category selection.
+    ///     Handles emoji choice selection during button creation.
     /// </summary>
+    /// <param name="panelId">The ID of the panel the button is being added to.</param>
+    /// <param name="choice">The user's choice regarding emoji addition (yes or no).</param>
+    /// <remarks>
+    ///     If the user chooses 'yes', prompts for emoji input. Then proceeds to the
+    ///     ticket settings configuration step.
+    /// </remarks>
+    [ComponentInteraction("btn_emoji:*:*", true)]
+    public async Task HandleEmojiChoice(string panelId, string choice)
+    {
+        try
+        {
+            if (choice == "yes")
+            {
+                await ctx.Interaction.SendConfirmAsync(Strings.PleaseEnterEmoji(ctx.Guild.Id));
+                var emoji = await NextMessageAsync(ctx.Channel.Id, ctx.User.Id);
+
+                if (!string.IsNullOrEmpty(emoji))
+                {
+                    await cache.Redis.GetDatabase().StringSetAsync($"btn_creation:{ctx.User.Id}:emoji", emoji);
+                }
+            }
+
+            await PromptTicketSettings(panelId);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error handling emoji choice for panel {PanelId}", panelId);
+            await RespondAsync("An error occurred during button creation.", ephemeral: true);
+        }
+    }
+
+    /// <summary>
+    ///     Handles category selection during button creation.
+    /// </summary>
+    /// <param name="panelId">The ID of the panel the button is being added to.</param>
+    /// <param name="values">Array of selected category values in format "type:categoryId".</param>
+    /// <remarks>
+    ///     Processes category selections for both ticket creation and archiving.
+    ///     Values are expected in format "create:categoryId" or "archive:categoryId".
+    /// </remarks>
     [ComponentInteraction("btn_category:*", true)]
     public async Task HandleCategorySelect(string panelId, string[] values)
     {
@@ -1048,11 +1128,13 @@ public class TicketCommands : MewdekoSlashModuleBase<TicketService>
             foreach (var selection in values)
             {
                 var parts = selection.Split(':');
-                var id = ulong.Parse(parts[1]);
-                if (parts[0] == "create")
-                    createCategory = id;
-                else if (parts[0] == "archive")
-                    archiveCategory = id;
+                if (parts.Length == 2 && ulong.TryParse(parts[1], out var id))
+                {
+                    if (parts[0] == "create")
+                        createCategory = id;
+                    else if (parts[0] == "archive")
+                        archiveCategory = id;
+                }
             }
 
             await cache.Redis.GetDatabase()
@@ -1077,15 +1159,21 @@ public class TicketCommands : MewdekoSlashModuleBase<TicketService>
 
             await FollowupAsync("Select support roles (optional):", components: components);
         }
-        catch (Exception e)
+        catch (Exception ex)
         {
-            Log.Error(e, "OOPSIE");
+            logger.LogError(ex, "Error handling category selection for panel {PanelId}", panelId);
+            await FollowupAsync("An error occurred during button creation.", ephemeral: true);
         }
     }
 
     /// <summary>
-    ///     Handles role selection.
+    ///     Handles support role selection during button creation.
     /// </summary>
+    /// <param name="panelId">The ID of the panel the button is being added to.</param>
+    /// <param name="values">Array of selected role IDs.</param>
+    /// <remarks>
+    ///     Stores the selected support roles and proceeds to viewer role selection.
+    /// </remarks>
     [ComponentInteraction("btn_roles:*", true)]
     public async Task HandleRoleSelect(string panelId, string[] values)
     {
@@ -1097,274 +1185,381 @@ public class TicketCommands : MewdekoSlashModuleBase<TicketService>
                     .StringSetAsync($"btn_creation:{ctx.User.Id}:roles", JsonSerializer.Serialize(values));
             }
 
-            var autoCloseMenu = new SelectMenuBuilder()
-                .WithPlaceholder("Select Auto-Close Time")
-                .WithCustomId($"btn_autoclose:{panelId}")
-                .WithMinValues(1)
-                .WithMaxValues(1)
-                .AddOption("1 hour", "1", "Auto-close after 1 hour of inactivity")
-                .AddOption("12 hours", "12", "Auto-close after 12 hours of inactivity")
-                .AddOption("24 hours", "24", "Auto-close after 24 hours of inactivity")
-                .AddOption("48 hours", "48", "Auto-close after 48 hours of inactivity")
-                .AddOption("1 week", "168", "Auto-close after 1 week of inactivity");
+            var viewerRoleMenu = new SelectMenuBuilder()
+                .WithPlaceholder("Select Viewer Roles")
+                .WithCustomId($"btn_viewer_roles:{panelId}")
+                .WithMinValues(0);
+
+            foreach (var role in ctx.Guild.Roles)
+            {
+                viewerRoleMenu.AddOption(role.Name, role.Id.ToString(), $"Viewer role: {role.Name}");
+            }
 
             var components = new ComponentBuilder()
-                .WithSelectMenu(autoCloseMenu)
-                .WithButton("Skip", $"btn_autoclose:{panelId}:skip")
+                .WithSelectMenu(viewerRoleMenu)
+                .WithButton("Skip", $"btn_viewer_roles:{panelId}:skip")
                 .Build();
 
-            await RespondAsync("Select auto-close time (optional):", components: components);
+            await RespondAsync("Select viewer roles (optional):", components: components);
         }
-        catch (Exception e)
+        catch (Exception ex)
         {
-            Log.Error(e, "OOPSIE");
+            logger.LogError(ex, "Error handling role selection for panel {PanelId}", panelId);
+            await RespondAsync("An error occurred during button creation.", ephemeral: true);
         }
     }
 
     /// <summary>
-    ///     Handles the completion of support role selection and prompts for viewer roles.
+    ///     Handles the completion of support role selection.
     /// </summary>
-    /// <param name="panelId">The ID of the panel being configured.</param>
+    /// <param name="panelId">The ID of the panel the button is being added to.</param>
     /// <remarks>
-    ///     This method is called after support roles have been selected. It presents a selection menu
-    ///     for viewer roles, which are roles that can view but not interact with tickets.
+    ///     This method is called when the user clicks "Continue" after support role selection.
+    ///     It presents the viewer role selection interface.
     /// </remarks>
     [ComponentInteraction("btn_roles:*:done", true)]
     public async Task HandleRoleDone(string panelId)
     {
-        var viewerRoleMenu = new SelectMenuBuilder()
-            .WithPlaceholder("Select Viewer Roles")
-            .WithCustomId($"btn_viewer_roles:{panelId}")
-            .WithMinValues(0);
-        foreach (var role in ctx.Guild.Roles)
+        try
         {
-            viewerRoleMenu.AddOption(role.Name, role.Id.ToString(), $"Viewer role: {role.Name}");
-        }
+            var viewerRoleMenu = new SelectMenuBuilder()
+                .WithPlaceholder("Select Viewer Roles")
+                .WithCustomId($"btn_viewer_roles:{panelId}")
+                .WithMinValues(0);
 
-        var components = new ComponentBuilder()
-            .WithSelectMenu(viewerRoleMenu)
-            .WithButton("Skip", $"btn_viewer_roles:{panelId}:skip")
-            .Build();
-        await RespondAsync("Select viewer roles (optional):", components: components);
+            foreach (var role in ctx.Guild.Roles)
+            {
+                viewerRoleMenu.AddOption(role.Name, role.Id.ToString(), $"Viewer role: {role.Name}");
+            }
+
+            var components = new ComponentBuilder()
+                .WithSelectMenu(viewerRoleMenu)
+                .WithButton("Skip", $"btn_viewer_roles:{panelId}:skip")
+                .Build();
+
+            await RespondAsync("Select viewer roles (optional):", components: components);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error transitioning to viewer role selection for panel {PanelId}", panelId);
+            await RespondAsync("An error occurred during button creation.", ephemeral: true);
+        }
     }
 
     /// <summary>
-    ///     Handles viewer role selection and additional ticket configuration settings.
+    ///     Handles viewer role selection and additional configuration prompts.
     /// </summary>
-    /// <param name="panelId">The ID of the panel being configured.</param>
-    /// <param name="values">The selected viewer role IDs.</param>
+    /// <param name="panelId">The ID of the panel the button is being added to.</param>
+    /// <param name="values">Array of selected viewer role IDs.</param>
     /// <remarks>
-    ///     This method processes selected viewer roles and sequentially prompts for:
-    ///     - Ticket opening message
-    ///     - Modal JSON configuration
-    ///     - Allowed priorities
-    ///     - Default priority
-    ///     - Required response time
-    ///     Each prompt allows skipping via 'skip' message.
+    ///     Stores viewer roles and sequentially prompts for ticket opening message,
+    ///     modal JSON configuration, allowed priorities, default priority, and response time.
     /// </remarks>
     [ComponentInteraction("btn_viewer_roles:*", true)]
     public async Task HandleViewerRoleSelect(string panelId, string[] values)
     {
-        if (values.Any())
+        try
         {
-            await cache.Redis.GetDatabase()
-                .StringSetAsync($"btn_creation:{ctx.User.Id}:viewer_roles", JsonSerializer.Serialize(values));
-        }
-
-        await ctx.Interaction.SendConfirmAsync(Strings.EnterTicketOpening(ctx.Guild.Id));
-
-        var openMsg = await NextMessageAsync(ctx.Channel.Id, ctx.User.Id);
-        if (!string.IsNullOrEmpty(openMsg) && openMsg.ToLower() != "skip")
-        {
-            await cache.Redis.GetDatabase()
-                .StringSetAsync($"btn_creation:{ctx.User.Id}:open_message", openMsg);
-        }
-
-        await ctx.Interaction.SendConfirmAsync(Strings.EnterModalJson(ctx.Guild.Id));
-
-        var modalJson = await NextMessageAsync(ctx.Channel.Id, ctx.User.Id);
-        if (!string.IsNullOrEmpty(modalJson) && modalJson.ToLower() != "skip")
-        {
-            await cache.Redis.GetDatabase()
-                .StringSetAsync($"btn_creation:{ctx.User.Id}:modal_json", modalJson);
-        }
-
-        await ctx.Interaction.SendConfirmAsync(
-            "Please enter the allowed priorities, comma separated (or type 'skip' to skip):");
-
-        var priorities = await NextMessageAsync(ctx.Channel.Id, ctx.User.Id);
-        if (!string.IsNullOrEmpty(priorities) && priorities.ToLower() != "skip")
-        {
-            await cache.Redis.GetDatabase()
-                .StringSetAsync($"btn_creation:{ctx.User.Id}:priorities",
-                    JsonSerializer.Serialize(priorities.Split(',').Select(p => p.Trim())));
-            await ctx.Interaction.SendConfirmAsync(Strings.EnterPriority(ctx.Guild.Id));
-            var defaultPriority = await NextMessageAsync(ctx.Channel.Id, ctx.User.Id);
-            if (!string.IsNullOrEmpty(defaultPriority) && defaultPriority.ToLower() != "skip")
+            if (values.Any())
             {
                 await cache.Redis.GetDatabase()
-                    .StringSetAsync($"btn_creation:{ctx.User.Id}:default_priority", defaultPriority);
+                    .StringSetAsync($"btn_creation:{ctx.User.Id}:viewer_roles", JsonSerializer.Serialize(values));
             }
-        }
 
-        var responseTimeMenu = new SelectMenuBuilder()
-            .WithPlaceholder("Select Response Time")
-            .WithCustomId($"btn_response_time:{panelId}")
-            .WithMinValues(0)
-            .WithMaxValues(1)
-            .AddOption("1 hour", "1", "Response required within 1 hour")
-            .AddOption("4 hours", "4", "Response required within 4 hours")
-            .AddOption("12 hours", "12", "Response required within 12 hours")
-            .AddOption("24 hours", "24", "Response required within 24 hours");
-        var components = new ComponentBuilder()
-            .WithSelectMenu(responseTimeMenu)
-            .WithButton("Skip", $"btn_response_time:{panelId}:skip")
-            .Build();
-        await ctx.Interaction.FollowupAsync("Select required response time (optional):", components: components);
+            await ctx.Interaction.SendConfirmAsync(
+                "Please enter a custom ticket opening message (or type 'skip' to use default):");
+            var openMsg = await NextMessageAsync(ctx.Channel.Id, ctx.User.Id);
+            if (!string.IsNullOrEmpty(openMsg) && openMsg.ToLower() != "skip")
+            {
+                await cache.Redis.GetDatabase()
+                    .StringSetAsync($"btn_creation:{ctx.User.Id}:open_message", openMsg);
+            }
+
+            await ctx.Interaction.SendConfirmAsync("Please enter modal JSON configuration (or type 'skip' to skip):");
+            var modalJson = await NextMessageAsync(ctx.Channel.Id, ctx.User.Id);
+            if (!string.IsNullOrEmpty(modalJson) && modalJson.ToLower() != "skip")
+            {
+                await cache.Redis.GetDatabase()
+                    .StringSetAsync($"btn_creation:{ctx.User.Id}:modal_json", modalJson);
+            }
+
+            await ctx.Interaction.SendConfirmAsync(
+                "Please enter allowed priorities, comma separated (or type 'skip' to skip):");
+            var priorities = await NextMessageAsync(ctx.Channel.Id, ctx.User.Id);
+            if (!string.IsNullOrEmpty(priorities) && priorities.ToLower() != "skip")
+            {
+                await cache.Redis.GetDatabase()
+                    .StringSetAsync($"btn_creation:{ctx.User.Id}:priorities",
+                        JsonSerializer.Serialize(priorities.Split(',').Select(p => p.Trim())));
+
+                await ctx.Interaction.SendConfirmAsync("Please enter the default priority (or type 'skip' to skip):");
+                var defaultPriority = await NextMessageAsync(ctx.Channel.Id, ctx.User.Id);
+                if (!string.IsNullOrEmpty(defaultPriority) && defaultPriority.ToLower() != "skip")
+                {
+                    await cache.Redis.GetDatabase()
+                        .StringSetAsync($"btn_creation:{ctx.User.Id}:default_priority", defaultPriority);
+                }
+            }
+
+            var responseTimeMenu = new SelectMenuBuilder()
+                .WithPlaceholder("Select Response Time")
+                .WithCustomId($"btn_response_time:{panelId}")
+                .WithMinValues(0)
+                .WithMaxValues(1)
+                .AddOption("1 hour", "1", "Response required within 1 hour")
+                .AddOption("4 hours", "4", "Response required within 4 hours")
+                .AddOption("12 hours", "12", "Response required within 12 hours")
+                .AddOption("24 hours", "24", "Response required within 24 hours");
+
+            var components = new ComponentBuilder()
+                .WithSelectMenu(responseTimeMenu)
+                .WithButton("Skip", $"btn_response_time:{panelId}:skip")
+                .Build();
+
+            await ctx.Interaction.FollowupAsync("Select required response time (optional):", components: components);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error handling viewer role selection for panel {PanelId}", panelId);
+            await RespondAsync("An error occurred during button creation.", ephemeral: true);
+        }
     }
 
     /// <summary>
-    ///     Handles final confirmation.
+    ///     Handles response time selection during button creation.
     /// </summary>
+    /// <param name="panelId">The ID of the panel the button is being added to.</param>
+    /// <param name="values">Array containing the selected response time in hours.</param>
+    /// <remarks>
+    ///     Stores the response time setting and shows the final confirmation dialog.
+    /// </remarks>
+    [ComponentInteraction("btn_response_time:*", true)]
+    public async Task HandleResponseTimeSelect(string panelId, string[] values)
+    {
+        try
+        {
+            if (values.Any())
+            {
+                await cache.Redis.GetDatabase()
+                    .StringSetAsync($"btn_creation:{ctx.User.Id}:response_time", values[0]);
+            }
+
+            var components = new ComponentBuilder()
+                .WithButton("Confirm", $"btn_confirm:{panelId}")
+                .WithButton("Cancel", $"btn_cancel:{panelId}", ButtonStyle.Danger)
+                .Build();
+
+            await RespondAsync("Review and confirm button creation:", components: components);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error handling response time selection for panel {PanelId}", panelId);
+            await RespondAsync("An error occurred during button creation.", ephemeral: true);
+        }
+    }
+
+    /// <summary>
+    ///     Handles skipping response time selection during button creation.
+    /// </summary>
+    /// <param name="panelId">The ID of the panel the button is being added to.</param>
+    /// <remarks>
+    ///     Shows the final confirmation dialog without setting a response time requirement.
+    /// </remarks>
+    [ComponentInteraction("btn_response_time:*:skip", true)]
+    public async Task HandleResponseTimeSkip(string panelId)
+    {
+        try
+        {
+            var components = new ComponentBuilder()
+                .WithButton("Confirm", $"btn_confirm:{panelId}")
+                .WithButton("Cancel", $"btn_cancel:{panelId}", ButtonStyle.Danger)
+                .Build();
+
+            await RespondAsync("Review and confirm button creation:", components: components);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error handling response time skip for panel {PanelId}", panelId);
+            await RespondAsync("An error occurred during button creation.", ephemeral: true);
+        }
+    }
+
+    /// <summary>
+    ///     Handles auto-close time selection during button creation.
+    /// </summary>
+    /// <param name="panelId">The ID of the panel the button is being added to.</param>
+    /// <param name="values">Array containing the selected auto-close time in hours.</param>
+    /// <remarks>
+    ///     Stores the auto-close setting and shows the final confirmation dialog.
+    /// </remarks>
+    [ComponentInteraction("btn_autoclose:*", true)]
+    public async Task HandleAutoCloseSelect(string panelId, string[] values)
+    {
+        try
+        {
+            if (values.Any())
+            {
+                await cache.Redis.GetDatabase()
+                    .StringSetAsync($"btn_creation:{ctx.User.Id}:autoclose", values[0]);
+            }
+
+            var components = new ComponentBuilder()
+                .WithButton("Confirm", $"btn_confirm:{panelId}")
+                .WithButton("Cancel", $"btn_cancel:{panelId}", ButtonStyle.Danger)
+                .Build();
+
+            await RespondAsync("Review and confirm button creation:", components: components);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error handling auto-close selection for panel {PanelId}", panelId);
+            await RespondAsync("An error occurred during button creation.", ephemeral: true);
+        }
+    }
+
+    /// <summary>
+    ///     Handles skipping auto-close time selection during button creation.
+    /// </summary>
+    /// <param name="panelId">The ID of the panel the button is being added to.</param>
+    /// <remarks>
+    ///     Shows the final confirmation dialog without setting an auto-close time.
+    /// </remarks>
+    [ComponentInteraction("btn_autoclose:*:skip", true)]
+    public async Task HandleAutoCloseSkip(string panelId)
+    {
+        try
+        {
+            var components = new ComponentBuilder()
+                .WithButton("Confirm", $"btn_confirm:{panelId}")
+                .WithButton("Cancel", $"btn_cancel:{panelId}", ButtonStyle.Danger)
+                .Build();
+
+            await RespondAsync("Review and confirm button creation:", components: components);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error handling auto-close skip for panel {PanelId}", panelId);
+            await RespondAsync("An error occurred during button creation.", ephemeral: true);
+        }
+    }
+
+    /// <summary>
+    ///     Handles the final confirmation and creation of a button.
+    /// </summary>
+    /// <param name="panelId">The ID of the panel to add the button to.</param>
+    /// <remarks>
+    ///     Retrieves all stored settings from Redis cache, validates them, creates the button
+    ///     using the ticket service, and cleans up the cache data.
+    /// </remarks>
     [ComponentInteraction("btn_confirm:*", true)]
     public async Task HandleConfirmation(ulong panelId)
     {
-        // Get all stored settings
-        var style = await cache.Redis.GetDatabase().StringGetAsync($"btn_creation:{ctx.User.Id}:style");
-        var label = await cache.Redis.GetDatabase().StringGetAsync($"btn_creation:{ctx.User.Id}:label");
-        var emoji = await cache.Redis.GetDatabase().StringGetAsync($"btn_creation:{ctx.User.Id}:emoji");
-        var category = await cache.Redis.GetDatabase().StringGetAsync($"btn_creation:{ctx.User.Id}:category");
-        var archiveCategory =
-            await cache.Redis.GetDatabase().StringGetAsync($"btn_creation:{ctx.User.Id}:archive_category");
-        var roles = await cache.Redis.GetDatabase().StringGetAsync($"btn_creation:{ctx.User.Id}:roles");
-        var viewerRoles = await cache.Redis.GetDatabase().StringGetAsync($"btn_creation:{ctx.User.Id}:viewer_roles");
-        var openMessage = await cache.Redis.GetDatabase().StringGetAsync($"btn_creation:{ctx.User.Id}:open_message");
-        var modalJson = await cache.Redis.GetDatabase().StringGetAsync($"btn_creation:{ctx.User.Id}:modal_json");
-        var priorities = await cache.Redis.GetDatabase().StringGetAsync($"btn_creation:{ctx.User.Id}:priorities");
-        var defaultPriority =
-            await cache.Redis.GetDatabase().StringGetAsync($"btn_creation:{ctx.User.Id}:default_priority");
-        var autoClose = await cache.Redis.GetDatabase().StringGetAsync($"btn_creation:{ctx.User.Id}:autoclose");
-
-        // Create the button
-        var panel = await Service.GetPanelAsync(panelId);
-        if (panel == null)
-        {
-            await RespondAsync("Panel not found!", ephemeral: true);
-            return;
-        }
-
         try
         {
-            // Parse style
-            var buttonStyle = ButtonStyle.Primary; // default
-            if (style.HasValue)
+            await DeferAsync();
+
+            // Get all stored settings
+            var style = await cache.Redis.GetDatabase().StringGetAsync($"btn_creation:{ctx.User.Id}:style");
+            var label = await cache.Redis.GetDatabase().StringGetAsync($"btn_creation:{ctx.User.Id}:label");
+            var emoji = await cache.Redis.GetDatabase().StringGetAsync($"btn_creation:{ctx.User.Id}:emoji");
+            var category = await cache.Redis.GetDatabase().StringGetAsync($"btn_creation:{ctx.User.Id}:category");
+            var archiveCategory = await cache.Redis.GetDatabase()
+                .StringGetAsync($"btn_creation:{ctx.User.Id}:archive_category");
+            var roles = await cache.Redis.GetDatabase().StringGetAsync($"btn_creation:{ctx.User.Id}:roles");
+            var viewerRoles =
+                await cache.Redis.GetDatabase().StringGetAsync($"btn_creation:{ctx.User.Id}:viewer_roles");
+            var openMessage =
+                await cache.Redis.GetDatabase().StringGetAsync($"btn_creation:{ctx.User.Id}:open_message");
+            var modalJson = await cache.Redis.GetDatabase().StringGetAsync($"btn_creation:{ctx.User.Id}:modal_json");
+            var priorities = await cache.Redis.GetDatabase().StringGetAsync($"btn_creation:{ctx.User.Id}:priorities");
+            var defaultPriority = await cache.Redis.GetDatabase()
+                .StringGetAsync($"btn_creation:{ctx.User.Id}:default_priority");
+            var autoClose = await cache.Redis.GetDatabase().StringGetAsync($"btn_creation:{ctx.User.Id}:autoclose");
+            var responseTime =
+                await cache.Redis.GetDatabase().StringGetAsync($"btn_creation:{ctx.User.Id}:response_time");
+
+            var panel = await Service.GetPanelAsync(panelId);
+            if (panel == null)
             {
-                if (Enum.TryParse<ButtonStyle>(style.ToString(), true, out var parsedStyle))
-                {
-                    buttonStyle = parsedStyle;
-                }
+                await FollowupAsync("Panel not found!", ephemeral: true);
+                return;
             }
 
-            // Parse category IDs
-            ulong? categoryId = null;
-            if (category.HasValue)
+            // Parse and validate all settings
+            var buttonStyle = ButtonStyle.Primary;
+            if (style.HasValue && Enum.TryParse<ButtonStyle>(style.ToString(), true, out var parsedStyle))
             {
-                if (ulong.TryParse(category, out var parsedCategory))
-                {
-                    categoryId = parsedCategory;
-                }
-                else
-                {
-                    await RespondAsync("Invalid category ID provided.", ephemeral: true);
-                    return;
-                }
+                buttonStyle = parsedStyle;
+            }
+
+            ulong? categoryId = null;
+            if (category.HasValue && ulong.TryParse((string)category, out var parsedCategory))
+            {
+                categoryId = parsedCategory;
             }
 
             ulong? archiveCategoryId = null;
-            if (archiveCategory.HasValue)
+            if (archiveCategory.HasValue && ulong.TryParse((string)archiveCategory, out var parsedArchiveCategory))
             {
-                if (ulong.TryParse(archiveCategory, out var parsedArchiveCategory))
-                {
-                    archiveCategoryId = parsedArchiveCategory;
-                }
-                else
-                {
-                    await RespondAsync("Invalid archive category ID provided.", ephemeral: true);
-                    return;
-                }
+                archiveCategoryId = parsedArchiveCategory;
             }
 
-            // Parse roles
             List<ulong> supportRoles = null;
             if (roles.HasValue)
             {
                 try
                 {
-                    var rolesArray = JsonSerializer.Deserialize<string[]>(roles);
+                    var rolesArray = JsonSerializer.Deserialize<string[]>((string)roles);
                     supportRoles = rolesArray.Select(ulong.Parse).ToList();
                 }
-                catch
+                catch (Exception ex)
                 {
-                    await RespondAsync("Invalid roles data.", ephemeral: true);
-                    return;
+                    logger.LogWarning(ex, "Failed to parse support roles");
                 }
             }
 
-            // Parse viewer roles
             List<ulong> viewerRolesList = null;
             if (viewerRoles.HasValue)
             {
                 try
                 {
-                    viewerRolesList = JsonSerializer.Deserialize<string[]>(viewerRoles).Select(ulong.Parse).ToList();
+                    viewerRolesList = JsonSerializer.Deserialize<string[]>((string)viewerRoles).Select(ulong.Parse)
+                        .ToList();
                 }
-                catch
+                catch (Exception ex)
                 {
-                    await RespondAsync("Invalid viewer roles data.", ephemeral: true);
-                    return;
+                    logger.LogWarning(ex, "Failed to parse viewer roles");
                 }
             }
 
-            // Parse priorities
             List<string> allowedPriorities = null;
             if (priorities.HasValue)
             {
                 try
                 {
-                    allowedPriorities = JsonSerializer.Deserialize<List<string>>(priorities);
+                    allowedPriorities = JsonSerializer.Deserialize<List<string>>((string)priorities);
                 }
-                catch
+                catch (Exception ex)
                 {
-                    await RespondAsync("Invalid priorities data.", ephemeral: true);
-                    return;
+                    logger.LogWarning(ex, "Failed to parse priorities");
                 }
             }
 
-            // Parse default priority
-            string defaultPriorityValue = null;
-            if (defaultPriority.HasValue)
-            {
-                defaultPriorityValue = defaultPriority;
-            }
-
-            // Parse autoCloseTime
             TimeSpan? autoCloseTime = null;
-            if (autoClose.HasValue)
+            if (autoClose.HasValue && int.TryParse((string)autoClose, out var autoCloseHours))
             {
-                if (int.TryParse(autoClose, out var autoCloseHours))
-                {
-                    autoCloseTime = TimeSpan.FromHours(autoCloseHours);
-                }
-                else
-                {
-                    await RespondAsync("Invalid auto-close time provided.", ephemeral: true);
-                    return;
-                }
+                autoCloseTime = TimeSpan.FromHours(autoCloseHours);
             }
 
-            var button = await Service.AddButtonAsync(
+            TimeSpan? requiredResponseTime = null;
+            if (responseTime.HasValue && int.TryParse((string)responseTime, out var responseHours))
+            {
+                requiredResponseTime = TimeSpan.FromHours(responseHours);
+            }
+
+            await Service.AddButtonAsync(
                 panel,
-                label.HasValue ? label.ToString() : null,
+                label.HasValue ? label.ToString() : "Button",
                 emoji.HasValue ? emoji.ToString() : null,
                 buttonStyle,
                 categoryId: categoryId,
@@ -1374,83 +1569,338 @@ public class TicketCommands : MewdekoSlashModuleBase<TicketService>
                 openMessageJson: openMessage.HasValue ? openMessage.ToString() : null,
                 modalJson: modalJson.HasValue ? modalJson.ToString() : null,
                 allowedPriorities: allowedPriorities,
-                defaultPriority: defaultPriorityValue,
-                autoCloseTime: autoCloseTime
+                defaultPriority: defaultPriority.HasValue ? defaultPriority.ToString() : null,
+                autoCloseTime: autoCloseTime,
+                requiredResponseTime: requiredResponseTime
             );
 
-            await RespondAsync("Button created successfully!", ephemeral: true);
+            await FollowupAsync("Button created successfully!", ephemeral: true);
         }
         catch (Exception ex)
         {
-            await RespondAsync($"Error creating button: {ex.Message}", ephemeral: true);
+            logger.LogError(ex, "Error confirming button creation for panel {PanelId}", panelId);
+            await FollowupAsync($"Error creating button: {ex.Message}", ephemeral: true);
         }
         finally
         {
-            // Cleanup
-            await cache.Redis.GetDatabase().KeyDeleteAsync(new RedisKey[]
-            {
+            // Cleanup Redis cache
+            await cache.Redis.GetDatabase().KeyDeleteAsync([
                 $"btn_creation:{ctx.User.Id}:style", $"btn_creation:{ctx.User.Id}:label",
                 $"btn_creation:{ctx.User.Id}:emoji", $"btn_creation:{ctx.User.Id}:category",
                 $"btn_creation:{ctx.User.Id}:archive_category", $"btn_creation:{ctx.User.Id}:roles",
                 $"btn_creation:{ctx.User.Id}:viewer_roles", $"btn_creation:{ctx.User.Id}:open_message",
                 $"btn_creation:{ctx.User.Id}:modal_json", $"btn_creation:{ctx.User.Id}:priorities",
-                $"btn_creation:{ctx.User.Id}:default_priority", $"btn_creation:{ctx.User.Id}:autoclose"
-            });
+                $"btn_creation:{ctx.User.Id}:default_priority", $"btn_creation:{ctx.User.Id}:autoclose",
+                $"btn_creation:{ctx.User.Id}:response_time"
+            ]);
         }
     }
 
-
     /// <summary>
-    ///     Handles auto-close time selection.
+    ///     Handles cancellation of button creation.
     /// </summary>
-    [ComponentInteraction("btn_autoclose:*", true)]
-    public async Task HandleAutoCloseSelect(string panelId, string[] values)
+    /// <param name="panelId">The ID of the panel for which button creation was cancelled.</param>
+    /// <remarks>
+    ///     Cleans up the Redis cache and notifies the user that button creation was cancelled.
+    /// </remarks>
+    [ComponentInteraction("btn_cancel:*", true)]
+    public async Task HandleButtonCancel(string panelId)
     {
         try
         {
-            // If skip button wasn't clicked and we have a value
-            if (values.Any())
+            // Cleanup Redis cache
+            await cache.Redis.GetDatabase().KeyDeleteAsync([
+                $"btn_creation:{ctx.User.Id}:style", $"btn_creation:{ctx.User.Id}:label",
+                $"btn_creation:{ctx.User.Id}:emoji", $"btn_creation:{ctx.User.Id}:category",
+                $"btn_creation:{ctx.User.Id}:archive_category", $"btn_creation:{ctx.User.Id}:roles",
+                $"btn_creation:{ctx.User.Id}:viewer_roles", $"btn_creation:{ctx.User.Id}:open_message",
+                $"btn_creation:{ctx.User.Id}:modal_json", $"btn_creation:{ctx.User.Id}:priorities",
+                $"btn_creation:{ctx.User.Id}:default_priority", $"btn_creation:{ctx.User.Id}:autoclose",
+                $"btn_creation:{ctx.User.Id}:response_time"
+            ]);
+
+            await RespondAsync("Button creation cancelled.", ephemeral: true);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error cancelling button creation for panel {PanelId}", panelId);
+            await RespondAsync("An error occurred while cancelling button creation.", ephemeral: true);
+        }
+    }
+
+    #endregion
+
+    #region Modal Interaction Handlers
+
+    /// <summary>
+    ///     Handles the submission of case creation modals.
+    /// </summary>
+    /// <param name="modal">The modal containing case creation information.</param>
+    /// <remarks>
+    ///     Creates a new ticket case with the provided title and description.
+    /// </remarks>
+    [ModalInteraction("create_case", true)]
+    public async Task HandleCaseCreation(CaseCreationModal modal)
+    {
+        try
+        {
+            var ticketCase = await Service.CreateCaseAsync(
+                ctx.Guild,
+                modal.CaseTitle,
+                modal.Description,
+                ctx.User as IGuildUser);
+
+            await RespondAsync(Strings.TicketCaseCreated(ctx.Guild.Id, ticketCase.Id.ToString()), ephemeral: true);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error creating case with title {Title}", modal.CaseTitle);
+            await RespondAsync("Failed to create case. Please try again.", ephemeral: true);
+        }
+    }
+
+    /// <summary>
+    ///     Handles the submission of case update modals.
+    /// </summary>
+    /// <param name="caseId">The ID of the case being updated.</param>
+    /// <param name="modal">The modal containing updated case information.</param>
+    /// <remarks>
+    ///     Updates an existing case with new title and/or description.
+    /// </remarks>
+    [ModalInteraction("case_update:*", true)]
+    public async Task HandleCaseUpdate(string caseId, CaseUpdateModal modal)
+    {
+        try
+        {
+            if (!int.TryParse(caseId, out var parsedCaseId))
             {
-                await cache.Redis.GetDatabase()
-                    .StringSetAsync($"btn_creation:{ctx.User.Id}:autoclose", values[0]);
+                await RespondAsync("Invalid case ID.", ephemeral: true);
+                return;
             }
 
-            // Show final confirmation
-            var components = new ComponentBuilder()
-                .WithButton("Confirm", $"btn_confirm:{panelId}")
-                .WithButton("Cancel", $"btn_cancel:{panelId}", ButtonStyle.Danger)
-                .Build();
-
-            await RespondAsync("Review and confirm button creation:", components: components);
+            await Service.UpdateCaseAsync(parsedCaseId, modal.CaseTitle, modal.Description);
+            await RespondAsync($"Case #{parsedCaseId} updated successfully!", ephemeral: true);
         }
-        catch (Exception e)
+        catch (Exception ex)
         {
-            Log.Error(e, "Error handling auto-close selection");
-            await RespondAsync("An error occurred while processing your selection.", ephemeral: true);
+            logger.LogError(ex, "Error updating case {CaseId}", caseId);
+            await RespondAsync("Failed to update case. Please try again.", ephemeral: true);
         }
     }
 
     /// <summary>
-    ///     Handles auto-close skip button.
+    ///     Handles the submission of select menu creation modals.
     /// </summary>
-    [ComponentInteraction("btn_autoclose:*:skip", true)]
-    public async Task HandleAutoCloseSkip(string panelId)
+    /// <param name="panelId">The ID of the panel to add the select menu to.</param>
+    /// <param name="modal">The modal containing select menu configuration.</param>
+    /// <remarks>
+    ///     Creates a new select menu on the specified panel with the provided configuration.
+    /// </remarks>
+    [ModalInteraction("create_menu:*", true)]
+    public async Task HandleSelectMenuCreation(string panelId, SelectMenuCreationModal modal)
     {
         try
         {
-            // Show final confirmation without setting auto-close
+            if (!ulong.TryParse(panelId, out var parsedPanelId))
+            {
+                await RespondAsync("Invalid panel ID.", ephemeral: true);
+                return;
+            }
+
+            var panel = await Service.GetPanelAsync(parsedPanelId);
+            if (panel == null)
+            {
+                await RespondAsync("Panel not found!", ephemeral: true);
+                return;
+            }
+
+            var menu = await Service.AddSelectMenuAsync(
+                panel,
+                modal.Placeholder,
+                modal.Title
+            );
+
+            await RespondAsync($"Select menu created successfully with ID {menu.Id}!", ephemeral: true);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error creating select menu for panel {PanelId}", panelId);
+            await RespondAsync("Failed to create select menu. Please try again.", ephemeral: true);
+        }
+    }
+
+    #endregion
+
+    #region Helper Methods
+
+    /// <summary>
+    ///     Prompts the user to configure ticket settings during button creation.
+    /// </summary>
+    /// <param name="panelId">The ID of the panel the button is being added to.</param>
+    /// <remarks>
+    ///     Displays a select menu for choosing ticket categories (creation and archive).
+    /// </remarks>
+    private async Task PromptTicketSettings(string panelId)
+    {
+        try
+        {
+            var categories = await ctx.Guild.GetCategoriesAsync();
+
+            var menuBuilder = new SelectMenuBuilder()
+                .WithPlaceholder("Select Categories")
+                .WithCustomId($"btn_category:{panelId}")
+                .WithMinValues(0)
+                .WithMaxValues(2);
+
+            foreach (var category in categories)
+            {
+                menuBuilder.AddOption(
+                    $"Create: {category.Name}",
+                    $"create:{category.Id}",
+                    "Category for new tickets"
+                );
+                menuBuilder.AddOption(
+                    $"Archive: {category.Name}",
+                    $"archive:{category.Id}",
+                    "Category for archived tickets"
+                );
+            }
+
             var components = new ComponentBuilder()
-                .WithButton("Confirm", $"btn_confirm:{panelId}")
-                .WithButton("Cancel", $"btn_cancel:{panelId}", ButtonStyle.Danger)
+                .WithSelectMenu(menuBuilder)
+                .WithButton("Skip", $"btn_category:{panelId}:skip")
                 .Build();
 
-            await RespondAsync("Review and confirm button creation:", components: components);
+            await FollowupAsync("Select ticket categories (optional):", components: components);
         }
-        catch (Exception e)
+        catch (Exception ex)
         {
-            Log.Error(e, "Error handling auto-close skip");
-            await RespondAsync("An error occurred while processing your request.", ephemeral: true);
+            logger.LogError(ex, "Error prompting ticket settings for panel {PanelId}", panelId);
+            await FollowupAsync("An error occurred during button creation.", ephemeral: true);
         }
+    }
+
+    /// <summary>
+    ///     Handles custom modals for ticket creation.
+    /// </summary>
+    /// <param name="buttonId">The buttons db ID</param>
+    /// <param name="unused">Unused modal parameter</param>
+    [ModalInteraction("ticket_modal:*", true)]
+    public async Task HandleTicketModalSubmission(string buttonId, SimpleInputModal unused)
+    {
+        await DeferAsync(true);
+
+        try
+        {
+            if (!int.TryParse(buttonId, out var buttonIdParsed))
+            {
+                await FollowupAsync($"{Config.ErrorEmote} Invalid button ID.", ephemeral: true);
+                return;
+            }
+
+            var button = await Service.GetButtonAsync(buttonIdParsed);
+            if (button == null)
+            {
+                await FollowupAsync($"{Config.ErrorEmote} Button configuration not found.", ephemeral: true);
+                return;
+            }
+
+            // Get the modal data from the interaction
+            var modal = (IModalInteraction)Context.Interaction;
+            var modalResponses = ExtractModalResponses(modal.Data.Components);
+
+            // Create the ticket using the submitted modal data
+            var ticket = await Service.CreateTicketAsync(
+                ctx.Guild,
+                ctx.User,
+                button,
+                modalResponses: modalResponses
+            );
+
+            if (ticket != null)
+            {
+                await FollowupAsync($"{Config.ErrorEmote} Ticket created: <#{ticket.ChannelId}>", ephemeral: true);
+            }
+            else
+            {
+                await FollowupAsync($"{Config.ErrorEmote} Failed to create ticket. Please try again.", ephemeral: true);
+            }
+        }
+        catch (InvalidOperationException ex)
+        {
+            await FollowupAsync($"There was an issue creating your ticket:\n{ex.Message}", ephemeral: true);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError($"Error handling ticket modal submission: {ex}");
+            await FollowupAsync($"{Config.ErrorEmote} An error occurred while creating your ticket.", ephemeral: true);
+        }
+    }
+
+    /// <summary>
+    ///     Extracts modal responses into a dictionary format
+    /// </summary>
+    /// <param name="components">The submitted modal components</param>
+    /// <returns>Dictionary with field IDs as keys and user responses as values</returns>
+    private static Dictionary<string, string> ExtractModalResponses(
+        IReadOnlyCollection<IComponentInteractionData> components)
+    {
+        var responses = new Dictionary<string, string>();
+
+        foreach (var component in components)
+        {
+            if (!string.IsNullOrEmpty(component.Value))
+            {
+                responses[component.CustomId] = component.Value;
+            }
+        }
+
+        return responses;
+    }
+
+    /// <summary>
+    ///     Starts the button creation process.
+    /// </summary>
+    [SlashCommand("addbutton", "Add a button to a ticket panel")]
+    [SlashUserPerm(GuildPermission.Administrator)]
+    public async Task AddButton(
+        [Summary("panel-id")] string panelId)
+    {
+        var components = new ComponentBuilder()
+            .WithButton("Primary", $"btn_style:{panelId}:primary")
+            .WithButton("Success", $"btn_style:{panelId}:success", ButtonStyle.Success)
+            .WithButton("Secondary", $"btn_style:{panelId}:secondary", ButtonStyle.Secondary)
+            .WithButton("Danger", $"btn_style:{panelId}:danger", ButtonStyle.Danger);
+
+        await RespondAsync("Choose the button style:", components: components.Build());
+    }
+
+    /// <summary>
+    ///     Handles label input.
+    /// </summary>
+    [ModalInteraction("btn_label:*", true)]
+    public async Task HandleButtonLabel(string panelId, SimpleInputModal modal)
+    {
+        // Store the label
+        await cache.Redis.GetDatabase().StringSetAsync($"btn_creation:{ctx.User.Id}:label", modal.Input);
+
+        // Ask if they want an emoji
+        var components = new ComponentBuilder()
+            .WithButton("Yes", $"btn_emoji:{panelId}:yes")
+            .WithButton("No", $"btn_emoji:{panelId}:no");
+
+        await RespondAsync(Strings.AddEmojiToButton(ctx.Guild.Id), components: components.Build());
+    }
+
+
+    /// <summary>
+    ///     Handles emoji input.
+    /// </summary>
+    [ModalInteraction("btn_emoji_input:*", true)]
+    public async Task HandleEmojiInput(string panelId, SimpleInputModal modal)
+    {
+        await cache.Redis.GetDatabase().StringSetAsync($"btn_creation:{ctx.User.Id}:emoji", modal.Input);
+        await PromptTicketSettings(panelId);
     }
 
     #endregion

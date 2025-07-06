@@ -12,6 +12,7 @@ public partial class Games
     ///     A module containing Hangman commands.
     /// </summary>
     /// <param name="guildSettings">The guild settings service</param>
+    /// <param name="handler">The event handler service</param>
     [Group]
     public class HangmanCommands(GuildSettingsService guildSettings, EventHandler handler)
         : MewdekoSubmodule<GamesService>
@@ -62,7 +63,7 @@ public partial class Games
             hm.OnGuessFailed += Hm_OnGuessFailed;
             hm.OnGuessSucceeded += Hm_OnGuessSucceeded;
             hm.OnLetterAlreadyUsed += Hm_OnLetterAlreadyUsed;
-            handler.MessageReceived += ClientMessageReceived;
+            handler.Subscribe("MessageReceived", "HangmanCommands", ClientMessageReceived);
 
             try
             {
@@ -77,15 +78,15 @@ public partial class Games
 
             await hm.EndedTask.ConfigureAwait(false);
 
-            handler.MessageReceived -= ClientMessageReceived;
+            handler.Unsubscribe("MessageReceived", "HangmanCommands", ClientMessageReceived);
             Service.HangmanGames.TryRemove(ctx.Channel.Id, out _);
             hm.Dispose();
             return;
 
             async Task ClientMessageReceived(SocketMessage msg)
             {
-                    if (ctx.Channel.Id == msg.Channel.Id && !msg.Author.IsBot)
-                        await hm.Input(msg.Author.Id, msg.Author.ToString(), msg.Content);
+                if (ctx.Channel.Id == msg.Channel.Id && !msg.Author.IsBot)
+                    await hm.Input(msg.Author.Id, msg.Author.ToString(), msg.Content);
             }
         }
 
@@ -99,7 +100,7 @@ public partial class Games
             if (winner == null)
             {
                 var loseEmbed = new EmbedBuilder().WithTitle($"Hangman Game ({game.TermType}) - Ended")
-                    .WithDescription(Format.Bold("You lose."))
+                    .WithDescription(Format.Bold(Strings.HangmanLose(ctx.Guild.Id)))
                     .AddField(efb => efb.WithName("It was").WithValue(game.Term.GetWord()))
                     .WithFooter(efb => efb.WithText(string.Join(" ", game.PreviousGuesses)))
                     .WithErrorColor();
@@ -111,7 +112,7 @@ public partial class Games
             }
 
             var winEmbed = new EmbedBuilder().WithTitle($"Hangman Game ({game.TermType}) - Ended")
-                .WithDescription(Format.Bold($"{winner} Won."))
+                .WithDescription(Format.Bold(Strings.HangmanWin(ctx.Guild.Id, winner)))
                 .AddField(efb => efb.WithName("It was").WithValue(game.Term.GetWord()))
                 .WithFooter(efb => efb.WithText(string.Join(" ", game.PreviousGuesses)))
                 .WithOkColor();

@@ -163,7 +163,8 @@ public partial class SlashAdministration
             {
                 if (modal.RecoveryKey == rescue.Value)
                 {
-                    var component = new ComponentBuilder().WithButton(Strings.Entertwofa(ctx.Guild.Id), "2fa-verify-rescue").Build();
+                    var component = new ComponentBuilder()
+                        .WithButton(Strings.Entertwofa(ctx.Guild.Id), "2fa-verify-rescue").Build();
                     await ctx.Interaction.RespondAsync(embed: new EmbedBuilder()
                         .WithDescription(Strings.Pleaseentertwofa(ctx.Guild.Id))
                         .WithOkColor()

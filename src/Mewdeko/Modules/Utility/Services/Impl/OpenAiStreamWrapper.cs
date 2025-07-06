@@ -1,5 +1,6 @@
 ﻿using System.ClientModel;
 using System.IO;
+using System.Text;
 using System.Text.Json;
 using System.Threading;
 using OpenAI.Chat;
@@ -7,17 +8,17 @@ using OpenAI.Chat;
 namespace Mewdeko.Modules.Utility.Services.Impl;
 
 /// <summary>
-/// Wraps OpenAI's streaming response in a Stream interface.
+///     Wraps OpenAI's streaming response in a Stream interface.
 /// </summary>
 public class OpenAiStreamWrapper : Stream
 {
-    private readonly AsyncCollectionResult<StreamingChatCompletionUpdate> stream;
     private readonly MemoryStream buffer;
-    private IAsyncEnumerator<StreamingChatCompletionUpdate>? enumerator;
+    private readonly AsyncCollectionResult<StreamingChatCompletionUpdate> stream;
     private bool endOfStream;
+    private IAsyncEnumerator<StreamingChatCompletionUpdate>? enumerator;
 
     /// <summary>
-    /// Initializes a new instance of the OpenAiStreamWrapper class.
+    ///     Initializes a new instance of the OpenAiStreamWrapper class.
     /// </summary>
     /// <param name="stream">The streaming updates from OpenAI.</param>
     public OpenAiStreamWrapper(AsyncCollectionResult<StreamingChatCompletionUpdate> stream)
@@ -27,26 +28,26 @@ public class OpenAiStreamWrapper : Stream
         this.endOfStream = false;
     }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public override bool CanRead => true;
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public override bool CanSeek => false;
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public override bool CanWrite => false;
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public override long Length => throw new NotSupportedException();
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public override long Position
     {
         get => throw new NotSupportedException();
         set => throw new NotSupportedException();
     }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
     {
         if (endOfStream && this.buffer.Length == 0)
@@ -69,13 +70,19 @@ public class OpenAiStreamWrapper : Stream
                 {
                     var data = new
                     {
-                        delta = new { text = update.ContentUpdate[0].Text },
-                        usage = new { total_tokens = 0 }
+                        delta = new
+                        {
+                            text = update.ContentUpdate[0].Text
+                        },
+                        usage = new
+                        {
+                            total_tokens = 0
+                        }
                     };
 
                     var json = JsonSerializer.Serialize(data);
                     var line = $"data: {json}\n\n";
-                    var bytes = System.Text.Encoding.UTF8.GetBytes(line);
+                    var bytes = Encoding.UTF8.GetBytes(line);
                     await this.buffer.WriteAsync(bytes, cancellationToken);
                 }
             }
@@ -104,11 +111,11 @@ public class OpenAiStreamWrapper : Stream
         return bytesRead;
     }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public override int Read(byte[] buffer, int offset, int count) =>
         throw new NotSupportedException("Use ReadAsync instead");
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (disposing)
@@ -119,18 +126,19 @@ public class OpenAiStreamWrapper : Stream
                 enumerator.DisposeAsync().AsTask().Wait();
             }
         }
+
         base.Dispose(disposing);
     }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public override void Flush() => throw new NotSupportedException();
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public override void SetLength(long value) => throw new NotSupportedException();
 }

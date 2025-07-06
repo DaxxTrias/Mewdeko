@@ -9,7 +9,7 @@ namespace Mewdeko.Modules.Utility;
 public partial class Utility
 {
     /// <summary>
-    /// Provides commands for managing and viewing invite-related information.
+    ///     Provides commands for managing and viewing invite-related information.
     /// </summary>
     [Group]
     public class InviteCommands : MewdekoSubmodule<InviteCountService>
@@ -17,7 +17,7 @@ public partial class Utility
         private readonly InteractiveService interactiveService;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="InviteCommands"/> class.
+        ///     Initializes a new instance of the <see cref="InviteCommands" /> class.
         /// </summary>
         /// <param name="serv">The interactive service for handling paginated responses.</param>
         public InviteCommands(InteractiveService serv)
@@ -26,7 +26,7 @@ public partial class Utility
         }
 
         /// <summary>
-        /// Displays the number of invites for a user.
+        ///     Displays the number of invites for a user.
         /// </summary>
         /// <param name="user">The user to check invites for. If null, checks for the command user.</param>
         [Cmd]
@@ -40,7 +40,7 @@ public partial class Utility
         }
 
         /// <summary>
-        /// Displays the current invite settings for the guild.
+        ///     Displays the current invite settings for the guild.
         /// </summary>
         [Cmd]
         [Aliases]
@@ -52,11 +52,11 @@ public partial class Utility
             await ReplyConfirmAsync(Strings.InviteSettings(ctx.Guild.Id,
                 GetEnDis(settings.IsEnabled),
                 GetEnDis(settings.RemoveInviteOnLeave),
-                    settings.MinAccountAge));
+                settings.MinAccountAge));
         }
 
         /// <summary>
-        /// Toggles invite tracking for the guild.
+        ///     Toggles invite tracking for the guild.
         /// </summary>
         [Cmd]
         [Aliases]
@@ -72,7 +72,7 @@ public partial class Utility
         }
 
         /// <summary>
-        /// Toggles whether invites should be removed when a user leaves the guild.
+        ///     Toggles whether invites should be removed when a user leaves the guild.
         /// </summary>
         [Cmd]
         [Aliases]
@@ -88,7 +88,7 @@ public partial class Utility
         }
 
         /// <summary>
-        /// Sets the minimum account age required for an invite to be counted.
+        ///     Sets the minimum account age required for an invite to be counted.
         /// </summary>
         /// <param name="days">The minimum age in days.</param>
         [Cmd]
@@ -103,7 +103,7 @@ public partial class Utility
         }
 
         /// <summary>
-        /// Displays a leaderboard of users with the most invites.
+        ///     Displays a leaderboard of users with the most invites.
         /// </summary>
         [Cmd]
         [Aliases]
@@ -142,7 +142,7 @@ public partial class Utility
         }
 
         /// <summary>
-        /// Displays who invited a specific user to the guild.
+        ///     Displays who invited a specific user to the guild.
         /// </summary>
         /// <param name="user">The user to check. If null, checks for the command user.</param>
         [Cmd]
@@ -160,7 +160,7 @@ public partial class Utility
         }
 
         /// <summary>
-        /// Displays a list of users invited by a specific user.
+        ///     Displays a list of users invited by a specific user.
         /// </summary>
         /// <param name="user">The user whose invites to check. If null, checks for the command user.</param>
         [Cmd]

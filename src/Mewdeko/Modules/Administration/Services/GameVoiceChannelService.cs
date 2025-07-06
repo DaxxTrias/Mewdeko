@@ -1,30 +1,30 @@
-﻿using Mewdeko.Database.DbContextStuff;
-using Serilog;
-
-namespace Mewdeko.Modules.Administration.Services;
+﻿namespace Mewdeko.Modules.Administration.Services;
 
 /// <summary>
 ///     Service for managing game voice channels.
 /// </summary>
 public class GameVoiceChannelService : INService
 {
-    private readonly DbContextProvider dbProvider;
+    private readonly IDataConnectionFactory dbFactory;
     private readonly GuildSettingsService guildSettings;
+    private readonly ILogger<GameVoiceChannelService> logger;
+
 
     /// <summary>
     ///     Constructs a new instance of the GameVoiceChannelService.
     /// </summary>
-    /// <param name="db">The database service.</param>
+    /// <param name="dbFactory">The database service.</param>
     /// <param name="guildSettings">The guild settings service.</param>
     /// <param name="eventHandler">The event handler.</param>
-    public GameVoiceChannelService(DbContextProvider dbProvider,
-        GuildSettingsService guildSettings, EventHandler eventHandler)
+    public GameVoiceChannelService(IDataConnectionFactory dbFactory,
+        GuildSettingsService guildSettings, EventHandler eventHandler, ILogger<GameVoiceChannelService> logger)
     {
-        this.dbProvider = dbProvider;
+        this.dbFactory = dbFactory;
         this.guildSettings = guildSettings;
+        this.logger = logger;
 
-        eventHandler.UserVoiceStateUpdated += Client_UserVoiceStateUpdated;
-        eventHandler.GuildMemberUpdated += _client_GuildMemberUpdated;
+        eventHandler.Subscribe("UserVoiceStateUpdated", "GameVoiceChannelService", Client_UserVoiceStateUpdated);
+        eventHandler.Subscribe("GuildMemberUpdated", "GameVoiceChannelService", _client_GuildMemberUpdated);
     }
 
     /// <summary>
@@ -39,23 +39,27 @@ public class GameVoiceChannelService : INService
         {
             if (after is null)
                 return;
-            if ((await guildSettings.GetGuildConfig(after.Guild.Id)).GameVoiceChannel != after?.VoiceChannel?.Id)
+
+            var gConfig = await guildSettings.GetGuildConfig(after.Guild.Id);
+            if (gConfig.GameVoiceChannel != after.VoiceChannel?.Id)
                 return;
-            //if the user is in the voice channel and that voice channel is gvc
-            //if the activity has changed, and is a playing activity
+
             if (!cacheable.HasValue)
                 return;
-            if (!Equals(cacheable.Value.Activities, after.Activities)
-                && after.Activities != null
-                && after.Activities.FirstOrDefault()?.Type == ActivityType.Playing)
+
+            var oldActivities = cacheable.Value.Activities;
+            var newActivities = after.Activities;
+            var firstNewActivity = newActivities?.FirstOrDefault();
+
+            if (!Equals(oldActivities, newActivities)
+                && firstNewActivity?.Type == ActivityType.Playing)
             {
-                //trigger gvc
-                await TriggerGvc(after, after.Activities.FirstOrDefault()?.Name).ConfigureAwait(false);
+                await TriggerGvc(after, firstNewActivity.Name).ConfigureAwait(false);
             }
         }
         catch (Exception ex)
         {
-            Log.Warning(ex, "Error running GuildMemberUpdated in gvc");
+            logger.LogWarning(ex, "Error running GuildMemberUpdated in gvc");
         }
     }
 
@@ -71,9 +75,13 @@ public class GameVoiceChannelService : INService
     public async Task<ulong?> ToggleGameVoiceChannel(ulong guildId, ulong vchId)
     {
         ulong? id;
+        var gc = await guildSettings.GetGuildConfig(guildId);
 
-        await using var db = await dbProvider.GetContextAsync();
-        var gc = await db.ForGuildId(guildId, set => set);
+        if (gc == null)
+        {
+            logger.LogWarning("GuildConfig is null for GuildId {GuildId} in ToggleGameVoiceChannel", guildId);
+            return null;
+        }
 
         if (gc.GameVoiceChannel == vchId)
         {
@@ -112,7 +120,8 @@ public class GameVoiceChannelService : INService
                 return;
             }
 
-            if ((await guildSettings.GetGuildConfig(gUser.Guild.Id)).GameVoiceChannel != newState.VoiceChannel.Id ||
+            var gConfig = await guildSettings.GetGuildConfig(gUser.Guild.Id);
+            if (gConfig.GameVoiceChannel != newState.VoiceChannel.Id ||
                 string.IsNullOrWhiteSpace(game))
             {
                 return;
@@ -122,7 +131,7 @@ public class GameVoiceChannelService : INService
         }
         catch (Exception ex)
         {
-            Log.Warning(ex, "Error running VoiceStateUpdate in gvc");
+            logger.LogWarning(ex, "Error running VoiceStateUpdate in gvc");
         }
     }
 

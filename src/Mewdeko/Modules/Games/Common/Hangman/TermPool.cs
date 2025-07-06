@@ -1,7 +1,6 @@
 ﻿using System.IO;
 using System.Text.Json;
 using Mewdeko.Modules.Games.Common.Hangman.Exceptions;
-
 using Serilog;
 
 namespace Mewdeko.Modules.Games.Common.Hangman;

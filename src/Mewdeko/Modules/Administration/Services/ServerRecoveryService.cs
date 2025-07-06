@@ -1,5 +1,5 @@
-﻿using Mewdeko.Database.DbContextStuff;
-using Microsoft.EntityFrameworkCore;
+﻿using DataModel;
+using LinqToDB;
 
 namespace Mewdeko.Modules.Administration.Services;
 
@@ -11,15 +11,15 @@ public class ServerRecoveryService : INService
     /// <summary>
     ///     The database service.
     /// </summary>
-    private readonly DbContextProvider dbProvider;
+    private readonly IDataConnectionFactory dbFactory;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="ServerRecoveryService" /> class.
     /// </summary>
-    /// <param name="db">The database service.</param>
-    public ServerRecoveryService(DbContextProvider dbProvider)
+    /// <param name="dbFactory">The database service.</param>
+    public ServerRecoveryService(IDataConnectionFactory dbFactory)
     {
-        this.dbProvider = dbProvider;
+        this.dbFactory = dbFactory;
     }
 
     /// <summary>
@@ -32,8 +32,8 @@ public class ServerRecoveryService : INService
     /// </returns>
     public async Task<(bool, ServerRecoveryStore)> RecoveryIsSetup(ulong guildId)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
-        var store = await dbContext.ServerRecoveryStore.FirstOrDefaultAsync(x => x.GuildId == guildId);
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
+        var store = await dbContext.ServerRecoveryStores.FirstOrDefaultAsync(x => x.GuildId == guildId);
         return (store != null, store);
     }
 
@@ -46,14 +46,13 @@ public class ServerRecoveryService : INService
     /// <returns>A task that represents the asynchronous operation.</returns>
     public async Task SetupRecovery(ulong guildId, string recoveryKey, string twoFactorKey)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
         var toAdd = new ServerRecoveryStore
         {
             GuildId = guildId, RecoveryKey = recoveryKey, TwoFactorKey = twoFactorKey
         };
 
-        await dbContext.ServerRecoveryStore.AddAsync(toAdd);
-        await dbContext.SaveChangesAsync();
+        await dbContext.InsertAsync(toAdd);
     }
 
     /// <summary>
@@ -63,8 +62,7 @@ public class ServerRecoveryService : INService
     /// <returns>A task that represents the asynchronous operation.</returns>
     public async Task ClearRecoverySetup(ServerRecoveryStore serverRecoveryStore)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
-        dbContext.ServerRecoveryStore.Remove(serverRecoveryStore);
-        await dbContext.SaveChangesAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
+        await dbContext.ServerRecoveryStores.Select(x => serverRecoveryStore).DeleteAsync();
     }
 }

@@ -3,14 +3,14 @@ using MartineApiNet;
 using MartineApiNet.Enums;
 using Mewdeko.Modules.Searches.Services;
 using Refit;
-using Serilog;
 
 namespace Mewdeko.Modules.Searches;
 
 /// <summary>
 ///     Provides slash command interactions for searching and retrieving content from various sources.
 /// </summary>
-public class SlashSearches(MartineApi martineApi) : MewdekoSlashModuleBase<SearchesService>
+public class SlashSearches(MartineApi martineApi, ILogger<SlashSearches> logger)
+    : MewdekoSlashModuleBase<SearchesService>
 {
     /// <summary>
     ///     Handles the "randomimage" component interaction, fetching and displaying a new random image from the specified
@@ -35,9 +35,9 @@ public class SlashSearches(MartineApi martineApi) : MewdekoSlashModuleBase<Searc
 
             var em = new EmbedBuilder()
                 .WithOkColor()
-                .WithAuthor($"u/{image.Data.Author.Name}")
+                .WithAuthor(Strings.SearchAuthorReddit(ctx.Guild.Id, image.Data.Author.Name))
                 .WithDescription($"Title: {image.Data.Title}\n[Source]({image.Data.PostUrl})")
-                .WithFooter($"{image.Data.Upvotes} Upvotes! | r/{image.Data.Subreddit.Name} Powered by martineAPI")
+                .WithFooter(Strings.RedditUpvotes(ctx.Guild.Id, image.Data.Upvotes, image.Data.Subreddit.Name))
                 .WithImageUrl(image.Data.ImageUrl);
 
             if (ctx.User.Id != id)
@@ -58,7 +58,7 @@ public class SlashSearches(MartineApi martineApi) : MewdekoSlashModuleBase<Searc
         }
         catch (ApiException ex)
         {
-            Log.Error(
+            logger.LogError(
                 "Image fetch failed in button handler. Error:\nCode: {StatusCode}\nContent: {Content}",
                 ex.StatusCode,
                 ex.HasContent ? ex.Content : "No Content"
@@ -66,7 +66,7 @@ public class SlashSearches(MartineApi martineApi) : MewdekoSlashModuleBase<Searc
 
             var errorEmbed = new EmbedBuilder()
                 .WithErrorColor()
-                .WithDescription("Failed to fetch image, please try again later!");
+                .WithDescription(Strings.FetchFailed(ctx.Guild.Id));
 
             if (ctx.User.Id != id)
             {
@@ -150,7 +150,7 @@ public class SlashSearches(MartineApi martineApi) : MewdekoSlashModuleBase<Searc
             Description = $"Title: {image.Data.Title}\n[Source]({image.Data.PostUrl})",
             Footer = new EmbedFooterBuilder
             {
-                Text = $"{image.Data.Upvotes} Upvotes! | r/{image.Data.Subreddit.Name} Powered by martineAPI"
+                Text = Strings.RedditUpvotes(ctx.Guild.Id, image.Data.Upvotes, image.Data.Subreddit.Name)
             },
             ImageUrl = image.Data.ImageUrl,
             Color = Mewdeko.OkColor

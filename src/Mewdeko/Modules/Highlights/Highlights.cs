@@ -1,8 +1,8 @@
 ﻿using Discord.Commands;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
+using LinqToDB;
 using Mewdeko.Common.Attributes.TextCommands;
-using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.Highlights.Services;
 
 namespace Mewdeko.Modules.Highlights;
@@ -11,9 +11,9 @@ namespace Mewdeko.Modules.Highlights;
 ///     Module for managing highlights.
 /// </summary>
 /// <param name="interactivity">The embed pagination service</param>
-/// <param name="svcs"></param>
-/// <param name="db"></param>
-public class Highlights(InteractiveService interactivity, IServiceProvider svcs, DbContextProvider dbProvider)
+/// <param name="svcs">The service provider</param>
+/// <param name="dbFactory">The db context provider</param>
+public class Highlights(InteractiveService interactivity, IServiceProvider svcs, IDataConnectionFactory dbFactory)
     : MewdekoModuleBase<HighlightsService>
 {
     /// <summary>
@@ -69,9 +69,10 @@ public class Highlights(InteractiveService interactivity, IServiceProvider svcs,
     [RequireContext(ContextType.Guild)]
     public async Task Highlight(HighlightActions action, [Remainder] string words = null)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
-        var highlights = (await dbContext.Highlights.ForUser(ctx.Guild.Id, ctx.User.Id)).ToList();
+        var highlights = await (dbContext.Highlights.Where(x => x.GuildId == ctx.Guild.Id && x.UserId == ctx.User.Id))
+            .ToListAsync();
         switch (action)
         {
             case HighlightActions.Add:
@@ -154,7 +155,8 @@ public class Highlights(InteractiveService interactivity, IServiceProvider svcs,
                     }
 
                     await Service.RemoveHighlight(todelete).ConfigureAwait(false);
-                    await ctx.Channel.SendConfirmAsync(Strings.HighlightRemoved(ctx.Guild.Id, Format.Code(todelete.Word)))
+                    await ctx.Channel
+                        .SendConfirmAsync(Strings.HighlightRemoved(ctx.Guild.Id, Format.Code(todelete.Word)))
                         .ConfigureAwait(false);
                     return;
                 }
@@ -233,7 +235,8 @@ public class Highlights(InteractiveService interactivity, IServiceProvider svcs,
                     if (await Service.ToggleIgnoredUser(ctx.Guild.Id, ctx.User.Id, host.Id.ToString())
                             .ConfigureAwait(false))
                     {
-                        await ctx.Channel.SendConfirmAsync(Strings.HighlightIgnoredUserAdded(ctx.Guild.Id, host.Mention))
+                        await ctx.Channel
+                            .SendConfirmAsync(Strings.HighlightIgnoredUserAdded(ctx.Guild.Id, host.Mention))
                             .ConfigureAwait(false);
                         return;
                     }
@@ -249,12 +252,14 @@ public class Highlights(InteractiveService interactivity, IServiceProvider svcs,
                 if (await Service.ToggleIgnoredChannel(ctx.Guild.Id, ctx.User.Id, channel.Id.ToString())
                         .ConfigureAwait(false))
                 {
-                    await ctx.Channel.SendConfirmAsync(Strings.HighlightIgnoredChannelAdded(ctx.Guild.Id, channel.Mention))
+                    await ctx.Channel
+                        .SendConfirmAsync(Strings.HighlightIgnoredChannelAdded(ctx.Guild.Id, channel.Mention))
                         .ConfigureAwait(false);
                 }
                 else
                 {
-                    await ctx.Channel.SendConfirmAsync(Strings.HighlightIgnoredChannelRemoved(ctx.Guild.Id, channel.Mention))
+                    await ctx.Channel
+                        .SendConfirmAsync(Strings.HighlightIgnoredChannelRemoved(ctx.Guild.Id, channel.Mention))
                         .ConfigureAwait(false);
                 }
 

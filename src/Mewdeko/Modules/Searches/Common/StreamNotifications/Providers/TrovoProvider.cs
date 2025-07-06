@@ -21,17 +21,19 @@ public class TrovoProvider : Provider
 
         if (string.IsNullOrWhiteSpace(creds.TrovoClientId))
         {
-            Log.Warning(@"Trovo streams are using a default clientId.
-If you are experiencing ratelimits, you should create your own application at: https://developer.trovo.live/");
+            Log.Warning("""
+                        Trovo streams are using a default clientId.
+                        If you are experiencing ratelimits, you should create your own application at: https://developer.trovo.live/
+                        """);
         }
     }
 
     /// <inheritdoc />
-    public override FollowedStream.FType Platform
+    public override FType Platform
     {
         get
         {
-            return FollowedStream.FType.Trovo;
+            return FType.Trovo;
         }
     }
 
@@ -120,7 +122,7 @@ If you are experiencing ratelimits, you should create your own application at: h
         if (string.IsNullOrWhiteSpace(trovoClientId))
         {
             Log.Warning("Trovo streams will be ignored until TrovoClientId is added to creds.yml");
-            return Array.Empty<StreamData?>();
+            return [];
         }
 
         var results = new List<StreamData?>(usernames.Count);

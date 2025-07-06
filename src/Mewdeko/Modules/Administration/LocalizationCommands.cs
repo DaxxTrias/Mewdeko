@@ -131,7 +131,8 @@ public partial class Administration
                     localization.SetGuildCulture(ctx.Guild, ci);
                 }
 
-                await ReplyConfirmAsync(Strings.LangSet(ctx.Guild.Id, Format.Bold(ci.ToString()), Format.Bold(ci.NativeName)))
+                await ReplyConfirmAsync(Strings.LangSet(ctx.Guild.Id, Format.Bold(ci.ToString()),
+                        Format.Bold(ci.NativeName)))
                     .ConfigureAwait(false);
             }
             catch (Exception)

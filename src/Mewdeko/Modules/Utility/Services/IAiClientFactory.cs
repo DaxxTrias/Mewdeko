@@ -6,7 +6,7 @@
 public interface IAiClientFactory
 {
     /// <summary>
-    /// Creates an AI client and stream parser for the specified provider.
+    ///     Creates an AI client and stream parser for the specified provider.
     /// </summary>
     /// <param name="provider">The AI provider to create components for.</param>
     /// <returns>A tuple containing the AI client and its corresponding stream parser.</returns>

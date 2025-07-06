@@ -69,7 +69,8 @@ public partial class Administration
         {
             if (timer is < 0 or > 600)
             {
-                await ctx.Channel.SendErrorAsync(Strings.Maxdeletetime(ctx.Guild.Id, "600 seconds"), Config).ConfigureAwait(false);
+                await ctx.Channel.SendErrorAsync(Strings.Maxdeletetime(ctx.Guild.Id, "600 seconds"), Config)
+                    .ConfigureAwait(false);
                 return;
             }
 
@@ -106,7 +107,8 @@ public partial class Administration
 
             await ReplyConfirmAsync(Strings.BoostmsgNew(ctx.Guild.Id)).ConfigureAwait(false);
             if (!sendBoostEnabled)
-                await ReplyConfirmAsync(Strings.BoostmsgEnable(ctx.Guild.Id, $"{await guildSettings.GetPrefix(ctx.Guild)}boost"))
+                await ReplyConfirmAsync(Strings.BoostmsgEnable(ctx.Guild.Id,
+                        $"{await guildSettings.GetPrefix(ctx.Guild)}boost"))
                     .ConfigureAwait(false);
         }
 
@@ -138,7 +140,7 @@ public partial class Administration
         [UserPerm(GuildPermission.ManageGuild)]
         public async Task LeaveHook(ITextChannel? chan, string? name, string? image = null, string? text = null)
         {
-            if (text?.ToLower() == "disable")
+            if (text?.Equals("disable", StringComparison.OrdinalIgnoreCase) == true)
             {
                 await Service.SetWebLeaveUrl(ctx.Guild, "").ConfigureAwait(false);
                 await ctx.Channel.SendConfirmAsync(Strings.Leavehookdisabled(ctx.Guild.Id)).ConfigureAwait(false);
@@ -160,7 +162,9 @@ public partial class Administration
             }
 
             var enabled = await Service.SetBye(ctx.Guild.Id, ctx.Channel.Id).ConfigureAwait(false);
-            var message = enabled ? Strings.Leavehookset(ctx.Guild.Id) : Strings.Leavehooksettwo(ctx.Guild.Id, await guildSettings.GetPrefix(ctx.Guild));
+            var message = enabled
+                ? Strings.Leavehookset(ctx.Guild.Id)
+                : Strings.Leavehooksettwo(ctx.Guild.Id, await guildSettings.GetPrefix(ctx.Guild));
             await ctx.Channel.SendConfirmAsync(message)
                 .ConfigureAwait(false);
         }
@@ -317,7 +321,8 @@ public partial class Administration
 
             await ReplyConfirmAsync(Strings.ByemsgNew(ctx.Guild.Id)).ConfigureAwait(false);
             if (!sendByeEnabled)
-                await ReplyConfirmAsync(Strings.ByemsgEnable(ctx.Guild.Id, $"`{await guildSettings.GetPrefix(ctx.Guild)}bye`"))
+                await ReplyConfirmAsync(Strings.ByemsgEnable(ctx.Guild.Id,
+                        $"`{await guildSettings.GetPrefix(ctx.Guild)}bye`"))
                     .ConfigureAwait(false);
         }
 
@@ -363,7 +368,8 @@ public partial class Administration
             await Service.ByeTest((ITextChannel)Context.Channel, user).ConfigureAwait(false);
             var enabled = await Service.GetByeEnabled(Context.Guild.Id);
             if (!enabled)
-                await ReplyConfirmAsync(Strings.ByemsgEnable(ctx.Guild.Id, $"`{await guildSettings.GetPrefix(ctx.Guild)}bye`"))
+                await ReplyConfirmAsync(Strings.ByemsgEnable(ctx.Guild.Id,
+                        $"`{await guildSettings.GetPrefix(ctx.Guild)}bye`"))
                     .ConfigureAwait(false);
         }
 

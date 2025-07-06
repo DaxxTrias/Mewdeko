@@ -1,11 +1,11 @@
 using System.Net;
+using DataModel;
 using Discord.Commands;
 using Discord.Net;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Modules.Administration.Services;
-using Serilog;
 using SkiaSharp;
 
 namespace Mewdeko.Modules.Administration;
@@ -17,7 +17,7 @@ public partial class Administration
     /// </summary>
     /// <param name="services">Main services provider for the bot.</param>
     /// <param name="intserv">Interactive service used for paginated embeds.</param>
-    public class RoleCommands(IServiceProvider services, InteractiveService intserv)
+    public class RoleCommands(IServiceProvider services, InteractiveService intserv, ILogger<RoleCommands> logger)
         : MewdekoSubmodule<RoleCommandsService>
     {
         /// <summary>
@@ -52,7 +52,7 @@ public partial class Administration
                     var roleResult = await roleReader.ReadAsync(ctx, inputRoleStr, services).ConfigureAwait(false);
                     if (!roleResult.IsSuccess)
                     {
-                        Log.Warning("Role {0} not found", inputRoleStr);
+                        logger.LogWarning("Role {0} not found", inputRoleStr);
                         return null;
                     }
 
@@ -208,6 +208,7 @@ public partial class Administration
         ///     This command allows administrators to manage reaction roles in the server while making all roles exclusive.
         ///     It requires the Manage Roles permission for the user and the Manage Roles permission for the bot.
         /// </remarks>
+        /// <param name="_">The exclusion parameter to make roles exclusive.</param>
         /// <param name="input">The roles and emojis to be associated with reactions.</param>
         /// <returns>A task representing the asynchronous operation.</returns>
         [Cmd]
@@ -266,7 +267,7 @@ public partial class Administration
                     var eb = new PageBuilder().WithOkColor();
                     return
                         eb.AddField("ID", rr.Index + 1)
-                            .AddField(Strings.ReroRolesCount(ctx.Guild.Id, rr.ReactionRoles.Count),
+                            .AddField(Strings.ReroRolesCount(ctx.Guild.Id, rr.ReactionRoles.Count()),
                                 string.Join(",",
                                     rr.ReactionRoles.Select(x => $"{x.EmoteName} {g.GetRole(x.RoleId).Mention}")))
                             .AddField(Strings.UsersCanSelectMorethanOne(ctx.Guild.Id), rr.Exclusive)
@@ -339,7 +340,7 @@ public partial class Administration
             }
             catch (Exception ex)
             {
-                Log.Warning(ex, "Error in setrole command");
+                logger.LogWarning(ex, "Error in setrole command");
                 await ReplyErrorAsync(Strings.SetroleErr(ctx.Guild.Id)).ConfigureAwait(false);
             }
         }
@@ -375,7 +376,7 @@ public partial class Administration
             }
             catch (Exception ex)
             {
-                Log.Warning(ex, "Error in setrole command");
+                logger.LogWarning(ex, "Error in setrole command");
                 await ReplyErrorAsync(Strings.SetroleErr(ctx.Guild.Id)).ConfigureAwait(false);
             }
         }

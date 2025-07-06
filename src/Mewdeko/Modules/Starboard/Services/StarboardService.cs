@@ -1,50 +1,65 @@
-﻿using Mewdeko.Common.ModuleBehaviors;
-using Mewdeko.Database.Models;
-using Mewdeko.Database.DbContextStuff;
-using Microsoft.EntityFrameworkCore;
-using Serilog;
-using Discord;
-using Discord.WebSocket;
+﻿using DataModel;
+using LinqToDB;
+using Mewdeko.Common.ModuleBehaviors;
+using Mewdeko.Services.Strings;
 
 namespace Mewdeko.Modules.Starboard.Services;
 
 /// <summary>
 ///     Service responsible for managing multiple starboards in Discord servers.
 /// </summary>
-public class StarboardService : INService, IReadyExecutor
+public class StarboardService : INService, IReadyExecutor, IUnloadableService
 {
     private readonly DiscordShardedClient client;
-    private readonly DbContextProvider dbProvider;
+    private readonly IDataConnectionFactory dbFactory;
+    private readonly EventHandler eventHandler;
+    private readonly ILogger<StarboardService> logger;
+    private readonly GeneratedBotStrings strings;
+    private List<DataModel.Starboard> starboardConfigs = [];
 
     private List<StarboardPost> starboardPosts = [];
-    private List<StarboardConfig> starboardConfigs = [];
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="StarboardService" /> class.
     /// </summary>
     /// <param name="client">The Discord socket client.</param>
-    /// <param name="dbProvider">The database context provider.</param>
+    /// <param name="dbFactory">The database context provider.</param>
     /// <param name="eventHandler">The event handler.</param>
-    public StarboardService(DiscordShardedClient client, DbContextProvider dbProvider,
-       EventHandler eventHandler)
+    public StarboardService(DiscordShardedClient client, IDataConnectionFactory dbFactory,
+        EventHandler eventHandler, GeneratedBotStrings strings, ILogger<StarboardService> logger)
     {
         this.client = client;
-        this.dbProvider = dbProvider;
-        eventHandler.ReactionAdded += OnReactionAddedAsync;
-        eventHandler.MessageDeleted += OnMessageDeletedAsync;
-        eventHandler.ReactionRemoved += OnReactionRemoveAsync;
-        eventHandler.ReactionsCleared += OnAllReactionsClearedAsync;
+        this.dbFactory = dbFactory;
+        this.eventHandler = eventHandler;
+        this.strings = strings;
+        this.logger = logger;
+        eventHandler.Subscribe("ReactionAdded", "StarboardService", OnReactionAddedAsync);
+        eventHandler.Subscribe("MessageDeleted", "StarboardService", OnMessageDeletedAsync);
+        eventHandler.Subscribe("ReactionRemoved", "StarboardService", OnReactionRemoveAsync);
+        eventHandler.Subscribe("ReactionsCleared", "StarboardService", OnAllReactionsClearedAsync);
     }
 
     /// <inheritdoc />
     public async Task OnReadyAsync()
     {
-        Log.Information($"Starting {GetType()} Cache");
-        await using var dbContext = await dbProvider.GetContextAsync();
+        logger.LogInformation($"Starting {GetType()} Cache");
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
         starboardPosts = await dbContext.StarboardPosts.ToListAsync();
         starboardConfigs = await dbContext.Starboards.ToListAsync();
-        Log.Information("Starboard Cache Ready");
+        logger.LogInformation("Starboard Cache Ready");
+    }
+
+    /// <summary>
+    ///     Unloads the service and unsubscribes from events.
+    /// </summary>
+    public Task Unload()
+    {
+        eventHandler.Unsubscribe("ReactionAdded", "StarboardService", OnReactionAddedAsync);
+        eventHandler.Unsubscribe("MessageDeleted", "StarboardService", OnMessageDeletedAsync);
+        eventHandler.Unsubscribe("ReactionRemoved", "StarboardService", OnReactionRemoveAsync);
+        eventHandler.Unsubscribe("ReactionsCleared", "StarboardService", OnAllReactionsClearedAsync);
+        return Task.CompletedTask;
     }
 
     /// <summary>
@@ -57,8 +72,8 @@ public class StarboardService : INService, IReadyExecutor
     /// <returns>The ID of the created starboard configuration.</returns>
     public async Task<int> CreateStarboard(IGuild guild, ulong channelId, string emote, int threshold)
     {
-        await using var db = await dbProvider.GetContextAsync();
-        var config = new StarboardConfig
+        await using var db = await dbFactory.CreateConnectionAsync();
+        var config = new DataModel.Starboard
         {
             GuildId = guild.Id,
             StarboardChannelId = channelId,
@@ -73,8 +88,7 @@ public class StarboardService : INService, IReadyExecutor
             RepostThreshold = 0
         };
 
-        db.Starboards.Add(config);
-        await db.SaveChangesAsync();
+        await db.InsertAsync(config);
         starboardConfigs.Add(config);
         return config.Id;
     }
@@ -91,9 +105,9 @@ public class StarboardService : INService, IReadyExecutor
         if (config == null)
             return false;
 
-        await using var db = await dbProvider.GetContextAsync();
-        db.Starboards.Remove(config);
-        await db.SaveChangesAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
+        await db.DeleteAsync(config);
+
         starboardConfigs.Remove(config);
         return true;
     }
@@ -103,8 +117,107 @@ public class StarboardService : INService, IReadyExecutor
     /// </summary>
     /// <param name="guildId">The ID of the guild.</param>
     /// <returns>A list of starboard configurations.</returns>
-    public List<StarboardConfig> GetStarboards(ulong guildId)
+    public List<DataModel.Starboard> GetStarboards(ulong guildId)
         => starboardConfigs.Where(x => x.GuildId == guildId).ToList();
+
+    /// <summary>
+    ///     Gets recent starboard highlights for a guild.
+    /// </summary>
+    /// <param name="guildId">The ID of the guild.</param>
+    /// <param name="limit">The maximum number of highlights to return.</param>
+    /// <returns>A list of recent starboard highlights.</returns>
+    public async Task<List<StarboardHighlight>> GetRecentHighlights(ulong guildId, int limit = 5)
+    {
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
+
+        // Get starboard configs for this guild
+        var guildStarboards = starboardConfigs.Where(s => s.GuildId == guildId).ToList();
+        if (guildStarboards.Count == 0)
+            return new List<StarboardHighlight>();
+
+        // Get recent starboard posts for this guild
+        var recentPosts = await dbContext.StarboardPosts
+            .Where(sp => guildStarboards.Select(gs => gs.Id).Contains(sp.StarboardConfigId))
+            .OrderByDescending(sp => sp.DateAdded)
+            .Take(limit * 2) // Get more than needed in case some messages are deleted
+            .ToListAsync();
+
+        var highlights = new List<StarboardHighlight>();
+        var guild = client.GetGuild(guildId);
+
+        if (guild == null)
+            return highlights;
+
+        // Process each post and try to get message content from Discord
+        foreach (var post in recentPosts)
+        {
+            if (highlights.Count >= limit)
+                break;
+
+            try
+            {
+                var starboardConfig = guildStarboards.FirstOrDefault(s => s.Id == post.StarboardConfigId);
+                if (starboardConfig == null) continue;
+
+                var starboardChannel = guild.GetTextChannel(starboardConfig.StarboardChannelId);
+                if (starboardChannel == null) continue;
+
+                var starboardMessage = await starboardChannel.GetMessageAsync(post.PostId);
+                if (starboardMessage == null) continue;
+
+                // Parse star count from the starboard message - handle different emotes
+                var starCount = 0;
+                var emote = starboardConfig.Emote ?? "⭐";
+                if (starboardMessage.Content.Contains(emote))
+                {
+                    var starText = starboardMessage.Content.Split(' ')[0];
+                    if (int.TryParse(starText.Replace(emote, "").Trim(), out var parsedCount))
+                        starCount = parsedCount;
+                }
+
+                // Try to get original message content and author info
+                var originalContent = "Message content unavailable";
+                var authorName = "Unknown User";
+                var authorAvatarUrl = "";
+                var imageUrl = "";
+
+                // Extract content from starboard message embed or content
+                if (starboardMessage.Embeds.Any())
+                {
+                    var embed = starboardMessage.Embeds.First();
+                    originalContent = embed.Description ?? originalContent;
+                    authorName = embed.Author?.Name ?? authorName;
+                    authorAvatarUrl = embed.Author?.IconUrl ?? "";
+
+                    // Check for images in embed
+                    if (embed.Image.HasValue)
+                        imageUrl = embed.Image.Value.Url;
+                    else if (embed.Thumbnail.HasValue)
+                        imageUrl = embed.Thumbnail.Value.Url;
+                }
+
+                highlights.Add(new StarboardHighlight
+                {
+                    MessageId = post.MessageId,
+                    ChannelId = 0, // We'd need to store this in the DB to get it
+                    StarCount = starCount,
+                    Content = originalContent,
+                    AuthorName = authorName,
+                    AuthorAvatarUrl = authorAvatarUrl,
+                    ImageUrl = imageUrl,
+                    StarEmote = emote,
+                    CreatedAt = post.DateAdded ?? DateTime.UtcNow
+                });
+            }
+            catch (Exception ex)
+            {
+                // Log error but continue processing other messages
+                logger.LogWarning($"Failed to process starboard highlight for post {post.Id}: {ex.Message}");
+            }
+        }
+
+        return highlights.OrderByDescending(h => h.StarCount).ToList();
+    }
 
     /// <summary>
     ///     Sets whether bots are allowed to be starred for a specific starboard.
@@ -119,10 +232,10 @@ public class StarboardService : INService, IReadyExecutor
         if (config == null)
             return false;
 
-        await using var db = await dbProvider.GetContextAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
         config.AllowBots = allowed;
-        db.Starboards.Update(config);
-        await db.SaveChangesAsync();
+        await db.UpdateAsync(config);
+
         return true;
     }
 
@@ -139,10 +252,10 @@ public class StarboardService : INService, IReadyExecutor
         if (config == null)
             return false;
 
-        await using var db = await dbProvider.GetContextAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
         config.RemoveOnDelete = removeOnDelete;
-        db.Starboards.Update(config);
-        await db.SaveChangesAsync();
+        await db.UpdateAsync(config);
+
         return true;
     }
 
@@ -159,10 +272,10 @@ public class StarboardService : INService, IReadyExecutor
         if (config == null)
             return false;
 
-        await using var db = await dbProvider.GetContextAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
         config.RemoveOnReactionsClear = removeOnClear;
-        db.Starboards.Update(config);
-        await db.SaveChangesAsync();
+        await db.UpdateAsync(config);
+
         return true;
     }
 
@@ -179,10 +292,10 @@ public class StarboardService : INService, IReadyExecutor
         if (config == null)
             return false;
 
-        await using var db = await dbProvider.GetContextAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
         config.RemoveOnBelowThreshold = removeBelowThreshold;
-        db.Starboards.Update(config);
-        await db.SaveChangesAsync();
+        await db.UpdateAsync(config);
+
         return true;
     }
 
@@ -199,10 +312,10 @@ public class StarboardService : INService, IReadyExecutor
         if (config == null)
             return false;
 
-        await using var db = await dbProvider.GetContextAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
         config.RepostThreshold = threshold;
-        db.Starboards.Update(config);
-        await db.SaveChangesAsync();
+        await db.UpdateAsync(config);
+
         return true;
     }
 
@@ -219,10 +332,10 @@ public class StarboardService : INService, IReadyExecutor
         if (config == null)
             return false;
 
-        await using var db = await dbProvider.GetContextAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
         config.Threshold = threshold;
-        db.Starboards.Update(config);
-        await db.SaveChangesAsync();
+        await db.UpdateAsync(config);
+
         return true;
     }
 
@@ -239,10 +352,10 @@ public class StarboardService : INService, IReadyExecutor
         if (config == null)
             return false;
 
-        await using var db = await dbProvider.GetContextAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
         config.UseBlacklist = useBlacklist;
-        db.Starboards.Update(config);
-        await db.SaveChangesAsync();
+        await db.UpdateAsync(config);
+
         return true;
     }
 
@@ -253,7 +366,8 @@ public class StarboardService : INService, IReadyExecutor
     /// <param name="starboardId">The ID of the starboard configuration.</param>
     /// <param name="channelId">The channel ID to toggle.</param>
     /// <returns>A tuple containing whether the channel was added and the starboard configuration.</returns>
-    public async Task<(bool WasAdded, StarboardConfig Config)> ToggleChannel(IGuild guild, int starboardId, string channelId)
+    public async Task<(bool WasAdded, DataModel.Starboard Config)> ToggleChannel(IGuild guild, int starboardId,
+        string channelId)
     {
         var config = starboardConfigs.FirstOrDefault(x => x.Id == starboardId && x.GuildId == guild.Id);
         if (config == null)
@@ -261,40 +375,38 @@ public class StarboardService : INService, IReadyExecutor
 
         var channels = config.CheckedChannels.Split(" ", StringSplitOptions.RemoveEmptyEntries).ToList();
 
-        await using var db = await dbProvider.GetContextAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
         if (!channels.Contains(channelId))
         {
             channels.Add(channelId);
             config.CheckedChannels = string.Join(" ", channels);
-            db.Starboards.Update(config);
-            await db.SaveChangesAsync();
+            await db.UpdateAsync(config);
+
             return (true, config);
         }
 
         channels.Remove(channelId);
         config.CheckedChannels = string.Join(" ", channels);
-        db.Starboards.Update(config);
-        await db.SaveChangesAsync();
+        await db.UpdateAsync(config);
+
         return (false, config);
     }
 
 
     private async Task AddStarboardPost(ulong messageId, ulong postId, int starboardId)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
         var post = starboardPosts.Find(x => x.MessageId == messageId && x.StarboardConfigId == starboardId);
         if (post == null)
         {
             var toAdd = new StarboardPost
             {
-                MessageId = messageId,
-                PostId = postId,
-                StarboardConfigId = starboardId
+                MessageId = messageId, PostId = postId, StarboardConfigId = starboardId
             };
             starboardPosts.Add(toAdd);
-            dbContext.StarboardPosts.Add(toAdd);
-            await dbContext.SaveChangesAsync();
+            await dbContext.InsertAsync(toAdd);
+
             return;
         }
 
@@ -303,9 +415,8 @@ public class StarboardService : INService, IReadyExecutor
 
         starboardPosts.Remove(post);
         post.PostId = postId;
-        dbContext.StarboardPosts.Update(post);
+        await dbContext.UpdateAsync(post);
         starboardPosts.Add(post);
-        await dbContext.SaveChangesAsync();
     }
 
     private async Task RemoveStarboardPost(ulong messageId, int starboardId)
@@ -314,10 +425,9 @@ public class StarboardService : INService, IReadyExecutor
         if (toRemove == null)
             return;
 
-        await using var dbContext = await dbProvider.GetContextAsync();
-        dbContext.StarboardPosts.Remove(toRemove);
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
+        await dbContext.DeleteAsync(toRemove);
         starboardPosts.Remove(toRemove);
-        await dbContext.SaveChangesAsync();
     }
 
     private async Task OnReactionAddedAsync(Cacheable<IUserMessage, ulong> message,
@@ -340,7 +450,7 @@ public class StarboardService : INService, IReadyExecutor
         }
     }
 
-   private async Task OnReactionRemoveAsync(Cacheable<IUserMessage, ulong> message,
+    private async Task OnReactionRemoveAsync(Cacheable<IUserMessage, ulong> message,
         Cacheable<IMessageChannel, ulong> channel,
         SocketReaction reaction)
     {
@@ -363,7 +473,7 @@ public class StarboardService : INService, IReadyExecutor
     private async Task HandleReactionChange(Cacheable<IUserMessage, ulong> message,
         Cacheable<IMessageChannel, ulong> channel,
         SocketReaction reaction,
-        StarboardConfig starboard,
+        DataModel.Starboard starboard,
         bool isAdd)
     {
         var textChannel = channel.Value as ITextChannel;
@@ -393,12 +503,14 @@ public class StarboardService : INService, IReadyExecutor
 
         if (starboard.UseBlacklist)
         {
-            if (!starboard.CheckedChannels.IsNullOrWhiteSpace() && starboard.CheckedChannels.Split(" ").Contains(newMessage.Channel.Id.ToString()))
+            if (!starboard.CheckedChannels.IsNullOrWhiteSpace() &&
+                starboard.CheckedChannels.Split(" ").Contains(newMessage.Channel.Id.ToString()))
                 return;
         }
         else
         {
-            if (!starboard.CheckedChannels.IsNullOrWhiteSpace() && !starboard.CheckedChannels.Split(" ").Contains(newMessage.Channel.ToString()))
+            if (!starboard.CheckedChannels.IsNullOrWhiteSpace() &&
+                !starboard.CheckedChannels.Split(" ").Contains(newMessage.Channel.ToString()))
                 return;
         }
 
@@ -450,6 +562,7 @@ public class StarboardService : INService, IReadyExecutor
                     // ignored
                 }
             }
+
             return;
         }
 
@@ -474,7 +587,8 @@ public class StarboardService : INService, IReadyExecutor
 
                     await post2.ModifyAsync(x =>
                     {
-                        x.Content = $"{emote} **{enumerable.Length}** {textChannel.Mention}";
+                        x.Content = strings.StarboardMessage(textChannel.Guild.Id, emote, enumerable.Length,
+                            textChannel.Mention);
                         x.Components = component;
                         x.Embed = eb1.Build();
                     });
@@ -504,7 +618,7 @@ public class StarboardService : INService, IReadyExecutor
                         eb2.WithImageUrl(imageurl);
 
                     var msg1 = await starboardChannel.SendMessageAsync(
-                        $"{emote} **{enumerable.Length}** {textChannel.Mention}",
+                        strings.StarboardMessage(textChannel.Guild.Id, emote, enumerable.Length, textChannel.Mention),
                         embed: eb2.Build(),
                         components: component);
 
@@ -528,7 +642,8 @@ public class StarboardService : INService, IReadyExecutor
 
                     await toModify.ModifyAsync(x =>
                     {
-                        x.Content = $"{emote} **{enumerable.Length}** {textChannel.Mention}";
+                        x.Content = strings.StarboardMessage(textChannel.Guild.Id, emote, enumerable.Length,
+                            textChannel.Mention);
                         x.Components = component;
                         x.Embed = eb1.Build();
                     });
@@ -545,7 +660,7 @@ public class StarboardService : INService, IReadyExecutor
                         eb2.WithImageUrl(imageurl);
 
                     var msg1 = await starboardChannel.SendMessageAsync(
-                        $"{emote} **{enumerable.Length}** {textChannel.Mention}",
+                        strings.StarboardMessage(textChannel.Guild.Id, emote, enumerable.Length, textChannel.Mention),
                         embed: eb2.Build(),
                         components: component);
 
@@ -565,7 +680,7 @@ public class StarboardService : INService, IReadyExecutor
                 eb.WithImageUrl(imageurl);
 
             var msg = await starboardChannel.SendMessageAsync(
-                $"{emote} **{enumerable.Length}** {textChannel.Mention}",
+                strings.StarboardMessage(textChannel.Guild.Id, emote, enumerable.Length, textChannel.Mention),
                 embed: eb.Build(),
                 components: component);
 
@@ -613,7 +728,8 @@ public class StarboardService : INService, IReadyExecutor
         }
     }
 
-    private async Task OnAllReactionsClearedAsync(Cacheable<IUserMessage, ulong> arg1, Cacheable<IMessageChannel, ulong> arg2)
+    private async Task OnAllReactionsClearedAsync(Cacheable<IUserMessage, ulong> arg1,
+        Cacheable<IMessageChannel, ulong> arg2)
     {
         if (!arg2.HasValue || arg2.Value is not ITextChannel channel)
             return;
@@ -652,4 +768,55 @@ public class StarboardService : INService, IReadyExecutor
             await RemoveStarboardPost(msg.Id, config.Id);
         }
     }
+}
+
+/// <summary>
+///     Represents a starboard highlight for dashboard display
+/// </summary>
+public class StarboardHighlight
+{
+    /// <summary>
+    ///     The original message ID
+    /// </summary>
+    public ulong MessageId { get; set; }
+
+    /// <summary>
+    ///     The channel ID where the message was posted
+    /// </summary>
+    public ulong ChannelId { get; set; }
+
+    /// <summary>
+    ///     The number of stars this message has
+    /// </summary>
+    public int StarCount { get; set; }
+
+    /// <summary>
+    ///     The content of the message
+    /// </summary>
+    public string Content { get; set; } = string.Empty;
+
+    /// <summary>
+    ///     The name of the message author
+    /// </summary>
+    public string AuthorName { get; set; } = string.Empty;
+
+    /// <summary>
+    ///     The avatar URL of the message author
+    /// </summary>
+    public string? AuthorAvatarUrl { get; set; }
+
+    /// <summary>
+    ///     The URL of any image attached to the message
+    /// </summary>
+    public string? ImageUrl { get; set; }
+
+    /// <summary>
+    ///     The star emote used for this starboard
+    /// </summary>
+    public string StarEmote { get; set; } = "⭐";
+
+    /// <summary>
+    ///     When the message was created
+    /// </summary>
+    public DateTime CreatedAt { get; set; }
 }

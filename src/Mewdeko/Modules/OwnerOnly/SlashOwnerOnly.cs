@@ -1,20 +1,21 @@
 ﻿using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.InteropServices;
+using DataModel;
 using Discord.Commands;
 using Discord.Interactions;
 using Discord.Net;
 using Discord.Rest;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
-using LinqToDB.EntityFrameworkCore;
+using LinqToDB;
+using LinqToDB.Data;
 using Mewdeko.Common.Attributes.InteractionCommands;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Common.Autocompleters;
 using Mewdeko.Common.Configs;
 using Mewdeko.Common.DiscordImplementations;
 using Mewdeko.Common.Modals;
-using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.OwnerOnly.Services;
 using Mewdeko.Services.Impl;
 using Mewdeko.Services.Settings;
@@ -22,8 +23,6 @@ using Mewdeko.Services.strings;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Scripting;
 using Microsoft.CodeAnalysis.Scripting;
-using Microsoft.EntityFrameworkCore;
-using Serilog;
 using ContextType = Discord.Interactions.ContextType;
 
 namespace Mewdeko.Modules.OwnerOnly;
@@ -35,8 +34,7 @@ namespace Mewdeko.Modules.OwnerOnly;
 /// <param name="client">The Discord client used to interact with the Discord API.</param>
 /// <param name="strings">Provides access to localized strings within the bot.</param>
 /// <param name="serv">Interactive service for handling interactive user commands.</param>
-/// <param name="coord">Coordinator for managing bot operations across different services and modules.</param>
-/// <param name="db">Service for database operations and access.</param>
+/// <param name="dbFactory">Service for database operations and access.</param>
 /// <param name="cache">Cache service for storing and retrieving temporary data.</param>
 /// <param name="guildSettings">Service for accessing and modifying guild-specific settings.</param>
 /// <param name="commandHandler">Handler for processing and executing commands received from users.</param>
@@ -46,11 +44,11 @@ public class SlashOwnerOnly(
     DiscordShardedClient client,
     IBotStrings strings,
     InteractiveService serv,
-    DbContextProvider dbProvider,
+    IDataConnectionFactory dbFactory,
     IDataCache cache,
     GuildSettingsService guildSettings,
     CommandHandler commandHandler,
-    BotConfig botConfigService, Localization localization)
+    ILogger<SlashOwnerOnly> logger)
     : MewdekoSlashModuleBase<OwnerOnlyService>
 {
     /// <summary>
@@ -80,23 +78,6 @@ public class SlashOwnerOnly(
     }
 
     /// <summary>
-    ///     Clears the count of used GPT tokens after confirming with the user.
-    /// </summary>
-    /// <remarks>
-    ///     This command prompts the user for confirmation before proceeding to clear the used token count.
-    ///     If the user confirms, it clears the count and notifies the user of completion.
-    /// </remarks>
-    [SlashCommand("clearusedtokens", "Clears the used gpt tokens count")]
-    public async Task ClearUsedTokens()
-    {
-        if (await PromptUserConfirmAsync(Strings.ClearTokensConfirm(ctx.Guild.Id), ctx.User.Id))
-        {
-            await Service.ClearUsedTokens();
-            await ctx.Interaction.SendErrorAsync(Strings.TokensCleared(ctx.Guild.Id), Config);
-        }
-    }
-
-    /// <summary>
     ///     Executes a command as if it were sent by the specified guild user.
     /// </summary>
     /// <param name="user">The guild user to impersonate when executing the command.</param>
@@ -106,7 +87,7 @@ public class SlashOwnerOnly(
     ///     then enqueues it for command parsing and execution.
     /// </remarks>
     [SlashCommand("sudo", "Run a command as another user")]
-    public async Task Sudo([Remainder] string args, IUser user = null)
+    public async Task Sudo([Remainder] string args, IUser? user = null)
     {
         user ??= await Context.Guild.GetOwnerAsync();
         var msg = new MewdekoUserMessage
@@ -147,13 +128,14 @@ public class SlashOwnerOnly(
     [SlashCommand("sqlexec", "Run a sql command")]
     public async Task SqlExec([Remainder] string sql)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
         if (!await PromptUserConfirmAsync(Strings.SqlExecConfirm(ctx.Guild.Id), ctx.User.Id).ConfigureAwait(false))
             return;
 
-        var affected = await dbContext.Database.ExecuteSqlRawAsync(sql).ConfigureAwait(false);
-        await ctx.Interaction.SendErrorAsync(Strings.SqlAffectedRows(ctx.Guild.Id, affected), Config).ConfigureAwait(false);
+        var affected = await dbContext.ExecuteAsync(sql).ConfigureAwait(false);
+        await ctx.Interaction.SendErrorAsync(Strings.SqlAffectedRows(ctx.Guild.Id, affected), Config)
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -182,7 +164,7 @@ public class SlashOwnerOnly(
         {
             await Task.CompletedTask;
             var newGuilds = guilds.Skip(10 * page);
-            var eb = new PageBuilder().WithOkColor().WithTitle("Servers List");
+            var eb = new PageBuilder().WithOkColor().WithTitle(Strings.ServersList(ctx.Guild?.Id ?? 0));
             foreach (var i in newGuilds)
             {
                 eb.AddField($"{i.Name} | {i.Id}", $"Members: {i.Users.Count}"
@@ -207,65 +189,77 @@ public class SlashOwnerOnly(
     [SlashCommand("commandstats", "Get stats about commands")]
     public async Task CommandStats()
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
-        var commandStatsTable = dbContext.CommandStats;
-        var topCommandTask = commandStatsTable
+        var topCommand = await dbContext.CommandStats
             .Where(x => !x.Trigger)
             .GroupBy(q => q.NameOrId)
             .Select(g => new
             {
-                g.Key, Count = g.Count()
+                Name = g.Key, Count = g.Count()
             })
             .OrderByDescending(gc => gc.Count)
-            .FirstOrDefaultAsyncLinqToDB();
+            .FirstOrDefaultAsync();
 
-        var topModuleTask = commandStatsTable
+        var topModule = await dbContext.CommandStats
             .Where(x => !x.Trigger)
             .GroupBy(q => q.Module)
             .Select(g => new
             {
-                g.Key, Count = g.Count()
+                Name = g.Key, Count = g.Count()
             })
             .OrderByDescending(gc => gc.Count)
-            .FirstOrDefaultAsyncLinqToDB();
+            .FirstOrDefaultAsync();
 
-        var topGuildTask = commandStatsTable
+        var topGuildStat = await dbContext.CommandStats
             .Where(x => !x.Trigger)
             .GroupBy(q => q.GuildId)
             .Select(g => new
             {
-                g.Key, Count = g.Count()
+                GuildId = g.Key, Count = g.Count()
             })
             .OrderByDescending(gc => gc.Count)
-            .FirstOrDefaultAsyncLinqToDB();
+            .FirstOrDefaultAsync();
 
-        var topUserTask = commandStatsTable
+        var topUserStat = await dbContext.CommandStats
             .Where(x => !x.Trigger)
             .GroupBy(q => q.UserId)
             .Select(g => new
             {
-                g.Key, Count = g.Count()
+                UserId = g.Key, Count = g.Count()
             })
             .OrderByDescending(gc => gc.Count)
-            .FirstOrDefaultAsyncLinqToDB();
+            .FirstOrDefaultAsync();
 
-        await Task.WhenAll(topCommandTask, topModuleTask, topGuildTask, topUserTask);
+        IGuild? guild = null;
+        IUser? user = null;
 
-        var topCommand = await topCommandTask;
-        var topModule = await topModuleTask;
-        var topGuild = await topGuildTask;
-        var topUser = await topUserTask;
-
-        var guild = await client.Rest.GetGuildAsync(topGuild.Key);
-        var user = await client.Rest.GetUserAsync(topUser.Key);
+        // Parallel fetch of guild and user details
+        await Task.WhenAll(
+            Task.Run(async () =>
+            {
+                if (topGuildStat?.GuildId != null)
+                    guild = await client.Rest.GetGuildAsync(topGuildStat.GuildId);
+            }),
+            Task.Run(async () =>
+            {
+                if (topUserStat?.UserId != null)
+                    user = await client.Rest.GetUserAsync(topUserStat.UserId);
+            })
+        );
 
         var eb = new EmbedBuilder()
             .WithOkColor()
-            .AddField("Top Command", $"{topCommand.Key} was used {topCommand.Count} times!")
-            .AddField("Top Module", $"{topModule.Key} was used {topModule.Count} times!")
-            .AddField("Top User", $"{user} has used commands {topUser.Count} times!")
-            .AddField("Top Guild", $"{guild} has used commands {topGuild.Count} times!");
+            .WithTitle(Strings.CommandStatsTitle(ctx.Guild.Id))
+            .AddField(Strings.CommandStats(ctx.Guild.Id),
+                Strings.StatsTopCommand(ctx.Guild.Id, topCommand?.Name ?? "N/A", topCommand?.Count ?? 0))
+            .AddField(Strings.ModuleStats(ctx.Guild.Id),
+                Strings.StatsTopModule(ctx.Guild.Id, topModule?.Name ?? "N/A", topModule?.Count ?? 0))
+            .AddField(Strings.UserStats(ctx.Guild.Id),
+                Strings.StatsTopUser(ctx.Guild.Id, user, topUserStat?.Count ?? 0))
+            .AddField(Strings.GuildStats(ctx.Guild.Id),
+                Strings.StatsTopGuild(ctx.Guild.Id, guild?.Name ?? Strings.UnknownGuild(ctx.Guild.Id),
+                    topGuildStat?.Count ?? 0));
 
         await ctx.Interaction.RespondAsync(embed: eb.Build());
     }
@@ -312,7 +306,7 @@ public class SlashOwnerOnly(
             .WithActionOnCancellation(ActionOnStop.DeleteMessage)
             .Build();
 
-        await serv.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
+        await serv.SendPaginatorAsync(paginator, Context.Interaction, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
 
         async Task<PageBuilder> PageFactory(int page)
         {
@@ -335,7 +329,9 @@ public class SlashOwnerOnly(
         return status switch
         {
             ConnectionState.Connected => "✅",
-            ConnectionState.Disconnected => "🔻"
+            ConnectionState.Disconnected => "🔻",
+            ConnectionState.Connecting => "🔄",
+            _ => "❓"
         };
     }
 
@@ -406,17 +402,20 @@ public class SlashOwnerOnly(
                 return;
             }
 
-            if (SmartEmbed.TryParse(rep.Replace(msg), ctx.Guild?.Id, out var embed, out var plainText,
+            if (SmartEmbed.TryParse(rep.Replace(msg) ?? string.Empty, ctx.Guild?.Id, out var embed, out var plainText,
                     out var components))
             {
                 await potentialUser.SendMessageAsync(plainText, embeds: embed, components: components.Build())
                     .ConfigureAwait(false);
-                await ctx.Interaction.SendConfirmAsync($"Message sent to {potentialUser.Mention}!").ConfigureAwait(false);
+                await ctx.Interaction
+                    .SendConfirmAsync(Strings.MessageSentToUser(ctx.Guild?.Id ?? 0, potentialUser.Mention))
+                    .ConfigureAwait(false);
                 return;
             }
 
             await potentialUser.SendMessageAsync(rep.Replace(msg)).ConfigureAwait(false);
-            await ctx.Interaction.SendConfirmAsync($"Message sent to {potentialUser.Mention}!").ConfigureAwait(false);
+            await ctx.Interaction.SendConfirmAsync(Strings.MessageSentToUser(ctx.Guild?.Id ?? 0, potentialUser.Mention))
+                .ConfigureAwait(false);
             return;
         }
 
@@ -430,18 +429,20 @@ public class SlashOwnerOnly(
         var channel = await potentialServer.GetTextChannelAsync(to).ConfigureAwait(false);
         if (channel is not null)
         {
-            if (SmartEmbed.TryParse(rep.Replace(msg), ctx.Guild.Id, out var embed, out var plainText,
+            if (SmartEmbed.TryParse(rep.Replace(msg) ?? string.Empty, ctx.Guild.Id, out var embed, out var plainText,
                     out var components))
             {
                 await channel.SendMessageAsync(plainText, embeds: embed, components: components?.Build())
                     .ConfigureAwait(false);
-                await ctx.Interaction.SendConfirmAsync($"Message sent to {potentialServer} in {channel.Mention}")
+                await ctx.Interaction
+                    .SendConfirmAsync(Strings.MessageSentToServer(ctx.Guild.Id, potentialServer, channel.Mention))
                     .ConfigureAwait(false);
                 return;
             }
 
             await channel.SendMessageAsync(rep.Replace(msg)).ConfigureAwait(false);
-            await ctx.Interaction.SendConfirmAsync(Strings.MessageSentChannel(ctx.Guild.Id, potentialServer, channel.Mention));
+            await ctx.Interaction.SendConfirmAsync(Strings.MessageSentChannel(ctx.Guild.Id, potentialServer,
+                channel.Mention));
             return;
         }
 
@@ -453,19 +454,19 @@ public class SlashOwnerOnly(
             return;
         }
 
-        if (SmartEmbed.TryParse(rep.Replace(msg), ctx.Guild?.Id, out var embed1, out var plainText1,
+        if (SmartEmbed.TryParse(rep.Replace(msg) ?? string.Empty, ctx.Guild?.Id, out var embed1, out var plainText1,
                 out var components1))
         {
             await channel.SendMessageAsync(plainText1, embeds: embed1, components: components1?.Build())
                 .ConfigureAwait(false);
-            await ctx.Interaction.SendConfirmAsync(Strings.MessageSentGuild(ctx.Guild.Id, potentialServer, user.Mention));
+            await ctx.Interaction.SendConfirmAsync(
+                Strings.MessageSentGuild(ctx.Guild.Id, potentialServer, user.Mention));
 
             return;
         }
 
         await channel.SendMessageAsync(rep.Replace(msg)).ConfigureAwait(false);
         await ctx.Interaction.SendConfirmAsync(Strings.MessageSentUser(ctx.Guild.Id, user.Mention));
-
     }
 
     /// <summary>
@@ -597,15 +598,16 @@ public class SlashOwnerOnly(
 
                     return new PageBuilder()
                         .WithOkColor()
-                        .WithAuthor("Bash Output")
+                        .WithAuthor(Strings.BashOutput(ctx.Guild.Id))
                         .AddField("Input", message)
-                        .WithDescription($"```{(isLinux ? "bash" : "powershell")}\n{stringList[page]}```");
+                        .WithDescription(Strings.CodeBlockPlatform(ctx.Guild.Id, isLinux ? "bash" : "powershell") +
+                                         $"\n{stringList[page]}```");
                 }
             }
             else
             {
                 process.Kill();
-                await ctx.Interaction.FollowupAsync("The process was hanging and has been terminated.")
+                await ctx.Interaction.FollowupAsync(Strings.ProcessTerminated(ctx.Guild.Id))
                     .ConfigureAwait(false);
             }
 
@@ -738,13 +740,16 @@ public class SlashOwnerOnly(
     /// <param name="services">Service provider for accessing various services.</param>
     /// <param name="client">The Discord client used to interact with the Discord API.</param>
     /// <param name="settingServices">Collection of services for managing bot settings.</param>
+    /// <param name="localization">Service for handling localization and translations.</param>
     [Discord.Interactions.Group("config", "Commands to manage various bot things")]
     public class ConfigCommands(
         GuildSettingsService guildSettings,
         CommandService commandService,
         IServiceProvider services,
         DiscordShardedClient client,
-        IEnumerable<IConfigService> settingServices, Localization localization)
+        IEnumerable<IConfigService> settingServices,
+        Localization localization,
+        ILogger<ConfigCommands> logger)
         : MewdekoSlashModuleBase<OwnerOnlyService>
     {
         /// <summary>
@@ -840,7 +845,7 @@ public class SlashOwnerOnly(
                 VoiceChannelName = guser.VoiceChannel?.Name,
                 Interval = 0
             };
-            Service.AddNewAutoCommand(cmd);
+            await Service.AddNewAutoCommand(cmd);
 
             await ctx.Interaction.RespondAsync(embed: new EmbedBuilder().WithOkColor()
                 .WithTitle(Strings.Scadd(ctx.Guild.Id))
@@ -905,9 +910,10 @@ public class SlashOwnerOnly(
                 VoiceChannelName = guser.VoiceChannel?.Name,
                 Interval = interval
             };
-            Service.AddNewAutoCommand(cmd);
+            await Service.AddNewAutoCommand(cmd);
 
-            await ReplyConfirmAsync(Strings.AutocmdAdd(ctx.Guild.Id, Format.Code(Format.Sanitize(cmdText)), cmd.Interval))
+            await ReplyConfirmAsync(Strings.AutocmdAdd(ctx.Guild.Id, Format.Code(Format.Sanitize(cmdText)),
+                    cmd.Interval))
                 .ConfigureAwait(false);
         }
 
@@ -940,11 +946,13 @@ public class SlashOwnerOnly(
                 var i = 0;
                 await ctx.Interaction.SendConfirmAsync(
                         text: string.Join("\n", scmds
-                            .Select(x => $@"```css
-#{++i}
-[{Strings.Server(ctx.Guild.Id)}]: {(x.GuildId.HasValue ? $"{x.GuildName} #{x.GuildId}" : "-")}
-[{Strings.Channel(ctx.Guild.Id)}]: {x.ChannelName} #{x.ChannelId}
-[{Strings.CommandText(ctx.Guild.Id)}]: {x.CommandText}```")),
+                            .Select(x => $"""
+                                          ```css
+                                          #{++i}
+                                          [{Strings.Server(ctx.Guild.Id)}]: {(x.GuildId.HasValue ? $"{x.GuildName} #{x.GuildId}" : "-")}
+                                          [{Strings.Channel(ctx.Guild.Id)}]: {x.ChannelName} #{x.ChannelId}
+                                          [{Strings.CommandText(ctx.Guild.Id)}]: {x.CommandText}```
+                                          """)),
                         title: string.Empty,
                         footer: Strings.Page(ctx.Guild.Id, page + 1))
                     .ConfigureAwait(false);
@@ -980,12 +988,14 @@ public class SlashOwnerOnly(
                 var i = 0;
                 await ctx.Interaction.SendConfirmAsync(
                         text: string.Join("\n", scmds
-                            .Select(x => $@"```css
-#{++i}
-[{Strings.Server(ctx.Guild.Id)}]: {(x.GuildId.HasValue ? $"{x.GuildName} #{x.GuildId}" : "-")}
-[{Strings.Channel(ctx.Guild.Id)}]: {x.ChannelName} #{x.ChannelId}
-{GetIntervalText(x.Interval)}
-[{Strings.CommandText(ctx.Guild.Id)}]: {x.CommandText}```")),
+                            .Select(x => $"""
+                                          ```css
+                                          #{++i}
+                                          [{Strings.Server(ctx.Guild.Id)}]: {(x.GuildId.HasValue ? $"{x.GuildName} #{x.GuildId}" : "-")}
+                                          [{Strings.Channel(ctx.Guild.Id)}]: {x.ChannelName} #{x.ChannelId}
+                                          {GetIntervalText(x.Interval)}
+                                          [{Strings.CommandText(ctx.Guild.Id)}]: {x.CommandText}```
+                                          """)),
                         title: string.Empty,
                         footer: Strings.Page(ctx.Guild.Id, page + 1))
                     .ConfigureAwait(false);
@@ -1018,7 +1028,6 @@ public class SlashOwnerOnly(
             }
 
             await ctx.Interaction.SendConfirmAsync(Strings.AutoCommandRemoved(ctx.Guild.Id));
-
         }
 
         /// <summary>
@@ -1114,7 +1123,7 @@ public class SlashOwnerOnly(
             }
             catch (RateLimitedException)
             {
-                Log.Warning("You've been ratelimited. Wait 2 hours to change your name");
+                logger.LogWarning("You've been ratelimited. Wait 2 hours to change your name");
             }
 
             await ReplyConfirmAsync(Strings.BotName(ctx.Guild.Id, Format.Bold(newName))).ConfigureAwait(false);
@@ -1134,7 +1143,7 @@ public class SlashOwnerOnly(
         [SlashCommand("setavatar", "Sets the bots avatar")]
         public async Task SetAvatar([Remainder] string? img = null)
         {
-            var success = await Service.SetAvatar(img).ConfigureAwait(false);
+            var success = img != null && await Service.SetAvatar(img).ConfigureAwait(false);
 
             if (success)
                 await ReplyConfirmAsync(Strings.SetAvatar(ctx.Guild.Id)).ConfigureAwait(false);
@@ -1194,7 +1203,7 @@ public class SlashOwnerOnly(
                     var propStrings = GetPropsAndValuesString(setting, propNames);
                     var embed = new EmbedBuilder()
                         .WithOkColor()
-                        .WithTitle($"⚙️ {setting.Name}")
+                        .WithTitle(Strings.SettingsTitle(ctx.Guild.Id, setting.Name))
                         .WithDescription(propStrings);
 
                     await ctx.Interaction.FollowupAsync(embed: embed.Build()).ConfigureAwait(false);
@@ -1222,7 +1231,8 @@ public class SlashOwnerOnly(
                 {
                     value = setting.GetSetting(prop);
                     if (prop != "currency.sign")
-                        Format.Code(Format.Sanitize(value.TrimTo(1000)), "json");
+                        if (value != null)
+                            Format.Code(Format.Sanitize(value.TrimTo(1000)), "json");
 
                     if (string.IsNullOrWhiteSpace(value))
                         value = "-";
@@ -1262,15 +1272,17 @@ public class SlashOwnerOnly(
 
         private static string GetPropsAndValuesString(IConfigService config, IEnumerable<string> names)
         {
-            var propValues = names.Select(pr =>
+            var enumerable = names as string[] ?? names.ToArray();
+            var propValues = enumerable.Select(pr =>
             {
                 var val = config.GetSetting(pr);
                 if (pr != "currency.sign")
-                    val = val.TrimTo(40);
+                    if (val != null)
+                        val = val.TrimTo(40);
                 return val?.Replace("\n", "") ?? "-";
             });
 
-            var strings = names.Zip(propValues, (name, value) =>
+            var strings = enumerable.Zip(propValues, (name, value) =>
                 $"{name,-25} = {value}\n");
 
             return string.Concat(strings);
@@ -1368,7 +1380,8 @@ public class SlashOwnerOnly(
         {
             await client.SetStatusAsync(SettableUserStatusToUserStatus(status)).ConfigureAwait(false);
 
-            await ReplyConfirmAsync(Strings.BotStatus(ctx.Guild.Id, Format.Bold(status.ToString()))).ConfigureAwait(false);
+            await ReplyConfirmAsync(Strings.BotStatus(ctx.Guild.Id, Format.Bold(status.ToString())))
+                .ConfigureAwait(false);
         }
 
         /// <summary>
@@ -1497,7 +1510,7 @@ public sealed class InteractionEvaluationEnvironment
     /// <summary>
     ///     Gets the Discord client instance associated with the current interaction handling.
     /// </summary>
-    public DiscordShardedClient Client
+    public DiscordShardedClient? Client
     {
         get
         {

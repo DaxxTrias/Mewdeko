@@ -9,7 +9,8 @@ namespace Mewdeko.Modules.Starboard;
 /// <summary>
 ///     Module for managing multiple starboard configurations in a guild.
 /// </summary>
-public class Starboard(GuildSettingsService guildSettings, InteractiveService interactiveService) : MewdekoSubmodule<StarboardService>
+public class Starboard(GuildSettingsService guildSettings, InteractiveService interactiveService)
+    : MewdekoSubmodule<StarboardService>
 {
     /// <summary>
     ///     Enum representing the mode for whitelisting or blacklisting channels for starboard.
@@ -75,8 +76,9 @@ public class Starboard(GuildSettingsService guildSettings, InteractiveService in
             return;
         }
 
-        var starboardId = await Service.CreateStarboard(ctx.Guild, channel.Id, emote.ToString(), threshold);
-        await ctx.Channel.SendConfirmAsync(Strings.StarboardCreated(ctx.Guild.Id, channel.Mention, emote.ToString(), threshold));
+        await Service.CreateStarboard(ctx.Guild, channel.Id, emote.ToString(), threshold);
+        await ctx.Channel.SendConfirmAsync(Strings.StarboardCreated(ctx.Guild.Id, channel.Mention, emote.ToString(),
+            threshold));
     }
 
     /// <summary>
@@ -104,7 +106,8 @@ public class Starboard(GuildSettingsService guildSettings, InteractiveService in
         var starboards = Service.GetStarboards(ctx.Guild.Id);
         if (!starboards.Any())
         {
-            await ctx.Channel.SendErrorAsync(Strings.NoStarboardsConfigured(ctx.Guild.Id), Config).ConfigureAwait(false);
+            await ctx.Channel.SendErrorAsync(Strings.NoStarboardsConfigured(ctx.Guild.Id), Config)
+                .ConfigureAwait(false);
             return;
         }
 
@@ -117,7 +120,8 @@ public class Starboard(GuildSettingsService guildSettings, InteractiveService in
             .WithActionOnCancellation(ActionOnStop.DeleteMessage)
             .Build();
 
-        await interactiveService.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
+        await interactiveService.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60))
+            .ConfigureAwait(false);
 
         async Task<PageBuilder> PageFactory(int page)
         {
@@ -176,9 +180,11 @@ public class Starboard(GuildSettingsService guildSettings, InteractiveService in
         if (await Service.SetRemoveOnClear(ctx.Guild, starboardId, enabled))
         {
             if (enabled)
-                await ctx.Channel.SendConfirmAsync(Strings.StarboardReactionsClearRemoveEnabled(ctx.Guild.Id, starboardId));
+                await ctx.Channel.SendConfirmAsync(
+                    Strings.StarboardReactionsClearRemoveEnabled(ctx.Guild.Id, starboardId));
             else
-                await ctx.Channel.SendConfirmAsync(Strings.StarboardReactionsClearRemoveDisabled(ctx.Guild.Id, starboardId));
+                await ctx.Channel.SendConfirmAsync(
+                    Strings.StarboardReactionsClearRemoveDisabled(ctx.Guild.Id, starboardId));
         }
         else
             await ctx.Channel.SendErrorAsync(Strings.StarboardNotFound(ctx.Guild.Id, starboardId), Config);
@@ -218,9 +224,11 @@ public class Starboard(GuildSettingsService guildSettings, InteractiveService in
         if (await Service.SetRemoveBelowThreshold(ctx.Guild, starboardId, enabled))
         {
             if (enabled)
-                await ctx.Channel.SendConfirmAsync(Strings.StarboardBelowThresholdRemoveEnabled(ctx.Guild.Id, starboardId));
+                await ctx.Channel.SendConfirmAsync(
+                    Strings.StarboardBelowThresholdRemoveEnabled(ctx.Guild.Id, starboardId));
             else
-                await ctx.Channel.SendConfirmAsync(Strings.StarboardBelowThresholdRemoveDisabled(ctx.Guild.Id, starboardId));
+                await ctx.Channel.SendConfirmAsync(
+                    Strings.StarboardBelowThresholdRemoveDisabled(ctx.Guild.Id, starboardId));
         }
         else
             await ctx.Channel.SendErrorAsync(Strings.StarboardNotFound(ctx.Guild.Id, starboardId), Config);
@@ -306,7 +314,8 @@ public class Starboard(GuildSettingsService guildSettings, InteractiveService in
             if (threshold == 0)
                 await ctx.Channel.SendConfirmAsync(Strings.StarboardRepostingDisabled(ctx.Guild.Id, starboardId));
             else
-                await ctx.Channel.SendConfirmAsync(Strings.StarboardRepostThresholdSet(ctx.Guild.Id, starboardId, threshold));
+                await ctx.Channel.SendConfirmAsync(
+                    Strings.StarboardRepostThresholdSet(ctx.Guild.Id, starboardId, threshold));
         }
         else
             await ctx.Channel.SendErrorAsync(Strings.StarboardNotFound(ctx.Guild.Id, starboardId), Config);

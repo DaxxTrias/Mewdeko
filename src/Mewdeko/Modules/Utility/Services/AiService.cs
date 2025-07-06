@@ -5,12 +5,11 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using DataModel;
+using LinqToDB;
 using Mewdeko.Common.Configs;
-using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.Utility.Services.Impl;
 using Mewdeko.Services.Strings;
-using Microsoft.EntityFrameworkCore;
-using Serilog;
 using Embed = Discord.Embed;
 
 namespace Mewdeko.Modules.Utility.Services;
@@ -20,16 +19,6 @@ namespace Mewdeko.Modules.Utility.Services;
 /// </summary>
 public class AiService : INService
 {
-    private readonly DbContextProvider dbProvider;
-    private readonly DiscordShardedClient client;
-    private readonly GeneratedBotStrings strings;
-    private readonly BotConfig botConfig;
-    private readonly AiClientFactory aiClientFactory;
-    private readonly IHttpClientFactory httpFactory;
-    private readonly ConcurrentDictionary<AiProvider, List<AiModel>> modelCache;
-    private readonly TimeSpan modelCacheExpiry = TimeSpan.FromHours(24);
-    private DateTime lastModelUpdate = DateTime.MinValue;
-
     /// <summary>
     ///     Defines the available AI providers.
     /// </summary>
@@ -51,68 +40,32 @@ public class AiService : INService
         Claude
     }
 
-    /// <summary>
-    ///     Represents an Ai model with its metadata.
-    /// </summary>
-    public class AiModel
-    {
-        /// <summary>
-        ///     Gets or sets the model identifier.
-        /// </summary>
-        public string Id { get; set; }
-
-        /// <summary>
-        ///     Gets or sets the display name of the model.
-        /// </summary>
-        public string Name { get; set; }
-
-        /// <summary>
-        ///     Gets or sets the provider of this model.
-        /// </summary>
-        public AiProvider Provider { get; set; }
-    }
-
-    private static readonly List<AiModel> SupportedModels = new()
-    {
-        new AiModel
-        {
-            Id = "gpt-4-turbo", Name = "GPT-4 Turbo", Provider = AiProvider.OpenAi
-        },
-        new AiModel
-        {
-            Id = "gpt-3.5-turbo", Name = "GPT-3.5 Turbo", Provider = AiProvider.OpenAi
-        },
-        new AiModel
-        {
-            Id = "claude-3-opus-20240229", Name = "Claude 3 Opus", Provider = AiProvider.Claude
-        },
-        new AiModel
-        {
-            Id = "claude-3-sonnet-20240229", Name = "Claude 3 Sonnet", Provider = AiProvider.Claude
-        },
-        new AiModel
-        {
-            Id = "mixtral-8x7b", Name = "Mixtral 8x7B", Provider = AiProvider.Groq
-        },
-        new AiModel
-        {
-            Id = "llama2-70b", Name = "Llama 2 70B", Provider = AiProvider.Groq
-        }
-    };
+    private readonly AiClientFactory aiClientFactory;
+    private readonly BotConfig botConfig;
+    private readonly DiscordShardedClient client;
+    private readonly IDataConnectionFactory dbFactory;
+    private readonly IHttpClientFactory httpFactory;
+    private readonly ILogger<AiService> logger;
+    private readonly ConcurrentDictionary<AiProvider, List<AiModel>> modelCache;
+    private readonly TimeSpan modelCacheExpiry = TimeSpan.FromHours(24);
+    private readonly GeneratedBotStrings strings;
+    private DateTime lastModelUpdate = DateTime.MinValue;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="AiService" /> class.
     /// </summary>
-    public AiService(DbContextProvider dbProvider, IHttpClientFactory httpFactory,
-        GeneratedBotStrings strings, BotConfig config, EventHandler handler, DiscordShardedClient client)
+    public AiService(IDataConnectionFactory dbFactory, IHttpClientFactory httpFactory,
+        GeneratedBotStrings strings, BotConfig config, EventHandler handler, DiscordShardedClient client,
+        ILogger<AiService> logger)
     {
-        this.dbProvider = dbProvider;
+        this.dbFactory = dbFactory;
         this.httpFactory = httpFactory;
         this.strings = strings;
         botConfig = config;
         this.client = client;
-        aiClientFactory = new AiClientFactory();
-        handler.MessageReceived += HandleMessage;
+        this.logger = logger;
+        aiClientFactory = new AiClientFactory(httpFactory);
+        handler.Subscribe("MessageReceived", "AiService", HandleMessage);
         modelCache = new ConcurrentDictionary<AiProvider, List<AiModel>>();
     }
 
@@ -124,8 +77,8 @@ public class AiService : INService
     /// <returns>The guild's Ai configuration.</returns>
     public async Task<GuildAiConfig> GetOrCreateConfig(ulong guildId)
     {
-        await using var db = await dbProvider.GetContextAsync();
-        return await db.GuildAiConfig.FirstOrDefaultAsync(x => x.GuildId == guildId)
+        await using var db = await dbFactory.CreateConnectionAsync();
+        return await db.GuildAiConfigs.FirstOrDefaultAsync(x => x.GuildId == guildId)
                ?? new GuildAiConfig
                {
                    GuildId = guildId
@@ -138,12 +91,11 @@ public class AiService : INService
     /// <param name="config">The configuration to update.</param>
     public async Task UpdateConfig(GuildAiConfig config)
     {
-        await using var db = await dbProvider.GetContextAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
         if (config.Id == 0)
-            db.GuildAiConfig.Add(config);
+            await db.InsertAsync(config);
         else
-            db.GuildAiConfig.Update(config);
-        await db.SaveChangesAsync();
+            await db.UpdateAsync(config);
     }
 
     /// <summary>
@@ -155,7 +107,7 @@ public class AiService : INService
     public async Task SetCustomEmbed(ulong guildId, string customEmbed)
     {
         var config = await GetOrCreateConfig(guildId);
-        config.CustomEmbed = customEmbed;
+        config.CustomEmbed = customEmbed == "-" ? "" : customEmbed;
         await UpdateConfig(config);
     }
 
@@ -218,7 +170,7 @@ public class AiService : INService
         }
         catch (Exception ex)
         {
-            Log.Warning(ex, "Error in AI processing");
+            logger.LogWarning(ex, "Error in AI processing");
             if (webhook != null && webhookMessageId.HasValue)
             {
                 await webhook.ModifyMessageAsync(webhookMessageId.Value, x =>
@@ -243,27 +195,47 @@ public class AiService : INService
         }
     }
 
+    /// <summary>
+    ///     Clears an AI conversation and all associated messages for a specific guild and user
+    /// </summary>
+    /// <param name="guildId">The Discord guild identifier</param>
+    /// <param name="userId">The Discord user identifier</param>
+    /// <returns>A task representing the asynchronous operation</returns>
     private async Task ClearConversation(ulong guildId, ulong userId)
     {
-        await using var db = await dbProvider.GetContextAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
         var conversation = await db.AiConversations
-            .Include(x => x.Messages)
+            .LoadWithAsTable(x => x.AiMessages)
             .FirstOrDefaultAsync(x => x.GuildId == guildId && x.UserId == userId);
 
         if (conversation != null)
         {
-            db.AiMessages.RemoveRange(conversation.Messages);
-            db.AiConversations.Remove(conversation);
-            await db.SaveChangesAsync();
+            try
+            {
+                // Delete all messages for this conversation
+                await db.AiMessages
+                    .Where(x => x.ConversationId == conversation.Id)
+                    .DeleteAsync();
+
+                // Delete the conversation itself
+                await db.AiConversations
+                    .Where(x => x.Id == conversation.Id)
+                    .DeleteAsync();
+            }
+            catch (Exception e)
+            {
+                logger.LogError(e, "There was an issue deleting the conversation");
+            }
         }
     }
+
 
     private async Task StreamResponse(GuildAiConfig config, ulong? webhookMessageId, SocketMessage userMsg,
         DiscordWebhookClient? webhook)
     {
-        await using var db = await dbProvider.GetContextAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
         var conversation = await db.AiConversations
-            .Include(x => x.Messages)
+            .LoadWithAsTable(x => x.AiMessages)
             .FirstOrDefaultAsync(x => x.GuildId == config.GuildId && x.UserId == userMsg.Author.Id);
 
         var guildChannel = userMsg.Channel as SocketTextChannel;
@@ -276,34 +248,92 @@ public class AiService : INService
 
         var sysPrompt = replacer.Replace(config.SystemPrompt);
 
+        int convId;
         if (conversation == null)
         {
-            conversation = new AiConversation
-            {
-                GuildId = config.GuildId,
-                UserId = userMsg.Author.Id,
-                Messages =
-                [
-                    new AiMessage
-                    {
-                        Role = "system", Content = sysPrompt ?? ""
-                    }
-                ]
-            };
-            db.AiConversations.Add(conversation);
+            if (!string.IsNullOrWhiteSpace(sysPrompt))
+                conversation = new AiConversation
+                {
+                    GuildId = config.GuildId,
+                    UserId = userMsg.Author.Id,
+                    AiMessages =
+                    [
+                        new AiMessage
+                        {
+                            Role = "system", Content = sysPrompt
+                        }
+                    ]
+                };
+            else
+                conversation = new AiConversation
+                {
+                    GuildId = config.GuildId, UserId = userMsg.Author.Id, AiMessages = []
+                };
+            convId = await db.InsertWithInt32IdentityAsync(conversation);
+            conversation.Id = convId;
+        }
+        else
+        {
+            convId = conversation.Id;
         }
 
-        conversation.Messages.Add(new AiMessage
+        // Create the user message object
+        var userMessage = new AiMessage
         {
-            Role = "user", Content = userMsg.Content
-        });
-        await db.SaveChangesAsync();
+            ConversationId = convId, Role = "user", Content = userMsg.Content
+        };
 
-        var (aiClient, _) = aiClientFactory.Create(config.Provider);
+        // Insert to database
+        await db.InsertAsync(userMessage);
+
+        // Maintain history size for all providers
+        const int maxHistorySize = 5;
+
+        // Create a list of all messages including the new user message
+        var allMessages = conversation.AiMessages.ToList();
+        allMessages.Add(userMessage);
+
+        // Keep system message plus most recent messages
+        var systemMessage = allMessages.FirstOrDefault(m => m.Role == "system");
+        var nonSystemMessages = allMessages
+            .Where(m => m.Role != "system")
+            .OrderByDescending(m => m.Id)
+            .Take(maxHistorySize)
+            .ToList();
+
+        var messagesToKeep = new HashSet<int>(nonSystemMessages.Select(m => m.Id));
+        if (systemMessage != null)
+            messagesToKeep.Add(systemMessage.Id);
+
+        var toRemove = allMessages
+            .Where(m => !messagesToKeep.Contains(m.Id))
+            .ToList();
+
+        if (toRemove.Any())
+        {
+            logger.LogInformation($"Removing {toRemove.Count} older messages from conversation to manage payload size");
+            await db.AiMessages
+                .Where(m =>
+                    m.ConversationId == conversation.Id &&
+                    !messagesToKeep.Contains(m.Id))
+                .DeleteAsync();
+        }
+
+        // Create the final list of messages to send to the AI client
+        var messagesToSend = allMessages
+            .Where(m => messagesToKeep.Contains(m.Id))
+            .OrderBy(m => m.Id)
+            .ToList();
+
+        var (aiClient, streamParser) = aiClientFactory.Create((AiProvider)config.Provider);
         var responseBuilder = new StringBuilder();
         var lastUpdate = DateTime.UtcNow;
         var tokenCount = 0;
 
+        // Store response message for regular (non-webhook) updates
+        IUserMessage? regularMessage = null;
+
+        // Create a replacer that will substitute %airesponse% with the current builder content
         replacer = new ReplacementBuilder()
             .WithChannel(userMsg.Channel)
             .WithUser(userMsg.Author)
@@ -312,81 +342,632 @@ public class AiService : INService
             .WithOverride("%airesponse%", () => responseBuilder.ToString())
             .Build();
 
-        var stream = await aiClient.StreamResponseAsync(conversation.Messages, config.Model, config.ApiKey);
-        await foreach (var text in stream)
+        // Process template once to maintain consistency
+        string? initialTemplate = null;
+        if (!string.IsNullOrEmpty(config.CustomEmbed))
         {
-            if (string.IsNullOrEmpty(text)) continue;
-            responseBuilder.Append(text);
-            if (!((DateTime.UtcNow - lastUpdate).TotalSeconds >= 1)) continue;
-            lastUpdate = DateTime.UtcNow;
-            await UpdateMessageEmbed();
+            // Pre-process the template, leaving %airesponse% placeholder intact
+            initialTemplate = config.CustomEmbed;
         }
 
-        conversation.Messages.Add(new AiMessage
+        var timeout = DateTime.UtcNow.AddMinutes(1); // 1-minute timeout as a safety
+        var stream = await aiClient.StreamResponseAsync(messagesToSend, config.Model, config.ApiKey);
+        await foreach (var rawJson in stream)
         {
-            Role = "assistant", Content = responseBuilder.ToString()
+            if (string.IsNullOrEmpty(rawJson)) continue;
+
+            // Log raw response for debugging
+            logger.LogInformation($"Claude raw response: {rawJson}");
+
+            // IMPORTANT: Parse the delta to extract just the content
+            var contentDelta = streamParser.ParseDelta(rawJson, (AiProvider)config.Provider);
+            if (!string.IsNullOrEmpty(contentDelta))
+            {
+                responseBuilder.Append(contentDelta);
+                logger.LogInformation($"Added content delta: {contentDelta}");
+            }
+
+            // Check for usage information
+            var usage = streamParser.ParseUsage(rawJson, (AiProvider)config.Provider);
+            if (usage.HasValue)
+            {
+                tokenCount = usage.Value.TotalTokens;
+                logger.LogInformation($"Updated token count: {tokenCount}");
+            }
+
+            // Update UI more frequently during stream
+            var now = DateTime.UtcNow;
+            if ((now - lastUpdate).TotalSeconds >= 1 && !string.IsNullOrWhiteSpace(contentDelta))
+            {
+                lastUpdate = now;
+                await UpdateMessageEmbed(false); // false = not final update
+            }
+
+            // Check if stream is finished
+            if (streamParser.IsStreamFinished(rawJson, (AiProvider)config.Provider))
+            {
+                logger.LogInformation("AI stream finished");
+                break;
+            }
+
+            // Safety timeout
+            if (DateTime.UtcNow <= timeout) continue;
+            logger.LogWarning("AI stream timed out");
+            break;
+        }
+
+        await db.InsertAsync(new AiMessage
+        {
+            ConversationId = convId, Role = "assistant", Content = responseBuilder.ToString()
         });
         config.TokensUsed += tokenCount;
+        await db.UpdateAsync(config);
 
-        await db.SaveChangesAsync();
-        await UpdateMessageEmbed();
+        // Final update with completed response
+        await UpdateMessageEmbed(true); // true = final update
+        return;
 
-        if (conversation.Messages.Count > 10)
+        async Task UpdateMessageEmbed(bool isFinalUpdate)
         {
-            var toRemove = conversation.Messages.Take(conversation.Messages.Count - 10);
-            db.AiMessages.RemoveRange(toRemove);
-            await db.SaveChangesAsync();
-        }
+            string processedContent = null;
+            var aiResponse = responseBuilder.ToString();
+            const int maxEmbedSize = 4000;
 
-        async Task UpdateMessageEmbed()
-        {
-            if (webhook != null && webhookMessageId.HasValue)
+            // Check if we need to split the response into multiple embeds
+            var needsSplitting = aiResponse.Length > maxEmbedSize;
+            var responseChunks = needsSplitting
+                ? SplitLongText(aiResponse)
+                : [aiResponse];
+
+            // Handle JSON templates
+            if (initialTemplate != null)
             {
-                var content = string.IsNullOrEmpty(config.CustomEmbed)
-                    ? responseBuilder.ToString()
-                    : replacer.Replace(config.CustomEmbed);
+                var isJsonEmbed = initialTemplate.TrimStart().StartsWith("{") &&
+                                  (initialTemplate.Contains("\"embeds\"") || initialTemplate.Contains("\"embed\""));
 
-                content = content.EscapeWeirdStuff();
-
-                if (SmartEmbed.TryParse(content, config.GuildId, out var embedData, out var plainText, out _))
+                if (isJsonEmbed)
                 {
-                    var modifiedEmbeds = embedData.Select(embed =>
+                    // For JSON templates, try to create and send the embed(s)
+                    try
                     {
-                        var builder = embed.ToEmbedBuilder();
-                        if (builder.Footer is null)
+                        if (needsSplitting)
                         {
-                            builder.WithFooter(strings.AiResponseFooter(config.GuildId, userMsg.Author.Username, tokenCount));
+                            // Handle multi-part response with JSON template
+                            await SendMultipartJsonEmbeds(responseChunks);
+                            return;
                         }
-                        return builder.Build();
-                    }).ToList();
 
-                    await webhook.ModifyMessageAsync(webhookMessageId.Value, x =>
+                        // Single embed with JSON template - similar to original logic
+                        var escapedContent = EscapeJsonString(aiResponse);
+                        processedContent = initialTemplate.Replace("%airesponse%", escapedContent);
+
+                        // Parse the JSON
+                        var newEmbed = JsonSerializer.Deserialize<NewEmbed>(processedContent);
+
+                        if (newEmbed != null && (newEmbed.Embeds?.Count > 0 || newEmbed.Embed != null))
+                        {
+                            var discordEmbeds = GetDiscordEmbeds(newEmbed);
+
+                            if (discordEmbeds.Count > 0)
+                            {
+                                // Send the embed based on whether we're using webhooks or regular messages
+                                if (webhook != null && webhookMessageId.HasValue)
+                                {
+                                    await webhook.ModifyMessageAsync(webhookMessageId.Value, msg =>
+                                    {
+                                        msg.Content = newEmbed.Content;
+                                        msg.Embeds = discordEmbeds;
+                                    });
+                                    return;
+                                }
+
+                                if (regularMessage != null)
+                                {
+                                    await regularMessage.ModifyAsync(msg =>
+                                    {
+                                        msg.Content = newEmbed.Content;
+                                        msg.Embeds = discordEmbeds.ToArray();
+                                    });
+                                    return;
+                                }
+
+                                regularMessage = await userMsg.Channel.SendMessageAsync(
+                                    newEmbed.Content,
+                                    embeds: discordEmbeds.ToArray(),
+                                    allowedMentions: AllowedMentions.None);
+                                return;
+                            }
+                        }
+                    }
+                    catch (Exception ex)
                     {
-                        x.Content = plainText;
-                        x.Embeds = modifiedEmbeds;
+                        logger.LogWarning($"Error parsing JSON embed: {ex.Message}");
+                        logger.LogWarning("Failed to parse JSON, falling back to standard embeds");
+                        // Fall through to standard embed handling
+                    }
+                }
+                else
+                {
+                    // For non-JSON templates
+                    processedContent = replacer.Replace(initialTemplate);
+                }
+            }
+            else
+            {
+                // No template, just use the response directly
+                processedContent = aiResponse;
+            }
+
+            // If we get here, either we don't have a JSON embed, or JSON parsing failed
+            // Fall back to the original handling or use the multi-part approach for long content
+            processedContent = processedContent.EscapeWeirdStuff();
+
+            if (needsSplitting)
+            {
+                // Send multiple regular embeds
+                await SendMultipartRegularEmbeds(responseChunks);
+            }
+            else
+            {
+                // Standard single embed - same as your original logic
+                if (webhook != null && webhookMessageId.HasValue)
+                {
+                    // WEBHOOK CASE - fallback
+                    if (SmartEmbed.TryParse(processedContent, config.GuildId, out var embedData, out var plainText,
+                            out _))
+                    {
+                        // Use the parsed embed data
+                        var modifiedEmbeds = embedData.Select(embed =>
+                        {
+                            var builder = embed.ToEmbedBuilder();
+                            if (builder.Footer is null || isFinalUpdate)
+                            {
+                                builder.WithFooter(strings.AiResponseFooter(config.GuildId, userMsg.Author.Username,
+                                    tokenCount));
+                            }
+
+                            return builder.Build();
+                        }).ToList();
+
+                        await webhook.ModifyMessageAsync(webhookMessageId.Value, x =>
+                        {
+                            x.Content = plainText;
+                            x.Embeds = modifiedEmbeds;
+                        });
+                    }
+                    else
+                    {
+                        // For non-embed content, create a simple embed
+                        var embed = new EmbedBuilder()
+                            .WithOkColor()
+                            .WithDescription(processedContent)
+                            .WithFooter(strings.AiResponseFooter(config.GuildId, userMsg.Author.Username, tokenCount))
+                            .Build();
+
+                        await webhook.ModifyMessageAsync(webhookMessageId.Value, x =>
+                        {
+                            x.Content = null;
+                            x.Embeds = new List<Embed>
+                            {
+                                embed
+                            };
+                        });
+                    }
+                }
+                else
+                {
+                    // REGULAR (NON-WEBHOOK) CASE - fallback
+                    if (regularMessage == null)
+                    {
+                        // First update - create new message
+                        if (SmartEmbed.TryParse(processedContent, config.GuildId, out var embedData, out var plainText,
+                                out _))
+                        {
+                            // Use the parsed embed data for the initial message
+                            var modifiedEmbeds = embedData.Select(embed =>
+                            {
+                                var builder = embed.ToEmbedBuilder();
+                                if (builder.Footer is null || isFinalUpdate)
+                                {
+                                    builder.WithFooter(strings.AiResponseFooter(config.GuildId, userMsg.Author.Username,
+                                        tokenCount));
+                                }
+
+                                return builder.Build();
+                            }).ToList();
+
+                            // Send the initial message and store the reference
+                            regularMessage = await userMsg.Channel.SendMessageAsync(
+                                plainText,
+                                embeds: modifiedEmbeds.ToArray(), allowedMentions: AllowedMentions.None);
+                        }
+                        else
+                        {
+                            // Create simple embed for first message
+                            regularMessage = await userMsg.Channel.SendConfirmAsync(processedContent);
+                        }
+                    }
+                    else
+                    {
+                        // Subsequent updates - modify existing message
+                        if (SmartEmbed.TryParse(processedContent, config.GuildId, out var embedData, out var plainText,
+                                out _))
+                        {
+                            // Use the parsed embed data for updates
+                            var modifiedEmbeds = embedData.Select(embed =>
+                            {
+                                var builder = embed.ToEmbedBuilder();
+                                if (builder.Footer is null || isFinalUpdate)
+                                {
+                                    builder.WithFooter(strings.AiResponseFooter(config.GuildId, userMsg.Author.Username,
+                                        tokenCount));
+                                }
+
+                                return builder.Build();
+                            }).ToList();
+
+                            // Update the existing message
+                            await regularMessage.ModifyAsync(msg =>
+                            {
+                                msg.Content = plainText;
+                                msg.Embeds = modifiedEmbeds.ToArray();
+                            });
+                        }
+                        else
+                        {
+                            // Update with simple embed
+                            var embed = new EmbedBuilder()
+                                .WithOkColor()
+                                .WithDescription(processedContent)
+                                .WithFooter(strings.AiResponseFooter(config.GuildId, userMsg.Author.Username,
+                                    tokenCount))
+                                .Build();
+
+                            await regularMessage.ModifyAsync(msg =>
+                            {
+                                msg.Content = null;
+                                msg.Embed = embed;
+                            });
+                        }
+                    }
+                }
+            }
+
+            // Helper method to extract Discord.NET embeds from a NewEmbed object
+            List<Embed> GetDiscordEmbeds(NewEmbed newEmbed)
+            {
+                var discordEmbeds = new List<Embed>();
+
+                if (newEmbed.Embeds?.Count > 0)
+                {
+                    discordEmbeds.AddRange(NewEmbed.ToEmbedArray(newEmbed.Embeds));
+                }
+                else if (newEmbed.Embed != null)
+                {
+                    discordEmbeds.AddRange(NewEmbed.ToEmbedArray(new List<global::Mewdeko.Common.Embed>
+                    {
+                        newEmbed.Embed
+                    }));
+                }
+
+                return discordEmbeds;
+            }
+
+            // Helper method to send multiple embeds when using JSON templates
+            async Task SendMultipartJsonEmbeds(List<string> chunks)
+            {
+                // For the initial message (or webhook update)
+                var allEmbeds = new List<Embed>();
+
+                for (var i = 0; i < chunks.Count; i++)
+                {
+                    try
+                    {
+                        // Create a new JSON embed for each chunk by using the template
+                        var escapedChunk = EscapeJsonString(chunks[i]);
+                        var jsonTemplate = initialTemplate.Replace("%airesponse%", escapedChunk);
+
+                        var newEmbed = JsonSerializer.Deserialize<NewEmbed>(jsonTemplate);
+
+                        if (newEmbed != null && (newEmbed.Embeds?.Count > 0 || newEmbed.Embed != null))
+                        {
+                            var discordEmbeds = new List<Embed>();
+
+                            if (newEmbed.Embeds?.Count > 0)
+                            {
+                                // Add part indicator to first embed title or description if missing
+                                if (i > 0 && newEmbed.Embeds[0] != null)
+                                {
+                                    // If there's a title, append to it, otherwise add to description
+                                    if (!string.IsNullOrEmpty(newEmbed.Embeds[0].Title))
+                                    {
+                                        newEmbed.Embeds[0].Title =
+                                            $"{newEmbed.Embeds[0].Title} (Part {i + 1}/{chunks.Count})";
+                                    }
+                                    else if (!string.IsNullOrEmpty(newEmbed.Embeds[0].Description))
+                                    {
+                                        // For the description, we'll prepend the part indicator
+                                        newEmbed.Embeds[0].Description =
+                                            $"**Part {i + 1}/{chunks.Count}**\n\n{newEmbed.Embeds[0].Description}";
+                                    }
+                                }
+
+                                discordEmbeds.AddRange(NewEmbed.ToEmbedArray(newEmbed.Embeds));
+                            }
+                            else if (newEmbed.Embed != null)
+                            {
+                                // Add part indicator to single embed
+                                if (i > 0)
+                                {
+                                    if (!string.IsNullOrEmpty(newEmbed.Embed.Title))
+                                    {
+                                        newEmbed.Embed.Title = $"{newEmbed.Embed.Title} (Part {i + 1}/{chunks.Count})";
+                                    }
+                                    else if (!string.IsNullOrEmpty(newEmbed.Embed.Description))
+                                    {
+                                        newEmbed.Embed.Description =
+                                            $"**Part {i + 1}/{chunks.Count}**\n\n{newEmbed.Embed.Description}";
+                                    }
+                                }
+
+                                discordEmbeds.AddRange(NewEmbed.ToEmbedArray(new List<global::Mewdeko.Common.Embed>
+                                {
+                                    newEmbed.Embed
+                                }));
+                            }
+
+                            // Add to our collection
+                            allEmbeds.AddRange(discordEmbeds);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogWarning($"Error creating JSON embed for chunk {i + 1}: {ex.Message}");
+
+                        // Fallback for this chunk
+                        var fallbackEmbed = new EmbedBuilder()
+                            .WithOkColor()
+                            .WithTitle($"Response (Part {i + 1}/{chunks.Count})")
+                            .WithDescription(chunks[i])
+                            .WithFooter(i == chunks.Count - 1
+                                ? strings.AiResponseFooter(config.GuildId, userMsg.Author.Username, tokenCount)
+                                : null)
+                            .Build();
+
+                        allEmbeds.Add(fallbackEmbed);
+                    }
+                }
+
+                // Send or update the message with all embeds
+                if (webhook != null && webhookMessageId.HasValue)
+                {
+                    await webhook.ModifyMessageAsync(webhookMessageId.Value, msg =>
+                    {
+                        msg.Content = null;
+                        msg.Embeds = allEmbeds;
+                    });
+                }
+                else if (regularMessage != null)
+                {
+                    await regularMessage.ModifyAsync(msg =>
+                    {
+                        msg.Content = null;
+                        msg.Embeds = allEmbeds.ToArray();
                     });
                 }
                 else
                 {
-                    // For non-embed content, maintain formatting but escape properly
-                    await webhook.ModifyMessageAsync(webhookMessageId.Value, x =>
-                    {
-                        x.Content = null;
-                        x.Embeds = new List<Embed>
-                        {
-                            new EmbedBuilder()
-                                .WithOkColor()
-                                .WithDescription(content)
-                                .WithFooter(strings.AiResponseFooter(config.GuildId, userMsg.Author.Username, tokenCount))
-                                .Build()
-                        };
-                    });
+                    // First message
+                    regularMessage = await userMsg.Channel.SendMessageAsync(
+                        embeds: allEmbeds.ToArray(),
+                        allowedMentions: AllowedMentions.None);
                 }
-                return;
             }
 
-            await userMsg.Channel.SendConfirmAsync(responseBuilder.ToString());
+            // Helper method to send multiple standard embeds (non-JSON template)
+            async Task SendMultipartRegularEmbeds(List<string> chunks)
+            {
+                // Create a collection of embeds
+                var allEmbeds = new List<Embed>();
+
+                for (var i = 0; i < chunks.Count; i++)
+                {
+                    var embedBuilder = new EmbedBuilder()
+                        .WithOkColor();
+
+                    // First part doesn't need a part indicator in the title
+                    if (i == 0)
+                    {
+                        embedBuilder.WithDescription(chunks[i]);
+                    }
+                    else
+                    {
+                        embedBuilder.WithTitle($"Continued (Part {i + 1}/{chunks.Count})")
+                            .WithDescription(chunks[i]);
+                    }
+
+                    // Add footer to last part only
+                    if (i == chunks.Count - 1 || isFinalUpdate)
+                    {
+                        embedBuilder.WithFooter(strings.AiResponseFooter(config.GuildId, userMsg.Author.Username,
+                            tokenCount));
+                    }
+
+                    allEmbeds.Add(embedBuilder.Build());
+                }
+
+                // Send or update with all embeds
+                if (webhook != null && webhookMessageId.HasValue)
+                {
+                    await webhook.ModifyMessageAsync(webhookMessageId.Value, msg =>
+                    {
+                        msg.Content = null;
+                        msg.Embeds = allEmbeds;
+                    });
+                }
+                else if (regularMessage != null)
+                {
+                    await regularMessage.ModifyAsync(msg =>
+                    {
+                        msg.Content = null;
+                        msg.Embeds = allEmbeds.ToArray();
+                    });
+                }
+                else
+                {
+                    // First message
+                    regularMessage = await userMsg.Channel.SendMessageAsync(
+                        embeds: allEmbeds.ToArray(),
+                        allowedMentions: AllowedMentions.None);
+                }
+            }
         }
+    }
+
+    /// <summary>
+    ///     Properly escapes a string for use in JSON.
+    /// </summary>
+    /// <param name="input">The string to escape</param>
+    /// <returns>JSON-safe escaped string</returns>
+    private string EscapeJsonString(string input)
+    {
+        if (string.IsNullOrEmpty(input))
+            return input;
+
+        var escaped = new StringBuilder(input.Length);
+
+        foreach (var c in input)
+        {
+            switch (c)
+            {
+                case '\\': escaped.Append("\\\\"); break;
+                case '"': escaped.Append("\\\""); break;
+                case '\n': escaped.Append("\\n"); break;
+                case '\r': escaped.Append("\\r"); break;
+                case '\t': escaped.Append("\\t"); break;
+                case '\b': escaped.Append("\\b"); break;
+                case '\f': escaped.Append("\\f"); break;
+                default:
+                    // Check for control characters (0x00-0x1F)
+                    if (c < 32)
+                    {
+                        escaped.Append($"\\u{(int)c:X4}");
+                    }
+                    else
+                    {
+                        escaped.Append(c);
+                    }
+
+                    break;
+            }
+        }
+
+        return escaped.ToString();
+    }
+
+    /// <summary>
+    ///     Splits a long text into multiple chunks suitable for Discord embeds.
+    /// </summary>
+    /// <param name="text">Text to split</param>
+    /// <param name="maxChunkSize">Maximum size of each chunk</param>
+    /// <param name="maxChunks">Maximum number of chunks to create</param>
+    /// <returns>List of text chunks</returns>
+    private List<string> SplitLongText(string text, int maxChunkSize = 4000, int maxChunks = 10)
+    {
+        var results = new List<string>();
+        if (string.IsNullOrEmpty(text))
+            return results;
+
+        // If text is already within limits, return it as is
+        if (text.Length <= maxChunkSize)
+        {
+            results.Add(text);
+            return results;
+        }
+
+        var startIndex = 0;
+        int endIndex;
+
+        // Split text into chunks at natural boundaries
+        while (startIndex < text.Length && results.Count < maxChunks)
+        {
+            // Determine the potential end of this chunk
+            endIndex = Math.Min(startIndex + maxChunkSize, text.Length);
+
+            // If this is the last chunk we can create due to maxChunks limit,
+            // include as much as possible up to maxChunkSize
+            if (results.Count == maxChunks - 1)
+            {
+                results.Add(text.Substring(startIndex, endIndex - startIndex));
+                break;
+            }
+
+            // Try to find a natural breaking point - preferably at paragraph or sentence end
+            if (endIndex < text.Length)
+            {
+                // Look for paragraph break
+                var paragraphBreak = text.LastIndexOf("\n\n", endIndex - 1, endIndex - startIndex);
+                if (paragraphBreak > startIndex + 100) // Ensure we have a reasonable chunk size
+                {
+                    endIndex = paragraphBreak + 2; // Include the double newline
+                }
+                else
+                {
+                    // Look for newline
+                    var newLineBreak = text.LastIndexOf('\n', endIndex - 1, endIndex - startIndex);
+                    if (newLineBreak > startIndex + 100)
+                    {
+                        endIndex = newLineBreak + 1; // Include the newline
+                    }
+                    else
+                    {
+                        // Look for sentence end
+                        var sentenceBreak = -1;
+                        foreach (var c in new[]
+                                 {
+                                     '.', '!', '?'
+                                 })
+                        {
+                            var breakPoint = text.LastIndexOf(c, endIndex - 1, endIndex - startIndex);
+                            if (breakPoint > sentenceBreak) sentenceBreak = breakPoint;
+                        }
+
+                        if (sentenceBreak > startIndex + 100)
+                        {
+                            endIndex = Math.Min(sentenceBreak + 1, text.Length);
+                        }
+                        else
+                        {
+                            // Look for space
+                            var spaceBreak = text.LastIndexOf(' ', endIndex - 1, endIndex - startIndex);
+                            if (spaceBreak > startIndex + 100)
+                            {
+                                endIndex = spaceBreak + 1;
+                            }
+                            // else we'll just cut at maxChunkSize
+                        }
+                    }
+                }
+            }
+
+            // Add chunk to results
+            results.Add(text.Substring(startIndex, endIndex - startIndex));
+            startIndex = endIndex;
+        }
+
+        // If there's still text left but we hit the maxChunks limit, add an indicator
+        if (startIndex < text.Length && results.Count >= maxChunks)
+        {
+            var lastChunk = results[results.Count - 1];
+            if (lastChunk.Length > maxChunkSize - 100)
+            {
+                lastChunk = lastChunk.Substring(0, maxChunkSize - 100);
+            }
+
+            results[results.Count - 1] = lastChunk + "\n\n... (Response truncated due to length)";
+        }
+
+        return results;
     }
 
     /// <summary>
@@ -436,20 +1017,20 @@ public class AiService : INService
             {
                 Id = m.Id, Name = FormatModelName(m.Id), Provider = AiProvider.OpenAi
             })
-            .ToList() ?? new List<AiModel>();
+            .ToList() ?? [];
     }
 
     private async Task<List<AiModel>> FetchGroqModels(HttpClient http, string apiKey)
     {
         http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
-        var response = await http.GetFromJsonAsync<GroqModelsResponse>("https://api.groq.com/v1/models");
+        var response = await http.GetFromJsonAsync<GroqModelsResponse>("https://api.groq.com/openai/v1/models");
 
         return response?.Data
             .Select(m => new AiModel
             {
                 Id = m.Id, Name = FormatModelName(m.Id), Provider = AiProvider.Groq
             })
-            .ToList() ?? new List<AiModel>();
+            .ToList() ?? [];
     }
 
     private async Task<List<AiModel>> FetchClaudeModels(HttpClient http, string apiKey)
@@ -458,7 +1039,7 @@ public class AiService : INService
         http.DefaultRequestHeaders.Add("anthropic-version", "2023-06-01");
         var response = await http.GetStringAsync("https://api.anthropic.com/v1/models");
         var data = JsonSerializer.Deserialize<ClaudeModelsResponse>(response);
-        Log.Information(response);
+        logger.LogInformation(response);
 
         return data.Data
             .Select(m => new AiModel
@@ -474,6 +1055,27 @@ public class AiService : INService
             modelId.Replace('-', ' ')
                 .Replace('/', ' ')
                 .Replace('_', ' '));
+    }
+
+    /// <summary>
+    ///     Represents an Ai model with its metadata.
+    /// </summary>
+    public class AiModel
+    {
+        /// <summary>
+        ///     Gets or sets the model identifier.
+        /// </summary>
+        public string Id { get; set; }
+
+        /// <summary>
+        ///     Gets or sets the display name of the model.
+        /// </summary>
+        public string Name { get; set; }
+
+        /// <summary>
+        ///     Gets or sets the provider of this model.
+        /// </summary>
+        public AiProvider Provider { get; set; }
     }
 
     private record class OpenAiModelsResponse(List<OpenAiModel> Data);

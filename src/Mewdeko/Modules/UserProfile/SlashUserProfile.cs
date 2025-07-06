@@ -1,10 +1,12 @@
-﻿using Discord.Interactions;
+﻿using DataModel;
+using Discord.Interactions;
+using LinqToDB;
 using Mewdeko.Common.Attributes.InteractionCommands;
 using Mewdeko.Common.Modals;
-using Mewdeko.Database.DbContextStuff;
+using Mewdeko.Database.Enums;
 using Mewdeko.Modules.Permissions.Services;
+using Mewdeko.Modules.UserProfile.Common;
 using Mewdeko.Modules.UserProfile.Services;
-using Microsoft.EntityFrameworkCore;
 using SkiaSharp;
 
 namespace Mewdeko.Modules.UserProfile;
@@ -18,18 +20,18 @@ public class SlashUserProfile : MewdekoSlashModuleBase<UserProfileService>
 {
     private readonly Mewdeko bot;
     private readonly BlacklistService bss;
-    private readonly DbContextProvider dbProvider;
+    private readonly IDataConnectionFactory dbFactory;
 
     /// <summary>
     ///     Initializes a new instance of the SlashUserProfile class, setting up dependencies for database and blacklist
     ///     services.
     /// </summary>
-    /// <param name="db">The database service instance.</param>
+    /// <param name="dbFactory">The database service instance.</param>
     /// <param name="bot">The bot instance.</param>
     /// <param name="bss">The blacklist service instance.</param>
-    public SlashUserProfile(DbContextProvider dbProvider, Mewdeko bot, BlacklistService bss)
+    public SlashUserProfile(IDataConnectionFactory dbFactory, Mewdeko bot, BlacklistService bss)
     {
-        this.dbProvider = dbProvider;
+        this.dbFactory = dbFactory;
         this.bot = bot;
         this.bss = bss;
     }
@@ -39,7 +41,7 @@ public class SlashUserProfile : MewdekoSlashModuleBase<UserProfileService>
     /// </summary>
     /// <param name="user">The user whose profile to display, optional.</param>
     [SlashCommand("profile", "Shows your or another users profile")]
-    public async Task Profile(IUser user = null)
+    public async Task Profile(IUser? user = null)
     {
         user ??= ctx.User;
         var embed = await Service.GetProfileEmbed(user, ctx.User);
@@ -65,7 +67,7 @@ public class SlashUserProfile : MewdekoSlashModuleBase<UserProfileService>
         }
 
         await Service.SetBio(ctx.User, bio);
-        await ctx.Interaction.SendConfirmAsync($"Your Profile Bio has been set to:\n{bio}");
+        await ctx.Interaction.SendConfirmAsync(Strings.BioSet(ctx.Guild.Id, bio));
     }
 
     /// <summary>
@@ -111,7 +113,7 @@ public class SlashUserProfile : MewdekoSlashModuleBase<UserProfileService>
         if (!result)
             await ctx.Interaction.SendErrorAsync(Strings.ZodiacInvalid(ctx.Guild.Id), Config);
         else
-            await ctx.Interaction.SendConfirmAsync($"Your Zodiac has been set to:\n`{zodiac}`");
+            await ctx.Interaction.SendConfirmAsync(Strings.ZodiacSet(ctx.Guild.Id, zodiac));
     }
 
     /// <summary>
@@ -130,7 +132,7 @@ public class SlashUserProfile : MewdekoSlashModuleBase<UserProfileService>
 
         var discordColor = new Color(inputColor.Red, inputColor.Green, inputColor.Blue);
         await Service.SetProfileColor(ctx.User, discordColor);
-        await ctx.Interaction.SendConfirmAsync($"Your Profile Color has been set to:\n`{inputColor}`");
+        await ctx.Interaction.SendConfirmAsync(Strings.ProfileColorSet(ctx.Guild.Id, inputColor));
     }
 
     /// <summary>
@@ -148,7 +150,7 @@ public class SlashUserProfile : MewdekoSlashModuleBase<UserProfileService>
         }
 
         await Service.SetBirthday(ctx.User, dateTime);
-        await ctx.Interaction.SendConfirmAsync($"Your birthday has been set to {dateTime:d}");
+        await ctx.Interaction.SendConfirmAsync(Strings.BirthdaySet(ctx.Guild.Id, dateTime.ToString("d")));
     }
 
     /// <summary>
@@ -157,7 +159,7 @@ public class SlashUserProfile : MewdekoSlashModuleBase<UserProfileService>
     /// <param name="birthdayDisplayModeEnum">The birthday display mode to set.</param>
     [SlashCommand("setbirthdayprivacy", "Sets how your birthday is displayed in your profile")]
     [CheckPermissions]
-    public async Task SetBirthdayPrivacy(DiscordUser.BirthdayDisplayModeEnum birthdayDisplayModeEnum)
+    public async Task SetBirthdayPrivacy(BirthdayDisplayModeEnum birthdayDisplayModeEnum)
     {
         await Service.SetBirthdayDisplayMode(ctx.User, birthdayDisplayModeEnum);
         await ctx.Interaction.SendConfirmAsync(
@@ -179,7 +181,7 @@ public class SlashUserProfile : MewdekoSlashModuleBase<UserProfileService>
         if (!await Service.SetSwitchFc(ctx.User, switchFc))
         {
             await Context.Interaction.SendErrorAsync(
-                "The Switch Friend Code you provided is invalid. Please make sure it matches the format sw-XXXX-XXXX-XXXX.",
+                Strings.InvalidFormat(ctx.Guild.Id),
                 Config);
             return;
         }
@@ -187,7 +189,7 @@ public class SlashUserProfile : MewdekoSlashModuleBase<UserProfileService>
         if (switchFc.Length == 0)
             await ctx.Interaction.SendConfirmAsync(Strings.SwitchCodeRemoved(ctx.Guild.Id));
         else
-            await ctx.Interaction.SendConfirmAsync($"Your Switch Friend Code has been set to {switchFc}.");
+            await ctx.Interaction.SendConfirmAsync(Strings.SwitchFcSet(ctx.Guild.Id, switchFc));
     }
 
     /// <summary>
@@ -200,14 +202,12 @@ public class SlashUserProfile : MewdekoSlashModuleBase<UserProfileService>
     {
         if (!url.IsImage())
         {
-            await ctx.Interaction.SendErrorAsync(
-                "The image url you provided is invalid. Please make sure it ends with `.gif`, `.png` or `.jpg`",
-                Config);
+            await ctx.Interaction.SendErrorAsync(Strings.InvalidImageUrl(ctx.Guild.Id), Config);
             return;
         }
 
         await Service.SetProfileImage(ctx.User, url);
-        var eb = new EmbedBuilder().WithOkColor().WithDescription("Sucesffully set the profile image to:")
+        var eb = new EmbedBuilder().WithOkColor().WithDescription(Strings.SuccessfullySetProfileImage(ctx.Guild.Id))
             .WithImageUrl(url);
         await ctx.Interaction.RespondAsync(embed: eb.Build());
     }
@@ -218,7 +218,7 @@ public class SlashUserProfile : MewdekoSlashModuleBase<UserProfileService>
     /// <param name="privacyEnum">The privacy setting to apply.</param>
     [SlashCommand("setprivacy", "Set's the privacy of your user profile")]
     [CheckPermissions]
-    public async Task SetPrivacy(DiscordUser.ProfilePrivacyEnum privacyEnum)
+    public async Task SetPrivacy(ProfilePrivacyEnum privacyEnum)
     {
         await Service.SetPrivacy(ctx.User, privacyEnum);
         await ctx.Interaction.SendConfirmAsync($"Privacy succesfully set to `{privacyEnum.ToString()}`");
@@ -239,12 +239,12 @@ public class SlashUserProfile : MewdekoSlashModuleBase<UserProfileService>
     [ComponentInteraction("pronouns_overwrite_clear", true)]
     public async Task ClearPronounsOverwrite()
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
         var user = await dbContext.GetOrCreateUser(ctx.User).ConfigureAwait(false);
         if (await PronounsDisabled(user).ConfigureAwait(false)) return;
         user.Pronouns = "";
-        await dbContext.SaveChangesAsync().ConfigureAwait(false);
+        await dbContext.UpdateAsync(user);
         await ConfirmAsync(Strings.PronounsClearedSelf(ctx.Guild.Id)).ConfigureAwait(false);
     }
 
@@ -255,12 +255,12 @@ public class SlashUserProfile : MewdekoSlashModuleBase<UserProfileService>
     [ModalInteraction("pronouns_overwrite_modal", true)]
     public async Task PronounsOverwriteModal(PronounsModal modal)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
         var user = await dbContext.GetOrCreateUser(ctx.User).ConfigureAwait(false);
         if (await PronounsDisabled(user).ConfigureAwait(false)) return;
         user.Pronouns = modal.Pronouns;
-        await dbContext.SaveChangesAsync().ConfigureAwait(false);
+        await dbContext.UpdateAsync(user);
         await ConfirmAsync(Strings.PronounsInternalUpdate(ctx.Guild.Id, user.Pronouns)).ConfigureAwait(false);
     }
 
@@ -271,26 +271,26 @@ public class SlashUserProfile : MewdekoSlashModuleBase<UserProfileService>
     [ComponentInteraction("pronouns_report.*;", true)]
     public async Task ReportPronouns(string sId)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
         var reporter = await dbContext.GetOrCreateUser(ctx.User).ConfigureAwait(false);
 
         if (await PronounsDisabled(reporter).ConfigureAwait(false)) return;
 
         var id = ulong.Parse(sId);
-        var user = await dbContext.DiscordUser.FirstOrDefaultAsync(x => x.UserId == id).ConfigureAwait(false);
+        var user = await dbContext.DiscordUsers.FirstOrDefaultAsync(x => x.UserId == id).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(user?.Pronouns)) return;
 
         var channel = await ctx.Client.GetChannelAsync(bot.Credentials.PronounAbuseReportChannelId)
             .ConfigureAwait(false);
-        var eb = new EmbedBuilder().WithAuthor(ctx.User).WithTitle("Pronoun abuse report")
+        var eb = new EmbedBuilder().WithAuthor(ctx.User).WithTitle(Strings.PronounAbuseReport(ctx.Guild.Id))
             .AddField("Reported User", $"{user.Username} ({user.UserId}, <@{user.UserId}>)")
             .AddField("Reporter", $"{reporter.Username} ({reporter.UserId}, <@{reporter.UserId}>)")
             .AddField("Pronouns Cleared Reason",
                 string.IsNullOrWhiteSpace(user.PronounsClearedReason) ? "Never Cleared" : user.PronounsClearedReason)
             .AddField("Pronouns", user.Pronouns)
             .WithFooter(
-                $"reported in the guild {ctx.Guild?.Id ?? 0}")
+                Strings.ReportedInGuild(ctx.Guild.Id, ctx.Guild?.Id ?? 0))
             .WithErrorColor();
         var cb = new ComponentBuilder()
             .WithButton("Reported User", "reported_row", ButtonStyle.Secondary, disabled: true)
@@ -324,7 +324,7 @@ public class SlashUserProfile : MewdekoSlashModuleBase<UserProfileService>
     public Task ClearPronouns(string sId, string sDisable)
     {
         return Context.Interaction.RespondWithModalAsync<PronounsFcbModal>($"pronouns_fc_action:{sId},{sDisable},false",
-            null, x => x.WithTitle("Clear Pronouns"));
+            null, x => x.WithTitle(Strings.ClearPronouns(ctx.Guild.Id)));
     }
 
     /// <summary>
@@ -337,7 +337,7 @@ public class SlashUserProfile : MewdekoSlashModuleBase<UserProfileService>
     public Task BlacklistPronouns(string sId)
     {
         return ctx.Interaction.RespondWithModalAsync<PronounsFcbModal>($"pronouns_fc_action:{sId},true,true", null,
-            x => x.WithTitle("Blacklist User and Clear Pronouns"));
+            x => x.WithTitle(Strings.BlacklistUserClearPronouns(ctx.Guild.Id)));
     }
 
     /// <summary>
@@ -351,7 +351,7 @@ public class SlashUserProfile : MewdekoSlashModuleBase<UserProfileService>
     {
         return ctx.Interaction
             .RespondWithModalAsync<PronounsFcbModal>($"pronouns_fcb_g:{sId}", null,
-                x => x.WithTitle("Blacklist Guild"));
+                x => x.WithTitle(Strings.BlacklistGuild(ctx.Guild.Id)));
     }
 
     /// <summary>
@@ -361,11 +361,11 @@ public class SlashUserProfile : MewdekoSlashModuleBase<UserProfileService>
     /// <param name="modal">The modal containing the reason for blacklisting.</param>
     [ModalInteraction("pronouns_fcb_g:*", true)]
     [SlashOwnerOnly]
-    public Task PronounsGuildBlacklist(string sId, PronounsFcbModal modal)
+    public async Task PronounsGuildBlacklist(string sId, PronounsFcbModal modal)
     {
         var id = ulong.Parse(sId);
-        bss.Blacklist(BlacklistType.Server, id, modal.FcbReason);
-        return RespondAsync("blacklisted the server");
+        await bss.Blacklist(BlacklistType.Server, id, modal.FcbReason);
+        await RespondAsync("blacklisted the server");
     }
 
     /// <summary>
@@ -384,15 +384,15 @@ public class SlashUserProfile : MewdekoSlashModuleBase<UserProfileService>
         PronounsFcbModal modal)
     {
         var userId = ulong.Parse(sId);
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
-        var user = await dbContext.DiscordUser.AsQueryable().FirstAsync(x => x.UserId == userId).ConfigureAwait(false);
+        var user = await dbContext.DiscordUsers.AsQueryable().FirstAsync(x => x.UserId == userId).ConfigureAwait(false);
         user.Pronouns = "";
         user.PronounsDisabled = sPronounsDisable;
         user.PronounsClearedReason = modal.FcbReason;
-        await dbContext.SaveChangesAsync().ConfigureAwait(false);
+        await dbContext.UpdateAsync(user);
         if (bool.TryParse(sBlacklist, out var blacklist) && blacklist)
-            bss.Blacklist(BlacklistType.User, user.UserId, modal.FcbReason);
+            await bss.Blacklist(BlacklistType.User, user.UserId, modal.FcbReason);
         await RespondAsync("completed moderation actions.").ConfigureAwait(false);
     }
 
@@ -414,7 +414,7 @@ public class SlashUserProfile : MewdekoSlashModuleBase<UserProfileService>
     [UserCommand("Pronouns")]
     public async Task Pronouns(IUser? user)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
         var dbUser = await dbContext.GetOrCreateUser(user).ConfigureAwait(false);
         if (await PronounsDisabled(dbUser).ConfigureAwait(false)) return;
@@ -441,7 +441,7 @@ public class SlashUserProfile : MewdekoSlashModuleBase<UserProfileService>
     [CheckPermissions]
     public async Task SetPronouns(string? pronouns = null)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
         var user = await dbContext.GetOrCreateUser(ctx.User).ConfigureAwait(false);
         if (await PronounsDisabled(user).ConfigureAwait(false)) return;
@@ -464,7 +464,7 @@ public class SlashUserProfile : MewdekoSlashModuleBase<UserProfileService>
         }
 
         user.Pronouns = pronouns;
-        await dbContext.SaveChangesAsync().ConfigureAwait(false);
+        await dbContext.UpdateAsync(user);
         await ConfirmAsync(Strings.PronounsInternalUpdate(ctx.Guild.Id, user.Pronouns)).ConfigureAwait(false);
     }
 
@@ -478,7 +478,8 @@ public class SlashUserProfile : MewdekoSlashModuleBase<UserProfileService>
     public Task DmUser(string uIdStr)
     {
         return ctx.Interaction
-            .RespondWithModalAsync<DmUserModal>($"pronouns_reportdm_modal:{uIdStr}", null, x => x.WithTitle("dm user"));
+            .RespondWithModalAsync<DmUserModal>($"pronouns_reportdm_modal:{uIdStr}", null,
+                x => x.WithTitle(Strings.DmUserModalTitle(ctx.Guild.Id)));
     }
 
     /// <summary>
@@ -494,7 +495,8 @@ public class SlashUserProfile : MewdekoSlashModuleBase<UserProfileService>
         {
             var user = await ctx.Client.GetUserAsync(ulong.Parse(uIdStr)).ConfigureAwait(false);
             var channel = await user.CreateDMChannelAsync().ConfigureAwait(false);
-            if (SmartEmbed.TryParse(modal.Message, ctx.Guild.Id, out var eb, out var txt, out var cb))
+            if (modal.Message != null &&
+                SmartEmbed.TryParse(modal.Message, ctx.Guild.Id, out var eb, out var txt, out var cb))
                 await channel.SendMessageAsync(txt, embeds: eb, components: cb.Build()).ConfigureAwait(false);
             else
                 await channel.SendMessageAsync(modal.Message).ConfigureAwait(false);

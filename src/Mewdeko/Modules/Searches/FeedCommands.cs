@@ -4,7 +4,6 @@ using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Modules.Searches.Services;
-using Serilog;
 
 namespace Mewdeko.Modules.Searches;
 
@@ -14,7 +13,7 @@ public partial class Searches
     ///     Module for managing RSS feeds in the guild.
     /// </summary>
     [Group]
-    public class FeedCommands(InteractiveService serv) : MewdekoSubmodule<FeedsService>
+    public class FeedCommands(InteractiveService serv, ILogger<FeedCommands> logger) : MewdekoSubmodule<FeedsService>
     {
         /// <summary>
         ///     Adds a new RSS feed to the guild's feed list.
@@ -45,7 +44,7 @@ public partial class Searches
                 }
                 catch (Exception ex)
                 {
-                    Log.Information(ex, "Unable to get feeds from that url");
+                    logger.LogInformation(ex, "Unable to get feeds from that url");
                     success = false;
                 }
             }

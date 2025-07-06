@@ -1,22 +1,24 @@
 ﻿using Discord.Interactions;
 using Mewdeko.Modules.Utility.Services;
-using Serilog;
 
 namespace Mewdeko.Common.Autocompleters;
 
 /// <summary>
-/// Provides autocomplete suggestions for AI model selection.
+///     Provides autocomplete suggestions for AI model selection.
 /// </summary>
 public class AiModelAutoCompleter : AutocompleteHandler
 {
     private readonly AiService aiService;
+    private readonly ILogger<AiModelAutoCompleter> logger;
+
 
     /// <summary>
-    /// Initializes a new instance of the AiModelAutoCompleter class.
+    ///     Initializes a new instance of the AiModelAutoCompleter class.
     /// </summary>
-    public AiModelAutoCompleter(AiService aiService)
+    public AiModelAutoCompleter(AiService aiService, ILogger<AiModelAutoCompleter> logger)
     {
         this.aiService = aiService;
+        this.logger = logger;
     }
 
     /// <inheritdoc />
@@ -39,7 +41,7 @@ public class AiModelAutoCompleter : AutocompleteHandler
             "Groq" => AiService.AiProvider.Groq,
             _ => AiService.AiProvider.Claude
         };
-        Log.Information(provider.GetType().Name);
+        logger.LogInformation(provider.GetType().Name);
 
         var config = await aiService.GetOrCreateConfig(guildId);
 

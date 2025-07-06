@@ -2,11 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+using System.Security;
 using System.Text;
-using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Text;
 
 namespace MewdekoSourceGen;
@@ -27,13 +26,18 @@ namespace MewdekoSourceGen;
 ///     5. Provide comprehensive documentation about locale support
 /// </remarks>
 [Generator]
-public partial class LocalizationGenerator : IIncrementalGenerator
+public class LocalizationGenerator : IIncrementalGenerator
 {
     /// <summary>
     ///     Regular expression pattern to match locale files and extract the culture code.
     ///     Matches files named 'responses.LOCALE.json' where LOCALE is the culture code.
     /// </summary>
     private static readonly Regex LangFilePattern = new(@"responses\.(.+)\.json$");
+
+    private static readonly Regex InvalidCharsRegex = new(@"[^A-Za-z0-9_]");
+    private static readonly Regex StartsWithDigitRegex = new(@"^\d+");
+    private static readonly Regex ContainsDigitRegex = new(@"\d");
+    private static readonly Regex FormatArgsRegex = new(@"\{(\d+)\}");
 
     /// <summary>
     ///     Initializes the incremental source generator.
@@ -47,7 +51,6 @@ public partial class LocalizationGenerator : IIncrementalGenerator
     /// </remarks>
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
-
         // Register all response files (responses.*.json)
         var responseFiles = context.AdditionalTextsProvider
             .Where(file => LangFilePattern.IsMatch(file.Path));
@@ -59,8 +62,7 @@ public partial class LocalizationGenerator : IIncrementalGenerator
             var locale = match.Groups[1].Value;
             var content = text.GetText(cancelToken)?.ToString() ?? "{}";
             // Initialize empty dictionary if deserialization returns null
-            var responses = JsonSerializer.Deserialize<Dictionary<string, string>>(content) ??
-                            new Dictionary<string, string>();
+            var responses = ParseJsonToDictionary(content);
             return (locale, responses);
         });
 
@@ -87,127 +89,131 @@ public partial class LocalizationGenerator : IIncrementalGenerator
     private static SourceText GenerateSource(
         ImmutableArray<(string locale, Dictionary<string, string> responses)> allResponses)
     {
-        var sourceBuilder = new StringBuilder(@"
-using System;
-using System.Globalization;
-using Mewdeko.Services.strings;
+        var sourceBuilder = new StringBuilder("""
 
-namespace Mewdeko.Services.Strings
-{
-    /// <summary>
-    /// Provides strongly-typed access to localization strings.
-    /// Generated from responses.*.json files
-    /// </summary>
-    /// <remarks>
-    /// This class wraps the IBotStrings interface to provide:
-    /// - Strongly-typed access to localization keys
-    /// - Guild-specific language support
-    /// - Explicit culture specification
-    /// - Proper fallback behavior
-    /// </remarks>
-    public partial class GeneratedBotStrings
-    {
-        private readonly IBotStrings _strings;
-        private readonly ILocalization _localization;
+                                              using System;
+                                              using System.Globalization;
+                                              using Mewdeko.Services.strings;
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref=""GeneratedBotStrings""/> class.
-        /// </summary>
-        /// <param name=""strings"">The bot strings service that provides localization.</param>
-        /// <param name=""localization"">The localization service that handles culture resolution.</param>
-        public GeneratedBotStrings(IBotStrings strings, ILocalization localization)
-        {
-            _strings = strings;
-            _localization = localization;
-        }
+                                              namespace Mewdeko.Services.Strings
+                                              {
+                                                  /// <summary>
+                                                  /// Provides strongly-typed access to localization strings.
+                                                  /// Generated from responses.*.json files
+                                                  /// </summary>
+                                                  /// <remarks>
+                                                  /// This class wraps the IBotStrings interface to provide:
+                                                  /// - Strongly-typed access to localization keys
+                                                  /// - Guild-specific language support
+                                                  /// - Explicit culture specification
+                                                  /// - Proper fallback behavior
+                                                  /// </remarks>
+                                                  public partial class GeneratedBotStrings
+                                                  {
+                                                      private readonly IBotStrings _strings;
+                                                      private readonly ILocalization _localization;
 
-        /// <summary>
-        /// Gets the appropriate culture info for the specified guild.
-        /// </summary>
-        /// <param name=""guildId"">The ID of the guild, or null for default culture.</param>
-        /// <returns>The resolved CultureInfo for the guild or default.</returns>
-        private CultureInfo GetCultureInfo(ulong? guildId = null) =>
-            _localization.GetCultureInfo(guildId);
-");
+                                                      /// <summary>
+                                                      /// Initializes a new instance of the <see cref="GeneratedBotStrings"/> class.
+                                                      /// </summary>
+                                                      /// <param name="strings">The bot strings service that provides localization.</param>
+                                                      /// <param name="localization">The localization service that handles culture resolution.</param>
+                                                      public GeneratedBotStrings(IBotStrings strings, ILocalization localization)
+                                                      {
+                                                          _strings = strings;
+                                                          _localization = localization;
+                                                      }
+
+                                                      /// <summary>
+                                                      /// Gets the appropriate culture info for the specified guild.
+                                                      /// </summary>
+                                                      /// <param name="guildId">The ID of the guild, or null for default culture.</param>
+                                                      /// <returns>The resolved CultureInfo for the guild or default.</returns>
+                                                      private CultureInfo GetCultureInfo(ulong? guildId = null) =>
+                                                          _localization.GetCultureInfo(guildId);
+
+                                              """);
 
         // Get all unique keys across all locales
         var allKeys = allResponses.SelectMany(x => x.responses.Keys).Distinct().OrderBy(x => x);
 
         var methodNames = new HashSet<string>(StringComparer.Ordinal);
 
-foreach (var key in allKeys)
-{
-    var pascalCaseKey = SnakeToPascalCase(key);
-
-    // Ensure the method name is unique
-    if (!methodNames.Add(pascalCaseKey))
-    {
-        var suffix = 1;
-        string uniqueName;
-        do
+        foreach (var key in allKeys)
         {
-            uniqueName = pascalCaseKey + suffix++;
-        } while (!methodNames.Add(uniqueName));
+            var pascalCaseKey = SnakeToPascalCase(key);
 
-        pascalCaseKey = uniqueName;
-    }
+            // Ensure the method name is unique
+            if (!methodNames.Add(pascalCaseKey))
+            {
+                var suffix = 1;
+                string uniqueName;
+                do
+                {
+                    uniqueName = pascalCaseKey + suffix++;
+                } while (!methodNames.Add(uniqueName));
 
-    // Get default (en-US) value for documentation
-    var defaultValue = allResponses
-        .FirstOrDefault(x => x.locale == "en-US")
-        .responses
-        .GetValueOrDefault(key, string.Empty);
+                pascalCaseKey = uniqueName;
+            }
 
-   var (paramCount, sequential) = AnalyzeStringParameters(defaultValue);
+            // Get default (en-US) value for documentation
+            var defaultResponse = allResponses.FirstOrDefault(x => x.locale == "en-US").responses;
+            var defaultValue = defaultResponse != null && defaultResponse.ContainsKey(key)
+                ? defaultResponse[key]
+                : string.Empty;
 
-    string parametersList, argumentsList;
-    if (paramCount == 0)
-    {
-        // No parameters
-        parametersList = "ulong? guildId";
-        argumentsList = "Array.Empty<object>()";
-    }
-    else if (sequential)
-    {
-        // Sequential parameters
-        parametersList = $"ulong? guildId, {string.Join(", ", Enumerable.Range(0, paramCount).Select(i => $"object param{i}"))}";
-        argumentsList = $"new object[] {{ {string.Join(", ", Enumerable.Range(0, paramCount).Select(i => $"param{i}"))} }}";
-    }
-    else
-    {
-        // Non-sequential parameters
-        parametersList = "ulong? guildId, params object[] data";
-        argumentsList = "data";
-    }
+            var (paramCount, sequential) = AnalyzeStringParameters(defaultValue);
 
-    var supportedLocales = string.Join(", ",
-        allResponses.Where(x => x.responses.ContainsKey(key))
-            .Select(x => x.locale));
+            string parametersList, argumentsList;
+            if (paramCount == 0)
+            {
+                // No parameters
+                parametersList = "ulong? guildId";
+                argumentsList = "Array.Empty<object>()";
+            }
+            else if (sequential)
+            {
+                // Sequential parameters
+                parametersList =
+                    $"ulong? guildId, {string.Join(", ", Enumerable.Range(0, paramCount).Select(i => $"object param{i}"))}";
+                argumentsList =
+                    $"new object[] {{ {string.Join(", ", Enumerable.Range(0, paramCount).Select(i => $"param{i}"))} }}";
+            }
+            else
+            {
+                // Non-sequential parameters
+                parametersList = "ulong? guildId, params object[] data";
+                argumentsList = "data";
+            }
 
-    // Escape any potential code-like content in the documentation
-    var escapedKey = System.Security.SecurityElement.Escape(key);
-    var escapedDefaultValue = SanitizeDocumentationValue(defaultValue);
-    var escapedSupportedLocales = System.Security.SecurityElement.Escape(supportedLocales);
+            var supportedLocales = string.Join(", ",
+                allResponses.Where(x => x.responses.ContainsKey(key))
+                    .Select(x => x.locale));
 
-    sourceBuilder.AppendLine($"""
+            // Escape any potential code-like content in the documentation
+            var escapedKey = SecurityElement.Escape(key);
+            var escapedDefaultValue = SanitizeDocumentationValue(defaultValue);
+            var escapedSupportedLocales = SecurityElement.Escape(supportedLocales);
 
-                                      /// <summary>Gets the localized string for key "{escapedKey}"</summary>
-                                      /// <remarks>
-                                      /// Default (en-US): "{escapedDefaultValue}"
-                                      /// Available in locales: {escapedSupportedLocales}
-                                      /// Parameter count: {paramCount}
-                                      /// </remarks>
-                                      /// <param name="guildId">The guild ID for culture resolution, or null for default culture.</param>
-                                      {(paramCount > 0 ? (sequential
-                                              ? string.Join("\n        ", Enumerable.Range(0, paramCount).Select(i => $"/// <param name=\"param{i}\">Format parameter {i}</param>"))
-                                              : "/// <param name=\"data\">Optional format parameters</param>")
-                                          : "")}
-                                      /// <returns>The localized string with optional formatting applied.</returns>
-                                      public string {pascalCaseKey}({parametersList}) =>
-                                          _strings.GetText(@"{key}", GetCultureInfo(guildId), {argumentsList});
+            sourceBuilder.AppendLine($"""
 
-                              """);
-}
+                                              /// <summary>Gets the localized string for key "{escapedKey}"</summary>
+                                              /// <remarks>
+                                              /// Default (en-US): "{escapedDefaultValue}"
+                                              /// Available in locales: {escapedSupportedLocales}
+                                              /// Parameter count: {paramCount}
+                                              /// </remarks>
+                                              /// <param name="guildId">The guild ID for culture resolution, or null for default culture.</param>
+                                              {(paramCount > 0 ? (sequential
+                                                      ? string.Join("\n        ", Enumerable.Range(0, paramCount).Select(i => $"/// <param name=\"param{i}\">Format parameter {i}</param>"))
+                                                      : "/// <param name=\"data\">Optional format parameters</param>")
+                                                  : "")}
+                                              /// <returns>The localized string with optional formatting applied.</returns>
+                                              public string {pascalCaseKey}({parametersList}) =>
+                                                  _strings.GetText(@"{key}", GetCultureInfo(guildId), {argumentsList});
+
+                                      """);
+        }
 
         sourceBuilder.AppendLine("    }"); // class close
         sourceBuilder.AppendLine("}"); // namespace close
@@ -217,15 +223,17 @@ foreach (var key in allKeys)
 
     private static (int count, bool sequential) AnalyzeStringParameters(string input)
     {
-        var matches = Regex.Matches(input, @"\{(\d+)\}");
+        var matches = FormatArgsRegex.Matches(input);
         if (matches.Count == 0)
             return (0, false);
 
-        var parameters = matches
-            .Select(m => int.Parse(m.Groups[1].Value))
-            .Distinct()
-            .OrderBy(x => x)
-            .ToList();
+        var parameters = new List<int>();
+        foreach (Match match in matches)
+        {
+            parameters.Add(int.Parse(match.Groups[1].Value));
+        }
+
+        parameters = parameters.Distinct().OrderBy(x => x).ToList();
 
         var sequential = parameters.Count > 0 &&
                          parameters[0] == 0 &&
@@ -239,19 +247,82 @@ foreach (var key in allKeys)
         // List of C# reserved keywords
         var reservedKeywords = new HashSet<string>
         {
-            "abstract", "as", "base", "bool", "break", "byte",
-            "case", "catch", "char", "checked", "class", "const",
-            "continue", "decimal", "default", "delegate", "do",
-            "double", "else", "enum", "event", "explicit", "extern",
-            "false", "finally", "fixed", "float", "for", "foreach",
-            "goto", "if", "implicit", "in", "int", "interface",
-            "internal", "is", "lock", "long", "namespace", "new",
-            "null", "object", "operator", "out", "override", "params",
-            "private", "protected", "public", "readonly", "ref",
-            "return", "sbyte", "sealed", "short", "sizeof", "stackalloc",
-            "static", "string", "struct", "switch", "this", "throw",
-            "true", "try", "typeof", "uint", "ulong", "unchecked",
-            "unsafe", "ushort", "using", "virtual", "void", "volatile",
+            "abstract",
+            "as",
+            "base",
+            "bool",
+            "break",
+            "byte",
+            "case",
+            "catch",
+            "char",
+            "checked",
+            "class",
+            "const",
+            "continue",
+            "decimal",
+            "default",
+            "delegate",
+            "do",
+            "double",
+            "else",
+            "enum",
+            "event",
+            "explicit",
+            "extern",
+            "false",
+            "finally",
+            "fixed",
+            "float",
+            "for",
+            "foreach",
+            "goto",
+            "if",
+            "implicit",
+            "in",
+            "int",
+            "interface",
+            "internal",
+            "is",
+            "lock",
+            "long",
+            "namespace",
+            "new",
+            "null",
+            "object",
+            "operator",
+            "out",
+            "override",
+            "params",
+            "private",
+            "protected",
+            "public",
+            "readonly",
+            "ref",
+            "return",
+            "sbyte",
+            "sealed",
+            "short",
+            "sizeof",
+            "stackalloc",
+            "static",
+            "string",
+            "struct",
+            "switch",
+            "this",
+            "throw",
+            "true",
+            "try",
+            "typeof",
+            "uint",
+            "ulong",
+            "unchecked",
+            "unsafe",
+            "ushort",
+            "using",
+            "virtual",
+            "void",
+            "volatile",
             "while"
         };
 
@@ -260,7 +331,21 @@ foreach (var key in allKeys)
 
     private static bool IsValidIdentifier(string identifier)
     {
-        return SyntaxFacts.IsValidIdentifier(identifier) && !IsReservedKeyword(identifier);
+        if (string.IsNullOrEmpty(identifier))
+            return false;
+
+        // Must start with letter or underscore
+        if (!char.IsLetter(identifier[0]) && identifier[0] != '_')
+            return false;
+
+        // Rest can be letters, digits, or underscores
+        for (var i = 1; i < identifier.Length; i++)
+        {
+            if (!char.IsLetterOrDigit(identifier[i]) && identifier[i] != '_')
+                return false;
+        }
+
+        return !IsReservedKeyword(identifier);
     }
 
     private static string SanitizeDocumentationValue(string input)
@@ -268,7 +353,7 @@ foreach (var key in allKeys)
         if (string.IsNullOrEmpty(input))
             return string.Empty;
 
-        return System.Security.SecurityElement.Escape(input)
+        return SecurityElement.Escape(input)
             .Replace("\r\n", "\\n")
             .Replace("\n", "\\n")
             .Replace("\r", "\\n")
@@ -295,28 +380,55 @@ foreach (var key in allKeys)
         // Dictionary for number words
         var numberWords = new Dictionary<string, string>
         {
-            {"0", "Zero"}, {"1", "One"}, {"2", "Two"}, {"3", "Three"},
-            {"4", "Four"}, {"5", "Five"}, {"6", "Six"}, {"7", "Seven"},
-            {"8", "Eight"}, {"9", "Nine"}
+            {
+                "0", "Zero"
+            },
+            {
+                "1", "One"
+            },
+            {
+                "2", "Two"
+            },
+            {
+                "3", "Three"
+            },
+            {
+                "4", "Four"
+            },
+            {
+                "5", "Five"
+            },
+            {
+                "6", "Six"
+            },
+            {
+                "7", "Seven"
+            },
+            {
+                "8", "Eight"
+            },
+            {
+                "9", "Nine"
+            }
         };
 
         // Replace leading numbers with words
-        var result = MyRegex1().Replace(input, match =>
+        var result = StartsWithDigitRegex.Replace(input, match =>
         {
             var numbers = match.Value.ToCharArray();
             return string.Concat(numbers.Select(n => numberWords[n.ToString()]));
         });
 
         // Replace remaining numbers and special characters
-        result = MyRegex2().Replace(result, match => numberWords[match.Value]);
+        result = ContainsDigitRegex.Replace(result, match => numberWords[match.Value]);
 
         // Remove invalid characters and split into words
-        var words = MyRegex().Replace(result, "_")
-            .Split(new[] { '_', '-' }, StringSplitOptions.RemoveEmptyEntries);
+        var words = InvalidCharsRegex.Replace(result, "_")
+            .Split(['_', '-'], StringSplitOptions.RemoveEmptyEntries);
 
         // Convert to PascalCase
         var identifier = string.Join("", words.Select(word =>
-            char.ToUpperInvariant(word[0]) + word[1..].ToLowerInvariant()));
+            char.ToUpperInvariant(word[0]) + word.Substring(1).ToLowerInvariant()));
 
         // Handle empty or invalid starting character
         if (string.IsNullOrEmpty(identifier) || (!char.IsLetter(identifier[0]) && identifier[0] != '_'))
@@ -341,10 +453,131 @@ foreach (var key in allKeys)
         return finalIdentifier;
     }
 
-    [GeneratedRegex(@"[^A-Za-z0-9_]")]
-    private static partial Regex MyRegex();
-    [GeneratedRegex(@"^\d+")]
-    private static partial Regex MyRegex1();
-    [GeneratedRegex(@"\d")]
-    private static partial Regex MyRegex2();
+    /// <summary>
+    ///     Simple JSON parser that extracts string key-value pairs from a JSON object.
+    ///     This is a minimal implementation for source generators targeting netstandard2.0.
+    /// </summary>
+    /// <param name="json">The JSON string to parse.</param>
+    /// <returns>A dictionary of string keys to string values.</returns>
+    private static Dictionary<string, string> ParseJsonToDictionary(string json)
+    {
+        var result = new Dictionary<string, string>();
+        if (string.IsNullOrWhiteSpace(json))
+            return result;
+
+        // Remove whitespace and brackets
+        json = json.Trim();
+        if (json.StartsWith("{") && json.EndsWith("}"))
+        {
+            json = json.Substring(1, json.Length - 2);
+        }
+
+        // Simple state machine to parse key-value pairs
+        var inString = false;
+        var escaped = false;
+        var currentKey = "";
+        var currentValue = "";
+        var parsingKey = true;
+        var currentStr = new StringBuilder();
+
+        for (var i = 0; i < json.Length; i++)
+        {
+            var c = json[i];
+
+            if (escaped)
+            {
+                // Handle escaped characters
+                switch (c)
+                {
+                    case 'n':
+                        currentStr.Append('\n');
+                        break;
+                    case 'r':
+                        currentStr.Append('\r');
+                        break;
+                    case 't':
+                        currentStr.Append('\t');
+                        break;
+                    case '\\':
+                        currentStr.Append('\\');
+                        break;
+                    case '"':
+                        currentStr.Append('"');
+                        break;
+                    case '/':
+                        currentStr.Append('/');
+                        break;
+                    default:
+                        currentStr.Append(c);
+                        break;
+                }
+
+                escaped = false;
+                continue;
+            }
+
+            if (c == '\\' && inString)
+            {
+                escaped = true;
+                continue;
+            }
+
+            if (c == '"')
+            {
+                if (inString)
+                {
+                    // End of string
+                    if (parsingKey)
+                    {
+                        currentKey = currentStr.ToString();
+                    }
+                    else
+                    {
+                        currentValue = currentStr.ToString();
+                    }
+
+                    currentStr.Clear();
+                }
+
+                inString = !inString;
+                continue;
+            }
+
+            if (inString)
+            {
+                currentStr.Append(c);
+                continue;
+            }
+
+            // Skip whitespace outside strings
+            if (char.IsWhiteSpace(c))
+                continue;
+
+            if (c == ':' && parsingKey)
+            {
+                parsingKey = false;
+                continue;
+            }
+
+            if (c == ',')
+            {
+                if (!string.IsNullOrEmpty(currentKey))
+                {
+                    result[currentKey] = currentValue ?? "";
+                }
+
+                currentKey = "";
+                currentValue = "";
+                parsingKey = true;
+            }
+        }
+
+        // Process the final key-value pair if it exists
+        if (!string.IsNullOrEmpty(currentKey))
+        {
+            result[currentKey] = currentValue ?? "";
+        }
+
+        return result;
+    }
 }

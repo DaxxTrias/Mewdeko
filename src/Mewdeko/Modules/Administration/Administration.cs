@@ -6,7 +6,6 @@ using Humanizer;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Common.TypeReaders.Models;
 using Mewdeko.Modules.Administration.Services;
-using Serilog;
 
 namespace Mewdeko.Modules.Administration;
 
@@ -14,7 +13,7 @@ namespace Mewdeko.Modules.Administration;
 ///     Class for the Administration Module.
 /// </summary>
 /// <param name="serv">The interactivity service by Fergun.Interactive</param>
-public partial class Administration(InteractiveService serv)
+public partial class Administration(InteractiveService serv, ILogger<Administration> logger)
     : MewdekoModuleBase<AdministrationService>
 {
     /// <summary>
@@ -89,6 +88,30 @@ public partial class Administration(InteractiveService serv)
         ///     Represents the state of being inherited.
         /// </summary>
         Inherit
+    }
+
+    // Cache for compiled regex patterns to avoid repeated compilation
+    private static readonly ConcurrentDictionary<string, Regex> RegexCache = new();
+
+    /// <summary>
+    ///     Gets a cached compiled regex pattern or creates and caches a new one.
+    /// </summary>
+    /// <param name="pattern">The regex pattern to compile</param>
+    /// <returns>A compiled regex with optimized options</returns>
+    private static Regex GetCachedRegex(string pattern)
+    {
+        return RegexCache.GetOrAdd(pattern, static p =>
+        {
+            try
+            {
+                return new Regex(p, RegexOptions.Compiled, TimeSpan.FromMilliseconds(200));
+            }
+            catch (ArgumentException)
+            {
+                // If pattern is invalid, return a regex that never matches
+                return new Regex("(?!.*)", RegexOptions.Compiled);
+            }
+        });
     }
 
 
@@ -183,6 +206,7 @@ public partial class Administration(InteractiveService serv)
     /// <param name="newNick">The new nickname. Provide none to reset.</param>
     /// <example>.setnick @user newNick</example>
     [Cmd]
+    [Aliases]
     [BotPerm(GuildPermission.ManageNicknames)]
     [UserPerm(GuildPermission.ManageNicknames)]
     [Priority(1)]
@@ -219,7 +243,8 @@ public partial class Administration(InteractiveService serv)
             return;
         }
 
-        if (!await PromptUserConfirmAsync(Strings.BanInRoleConfirm(ctx.Guild.Id, usersToBan.Count, role.Mention), ctx.User.Id))
+        if (!await PromptUserConfirmAsync(Strings.BanInRoleConfirm(ctx.Guild.Id, usersToBan.Count, role.Mention),
+                ctx.User.Id))
         {
             await ctx.Channel.SendErrorAsync(Strings.BanInRoleCancelled(ctx.Guild.Id), Config).ConfigureAwait(false);
             return;
@@ -244,11 +269,13 @@ public partial class Administration(InteractiveService serv)
             await ctx.Channel.SendConfirmAsync(Strings.BanInRoleSuccess(ctx.Guild.Id, usersToBan.Count, role.Mention))
                 .ConfigureAwait(false);
         else if (failedUsers == usersToBan.Count)
-            await ctx.Channel.SendErrorAsync(Strings.BanInRoleAllFailed(ctx.Guild.Id, users.Count, role.Mention), Config)
+            await ctx.Channel
+                .SendErrorAsync(Strings.BanInRoleAllFailed(ctx.Guild.Id, users.Count, role.Mention), Config)
                 .ConfigureAwait(false);
         else
             await ctx.Channel
-                .SendConfirmAsync(Strings.BanInRolePartialSuccess(ctx.Guild.Id, usersToBan.Count - failedUsers, role.Mention,
+                .SendConfirmAsync(Strings.BanInRolePartialSuccess(ctx.Guild.Id, usersToBan.Count - failedUsers,
+                    role.Mention,
                     failedUsers)).ConfigureAwait(false);
     }
 
@@ -285,7 +312,7 @@ public partial class Administration(InteractiveService serv)
     [BotPerm(GuildPermission.BanMembers)]
     public async Task NameBan([Remainder] string name)
     {
-        var regex = new Regex(name, RegexOptions.Compiled, TimeSpan.FromMilliseconds(200));
+        var regex = GetCachedRegex(name);
         var users = await ctx.Guild.GetUsersAsync();
         users = users.Where(x => regex.IsMatch(x.Username.ToLower())).ToList();
         if (!users.Any())
@@ -302,7 +329,7 @@ public partial class Administration(InteractiveService serv)
             return;
         }
 
-        if (!int.TryParse(deleteString, out var _))
+        if (!int.TryParse(deleteString, out _))
         {
             await ctx.Channel.SendErrorAsync(Strings.InvalidInputNumber(ctx.Guild.Id), Config);
             return;
@@ -340,7 +367,8 @@ public partial class Administration(InteractiveService serv)
                 async Task<PageBuilder> PageFactory(int page)
                 {
                     await Task.CompletedTask.ConfigureAwait(false);
-                    return new PageBuilder().WithTitle(Strings.NamebanPreviewCount(ctx.Guild.Id, users.Count, name.ToLower()))
+                    return new PageBuilder()
+                        .WithTitle(Strings.NamebanPreviewCount(ctx.Guild.Id, users.Count, name.ToLower()))
                         .WithDescription(string.Join("\n", users.Skip(page * 20).Take(20)));
                 }
             case "executeorder66":
@@ -394,7 +422,7 @@ public partial class Administration(InteractiveService serv)
         {
             await ctx.Guild.DownloadUsersAsync().ConfigureAwait(false);
             IEnumerable<IUser> users;
-            if (option is not null && option.ToLower() == "-accage" && time1 is not null)
+            if (option is not null && option.Equals("-accage", StringComparison.OrdinalIgnoreCase) && time1 is not null)
             {
                 users = ((SocketGuild)ctx.Guild).Users.Where(c =>
                     c.JoinedAt != null
@@ -414,7 +442,7 @@ public partial class Administration(InteractiveService serv)
                 return;
             }
 
-            if (option is not null && option.ToLower() == "-p")
+            if (option is not null && option.Equals("-p", StringComparison.OrdinalIgnoreCase))
             {
                 var paginator = new LazyPaginatorBuilder().AddUser(ctx.User).WithPageFactory(PageFactory)
                     .WithFooter(PaginatorFooter.PageNumber | PaginatorFooter.Users)
@@ -442,7 +470,8 @@ public partial class Administration(InteractiveService serv)
             await msg.DeleteAsync();
             if (!text.ToLower().Contains("yes"))
                 return;
-            var message = await ConfirmAsync(Strings.BanunderBanning(ctx.Guild.Id, users.Count())).ConfigureAwait(false);
+            var message = await ConfirmAsync(Strings.BanunderBanning(ctx.Guild.Id, users.Count()))
+                .ConfigureAwait(false);
             foreach (var i in users)
             {
                 try
@@ -466,7 +495,7 @@ public partial class Administration(InteractiveService serv)
         }
         catch (Exception ex)
         {
-            Log.Error(ex.ToString());
+            logger.LogError(ex.ToString());
         }
     }
 
@@ -497,7 +526,7 @@ public partial class Administration(InteractiveService serv)
             return;
         }
 
-        if (option is not null && option.ToLower() == "-p")
+        if (option is not null && option.Equals("-p", StringComparison.OrdinalIgnoreCase))
         {
             var paginator = new LazyPaginatorBuilder()
                 .AddUser(ctx.User)
@@ -639,7 +668,7 @@ public partial class Administration(InteractiveService serv)
         }
         catch (Exception exception)
         {
-            Log.Error("Error in prunemembers: \n{0}", exception);
+            logger.LogError("Error in prunemembers: \n{0}", exception);
         }
     }
 
@@ -851,6 +880,7 @@ public partial class Administration(InteractiveService serv)
     /// <example>.delmsgoncmd enable #channel</example>
     /// <example>.delmsgoncmd disable #channel</example>
     [Cmd]
+    [Aliases]
     [RequireContext(ContextType.Guild)]
     [UserPerm(GuildPermission.Administrator)]
     [BotPerm(GuildPermission.ManageMessages)]

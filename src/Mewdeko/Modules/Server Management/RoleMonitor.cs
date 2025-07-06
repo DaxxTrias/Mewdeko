@@ -1,7 +1,7 @@
 ﻿using Discord.Commands;
 using LinqToDB;
 using Mewdeko.Common.Attributes.TextCommands;
-using Mewdeko.Database.DbContextStuff;
+using Mewdeko.Modules.Administration.Common;
 using Mewdeko.Modules.Server_Management.Services;
 
 namespace Mewdeko.Modules.Server_Management;
@@ -11,7 +11,7 @@ public partial class ServerManagement
     /// <summary>
     ///     Manages role monitoring settings, blacklists, and whitelists.
     /// </summary>
-    public class RoleMonitorCommands(DbContextProvider dbContextProvider) : MewdekoSubmodule<RoleMonitorService>
+    public class RoleMonitorCommands(IDataConnectionFactory dbFactory) : MewdekoSubmodule<RoleMonitorService>
     {
         /// <summary>
         ///     Sets the default punishment action for the guild.
@@ -47,7 +47,8 @@ public partial class ServerManagement
             }
             catch (InvalidOperationException ex)
             {
-                await ErrorAsync(Strings.RoleBlacklistError(ctx.Guild.Id, ex.Message, role.Mention)).ConfigureAwait(false);
+                await ErrorAsync(Strings.RoleBlacklistError(ctx.Guild.Id, ex.Message, role.Mention))
+                    .ConfigureAwait(false);
             }
         }
 
@@ -69,7 +70,8 @@ public partial class ServerManagement
             }
             catch (InvalidOperationException ex)
             {
-                await ErrorAsync(Strings.RoleUnblacklistError(ctx.Guild.Id, ex.Message, role.Mention)).ConfigureAwait(false);
+                await ErrorAsync(Strings.RoleUnblacklistError(ctx.Guild.Id, ex.Message, role.Mention))
+                    .ConfigureAwait(false);
             }
         }
 
@@ -93,7 +95,8 @@ public partial class ServerManagement
             }
             catch (InvalidOperationException ex)
             {
-                await ErrorAsync(Strings.PermissionBlacklistError(ctx.Guild.Id, ex.Message, permission)).ConfigureAwait(false);
+                await ErrorAsync(Strings.PermissionBlacklistError(ctx.Guild.Id, ex.Message, permission))
+                    .ConfigureAwait(false);
             }
         }
 
@@ -115,7 +118,8 @@ public partial class ServerManagement
             }
             catch (InvalidOperationException ex)
             {
-                await ErrorAsync(Strings.PermissionUnblacklistError(ctx.Guild.Id, ex.Message, permission)).ConfigureAwait(false);
+                await ErrorAsync(Strings.PermissionUnblacklistError(ctx.Guild.Id, ex.Message, permission))
+                    .ConfigureAwait(false);
             }
         }
 
@@ -176,7 +180,8 @@ public partial class ServerManagement
         public async Task RemoveWhitelistedRole(IRole role)
         {
             await Service.RemoveWhitelistedRoleAsync(ctx.Guild, role);
-            await SuccessAsync(Strings.RoleUnwhitelisted(ctx.Guild.Id, role.Name)).ConfigureAwait(false);        }
+            await SuccessAsync(Strings.RoleUnwhitelisted(ctx.Guild.Id, role.Name)).ConfigureAwait(false);
+        }
 
         /// <summary>
         ///     Lists all blacklisted and whitelisted roles and permissions.
@@ -188,7 +193,7 @@ public partial class ServerManagement
         [RequireServerOwner]
         public async Task ListBlacklists()
         {
-            await using var context = await dbContextProvider.GetContextAsync();
+            await using var context = await dbFactory.CreateConnectionAsync();
 
             var blacklistedRoles = await context.BlacklistedRoles
                 .Where(r => r.GuildId == ctx.Guild.Id)
@@ -239,7 +244,8 @@ public partial class ServerManagement
             }
             else
             {
-                embed.AddField(Strings.BlacklistedPermissions(ctx.Guild.Id), Strings.NoBlacklistedPermissions(ctx.Guild.Id));
+                embed.AddField(Strings.BlacklistedPermissions(ctx.Guild.Id),
+                    Strings.NoBlacklistedPermissions(ctx.Guild.Id));
             }
 
             if (whitelistedRoles.Any())

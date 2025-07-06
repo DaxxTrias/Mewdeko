@@ -18,10 +18,8 @@ using Mewdeko.Modules.Searches.Common;
 using Mewdeko.Modules.Searches.Services;
 using Mewdeko.Services.Settings;
 using Microsoft.Extensions.Caching.Memory;
-
 using Newtonsoft.Json.Linq;
 using Refit;
-using Serilog;
 using SkiaSharp;
 
 namespace Mewdeko.Modules.Searches;
@@ -30,7 +28,6 @@ namespace Mewdeko.Modules.Searches;
 ///     The Searches module provides commands for searching and retrieving various types of information. It includes
 ///     commands for searching memes, Reddit posts, weather, and more.
 /// </summary>
-/// <param name="creds">The bot credentials.</param>
 /// <param name="google">The Google API service.</param>
 /// <param name="factory">The HTTP client factory.</param>
 /// <param name="cache">The memory cache service.</param>
@@ -40,7 +37,6 @@ namespace Mewdeko.Modules.Searches;
 /// <param name="toneTagService">The ToneTag service.</param>
 /// <param name="config">The bot configuration service.</param>
 public partial class Searches(
-    IBotCredentials creds,
     IGoogleApiService google,
     IHttpClientFactory factory,
     IMemoryCache cache,
@@ -48,7 +44,8 @@ public partial class Searches(
     InteractiveService serv,
     MartineApi martineApi,
     ToneTagService toneTagService,
-    BotConfigService config)
+    BotConfigService config,
+    ILogger<Searches> logger)
     : MewdekoModuleBase<SearchesService>
 {
     private static readonly ConcurrentDictionary<string, string> CachedShortenedLinks = new();
@@ -67,7 +64,7 @@ public partial class Searches(
     [Aliases]
     public async Task Meme()
     {
-        var msg = await ctx.Channel.SendConfirmAsync($"{config.Data.LoadingEmote} Fetching random meme...")
+        var msg = await ctx.Channel.SendConfirmAsync(Strings.LoadingMemeFetch(ctx.Guild.Id, config.Data.LoadingEmote))
             .ConfigureAwait(false);
         var image = await martineApi.RedditApi.GetRandomMeme(Toptype.year).ConfigureAwait(false);
 
@@ -76,7 +73,7 @@ public partial class Searches(
         {
             Author = new EmbedAuthorBuilder
             {
-                Name = $"u/{image.Data.Author.Name}"
+                Name = Strings.RedditAuthor(ctx.Guild.Id, image.Data.Author.Name)
             },
             Description = $"Title: {image.Data.Title}\n[Source]({image.Data.PostUrl})",
             Footer = new EmbedFooterBuilder
@@ -115,8 +112,7 @@ public partial class Searches(
         {
             var emt = new EmbedBuilder
             {
-                Description = Strings.SubredditIsNsfw(ctx.Guild.Id),
-                Color = Mewdeko.ErrorColor
+                Description = Strings.SubredditIsNsfw(ctx.Guild.Id), Color = Mewdeko.ErrorColor
             };
             await msg.ModifyAsync(x => x.Embed = emt.Build()).ConfigureAwait(false);
             return;
@@ -132,7 +128,7 @@ public partial class Searches(
         {
             await msg.DeleteAsync().ConfigureAwait(false);
             await ctx.Channel.SendErrorAsync(Strings.SubredditNotFound(ctx.Guild.Id), Config);
-            Log.Error(
+            logger.LogError(
                 $"Seems that Meme fetching has failed. Here's the error:\nCode: {ex.StatusCode}\nContent: {(ex.HasContent ? ex.Content : "No Content.")}");
             return;
         }
@@ -141,12 +137,12 @@ public partial class Searches(
         {
             Author = new EmbedAuthorBuilder
             {
-                Name = $"u/{image.Data.Author.Name}"
+                Name = Strings.RedditAuthor(ctx.Guild.Id, image.Data.Author.Name)
             },
             Description = $"Title: {image.Data.Title}\n[Source]({image.Data.PostUrl})",
             Footer = new EmbedFooterBuilder
             {
-                Text = $"{image.Data.Upvotes} Upvotes! | r/{image.Data.Subreddit.Name} Powered by martineAPI"
+                Text = Strings.RedditUpvotesFooter(ctx.Guild.Id, image.Data.Upvotes, image.Data.Subreddit.Name)
             },
             ImageUrl = image.Data.ImageUrl,
             Color = Mewdeko.OkColor
@@ -179,7 +175,6 @@ public partial class Searches(
         await using var _ = picStream.ConfigureAwait(false);
         await ctx.Channel.SendFileAsync(picStream, "rip.png",
             Strings.RipMessage(ctx.Guild.Id, Format.Bold(usr.ToString()), Format.Italics(ctx.User.ToString())));
-
     }
 
     /// <summary>
@@ -236,7 +231,8 @@ public partial class Searches(
                     fb.WithName($"😓 {Format.Bold(Strings.Humidity(ctx.Guild.Id))}").WithValue($"{data.Main.Humidity}%")
                         .WithIsInline(true))
                 .AddField(fb =>
-                    fb.WithName($"💨 {Format.Bold(Strings.WindSpeed(ctx.Guild.Id))}").WithValue($"{data.Wind.Speed} m/s")
+                    fb.WithName($"💨 {Format.Bold(Strings.WindSpeed(ctx.Guild.Id))}")
+                        .WithValue($"{data.Wind.Speed} m/s")
                         .WithIsInline(true))
                 .AddField(fb =>
                     fb.WithName($"🌡 {Format.Bold(Strings.Temperature(ctx.Guild.Id))}")
@@ -247,14 +243,16 @@ public partial class Searches(
                             $"{data.Main.TempMin:F1}°C - {data.Main.TempMax:F1}°C\n{f(data.Main.TempMin):F1}°F - {f(data.Main.TempMax):F1}°F")
                         .WithIsInline(true))
                 .AddField(fb =>
-                    fb.WithName($"🌄 {Format.Bold(Strings.Sunrise(ctx.Guild.Id))}").WithValue($"{sunrise:HH:mm} {timezone}")
+                    fb.WithName($"🌄 {Format.Bold(Strings.Sunrise(ctx.Guild.Id))}")
+                        .WithValue($"{sunrise:HH:mm} {timezone}")
                         .WithIsInline(true))
                 .AddField(fb =>
-                    fb.WithName($"🌇 {Format.Bold(Strings.Sunset(ctx.Guild.Id))}").WithValue($"{sunset:HH:mm} {timezone}")
+                    fb.WithName($"🌇 {Format.Bold(Strings.Sunset(ctx.Guild.Id))}")
+                        .WithValue($"{sunset:HH:mm} {timezone}")
                         .WithIsInline(true))
                 .WithOkColor()
                 .WithFooter(efb =>
-                    efb.WithText("Powered by openweathermap.org")
+                    efb.WithText(Strings.WeatherAttribution(ctx.Guild.Id))
                         .WithIconUrl($"https://openweathermap.org/img/w/{data.Weather[0].Icon}.png"));
         }
 
@@ -483,9 +481,9 @@ public partial class Searches(
 
             var em = new EmbedBuilder()
                 .WithOkColor()
-                .WithAuthor($"u/{image.Data.Author.Name}")
+                .WithAuthor(Strings.RedditAuthor(ctx.Guild.Id, image.Data.Author.Name))
                 .WithDescription($"Title: {image.Data.Title}\n[Source]({image.Data.PostUrl})")
-                .WithFooter($"{image.Data.Upvotes} Upvotes! | r/{image.Data.Subreddit.Name} Powered by martineAPI")
+                .WithFooter(Strings.RedditUpvotesFooter(ctx.Guild.Id, image.Data.Upvotes, image.Data.Subreddit.Name))
                 .WithImageUrl(image.Data.ImageUrl);
 
             await msg.ModifyAsync(x =>
@@ -502,7 +500,7 @@ public partial class Searches(
             var errorMsg = await ctx.Channel.SendErrorAsync(Strings.FetchFailed(ctx.Guild.Id), Config);
 
 
-            Log.Error(
+            logger.LogError(
                 "Image fetch failed. Error:\nCode: {StatusCode}\nContent: {Content}",
                 ex.StatusCode,
                 ex.HasContent ? ex.Content : "No Content"
@@ -529,7 +527,8 @@ public partial class Searches(
     public async Task Image([Remainder] string query)
     {
         // Send a message indicating that images are being checked
-        var checkingMessage = await ctx.Channel.SendConfirmAsync(Strings.ImageChecking(ctx.Guild.Id)).ConfigureAwait(false);
+        var checkingMessage =
+            await ctx.Channel.SendConfirmAsync(Strings.ImageChecking(ctx.Guild.Id)).ConfigureAwait(false);
 
         IEnumerable<IImageResult> images = null;
         string sourceName = null;
@@ -637,31 +636,6 @@ public partial class Searches(
         }
     }
 
-
-    /// <summary>
-    ///     Generates a Let Me Google That For You (LMGTFY) link for the provided query.
-    /// </summary>
-    /// <param name="ffs">The search query to be used in the LMGTFY link.</param>
-    /// <remarks>
-    ///     This command takes a search query as input and generates a LMGTFY link.
-    ///     The LMGTFY link is then shortened using the google.ShortenUrl method and sent to the channel.
-    ///     If the provided query is null or whitespace, the command will return without sending a message.
-    /// </remarks>
-    /// <example>
-    ///     <code>.lmgtfy query</code>
-    /// </example>
-    [Cmd]
-    [Aliases]
-    public async Task Lmgtfy([Remainder] string? ffs = null)
-    {
-        if (!await ValidateQuery(ctx.Channel, ffs).ConfigureAwait(false))
-            return;
-
-        await ctx.Channel.SendConfirmAsync(
-                $"<{await google.ShortenUrl($"https://lmgtfy.com/?q={Uri.EscapeDataString(ffs)}").ConfigureAwait(false)}>")
-            .ConfigureAwait(false);
-    }
-
     /// <summary>
     ///     Shortens a provided URL using the goolnk.com API.
     /// </summary>
@@ -708,7 +682,7 @@ public partial class Searches(
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Error shortening a link: {Message}", ex.Message);
+                logger.LogError(ex, "Error shortening a link: {Message}", ex.Message);
                 return;
             }
         }
@@ -751,15 +725,17 @@ public partial class Searches(
             if (data is null)
             {
                 await ctx.Channel.SendErrorAsync(
-                        "Neither google nor duckduckgo returned a result! Please search something else!", Config)
+                        Strings.SearchNoResults(ctx.Guild.Id), Config)
                     .ConfigureAwait(false);
                 return;
             }
         }
 
         var desc = data.Results.Take(5).Select(res =>
-            $@"[{res.Title}]({res.Link})
-{res.Text.TrimTo(400 - res.Title.Length - res.Link.Length)}");
+            $"""
+             [{res.Title}]({res.Link})
+             {res.Text.TrimTo(400 - res.Title.Length - res.Link.Length)}
+             """);
 
         var descStr = string.Join("\n\n", desc);
 
@@ -771,87 +747,6 @@ public partial class Searches(
             .WithFooter(efb => efb.WithText(data.TotalResults))
             .WithDescription(descStr)
             .WithOkColor();
-
-        await ctx.Channel.EmbedAsync(embed).ConfigureAwait(false);
-    }
-
-    /// <summary>
-    ///     Fetches and displays information about a Magic: The Gathering card.
-    /// </summary>
-    /// <param name="search">The name or identifier of the Magic: The Gathering card to search for.</param>
-    /// <remarks>
-    ///     Utilizing an external API, this command retrieves details about a specified Magic: The Gathering card,
-    ///     including its name, description, mana cost, types, and an image if available.
-    ///     The information is presented in an embed format.
-    /// </remarks>
-    /// <example>
-    ///     <code>.magicthegathering "Black Lotus"</code>
-    /// </example>
-    [Cmd]
-    [Aliases]
-    public async Task MagicTheGathering([Remainder] string search)
-    {
-        if (!await ValidateQuery(ctx.Channel, search).ConfigureAwait(false))
-            return;
-
-        await ctx.Channel.TriggerTypingAsync().ConfigureAwait(false);
-        var card = await Service.GetMtgCardAsync(search).ConfigureAwait(false);
-
-        if (card == null)
-        {
-            await ReplyErrorAsync(Strings.CardNotFound(ctx.Guild.Id)).ConfigureAwait(false);
-            return;
-        }
-
-        var embed = new EmbedBuilder().WithOkColor()
-            .WithTitle(card.Name)
-            .WithDescription(card.Description)
-            .WithImageUrl(card.ImageUrl)
-            .AddField(efb => efb.WithName(Strings.StoreUrl(ctx.Guild.Id)).WithValue(card.StoreUrl).WithIsInline(true))
-            .AddField(efb => efb.WithName(Strings.Cost(ctx.Guild.Id)).WithValue(card.ManaCost).WithIsInline(true))
-            .AddField(efb => efb.WithName(Strings.Types(ctx.Guild.Id)).WithValue(card.Types).WithIsInline(true));
-
-        await ctx.Channel.EmbedAsync(embed).ConfigureAwait(false);
-    }
-
-    /// <summary>
-    ///     Searches for and displays information about a Hearthstone card.
-    /// </summary>
-    /// <param name="name">The name of the Hearthstone card to search for.</param>
-    /// <remarks>
-    ///     This command searches for a Hearthstone card by name and displays its image and flavor text, if available.
-    ///     It requires a valid Mashape API key set in the bot's configuration to access the Hearthstone API.
-    /// </remarks>
-    /// <example>
-    ///     <code>.hearthstone "Leeroy Jenkins"</code>
-    /// </example>
-    [Cmd]
-    [Aliases]
-    public async Task Hearthstone([Remainder] string name)
-    {
-        if (!await ValidateQuery(ctx.Channel, name).ConfigureAwait(false))
-            return;
-
-        if (string.IsNullOrWhiteSpace(creds.MashapeKey))
-        {
-            await ReplyErrorAsync(Strings.MashapeApiMissing(ctx.Guild.Id)).ConfigureAwait(false);
-            return;
-        }
-
-        await ctx.Channel.TriggerTypingAsync().ConfigureAwait(false);
-        var card = await Service.GetHearthstoneCardDataAsync(name).ConfigureAwait(false);
-
-        if (card == null)
-        {
-            await ReplyErrorAsync(Strings.CardNotFound(ctx.Guild.Id)).ConfigureAwait(false);
-            return;
-        }
-
-        var embed = new EmbedBuilder().WithOkColor()
-            .WithImageUrl(card.Img);
-
-        if (!string.IsNullOrWhiteSpace(card.Flavor))
-            embed.WithDescription(card.Flavor);
 
         await ctx.Channel.EmbedAsync(embed).ConfigureAwait(false);
     }
@@ -902,8 +797,7 @@ public partial class Searches(
                     var item = items.List[page];
                     return new PageBuilder().WithOkColor()
                         .WithUrl(item.Permalink)
-                        .WithAuthor(
-                            eab => eab.WithIconUrl("https://i.imgur.com/nwERwQE.jpg").WithName(item.Word))
+                        .WithAuthor(eab => eab.WithIconUrl("https://i.imgur.com/nwERwQE.jpg").WithName(item.Word))
                         .WithDescription(item.Definition);
                 }
             }
@@ -955,7 +849,7 @@ public partial class Searches(
 
             if (!datas.Any())
             {
-                Log.Warning("Definition not found: {Word}", word);
+                logger.LogWarning("Definition not found: {Word}", word);
                 await ReplyErrorAsync(Strings.DefineUnknown(ctx.Guild.Id)).ConfigureAwait(false);
             }
 
@@ -970,7 +864,7 @@ public partial class Searches(
                 WordType: string.IsNullOrWhiteSpace(tuple.PartOfSpeech) ? "-" : tuple.PartOfSpeech
             )).ToList();
 
-            Log.Information($"Sending {col.Count} definition for: {word}");
+            logger.LogInformation($"Sending {col.Count} definition for: {word}");
 
             var paginator = new LazyPaginatorBuilder()
                 .AddUser(ctx.User)
@@ -1002,7 +896,7 @@ public partial class Searches(
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error retrieving definition data for: {Word}", word);
+            logger.LogError(ex, "Error retrieving definition data for: {Word}", word);
         }
     }
 
@@ -1243,8 +1137,10 @@ public partial class Searches(
             }
 
             var url = Uri.EscapeDataString($"https://{target}.fandom.com/wiki/{title}");
-            var response = $@"`{Strings.Title(ctx.Guild.Id)}` {title.SanitizeMentions()}
-`{Strings.Url(ctx.Guild.Id)}:` {url}";
+            var response = $"""
+                            `{Strings.Title(ctx.Guild.Id)}` {title.SanitizeMentions()}
+                            `{Strings.Url(ctx.Guild.Id)}:` {url}
+                            """;
             await ctx.Channel.SendMessageAsync(response).ConfigureAwait(false);
         }
         catch
@@ -1286,14 +1182,15 @@ public partial class Searches(
 
         if (obj.Error != null || !obj.Verses.Any())
         {
-            await ctx.Channel.SendErrorAsync(obj.Error ?? "No verse found.", Config).ConfigureAwait(false);
+            await ctx.Channel.SendErrorAsync(obj.Error ?? Strings.NoVerseFound(ctx.Guild.Id), Config)
+                .ConfigureAwait(false);
         }
         else
         {
             var v = obj.Verses[0];
             await ctx.Channel.EmbedAsync(new EmbedBuilder()
                 .WithOkColor()
-                .WithTitle($"{v.BookName} {v.Chapter}:{v.Verse}")
+                .WithTitle(Strings.BibleVerseTitle(ctx.Guild.Id, v.BookName, v.Chapter, v.Verse))
                 .WithDescription(v.Text)).ConfigureAwait(false);
         }
     }
@@ -1319,24 +1216,24 @@ public partial class Searches(
 
         await Context.Channel.TriggerTypingAsync().ConfigureAwait(false);
 
-        var appId = await Service.GetSteamGameInfoByName(query).ConfigureAwait(false);
-        if (appId.AppId == -1)
+        var gameInfo = await Service.GetSteamGameInfoByName(query).ConfigureAwait(false);
+        if (gameInfo == null)
         {
             await ReplyErrorAsync(Strings.NotFound(ctx.Guild.Id)).ConfigureAwait(false);
             return;
         }
 
-        //var embed = new EmbedBuilder()
-        //    .WithOkColor()
-        //    .WithDescription(gameData.ShortDescription)
-        //    .WithTitle(gameData.Name)
-        //    .WithUrl(gameData.Link)
-        //    .WithImageUrl(gameData.HeaderImage)
-        //    .AddField(efb => efb.WithName(Strings.Genres(ctx.Guild.Id)).WithValue(gameData.TotalEpisodes.ToString()).WithIsInline(true))
-        //    .AddField(efb => efb.WithName(Strings.Price(ctx.Guild.Id)).WithValue(gameData.IsFree ? Strings.Free(ctx.Guild.Id) : game).WithIsInline(true))
-        //    .AddField(efb => efb.WithName(Strings.Links(ctx.Guild.Id)).WithValue(gameData.GetGenresString()).WithIsInline(true))
-        //    .WithFooter(efb => efb.WithText(Strings.Recommendations(ctx.Guild.Id, gameData.TotalRecommendations)));
-        await ctx.Channel.SendMessageAsync($"https://store.steampowered.com/app/{appId}").ConfigureAwait(false);
+        var paginator = new LazyPaginatorBuilder()
+            .AddUser(ctx.User)
+            .WithPageFactory(page => CreatePage(page, gameInfo))
+            .WithFooter(PaginatorFooter.PageNumber | PaginatorFooter.Users)
+            .WithMaxPageIndex(gameInfo.Screenshots?.Count ?? 0)
+            .WithDefaultEmotes()
+            .WithActionOnCancellation(ActionOnStop.DeleteMessage)
+            .Build();
+
+        await serv.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(10))
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -1375,10 +1272,67 @@ public partial class Searches(
         else
         {
             await channel.EmbedAsync(new EmbedBuilder().WithOkColor()
-                .WithDescription($"{umsg.Author.Mention} [{tag ?? "url"}]({imgObj.FileUrl})")
+                .WithDescription($"{umsg.Author.Mention} [{tag ?? Strings.Url(ctx.Guild.Id)}]({imgObj.FileUrl})")
                 .WithImageUrl(imgObj.FileUrl)
                 .WithFooter(efb => efb.WithText(type.ToString()))).ConfigureAwait(false);
         }
+    }
+
+    private async Task<PageBuilder> CreatePage(int page, SteamGameInfo gameInfo)
+    {
+        await Task.CompletedTask;
+
+        var priceText = gameInfo.Price == null
+            ? "N/A"
+            : gameInfo.Price.Final == gameInfo.Price.Initial
+                ? $"${gameInfo.Price.Final / 100.0m:F2}"
+                : $"~~${gameInfo.Price.Initial / 100.0m:F2}~~ ${gameInfo.Price.Final / 100.0m:F2}";
+
+        var pageBuilder = new PageBuilder()
+            .WithOkColor()
+            .WithTitle(gameInfo.Name)
+            .WithUrl($"https://store.steampowered.com/app/{gameInfo.SteamAppid}")
+            .WithDescription(gameInfo.ShortDescription)
+            .AddField("💰 Price", priceText, true)
+            .AddField("🎮 Platforms", GetPlatforms(gameInfo), true)
+            .AddField("📅 Release Date", gameInfo.ReleaseDate?.Date ?? "N/A", true)
+            .AddField("👥 Developer", string.Join(", ", gameInfo.Developers), true)
+            .AddField("🏷️ Categories", string.Join(", ", gameInfo.Categories?.Take(3).Select(c => c.Description)),
+                true);
+
+        // Add Metacritic score if available
+        if (gameInfo.Metacritic?.Score > 0)
+        {
+            pageBuilder.AddField("📊 Metacritic", $"{gameInfo.Metacritic.Score}/100", true);
+        }
+
+        // Set image based on page number
+        if (gameInfo.Screenshots != null && gameInfo.Screenshots.Count > page)
+        {
+            pageBuilder.WithImageUrl(gameInfo.Screenshots[page].PathFull);
+        }
+        else
+        {
+            pageBuilder.WithImageUrl(gameInfo.HeaderImage);
+        }
+
+        if (gameInfo.Recommendations?.Total > 0)
+        {
+            pageBuilder.WithFooter(Strings.GameRecommendations(ctx.Guild.Id,
+                gameInfo.Recommendations.Total.ToString("N0")));
+        }
+
+        return pageBuilder;
+    }
+
+    private string GetPlatforms(SteamGameInfo gameInfo)
+    {
+        var platforms = new List<string>();
+        if (gameInfo.Platforms["windows"]) platforms.Add("Windows");
+        if (gameInfo.Platforms["mac"]) platforms.Add("macOS");
+        if (gameInfo.Platforms["linux"]) platforms.Add("Linux");
+
+        return platforms.Any() ? string.Join(", ", platforms) : "N/A";
     }
 
     /// <summary>
