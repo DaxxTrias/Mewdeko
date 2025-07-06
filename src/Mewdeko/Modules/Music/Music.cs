@@ -38,7 +38,7 @@ public partial class Music(
         {
             var eb = new EmbedBuilder()
                 .WithErrorColor()
-                .WithDescription(GetText("music_not_in_channel"));
+                .WithDescription(Strings.MusicNotInChannel(ctx.Guild.Id));
 
             await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
             return;
@@ -325,7 +325,7 @@ public partial class Music(
         catch (Exception e)
         {
             Log.Error("Failed to add song to Queue: {Message}", e.Message);
-            await ReplyErrorLocalizedAsync("music_queue_add_failed").ConfigureAwait(false);
+            await ReplyErrorAsync("music_queue_add_failed").ConfigureAwait(false);
         }
     }
 
@@ -444,7 +444,7 @@ public partial class Music(
         var trackToRemove = queue.FirstOrDefault(x => x.Index == queueNumber);
         if (trackToRemove == null)
         {
-            await ReplyErrorLocalizedAsync("music_track_not_found").ConfigureAwait(false);
+            await ReplyErrorAsync("music_track_not_found").ConfigureAwait(false);
             return;
         }
 
@@ -991,7 +991,7 @@ public partial class Music(
         }
 
         await player.SeekAsync(player.CurrentItem.Track.Duration).ConfigureAwait(false);
-        await ReplyConfirmLocalizedAsync("music_track_skipped").ConfigureAwait(false);
+        await ReplyConfirmAsync("music_track_skipped").ConfigureAwait(false);
     }
 
     /// <summary>
