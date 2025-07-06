@@ -1893,7 +1893,7 @@ public partial class Utility(
                 .AddField(Strings.CommandsRan(ctx.Guild.Id), $"{commandStats}/5s")
                 .AddField(Strings.CommandCount(ctx.Guild.Id), cmdServ.Commands.DistinctBy(x => x.Name).Count())
                 // .AddField("Library", stats.Library)
-                .AddField(GetText("library"), $"{targetFramework} \n {libraryInfo.Library} \n {libraryInfo.OpenAILib}")
+                //.AddField(GetText("library"), $"{targetFramework} \n {libraryInfo.Library} \n {libraryInfo.OpenAILib}")
                 .AddField(Strings.OwnerIds(ctx.Guild.Id), string.Join("\n", creds.OwnerIds.Select(x => $"<@{x}>")))
                 .AddField(Strings.Shard(ctx.Guild.Id), $"#{client.GetShardFor(ctx.Guild).ShardId} / {creds.TotalShards}")
                 .AddField(Strings.Memory(ctx.Guild.Id), $"{stats.Heap} MB")
@@ -2008,6 +2008,16 @@ public partial class Utility(
         await ctx.Channel.SendMessageAsync(OwoServices.OwoIfy(input).SanitizeMentions(true)).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Provides a link to the Tealstreet documentation based on the specified platform.
+    /// </summary>
+    /// <param name="platform">
+    /// The platform for which documentation is requested. Examples include "windows", "linux", "mac", etc.
+    /// If no platform is specified, the general documentation link is provided.
+    /// </param>
+    /// <returns>
+    /// A task representing the asynchronous operation of responding with the documentation link.
+    /// </returns>
     [Cmd, Aliases]
     public async Task Docs(string platform = "")
     {

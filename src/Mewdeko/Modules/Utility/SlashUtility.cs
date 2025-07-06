@@ -264,7 +264,7 @@ public class SlashUtility(
                     //.AddField(Strings.Author(ctx.Guild.Id), $"{user.Mention} | {user.Username}#{user.Discriminator}")
                     .AddField(Strings.CommandsRan(ctx.Guild.Id), $"{commandStats}/5s")
                     //.AddField("Library", stats.Library)
-                    .AddField(GetText("library"), $"{targetFramework} \n {libraryInfo.Library} \n {libraryInfo.OpenAILib}")
+                    //.AddField(GetText("library"), $"{targetFramework} \n {libraryInfo.Library} \n {libraryInfo.OpenAILib}")
                     .AddField(Strings.OwnerIds(ctx.Guild.Id), string.Join("\n", creds.OwnerIds.Select(x => $"<@{x}>")))
                     .AddField(Strings.Shard(ctx.Guild.Id), $"#{client.GetShardFor(ctx.Guild)} / {creds.TotalShards}")
                     .AddField(Strings.Memory(ctx.Guild.Id), $"{stats.Heap} MB")
@@ -273,7 +273,19 @@ public class SlashUtility(
             .ConfigureAwait(false);
     }
 
-    [SlashCommand("docs", "Link to the terminal docs"), CheckPermissions, SlashUserPerm(GuildPermission.SendMessages)]
+    /// <summary>
+    /// Provides a link to the Tealstreet documentation based on the specified platform.
+    /// </summary>
+    /// <param name="platform">
+    /// The platform for which documentation is requested. Examples include "windows", "linux", "mac", etc.
+    /// If no platform is specified, the general documentation link is provided.
+    /// </param>
+    /// <returns>
+    /// A task representing the asynchronous operation of responding with the documentation link.
+    /// </returns>
+    [SlashCommand("docs", "Link to the terminal docs")]
+    [CheckPermissions]
+    [SlashUserPerm(GuildPermission.SendMessages)]
     public async Task Docs(string platform = "")
     {
         var link = platform.ToLower() switch
@@ -318,10 +330,8 @@ public class SlashUtility(
             "stops" or "stop-orders" or "stoploss" => "https://docs.tealstreet.io/docs/trade/placing-orders#stop-orders",
             "trailingstop" or "trailing-stop" or "trailing" => "https://docs.tealstreet.io/docs/trade/placing-orders#trailing-stop-orders",
             "mobile" or "phone" => "https://docs.tealstreet.io/docs/trade/mobile",
-
-            // default case
             "" => "https://docs.tealstreet.io/",
-            _ => "https://docs.tealstreet.io/" // This is like the default case in traditional switch.
+            _ => "https://docs.tealstreet.io/"
         };
 
         await ctx.Interaction.RespondAsync(embed:

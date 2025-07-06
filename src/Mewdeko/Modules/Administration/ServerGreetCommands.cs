@@ -1,4 +1,4 @@
-﻿using System.Net.Http;
+using System.Net.Http;
 using Discord.Commands;
 using Mewdeko.Common.Attributes.TextCommands;
 
@@ -69,7 +69,8 @@ public partial class Administration
         {
             if (timer is < 0 or > 90000)
             {
-                await ctx.Channel.SendErrorAsync(GetText("maxdeletetime", "90000 seconds"), Config).ConfigureAwait(false);
+                await ctx.Channel.SendErrorAsync(
+                    Strings.Maxdeletetime(ctx.Guild.Id, "90000 seconds"), Config).ConfigureAwait(false);
                 return;
             }
 

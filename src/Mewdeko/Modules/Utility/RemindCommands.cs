@@ -1,4 +1,4 @@
-﻿using Discord.Commands;
+using Discord.Commands;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.Administration.Services;
@@ -103,16 +103,16 @@ public partial class Utility
         [Priority(0)]
         public async Task RemindUser(IUser user, [Remainder] string remindString)
         {
-            if (!Service.TryParseRemindMessage(remindString, out var remindData))
+            if (!Service.TryParseRemindMessage(remindString, out var remindData))   
             {
-                await ReplyErrorLocalizedAsync("remind_invalid").ConfigureAwait(false);
+                await ReplyErrorAsync("remind_invalid").ConfigureAwait(false);
                 return;
             }
 
             if (!await RemindInternal(user.Id, true, remindData.Time, remindData.What)
                     .ConfigureAwait(false))
             {
-                await ReplyErrorLocalizedAsync("remind_too_long").ConfigureAwait(false);
+                await ReplyErrorAsync("remind_too_long").ConfigureAwait(false);
             }
         }
 

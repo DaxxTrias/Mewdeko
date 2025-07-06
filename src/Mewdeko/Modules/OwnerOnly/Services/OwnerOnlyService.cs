@@ -1,4 +1,4 @@
-﻿using System.Collections.Immutable;
+using System.Collections.Immutable;
 using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
@@ -763,6 +763,22 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
     {
         var embeds = new List<Embed>();
         var partIndex = 0;
+        // If response is empty, add a placeholder to avoid Discord API errors
+        if (string.IsNullOrWhiteSpace(response))
+        {
+            var embedBuilder = new EmbedBuilder()
+                .WithDescription("*(No response received)*")
+                .WithOkColor();
+
+            embedBuilder.WithAuthor("ChatGPT",
+                "https://seeklogo.com/images/C/chatgpt-logo-02AFA704B5-seeklogo.com.png");
+
+            embedBuilder.WithFooter(
+                $"Requested by {requester.Username} | Total Tokens Used: {totalTokensUsed}");
+
+            embeds.Add(embedBuilder.Build());
+            return embeds;
+        }
         while (partIndex < response.Length)
         {
             var length = Math.Min(4096, response.Length - partIndex);

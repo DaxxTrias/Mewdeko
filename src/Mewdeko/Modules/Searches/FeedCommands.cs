@@ -1,4 +1,4 @@
-﻿using CodeHollow.FeedReader;
+using CodeHollow.FeedReader;
 using Discord.Commands;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
@@ -217,9 +217,9 @@ public partial class Searches
         public async Task FeedStart()
         {
             if (Service.StartTracking(ctx.Guild.Id))
-                await ReplyConfirmLocalizedAsync("feed_started").ConfigureAwait(false);
+                await ReplyConfirmAsync("feed_started").ConfigureAwait(false);
             else
-                await ReplyErrorLocalizedAsync("feed_already_started").ConfigureAwait(false);
+                await ReplyErrorAsync("feed_already_started").ConfigureAwait(false);
         }
 
         /// <summary>
@@ -230,9 +230,9 @@ public partial class Searches
         public async Task FeedStop()
         {
             if (Service.StopTracking(ctx.Guild.Id))
-                await ReplyConfirmLocalizedAsync("feed_stopped").ConfigureAwait(false);
+                await ReplyConfirmAsync("feed_stopped").ConfigureAwait(false);
             else
-                await ReplyErrorLocalizedAsync("feed_already_stopped").ConfigureAwait(false);
+                await ReplyErrorAsync("feed_already_stopped").ConfigureAwait(false);
         }
     }
 }

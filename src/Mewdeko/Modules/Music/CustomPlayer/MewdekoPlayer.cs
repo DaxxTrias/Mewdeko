@@ -170,7 +170,7 @@ public sealed class MewdekoPlayer : LavalinkPlayer
         }
         catch (Exception)
         {
-            await musicChannel.SendErrorAsync(strings.GetText("music_lavalink_error"), config);
+            await musicChannel.SendErrorAsync(Strings.MusicLavalinkError(GuildId), config);
         }
     }
 

@@ -137,7 +137,7 @@ public class SlashRemindCommands(DbContextProvider dbProvider, GuildTimezoneServ
         if (!await RemindInternal(user.Id, true, time, reminder)
                 .ConfigureAwait(false))
         {
-            await ReplyErrorLocalizedAsync("remind_too_long").ConfigureAwait(false);
+            await ReplyErrorAsync("remind_too_long").ConfigureAwait(false);
         }
     }
 
