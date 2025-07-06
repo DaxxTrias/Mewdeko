@@ -375,7 +375,8 @@ public class MultiGreets(InteractiveService interactivity) : MewdekoModuleBase<M
             {
                 case "preview":
                     await msg.DeleteAsync().ConfigureAwait(false);
-                    var replacer = new ReplacementBuilder().WithUser(ctx.User)
+                    var replacer = new ReplacementBuilder()
+                        .WithUser(ctx.User)
                         .WithClient(ctx.Client as DiscordShardedClient)
                         .WithServer(ctx.Client as DiscordShardedClient, ctx.Guild as SocketGuild).Build();
                     var content = replacer.Replace(greet.Message);
@@ -383,7 +384,7 @@ public class MultiGreets(InteractiveService interactivity) : MewdekoModuleBase<M
                             out var components2))
                     {
                         await ctx.Channel
-                            .SendMessageAsync(plainText, embeds: embedData, components: components2.Build())
+                            .SendMessageAsync(plainText ?? "", embeds: embedData, components: components2?.Build())
                             .ConfigureAwait(false);
                     }
                     else
