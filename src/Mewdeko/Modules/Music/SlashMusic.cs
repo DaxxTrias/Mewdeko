@@ -685,7 +685,7 @@ public class SlashMusic(
         await player.SetAutoPlay(amount).ConfigureAwait(false);
         if (amount == 0)
         {
-            await ReplyConfirmAsync(Strings.MusicAutoPlayDisabled(ctx.Guild.Id)).ConfigureAwait(false);
+            await ReplyConfirmAsync(Strings.MusicAutoplayDisabled(ctx.Guild.Id)).ConfigureAwait(false);
         }
         else
         {
