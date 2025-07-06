@@ -40,7 +40,8 @@ public class SlashMusic(
         {
             var eb = new EmbedBuilder()
                 .WithErrorColor()
-                .WithDescription(GetText("music_not_in_channel"));
+                //.WithDescription(GetText("music_not_in_channel"));
+                .WithDescription(Strings.MusicNotInChannel(ctx.Guild.Id));
 
             await Context.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
             return;
@@ -326,7 +327,7 @@ public class SlashMusic(
         catch (Exception e)
         {
             Log.Error("Failed to add song to Queue: {Message}", e.Message);
-            await ReplyErrorLocalizedAsync("music_queue_add_failed").ConfigureAwait(false);
+            await ReplyErrorAsync("music_queue_add_failed").ConfigureAwait(false);
         }
     }
 
@@ -798,7 +799,7 @@ public class SlashMusic(
         {
             var eb = new EmbedBuilder()
                 .WithErrorColor()
-                .WithTitle(GetText("music_player_error"))
+                .WithTitle(Strings.MusicPlayerError(ctx.Guild.Id))
                 .WithDescription(result);
 
             await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
@@ -808,7 +809,7 @@ public class SlashMusic(
         var queue = await cache.GetMusicQueue(ctx.Guild.Id);
         if (queue.Count == 0)
         {
-            await ReplyErrorLocalizedAsync("music_queue_empty").ConfigureAwait(false);
+            await ReplyErrorAsync("music_queue_empty").ConfigureAwait(false);
             return;
         }
 
@@ -817,7 +818,7 @@ public class SlashMusic(
         // verify shuffled
         if (queue.SequenceEqual(shuffledQueue))
         {
-            await ReplyErrorLocalizedAsync("music_queue_shuffle_failed").ConfigureAwait(false);
+            await ReplyErrorAsync("music_queue_shuffle_failed").ConfigureAwait(false);
             return;
         }
 
@@ -826,7 +827,7 @@ public class SlashMusic(
 
 
         await cache.SetMusicQueue(ctx.Guild.Id, shuffledQueue);
-        await ReplyConfirmLocalizedAsync("music_queue_shuffled").ConfigureAwait(false);
+        await ReplyConfirmAsync("music_queue_shuffled").ConfigureAwait(false);
     }
 
     /// <summary>
