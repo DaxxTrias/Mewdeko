@@ -491,7 +491,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
             else if (!args.Content.StartsWith("-frog") && isDebugMode)
                 return;
 
-            Log.Information("ChatGPT request from {Author}: | ({AuthorId}): | {Content}", args.Author, args.Author.Id, args.Content);
+            Log.Information("LLM request from {Author}: | ({AuthorId}): | {Content}", args.Author, args.Author.Id, args.Content);
 
             // lower any capitalization in message content
             var loweredContents = args.Content.ToLower();
@@ -696,7 +696,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
 
         using var response = await httpClient.PostAsync("https://api.x.ai/v1/chat/completions", content);
         //using var response = await httpClient.PostAsync("https://api.openai.com/v1/chat/completions", content);
-        // using var response = await httpClient.PostAsync("https://api.groq.com/openai/v1/chat/completions", content);
+
         response.EnsureSuccessStatusCode();
 
         await using var stream = await response.Content.ReadAsStreamAsync();
@@ -767,14 +767,15 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         if (string.IsNullOrWhiteSpace(response))
         {
             var embedBuilder = new EmbedBuilder()
-                .WithDescription("*(No response received (Outage?))*")
+                .WithDescription("*(No response received)*")
                 .WithOkColor();
 
+            //todo: stop being lazy and do the rewrite you fk
             //embedBuilder.WithAuthor("ChatGPT",
             //    "https://seeklogo.com/images/C/chatgpt-logo-02AFA704B5-seeklogo.com.png");
 
             embedBuilder.WithAuthor("Grok",
-                "https://images.seeklogo.com/logo-png/61/1/grok-logo-png_seeklogo-613403.png");
+            "https://images.seeklogo.com/logo-png/61/1/grok-logo-png_seeklogo-613403.png");
 
             embedBuilder.WithFooter(
                 $"Requested by {requester.Username} | Total Tokens Used: {totalTokensUsed}");
@@ -790,9 +791,13 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
                 .WithDescription(description)
                 .WithOkColor();
 
+            //if (partIndex == 0)
+            //    embedBuilder.WithAuthor("ChatGPT",
+            //        "https://seeklogo.com/images/C/chatgpt-logo-02AFA704B5-seeklogo.com.png");
+
             if (partIndex == 0)
-                embedBuilder.WithAuthor("ChatGPT",
-                    "https://seeklogo.com/images/C/chatgpt-logo-02AFA704B5-seeklogo.com.png");
+                embedBuilder.WithAuthor("Grok",
+                    "https://images.seeklogo.com/logo-png/61/1/grok-logo-png_seeklogo-613403.png");
 
             if (partIndex + length == response.Length)
                 embedBuilder.WithFooter(
