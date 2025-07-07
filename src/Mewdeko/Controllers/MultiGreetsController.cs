@@ -94,7 +94,7 @@ public class MultiGreetController : Controller
         var greets = await multiGreetService.GetGreets(guildId);
         if (greets is null)
             return NotFound("Somehow multigreets are null.");
-        var greet = greets.ElementAtOrDefault(greetId - 1);
+        var greet = greets.FirstOrDefault(x => x.Id == greetId);
 
         if (greet == null)
             return NotFound();
@@ -116,7 +116,9 @@ public class MultiGreetController : Controller
         var greets = await multiGreetService.GetGreets(guildId);
         if (greets is null)
             return NotFound("Somehow multigreets are null.");
-        var greet = greets.ElementAtOrDefault(greetId - 1);
+
+        var greet = greets.FirstOrDefault(x => x.Id == greetId);
+
 
         if (greet == null)
             return NotFound();
@@ -138,7 +140,8 @@ public class MultiGreetController : Controller
         var greets = await multiGreetService.GetGreets(guildId);
         if (greets is null)
             return NotFound("Somehow multigreets are null.");
-        var greet = greets.ElementAtOrDefault(greetId - 1);
+        var greet = greets.FirstOrDefault(x => x.Id == greetId);
+
 
         if (greet == null)
             return NotFound();
@@ -161,7 +164,9 @@ public class MultiGreetController : Controller
         var greets = await multiGreetService.GetGreets(guildId);
         if (greets is null)
             return NotFound("Somehow multigreets are null.");
-        var greet = greets.ElementAtOrDefault(greetId - 1);
+
+        var greet = greets.FirstOrDefault(x => x.Id == greetId);
+
 
         if (greet == null)
             return NotFound();
@@ -183,7 +188,8 @@ public class MultiGreetController : Controller
         var greets = await multiGreetService.GetGreets(guildId);
         if (greets is null)
             return NotFound("Somehow multigreets are null.");
-        var greet = greets.ElementAtOrDefault(greetId - 1);
+        var greet = greets.FirstOrDefault(x => x.Id == greetId);
+
 
         if (greet == null)
             return NotFound();
@@ -223,7 +229,8 @@ public class MultiGreetController : Controller
         var greets = await multiGreetService.GetGreets(guildId);
         if (greets is null)
             return NotFound("Somehow multigreets are null.");
-        var greet = greets.ElementAtOrDefault(greetId - 1);
+        var greet = greets.FirstOrDefault(x => x.Id == greetId);
+
 
         if (greet == null)
             return NotFound();

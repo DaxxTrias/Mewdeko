@@ -154,7 +154,6 @@ namespace DataModel
 		public ITable<UnroleTimer>               UnroleTimers               => this.GetTable<UnroleTimer>();
 		public ITable<UserRoleState>             UserRoleStates             => this.GetTable<UserRoleState>();
 		public ITable<UserVoicePreference>       UserVoicePreferences       => this.GetTable<UserVoicePreference>();
-		public ITable<UserXpStat>                UserXpStats                => this.GetTable<UserXpStat>();
 		public ITable<VcRole>                    VcRoles                    => this.GetTable<VcRole>();
 		public ITable<VoteRole>                  VoteRoles                  => this.GetTable<VoteRole>();
 		public ITable<Vote>                      Votes                      => this.GetTable<Vote>();
@@ -1317,16 +1316,6 @@ namespace DataModel
 		}
 
 		public static Task<UserVoicePreference?> FindAsync(this ITable<UserVoicePreference> table, int id, CancellationToken cancellationToken = default)
-		{
-			return table.FirstOrDefaultAsync(e => e.Id == id, cancellationToken);
-		}
-
-		public static UserXpStat? Find(this ITable<UserXpStat> table, int id)
-		{
-			return table.FirstOrDefault(e => e.Id == id);
-		}
-
-		public static Task<UserXpStat?> FindAsync(this ITable<UserXpStat> table, int id, CancellationToken cancellationToken = default)
 		{
 			return table.FirstOrDefaultAsync(e => e.Id == id, cancellationToken);
 		}

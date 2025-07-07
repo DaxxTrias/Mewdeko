@@ -3,9 +3,8 @@ server: # REST and WS server
   address: 127.0.0.1
 lavalink:
   plugins:
-    - dependency: "com.github.topi314.lavasrc:lavasrc-plugin:4.6.0"
-    - dependency: "dev.lavalink.youtube:youtube-plugin:130561e2d2f76605eb08b2c9cc4facbf400caccb"
-      snapshot: true
+    - dependency: "com.github.topi314.lavasrc:lavasrc-plugin:4.7.2"
+    - dependency: "dev.lavalink.youtube:youtube-plugin:1.13.3"
   server:
     password: "Hope4a11"
     sources:

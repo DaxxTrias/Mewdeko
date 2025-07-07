@@ -15,7 +15,6 @@ using Mewdeko.Modules.Music.Common;
 using Mewdeko.Services.Strings;
 using Microsoft.Extensions.DependencyInjection;
 using SpotifyAPI.Web;
-using Embed = Discord.Embed;
 
 namespace Mewdeko.Modules.Music.CustomPlayer;
 
@@ -124,11 +123,14 @@ public sealed class MewdekoPlayer : LavalinkPlayer
 
                 break;
             case TrackEndReason.LoadFailed:
-                var failedEmbed = new EmbedBuilder()
-                    .WithDescription(Strings.TrackLoadFailed(GuildId, item.Track.Title))
-                    .WithOkColor()
-                    .Build();
-                await musicChannel.SendMessageAsync(embed: failedEmbed);
+                var components = new ComponentBuilderV2()
+                    .WithContainer([
+                        new TextDisplayBuilder("# ⚠️ Track Load Failed")
+                    ], Mewdeko.ErrorColor)
+                    .WithSeparator()
+                    .WithContainer(new TextDisplayBuilder(Strings.TrackLoadFailed(GuildId, item.Track.Title)));
+                await musicChannel.SendMessageAsync(components: components.Build(), flags: MessageFlags.ComponentsV2,
+                    allowedMentions: AllowedMentions.None);
                 await PlayAsync(nextTrack.Track, cancellationToken: token);
                 await cache.SetCurrentTrack(GuildId, nextTrack);
                 queue.Remove(currentTrack);
@@ -158,11 +160,12 @@ public sealed class MewdekoPlayer : LavalinkPlayer
         var currentTrack = await cache.GetCurrentTrack(GuildId);
         var musicChannel = await GetMusicChannel();
 
-        // Create embed and component buttons
-        var embed = await PrettyNowPlayingAsync(queue);
-        var components = CreatePlayerControls();
+        // Create now playing display and component buttons
+        var nowPlayingComponents = await PrettyNowPlayingAsync(queue);
+        var controlComponents = CreatePlayerControls();
 
-        var message = await musicChannel.SendMessageAsync(embed: embed, components: components);
+        var message = await musicChannel.SendMessageAsync(components: nowPlayingComponents,
+            flags: MessageFlags.ComponentsV2, allowedMentions: AllowedMentions.None);
 
         if (DateTime.Now.Month == 4 && DateTime.Now.Day == 1 && !isAprilFoolsJokeRunning)
         {
@@ -333,52 +336,75 @@ public sealed class MewdekoPlayer : LavalinkPlayer
     /// <summary>
     ///     Gets a pretty now playing message for the player.
     /// </summary>
-    public async Task<Embed> PrettyNowPlayingAsync(List<MewdekoTrack> queue)
+    public async Task<MessageComponent> PrettyNowPlayingAsync(List<MewdekoTrack> queue)
     {
         var currentTrack = await cache.GetCurrentTrack(GuildId);
         var position = Position.Value.Position;
         var duration = CurrentTrack.Duration;
         var (progressBar, percentage) = CreateProgressBar(position, duration);
-        await GetMusicSettings();
+        var settings = await GetMusicSettings();
 
-        var description = new StringBuilder()
-            .AppendLine("## 📀 Track Info")
-            .AppendLine($"### [{currentTrack.Track.Title}]({currentTrack.Track.Uri})")
-            .AppendLine()
-            .AppendLine($"🎵 **Artist:** {currentTrack.Track.Author}")
-            .AppendLine($"🎧 **Source:** {currentTrack.Track.Provider}")
-            .AppendLine($"👤 **Requested by:** {currentTrack.Requester.Username}")
-            .AppendLine()
-            .AppendLine("## ⏳ Progress")
-            .AppendLine(progressBar)
-            .AppendLine($"`{position:hh\\:mm\\:ss}/{duration:hh\\:mm\\:ss} ({percentage:F1}%)`");
+        var color = GetColorForPercentage(position.TotalMilliseconds / duration.TotalMilliseconds);
+        var containerComponents = new List<IMessageComponentBuilder>();
 
+        // Add title
+        containerComponents.Add(new TextDisplayBuilder()
+            .WithContent($"# Now Playing {GetRepeatEmoji()}"));
+
+        containerComponents.Add(new SeparatorBuilder());
+
+        // Main track info section with artwork
+        var trackSection = new SectionBuilder()
+            .WithComponents([
+                new TextDisplayBuilder($"### [{currentTrack.Track.Title}]({currentTrack.Track.Uri})\n" +
+                                       $"**Artist:** {currentTrack.Track.Author}\n" +
+                                       $"**Source:** {currentTrack.Track.Provider}\n" +
+                                       $"**Requested by:** {currentTrack.Requester.Username}")
+            ]);
+
+        if (currentTrack.Track.ArtworkUri != null)
+        {
+            var thumbnailBuilder = new ThumbnailBuilder()
+                .WithMedia(new UnfurledMediaItemProperties
+                {
+                    Url = currentTrack.Track.ArtworkUri.ToString()
+                });
+            trackSection.WithAccessory(thumbnailBuilder);
+        }
+
+        containerComponents.Add(trackSection);
+        containerComponents.Add(new SeparatorBuilder());
+
+        // Progress info
+        containerComponents.Add(new TextDisplayBuilder()
+            .WithContent($"**Progress:** {progressBar}\n" +
+                         $"`{position:hh\\:mm\\:ss}/{duration:hh\\:mm\\:ss} ({percentage:F1}%)`"));
+
+        containerComponents.Add(new SeparatorBuilder());
+
+        // Player stats
+        containerComponents.Add(new TextDisplayBuilder()
+            .WithContent(
+                $"**Volume:** {Volume * 100}% | **Track:** {currentTrack.Index} of {queue.Count} | **Repeat:** {await GetRepeatType()}"));
+
+        // Active effects if any
         var activeEffects = GetActiveEffects();
         if (activeEffects.Any())
         {
-            description.AppendLine()
-                .AppendLine("## 🎚️ Active Effects")
-                .AppendLine(string.Join(" ", activeEffects));
+            containerComponents.Add(new SeparatorBuilder());
+            containerComponents.Add(new TextDisplayBuilder()
+                .WithContent($"**Active Effects:** {string.Join(", ", activeEffects)}"));
         }
 
-        var stats = GetPlayerStats(currentTrack.Index, queue.Count);
-        if (stats.Any())
-        {
-            description.AppendLine()
-                .AppendLine("## ℹ️ Player Stats")
-                .AppendLine(string.Join("\n", stats));
-        }
+        // Create the main container
+        var mainContainer = new ContainerBuilder()
+            .WithComponents(containerComponents)
+            .WithAccentColor(color);
 
-        var color = GetColorForPercentage(position.TotalMilliseconds / duration.TotalMilliseconds);
+        var componentsV2 = new ComponentBuilderV2()
+            .AddComponent(mainContainer);
 
-        var eb = new EmbedBuilder()
-            .WithTitle($"🎵 Now Playing {GetRepeatEmoji()}")
-            .WithDescription(description.ToString())
-            .WithColor(color)
-            .WithThumbnailUrl(currentTrack.Track.ArtworkUri?.ToString())
-            .WithFooter(GetVolumeIndicator());
-
-        return eb.Build();
+        return componentsV2.Build();
     }
 
     private string GetVolumeIndicator()
@@ -399,7 +425,7 @@ public sealed class MewdekoPlayer : LavalinkPlayer
         var effects = new List<string>();
 
         if (Filters.Equalizer != null)
-            effects.Add("🎵 Bass");
+            effects.Add("Bass");
 
         if (Filters.Timescale != null)
         {
@@ -407,20 +433,20 @@ public sealed class MewdekoPlayer : LavalinkPlayer
             switch (speed)
             {
                 case > 1.0f:
-                    effects.Add("⚡ Nightcore");
+                    effects.Add("Nightcore");
                     break;
                 case < 1.0f:
-                    effects.Add("🌊 Vaporwave");
+                    effects.Add("Vaporwave");
                     break;
             }
         }
 
-        if (Filters.Karaoke != null) effects.Add("🎤 Karaoke");
-        if (Filters.Tremolo != null) effects.Add("〰️ Tremolo");
-        if (Filters.Vibrato != null) effects.Add("📳 Vibrato");
-        if (Filters.Rotation != null) effects.Add("🎧 8D");
-        if (Filters.Distortion != null) effects.Add("🔊 Distort");
-        if (Filters.ChannelMix != null) effects.Add("🔀 Stereo");
+        if (Filters.Karaoke != null) effects.Add("Karaoke");
+        if (Filters.Tremolo != null) effects.Add("Tremolo");
+        if (Filters.Vibrato != null) effects.Add("Vibrato");
+        if (Filters.Rotation != null) effects.Add("8D");
+        if (Filters.Distortion != null) effects.Add("Distort");
+        if (Filters.ChannelMix != null) effects.Add("Stereo");
 
         return effects;
     }

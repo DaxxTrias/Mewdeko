@@ -419,13 +419,13 @@ public class PatreonController : ControllerBase
     }
 
     /// <summary>
-    ///     Gets Patreon goals for a guild
+    ///     Gets Patreon creator identity information for a guild
     /// </summary>
     /// <param name="guildId">Discord guild ID</param>
-    /// <returns>List of Patreon goals</returns>
-    [HttpGet("goals")]
+    /// <returns>Creator identity information</returns>
+    [HttpGet("creator")]
     [EnableRateLimiting("BasicPolicy")]
-    public async Task<IActionResult> GetGoals([FromQuery] ulong guildId)
+    public async Task<IActionResult> GetCreatorIdentity([FromQuery] ulong guildId)
     {
         try
         {
@@ -438,12 +438,20 @@ public class PatreonController : ControllerBase
                 });
             }
 
-            var goals = await patreonService.GetGoalsAsync(guildId);
-            return Ok(goals);
+            var creator = await patreonService.GetCreatorIdentity(guildId);
+            if (creator == null)
+            {
+                return NotFound(new
+                {
+                    error = "Creator identity not found"
+                });
+            }
+
+            return Ok(creator);
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error getting Patreon goals for guild {GuildId}", guildId);
+            logger.LogError(ex, "Error getting Patreon creator identity for guild {GuildId}", guildId);
             return StatusCode(500, new
             {
                 error = "Internal server error"
@@ -559,6 +567,45 @@ public class PatreonController : ControllerBase
         {
             logger.LogError(ex, "Error mapping Patreon tier {TierId} to role {RoleId} for guild {GuildId}",
                 request.TierId, request.RoleId, guildId);
+            return StatusCode(500, new
+            {
+                error = "Internal server error"
+            });
+        }
+    }
+
+    /// <summary>
+    ///     Disconnects Patreon OAuth for a guild to allow re-login (preserves settings)
+    /// </summary>
+    /// <param name="guildId">Discord guild ID</param>
+    /// <returns>Disconnect result</returns>
+    [HttpDelete("oauth/disconnect")]
+    [EnableRateLimiting("AuthPolicy")]
+    public async Task<IActionResult> DisconnectPatreon([FromQuery] ulong guildId)
+    {
+        try
+        {
+            var success = await patreonService.DisconnectPatreonAsync(guildId);
+
+            if (success)
+            {
+                logger.LogInformation("Successfully disconnected Patreon OAuth for guild {GuildId}", guildId);
+                return Ok(new
+                {
+                    message = "Patreon OAuth cleared successfully. You can now reconnect with fresh credentials."
+                });
+            }
+            else
+            {
+                return StatusCode(500, new
+                {
+                    error = "Failed to clear Patreon OAuth tokens"
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error disconnecting Patreon OAuth for guild {GuildId}", guildId);
             return StatusCode(500, new
             {
                 error = "Internal server error"
