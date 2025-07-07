@@ -33,25 +33,6 @@ public partial class Searches
         [UserPerm(GuildPermission.ManageMessages)]
         public async Task FeedAdd(string url, [Remainder] ITextChannel? channel = null)
         {
-            // Replace 'twitter.com' with 'nitter.cz'
-            if (url.Contains("twitter.com"))
-            {
-                if (url.StartsWith("https://"))
-                {
-                    var baseString = url;
-                    baseString = url + "/rss";
-                    url = baseString;
-                    url = url.Replace("twitter.com", "nitter.cz");
-                }
-                else
-                {
-                    var baseString = url;
-                    baseString = "https://" + url + "/rss";
-                    url = baseString;
-                    url = url.Replace("twitter.com", "nitter.cz");
-                }
-            }
-
             var success = Uri.TryCreate(url, UriKind.Absolute, out var uri) &&
                           (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
             if (success)
@@ -78,7 +59,6 @@ public partial class Searches
                 }
             }
 
-            Log.Information("error in url: " + url);
             await ReplyErrorAsync(Strings.FeedNotValid(ctx.Guild.Id)).ConfigureAwait(false);
         }
 
@@ -144,7 +124,7 @@ public partial class Searches
         [Aliases]
         [RequireContext(ContextType.Guild)]
         [UserPerm(GuildPermission.ManageMessages)]
-        public async Task RssTest(int index, bool sendBoth = false)
+        public async Task RssTest(int index)
         {
             var feeds = await Service.GetFeeds(ctx.Guild.Id);
             if (feeds.ElementAt(index - 1) is null)
@@ -153,7 +133,7 @@ public partial class Searches
                 return;
             }
 
-            await Service.TestRss(feeds.ElementAt(index - 1), ctx.Channel as ITextChannel, sendBoth).ConfigureAwait(false);
+            await Service.TestRss(feeds.ElementAt(index - 1), ctx.Channel as ITextChannel).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -206,32 +186,6 @@ public partial class Searches
 
                 return embed.WithDescription(fs);
             }
-        }
-
-        /// <summary>
-        ///    Starts the tracking of feed updates
-        /// </summary>
-        /// <returns></returns>
-        [Cmd, Aliases, RequireContext(ContextType.Guild), UserPerm(GuildPermission.ManageMessages)]
-        public async Task FeedStart()
-        {
-            if (Service.StartTracking(ctx.Guild.Id))
-                await ReplyConfirmAsync("feed_started").ConfigureAwait(false);
-            else
-                await ReplyErrorAsync("feed_already_started").ConfigureAwait(false);
-        }
-
-        /// <summary>
-        ///     Stops the tracking of feed updates
-        /// </summary>
-        /// <returns></returns>
-        [Cmd, Aliases, RequireContext(ContextType.Guild), UserPerm(GuildPermission.ManageMessages)]
-        public async Task FeedStop()
-        {
-            if (Service.StopTracking(ctx.Guild.Id))
-                await ReplyConfirmAsync("feed_stopped").ConfigureAwait(false);
-            else
-                await ReplyErrorAsync("feed_already_stopped").ConfigureAwait(false);
         }
     }
 }
