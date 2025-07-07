@@ -35,10 +35,6 @@ public sealed class BotConfig
         SupportServer = "https://discord.gg/mewdeko";
         RedirectUrl = "https://";
         YoutubeSupport = true;
-        ChatGptInitPrompt =
-            "Your name is Frogbot. You are a discord bot.";
-        ChatGptMaxTokens = 1000;
-        ChatGptTemperature = 0.9;
         QuarantineNotification = true;
         UpdateBranch = "null";
         CheckForUpdates = UpdateCheckType.None;

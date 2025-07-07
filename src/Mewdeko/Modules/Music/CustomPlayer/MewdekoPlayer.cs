@@ -57,36 +57,8 @@ public sealed class MewdekoPlayer : LavalinkPlayer
         dbProvider = properties.ServiceProvider.GetRequiredService<DbContextProvider>();
         cache = properties.ServiceProvider.GetRequiredService<IDataCache>();
         Strings = properties.ServiceProvider.GetRequiredService<GeneratedBotStrings>();
-        aloneCheckTimer = new Timer(CheckIfAlone, null, TimeSpan.FromMicroseconds(1), TimeSpan.FromMinutes(1));
     }
 
-    /// <summary>
-    ///     Check if bot is alone in a voice channel and stop the music player if it is.
-    /// </summary>
-    /// <param name="state"></param>
-    private async void CheckIfAlone(object state)
-    {
-        var voicechannel = client.GetGuild(GuildId)?.GetVoiceChannel(VoiceChannelId);
-        if (voicechannel == null)
-            return;
-
-        var userCount = voicechannel.Users.Count;
-        if (userCount == 1)
-        {
-            aloneTime++;
-            if (aloneTime >= 5)
-            {
-                await StopAsync();
-                await cache.SetMusicQueue(GuildId, new List<MewdekoTrack>());
-                await cache.SetCurrentTrack(GuildId, null);
-                aloneTime = 0;
-            }
-        }
-        else
-        {
-            aloneTime = 0;
-        }
-    }
 
     /// <summary>
     ///     Handles the event the track ended, resolves stuff like auto play, auto playing the next track, and looping.
@@ -101,81 +73,67 @@ public sealed class MewdekoPlayer : LavalinkPlayer
         var queue = await cache.GetMusicQueue(GuildId);
         var currentTrack = await cache.GetCurrentTrack(GuildId);
         var nextTrack = queue.FirstOrDefault(x => x.Index == currentTrack.Index + 1);
-        try
+        switch (reason)
         {
-            switch (reason)
-            {
-                case TrackEndReason.Finished:
-                    var repeatType = await GetRepeatType();
-                    switch (repeatType)
-                    {
-                        case PlayerRepeatType.None:
+            case TrackEndReason.Finished:
+                var repeatType = await GetRepeatType();
+                switch (repeatType)
+                {
+                    case PlayerRepeatType.None:
 
-                            if (nextTrack is null)
-                            {
-                                await musicChannel.SendMessageAsync("Queue is empty. Stopping.");
-                                await StopAsync(token);
-                                await cache.SetCurrentTrack(GuildId, null);
-                            }
-                            else
-                            {
-                                await PlayAsync(nextTrack.Track, cancellationToken: token);
-                                await cache.SetCurrentTrack(GuildId, nextTrack);
-                            }
+                        if (nextTrack is null)
+                        {
+                            await musicChannel.SendMessageAsync("Queue is empty. Stopping.");
+                            await StopAsync(token);
+                            await cache.SetCurrentTrack(GuildId, null);
+                        }
+                        else
+                        {
+                            await PlayAsync(nextTrack.Track, cancellationToken: token);
+                            await cache.SetCurrentTrack(GuildId, nextTrack);
+                        }
 
-                            break;
-                        case PlayerRepeatType.Track:
-                            await PlayAsync(item.Track, cancellationToken: token);
-                            break;
-                        case PlayerRepeatType.Queue:
-                            if (nextTrack is null)
-                            {
-                                await PlayAsync(queue[0].Track, cancellationToken: token);
-                                await cache.SetCurrentTrack(GuildId, queue[0]);
-                            }
-                            else
-                            {
-                                await PlayAsync(nextTrack.Track, cancellationToken: token);
-                                await cache.SetCurrentTrack(GuildId, nextTrack);
-                            }
-
-                            break;
-                        case PlayerRepeatType.Shuffle:
-                            queue = queue.Shuffle().ToList();
-                            await cache.SetMusicQueue(GuildId, queue);
-                            await PlayAsync(queue[0].Track,
-                                cancellationToken: token);
+                        break;
+                    case PlayerRepeatType.Track:
+                        await PlayAsync(item.Track, cancellationToken: token);
+                        break;
+                    case PlayerRepeatType.Queue:
+                        if (nextTrack is null)
+                        {
+                            await PlayAsync(queue[0].Track, cancellationToken: token);
                             await cache.SetCurrentTrack(GuildId, queue[0]);
-                            break;
-                        default:
-                            throw new ArgumentOutOfRangeException();
-                    }
+                        }
+                        else
+                        {
+                            await PlayAsync(nextTrack.Track, cancellationToken: token);
+                            await cache.SetCurrentTrack(GuildId, nextTrack);
+                        }
 
-                    break;
-                case TrackEndReason.LoadFailed:
-                    var failedEmbed = new EmbedBuilder()
-                        .WithDescription($"Failed to load track {item.Track.Title}. Removing and skipping to the next one.")
-                        .WithOkColor()
-                        .Build();
-                    await musicChannel.SendMessageAsync(embed: failedEmbed);
-                    await PlayAsync(nextTrack.Track, cancellationToken: token);
-                    await cache.SetCurrentTrack(GuildId, nextTrack);
-                    queue.Remove(currentTrack);
-                    await cache.SetMusicQueue(GuildId, queue);
-                    break;
-                case TrackEndReason.Stopped:
-                    return;
-                case TrackEndReason.Replaced:
-                    break;
-                case TrackEndReason.Cleanup:
-                    break;
-                default:
-                    throw new ArgumentOutOfRangeException(nameof(reason), reason, null);
-            }
-        }
-        catch (Exception)
-        {
-            await musicChannel.SendErrorAsync(Strings.MusicLavalinkError(GuildId), config);
+                        break;
+                    default:
+                        throw new ArgumentOutOfRangeException();
+                }
+
+                break;
+            case TrackEndReason.LoadFailed:
+                var failedEmbed = new EmbedBuilder()
+                    .WithDescription($"Failed to load track {item.Track.Title}. Removing and skipping to the next one.")
+                    .WithOkColor()
+                    .Build();
+                await musicChannel.SendMessageAsync(embed: failedEmbed);
+                await PlayAsync(nextTrack.Track, cancellationToken: token);
+                await cache.SetCurrentTrack(GuildId, nextTrack);
+                queue.Remove(currentTrack);
+                await cache.SetMusicQueue(GuildId, queue);
+                break;
+            case TrackEndReason.Stopped:
+                return;
+            case TrackEndReason.Replaced:
+                break;
+            case TrackEndReason.Cleanup:
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(reason), reason, null);
         }
     }
 
@@ -448,12 +406,18 @@ public sealed class MewdekoPlayer : LavalinkPlayer
             }
         }
 
-        if (Filters.Karaoke != null) effects.Add("🎤 Karaoke");
-        if (Filters.Tremolo != null) effects.Add("〰️ Tremolo");
-        if (Filters.Vibrato != null) effects.Add("📳 Vibrato");
-        if (Filters.Rotation != null) effects.Add("🎧 8D");
-        if (Filters.Distortion != null) effects.Add("🔊 Distort");
-        if (Filters.ChannelMix != null) effects.Add("🔀 Stereo");
+        if (Filters.Karaoke != null)
+            effects.Add("🎤 Karaoke");
+        if (Filters.Tremolo != null)
+            effects.Add("〰️ Tremolo");
+        if (Filters.Vibrato != null)
+            effects.Add("📳 Vibrato");
+        if (Filters.Rotation != null)
+            effects.Add("🎧 8D");
+        if (Filters.Distortion != null)
+            effects.Add("🔊 Distort");
+        if (Filters.ChannelMix != null)
+            effects.Add("🔀 Stereo");
 
         return effects;
     }
@@ -628,7 +592,9 @@ public sealed class MewdekoPlayer : LavalinkPlayer
 
                 queue.Add(new MewdekoTrack(queue.Count + 1, trackToLoad, new PartialUser
                 {
-                    AvatarUrl = client.CurrentUser.GetAvatarUrl(), Username = "Mewdeko", Id = client.CurrentUser.Id
+                    AvatarUrl = client.CurrentUser.GetAvatarUrl(),
+                    Username = "Mewdeko",
+                    Id = client.CurrentUser.Id
                 }));
             }
 
@@ -781,7 +747,8 @@ public sealed class MewdekoPlayer : LavalinkPlayer
 
             var payload = new
             {
-                sound_id = soundId, source_guild_id = SourceGuildId.ToString()
+                sound_id = soundId,
+                source_guild_id = SourceGuildId.ToString()
             };
 
             var jsonContent = JsonSerializer.Serialize(payload);
