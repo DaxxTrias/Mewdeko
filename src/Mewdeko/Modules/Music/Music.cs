@@ -1,4 +1,3 @@
-using System.Text;
 using System.Text.Json;
 using System.Threading;
 using DataModel;
@@ -53,12 +52,15 @@ public partial class Music(
                 .ConfigureAwait(false);
         else
         {
-            var eb = new EmbedBuilder()
-                .WithErrorColor()
-                .WithTitle(Strings.MusicPlayerError(ctx.Guild.Id))
-                .WithDescription(result);
+            var components = new ComponentBuilderV2()
+                .WithContainer([
+                    new TextDisplayBuilder($"# {Strings.MusicPlayerError(ctx.Guild.Id)}")
+                ], Mewdeko.ErrorColor)
+                .WithSeparator()
+                .WithContainer(new TextDisplayBuilder(result));
 
-            await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
+            await ctx.Channel.SendMessageAsync(components: components.Build(),
+                flags: MessageFlags.ComponentsV2, allowedMentions: AllowedMentions.None).ConfigureAwait(false);
         }
     }
 
@@ -73,12 +75,15 @@ public partial class Music(
         var (player, result) = await GetPlayerAsync(false);
         if (result is not null)
         {
-            var eb = new EmbedBuilder()
-                .WithErrorColor()
-                .WithTitle(Strings.MusicPlayerError(ctx.Guild.Id))
-                .WithDescription(result);
+            var components = new ComponentBuilderV2()
+                .WithContainer([
+                    new TextDisplayBuilder($"# {Strings.MusicPlayerError(ctx.Guild.Id)}")
+                ], Mewdeko.ErrorColor)
+                .WithSeparator()
+                .WithContainer(new TextDisplayBuilder(result));
 
-            await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
+            await ctx.Channel.SendMessageAsync(components: components.Build(),
+                flags: MessageFlags.ComponentsV2, allowedMentions: AllowedMentions.None).ConfigureAwait(false);
             return;
         }
 
@@ -101,12 +106,15 @@ public partial class Music(
 
         if (result is not null)
         {
-            var eb = new EmbedBuilder()
-                .WithErrorColor()
-                .WithTitle(Strings.MusicPlayerError(ctx.Guild.Id))
-                .WithDescription(result);
+            var components = new ComponentBuilderV2()
+                .WithContainer([
+                    new TextDisplayBuilder($"# {Strings.MusicPlayerError(ctx.Guild.Id)}")
+                ], Mewdeko.ErrorColor)
+                .WithSeparator()
+                .WithContainer(new TextDisplayBuilder(result));
 
-            await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
+            await ctx.Channel.SendMessageAsync(components: components.Build(),
+                flags: MessageFlags.ComponentsV2, allowedMentions: AllowedMentions.None).ConfigureAwait(false);
             return;
         }
 
@@ -129,12 +137,15 @@ public partial class Music(
 
         if (result is not null)
         {
-            var eb = new EmbedBuilder()
-                .WithErrorColor()
-                .WithTitle(Strings.MusicPlayerError(ctx.Guild.Id))
-                .WithDescription(result);
+            var components = new ComponentBuilderV2()
+                .WithContainer([
+                    new TextDisplayBuilder($"# {Strings.MusicPlayerError(ctx.Guild.Id)}")
+                ], Mewdeko.ErrorColor)
+                .WithSeparator()
+                .WithContainer(new TextDisplayBuilder(result));
 
-            await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
+            await ctx.Channel.SendMessageAsync(components: components.Build(),
+                flags: MessageFlags.ComponentsV2, allowedMentions: AllowedMentions.None).ConfigureAwait(false);
             return;
         }
 
@@ -217,12 +228,15 @@ public partial class Music(
 
         if (result is not null)
         {
-            var eb = new EmbedBuilder()
-                .WithErrorColor()
-                .WithTitle(Strings.MusicPlayerError(ctx.Guild.Id))
-                .WithDescription(result);
+            var components = new ComponentBuilderV2()
+                .WithContainer([
+                    new TextDisplayBuilder($"# {Strings.MusicPlayerError(ctx.Guild.Id)}")
+                ], Mewdeko.ErrorColor)
+                .WithSeparator()
+                .WithContainer(new TextDisplayBuilder(result));
 
-            await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
+            await ctx.Channel.SendMessageAsync(components: components.Build(),
+                flags: MessageFlags.ComponentsV2, allowedMentions: AllowedMentions.None).ConfigureAwait(false);
             return;
         }
 
@@ -253,12 +267,15 @@ public partial class Music(
 
             if (result is not null)
             {
-                var eb = new EmbedBuilder()
-                    .WithErrorColor()
-                    .WithTitle(Strings.MusicPlayerError(ctx.Guild.Id))
-                    .WithDescription(result);
+                var errorComponents = new ComponentBuilderV2()
+                    .WithContainer([
+                        new TextDisplayBuilder($"# {Strings.MusicPlayerError(ctx.Guild.Id)}")
+                    ], Mewdeko.ErrorColor)
+                    .WithSeparator()
+                    .WithContainer(new TextDisplayBuilder(result));
 
-                await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
+                await ctx.Channel.SendMessageAsync(components: errorComponents.Build(),
+                    flags: MessageFlags.ComponentsV2, allowedMentions: AllowedMentions.None).ConfigureAwait(false);
                 return;
             }
 
@@ -271,8 +288,9 @@ public partial class Music(
             }
 
 
-            var embed = await player.PrettyNowPlayingAsync(queue);
-            await ctx.Channel.SendMessageAsync(embed: embed).ConfigureAwait(false);
+            var components = await player.PrettyNowPlayingAsync(queue);
+            await ctx.Channel.SendMessageAsync(components: components,
+                flags: MessageFlags.ComponentsV2, allowedMentions: AllowedMentions.None).ConfigureAwait(false);
         }
         catch (Exception e)
         {
@@ -293,12 +311,15 @@ public partial class Music(
         var (player, result) = await GetPlayerAsync(false);
         if (result is not null)
         {
-            var eb = new EmbedBuilder()
-                .WithErrorColor()
-                .WithTitle(Strings.MusicPlayerError(ctx.Guild.Id))
-                .WithDescription(result);
+            var components = new ComponentBuilderV2()
+                .WithContainer([
+                    new TextDisplayBuilder($"# {Strings.MusicPlayerError(ctx.Guild.Id)}")
+                ], Mewdeko.ErrorColor)
+                .WithSeparator()
+                .WithContainer(new TextDisplayBuilder(result));
 
-            await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
+            await ctx.Channel.SendMessageAsync(components: components.Build(),
+                flags: MessageFlags.ComponentsV2, allowedMentions: AllowedMentions.None).ConfigureAwait(false);
             return;
         }
 
@@ -368,12 +389,15 @@ public partial class Music(
         var (_, result) = await GetPlayerAsync(false);
         if (result is not null)
         {
-            var eb = new EmbedBuilder()
-                .WithErrorColor()
-                .WithTitle(Strings.MusicPlayerError(ctx.Guild.Id))
-                .WithDescription(result);
+            var components = new ComponentBuilderV2()
+                .WithContainer([
+                    new TextDisplayBuilder($"# {Strings.MusicPlayerError(ctx.Guild.Id)}")
+                ], Mewdeko.ErrorColor)
+                .WithSeparator()
+                .WithContainer(new TextDisplayBuilder(result));
 
-            await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
+            await ctx.Channel.SendMessageAsync(components: components.Build(),
+                flags: MessageFlags.ComponentsV2, allowedMentions: AllowedMentions.None).ConfigureAwait(false);
             return;
         }
 
@@ -430,12 +454,15 @@ public partial class Music(
         var (player, result) = await GetPlayerAsync(false);
         if (result is not null)
         {
-            var eb = new EmbedBuilder()
-                .WithErrorColor()
-                .WithTitle(Strings.MusicPlayerError(ctx.Guild.Id))
-                .WithDescription(result);
+            var components = new ComponentBuilderV2()
+                .WithContainer([
+                    new TextDisplayBuilder($"# {Strings.MusicPlayerError(ctx.Guild.Id)}")
+                ], Mewdeko.ErrorColor)
+                .WithSeparator()
+                .WithContainer(new TextDisplayBuilder(result));
 
-            await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
+            await ctx.Channel.SendMessageAsync(components: components.Build(),
+                flags: MessageFlags.ComponentsV2, allowedMentions: AllowedMentions.None).ConfigureAwait(false);
             return;
         }
 
@@ -462,12 +489,15 @@ public partial class Music(
         var (player, result) = await GetPlayerAsync(false);
         if (result is not null)
         {
-            var eb = new EmbedBuilder()
-                .WithErrorColor()
-                .WithTitle(Strings.MusicPlayerError(ctx.Guild.Id))
-                .WithDescription(result);
+            var components = new ComponentBuilderV2()
+                .WithContainer([
+                    new TextDisplayBuilder($"# {Strings.MusicPlayerError(ctx.Guild.Id)}")
+                ], Mewdeko.ErrorColor)
+                .WithSeparator()
+                .WithContainer(new TextDisplayBuilder(result));
 
-            await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
+            await ctx.Channel.SendMessageAsync(components: components.Build(),
+                flags: MessageFlags.ComponentsV2, allowedMentions: AllowedMentions.None).ConfigureAwait(false);
             return;
         }
 
@@ -509,12 +539,15 @@ public partial class Music(
         var (player, result) = await GetPlayerAsync(false);
         if (result is not null)
         {
-            var eb = new EmbedBuilder()
-                .WithErrorColor()
-                .WithTitle(Strings.MusicPlayerError(ctx.Guild.Id))
-                .WithDescription(result);
+            var components = new ComponentBuilderV2()
+                .WithContainer([
+                    new TextDisplayBuilder($"# {Strings.MusicPlayerError(ctx.Guild.Id)}")
+                ], Mewdeko.ErrorColor)
+                .WithSeparator()
+                .WithContainer(new TextDisplayBuilder(result));
 
-            await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
+            await ctx.Channel.SendMessageAsync(components: components.Build(),
+                flags: MessageFlags.ComponentsV2, allowedMentions: AllowedMentions.None).ConfigureAwait(false);
             return;
         }
 
@@ -611,12 +644,15 @@ public partial class Music(
         var (_, result) = await GetPlayerAsync(false);
         if (result is not null)
         {
-            var eb = new EmbedBuilder()
-                .WithErrorColor()
-                .WithTitle(Strings.MusicPlayerError(ctx.Guild.Id))
-                .WithDescription(result);
+            var components = new ComponentBuilderV2()
+                .WithContainer([
+                    new TextDisplayBuilder($"# {Strings.MusicPlayerError(ctx.Guild.Id)}")
+                ], Mewdeko.ErrorColor)
+                .WithSeparator()
+                .WithContainer(new TextDisplayBuilder(result));
 
-            await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
+            await ctx.Channel.SendMessageAsync(components: components.Build(),
+                flags: MessageFlags.ComponentsV2, allowedMentions: AllowedMentions.None).ConfigureAwait(false);
             return;
         }
 
@@ -658,12 +694,15 @@ public partial class Music(
         var (player, result) = await GetPlayerAsync();
         if (result is not null)
         {
-            var eb = new EmbedBuilder()
-                .WithErrorColor()
-                .WithTitle(Strings.MusicPlayerError(ctx.Guild.Id))
-                .WithDescription(result);
+            var components = new ComponentBuilderV2()
+                .WithContainer([
+                    new TextDisplayBuilder($"# {Strings.MusicPlayerError(ctx.Guild.Id)}")
+                ], Mewdeko.ErrorColor)
+                .WithSeparator()
+                .WithContainer(new TextDisplayBuilder(result));
 
-            await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
+            await ctx.Channel.SendMessageAsync(components: components.Build(),
+                flags: MessageFlags.ComponentsV2, allowedMentions: AllowedMentions.None).ConfigureAwait(false);
             return;
         }
 
@@ -716,25 +755,25 @@ public partial class Music(
             return;
         }
 
-        var sb = new StringBuilder();
+        var components = new ComponentBuilderV2()
+            .WithContainer([
+                new TextDisplayBuilder($"# {Strings.MusicPlaylistsTitle(ctx.Guild.Id)}")
+            ], Mewdeko.OkColor)
+            .WithSeparator();
+
         foreach (var playlist in playlists)
         {
             var user = await ctx.Guild.GetUserAsync(playlist.AuthorId);
-            sb.AppendLine(Strings.MusicPlaylistEntry(
+            components.WithContainer(new TextDisplayBuilder(Strings.MusicPlaylistEntry(
                 ctx.Guild.Id,
                 playlist.Name,
                 playlist.MusicPlaylistTracks.Count(),
                 user?.Username ?? "Unknown"
-            ));
+            )));
         }
 
-        var eb = new EmbedBuilder()
-            .WithTitle(Strings.MusicPlaylistsTitle(ctx.Guild.Id))
-            .WithDescription(sb.ToString())
-            .WithOkColor()
-            .Build();
-
-        await ctx.Channel.SendMessageAsync(embed: eb).ConfigureAwait(false);
+        await ctx.Channel.SendMessageAsync(components: components.Build(),
+            flags: MessageFlags.ComponentsV2, allowedMentions: AllowedMentions.None).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -771,22 +810,26 @@ public partial class Music(
         }
 
         var trackList = tracks.Tracks.Take(10).ToList();
-        var sb = new StringBuilder();
+        var components = new ComponentBuilderV2()
+            .WithContainer([
+                new TextDisplayBuilder($"# {Strings.MusicSearchResults(ctx.Guild.Id)}")
+            ], Mewdeko.OkColor)
+            .WithSeparator();
 
+        // Add each track as a section for better organization
         for (var i = 0; i < trackList.Count; i++)
         {
             var track = trackList[i];
-            sb.AppendLine($"`{i + 1}.` [{track.Title}]({track.Uri}) `{track.Duration}`");
+            components.WithContainer(new TextDisplayBuilder($"`{i + 1}.` [{track.Title}]({track.Uri})\n" +
+                                                            $"⏱️ Duration: `{track.Duration}`\n" +
+                                                            $"👤 Artist: {track.Author}"));
         }
 
-        var eb = new EmbedBuilder()
-            .WithTitle(Strings.MusicSearchResults(ctx.Guild.Id))
-            .WithDescription(sb.ToString())
-            .WithFooter(Strings.MusicSearchUsePlay(ctx.Guild.Id))
-            .WithOkColor()
-            .Build();
+        components.WithSeparator()
+            .WithContainer(new TextDisplayBuilder($"ℹ️ {Strings.MusicSearchUsePlay(ctx.Guild.Id)}"));
 
-        await ctx.Channel.SendMessageAsync(embed: eb);
+        await ctx.Channel.SendMessageAsync(components: components.Build(),
+            flags: MessageFlags.ComponentsV2, allowedMentions: AllowedMentions.None);
     }
 
     /// <summary>
@@ -800,12 +843,15 @@ public partial class Music(
         var (_, result) = await GetPlayerAsync(false);
         if (result is not null)
         {
-            var eb = new EmbedBuilder()
-                .WithErrorColor()
-                .WithTitle(Strings.MusicPlayerError(ctx.Guild.Id))
-                .WithDescription(result);
+            var components = new ComponentBuilderV2()
+                .WithContainer([
+                    new TextDisplayBuilder($"# {Strings.MusicPlayerError(ctx.Guild.Id)}")
+                ], Mewdeko.ErrorColor)
+                .WithSeparator()
+                .WithContainer(new TextDisplayBuilder(result));
 
-            await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
+            await ctx.Channel.SendMessageAsync(components: components.Build(),
+                flags: MessageFlags.ComponentsV2, allowedMentions: AllowedMentions.None).ConfigureAwait(false);
             return;
         }
 
@@ -856,12 +902,15 @@ public partial class Music(
         var (player, result) = await GetPlayerAsync(false);
         if (result is not null)
         {
-            var eb = new EmbedBuilder()
-                .WithErrorColor()
-                .WithTitle(Strings.MusicPlayerError(ctx.Guild.Id))
-                .WithDescription(result);
+            var components = new ComponentBuilderV2()
+                .WithContainer([
+                    new TextDisplayBuilder($"# {Strings.MusicPlayerError(ctx.Guild.Id)}")
+                ], Mewdeko.ErrorColor)
+                .WithSeparator()
+                .WithContainer(new TextDisplayBuilder(result));
 
-            await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
+            await ctx.Channel.SendMessageAsync(components: components.Build(),
+                flags: MessageFlags.ComponentsV2, allowedMentions: AllowedMentions.None).ConfigureAwait(false);
             return;
         }
 
@@ -886,12 +935,15 @@ public partial class Music(
         var (_, result) = await GetPlayerAsync(false);
         if (result is not null)
         {
-            var eb = new EmbedBuilder()
-                .WithErrorColor()
-                .WithTitle(Strings.MusicPlayerError(ctx.Guild.Id))
-                .WithDescription(result);
+            var errorComponents = new ComponentBuilderV2()
+                .WithContainer([
+                    new TextDisplayBuilder($"# {Strings.MusicPlayerError(ctx.Guild.Id)}")
+                ], Mewdeko.ErrorColor)
+                .WithSeparator()
+                .WithContainer(new TextDisplayBuilder(result));
 
-            await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
+            await ctx.Channel.SendMessageAsync(components: errorComponents.Build(),
+                flags: MessageFlags.ComponentsV2, allowedMentions: AllowedMentions.None).ConfigureAwait(false);
             return;
         }
 
@@ -903,37 +955,132 @@ public partial class Music(
         }
 
         var currentTrack = await cache.GetCurrentTrack(ctx.Guild.Id);
+        var orderedQueue = queue.OrderBy(x => x.Index).ToList();
+        const int tracksPerPage = 5;
+        var totalPages = Math.Max(1, (int)Math.Ceiling((double)orderedQueue.Count / tracksPerPage));
 
-        var paginator = new LazyPaginatorBuilder().AddUser(ctx.User)
-            .WithPageFactory(PageFactory)
-            .WithFooter(PaginatorFooter.PageNumber | PaginatorFooter.Users)
-            .WithMaxPageIndex((queue.Count - 1) / 10)
-            .WithDefaultEmotes()
+        var paginator = new ComponentPaginatorBuilder()
+            .AddUser(ctx.User)
+            .WithPageFactory(GeneratePage)
+            .WithPageCount(totalPages)
             .WithActionOnCancellation(ActionOnStop.DeleteMessage)
+            .WithActionOnTimeout(ActionOnStop.DisableInput)
             .Build();
 
-        await interactiveService.SendPaginatorAsync(paginator, ctx.Channel, TimeSpan.FromMinutes(5));
+        await interactiveService.SendPaginatorAsync(paginator, ctx.Channel, TimeSpan.FromMinutes(10));
 
-        async Task<PageBuilder> PageFactory(int index)
+        IPage GeneratePage(IComponentPaginator p)
         {
-            await Task.CompletedTask;
-            var tracks = queue.OrderBy(x => x.Index).Skip(index * 10).Take(10).ToList();
-            var sb = new StringBuilder();
-            foreach (var track in tracks)
+            var startIndex = p.CurrentPageIndex * tracksPerPage;
+            var tracksOnPage = orderedQueue.Skip(startIndex).Take(tracksPerPage).ToList();
+
+            var containerComponents = new List<IMessageComponentBuilder>();
+
+            // Add title
+            containerComponents.Add(new TextDisplayBuilder()
+                .WithContent($"# {Strings.MusicQueueTitle(ctx.Guild.Id, queue.Count)}"));
+
+            containerComponents.Add(new SeparatorBuilder());
+
+            // Add currently playing track if it's on this page or it's the first page
+            if (currentTrack != null &&
+                (p.CurrentPageIndex == 0 || tracksOnPage.Any(t => t.Index == currentTrack.Index)))
             {
-                if (currentTrack.Index == track.Index)
-                    sb.AppendLine(
-                        $":loud_sound: **{track.Index}. [{track.Track.Title}]({track.Track.Uri})**" +
-                        $"\n`{track.Track.Duration} {track.Requester.Username} {track.Track.Provider}`");
-                else
-                    sb.AppendLine($"{track.Index}. [{track.Track.Title}]({track.Track.Uri})" +
-                                  $"\n`{track.Track.Duration} {track.Requester.Username} {track.Track.Provider}`");
+                var nowPlayingSection = new SectionBuilder()
+                    .WithComponents([
+                        new TextDisplayBuilder($"**Now Playing**\n" +
+                                               $"**{currentTrack.Index}. [{currentTrack.Track.Title}]({currentTrack.Track.Uri})**\n" +
+                                               $"`{currentTrack.Track.Duration} | {currentTrack.Requester.Username} | {currentTrack.Track.Provider}`")
+                    ]);
+
+                if (currentTrack.Track.ArtworkUri != null)
+                {
+                    var thumbnailBuilder = new ThumbnailBuilder()
+                        .WithMedia(new UnfurledMediaItemProperties
+                        {
+                            Url = currentTrack.Track.ArtworkUri.ToString()
+                        });
+                    nowPlayingSection.WithAccessory(thumbnailBuilder);
+                }
+
+                containerComponents.Add(nowPlayingSection);
+                containerComponents.Add(new SeparatorBuilder());
             }
 
+            // Add tracks for this page
+            var upcomingTracks = tracksOnPage.Where(t => t.Index != currentTrack?.Index).ToList();
+            if (upcomingTracks.Any())
+            {
+                containerComponents.Add(new TextDisplayBuilder().WithContent("**Upcoming Tracks**"));
+
+                foreach (var track in upcomingTracks)
+                {
+                    var trackSection = new SectionBuilder()
+                        .WithComponents([
+                            new TextDisplayBuilder($"{track.Index}. [{track.Track.Title}]({track.Track.Uri})\n" +
+                                                   $"`{track.Track.Duration} | {track.Requester.Username} | {track.Track.Provider}`")
+                        ]);
+
+                    if (track.Track.ArtworkUri != null)
+                    {
+                        var thumbnailBuilder = new ThumbnailBuilder()
+                            .WithMedia(new UnfurledMediaItemProperties
+                            {
+                                Url = track.Track.ArtworkUri.ToString()
+                            });
+                        trackSection.WithAccessory(thumbnailBuilder);
+                    }
+
+                    containerComponents.Add(trackSection);
+
+                    if (track != upcomingTracks.Last())
+                        containerComponents.Add(new SeparatorBuilder());
+                }
+            }
+
+            containerComponents.Add(new SeparatorBuilder());
+
+            // Create select menu with current page tracks
+            if (tracksOnPage.Any())
+            {
+                var selectOptions = tracksOnPage.Select(track =>
+                    new SelectMenuOptionBuilder()
+                        .WithLabel(
+                            $"{track.Index}. {(track.Track.Title.Length > 80 ? track.Track.Title.Substring(0, 77) + "..." : track.Track.Title)}")
+                        .WithValue($"music_track_info:{track.Index}")
+                        .WithDescription($"{track.Track.Duration} | {track.Requester.Username}")
+                ).ToList();
+
+                var selectMenuRow = new ActionRowBuilder()
+                    .WithSelectMenu("music_track_select", selectOptions, "Select a track for options...",
+                        disabled: p.ShouldDisable());
+
+                containerComponents.Add(selectMenuRow);
+            }
+
+            // Create navigation row
+            var navigationRow = new ActionRowBuilder()
+                .AddPreviousButton(p, style: ButtonStyle.Secondary)
+                .AddNextButton(p, style: ButtonStyle.Secondary)
+                .AddStopButton(p);
+
+            containerComponents.Add(navigationRow);
+
+            // Add footer
+            containerComponents.Add(new TextDisplayBuilder()
+                .WithContent($"Page {p.CurrentPageIndex + 1}/{p.PageCount} • {queue.Count} tracks in queue"));
+
+            // Create the main container
+            var mainContainer = new ContainerBuilder()
+                .WithComponents(containerComponents)
+                .WithAccentColor(Mewdeko.OkColor);
+
+            var componentsV2 = new ComponentBuilderV2()
+                .AddComponent(mainContainer);
+
             return new PageBuilder()
-                .WithTitle(Strings.MusicQueueTitle(ctx.Guild.Id, queue.Count))
-                .WithDescription(sb.ToString())
-                .WithOkColor();
+                .WithComponents(componentsV2.Build())
+                .Build();
         }
     }
 
@@ -949,12 +1096,15 @@ public partial class Music(
         var (player, result) = await GetPlayerAsync(false);
         if (result is not null)
         {
-            var eb = new EmbedBuilder()
-                .WithErrorColor()
-                .WithTitle(Strings.MusicPlayerError(ctx.Guild.Id))
-                .WithDescription(result);
+            var components = new ComponentBuilderV2()
+                .WithContainer([
+                    new TextDisplayBuilder($"# {Strings.MusicPlayerError(ctx.Guild.Id)}")
+                ], Mewdeko.ErrorColor)
+                .WithSeparator()
+                .WithContainer(new TextDisplayBuilder(result));
 
-            await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
+            await ctx.Channel.SendMessageAsync(components: components.Build(),
+                flags: MessageFlags.ComponentsV2, allowedMentions: AllowedMentions.None).ConfigureAwait(false);
             return;
         }
 
@@ -986,12 +1136,15 @@ public partial class Music(
         var (player, result) = await GetPlayerAsync(false);
         if (result is not null)
         {
-            var eb = new EmbedBuilder()
-                .WithErrorColor()
-                .WithTitle(Strings.MusicPlayerError(ctx.Guild.Id))
-                .WithDescription(result);
+            var errorComponents = new ComponentBuilderV2()
+                .WithContainer([
+                    new TextDisplayBuilder($"# {Strings.MusicPlayerError(ctx.Guild.Id)}")
+                ], Mewdeko.ErrorColor)
+                .WithSeparator()
+                .WithContainer(new TextDisplayBuilder(result));
 
-            await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
+            await ctx.Channel.SendMessageAsync(components: errorComponents.Build(),
+                flags: MessageFlags.ComponentsV2, allowedMentions: AllowedMentions.None).ConfigureAwait(false);
             return;
         }
 
@@ -1000,16 +1153,22 @@ public partial class Music(
         var repeat = await player.GetRepeatType();
         var musicChannel = await player.GetMusicChannel();
 
-        var toSend = new EmbedBuilder()
-            .WithOkColor()
-            .WithTitle(Strings.MusicSettings(ctx.Guild.Id))
-            .WithDescription(
-                $"{(autoplay == 0 ? Strings.MusicsettingsAutoplayDisabled(ctx.Guild.Id) : Strings.MusicsettingsAutoplay(ctx.Guild.Id, autoplay))}\n" +
-                $"{Strings.MusicsettingsVolume(ctx.Guild.Id, volume)}\n" +
-                $"{Strings.MusicsettingsRepeat(ctx.Guild.Id, repeat)}\n" +
-                $"{(musicChannel == null ? Strings.UnsetMusicChannel(ctx.Guild.Id) : Strings.MusicsettingsChannel(ctx.Guild.Id, musicChannel.Id))}");
+        var components = new ComponentBuilderV2()
+            .WithContainer([
+                new TextDisplayBuilder($"# {Strings.MusicSettings(ctx.Guild.Id)}")
+            ], Mewdeko.OkColor)
+            .WithSeparator()
+            .WithContainer(new TextDisplayBuilder(
+                $"**🔄 Autoplay**\n{(autoplay == 0 ? Strings.MusicsettingsAutoplayDisabled(ctx.Guild.Id) : Strings.MusicsettingsAutoplay(ctx.Guild.Id, autoplay))}"))
+            .WithContainer(
+                new TextDisplayBuilder($"**🔊 Volume**\n{Strings.MusicsettingsVolume(ctx.Guild.Id, volume)}"))
+            .WithContainer(
+                new TextDisplayBuilder($"**🔁 Repeat Mode**\n{Strings.MusicsettingsRepeat(ctx.Guild.Id, repeat)}"))
+            .WithContainer(new TextDisplayBuilder(
+                $"**📺 Music Channel**\n{(musicChannel == null ? Strings.UnsetMusicChannel(ctx.Guild.Id) : Strings.MusicsettingsChannel(ctx.Guild.Id, musicChannel.Id))}"));
 
-        await ctx.Channel.SendMessageAsync(embed: toSend.Build()).ConfigureAwait(false);
+        await ctx.Channel.SendMessageAsync(components: components.Build(),
+            flags: MessageFlags.ComponentsV2, allowedMentions: AllowedMentions.None).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -1025,12 +1184,15 @@ public partial class Music(
         var (player, result) = await GetPlayerAsync(false);
         if (result is not null)
         {
-            var eb = new EmbedBuilder()
-                .WithErrorColor()
-                .WithTitle(Strings.MusicPlayerError(ctx.Guild.Id))
-                .WithDescription(result);
+            var components = new ComponentBuilderV2()
+                .WithContainer([
+                    new TextDisplayBuilder($"# {Strings.MusicPlayerError(ctx.Guild.Id)}")
+                ], Mewdeko.ErrorColor)
+                .WithSeparator()
+                .WithContainer(new TextDisplayBuilder(result));
 
-            await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
+            await ctx.Channel.SendMessageAsync(components: components.Build(),
+                flags: MessageFlags.ComponentsV2, allowedMentions: AllowedMentions.None).ConfigureAwait(false);
             return;
         }
 
@@ -1050,12 +1212,15 @@ public partial class Music(
         var (player, result) = await GetPlayerAsync(false);
         if (result is not null)
         {
-            var eb = new EmbedBuilder()
-                .WithErrorColor()
-                .WithTitle(Strings.MusicPlayerError(ctx.Guild.Id))
-                .WithDescription(result);
+            var components = new ComponentBuilderV2()
+                .WithContainer([
+                    new TextDisplayBuilder($"# {Strings.MusicPlayerError(ctx.Guild.Id)}")
+                ], Mewdeko.ErrorColor)
+                .WithSeparator()
+                .WithContainer(new TextDisplayBuilder(result));
 
-            await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
+            await ctx.Channel.SendMessageAsync(components: components.Build(),
+                flags: MessageFlags.ComponentsV2, allowedMentions: AllowedMentions.None).ConfigureAwait(false);
             return;
         }
 
@@ -1145,7 +1310,8 @@ public partial class Music(
 
             var components = new ComponentBuilder().WithSelectMenu(selectMenu).Build();
 
-            var message = await ctx.Channel.SendMessageAsync(embed: eb, components: components);
+            var message = await ctx.Channel.SendMessageAsync(embed: eb, components: components,
+                allowedMentions: AllowedMentions.None);
 
             // Cache the track list for the selection menu handler
             await cache.Redis.GetDatabase().StringSetAsync(
@@ -1189,56 +1355,86 @@ public partial class Music(
             await cache.SetCurrentTrack(ctx.Guild.Id, queue[0]);
         }
 
-        // Create response embed
-        var embed = new EmbedBuilder()
-            .WithTitle(Strings.MusicAddedTitle(ctx.Guild.Id))
-            .WithDescription(CreateAddedTracksDescription(addedTracks))
-            .WithOkColor()
-            .Build();
+        // Create response components
+        var containerComponents = new List<IMessageComponentBuilder>();
 
-        await ctx.Channel.SendMessageAsync(embed: embed);
-    }
+        containerComponents.Add(new TextDisplayBuilder()
+            .WithContent($"# {Strings.MusicAddedTitle(ctx.Guild.Id)}"));
 
-    /// <summary>
-    ///     Creates a formatted description of added tracks
-    /// </summary>
-    private static string CreateAddedTracksDescription(List<MewdekoTrack> tracks)
-    {
-        var sb = new StringBuilder();
+        containerComponents.Add(new SeparatorBuilder());
 
-        if (tracks.Count == 1)
+        if (addedTracks.Count == 1)
         {
-            var track = tracks[0];
-            sb.AppendLine("**Now Playing**");
-            sb.AppendLine($"🎵 [{track.Track.Title}]({track.Track.Uri})");
-            sb.AppendLine($"👤 {track.Track.Author}");
-            sb.AppendLine($"⏱️ Duration: `{track.Track.Duration}`");
-            sb.AppendLine($"📋 Queue Position: `#{track.Index}`");
+            var track = addedTracks[0];
+            var trackSection = new SectionBuilder()
+                .WithComponents([
+                    new TextDisplayBuilder($"### [{track.Track.Title}]({track.Track.Uri})\n" +
+                                           $"**Artist:** {track.Track.Author}\n" +
+                                           $"**Duration:** {track.Track.Duration}\n" +
+                                           $"**Position in queue:** {track.Index}")
+                ]);
+
+            if (track.Track.ArtworkUri != null)
+            {
+                var thumbnailBuilder = new ThumbnailBuilder()
+                    .WithMedia(new UnfurledMediaItemProperties
+                    {
+                        Url = track.Track.ArtworkUri.ToString()
+                    });
+                trackSection.WithAccessory(thumbnailBuilder);
+            }
+
+            containerComponents.Add(trackSection);
         }
         else
         {
-            var totalDuration = TimeSpan.FromMilliseconds(tracks.Sum(t => t.Track.Duration.TotalMilliseconds));
-            sb.AppendLine($"**Added to Queue: {tracks.Count} tracks**");
-            sb.AppendLine($"⏱️ Total Duration: `{totalDuration:hh\\:mm\\:ss}`\n");
+            containerComponents.Add(new TextDisplayBuilder()
+                .WithContent($"**{addedTracks.Count} tracks added**\n" +
+                             $"Queue positions: {addedTracks[0].Index} - {addedTracks[^1].Index}"));
 
-            // Show first few tracks as preview
-            const int previewCount = 3;
-            for (var i = 0; i < Math.Min(previewCount, tracks.Count); i++)
+            containerComponents.Add(new SeparatorBuilder());
+
+            // Show first few tracks with artwork in a media gallery if available
+            var tracksWithArtwork = addedTracks.Where(t => t.Track.ArtworkUri != null).Take(4).ToList();
+            if (tracksWithArtwork.Any())
             {
-                var track = tracks[i];
-                var prefix = i == 0 ? "🎵" : "└";
-                sb.AppendLine($"{prefix} [{track.Track.Title}]({track.Track.Uri}) `{track.Track.Duration:mm\\:ss}`");
+                var mediaItems = tracksWithArtwork.Select(track =>
+                    new MediaGalleryItemProperties(
+                        new UnfurledMediaItemProperties
+                        {
+                            Url = track.Track.ArtworkUri.ToString()
+                        },
+                        $"{track.Track.Title} - {track.Track.Author}"
+                    )).ToList();
+
+                var mediaGallery = new MediaGalleryBuilder()
+                    .WithItems(mediaItems);
+
+                containerComponents.Add(mediaGallery);
             }
 
-            if (tracks.Count > previewCount)
-            {
-                sb.AppendLine($"\n_...and {tracks.Count - previewCount} more tracks_");
-            }
+            // Add summary of added tracks
+            var trackList = string.Join("\n", addedTracks.Take(5).Select(t =>
+                $"**{t.Index}.** {(t.Track.Title.Length > 50 ? t.Track.Title.Substring(0, 47) + "..." : t.Track.Title)}"));
+
+            if (addedTracks.Count > 5)
+                trackList += $"\n*...and {addedTracks.Count - 5} more tracks*";
+
+            containerComponents.Add(new TextDisplayBuilder()
+                .WithContent(trackList));
         }
 
-        return sb.ToString();
-    }
+        // Create the main container
+        var mainContainer = new ContainerBuilder()
+            .WithComponents(containerComponents)
+            .WithAccentColor(Mewdeko.OkColor);
 
+        var componentsV2 = new ComponentBuilderV2()
+            .AddComponent(mainContainer);
+
+        await ctx.Channel.SendMessageAsync(components: componentsV2.Build(),
+            flags: MessageFlags.ComponentsV2, allowedMentions: AllowedMentions.None);
+    }
 
     /// <summary>
     ///     Determines the appropriate search mode based on the URL
@@ -1284,16 +1480,25 @@ public partial class Music(
                 IUserMessage loadingMsg = null;
                 if (album.Tracks.Total > 10)
                 {
-                    var loadingEmbed = new EmbedBuilder()
-                        .WithTitle(Strings.MusicAlbumTitle(ctx.Guild.Id, album.Name))
-                        .WithDescription(
-                            Strings.LoadingAlbum(ctx.Guild.Id, Config.LoadingEmote, album.Tracks.Total,
-                                album.Artists.FirstOrDefault()?.Name ?? "Unknown"))
-                        .WithColor(new Color(30, 215, 96))
-                        .WithThumbnailUrl(album.Images.FirstOrDefault()?.Url)
-                        .WithFooter(Strings.MusicProcessingTracks(ctx.Guild.Id, tracks.Count, album.Tracks.Total))
-                        .Build();
-                    loadingMsg = await ctx.Channel.SendMessageAsync(embed: loadingEmbed);
+                    var loadingComponents = new ComponentBuilderV2()
+                        .WithContainer([
+                            new TextDisplayBuilder($"# {Strings.MusicAlbumTitle(ctx.Guild.Id, album.Name)}")
+                        ], new Color(30, 215, 96))
+                        .WithSeparator()
+                        .WithSection([
+                                new TextDisplayBuilder(Strings.LoadingAlbum(ctx.Guild.Id, Config.LoadingEmote,
+                                    album.Tracks.Total,
+                                    album.Artists.FirstOrDefault()?.Name ?? "Unknown"))
+                            ],
+                            album.Images.FirstOrDefault()?.Url != null
+                                ? new ThumbnailBuilder(album.Images.FirstOrDefault().Url)
+                                : null)
+                        .WithSeparator()
+                        .WithContainer(new TextDisplayBuilder(
+                            $"ℹ️ {Strings.MusicProcessingTracks(ctx.Guild.Id, tracks.Count, album.Tracks.Total)}"));
+
+                    loadingMsg = await ctx.Channel.SendMessageAsync(components: loadingComponents.Build(),
+                        flags: MessageFlags.ComponentsV2, allowedMentions: AllowedMentions.None);
                 }
 
                 foreach (var searchQuery in album.Tracks.Items.Select(track =>
@@ -1347,15 +1552,24 @@ public partial class Music(
                 IUserMessage loadingMsg = null;
                 if (playlist.Tracks.Total > 10)
                 {
-                    var loadingEmbed = new EmbedBuilder()
-                        .WithTitle($"{playlist.Name}")
-                        .WithDescription(
-                            Strings.LoadingPlaylist(ctx.Guild.Id, playlist.Tracks.Total, playlist.Owner.DisplayName))
-                        .WithColor(new Color(30, 215, 96))
-                        .WithThumbnailUrl(playlist.Images.FirstOrDefault()?.Url)
-                        .WithFooter(Strings.MusicProcessingTracks(ctx.Guild.Id, tracks.Count, playlist.Tracks.Total))
-                        .Build();
-                    loadingMsg = await ctx.Channel.SendMessageAsync(embed: loadingEmbed);
+                    var loadingComponents = new ComponentBuilderV2()
+                        .WithContainer([
+                            new TextDisplayBuilder($"# {playlist.Name}")
+                        ], new Color(30, 215, 96))
+                        .WithSeparator()
+                        .WithSection([
+                                new TextDisplayBuilder(Strings.LoadingPlaylist(ctx.Guild.Id, playlist.Tracks.Total,
+                                    playlist.Owner.DisplayName))
+                            ],
+                            playlist.Images.FirstOrDefault()?.Url != null
+                                ? new ThumbnailBuilder(playlist.Images.FirstOrDefault().Url)
+                                : null)
+                        .WithSeparator()
+                        .WithContainer(new TextDisplayBuilder(
+                            $"ℹ️ {Strings.MusicProcessingTracks(ctx.Guild.Id, tracks.Count, playlist.Tracks.Total)}"));
+
+                    loadingMsg = await ctx.Channel.SendMessageAsync(components: loadingComponents.Build(),
+                        flags: MessageFlags.ComponentsV2, allowedMentions: AllowedMentions.None);
                 }
 
                 foreach (var item in playlist.Tracks.Items)

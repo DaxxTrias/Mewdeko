@@ -6,6 +6,7 @@ using Discord.Commands;
 using Discord.Interactions;
 using Discord.Net;
 using Discord.Rest;
+using Fergun.Interactive;
 using LinqToDB;
 using Mewdeko.Common.Collections;
 using Mewdeko.Common.ModuleBehaviors;
@@ -41,6 +42,7 @@ public class CommandHandler : INService
     private readonly IDataConnectionFactory dbFactory;
     private readonly GuildSettingsService gss;
     private readonly InteractionService interactionService;
+    private readonly InteractiveService interactiveService;
     private readonly ILogger<CommandHandler> logger;
 
     /// <summary>
@@ -64,12 +66,14 @@ public class CommandHandler : INService
     public CommandHandler(DiscordShardedClient client, IDataConnectionFactory dbFactory, CommandService commandService,
         BotConfigService bss, Mewdeko bot, IServiceProvider services,
         InteractionService interactionService,
-        GuildSettingsService gss, EventHandler eventHandler, IDataCache cache, ILogger<CommandHandler> logger)
+        GuildSettingsService gss, EventHandler eventHandler, IDataCache cache, ILogger<CommandHandler> logger,
+        InteractiveService interactiveService)
     {
         this.interactionService = interactionService;
         this.gss = gss;
         this.cache = cache;
         this.logger = logger;
+        this.interactiveService = interactiveService;
         this.client = client;
         this.commandService = commandService;
         this.bss = bss;
@@ -417,6 +421,11 @@ public class CommandHandler : INService
                     return;
                 }
             }
+
+            // Ignore fergun interactions, getting tired of the cant find interaction handler crap
+            if (interactiveService.IsManaged(interaction))
+                return;
+
             // i hate discord
             // if (interaction is IComponentInteraction compInter
             //     && compInter.Message.Author.IsWebhook
