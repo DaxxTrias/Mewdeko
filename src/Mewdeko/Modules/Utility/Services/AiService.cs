@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -37,7 +37,12 @@ public class AiService : INService
         /// <summary>
         ///     Anthropic's Claude API provider.
         /// </summary>
-        Claude
+        Claude,
+
+        /// <summary>
+        /// x.AI's Grok API provider.
+        /// </summary>
+        Grok
     }
 
     private readonly AiClientFactory aiClientFactory;

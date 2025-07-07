@@ -1,4 +1,4 @@
-﻿using Discord.Interactions;
+using Discord.Interactions;
 using Mewdeko.Modules.Utility.Services;
 
 namespace Mewdeko.Common.Autocompleters;
@@ -39,6 +39,7 @@ public class AiModelAutoCompleter : AutocompleteHandler
             "Claude" => AiService.AiProvider.Claude,
             "OpenAI" => AiService.AiProvider.OpenAi,
             "Groq" => AiService.AiProvider.Groq,
+            "Grok" => AiService.AiProvider.Grok,
             _ => AiService.AiProvider.Claude
         };
         logger.LogInformation(provider.GetType().Name);

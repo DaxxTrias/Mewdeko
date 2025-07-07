@@ -1,4 +1,4 @@
-﻿namespace Mewdeko.Modules.Utility.Common;
+namespace Mewdeko.Modules.Utility.Common;
 
 /// <summary>
 ///     Base response class for AI providers.
@@ -181,6 +181,60 @@ public static class AiResponseParsers
     ///     Groq token usage structure.
     /// </summary>
     public class GroqUsage
+    {
+        /// <summary>
+        ///     Gets or sets tokens used in the prompt.
+        /// </summary>
+        public int PromptTokens { get; set; }
+
+        /// <summary>
+        ///     Gets or sets tokens used in the completion.
+        /// </summary>
+        public int CompletionTokens { get; set; }
+    }
+
+    /// <summary>
+    ///     Grok response structure.
+    /// </summary>
+    public class GrokResponse
+    {
+        /// <summary>
+        ///     Gets or sets available choices.
+        /// </summary>
+        public Choice[] Choices { get; set; }
+
+        /// <summary>
+        ///     Gets or sets token usage information.
+        /// </summary>
+        public GrokUsage Usage { get; set; }
+
+        /// <summary>
+        ///     Represents a choice in the response.
+        /// </summary>
+        public class Choice
+        {
+            /// <summary>
+            ///     Gets or sets the delta content.
+            /// </summary>
+            public Delta Delta { get; set; }
+        }
+
+        /// <summary>
+        ///     Content delta information.
+        /// </summary>
+        public class Delta
+        {
+            /// <summary>
+            ///     Gets or sets the actual content.
+            /// </summary>
+            public string Content { get; set; }
+        }
+    }
+
+    /// <summary>
+    ///     Grok token usage structure.
+    /// </summary>
+    public class GrokUsage
     {
         /// <summary>
         ///     Gets or sets tokens used in the prompt.
