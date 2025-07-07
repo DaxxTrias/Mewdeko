@@ -40,7 +40,7 @@ public class AiService : INService
         Claude,
 
         /// <summary>
-        /// x.AI's Grok API provider.
+        ///     x.AI's Grok API provider.
         /// </summary>
         Grok
     }
@@ -1003,6 +1003,7 @@ public class AiService : INService
             AiProvider.OpenAi => await FetchOpenAiModels(http, apiKey),
             AiProvider.Groq => await FetchGroqModels(http, apiKey),
             AiProvider.Claude => await FetchClaudeModels(http, apiKey),
+            AiProvider.Grok => await FetchGrokModels(http, apiKey),
             _ => throw new NotSupportedException($"Provider {provider} not supported")
         };
 
@@ -1021,6 +1022,22 @@ public class AiService : INService
             .Select(m => new AiModel
             {
                 Id = m.Id, Name = FormatModelName(m.Id), Provider = AiProvider.OpenAi
+            })
+            .ToList() ?? [];
+    }
+
+    private async Task<List<AiModel>> FetchGrokModels(HttpClient http, string apiKey)
+    {
+        http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+        var response = await http.GetFromJsonAsync<OpenAiModelsResponse>("https://api.grok.com/v1/models");
+
+        return response?.Data
+            .Where(m => m.Id.StartsWith("grok"))
+            .Select(m => new AiModel
+            {
+                Id = m.Id,
+                Name = FormatModelName(m.Id),
+                Provider = AiProvider.Grok
             })
             .ToList() ?? [];
     }

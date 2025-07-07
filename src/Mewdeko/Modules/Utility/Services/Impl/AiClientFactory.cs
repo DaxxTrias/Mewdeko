@@ -1,4 +1,4 @@
-﻿using System.Net.Http;
+using System.Net.Http;
 
 namespace Mewdeko.Modules.Utility.Services.Impl;
 
@@ -18,7 +18,9 @@ public class AiClientFactory : IAiClientFactory
         clients = new Dictionary<AiService.AiProvider, (IAiClient Client, IAiStreamParser Parser)>
         {
             [AiService.AiProvider.Claude] = (new ClaudeClient(httpClientFactory), new ClaudeStreamParser()),
-            [AiService.AiProvider.Groq] = (new GroqClient(httpClientFactory), new GroqStreamParser())
+            [AiService.AiProvider.Groq] = (new GroqClient(httpClientFactory), new GroqStreamParser()),
+            //[AiService.AiProvider.Grok] = (new GrokClient(), new GrokStreamParser()),
+            // [AiService.AiProvider.OpenAi] = (new OpenAiClient(), new OpenAiStreamParser()),
         };
     }
 

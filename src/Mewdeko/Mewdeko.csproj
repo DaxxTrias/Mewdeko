@@ -39,7 +39,6 @@
     <PackageReference Include="Figgle.Fonts" Version="0.6.2" />
     <PackageReference Include="FluentMigrator" Version="7.1.0" />
     <PackageReference Include="Google.Cloud.Vision.V1" Version="3.7.0" />
-    <PackageReference Include="grok.net" Version="2.0.0" />
     <PackageReference Include="GroqApiLibrary" Version="1.0.9" />
     <PackageReference Include="HarfBuzzSharp" Version="8.3.1.1" />
     <PackageReference Include="HarfBuzzSharp.NativeAssets.Linux" Version="8.3.1.1" />
