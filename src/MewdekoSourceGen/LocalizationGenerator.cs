@@ -2,10 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
-using System.Security;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Text;
 
 namespace MewdekoSourceGen;
@@ -34,11 +35,6 @@ public partial class LocalizationGenerator : IIncrementalGenerator
     /// </summary>
     private static readonly Regex LangFilePattern = new(@"responses\.(.+)\.json$");
 
-    private static readonly Regex InvalidCharsRegex = new(@"[^A-Za-z0-9_]");
-    private static readonly Regex StartsWithDigitRegex = new(@"^\d+");
-    private static readonly Regex ContainsDigitRegex = new(@"\d");
-    private static readonly Regex FormatArgsRegex = new(@"\{(\d+)\}");
-
     /// <summary>
     ///     Initializes the incremental source generator.
     /// </summary>
@@ -51,6 +47,7 @@ public partial class LocalizationGenerator : IIncrementalGenerator
     /// </remarks>
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
+
         // Register all response files (responses.*.json)
         var responseFiles = context.AdditionalTextsProvider
             .Where(file => LangFilePattern.IsMatch(file.Path));
@@ -62,7 +59,8 @@ public partial class LocalizationGenerator : IIncrementalGenerator
             var locale = match.Groups[1].Value;
             var content = text.GetText(cancelToken)?.ToString() ?? "{}";
             // Initialize empty dictionary if deserialization returns null
-            var responses = ParseJsonToDictionary(content);
+            var responses = JsonSerializer.Deserialize<Dictionary<string, string>>(content) ??
+                            new Dictionary<string, string>();
             return (locale, responses);
         });
 
@@ -89,50 +87,48 @@ public partial class LocalizationGenerator : IIncrementalGenerator
     private static SourceText GenerateSource(
         ImmutableArray<(string locale, Dictionary<string, string> responses)> allResponses)
     {
-        var sourceBuilder = new StringBuilder("""
+        var sourceBuilder = new StringBuilder(@"
+using System;
+using System.Globalization;
+using Mewdeko.Services.strings;
 
-                                              using System;
-                                              using System.Globalization;
-                                              using Mewdeko.Services.strings;
+namespace Mewdeko.Services.Strings
+{
+    /// <summary>
+    /// Provides strongly-typed access to localization strings.
+    /// Generated from responses.*.json files
+    /// </summary>
+    /// <remarks>
+    /// This class wraps the IBotStrings interface to provide:
+    /// - Strongly-typed access to localization keys
+    /// - Guild-specific language support
+    /// - Explicit culture specification
+    /// - Proper fallback behavior
+    /// </remarks>
+    public partial class GeneratedBotStrings
+    {
+        private readonly IBotStrings _strings;
+        private readonly ILocalization _localization;
 
-                                              namespace Mewdeko.Services.Strings
-                                              {
-                                                  /// <summary>
-                                                  /// Provides strongly-typed access to localization strings.
-                                                  /// Generated from responses.*.json files
-                                                  /// </summary>
-                                                  /// <remarks>
-                                                  /// This class wraps the IBotStrings interface to provide:
-                                                  /// - Strongly-typed access to localization keys
-                                                  /// - Guild-specific language support
-                                                  /// - Explicit culture specification
-                                                  /// - Proper fallback behavior
-                                                  /// </remarks>
-                                                  public partial class GeneratedBotStrings
-                                                  {
-                                                      private readonly IBotStrings _strings;
-                                                      private readonly ILocalization _localization;
+        /// <summary>
+        /// Initializes a new instance of the <see cref=""GeneratedBotStrings""/> class.
+        /// </summary>
+        /// <param name=""strings"">The bot strings service that provides localization.</param>
+        /// <param name=""localization"">The localization service that handles culture resolution.</param>
+        public GeneratedBotStrings(IBotStrings strings, ILocalization localization)
+        {
+            _strings = strings;
+            _localization = localization;
+        }
 
-                                                      /// <summary>
-                                                      /// Initializes a new instance of the <see cref="GeneratedBotStrings"/> class.
-                                                      /// </summary>
-                                                      /// <param name="strings">The bot strings service that provides localization.</param>
-                                                      /// <param name="localization">The localization service that handles culture resolution.</param>
-                                                      public GeneratedBotStrings(IBotStrings strings, ILocalization localization)
-                                                      {
-                                                          _strings = strings;
-                                                          _localization = localization;
-                                                      }
-
-                                                      /// <summary>
-                                                      /// Gets the appropriate culture info for the specified guild.
-                                                      /// </summary>
-                                                      /// <param name="guildId">The ID of the guild, or null for default culture.</param>
-                                                      /// <returns>The resolved CultureInfo for the guild or default.</returns>
-                                                      private CultureInfo GetCultureInfo(ulong? guildId = null) =>
-                                                          _localization.GetCultureInfo(guildId);
-
-                                              """);
+        /// <summary>
+        /// Gets the appropriate culture info for the specified guild.
+        /// </summary>
+        /// <param name=""guildId"">The ID of the guild, or null for default culture.</param>
+        /// <returns>The resolved CultureInfo for the guild or default.</returns>
+        private CultureInfo GetCultureInfo(ulong? guildId = null) =>
+            _localization.GetCultureInfo(guildId);
+");
 
         // Get all unique keys across all locales
         var allKeys = allResponses.SelectMany(x => x.responses.Keys).Distinct().OrderBy(x => x);
@@ -157,10 +153,10 @@ public partial class LocalizationGenerator : IIncrementalGenerator
             }
 
             // Get default (en-US) value for documentation
-            var defaultResponse = allResponses.FirstOrDefault(x => x.locale == "en-US").responses;
-            var defaultValue = defaultResponse != null && defaultResponse.ContainsKey(key)
-                ? defaultResponse[key]
-                : string.Empty;
+            var defaultValue = allResponses
+                .FirstOrDefault(x => x.locale == "en-US")
+                .responses
+                .GetValueOrDefault(key, string.Empty);
 
             var (paramCount, sequential) = AnalyzeStringParameters(defaultValue);
 
@@ -174,10 +170,8 @@ public partial class LocalizationGenerator : IIncrementalGenerator
             else if (sequential)
             {
                 // Sequential parameters
-                parametersList =
-                    $"ulong? guildId, {string.Join(", ", Enumerable.Range(0, paramCount).Select(i => $"object param{i}"))}";
-                argumentsList =
-                    $"new object[] {{ {string.Join(", ", Enumerable.Range(0, paramCount).Select(i => $"param{i}"))} }}";
+                parametersList = $"ulong? guildId, {string.Join(", ", Enumerable.Range(0, paramCount).Select(i => $"object param{i}"))}";
+                argumentsList = $"new object[] {{ {string.Join(", ", Enumerable.Range(0, paramCount).Select(i => $"param{i}"))} }}";
             }
             else
             {
@@ -191,28 +185,28 @@ public partial class LocalizationGenerator : IIncrementalGenerator
                     .Select(x => x.locale));
 
             // Escape any potential code-like content in the documentation
-            var escapedKey = SecurityElement.Escape(key);
+            var escapedKey = System.Security.SecurityElement.Escape(key);
             var escapedDefaultValue = SanitizeDocumentationValue(defaultValue);
-            var escapedSupportedLocales = SecurityElement.Escape(supportedLocales);
+            var escapedSupportedLocales = System.Security.SecurityElement.Escape(supportedLocales);
 
             sourceBuilder.AppendLine($"""
 
-                                              /// <summary>Gets the localized string for key "{escapedKey}"</summary>
-                                              /// <remarks>
-                                              /// Default (en-US): "{escapedDefaultValue}"
-                                              /// Available in locales: {escapedSupportedLocales}
-                                              /// Parameter count: {paramCount}
-                                              /// </remarks>
-                                              /// <param name="guildId">The guild ID for culture resolution, or null for default culture.</param>
-                                              {(paramCount > 0 ? (sequential
+                                      /// <summary>Gets the localized string for key "{escapedKey}"</summary>
+                                      /// <remarks>
+                                      /// Default (en-US): "{escapedDefaultValue}"
+                                      /// Available in locales: {escapedSupportedLocales}
+                                      /// Parameter count: {paramCount}
+                                      /// </remarks>
+                                      /// <param name="guildId">The guild ID for culture resolution, or null for default culture.</param>
+                                      {(paramCount > 0 ? (sequential
                                                       ? string.Join("\n        ", Enumerable.Range(0, paramCount).Select(i => $"/// <param name=\"param{i}\">Format parameter {i}</param>"))
                                                       : "/// <param name=\"data\">Optional format parameters</param>")
                                                   : "")}
-                                              /// <returns>The localized string with optional formatting applied.</returns>
-                                              public string {pascalCaseKey}({parametersList}) =>
-                                                  _strings.GetText(@"{key}", GetCultureInfo(guildId), {argumentsList});
+                                      /// <returns>The localized string with optional formatting applied.</returns>
+                                      public string {pascalCaseKey}({parametersList}) =>
+                                          _strings.GetText(@"{key}", GetCultureInfo(guildId), {argumentsList});
 
-                                      """);
+                              """);
         }
 
         sourceBuilder.AppendLine("    }"); // class close
@@ -223,17 +217,15 @@ public partial class LocalizationGenerator : IIncrementalGenerator
 
     private static (int count, bool sequential) AnalyzeStringParameters(string input)
     {
-        var matches = FormatArgsRegex.Matches(input);
+        var matches = Regex.Matches(input, @"\{(\d+)\}");
         if (matches.Count == 0)
             return (0, false);
 
-        var parameters = new List<int>();
-        foreach (Match match in matches)
-        {
-            parameters.Add(int.Parse(match.Groups[1].Value));
-        }
-
-        parameters = parameters.Distinct().OrderBy(x => x).ToList();
+        var parameters = matches
+            .Select(m => int.Parse(m.Groups[1].Value))
+            .Distinct()
+            .OrderBy(x => x)
+            .ToList();
 
         var sequential = parameters.Count > 0 &&
                          parameters[0] == 0 &&
@@ -247,82 +239,19 @@ public partial class LocalizationGenerator : IIncrementalGenerator
         // List of C# reserved keywords
         var reservedKeywords = new HashSet<string>
         {
-            "abstract",
-            "as",
-            "base",
-            "bool",
-            "break",
-            "byte",
-            "case",
-            "catch",
-            "char",
-            "checked",
-            "class",
-            "const",
-            "continue",
-            "decimal",
-            "default",
-            "delegate",
-            "do",
-            "double",
-            "else",
-            "enum",
-            "event",
-            "explicit",
-            "extern",
-            "false",
-            "finally",
-            "fixed",
-            "float",
-            "for",
-            "foreach",
-            "goto",
-            "if",
-            "implicit",
-            "in",
-            "int",
-            "interface",
-            "internal",
-            "is",
-            "lock",
-            "long",
-            "namespace",
-            "new",
-            "null",
-            "object",
-            "operator",
-            "out",
-            "override",
-            "params",
-            "private",
-            "protected",
-            "public",
-            "readonly",
-            "ref",
-            "return",
-            "sbyte",
-            "sealed",
-            "short",
-            "sizeof",
-            "stackalloc",
-            "static",
-            "string",
-            "struct",
-            "switch",
-            "this",
-            "throw",
-            "true",
-            "try",
-            "typeof",
-            "uint",
-            "ulong",
-            "unchecked",
-            "unsafe",
-            "ushort",
-            "using",
-            "virtual",
-            "void",
-            "volatile",
+            "abstract", "as", "base", "bool", "break", "byte",
+            "case", "catch", "char", "checked", "class", "const",
+            "continue", "decimal", "default", "delegate", "do",
+            "double", "else", "enum", "event", "explicit", "extern",
+            "false", "finally", "fixed", "float", "for", "foreach",
+            "goto", "if", "implicit", "in", "int", "interface",
+            "internal", "is", "lock", "long", "namespace", "new",
+            "null", "object", "operator", "out", "override", "params",
+            "private", "protected", "public", "readonly", "ref",
+            "return", "sbyte", "sealed", "short", "sizeof", "stackalloc",
+            "static", "string", "struct", "switch", "this", "throw",
+            "true", "try", "typeof", "uint", "ulong", "unchecked",
+            "unsafe", "ushort", "using", "virtual", "void", "volatile",
             "while"
         };
 
@@ -331,21 +260,7 @@ public partial class LocalizationGenerator : IIncrementalGenerator
 
     private static bool IsValidIdentifier(string identifier)
     {
-        if (string.IsNullOrEmpty(identifier))
-            return false;
-
-        // Must start with letter or underscore
-        if (!char.IsLetter(identifier[0]) && identifier[0] != '_')
-            return false;
-
-        // Rest can be letters, digits, or underscores
-        for (var i = 1; i < identifier.Length; i++)
-        {
-            if (!char.IsLetterOrDigit(identifier[i]) && identifier[i] != '_')
-                return false;
-        }
-
-        return !IsReservedKeyword(identifier);
+        return SyntaxFacts.IsValidIdentifier(identifier) && !IsReservedKeyword(identifier);
     }
 
     private static string SanitizeDocumentationValue(string input)
@@ -380,36 +295,9 @@ public partial class LocalizationGenerator : IIncrementalGenerator
         // Dictionary for number words
         var numberWords = new Dictionary<string, string>
         {
-            {
-                "0", "Zero"
-            },
-            {
-                "1", "One"
-            },
-            {
-                "2", "Two"
-            },
-            {
-                "3", "Three"
-            },
-            {
-                "4", "Four"
-            },
-            {
-                "5", "Five"
-            },
-            {
-                "6", "Six"
-            },
-            {
-                "7", "Seven"
-            },
-            {
-                "8", "Eight"
-            },
-            {
-                "9", "Nine"
-            }
+            {"0", "Zero"}, {"1", "One"}, {"2", "Two"}, {"3", "Three"},
+            {"4", "Four"}, {"5", "Five"}, {"6", "Six"}, {"7", "Seven"},
+            {"8", "Eight"}, {"9", "Nine"}
         };
 
         // Replace leading numbers with words
