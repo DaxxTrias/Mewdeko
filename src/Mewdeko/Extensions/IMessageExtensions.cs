@@ -44,7 +44,8 @@ public static class MessageExtensions
         {
             var eb = new NewEmbed
             {
-                Embeds = [], Components = []
+                Embeds = [],
+                Components = []
             };
             var embedList = new List<Embed>();
             var componentList = new List<NewEmbed.NewEmbedComponent>();
@@ -67,7 +68,9 @@ public static class MessageExtensions
                 {
                     e.Author = new Author
                     {
-                        Name = i.Author.Value.Name, Url = i.Author.Value.Url, IconUrl = i.Author.Value.IconUrl
+                        Name = i.Author.Value.Name,
+                        Url = i.Author.Value.Url,
+                        IconUrl = i.Author.Value.IconUrl
                     };
                 }
 
@@ -77,7 +80,9 @@ public static class MessageExtensions
                     {
                         e.Fields.Add(new Field
                         {
-                            Name = field.Name, Value = field.Value, Inline = field.Inline
+                            Name = field.Name,
+                            Value = field.Value,
+                            Inline = field.Inline
                         });
                     }
                 }
@@ -86,7 +91,8 @@ public static class MessageExtensions
                 {
                     e.Footer = new Footer
                     {
-                        Text = i.Footer.Value.Text, IconUrl = i.Footer.HasValue ? i.Footer.Value.IconUrl : ""
+                        Text = i.Footer.Value.Text,
+                        IconUrl = i.Footer.HasValue ? i.Footer.Value.IconUrl : ""
                     };
                 }
 
@@ -110,7 +116,7 @@ public static class MessageExtensions
 
                 if (i.Color.HasValue)
                 {
-                    e.Color = i.Color;
+                    e.Color = i.Color.Value.ToString(); // Fix: Convert Discord.Color to string using ToString()    
                 }
 
                 embedList.Add(e);
@@ -142,16 +148,19 @@ public static class MessageExtensions
                         {
                             var component = new NewEmbed.NewEmbedComponent
                             {
-                                IsSelect = true, DisplayName = select.Placeholder, Id = select.CustomId, Options = []
+                                IsSelect = true,
+                                DisplayName = select.Placeholder,
+                                Id = select.CustomId,
+                                Options = []
                             };
 
                             var optionList = select.Options.Select(option => new NewEmbed.NewEmbedSelectOption
-                                {
-                                    Description = option.Description,
-                                    Name = option.Label,
-                                    Id = option.Value,
-                                    Emoji = option.Emote?.ToString()
-                                })
+                            {
+                                Description = option.Description,
+                                Name = option.Label,
+                                Id = option.Value,
+                                Emoji = option.Emote?.ToString()
+                            })
                                 .ToList();
 
                             component.Options.AddRange(optionList);
