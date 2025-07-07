@@ -19,7 +19,9 @@ namespace DataModel
 		[Column("Id"       , IsPrimaryKey = true , IsIdentity = true, SkipOnInsert = true, SkipOnUpdate = true)] public int       Id        { get; set; } // integer
 		[Column("EmbedName"                                                                                   )] public string?   EmbedName { get; set; } // text
 		[Column("JsonCode" , CanBeNull    = false                                                             )] public string    JsonCode  { get; set; } = null!; // text
-		[Column("UserId"                                                                                      )] public ulong   UserId    { get; set; } // numeric(20,0)
+		[Column("UserId"                                                                                      )] public ulong     UserId    { get; set; } // numeric(20,0)
 		[Column("DateAdded"                                                                                   )] public DateTime? DateAdded { get; set; } // timestamp (6) without time zone
+		[Column("GuildId"                                                                                     )] public ulong?    GuildId   { get; set; } // numeric(20,0)
+		[Column("IsGuildShared"                                                                               )] public bool      IsGuildShared { get; set; } // boolean
 	}
 }

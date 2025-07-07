@@ -28582,3 +28582,69 @@ todofilter:
       desc: The value to filter by.
       type: string
       optional: true
+
+embedsave:
+  desc: Saves an embed template for personal use.
+  args:
+    - "name"
+    - "embedJson"
+  params:
+    - name: name
+      desc: The name of the embed template.
+      type: string
+      optional: false
+    - name: embedJson
+      desc: The JSON representation of the embed.
+      type: string
+      optional: false
+guildembedsave:
+  desc: Saves an embed template for guild use (requires ManageMessages permission).
+  args:
+    - "name"
+    - "embedJson"
+  params:
+    - name: name
+      desc: The name of the embed template.
+      type: string
+      optional: false
+    - name: embedJson
+      desc: The JSON representation of the embed.
+      type: string
+      optional: false
+embedlist:
+  desc: Lists all personal embed templates.
+  args:
+    - ""
+  params: [ ]
+guildembedlist:
+  desc: Lists all guild embed templates.
+  args:
+    - ""
+  params: [ ]
+embeddelete:
+  desc: Deletes a personal embed template.
+  args:
+    - "name"
+  params:
+    - name: name
+      desc: The name of the embed template to delete.
+      type: string
+      optional: false
+guildembeddelete:
+  desc: Deletes a guild embed template (requires ManageMessages permission).
+  args:
+    - "name"
+  params:
+    - name: name
+      desc: The name of the embed template to delete.
+      type: string
+      optional: false
+embedpreview:
+  desc: Previews an embed template.
+  args:
+    - "name"
+  params:
+    - name: name
+      desc: The name of the embed template to preview.
+      type: string
+      optional: false

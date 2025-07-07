@@ -344,12 +344,12 @@ public class MultiGreets(InteractiveService interactivity) : MewdekoModuleBase<M
     ///     Changes the message for a MultiGreet.
     /// </summary>
     /// <param name="id">The id of the MultiGreet to change</param>
-    /// <param name="message">The message to set</param>
+    /// <param name="embedTemplate">The message/embed template to set</param>
     [Cmd]
     [Aliases]
     [UserPerm(GuildPermission.Administrator)]
     [RequireContext(ContextType.Guild)]
-    public async Task MultiGreetMessage(int id, [Remainder] string? message = null)
+    public async Task MultiGreetMessage(int id, [Remainder] EmbedTemplateResult? embedTemplate = null)
     {
         var greet = (await Service.GetGreets(ctx.Guild.Id))?.ElementAtOrDefault(id - 1);
         if (greet is null)
@@ -361,7 +361,7 @@ public class MultiGreets(InteractiveService interactivity) : MewdekoModuleBase<M
             return;
         }
 
-        if (message is null)
+        if (embedTemplate is null)
         {
             var components = new ComponentBuilder()
                 .WithButton(Strings.Preview(ctx.Guild.Id), "preview")
@@ -386,14 +386,12 @@ public class MultiGreets(InteractiveService interactivity) : MewdekoModuleBase<M
                         await ctx.Channel
                             .SendMessageAsync(plainText ?? "", embeds: embedData, components: components2?.Build())
                             .ConfigureAwait(false);
-                    }
-                    else
-                    {
-                        await ctx.Channel.SendMessageAsync(content).ConfigureAwait(false);
                         return;
                     }
 
-                    break;
+                    await ctx.Channel.SendMessageAsync(content).ConfigureAwait(false);
+                    return;
+
                 case "regular":
                     await msg.DeleteAsync().ConfigureAwait(false);
                     await ctx.Channel.SendConfirmAsync(greet.Message).ConfigureAwait(false);
@@ -401,7 +399,7 @@ public class MultiGreets(InteractiveService interactivity) : MewdekoModuleBase<M
             }
         }
 
-        await Service.ChangeMgMessage(greet, message).ConfigureAwait(false);
+        await Service.ChangeMgMessage(greet, embedTemplate.ContentToStore).ConfigureAwait(false);
         await ctx.Channel.SendConfirmAsync(
             Strings.MultigreetMessageUpdated(ctx.Guild.Id, id)
         ).ConfigureAwait(false);

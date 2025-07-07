@@ -15,6 +15,11 @@ namespace Mewdeko.Modules.Patreon.Services;
 /// </summary>
 public class PatreonService : BackgroundService, INService, IReadyExecutor
 {
+    private static readonly JsonSerializerOptions CachedJsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
+
     private readonly PatreonApiClient apiClient;
     private readonly DiscordShardedClient client;
     private readonly IBotCredentials creds;
@@ -32,6 +37,7 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
     /// <param name="strings">The localized bot strings.</param>
     /// <param name="creds">The bot credentials.</param>
     /// <param name="apiClient">The Patreon API client.</param>
+    /// <param name="logger">Serilog logger.</param>
     public PatreonService(
         DiscordShardedClient client,
         IDataConnectionFactory db,
@@ -177,6 +183,25 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
         return (config.PatreonChannelId, config.PatreonMessage, config.PatreonAnnouncementDay,
             config.PatreonEnabled, config.PatreonLastAnnouncement, config.PatreonAccessToken,
             config.PatreonRefreshToken, config.PatreonCampaignId, config.PatreonTokenExpiry);
+    }
+
+    /// <summary>
+    ///     Gets the creator's identity information from Patreon
+    /// </summary>
+    public async Task<User?> GetCreatorIdentity(ulong guildId)
+    {
+        var config = await guildSettings.GetGuildConfig(guildId);
+
+        if (string.IsNullOrEmpty(config.PatreonAccessToken))
+        {
+            logger.LogWarning("No Patreon access token available for guild {GuildId}", guildId);
+            return null;
+        }
+
+        var userResponse = await apiClient.GetUserIdentityAsync(config.PatreonAccessToken);
+        if (userResponse?.Data != null) return userResponse.Data;
+        logger.LogWarning("Failed to get user identity for guild {GuildId}", guildId);
+        return null;
     }
 
     /// <summary>
@@ -400,44 +425,28 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
             await using var uow = await db.CreateConnectionAsync();
             var guildConfig = await uow.GuildConfigs.FirstOrDefaultAsync(x => x.GuildId == guildId);
 
-            if (guildConfig?.PatreonAccessToken == null || guildConfig.PatreonCampaignId == null)
+            if (guildConfig?.PatreonCampaignId == null)
             {
-                logger.LogWarning("No Patreon access token or campaign ID found for guild {GuildId}", guildId);
+                logger.LogWarning("No Patreon campaign ID found for guild {GuildId}", guildId);
                 return -1;
             }
 
-            // Check if token needs refreshing
-            if (guildConfig.PatreonTokenExpiry <= DateTime.UtcNow.AddMinutes(5))
+            // Ensure we have a valid token before proceeding
+            var accessToken = await EnsureValidTokenAsync(guildId);
+            if (accessToken == null)
             {
-                var refreshedToken = await RefreshTokenAsync(guildId);
-                if (refreshedToken == null)
-                {
-                    logger.LogError("Failed to refresh Patreon token for guild {GuildId}", guildId);
-                    return -1;
-                }
-
-                guildConfig.PatreonAccessToken = refreshedToken.AccessToken;
-                guildConfig.PatreonRefreshToken = refreshedToken.RefreshToken;
-                guildConfig.PatreonTokenExpiry = DateTime.UtcNow.AddSeconds(refreshedToken.ExpiresIn);
-
-                await uow.GuildConfigs
-                    .Where(x => x.GuildId == guildId)
-                    .UpdateAsync(x => new GuildConfig
-                    {
-                        PatreonAccessToken = guildConfig.PatreonAccessToken,
-                        PatreonRefreshToken = guildConfig.PatreonRefreshToken,
-                        PatreonTokenExpiry = guildConfig.PatreonTokenExpiry
-                    });
+                logger.LogError("Unable to get valid Patreon access token for guild {GuildId}", guildId);
+                return -1;
             }
 
-            var supporters = new List<PatreonMember>();
+            var supporters = new List<Member>();
             string? cursor = null;
 
             // Fetch all supporters with pagination
             do
             {
                 var response = await apiClient.GetCampaignMembersAsync(
-                    guildConfig.PatreonAccessToken,
+                    accessToken,
                     guildConfig.PatreonCampaignId,
                     cursor);
 
@@ -468,16 +477,16 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
                             GuildId = guildId,
                             PatreonUserId = supporter.Id,
                             DiscordUserId = 0, // Will be linked later via commands
-                            FullName = supporter.FullName ?? "Unknown",
-                            Email = supporter.Email,
+                            FullName = supporter.Attributes.FullName ?? "Unknown",
+                            Email = supporter.Attributes.Email,
                             TierId = GetCurrentTierId(supporter),
-                            AmountCents = supporter.CurrentlyEntitledAmountCents ?? 0,
-                            PatronStatus = supporter.PatronStatus ?? "unknown",
-                            PledgeRelationshipStart = ParseDateTime(supporter.PledgeRelationshipStart),
-                            LastChargeDate = ParseDateTime(supporter.LastChargeDate),
-                            LastChargeStatus = supporter.LastChargeStatus,
-                            LifetimeAmountCents = supporter.LifetimeSupportCents ?? 0,
-                            CurrentlyEntitledAmountCents = supporter.CurrentlyEntitledAmountCents ?? 0,
+                            AmountCents = supporter.Attributes.CurrentlyEntitledAmountCents ?? 0,
+                            PatronStatus = supporter.Attributes.PatronStatus ?? "unknown",
+                            PledgeRelationshipStart = supporter.Attributes.PledgeRelationshipStart,
+                            LastChargeDate = supporter.Attributes.LastChargeDate,
+                            LastChargeStatus = supporter.Attributes.LastChargeStatus,
+                            LifetimeAmountCents = supporter.Attributes.CampaignLifetimeSupportCents ?? 0,
+                            CurrentlyEntitledAmountCents = supporter.Attributes.CurrentlyEntitledAmountCents ?? 0,
                             LastUpdated = DateTime.UtcNow
                         };
 
@@ -491,21 +500,23 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
                             .Where(x => x.Id == existingSupporter.Id)
                             .UpdateAsync(x => new PatreonSupporter
                             {
-                                FullName = supporter.FullName ?? existingSupporter.FullName,
-                                Email = supporter.Email ?? existingSupporter.Email,
+                                FullName = supporter.Attributes.FullName ?? existingSupporter.FullName,
+                                Email = supporter.Attributes.Email ?? existingSupporter.Email,
                                 TierId = GetCurrentTierId(supporter),
-                                AmountCents = supporter.CurrentlyEntitledAmountCents ?? 0,
-                                PatronStatus = supporter.PatronStatus ?? existingSupporter.PatronStatus,
+                                AmountCents = supporter.Attributes.CurrentlyEntitledAmountCents ?? 0,
+                                PatronStatus = supporter.Attributes.PatronStatus ?? existingSupporter.PatronStatus,
                                 PledgeRelationshipStart =
-                                    ParseDateTime(supporter.PledgeRelationshipStart) ??
+                                    supporter.Attributes.PledgeRelationshipStart ??
                                     existingSupporter.PledgeRelationshipStart,
                                 LastChargeDate =
-                                    ParseDateTime(supporter.LastChargeDate) ?? existingSupporter.LastChargeDate,
-                                LastChargeStatus = supporter.LastChargeStatus ?? existingSupporter.LastChargeStatus,
+                                    supporter.Attributes.LastChargeDate ?? existingSupporter.LastChargeDate,
+                                LastChargeStatus =
+                                    supporter.Attributes.LastChargeStatus ?? existingSupporter.LastChargeStatus,
                                 LifetimeAmountCents =
-                                    supporter.LifetimeSupportCents ?? existingSupporter.LifetimeAmountCents,
+                                    supporter.Attributes.CampaignLifetimeSupportCents ??
+                                    existingSupporter.LifetimeAmountCents,
                                 CurrentlyEntitledAmountCents =
-                                    supporter.CurrentlyEntitledAmountCents ??
+                                    supporter.Attributes.CurrentlyEntitledAmountCents ??
                                     existingSupporter.CurrentlyEntitledAmountCents,
                                 LastUpdated = DateTime.UtcNow
                             });
@@ -544,7 +555,7 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
     /// </summary>
     /// <param name="guildId">Discord guild ID</param>
     /// <returns>New token response, or null if failed</returns>
-    public async Task<PatreonTokenResponse?> RefreshTokenAsync(ulong guildId)
+    public async Task<TokenResponse?> RefreshTokenAsync(ulong guildId)
     {
         try
         {
@@ -590,11 +601,11 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
     {
         logger.LogInformation("Starting full Patreon data sync for guild {GuildId}", guildId);
 
-        // Refresh token first to ensure all subsequent API calls are authenticated.
-        var refreshedToken = await RefreshTokenAsync(guildId);
-        if (refreshedToken == null)
+        // Ensure tokens are valid before syncing - this will auto-refresh if needed
+        var accessToken = await EnsureValidTokenAsync(guildId);
+        if (accessToken == null)
         {
-            logger.LogError("Could not refresh token for guild {GuildId}. Aborting full sync.", guildId);
+            logger.LogError("Could not get valid tokens for guild {GuildId}. Aborting full sync.", guildId);
             return;
         }
 
@@ -617,15 +628,21 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
             await using var uow = await db.CreateConnectionAsync();
             var guildConfig = await uow.GuildConfigs.FirstOrDefaultAsync(x => x.GuildId == guildId);
 
-            if (guildConfig?.PatreonAccessToken == null || guildConfig.PatreonCampaignId == null)
+            if (guildConfig?.PatreonCampaignId == null)
             {
-                logger.LogWarning("No Patreon access token or campaign ID found for tier/goal sync in guild {GuildId}",
-                    guildId);
+                logger.LogWarning("No Patreon campaign ID found for tier/goal sync in guild {GuildId}", guildId);
                 return -1;
             }
 
-            var campaignResponse =
-                await apiClient.GetCampaignAsync(guildConfig.PatreonAccessToken, guildConfig.PatreonCampaignId);
+            // Ensure we have a valid token before proceeding
+            var accessToken = await EnsureValidTokenAsync(guildId);
+            if (accessToken == null)
+            {
+                logger.LogError("Unable to get valid Patreon access token for guild {GuildId}", guildId);
+                return -1;
+            }
+
+            var campaignResponse = await apiClient.GetCampaignAsync(accessToken, guildConfig.PatreonCampaignId);
             if (campaignResponse?.Included == null)
             {
                 logger.LogWarning("Failed to fetch campaign data with includes for guild {GuildId}", guildId);
@@ -637,12 +654,11 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
 
             // Process Tiers
             var apiTiers = includedData.Where(x => x.Type == "tier").ToList();
-            foreach (var apiTierResource in apiTiers)
+            foreach (var apiTier in apiTiers
+                         .Select(apiTierResource => JsonSerializer.Serialize(apiTierResource, CachedJsonOptions))
+                         .Select(tierJson => JsonSerializer.Deserialize<Tier>(tierJson, CachedJsonOptions))
+                         .OfType<Tier>())
             {
-                var apiTier = new PatreonTierData
-                {
-                    Id = apiTierResource.Id, Attributes = apiTierResource.Attributes
-                };
                 var existingTier =
                     await uow.PatreonTiers.FirstOrDefaultAsync(x => x.GuildId == guildId && x.TierId == apiTier.Id);
                 if (existingTier == null)
@@ -651,75 +667,32 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
                     {
                         GuildId = guildId,
                         TierId = apiTier.Id,
-                        TierTitle = apiTier.Title ?? "Untitled Tier",
-                        AmountCents = apiTier.AmountCents ?? 0,
-                        Description = apiTier.Description,
-                        IsActive = apiTier.Published ?? false,
+                        TierTitle = apiTier.Attributes.Title ?? "Untitled Tier",
+                        AmountCents = apiTier.Attributes.AmountCents ?? 0,
+                        Description = apiTier.Attributes.Description,
+                        IsActive = apiTier.Attributes.Published ?? false,
                         DateAdded = DateTime.UtcNow
                     });
-                    updatedCount++;
                 }
                 else
                 {
                     await uow.PatreonTiers.Where(x => x.Id == existingTier.Id)
                         .UpdateAsync(x => new PatreonTier
                         {
-                            TierTitle = apiTier.Title ?? existingTier.TierTitle,
-                            AmountCents = apiTier.AmountCents ?? existingTier.AmountCents,
-                            Description = apiTier.Description ?? existingTier.Description,
-                            IsActive = apiTier.Published ?? existingTier.IsActive,
+                            TierTitle = apiTier.Attributes.Title ?? existingTier.TierTitle,
+                            AmountCents = apiTier.Attributes.AmountCents ?? existingTier.AmountCents,
+                            Description = apiTier.Attributes.Description ?? existingTier.Description,
+                            IsActive = apiTier.Attributes.Published ?? existingTier.IsActive,
                             DateAdded = DateTime.UtcNow
                         });
-                    updatedCount++;
                 }
+
+                updatedCount++;
             }
 
             logger.LogInformation("Updated {Count} tiers for guild {GuildId}", apiTiers.Count, guildId);
 
-            // Process Goals
-            var apiGoals = includedData.Where(x => x.Type == "goal").ToList();
-            foreach (var apiGoalResource in apiGoals)
-            {
-                var apiGoal = new PatreonGoalData
-                {
-                    Id = apiGoalResource.Id, Attributes = apiGoalResource.Attributes
-                };
-                var existingGoal =
-                    await uow.PatreonGoals.FirstOrDefaultAsync(x => x.GuildId == guildId && x.GoalId == apiGoal.Id);
-                if (existingGoal == null)
-                {
-                    await uow.InsertAsync(new PatreonGoal
-                    {
-                        GuildId = guildId,
-                        GoalId = apiGoal.Id,
-                        Title = apiGoal.Title ?? "Untitled Goal",
-                        Description = apiGoal.Description,
-                        AmountCents = apiGoal.AmountCents ?? 0,
-                        CompletedPercentage = apiGoal.CompletedPercentage ?? 0,
-                        CreatedAt = ParseDateTime(apiGoal.CreatedAt) ?? DateTime.UtcNow,
-                        ReachedAt = ParseDateTime(apiGoal.ReachedAt),
-                        IsActive = true,
-                        LastUpdated = DateTime.UtcNow
-                    });
-                    updatedCount++;
-                }
-                else
-                {
-                    await uow.PatreonGoals.Where(x => x.Id == existingGoal.Id)
-                        .UpdateAsync(x => new PatreonGoal
-                        {
-                            Title = apiGoal.Title ?? existingGoal.Title,
-                            Description = apiGoal.Description ?? existingGoal.Description,
-                            AmountCents = apiGoal.AmountCents ?? existingGoal.AmountCents,
-                            CompletedPercentage = apiGoal.CompletedPercentage ?? existingGoal.CompletedPercentage,
-                            ReachedAt = ParseDateTime(apiGoal.ReachedAt) ?? existingGoal.ReachedAt,
-                            LastUpdated = DateTime.UtcNow
-                        });
-                    updatedCount++;
-                }
-            }
-
-            logger.LogInformation("Updated {Count} goals for guild {GuildId}", apiGoals.Count, guildId);
+            // Goals are deprecated in Patreon API v2 - no longer processing them
 
             return updatedCount;
         }
@@ -761,18 +734,32 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
             .ToListAsync();
     }
 
+
     /// <summary>
-    ///     Gets Patreon goals for a guild
+    ///     Gets user identity information from Patreon API
     /// </summary>
     /// <param name="guildId">Discord guild ID</param>
-    /// <returns>List of goals</returns>
-    public async Task<List<PatreonGoal>> GetGoalsAsync(ulong guildId)
+    /// <returns>User identity data or null if failed</returns>
+    public async Task<User?> GetUserIdentityAsync(ulong guildId)
     {
-        await using var uow = await db.CreateConnectionAsync();
-        return await uow.PatreonGoals
-            .Where(x => x.GuildId == guildId && x.IsActive)
-            .OrderBy(x => x.AmountCents)
-            .ToListAsync();
+        try
+        {
+            var accessToken = await EnsureValidTokenAsync(guildId);
+            if (accessToken == null)
+            {
+                logger.LogError("Unable to get valid Patreon access token for user identity request in guild {GuildId}",
+                    guildId);
+                return null;
+            }
+
+            var response = await apiClient.GetUserIdentityAsync(accessToken);
+            return response?.Data;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error getting Patreon user identity for guild {GuildId}", guildId);
+            return null;
+        }
     }
 
     /// <summary>
@@ -1063,11 +1050,11 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
     /// </summary>
     /// <param name="supporter">Patreon supporter data</param>
     /// <returns>Current tier ID or null</returns>
-    private static string? GetCurrentTierId(PatreonMember supporter)
+    private static string? GetCurrentTierId(Member supporter)
     {
-        // This would need to be implemented based on the relationships data structure
-        // For now, return null as a placeholder
-        return null;
+        // Get the first entitled tier ID from relationships
+        var currentlyEntitledTiers = supporter.Relationships?.CurrentlyEntitledTiers?.Data;
+        return currentlyEntitledTiers?.FirstOrDefault()?.Id;
     }
 
     /// <summary>
@@ -1229,18 +1216,6 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
         }
     }
 
-    /// <summary>
-    ///     Parses ISO datetime string to DateTime
-    /// </summary>
-    /// <param name="dateString">ISO datetime string</param>
-    /// <returns>Parsed DateTime or null</returns>
-    private static DateTime? ParseDateTime(string? dateString)
-    {
-        if (string.IsNullOrEmpty(dateString))
-            return null;
-
-        return DateTime.TryParse(dateString, out var result) ? result : null;
-    }
 
     /// <summary>
     ///     Stores OAuth tokens and campaign information for a guild
@@ -1273,6 +1248,94 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
         catch (Exception ex)
         {
             logger.LogError(ex, "Error storing Patreon OAuth tokens for guild {GuildId}", guildId);
+            return false;
+        }
+    }
+
+    /// <summary>
+    ///     Ensures tokens are valid and refreshes them if needed before API operations
+    /// </summary>
+    /// <param name="guildId">Discord guild ID</param>
+    /// <returns>Valid access token or null if refresh failed</returns>
+    public async Task<string?> EnsureValidTokenAsync(ulong guildId)
+    {
+        try
+        {
+            await using var uow = await db.CreateConnectionAsync();
+            var guildConfig = await uow.GuildConfigs.FirstOrDefaultAsync(x => x.GuildId == guildId);
+
+            if (guildConfig?.PatreonAccessToken == null || guildConfig.PatreonRefreshToken == null)
+            {
+                logger.LogWarning("No Patreon tokens found for guild {GuildId}", guildId);
+                return null;
+            }
+
+            // Check if token needs refreshing (refresh 10 minutes before expiry)
+            if (guildConfig.PatreonTokenExpiry <= DateTime.UtcNow.AddMinutes(10))
+            {
+                logger.LogInformation("Patreon token for guild {GuildId} expires soon, refreshing...", guildId);
+
+                var refreshedToken = await RefreshTokenAsync(guildId);
+                if (refreshedToken == null)
+                {
+                    logger.LogError("Failed to refresh Patreon token for guild {GuildId}", guildId);
+                    return null;
+                }
+
+                return refreshedToken.AccessToken;
+            }
+
+            return guildConfig.PatreonAccessToken;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error ensuring valid token for guild {GuildId}", guildId);
+            return null;
+        }
+    }
+
+    /// <summary>
+    ///     Disconnects Patreon integration for a guild by clearing OAuth tokens while preserving configuration
+    /// </summary>
+    /// <param name="guildId">Discord guild ID</param>
+    /// <returns>True if disconnected successfully</returns>
+    public async Task<bool> DisconnectPatreonAsync(ulong guildId)
+    {
+        try
+        {
+            var config = await guildSettings.GetGuildConfig(guildId);
+
+            await using var uow = await db.CreateConnectionAsync();
+
+            // Clear OAuth tokens and campaign information only
+            // Preserve announcement settings, messages, channels, etc.
+            config.PatreonAccessToken = null;
+            config.PatreonRefreshToken = null;
+            config.PatreonCampaignId = null;
+            config.PatreonTokenExpiry = null;
+
+            await guildSettings.UpdateGuildConfig(guildId, config);
+
+            // Clear cached supporter/tier data since it needs fresh OAuth to re-sync
+            await uow.PatreonSupporters
+                .Where(x => x.GuildId == guildId)
+                .DeleteAsync();
+
+            await uow.PatreonTiers
+                .Where(x => x.GuildId == guildId)
+                .DeleteAsync();
+
+            await uow.PatreonGoals
+                .Where(x => x.GuildId == guildId)
+                .DeleteAsync();
+
+            logger.LogInformation("Successfully disconnected Patreon OAuth for guild {GuildId} (settings preserved)",
+                guildId);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error disconnecting Patreon integration for guild {GuildId}", guildId);
             return false;
         }
     }

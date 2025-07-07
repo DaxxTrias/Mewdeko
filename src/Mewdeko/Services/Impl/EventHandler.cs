@@ -13,10 +13,10 @@ public sealed class EventHandler : IDisposable
 {
     private readonly ConcurrentDictionary<string, CircuitBreaker> circuitBreakers = new();
     private readonly DiscordShardedClient client;
-    private readonly InteractionService interaction;
 
     // Metrics tracking
     private readonly ConcurrentDictionary<string, EventMetrics> eventMetrics = new();
+    private readonly InteractionService interaction;
     private readonly ILogger<EventHandler> logger;
     private readonly BatchedEventProcessor<SocketMessage> messageProcessor;
     private readonly Timer metricsResetTimer;
@@ -884,6 +884,8 @@ public sealed class EventHandler : IDisposable
 
                 try
                 {
+                    if (eventType.ToLower().Contains("intera"))
+                        Log.Information($"Executing Interaction Handler for {moduleName}");
                     using (perfService.Measure($"Event_{eventType}_{moduleName}"))
                     {
                         await ExecuteHandlerByEventType(eventType, handler, args).ConfigureAwait(false);

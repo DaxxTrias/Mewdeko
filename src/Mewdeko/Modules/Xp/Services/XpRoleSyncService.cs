@@ -141,8 +141,8 @@ public class XpRoleSyncService : INService
     {
         await using var db = await dbFactory.CreateConnectionAsync();
 
-        var usersWithXp = await db.UserXpStats
-            .Where(x => x.GuildId == guildId && x.Xp > 0)
+        var usersWithXp = await db.GuildUserXps
+            .Where(x => x.GuildId == guildId && x.TotalXp > 0)
             .ToListAsync();
 
         var roleRewards = await db.XpRoleRewards
@@ -198,7 +198,7 @@ public class XpRoleSyncService : INService
     /// <returns>A task representing the asynchronous operation with sync results.</returns>
     private async Task<UserRoleSyncResult> SyncUserRolesBatchAsync(
         IGuild guild,
-        UserXpStat userXp,
+        GuildUserXp userXp,
         BatchSyncData batchData,
         Dictionary<ulong, IGuildUser> memberDict,
         Dictionary<ulong, IRole> roleDict)
@@ -357,7 +357,7 @@ public class XpRoleSyncService : INService
 
         await using var db = await dbFactory.CreateConnectionAsync();
 
-        var userXp = await db.UserXpStats
+        var userXp = await db.GuildUserXps
             .FirstOrDefaultAsync(x => x.GuildId == guild.Id && x.UserId == userId);
 
         if (userXp == null)
@@ -394,7 +394,7 @@ public class XpRoleSyncService : INService
     /// <param name="userXp">The user's XP data.</param>
     /// <param name="roleRewards">The available role rewards for the guild.</param>
     /// <returns>A task representing the asynchronous operation with sync results.</returns>
-    private async Task<UserRoleSyncResult> SyncUserRolesInternalAsync(IGuild guild, UserXpStat userXp,
+    private async Task<UserRoleSyncResult> SyncUserRolesInternalAsync(IGuild guild, GuildUserXp userXp,
         List<XpRoleReward> roleRewards)
     {
         var result = new UserRoleSyncResult
@@ -472,7 +472,7 @@ public class BatchSyncData
     /// <summary>
     ///     List of users with XP in the guild.
     /// </summary>
-    public List<UserXpStat> UsersWithXp { get; set; } = new();
+    public List<GuildUserXp> UsersWithXp { get; set; } = new();
 
     /// <summary>
     ///     List of role rewards for the guild.
