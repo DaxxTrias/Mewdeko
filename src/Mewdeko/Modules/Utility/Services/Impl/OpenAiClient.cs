@@ -1,4 +1,6 @@
-﻿using System.Threading;
+using System.IO;
+using System.Net.Http;
+using System.Threading;
 using DataModel;
 using OpenAI.Chat;
 
@@ -9,6 +11,20 @@ namespace Mewdeko.Modules.Utility.Services.Impl;
 /// </summary>
 public class OpenAiClient : IAiClient
 {
+    // Define OpenAI model context windows from the documentation
+    private static readonly Dictionary<string, int> ModelContextLimits = new()
+    {
+        {
+            "GPT-4", 8192
+        },
+        {
+            "GPT-4o", 128000
+        },
+        {
+            "GPT-4.1", 1047576
+        },
+    };
+
     /// <summary>
     ///     Gets the AI provider type for this client.
     /// </summary>
@@ -28,22 +44,63 @@ public class OpenAiClient : IAiClient
     /// <param name="apiKey">The API key for authentication.</param>
     /// <param name="cancellationToken">Optional token to cancel the operation.</param>
     /// <returns>A stream containing the AI response.</returns>
-    public async Task<IAsyncEnumerable<string>> StreamResponseAsync(IEnumerable<AiMessage> messages, string model,
-        string apiKey, CancellationToken cancellationToken = default)
+    public async Task<IAsyncEnumerable<string>> StreamResponseAsync(
+        IEnumerable<AiMessage> messages, 
+        string model,
+        string apiKey, 
+        CancellationToken cancellationToken = default)
     {
-        await Task.CompletedTask;
-        var client = new ChatClient(model, apiKey);
+        var httpClient = new HttpClient();
+        var request = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/chat/completions");
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
 
-        var chatMessages = messages.Select<AiMessage, ChatMessage>(m => m.Role switch
+        var payload = new
         {
-            "user" => new UserChatMessage(m.Content),
-            "assistant" => new AssistantChatMessage(m.Content),
-            "system" => new SystemChatMessage(m.Content),
-            _ => throw new ArgumentException($"Unknown role: {m.Role}")
-        }).ToList();
+            model,
+            messages = messages.Select(m => new { role = m.Role, content = m.Content }),
+            stream = true
+        };
+        request.Content = new StringContent(System.Text.Json.JsonSerializer.Serialize(payload), System.Text.Encoding.UTF8, "application/json");
 
-        var completionUpdates = client.CompleteChatStreamingAsync(chatMessages, cancellationToken: cancellationToken);
+        // Use the static method to get the streaming JSON chunks
+        var stream = StreamChatCompletionsAsync(httpClient, request);
 
-        return completionUpdates.Select(update => update.ContentUpdate.FirstOrDefault()?.Text ?? "");
+        // Optionally, you can wrap this in Task.FromResult to match the signature
+        return await Task.FromResult(stream);
+    }
+
+    /// <summary>
+    ///     pre-parses the response from OpenAI's chat completions endpoint to filter out non-JSON elements
+    /// </summary>
+    /// <param name="httpClient"></param>
+    /// <param name="request"></param>
+    /// <returns></returns>
+    public static async IAsyncEnumerable<string> StreamChatCompletionsAsync(HttpClient httpClient, HttpRequestMessage request)
+    {
+        // Send request with streaming response
+        using var response = await httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+        response.EnsureSuccessStatusCode();
+        using var stream = await response.Content.ReadAsStreamAsync();
+        using var reader = new StreamReader(stream);
+
+        string? line;
+        while ((line = await reader.ReadLineAsync()) != null)
+        {
+            if (string.IsNullOrWhiteSpace(line))
+                continue;  // skip empty lines (SSE heartbeat or spacing)
+
+            if (line.StartsWith("data: [DONE]"))
+                break;    // end of stream detected – stop iteration
+
+            if (!line.StartsWith("data: "))
+                continue; // skip any line that doesn't begin with the expected prefix
+
+            // Trim the "data: " prefix to isolate the JSON content
+            var json = line.Substring("data: ".Length).Trim();
+            if (string.IsNullOrWhiteSpace(json))
+                continue;  // skip if nothing after prefix (just in case)
+
+            yield return json;  // yield the clean JSON string for parsing
+        }
     }
 }
