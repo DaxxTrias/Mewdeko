@@ -15,13 +15,13 @@ public class OpenAiClient : IAiClient
     private static readonly Dictionary<string, int> ModelContextLimits = new()
     {
         {
-            "GPT-4", 8192
+            "gpt-4", 8192
         },
         {
-            "GPT-4o", 128000
+            "gpt-4o", 128000
         },
         {
-            "GPT-4.1", 1047576
+            "gpt-4.1", 1047576
         },
     };
 

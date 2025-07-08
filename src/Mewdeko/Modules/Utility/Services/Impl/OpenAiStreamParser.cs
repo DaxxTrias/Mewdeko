@@ -56,7 +56,7 @@ namespace Mewdeko.Modules.Utility.Services.Impl
                     choices[0].TryGetProperty("finish_reason", out var finishReason))
                 {
                     // finish_reason is null for intermediate chunks, and a string (e.g. "stop") when done
-                    string reason = finishReason.ValueKind == JsonValueKind.Null ? null : finishReason.GetString();
+                    var reason = finishReason.ValueKind == JsonValueKind.Null ? null : finishReason.GetString();
                     if (!string.IsNullOrEmpty(reason))
                     {
                         Log.Information($"Stream finished with reason: {reason}");

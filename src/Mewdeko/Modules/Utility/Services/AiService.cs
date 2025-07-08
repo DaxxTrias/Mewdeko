@@ -362,7 +362,7 @@ public class AiService : INService
             if (string.IsNullOrEmpty(rawJson)) continue;
 
             // Log raw response for debugging
-            logger.LogInformation($"Claude raw response: {rawJson}");
+            logger.LogInformation($"{config.Provider} raw response: {rawJson}");
 
             // IMPORTANT: Parse the delta to extract just the content
             var contentDelta = streamParser.ParseDelta(rawJson, (AiProvider)config.Provider);
