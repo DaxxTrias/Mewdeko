@@ -362,7 +362,7 @@ public class AiService : INService
             if (string.IsNullOrEmpty(rawJson)) continue;
 
             // Log raw response for debugging
-            logger.LogInformation($"{config.Provider} raw response: {rawJson}");
+            logger.LogInformation($"{(AiProvider)config.Provider} raw response: {rawJson}");
 
             // IMPORTANT: Parse the delta to extract just the content
             var contentDelta = streamParser.ParseDelta(rawJson, (AiProvider)config.Provider);
@@ -501,6 +501,12 @@ public class AiService : INService
             {
                 // No template, just use the response directly
                 processedContent = aiResponse;
+            }
+
+            if (string.IsNullOrWhiteSpace(processedContent))
+            {
+                // If processedContent is blank, supply a default message so discord doesnt shit the bed with error 50035
+                processedContent = "[AI did not respond]";
             }
 
             // If we get here, either we don't have a JSON embed, or JSON parsing failed
