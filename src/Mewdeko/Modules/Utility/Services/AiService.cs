@@ -152,6 +152,7 @@ public class AiService : INService
 
         DiscordWebhookClient? webhook = null;
         ulong? webhookMessageId = null;
+        IUserMessage? processingMessage = null;
         if (!string.IsNullOrEmpty(config.WebhookUrl))
         {
             webhook = new DiscordWebhookClient(config.WebhookUrl);
@@ -165,7 +166,8 @@ public class AiService : INService
         }
         else
         {
-            await msg.Channel.SendConfirmAsync(strings.AiProcessingRequest(guildChannel.GuildId, msg.Author.Mention));
+            // Store the processing message so we can delete it later
+            processingMessage = await msg.Channel.SendConfirmAsync(strings.AiProcessingRequest(guildChannel.GuildId, msg.Author.Mention));
         }
 
         try
@@ -197,6 +199,18 @@ public class AiService : INService
         finally
         {
             webhook?.Dispose();
+            // Clean up the processing message if it exists and the response was successful
+            if (processingMessage != null)
+            {
+                try
+                {
+                    await processingMessage.DeleteAsync();
+                }
+                catch (Exception ex)
+                {
+                    logger.LogDebug(ex, "Failed to delete processing message");
+                }
+            }
         }
     }
 

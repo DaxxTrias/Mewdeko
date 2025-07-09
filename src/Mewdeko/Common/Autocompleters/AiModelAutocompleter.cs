@@ -40,7 +40,7 @@ public class AiModelAutoCompleter : AutocompleteHandler
             "OpenAI" => AiService.AiProvider.OpenAi,
             "Groq" => AiService.AiProvider.Groq,
             "Grok" => AiService.AiProvider.Grok,
-            _ => AiService.AiProvider.Claude
+            _ => AiService.AiProvider.OpenAi
         };
         logger.LogInformation(provider.GetType().Name);
 
