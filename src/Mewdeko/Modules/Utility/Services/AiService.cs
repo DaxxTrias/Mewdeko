@@ -368,9 +368,32 @@ public class AiService : INService
         }
 
         var timeout = DateTime.UtcNow.AddMinutes(1); // 1-minute timeout as a safety
+
+        // Filter out empty assistant messages
+        messagesToSend = messagesToSend
+            .Where(m => m.Role != "assistant" || !string.IsNullOrWhiteSpace(m.Content))
+            .ToList();
+
+        // Ensure last message is a user message (for current prompt)
+        if (messagesToSend.Count == 0 || messagesToSend.Last().Role != "user")
+        {
+            messagesToSend.Add(new AiMessage
+            {
+                ConversationId = convId,
+                Role = "user",
+                Content = userMsg.Content
+            });
+        }
+
+        //logger.LogInformation("Sending to AI provider. Messages: {Json}", JsonSerializer.Serialize(messagesToSend));
+
         var stream = await aiClient.StreamResponseAsync(messagesToSend, config.Model, config.ApiKey);
+
         await foreach (var rawJson in stream)
         {
+            // Ensure that rawJson is explicitly cast to a string before checking for null or empty
+            if (rawJson is string jsonString && string.IsNullOrEmpty(jsonString)) continue;
+
             if (string.IsNullOrEmpty(rawJson)) continue;
 
             // Log raw response for debugging

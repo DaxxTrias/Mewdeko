@@ -1,5 +1,7 @@
 using System.IO;
 using System.Net.Http;
+using System.Text;
+using System.Text.Json;
 using System.Threading;
 using DataModel;
 
@@ -54,13 +56,21 @@ public class OpenAiClient : IAiClient
         var request = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/chat/completions");
         request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
 
+        var openAiMessages = messages
+            .Where(m => !string.IsNullOrWhiteSpace(m.Content))
+            .Select(m => new { role = m.Role.ToLowerInvariant(), content = m.Content });
+
         var payload = new
         {
             model,
-            messages = messages.Select(m => new { role = m.Role, content = m.Content }),
+            messages = openAiMessages,
             stream = true
         };
-        request.Content = new StringContent(System.Text.Json.JsonSerializer.Serialize(payload), System.Text.Encoding.UTF8, "application/json");
+
+        request.Content = new StringContent(
+        JsonSerializer.Serialize(payload),
+        Encoding.UTF8,
+        "application/json");
 
         //var payloadJson = JsonSerializer.Serialize(payload);
         //// Add debug logging for the outgoing payload
