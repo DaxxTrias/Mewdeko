@@ -101,6 +101,9 @@ public class OpenAiClient : IAiClient
             if (string.IsNullOrWhiteSpace(json))
                 continue;  // skip if nothing after prefix (just in case)
 
+            // Add debug logging for each chunk received
+            //Serilog.Log.Information("OpenAI Stream Chunk: {Chunk}", json);
+
             yield return json;  // yield the clean JSON string for parsing
         }
     }

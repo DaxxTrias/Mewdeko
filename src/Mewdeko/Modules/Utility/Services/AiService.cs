@@ -303,6 +303,13 @@ public class AiService : INService
         var allMessages = conversation.AiMessages.ToList();
         allMessages.Add(userMessage);
 
+        // Log all messages before trimming for debugging
+        //logger.LogInformation("AI conversation messages before trimming (GuildId: {GuildId}, UserId: {UserId}):\n{Messages}",
+        //    config.GuildId,
+        //    userMsg.Author.Id,
+        //    string.Join("\n---\n", allMessages.Select(m => $"[{m.Role}] (Id: {m.Id}) {m.Content}"))
+        //);
+
         // Keep system message plus most recent messages
         var systemMessage = allMessages.FirstOrDefault(m => m.Role == "system");
         var nonSystemMessages = allMessages
