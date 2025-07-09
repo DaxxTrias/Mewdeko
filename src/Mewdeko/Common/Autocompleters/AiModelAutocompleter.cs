@@ -48,7 +48,7 @@ public class AiModelAutoCompleter : AutocompleteHandler
 
         if (string.IsNullOrEmpty(config.ApiKey))
             return AutocompletionResult.FromSuccess(
-                [new AutocompleteResult("No API key set for this provider", "none")]);
+                [new AutocompleteResult("No API key set for this provider. Set a key before trying to query models", "none")]);
 
         try
         {

@@ -1072,16 +1072,43 @@ public class AiService : INService
     private async Task<List<AiModel>> FetchOpenAiModels(HttpClient http, string apiKey)
     {
         http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
-        var response = await http.GetFromJsonAsync<OpenAiModelsResponse>("https://api.openai.com/v1/models");
+        try
+        {
+            var response = await http.GetAsync("https://api.openai.com/v1/models");
+            var content = await response.Content.ReadAsStringAsync();
 
-        return response?.Data
-            .Where(m => m.Id.StartsWith("gpt"))
-            .Select(m => new AiModel
+            if (!response.IsSuccessStatusCode)
             {
-                Id = m.Id, Name = FormatModelName(m.Id), Provider = AiProvider.OpenAi
-            })
-            .ToList() ?? [];
+                logger.LogError("OpenAI models fetch failed: {Status} {Content}", response.StatusCode, content);
+                return new List<AiModel>();
+            }
+
+            var openAiResponse = JsonSerializer.Deserialize<OpenAiModelsResponse>(content);
+
+            if (openAiResponse?.Data == null)
+            {
+                logger.LogError("OpenAI models fetch: Data field is null. Raw content: {Content}", content);
+                return new List<AiModel>();
+            }
+
+            return openAiResponse.Data
+                .Where(m => m.Id.StartsWith("gpt"))
+                .Select(m => new AiModel
+                {
+                    Id = m.Id,
+                    Name = FormatModelName(m.Id),
+                    Provider = AiProvider.OpenAi
+                })
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "OpenAI models fetch failed with exception");
+            return new List<AiModel>();
+        }
     }
+
+
 
     private async Task<List<AiModel>> FetchGrokModels(HttpClient http, string apiKey)
     {
@@ -1157,9 +1184,11 @@ public class AiService : INService
         public AiProvider Provider { get; set; }
     }
 
-    private record class OpenAiModelsResponse(List<OpenAiModel> Data);
+    private record class OpenAiModelsResponse(
+        [property: JsonPropertyName("data")] List<OpenAiModel> Data);
 
-    private record class OpenAiModel(string Id);
+    private record class OpenAiModel(
+        [property: JsonPropertyName("id")] string Id);
 
     private record class GroqModelsResponse(List<GroqModel> Data);
 
