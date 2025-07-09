@@ -238,6 +238,7 @@ public class AiService : INService
     private async Task StreamResponse(GuildAiConfig config, ulong? webhookMessageId, SocketMessage userMsg,
         DiscordWebhookClient? webhook)
     {
+        
         await using var db = await dbFactory.CreateConnectionAsync();
         var conversation = await db.AiConversations
             .LoadWithAsTable(x => x.AiMessages)
@@ -272,7 +273,9 @@ public class AiService : INService
             else
                 conversation = new AiConversation
                 {
-                    GuildId = config.GuildId, UserId = userMsg.Author.Id, AiMessages = []
+                    GuildId = config.GuildId,
+                    UserId = userMsg.Author.Id,
+                    AiMessages = []
                 };
             convId = await db.InsertWithInt32IdentityAsync(conversation);
             conversation.Id = convId;
@@ -285,7 +288,9 @@ public class AiService : INService
         // Create the user message object
         var userMessage = new AiMessage
         {
-            ConversationId = convId, Role = "user", Content = userMsg.Content
+            ConversationId = convId,
+            Role = "user",
+            Content = userMsg.Content
         };
 
         // Insert to database
@@ -403,7 +408,9 @@ public class AiService : INService
 
         await db.InsertAsync(new AiMessage
         {
-            ConversationId = convId, Role = "assistant", Content = responseBuilder.ToString()
+            ConversationId = convId,
+            Role = "assistant",
+            Content = responseBuilder.ToString()
         });
         config.TokensUsed += tokenCount;
         await db.UpdateAsync(config);
