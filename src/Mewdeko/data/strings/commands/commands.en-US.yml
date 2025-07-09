@@ -17117,9 +17117,10 @@ renameemote:
       type: string
       optional: false
 stealemotes:
-  desc: Steals emotes from a message and adds them to the server.
+  desc: Steals one or more emotes you mention. Alternatively If only one emote is stolen you can provide a custom name for it.
   args:
-    - text
+    - emote emote emote
+    - emote custom_name
   params:
     - &o425
       name: e
