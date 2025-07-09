@@ -3,6 +3,7 @@ using Mewdeko.Common.Attributes.InteractionCommands;
 using Mewdeko.Common.Autocompleters;
 using Mewdeko.Common.Modals;
 using Mewdeko.Modules.Utility.Services;
+using static Mewdeko.Modules.Utility.Services.AiService;
 
 namespace Mewdeko.Modules.Utility;
 
@@ -164,13 +165,18 @@ public partial class SlashUtility
         {
             var config = await Service.GetOrCreateConfig(ctx.Guild.Id);
 
+            // Get provider enum value and its integer index
+            var providerEnum = (AiProvider)config.Provider;
+            var providerIndex = (int)providerEnum;
+            var providerLabel = $"{providerEnum} ({providerIndex})";
+
             await ctx.Interaction.RespondAsync(embed: new EmbedBuilder()
                 .WithTitle(Strings.AiConfigTitle(ctx.Guild.Id))
                 .WithDescription(Strings.AiConfigDescription(
                     ctx.Guild.Id,
                     config.Enabled,
                     config.ChannelId,
-                    config.Provider,
+                    providerLabel,
                     config.Model ?? "Not Set",
                     config.TokensUsed))
                 .WithOkColor()
