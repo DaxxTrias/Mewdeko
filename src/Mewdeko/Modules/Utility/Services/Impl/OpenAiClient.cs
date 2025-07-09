@@ -2,7 +2,6 @@ using System.IO;
 using System.Net.Http;
 using System.Threading;
 using DataModel;
-using OpenAI.Chat;
 
 namespace Mewdeko.Modules.Utility.Services.Impl;
 
@@ -62,6 +61,12 @@ public class OpenAiClient : IAiClient
             stream = true
         };
         request.Content = new StringContent(System.Text.Json.JsonSerializer.Serialize(payload), System.Text.Encoding.UTF8, "application/json");
+
+        //var payloadJson = JsonSerializer.Serialize(payload);
+        //// Add debug logging for the outgoing payload
+        //Serilog.Log.Information("OpenAI Payload: {Payload}", payloadJson);
+
+        //request.Content = new StringContent(payloadJson, System.Text.Encoding.UTF8, "application/json");
 
         // Use the static method to get the streaming JSON chunks
         var stream = StreamChatCompletionsAsync(httpClient, request);
