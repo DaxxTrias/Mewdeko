@@ -22,43 +22,52 @@ namespace Mewdeko.Extensions
 
             using var inputStream = new MemoryStream(imgData);
             using var skiaStream = new SKManagedStream(inputStream);
-            using var bitmap = SKBitmap.Decode(skiaStream);
-            if (bitmap == null)
+
+            // Try to decode as animated image (GIF, APNG, WebP)
+            using var codec = SKCodec.Create(skiaStream);
+            if (codec == null)
                 throw new InvalidOperationException("Failed to decode image for compression.");
 
-            // Try JPEG first for best compression
-            var quality = 90;
-            byte[]? result = null;
-            while (quality >= 50)
+            var frameCount = codec.FrameCount;
+            var info = codec.Info;
+
+            // Only compress if single-frame
+            if (frameCount == 1)
             {
-                using var ms = new MemoryStream();
-                using (var image = SKImage.FromBitmap(bitmap))
-                using (var data = image.Encode(SKEncodedImageFormat.Jpeg, quality))
-                    data.SaveTo(ms);
-                if (ms.Length <= maxSize)
+                using var bitmap = SKBitmap.Decode(codec);
+                if (bitmap == null)
+                    throw new InvalidOperationException("Failed to decode image for compression.");
+
+                // Try PNG first to preserve transparency
+                using (var ms = new MemoryStream())
                 {
-                    result = ms.ToArray();
-                    break;
+                    using (var image = SKImage.FromBitmap(bitmap))
+                    using (var data = image.Encode(SKEncodedImageFormat.Png, 100))
+                        data.SaveTo(ms);
+                    if (ms.Length <= maxSize)
+                        return new MemoryStream(ms.ToArray());
                 }
-                quality -= 10;
-            }
 
-            // If JPEG didn't work, try PNG (lossless, but sometimes smaller for simple images)
-            if (result == null)
-            {
-                using var ms = new MemoryStream();
-                using (var image = SKImage.FromBitmap(bitmap))
-                using (var data = image.Encode(SKEncodedImageFormat.Png, 100))
-                    data.SaveTo(ms);
-                if (ms.Length <= maxSize)
-                    result = ms.ToArray();
-            }
+                // Try lossy WebP as fallback
+                var quality = 90;
+                while (quality >= 50)
+                {
+                    using var ms = new MemoryStream();
+                    using (var image = SKImage.FromBitmap(bitmap))
+                    using (var data = image.Encode(SKEncodedImageFormat.Webp, quality))
+                        data.SaveTo(ms);
+                    if (ms.Length <= maxSize)
+                        return new MemoryStream(ms.ToArray());
+                    quality -= 10;
+                }
 
-            // If still too large, throw
-            if (result == null || result.Length > maxSize)
                 throw new InvalidOperationException("Image could not be compressed under 256kb.");
-
-            return new MemoryStream(result);
+            }
+            else
+            {
+                // Multi-frame image: skip compression, return as-is (SkiaSharp doesnt support)
+                return new MemoryStream(imgData);
+            }
         }
     }
 }
