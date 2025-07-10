@@ -292,7 +292,6 @@ public partial class ServerManagement(IHttpClientFactory factory, BotConfigServi
             var emoteName = i.Name; // Default to the emote name
 
             // Define a pattern to find the emote in the message
-            //var pattern = $"<:{i.Name}:[0-9]+>";
             var pattern = $"<a?:{i.Name}:[0-9]+>";
             var match = Regex.Match(ctx.Message.Content, pattern);
 
@@ -310,9 +309,6 @@ public partial class ServerManagement(IHttpClientFactory factory, BotConfigServi
                 // Use the provided name only if there is exactly one emote and one potential name
                 if (parts.Length > 0)
                 {
-                    //emoteName = parts[0]; // Custom name provided by the user
-
-                    // newer newer code
                     var candidateName = parts[0];
                     // Validate Discord emote name: 2-32 chars, alphanumeric/underscore only
                     if (Regex.IsMatch(candidateName, @"^[a-zA-Z0-9_]{2,32}$"))
@@ -327,6 +323,17 @@ public partial class ServerManagement(IHttpClientFactory factory, BotConfigServi
                 .ConfigureAwait(false);
             var imgData = await sr.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
             var imgStream = imgData.ToStream();
+
+            try
+            {
+                imgStream = ImageCompressor.EnsureImageUnder256Kb(imgData);
+            }
+            catch (InvalidOperationException)
+            {
+                errored.Add($"Unable to add '{i.Name}'. Image could not be compressed under 256kb.");
+                continue;
+            }
+
             await using var _ = imgStream.ConfigureAwait(false);
             {
                 try
