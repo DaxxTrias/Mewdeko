@@ -22249,7 +22249,7 @@ convertlist:
   args:
     - ''
   params: [ ]
-convert:
+convertunits:
   desc: Converts a specified value from one unit to another.
   args:
     - text text number
@@ -22269,12 +22269,22 @@ convert:
       desc: The value to be converted.
       type: decimal
       optional: false
+convert:
+  desc: Converts media files to different formats. Usage with attached file.
+  args:
+    - text
+  params:
+    - &o560
+      name: targetFormat
+      desc: The format to convert to (e.g., gif, mp4, mp3, jpg, png)
+      type: string
+      optional: false
 convertlist_noparams:
   desc: Lists all available units that can be converted.
   args:
     - ''
   params: [ ]
-convert_string_string_decimal:
+convertunits_string_string_decimal:
   desc: Converts a specified value from one unit to another.
   args:
     - text text number
@@ -22282,12 +22292,18 @@ convert_string_string_decimal:
     - *o557
     - *o558
     - *o559
+convert_string:
+  desc: Converts media files to different formats. Usage with attached file.
+  args:
+    - text
+  params:
+    - *o560
 convertlist_noparams_1:
   desc: Contains commands for converting units from one system to another.
   args:
     - ''
   params: [ ]
-convert_string_string_decimal_1:
+convertunits_string_string_decimal_1:
   desc: Converts a specified value from one unit to another.
   args:
     - text text number
@@ -22295,12 +22311,18 @@ convert_string_string_decimal_1:
     - *o557
     - *o558
     - *o559
+convert_string_1:
+  desc: Converts media files to different formats. Usage with attached file.
+  args:
+    - text
+  params:
+    - *o560
 convertlist_noparams_2:
   desc: Contains commands for converting units from one system to another.
   args:
     - ''
   params: [ ]
-convert_string_string_decimal_2:
+convertunits_string_string_decimal_2:
   desc: Converts a specified value from one unit to another.
   args:
     - text text number
@@ -22308,6 +22330,12 @@ convert_string_string_decimal_2:
     - *o557
     - *o558
     - *o559
+convert_string_2:
+  desc: Converts media files to different formats. Usage with attached file.
+  args:
+    - text
+  params:
+    - *o560
 debugembed:
   desc: Parses the type of permission search.
   args:

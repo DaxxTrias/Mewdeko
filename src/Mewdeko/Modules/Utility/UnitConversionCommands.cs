@@ -41,7 +41,7 @@ public partial class Utility
         [Cmd]
         [Aliases]
         [Priority(0)]
-        public async Task Convert(string origin, string target, decimal value)
+        public async Task ConvertUnits(string origin, string target, decimal value)
         {
             var originUnit = Array.Find(Service.Units, x =>
                 x.Triggers.Select(y => y.ToUpperInvariant()).Contains(origin.ToUpperInvariant()));

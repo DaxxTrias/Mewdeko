@@ -891,6 +891,10 @@ considermessage:
   - considermsg
 convert:
   - convert
+convertunits:
+  - convertunits
+  - unitconvert
+  - units
 convertlist:
   - convertlist
 createcatandtxtchannels:

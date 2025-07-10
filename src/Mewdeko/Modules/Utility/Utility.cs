@@ -48,7 +48,8 @@ public partial class Utility(
     BotConfigService config,
     IDataConnectionFactory dbFactory,
     IDataCache cache,
-    ILogger<Utility> logger)
+    ILogger<Utility> logger,
+    MediaConversionService mediaConversionService)
     : MewdekoModuleBase<UtilityService>
 {
     /// <summary>
@@ -2007,6 +2008,286 @@ public partial class Utility(
     public async Task OwoIfy([Remainder] string input)
     {
         await ctx.Channel.SendMessageAsync(OwoServices.OwoIfy(input).SanitizeMentions(true)).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Converts media files to different formats. Usage: .convert format_to_convert_to (with attached file)
+    /// </summary>
+    /// <param name="targetFormat">The format to convert to (e.g., gif, mp4, mp3, jpg, png)</param>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    public async Task Convert([Remainder] string targetFormat)
+    {
+        if (string.IsNullOrWhiteSpace(targetFormat))
+        {
+            await ctx.Channel.SendErrorAsync(Strings.ConvertMediaNoFormat(ctx.Guild.Id, Config.ErrorEmote), Config)
+                .ConfigureAwait(false);
+            return;
+        }
+
+        var attachment = ctx.Message.Attachments.FirstOrDefault();
+        if (attachment == null)
+        {
+            await ctx.Channel.SendErrorAsync(Strings.ConvertMediaNoFile(ctx.Guild.Id, Config.ErrorEmote), Config)
+                .ConfigureAwait(false);
+            return;
+        }
+
+        // Security: Validate and sanitize the filename
+        if (!IsValidFilename(attachment.Filename))
+        {
+            await ctx.Channel
+                .SendErrorAsync(
+                    Strings.ConvertMediaError(ctx.Guild.Id, Config.ErrorEmote,
+                        Strings.ConvertMediaInvalidFilename(ctx.Guild.Id)), Config).ConfigureAwait(false);
+            return;
+        }
+
+        var inputExtension = Path.GetExtension(attachment.Filename).ToLower().TrimStart('.');
+        var outputExtension = targetFormat.ToLower().TrimStart('.');
+
+        // Security: Validate input file extension
+        var allowedInputFormats = new[]
+        {
+            "mp4", "gif", "mp3", "wav", "jpg", "jpeg", "png", "webp", "webm", "avi", "mov", "mkv", "flv", "m4a", "ogg",
+            "bmp", "tiff", "svg", "flac", "alac", "ape"
+        };
+        if (!allowedInputFormats.Contains(inputExtension))
+        {
+            await ctx.Channel
+                .SendErrorAsync(
+                    Strings.ConvertMediaError(ctx.Guild.Id, Config.ErrorEmote,
+                        Strings.ConvertMediaInputNotSupported(ctx.Guild.Id, inputExtension)), Config)
+                .ConfigureAwait(false);
+            return;
+        }
+
+        var supportedFormats = new[]
+        {
+            "mp4", "gif", "mp3", "wav", "jpg", "jpeg", "png", "webp", "webm", "avi", "mov", "mkv", "flv"
+        };
+
+        if (!supportedFormats.Contains(outputExtension))
+        {
+            await ctx.Channel
+                .SendErrorAsync(
+                    Strings.ConvertMediaUnsupported(ctx.Guild.Id, Config.ErrorEmote, outputExtension,
+                        string.Join(", ", supportedFormats)), Config).ConfigureAwait(false);
+            return;
+        }
+
+        if (attachment.Size > 100 * 1024 * 1024) // 100MB limit
+        {
+            await ctx.Channel.SendErrorAsync(Strings.ConvertMediaTooLarge(ctx.Guild.Id, Config.ErrorEmote), Config)
+                .ConfigureAwait(false);
+            return;
+        }
+
+        // Create conversion request
+        var request = new ConversionRequest
+        {
+            FileUrl = attachment.Url,
+            InputExtension = inputExtension,
+            OutputExtension = outputExtension,
+            OriginalFilename = attachment.Filename,
+            GuildId = ctx.Guild.Id
+        };
+
+        // Enqueue the conversion and get queue info
+        var (queuePosition, estimatedWait) = mediaConversionService.EnqueueConversion(request);
+        var (queueLength, activeConversions) = mediaConversionService.GetQueueStats();
+
+        // Send queue status message
+        var queueMessage = queuePosition == 1 && activeConversions < 8
+            ? Strings.ConvertMediaProcessingNow(ctx.Guild.Id, Config.LoadingEmote)
+            : Strings.ConvertMediaQueued(ctx.Guild.Id, Config.LoadingEmote, queuePosition, estimatedWait.TotalSeconds,
+                activeConversions);
+
+        var queueEmbed = new EmbedBuilder()
+            .WithColor(Mewdeko.OkColor)
+            .WithDescription(queueMessage)
+            .Build();
+
+        await ctx.Channel.SendMessageAsync(embed: queueEmbed).ConfigureAwait(false);
+
+        // Wait for the conversion to complete
+        using var typing = ctx.Channel.EnterTypingState();
+
+        try
+        {
+            var result = await request.CompletionSource.Task.ConfigureAwait(false);
+
+            if (!result.Success)
+            {
+                var errorMessage = result.Error switch
+                {
+                    "CONVERSION_TIMEOUT" => Strings.ConvertMediaTimeout(ctx.Guild.Id, Config.ErrorEmote),
+                    "NO_OUTPUT_FILE" => Strings.ConvertMediaNoOutput(ctx.Guild.Id, Config.ErrorEmote),
+                    "FILE_TOO_LARGE" => Strings.ConvertMediaDiscordLimit(ctx.Guild.Id, Config.ErrorEmote),
+                    var error when error.StartsWith("CONVERSION_FAILED|") =>
+                        Strings.ConvertMediaFailed(ctx.Guild.Id, Config.ErrorEmote, error.Split('|')[1]),
+                    var error when error.StartsWith("GENERAL_ERROR|") =>
+                        Strings.ConvertMediaError(ctx.Guild.Id, Config.ErrorEmote, error.Split('|')[1]),
+                    _ => Strings.ConvertMediaError(ctx.Guild.Id, Config.ErrorEmote, result.Error)
+                };
+                await ctx.Channel.SendErrorAsync(errorMessage, Config).ConfigureAwait(false);
+                return;
+            }
+
+            // Use original filename for Discord upload (sanitized)
+            var originalBaseName = SanitizeFilename(Path.GetFileNameWithoutExtension(attachment.Filename));
+            var outputFilename = originalBaseName + "." + outputExtension;
+
+            // Create success embed
+            var successMessage =
+                Strings.ConvertMediaSuccess(ctx.Guild.Id, Config.SuccessEmote, inputExtension, outputExtension);
+            if (IsLosslessToLossyConversion(inputExtension, outputExtension))
+            {
+                successMessage += GetLosslessToLossyEasterEgg(ctx.Guild.Id);
+            }
+
+            var embed = new EmbedBuilder()
+                .WithColor(Mewdeko.OkColor)
+                .WithDescription(successMessage)
+                .Build();
+
+            // Send the converted file with embed
+            using var stream = new MemoryStream(result.Data);
+            await ctx.Channel.SendFileAsync(stream, outputFilename, embed: embed).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            await ctx.Channel
+                .SendErrorAsync(Strings.ConvertMediaError(ctx.Guild.Id, Config.ErrorEmote, ex.Message), Config)
+                .ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    ///     Validates that a filename is safe and not malicious
+    /// </summary>
+    /// <param name="filename">The filename to validate</param>
+    /// <returns>True if the filename is safe, false otherwise</returns>
+    private static bool IsValidFilename(string filename)
+    {
+        if (string.IsNullOrWhiteSpace(filename))
+            return false;
+
+        // Check filename length (Discord max is 256, but we'll be more restrictive)
+        if (filename.Length > 200)
+            return false;
+
+        // Get just the filename part (no directories)
+        var fileName = Path.GetFileName(filename);
+        if (string.IsNullOrWhiteSpace(fileName))
+            return false;
+
+        // Check for path traversal attempts
+        if (filename.Contains("..") || filename.Contains("./") || filename.Contains(".\\"))
+            return false;
+
+        // Check for null bytes
+        if (filename.Contains('\0'))
+            return false;
+
+        // Check for Windows reserved names
+        var nameWithoutExt = Path.GetFileNameWithoutExtension(fileName).ToUpperInvariant();
+        var reservedNames = new[]
+        {
+            "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9", "LPT1",
+            "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"
+        };
+        if (reservedNames.Contains(nameWithoutExt))
+            return false;
+
+        // Check for dangerous characters
+        var invalidChars = Path.GetInvalidFileNameChars().Concat([
+            '<', '>', ':', '"', '|', '?', '*', ';', '&', '$', '`'
+        ]).ToArray();
+        if (filename.IndexOfAny(invalidChars) >= 0)
+            return false;
+
+        // Check for excessive dots or weird patterns
+        if (filename.StartsWith('.') || filename.EndsWith('.') || filename.Contains("..."))
+            return false;
+
+        return true;
+    }
+
+    /// <summary>
+    ///     Sanitizes a filename by removing or replacing dangerous characters
+    /// </summary>
+    /// <param name="filename">The filename to sanitize</param>
+    /// <returns>A safe filename</returns>
+    private static string SanitizeFilename(string filename)
+    {
+        if (string.IsNullOrWhiteSpace(filename))
+            return "converted_file";
+
+        // Remove dangerous characters
+        var invalidChars = Path.GetInvalidFileNameChars().Concat(new[]
+        {
+            '<', '>', ':', '"', '|', '?', '*', ';', '&', '$', '`', '.'
+        }).ToArray();
+        var sanitized = string.Join("_", filename.Split(invalidChars, StringSplitOptions.RemoveEmptyEntries));
+
+        // Ensure it's not empty after sanitization
+        if (string.IsNullOrWhiteSpace(sanitized))
+            return "converted_file";
+
+        // Truncate if too long
+        if (sanitized.Length > 50)
+            sanitized = sanitized[..50];
+
+        // Ensure it doesn't end with whitespace
+        sanitized = sanitized.Trim();
+
+        return string.IsNullOrWhiteSpace(sanitized) ? "converted_file" : sanitized;
+    }
+
+    /// <summary>
+    ///     Checks if the conversion is from a lossless audio format to a lossy one
+    /// </summary>
+    /// <param name="inputExt">Input file extension</param>
+    /// <param name="outputExt">Output file extension</param>
+    /// <returns>True if converting from lossless to lossy audio</returns>
+    private static bool IsLosslessToLossyConversion(string inputExt, string outputExt)
+    {
+        var losslessFormats = new[]
+        {
+            "wav", "flac", "aiff", "alac", "ape", "wv"
+        };
+        var lossyFormats = new[]
+        {
+            "mp3", "aac", "ogg", "m4a", "wma"
+        };
+
+        return losslessFormats.Contains(inputExt.ToLower()) && lossyFormats.Contains(outputExt.ToLower());
+    }
+
+    /// <summary>
+    ///     Returns a random localized easter egg message for lossless to lossy audio conversion
+    /// </summary>
+    /// <param name="guildId">Guild ID for localization</param>
+    /// <returns>Easter egg message</returns>
+    private string GetLosslessToLossyEasterEgg(ulong guildId)
+    {
+        var random = new Random();
+        var messageIndex = random.Next(1, 9); // We have 8 messages (1-8)
+
+        return messageIndex switch
+        {
+            1 => Strings.ConvertLosslessToLossyOne(guildId),
+            2 => Strings.ConvertLosslessToLossyTwo(guildId),
+            3 => Strings.ConvertLosslessToLossyThree(guildId),
+            4 => Strings.ConvertLosslessToLossyFour(guildId),
+            5 => Strings.ConvertLosslessToLossyFive(guildId),
+            6 => Strings.ConvertLosslessToLossySix(guildId),
+            7 => Strings.ConvertLosslessToLossySeven(guildId),
+            8 => Strings.ConvertLosslessToLossyEight(guildId),
+            _ => Strings.ConvertLosslessToLossyOne(guildId)
+        };
     }
 
     /// <summary>
