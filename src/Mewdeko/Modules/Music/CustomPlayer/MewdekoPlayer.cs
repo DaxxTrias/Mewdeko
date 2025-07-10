@@ -160,9 +160,8 @@ public sealed class MewdekoPlayer : LavalinkPlayer
         var currentTrack = await cache.GetCurrentTrack(GuildId);
         var musicChannel = await GetMusicChannel();
 
-        // Create now playing display and component buttons
+        // Create now playing display with integrated control buttons
         var nowPlayingComponents = await PrettyNowPlayingAsync(queue);
-        var controlComponents = CreatePlayerControls();
 
         var message = await musicChannel.SendMessageAsync(components: nowPlayingComponents,
             flags: MessageFlags.ComponentsV2, allowedMentions: AllowedMentions.None);
@@ -215,31 +214,6 @@ public sealed class MewdekoPlayer : LavalinkPlayer
                 await SetAutoPlay(0);
             }
         }
-    }
-
-    /// <summary>
-    ///     Creates the player control buttons.
-    /// </summary>
-    /// <returns>Built component collection.</returns>
-    private MessageComponent CreatePlayerControls()
-    {
-        var isPaused = State == PlayerState.Paused;
-
-        return new ComponentBuilder()
-            // Row 1 - Main controls
-            .WithButton(customId: $"music:prev:{GuildId}", emote: new Emoji("⏮️"), style: ButtonStyle.Secondary)
-            .WithButton(customId: $"music:playpause:{GuildId}", emote: new Emoji(isPaused ? "▶️" : "⏸️"),
-                style: ButtonStyle.Primary)
-            .WithButton(customId: $"music:next:{GuildId}", emote: new Emoji("⏭️"), style: ButtonStyle.Secondary)
-            .WithButton(customId: $"music:stop:{GuildId}", emote: new Emoji("⏹️"), style: ButtonStyle.Danger)
-            // Row 2 - Additional controls
-            .WithButton(customId: $"music:loop:{GuildId}", emote: new Emoji("🔁"), style: ButtonStyle.Secondary, row: 1)
-            .WithButton(customId: $"music:volume_down:{GuildId}", emote: new Emoji("🔉"), style: ButtonStyle.Secondary,
-                row: 1)
-            .WithButton(customId: $"music:volume_up:{GuildId}", emote: new Emoji("🔊"), style: ButtonStyle.Secondary,
-                row: 1)
-            .WithButton(customId: $"music:queue:{GuildId}", label: "Queue", style: ButtonStyle.Secondary, row: 1)
-            .Build();
     }
 
 
@@ -347,19 +321,18 @@ public sealed class MewdekoPlayer : LavalinkPlayer
         var color = GetColorForPercentage(position.TotalMilliseconds / duration.TotalMilliseconds);
         var containerComponents = new List<IMessageComponentBuilder>();
 
-        // Add title
+        // Clean header without extra emojis
         containerComponents.Add(new TextDisplayBuilder()
-            .WithContent($"# Now Playing {GetRepeatEmoji()}"));
+            .WithContent("# Now Playing"));
 
         containerComponents.Add(new SeparatorBuilder());
 
         // Main track info section with artwork
         var trackSection = new SectionBuilder()
             .WithComponents([
-                new TextDisplayBuilder($"### [{currentTrack.Track.Title}]({currentTrack.Track.Uri})\n" +
-                                       $"**Artist:** {currentTrack.Track.Author}\n" +
-                                       $"**Source:** {currentTrack.Track.Provider}\n" +
-                                       $"**Requested by:** {currentTrack.Requester.Username}")
+                new TextDisplayBuilder($"## [{currentTrack.Track.Title}]({currentTrack.Track.Uri})\n" +
+                                       $"{currentTrack.Track.Author}\n" +
+                                       $"🎵 {currentTrack.Track.Provider} • 👤 {currentTrack.Requester.Username}")
             ]);
 
         if (currentTrack.Track.ArtworkUri != null)
@@ -375,26 +348,47 @@ public sealed class MewdekoPlayer : LavalinkPlayer
         containerComponents.Add(trackSection);
         containerComponents.Add(new SeparatorBuilder());
 
-        // Progress info
+        // Progress bar section - spans full width
         containerComponents.Add(new TextDisplayBuilder()
-            .WithContent($"**Progress:** {progressBar}\n" +
-                         $"`{position:hh\\:mm\\:ss}/{duration:hh\\:mm\\:ss} ({percentage:F1}%)`"));
+            .WithContent($"`{position:mm\\:ss}` {progressBar} `{duration:mm\\:ss}`"));
 
         containerComponents.Add(new SeparatorBuilder());
 
-        // Player stats
-        containerComponents.Add(new TextDisplayBuilder()
-            .WithContent(
-                $"**Volume:** {Volume * 100}% | **Track:** {currentTrack.Index} of {queue.Count} | **Repeat:** {await GetRepeatType()}"));
+        // Main playback controls row
+        var isPaused = State == PlayerState.Paused;
+        var mainControlsRow = new ActionRowBuilder()
+            .WithButton(customId: $"music:loop:{GuildId}", emote: new Emoji("🔁"), style: ButtonStyle.Secondary)
+            .WithButton(customId: $"music:prev:{GuildId}", emote: new Emoji("⏮️"), style: ButtonStyle.Secondary)
+            .WithButton(customId: $"music:playpause:{GuildId}", emote: new Emoji(isPaused ? "▶️" : "⏸️"),
+                style: ButtonStyle.Primary)
+            .WithButton(customId: $"music:next:{GuildId}", emote: new Emoji("⏭️"), style: ButtonStyle.Secondary)
+            .WithButton(customId: $"music:stop:{GuildId}", emote: new Emoji("⏹️"), style: ButtonStyle.Danger);
 
-        // Active effects if any
+        containerComponents.Add(mainControlsRow);
+        containerComponents.Add(new SeparatorBuilder());
+
+        // Enhanced footer with more detailed information
         var activeEffects = GetActiveEffects();
-        if (activeEffects.Any())
-        {
-            containerComponents.Add(new SeparatorBuilder());
-            containerComponents.Add(new TextDisplayBuilder()
-                .WithContent($"**Active Effects:** {string.Join(", ", activeEffects)}"));
-        }
+        var effectsText = activeEffects.Any() ? $" • 🎛️ {string.Join(", ", activeEffects)}" : "";
+        var repeatEmoji = GetRepeatEmoji();
+        var volumeEmoji = GetVolumeEmoji();
+        var repeatText = repeatEmoji != "" ? $" • {repeatEmoji} Repeat" : "";
+
+        var footerText =
+            $"{volumeEmoji} **{Volume * 100:0}%** • 📑 **{currentTrack.Index}** of **{queue.Count}**{repeatText}{effectsText}";
+
+        containerComponents.Add(new TextDisplayBuilder()
+            .WithContent(footerText));
+
+        // Secondary controls at the bottom
+        containerComponents.Add(new SeparatorBuilder());
+
+        var secondaryControlsRow = new ActionRowBuilder()
+            .WithButton(customId: $"music:volume_down:{GuildId}", emote: new Emoji("🔉"), style: ButtonStyle.Secondary)
+            .WithButton(customId: $"music:volume_up:{GuildId}", emote: new Emoji("🔊"), style: ButtonStyle.Secondary)
+            .WithButton(customId: $"music:queue:{GuildId}", label: "View Queue", style: ButtonStyle.Secondary);
+
+        containerComponents.Add(secondaryControlsRow);
 
         // Create the main container
         var mainContainer = new ContainerBuilder()
@@ -474,31 +468,37 @@ public sealed class MewdekoPlayer : LavalinkPlayer
         };
     }
 
+    private string GetVolumeEmoji()
+    {
+        var volume = Volume * 100;
+        return volume switch
+        {
+            0 => "🔇",
+            <= 33 => "🔈",
+            <= 67 => "🔉",
+            _ => "🔊"
+        };
+    }
+
     private (string Bar, double Percentage) CreateProgressBar(TimeSpan position, TimeSpan duration)
     {
-        const int barLength = 25;
+        const int barLength = 20;
         var progress = position.TotalMilliseconds / duration.TotalMilliseconds;
         var progressBarPosition = (int)(progress * barLength);
         var percentage = progress * 100;
 
         var bar = new StringBuilder();
 
-        // Add start cap
-        bar.Append('╠');
-
-        // Build progress bar
+        // Build progress bar with cleaner style
         for (var i = 0; i < barLength; i++)
         {
             if (i == progressBarPosition)
-                bar.Append("🔘");
+                bar.Append("●"); // Current position indicator
             else if (i < progressBarPosition)
-                bar.Append('═');
+                bar.Append("━"); // Completed portion
             else
-                bar.Append('─');
+                bar.Append("─"); // Remaining portion
         }
-
-        // Add end cap
-        bar.Append('╣');
 
         return (bar.ToString(), percentage);
     }
