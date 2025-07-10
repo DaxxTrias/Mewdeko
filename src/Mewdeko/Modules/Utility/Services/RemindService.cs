@@ -181,6 +181,7 @@ public partial class RemindService : INService
             ChannelId = targetId,
             IsPrivate = isPrivate,
             When = time,
+            DateAdded = DateTime.UtcNow,
             Message = message,
             UserId = userId,
             ServerId = serverId ?? 0
