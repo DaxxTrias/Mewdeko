@@ -169,7 +169,7 @@ public sealed class MewdekoPlayer : LavalinkPlayer
         }
 
         // Create embed and component buttons
-        var embed = await PrettyNowPlayingAsync(queue);
+        var embed = await PrettyNowPlayingAsync(queue, true);
         var components = CreatePlayerControls();
 
         var message = await musicChannel.SendMessageAsync(embed: embed, components: components);
@@ -343,7 +343,7 @@ public sealed class MewdekoPlayer : LavalinkPlayer
     /// <summary>
     ///     Gets a pretty now playing message for the player.
     /// </summary>
-    public async Task<Embed> PrettyNowPlayingAsync(List<MewdekoTrack> queue)
+    public async Task<Embed> PrettyNowPlayingAsync(List<MewdekoTrack> queue, bool minimal = false)
     {
         var currentTrack = await cache.GetCurrentTrack(GuildId);
         var position = Position.Value.Position;
@@ -352,6 +352,9 @@ public sealed class MewdekoPlayer : LavalinkPlayer
         await GetMusicSettings();
 
         var description = new StringBuilder()
+        if (!minimal)
+        {
+            description
             .AppendLine("## 📀 Track Info")
             .AppendLine($"### [{currentTrack.Track.Title}]({currentTrack.Track.Uri})")
             .AppendLine()
@@ -362,6 +365,14 @@ public sealed class MewdekoPlayer : LavalinkPlayer
             .AppendLine("## ⏳ Progress")
             .AppendLine(progressBar)
             .AppendLine($"`{position:hh\\:mm\\:ss}/{duration:hh\\:mm\\:ss} ({percentage:F1}%)`");
+        }
+        else
+        {
+            description
+            .AppendLine($"### [{currentTrack.Track.Title}]({currentTrack.Track.Uri})")
+            .AppendLine()
+            .AppendLine($"🎧 **Source:** {currentTrack.Track.Provider}");
+        }
 
         var activeEffects = GetActiveEffects();
         if (activeEffects.Any())
