@@ -65,7 +65,7 @@ namespace Mewdeko.Extensions
             }
             else
             {
-                // Multi-frame image: skip compression, return as-is (SkiaSharp doesnt support)
+                // Multi-frame image: skip compression, return as-is (SkiaSharp doesnt support encoding these)
                 return new MemoryStream(imgData);
             }
         }
