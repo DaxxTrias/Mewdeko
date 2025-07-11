@@ -400,7 +400,7 @@ public class SearchesService : INService, IUnloadableService
             TimeSpan.FromHours(3));
     }
 
-    private async Task<WeatherData?>? GetWeatherDataFactory(string query)
+    private async Task<WeatherData?> GetWeatherDataFactory(string query)
     {
         using var http = httpFactory.CreateClient();
         try

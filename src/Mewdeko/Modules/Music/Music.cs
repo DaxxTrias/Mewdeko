@@ -324,6 +324,8 @@ public partial class Music(
             return;
         }
 
+        string removedTrackTitle = trackToRemove.Track.Title;
+
         queue.Remove(trackToRemove);
 
         if (currentTrack.Index == trackToRemove.Index)
@@ -345,11 +347,11 @@ public partial class Music(
 
         if (player.State == PlayerState.Playing)
         {
-            await ReplyConfirmAsync(Strings.MusicSongRemoved(ctx.Guild.Id)).ConfigureAwait(false);
+            await ReplyConfirmAsync($"{Strings.MusicSongRemoved(ctx.Guild.Id)}\nRemoved: **{removedTrackTitle}**").ConfigureAwait(false);
         }
         else
         {
-            await ReplyConfirmAsync(Strings.MusicSongRemovedStop(ctx.Guild.Id)).ConfigureAwait(false);
+            await ReplyConfirmAsync($"{Strings.MusicSongRemovedStop(ctx.Guild.Id)}\nRemoved: **{removedTrackTitle}**").ConfigureAwait(false);
         }
     }
 
