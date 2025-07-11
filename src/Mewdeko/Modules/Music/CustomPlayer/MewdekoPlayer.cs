@@ -160,7 +160,11 @@ public sealed class MewdekoPlayer : LavalinkPlayer
 
         if (queue == null || currentTrack == null || musicChannel == null)
         {
-            logger?.LogError("NotifyTrackStartedAsync: queue, currentTrack, or musicChannel is null. GuildId: {GuildId}", GuildId);
+            var nullParts = new List<string>();
+            if (queue == null) nullParts.Add("queue");
+            if (currentTrack == null) nullParts.Add("currentTrack");
+            if (musicChannel == null) nullParts.Add("musicChannel");
+            logger?.LogError("NotifyTrackStartedAsync: {NullParts} is/are null. GuildId: {GuildId}", string.Join(", ", nullParts), GuildId);
             return;
         }
 
