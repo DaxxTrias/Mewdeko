@@ -351,7 +351,7 @@ public sealed class MewdekoPlayer : LavalinkPlayer
         var (progressBar, percentage) = CreateProgressBar(position, duration);
         await GetMusicSettings();
 
-        var description = new StringBuilder()
+        var description = new StringBuilder();
         if (!minimal)
         {
             description
