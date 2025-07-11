@@ -198,7 +198,7 @@ public partial class Searches(
         var embed = new EmbedBuilder();
         var data = await Service.GetWeatherDataAsync(query).ConfigureAwait(false);
 
-        if (data == null)
+        if (data == null || data.Sys == null)
         {
             embed.WithDescription(Strings.CityNotFound(ctx.Guild.Id))
                 .WithErrorColor();
