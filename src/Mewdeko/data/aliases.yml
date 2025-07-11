@@ -785,6 +785,7 @@ calcops:
 calculate:
   - calculate
   - calc
+  - math
 cash:
   - cash
   - $
@@ -1863,6 +1864,7 @@ softban:
 songremove:
   - songremove
   - trackremove
+  - songremove
   - srm
 source:
   - source

@@ -249,7 +249,6 @@ public sealed class MewdekoPlayer : LavalinkPlayer
             .Build();
     }
 
-
     /// <summary>
     ///     Gets the music channel for the player.
     /// </summary>
