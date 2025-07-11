@@ -1864,7 +1864,7 @@ softban:
 songremove:
   - songremove
   - trackremove
-  - songremove
+  - removesong
   - srm
 source:
   - source
