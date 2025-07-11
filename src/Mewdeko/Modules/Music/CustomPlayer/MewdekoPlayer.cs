@@ -151,12 +151,18 @@ public sealed class MewdekoPlayer : LavalinkPlayer
     /// <param name="track">The track that started playing.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     protected override async ValueTask NotifyTrackStartedAsync(ITrackQueueItem track,
-        CancellationToken cancellationToken = default)
+    CancellationToken cancellationToken = default)
     {
         await stateTracker.ForceUpdate();
         var queue = await cache.GetMusicQueue(GuildId);
         var currentTrack = await cache.GetCurrentTrack(GuildId);
         var musicChannel = await GetMusicChannel();
+
+        if (queue == null || currentTrack == null || musicChannel == null)
+        {
+            logger?.LogError("NotifyTrackStartedAsync: queue, currentTrack, or musicChannel is null. GuildId: {GuildId}", GuildId);
+            return;
+        }
 
         // Create embed and component buttons
         var embed = await PrettyNowPlayingAsync(queue);
@@ -174,7 +180,7 @@ public sealed class MewdekoPlayer : LavalinkPlayer
                     try
                     {
                         var guild = client.GetGuild(GuildId);
-                        var chan = guild.GetVoiceChannel(VoiceChannelId);
+                        var chan = guild?.GetVoiceChannel(VoiceChannelId);
 
                         if (chan != null)
                         {
