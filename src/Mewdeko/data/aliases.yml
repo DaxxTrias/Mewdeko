@@ -1916,6 +1916,7 @@ stealemotes:
   - stealemotes
 stealsticker:
   - addsticker
+  - stealsticker
   - stickeradd
 stealforrole:
   - sfr

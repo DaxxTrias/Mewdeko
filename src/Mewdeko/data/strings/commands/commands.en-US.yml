@@ -17131,7 +17131,6 @@ stealsticker:
   desc: Steals a supplied sticker and adds it to the current server.
   args:
     - sticker
-    - sticker custom_name
   params:
     - &o425
       name: e
