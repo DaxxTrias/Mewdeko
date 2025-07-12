@@ -437,4 +437,71 @@ public partial class ServerManagement(IHttpClientFactory factory, BotConfigServi
         if (errored.Count > 0) b.AddField($"{errored.Count} Errored Emotes", string.Join("\n\n", errored));
         await msg.ModifyAsync(x => x.Embed = b.Build()).ConfigureAwait(false);
     }
+
+    /// <summary>
+    ///     Steals stickers from a message and adds them to the server.
+    /// </summary>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    [UserPerm(GuildPermission.ManageEmojisAndStickers)]
+    [BotPerm(GuildPermission.ManageEmojisAndStickers)]
+    public async Task StealSticker([Remainder] string? _ = null)
+    {
+        var stickers = ctx.Message.Stickers;
+        if (!stickers.Any())
+        {
+            await ctx.Channel.SendErrorAsync("Message contains no stickers.", Config).ConfigureAwait(false);
+            return;
+        }
+
+        var eb = new EmbedBuilder
+        {
+            Description = $"{config.Data.LoadingEmote} Adding Stickers...",
+            Color = Mewdeko.OkColor
+        };
+        var msg = await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
+
+        var errored = new List<string>();
+        var added = new List<string>();
+
+        foreach (var sticker in stickers)
+        {
+            try
+            {
+                using var http = factory.CreateClient();
+                await using var stream = await http.GetStreamAsync(sticker.GetStickerUrl());
+                var ms = new System.IO.MemoryStream();
+                await stream.CopyToAsync(ms);
+                ms.Position = 0;
+
+                var createdSticker = await ctx.Guild.CreateStickerAsync(sticker.Name, new Image(ms), new[] { "Mewdeko" }, sticker.Name).ConfigureAwait(false);
+                added.Add($"{createdSticker.Name} - [View]({createdSticker.GetStickerUrl()})");
+            }
+            catch (HttpException httpEx) when (httpEx.DiscordCode == (DiscordErrorCode)50138)
+            {
+                errored.Add($"Unable to add '{sticker.Name}'. Sticker file size is too large.");
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Failed to add sticker {StickerName}", sticker.Name);
+                errored.Add($"Unable to add '{sticker.Name}'. An unknown error occurred.");
+            }
+        }
+
+        var b = new EmbedBuilder
+        {
+            Color = Mewdeko.OkColor
+        };
+
+        if (added.Any())
+            b.WithDescription($"**Added Stickers**\n{string.Join("\n", added)}");
+        else
+            b.WithDescription("No stickers were added.");
+
+        if (errored.Any())
+            b.AddField("Errored Stickers", string.Join("\n", errored));
+
+        await msg.ModifyAsync(x => x.Embed = b.Build()).ConfigureAwait(false);
+    }
 }

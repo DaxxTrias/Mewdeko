@@ -1914,6 +1914,9 @@ stats:
 stealemotes:
   - steal
   - stealemotes
+stealsticker:
+  - addsticker
+  - stickeradd
 stealforrole:
   - sfr
 steam:

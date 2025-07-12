@@ -17127,6 +17127,17 @@ stealemotes:
       desc: The message containing the emotes to steal.
       type: string
       optional: false
+stealsticker:
+  desc: Steals a supplied sticker and adds it to the current server.
+  args:
+    - sticker
+    - sticker custom_name
+  params:
+    - &o425
+      name: e
+      desc: The message containing the sticker to steal.
+      type: string
+      optional: false
 stealforrole:
   desc: Steals emotes from a message and locks them to a specified role.
   args:
