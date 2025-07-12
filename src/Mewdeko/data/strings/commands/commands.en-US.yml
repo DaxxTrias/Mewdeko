@@ -27340,11 +27340,12 @@ config_string_string_string:
       type: string
       optional: true
 steal:
-  desc: Steals emotes from other servers.
+  desc: Steals one or more emotes you mention. Alternatively If only one emote is stolen you can provide a custom name for it.
   args:
-    - emotes
+    - emote emote emote
+    - emote custom_name
   params:
-    - name: e
+    - name: emote
       desc: Space-separated list of emote URLs or emote names.
       type: string
       optional: false
