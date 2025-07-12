@@ -451,13 +451,13 @@ public partial class ServerManagement(IHttpClientFactory factory, BotConfigServi
         var stickers = ctx.Message.Stickers;
         if (!stickers.Any())
         {
-            await ctx.Channel.SendErrorAsync("Message contains no stickers.", Config).ConfigureAwait(false);
+            await ctx.Channel.SendErrorAsync("Message contains no sticker.", Config).ConfigureAwait(false);
             return;
         }
 
         var eb = new EmbedBuilder
         {
-            Description = $"{config.Data.LoadingEmote} Adding Stickers...",
+            Description = $"{config.Data.LoadingEmote} Adding Sticker...",
             Color = Mewdeko.OkColor
         };
         var msg = await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
@@ -495,12 +495,12 @@ public partial class ServerManagement(IHttpClientFactory factory, BotConfigServi
         };
 
         if (added.Any())
-            b.WithDescription($"**Added Stickers**\n{string.Join("\n", added)}");
+            b.WithDescription($"**Added Sticker**\n{string.Join("\n", added)}");
         else
-            b.WithDescription("No stickers were added.");
+            b.WithDescription("No sticker added.");
 
         if (errored.Any())
-            b.AddField("Errored Stickers", string.Join("\n", errored));
+            b.AddField("Errored adding sticker", string.Join("\n", errored));
 
         await msg.ModifyAsync(x => x.Embed = b.Build()).ConfigureAwait(false);
     }
