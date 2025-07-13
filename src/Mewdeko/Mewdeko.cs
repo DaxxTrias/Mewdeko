@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Reflection;
 using System.Text.Json;
 using DataModel;
@@ -325,10 +325,16 @@ public class Mewdeko
         await interactionService.RegisterCommandsGloballyAsync().ConfigureAwait(false);
 #endif
 #if DEBUG
-        if (Client.Guilds.Select(x => x.Id).Contains(Credentials.DebugGuildId))
-            await interactionService.RegisterCommandsToGuildAsync(Credentials.DebugGuildId);
-#endif
+        // lock slash commands to debug server (sylv original impl)
+        //if (Client.Guilds.Select(x => x.Id).Contains(Credentials.DebugGuildId))
+        //    await interactionService.RegisterCommandsToGuildAsync(Credentials.DebugGuildId);
 
+        // register slash cmds on all servers (not a problem for my self hosting)
+        foreach (var guild in Client.Guilds)
+        {
+            await interactionService.RegisterCommandsToGuildAsync(guild.Id);
+        }
+#endif
         _ = Task.Run(HandleStatusChanges);
         _ = Task.Run(async () => await ExecuteReadySubscriptions());
         var performanceMonitor = Services.GetRequiredService<PerformanceMonitorService>();
