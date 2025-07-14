@@ -2066,6 +2066,7 @@ public partial class Utility(
             "orders" or "placing-orders" => "https://docs.tealstreet.io/docs/trade/placing-orders",
             "stops" or "stop-orders" or "stoploss" => "https://docs.tealstreet.io/docs/trade/placing-orders#stop-orders",
             "trailingstop" or "trailing-stop" or "trailing" => "https://docs.tealstreet.io/docs/trade/placing-orders#trailing-stop-orders",
+            "troubleshoot" or "troubleshooting" or "trouble-shooting" => "https://docs.tealstreet.io/docs/support/troubleshooting",
             "mobile" or "phone" => "https://docs.tealstreet.io/docs/trade/mobile",
 
             // default case
