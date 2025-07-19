@@ -61,4 +61,41 @@ public class LocalBotStringsProvider : IBotStringsProvider
 
         return null;
     }
+
+    /// <summary>
+    ///     Gets overloaded versions of a command for the specified locale and command name.
+    /// </summary>
+    /// <param name="localeName">The name of the locale.</param>
+    /// <param name="commandName">The base name of the command.</param>
+    /// <returns>A list of overloaded versions of the command.</returns>
+    public List<CommandOverload> GetCommandOverloads(string localeName, string commandName)
+    {
+        var overloads = new List<CommandOverload>();
+
+        if (!commandStrings.TryGetValue(localeName, out var langStrings))
+            return overloads;
+
+        var baseCommandKey = commandName.ToLowerInvariant();
+        var index = 0;
+
+        while (true)
+        {
+            var overloadKey = $"{baseCommandKey}_overload_{index}";
+            if (!langStrings.TryGetValue(overloadKey, out var overloadString))
+                break;
+
+            // Convert CommandStrings to CommandOverload
+            overloads.Add(new CommandOverload
+            {
+                Desc = overloadString.Desc,
+                Args = overloadString.Args,
+                Parameters = overloadString.Parameters?.ToList(),
+                Signature = overloadString.Signature
+            });
+
+            index++;
+        }
+
+        return overloads;
+    }
 }

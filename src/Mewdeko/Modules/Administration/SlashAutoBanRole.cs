@@ -1,10 +1,10 @@
 ﻿using Discord.Interactions;
+using Mewdeko.Common.Attributes.InteractionCommands;
 using Mewdeko.Modules.Administration.Services;
 
 namespace Mewdeko.Modules.Administration;
 
 public partial class SlashAdministration
-
 {
     /// <summary>
     ///     Slash command group for managing the AutoBanRole feature.
@@ -13,20 +13,50 @@ public partial class SlashAdministration
     public class SlashAutoBanRole : MewdekoSlashSubmodule<AutoBanRoleService>
     {
         /// <summary>
+        ///     Lists all roles in the AutoBanRole list for the current guild.
+        /// </summary>
+        [SlashCommand("list", "List all roles that trigger auto-ban")]
+        [SlashUserPerm(GuildPermission.Administrator)]
+        public async Task AutoBanRoleList()
+        {
+            var roles = await Service.GetAutoBanRoles(Context.Guild.Id);
+
+            if (roles.Count == 0)
+            {
+                await ReplyErrorAsync("No auto-ban roles configured for this server.").ConfigureAwait(false);
+                return;
+            }
+
+            var roleList = (from roleId in roles
+                let role = Context.Guild.GetRole(roleId)
+                select role != null ? $"• {role.Mention} (`{role.Id}`)" : $"• Deleted Role (`{roleId}`)").ToList();
+
+            var embed = new EmbedBuilder()
+                .WithTitle("Auto-Ban Roles")
+                .WithDescription(string.Join("\n", roleList))
+                .WithColor(Mewdeko.ErrorColor)
+                .WithFooter($"Total: {roleList.Count} role(s)")
+                .Build();
+
+            await RespondAsync(embed: embed).ConfigureAwait(false);
+        }
+
+        /// <summary>
         ///     Adds a role to the list of AutoBanRoles.
         /// </summary>
         /// <param name="role">The role to add</param>
         [SlashCommand("add", "Add a role to the list of AutoBanRoles")]
+        [SlashUserPerm(GuildPermission.Administrator)]
         public async Task AutoBanRoleAdd(IRole role)
         {
             var success = await Service.AddAutoBanRole(Context.Guild.Id, role.Id);
             if (success)
             {
-                await ReplyConfirmLocalizedAsync("abrole_add", role.Mention).ConfigureAwait(false);
+                await ReplyConfirmAsync(Strings.AbroleAdd(Context.Guild.Id, role.Mention)).ConfigureAwait(false);
             }
             else
             {
-                await ReplyErrorLocalizedAsync("abrole_exists", role.Mention).ConfigureAwait(false);
+                await ReplyErrorAsync(Strings.AbroleExists(Context.Guild.Id, role.Mention)).ConfigureAwait(false);
             }
         }
 
@@ -35,16 +65,17 @@ public partial class SlashAdministration
         /// </summary>
         /// <param name="role">The role to remove</param>
         [SlashCommand("remove", "Remove a role from the list of AutoBanRoles")]
+        [SlashUserPerm(GuildPermission.Administrator)]
         public async Task AutoBanRoleRemove(IRole role)
         {
             var success = await Service.RemoveAutoBanRole(Context.Guild.Id, role.Id);
             if (success)
             {
-                await ReplyConfirmLocalizedAsync("abrole_remove", role.Mention).ConfigureAwait(false);
+                await ReplyConfirmAsync(Strings.AbroleRemove(Context.Guild.Id, role.Mention)).ConfigureAwait(false);
             }
             else
             {
-                await ReplyErrorLocalizedAsync("abrole_notexists", role.Mention).ConfigureAwait(false);
+                await ReplyErrorAsync(Strings.AbroleNotexists(Context.Guild.Id, role.Mention)).ConfigureAwait(false);
             }
         }
     }

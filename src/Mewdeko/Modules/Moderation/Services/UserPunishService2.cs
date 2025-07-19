@@ -1,8 +1,8 @@
-using LinqToDB.EntityFrameworkCore;
+using DataModel;
+using LinqToDB;
 using Mewdeko.Common.TypeReaders.Models;
-using Mewdeko.Database.DbContextStuff;
-using Microsoft.EntityFrameworkCore;
-using Serilog;
+using Mewdeko.Modules.Administration.Common;
+using Mewdeko.Modules.Moderation.Common;
 
 namespace Mewdeko.Modules.Moderation.Services;
 
@@ -11,22 +11,25 @@ namespace Mewdeko.Modules.Moderation.Services;
 /// </summary>
 public class UserPunishService2 : INService
 {
-    private readonly DbContextProvider dbProvider;
+    private readonly IDataConnectionFactory dbFactory;
     private readonly GuildSettingsService guildSettings;
+    private readonly ILogger<UserPunishService2> logger;
     private readonly MuteService mute;
+
 
     /// <summary>
     ///     Initializes a new instance of <see cref="UserPunishService2" />.
     /// </summary>
     /// <param name="mute">The mute service</param>
-    /// <param name="db">The database service</param>
+    /// <param name="dbFactory">The database service</param>
     /// <param name="guildSettings">The guild settings service</param>
-    public UserPunishService2(MuteService mute, DbContextProvider dbProvider,
-        GuildSettingsService guildSettings)
+    public UserPunishService2(MuteService mute, IDataConnectionFactory dbFactory,
+        GuildSettingsService guildSettings, ILogger<UserPunishService2> logger)
     {
         this.mute = mute;
-        this.dbProvider = dbProvider;
+        this.dbFactory = dbFactory;
         this.guildSettings = guildSettings;
+        this.logger = logger;
     }
 
     /// <summary>
@@ -46,8 +49,8 @@ public class UserPunishService2 : INService
     /// <param name="channel">The channel</param>
     public async Task SetMWarnlogChannelId(IGuild guild, ITextChannel channel)
     {
-        await using var db = await dbProvider.GetContextAsync();
-        var gc = await db.ForGuildId(guild.Id, set => set);
+        await using var db = await dbFactory.CreateConnectionAsync();
+        var gc = await guildSettings.GetGuildConfig(guild.Id);
         gc.MiniWarnlogChannelId = channel.Id;
         await guildSettings.UpdateGuildConfig(guild.Id, gc);
     }
@@ -60,7 +63,7 @@ public class UserPunishService2 : INService
     /// <param name="mod">The moderator</param>
     /// <param name="reason">The reason</param>
     /// <returns></returns>
-    public async Task<WarningPunishment2>? Warn(IGuild guild, ulong userId, IUser mod, string reason)
+    public async Task<WarningPunishment2?>? Warn(IGuild guild, ulong userId, IUser mod, string reason)
     {
         var modName = mod.ToString();
 
@@ -69,7 +72,7 @@ public class UserPunishService2 : INService
 
         var guildId = guild.Id;
 
-        var warn2 = new Warning2
+        var warn2 = new Warnings2
         {
             UserId = userId, GuildId = guildId, Reason = reason, Moderator = modName
         };
@@ -77,28 +80,27 @@ public class UserPunishService2 : INService
         var warnings = 1;
         List<WarningPunishment2> ps;
 
-        await using var dbContext = await dbProvider.GetContextAsync();
-        {
-            ps = (await dbContext.ForGuildId(guildId, set => set.Include(x => x.WarnPunishments2)))
-                .WarnPunishments2;
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
-            warnings += dbContext.Warnings2
-                .ForId(guildId, userId)
-                .Count(w => !w.Forgiven && w.UserId == userId);
+        // Direct query with GuildId filter
+        ps = await dbContext.WarningPunishment2s
+            .Where(x => x.GuildId == guildId)
+            .ToListAsync();
 
-            dbContext.Warnings2.Add(warn2);
+        // Count warnings directly using GuildId filter
+        warnings += await dbContext.Warnings2s
+            .CountAsync(w => w.GuildId == guildId && w.UserId == userId && !w.Forgiven);
 
-            await dbContext.SaveChangesAsync().ConfigureAwait(false);
-        }
+        await dbContext.InsertAsync(warn2);
 
         var p = ps.Find(x => x.Count == warnings);
 
-        if (p != null)
+        if (p == null) return null;
         {
             var user = await guild.GetUserAsync(userId).ConfigureAwait(false);
             if (user == null)
                 return null;
-            switch (p.Punishment)
+            switch ((PunishmentAction)p.Punishment)
             {
                 case PunishmentAction.Mute:
                     if (p.Time == 0)
@@ -108,45 +110,30 @@ public class UserPunishService2 : INService
                     break;
                 case PunishmentAction.VoiceMute:
                     if (p.Time == 0)
-                    {
                         await mute.MuteUser(user, mod, MuteType.Voice).ConfigureAwait(false);
-                    }
                     else
-                    {
                         await mute.TimedMute(user, mod, TimeSpan.FromMinutes(p.Time), MuteType.Voice)
                             .ConfigureAwait(false);
-                    }
-
                     break;
                 case PunishmentAction.ChatMute:
                     if (p.Time == 0)
-                    {
                         await mute.MuteUser(user, mod, MuteType.Chat).ConfigureAwait(false);
-                    }
                     else
-                    {
                         await mute.TimedMute(user, mod, TimeSpan.FromMinutes(p.Time), MuteType.Chat)
                             .ConfigureAwait(false);
-                    }
-
                     break;
                 case PunishmentAction.Kick:
                     await user.KickAsync("Warned too many times.").ConfigureAwait(false);
                     break;
                 case PunishmentAction.Ban:
                     if (p.Time == 0)
-                    {
                         await guild.AddBanAsync(user, options: new RequestOptions
                         {
                             AuditLogReason = "Warned too many times"
                         }).ConfigureAwait(false);
-                    }
                     else
-                    {
                         await mute.TimedBan(guild, user, TimeSpan.FromMinutes(p.Time), "Warned too many times.")
                             .ConfigureAwait(false);
-                    }
-
                     break;
                 case PunishmentAction.Softban:
                     await guild.AddBanAsync(user, 7, options: new RequestOptions
@@ -170,29 +157,19 @@ public class UserPunishService2 : INService
                 case PunishmentAction.AddRole:
                     var role = guild.GetRole(p.RoleId.Value);
                     if (role is not null)
-                    {
                         if (p.Time == 0)
-                        {
                             await user.AddRoleAsync(role).ConfigureAwait(false);
-                        }
                         else
-                        {
                             await mute.TimedRole(user, TimeSpan.FromMinutes(p.Time), "Warned too many times.",
                                 role).ConfigureAwait(false);
-                        }
-                    }
                     else
-                    {
-                        Log.Warning($"Warnpunish can't find role {p.RoleId.Value} on server {guild.Id}");
-                    }
+                        logger.LogWarning($"Warnpunish can't find role {p.RoleId.Value} on server {guild.Id}");
 
                     break;
             }
 
             return p;
         }
-
-        return null;
     }
 
     /// <summary>
@@ -203,11 +180,10 @@ public class UserPunishService2 : INService
     /// <returns></returns>
     public async Task<int> GetWarnings(IGuild guild, ulong userId)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
-        return dbContext.Warnings2
-            .ForId(guild.Id, userId)
-            .Count(w => !w.Forgiven && w.UserId == userId);
+        return await dbContext.Warnings2s
+            .CountAsync(w => !w.Forgiven && w.UserId == userId && w.GuildId == guild.Id);
     }
 
     /// <summary>
@@ -215,21 +191,21 @@ public class UserPunishService2 : INService
     /// </summary>
     public async Task CheckAllWarnExpiresAsync()
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
 // For 'cleared' part
         var relevantGuildConfigsForClear = await dbContext.GuildConfigs
             .Where(gc => gc.WarnExpireHours > 0 && gc.WarnExpireAction == 0)
-            .ToListAsyncEF();
+            .ToListAsync();
 
         var cleared = 0;
 
         foreach (var gc in relevantGuildConfigsForClear)
         {
             var expireTime = DateTime.Now.AddHours(-gc.WarnExpireHours);
-            var warningsToClear = await dbContext.Warnings2
+            var warningsToClear = await dbContext.Warnings2s
                 .Where(w => w.GuildId == gc.GuildId && w.Forgiven && w.DateAdded < expireTime)
-                .ToListAsyncEF();
+                .ToListAsync();
 
             foreach (var warning in warningsToClear)
             {
@@ -241,31 +217,22 @@ public class UserPunishService2 : INService
         }
 
 // For 'deleted' part
-        var relevantGuildConfigsForDelete = (await dbContext.GuildConfigs.ToListAsyncEF())
-            .Where(gc => gc.WarnExpireHours > 0 && gc.WarnExpireAction == WarnExpireAction.Delete);
+        var relevantGuildConfigsForDelete = (await dbContext.GuildConfigs.ToListAsync())
+            .Where(gc => gc.WarnExpireHours > 0 && (WarnExpireAction)gc.WarnExpireAction == WarnExpireAction.Delete);
 
         var deleted = 0;
 
         foreach (var gc in relevantGuildConfigsForDelete)
         {
             var expireTime = DateTime.Now.AddHours(-gc.WarnExpireHours);
-            var warningsToDelete = await dbContext.Warnings2
-                .Where(w => w.GuildId == gc.GuildId && w.DateAdded < expireTime)
-                .ToListAsyncEF();
+            var warningsToDelete = await dbContext.Warnings2s
+                .Where(w => w.GuildId == gc.GuildId && w.DateAdded < expireTime).DeleteAsync();
 
-            foreach (var warning in warningsToDelete)
-            {
-                dbContext.Warnings2.Remove(warning);
-            }
-
-            deleted += warningsToDelete.Count;
+            deleted += warningsToDelete;
         }
 
-// Save changes to the database
-        await dbContext.SaveChangesAsync();
-
         if (cleared > 0 || deleted > 0)
-            Log.Information($"Cleared {cleared} warnings and deleted {deleted} warnings due to expiry.");
+            logger.LogInformation($"Cleared {cleared} warnings and deleted {deleted} warnings due to expiry.");
     }
 
     /// <summary>
@@ -274,36 +241,34 @@ public class UserPunishService2 : INService
     /// <param name="guildId">The guild ID</param>
     public async Task CheckWarnExpiresAsync(ulong guildId)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
-        var config = await dbContext.ForGuildId(guildId, inc => inc);
+        var config = await guildSettings.GetGuildConfig(guildId);
 
         if (config.WarnExpireHours == 0)
             return;
 
         var expiryDate = DateTime.Now.AddHours(-config.WarnExpireHours);
 
-        switch (config.WarnExpireAction)
+        switch ((WarnExpireAction)config.WarnExpireAction)
         {
             case WarnExpireAction.Clear:
                 var warningsToForgive =
-                    await dbContext.Warnings2
-                        .Where(w => w.GuildId == guildId && !w.Forgiven && w.DateAdded < expiryDate).ToListAsync();
+                    dbContext.Warnings2s
+                        .Where(w => w.GuildId == guildId && !w.Forgiven && w.DateAdded < expiryDate);
                 foreach (var warning in warningsToForgive)
                 {
                     warning.Forgiven = true;
                     warning.ForgivenBy = "Expiry";
                 }
 
+                await dbContext.UpdateAsync(warningsToForgive);
                 break;
             case WarnExpireAction.Delete:
-                var warningsToDelete = await dbContext.Warnings2
-                    .Where(w => w.GuildId == guildId && w.DateAdded < expiryDate).ToListAsync();
-                dbContext.Warnings2.RemoveRange(warningsToDelete);
+                await dbContext.Warnings2s
+                    .Where(w => w.GuildId == guildId && w.DateAdded < expiryDate).DeleteAsync();
                 break;
         }
-
-        await dbContext.SaveChangesAsync().ConfigureAwait(false);
     }
 
 
@@ -315,18 +280,14 @@ public class UserPunishService2 : INService
     /// <param name="delete">Whether to delete the warnings</param>
     public async Task WarnExpireAsync(ulong guildId, int days, WarnExpireAction delete)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
-        {
-            var config = await dbContext.ForGuildId(guildId, inc => inc);
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
+        var config = await guildSettings.GetGuildConfig(guildId);
 
-            config.WarnExpireHours = days * 24;
-            config.WarnExpireAction = delete;
-            await dbContext.SaveChangesAsync().ConfigureAwait(false);
-
-            // no need to check for warn expires
-            if (config.WarnExpireHours == 0)
-                return;
-        }
+        config.WarnExpireHours = days * 24;
+        config.WarnExpireAction = (int)delete;
+        await guildSettings.UpdateGuildConfig(guildId, config);
+        if (config.WarnExpireHours == 0)
+            return;
 
         await CheckWarnExpiresAsync(guildId).ConfigureAwait(false);
     }
@@ -336,11 +297,11 @@ public class UserPunishService2 : INService
     /// </summary>
     /// <param name="gid"></param>
     /// <returns></returns>
-    public async Task<IGrouping<ulong, Warning2>[]> WarnlogAll(ulong gid)
+    public async Task<IGrouping<ulong, Warnings2>[]> WarnlogAll(ulong gid)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
-        return dbContext.Warnings2.GetForGuild(gid).GroupBy(x => x.UserId).ToArray();
+        return await dbContext.Warnings2s.Where(x => x.GuildId == gid).GroupBy(x => x.UserId).ToArrayAsync();
     }
 
     /// <summary>
@@ -349,10 +310,10 @@ public class UserPunishService2 : INService
     /// <param name="gid">The guild ID</param>
     /// <param name="userId">The user ID</param>
     /// <returns></returns>
-    public async Task<Warning2[]> UserWarnings(ulong gid, ulong userId)
+    public async Task<Warnings2[]> UserWarnings(ulong gid, ulong userId)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
-        return dbContext.Warnings2.ForId(gid, userId);
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
+        return await dbContext.Warnings2s.Where(x => x.UserId == userId && x.GuildId == gid).ToArrayAsync();
     }
 
     /// <summary>
@@ -367,13 +328,12 @@ public class UserPunishService2 : INService
     {
         var toReturn = true;
 
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
         if (index == 0)
-            await dbContext.Warnings2.ForgiveAll(guildId, userId, moderator).ConfigureAwait(false);
+            await dbContext.Warnings2s.ForgiveAll(dbContext, guildId, userId, moderator).ConfigureAwait(false);
         else
-            toReturn = await dbContext.Warnings2.Forgive(guildId, userId, moderator, index - 1);
-        await dbContext.SaveChangesAsync().ConfigureAwait(false);
+            toReturn = await dbContext.Warnings2s.Forgive(dbContext, guildId, userId, moderator, index - 1);
 
         return toReturn;
     }
@@ -387,31 +347,31 @@ public class UserPunishService2 : INService
     /// <param name="time">The time</param>
     /// <param name="role">The role</param>
     /// <returns></returns>
-    public async Task<bool> WarnPunish(ulong guildId, int number, PunishmentAction punish, StoopidTime? time,
+    public async Task<bool> WarnPunish(ulong guildId, int number, int punish, StoopidTime? time,
         IRole? role = null)
     {
         // these 3 don't make sense with time
-        if (punish is PunishmentAction.Softban or PunishmentAction.Kick or PunishmentAction.RemoveRoles && time != null)
+        if ((PunishmentAction)punish is PunishmentAction.Softban or PunishmentAction.Kick
+            or PunishmentAction.RemoveRoles && time != null)
             return false;
         if (number <= 0 || time != null && time.Time > TimeSpan.FromDays(49))
             return false;
 
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
-        await using var dbContext = await dbProvider.GetContextAsync();
+        // Directly query WarnPunishments2 with GuildId filter
+        await dbContext.WarningPunishment2s
+            .Where(x => x.GuildId == guildId && x.Count == number).DeleteAsync();
 
-        var ps = (await dbContext.ForGuildId(guildId, set => set.Include(x => x.WarnPunishments2))).WarnPunishments2;
-        var toDelete = ps.Where(x => x.Count == number);
-
-        dbContext.RemoveRange(toDelete);
-
-        ps.Add(new WarningPunishment2
+        // Add new punishment with GuildId
+        await dbContext.InsertAsync(new WarningPunishment2
         {
+            GuildId = guildId,
             Count = number,
             Punishment = punish,
             Time = (int?)time?.Time.TotalMinutes ?? 0,
-            RoleId = punish == PunishmentAction.AddRole ? role.Id : default(ulong?)
+            RoleId = punish == (int)PunishmentAction.AddRole ? role?.Id : default
         });
-        await dbContext.SaveChangesAsync().ConfigureAwait(false);
 
         return true;
     }
@@ -427,14 +387,15 @@ public class UserPunishService2 : INService
         if (number <= 0)
             return false;
 
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
-        var ps = (await dbContext.ForGuildId(guildId, set => set.Include(x => x.WarnPunishments2))).WarnPunishments2;
-        var p = ps.Find(x => x.Count == number);
+        // Directly query for the specific warn punishment
+        var p = await dbContext.WarningPunishment2s
+            .FirstOrDefaultAsync(x => x.GuildId == guildId && x.Count == number);
 
         if (p == null) return true;
-        dbContext.Remove(p);
-        await dbContext.SaveChangesAsync().ConfigureAwait(false);
+
+        await dbContext.WarningPunishment2s.Select(x => p).DeleteAsync();
 
         return true;
     }
@@ -446,11 +407,12 @@ public class UserPunishService2 : INService
     /// <returns></returns>
     public async Task<WarningPunishment2[]> WarnPunishList(ulong guildId)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
-        return (await dbContext.ForGuildId(guildId, gc => gc.Include(x => x.WarnPunishments2)))
-            .WarnPunishments2
+        // Directly query WarnPunishments2 with GuildId filter
+        return await dbContext.WarningPunishment2s
+            .Where(x => x.GuildId == guildId)
             .OrderBy(x => x.Count)
-            .ToArray();
+            .ToArrayAsync();
     }
 }

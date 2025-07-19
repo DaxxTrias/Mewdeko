@@ -1,7 +1,9 @@
 using System.Net.Http;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading;
 using System.Xml;
-using Newtonsoft.Json;
+using Mewdeko.Modules.Nsfw.Common.Downloaders;
 using Serilog;
 
 namespace Mewdeko.Modules.Searches.Common;
@@ -157,8 +159,7 @@ public class SearchImageCacher
                 break;
             case DapiSearchType.Derpibooru:
                 tag = string.IsNullOrWhiteSpace(tag) ? "safe" : tag;
-                website =
-                    $"https://www.derpibooru.org/api/v1/json/search/images?q={tag.Replace('+', ',')}&per_page=49";
+                website = $"https://www.derpibooru.org/api/v1/json/search/images?q={tag.Replace('+', ',')}&per_page=49";
                 break;
         }
 
@@ -171,10 +172,12 @@ public class SearchImageCacher
                 case DapiSearchType.Konachan or DapiSearchType.Yandere or DapiSearchType.Danbooru:
                 {
                     var data = await http.GetStringAsync(website).ConfigureAwait(false);
+                    var options = new JsonSerializerOptions
+                    {
+                        PropertyNameCaseInsensitive = true
+                    };
 
-
-                    return (JsonConvert.DeserializeObject<DapiImageObject[]>(data) ??
-                            [])
+                    return (JsonSerializer.Deserialize<DapiImageObject[]>(data, options) ?? [])
                         .Where(x => x.FileUrl != null)
                         .Select(x => new ImageCacherObject(x, type))
                         .ToArray();
@@ -182,32 +185,44 @@ public class SearchImageCacher
                 case DapiSearchType.E621:
                 {
                     var data = await http.GetStringAsync(website).ConfigureAwait(false);
-                    return JsonConvert.DeserializeAnonymousType(data, new
-                        {
-                            posts = new List<E621Object>()
-                        })
-                        .posts
+                    var options = new JsonSerializerOptions
+                    {
+                        PropertyNameCaseInsensitive = true
+                    };
+
+                    var response = JsonSerializer.Deserialize<E621Response>(data, options);
+                    return response?.Posts
                         .Where(x => !string.IsNullOrWhiteSpace(x.File.Url))
                         .Select(x =>
                             new ImageCacherObject(x.File.Url, type, string.Join(' ', x.Tags.General),
-                                x.Score.Total))
-                        .ToArray();
+                                x.Score.Total.ToString()))
+                        .ToArray() ?? [];
                 }
                 case DapiSearchType.Derpibooru:
                 {
                     var data = await http.GetStringAsync(website).ConfigureAwait(false);
-                    return JsonConvert.DeserializeObject<DerpiContainer>(data)
-                        .Images
+                    var options = new JsonSerializerOptions
+                    {
+                        PropertyNameCaseInsensitive = true
+                    };
+
+                    var container = JsonSerializer.Deserialize<DerpiContainer>(data, options);
+                    return container?.Images
                         .Where(x => !string.IsNullOrWhiteSpace(x.ViewUrl))
                         .Select(x => new ImageCacherObject(x.ViewUrl, type, string.Join("\n", x.Tags), x.Score))
-                        .ToArray();
+                        .ToArray() ?? [];
                 }
                 case DapiSearchType.Safebooru:
                 {
                     var data = await http.GetStringAsync(website).ConfigureAwait(false);
-                    return JsonConvert.DeserializeObject<SafebooruElement[]>(data)
-                        .Select(x => new ImageCacherObject(x.FileUrl, type, x.Tags, x.Rating))
-                        .ToArray();
+                    var options = new JsonSerializerOptions
+                    {
+                        PropertyNameCaseInsensitive = true
+                    };
+
+                    return JsonSerializer.Deserialize<SafebooruElement[]>(data, options)
+                        ?.Select(x => new ImageCacherObject(x.FileUrl, type, x.Tags, x.Rating))
+                        .ToArray() ?? [];
                 }
                 default:
                     return (await LoadXmlAsync(website, type).ConfigureAwait(false)).ToArray();
@@ -263,7 +278,7 @@ public class DapiImageObject
     /// <summary>
     ///     Gets or sets the URL of the image file.
     /// </summary>
-    [JsonProperty("File_Url")]
+    [JsonPropertyName("File_Url")]
     public string? FileUrl { get; set; }
 
     /// <summary>
@@ -274,7 +289,7 @@ public class DapiImageObject
     /// <summary>
     ///     Gets or sets the tag string associated with the image.
     /// </summary>
-    [JsonProperty("Tag_String")]
+    [JsonPropertyName("Tag_String")]
     public string? TagString { get; set; }
 
     /// <summary>
@@ -302,7 +317,7 @@ public class DerpiImageObject
     /// <summary>
     ///     Gets or sets the URL of the image view.
     /// </summary>
-    [JsonProperty("view_url")]
+    [JsonPropertyName("view_url")]
     public string ViewUrl { get; set; }
 
     /// <summary>

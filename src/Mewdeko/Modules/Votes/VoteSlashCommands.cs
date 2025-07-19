@@ -27,7 +27,7 @@ public class VoteSlashCommands(InteractiveService interactivity) : MewdekoSlashM
     public async Task VoteChannel(ITextChannel channel)
     {
         await Service.SetVoteChannel(ctx.Guild.Id, channel.Id);
-        await ctx.Interaction.SendConfirmAsync("Sucessfully set the vote channel!");
+        await ctx.Interaction.SendConfirmAsync(Strings.VoteChannelSet(ctx.Guild.Id));
     }
 
     /// <summary>
@@ -47,13 +47,13 @@ public class VoteSlashCommands(InteractiveService interactivity) : MewdekoSlashM
         var votes = await Service.GetVotes(ctx.Guild.Id, ctx.User.Id);
         switch (message)
         {
-            case null when await PromptUserConfirmAsync("Do you want to preview your embed?", ctx.User.Id):
+            case null when await PromptUserConfirmAsync(Strings.PreviewEmbedConfirm(ctx.Guild.Id), ctx.User.Id):
             {
                 if (string.IsNullOrWhiteSpace(voteMessage))
                 {
                     var eb = new EmbedBuilder()
-                        .WithTitle($"Thanks for voting for {ctx.Guild.Name}")
-                        .WithDescription($"You have votedd a total of {votes.Count} times!")
+                        .WithTitle(Strings.ThanksForVoting(ctx.Guild.Id, ctx.Guild.Name))
+                        .WithDescription(Strings.VoteCountTypo(ctx.Guild.Id, votes.Count))
                         .WithThumbnailUrl(ctx.User.RealAvatarUrl().AbsoluteUri)
                         .WithOkColor();
 
@@ -115,7 +115,7 @@ public class VoteSlashCommands(InteractiveService interactivity) : MewdekoSlashM
         {
             var component = new ComponentBuilder().WithButton(
                 "Press this to set the password. Remember, do not share it to anyone else.", "setvotepassword");
-            await ctx.Interaction.FollowupAsync("_ _", components: component.Build());
+            await ctx.Interaction.FollowupAsync(Strings.EmptyResponse(ctx.Guild.Id), components: component.Build());
         }
     }
 
@@ -140,7 +140,7 @@ public class VoteSlashCommands(InteractiveService interactivity) : MewdekoSlashM
             }
             catch
             {
-                await ctx.Interaction.SendErrorAsync("Invalid time input. Format is 1d3h2s", Config);
+                await ctx.Interaction.SendErrorAsync(Strings.InvalidTimeFormat(ctx.Guild.Id), Config);
                 return;
             }
         }
@@ -151,7 +151,7 @@ public class VoteSlashCommands(InteractiveService interactivity) : MewdekoSlashM
             if (!added.Item1)
             {
                 await ctx.Interaction.SendErrorAsync(
-                    $"Adding vote role failed for the following reason: {added.Item2}", Config);
+                    Strings.VoteRoleAddFailed(ctx.Guild.Id, added.Item2), Config);
             }
             else
             {
@@ -165,11 +165,11 @@ public class VoteSlashCommands(InteractiveService interactivity) : MewdekoSlashM
             if (!added.Item1)
             {
                 await ctx.Interaction.SendErrorAsync(
-                    $"Adding vote role failed for the following reason: {added.Item2}", Config);
+                    Strings.VoteRoleAddFailed(ctx.Guild.Id, added.Item2), Config);
             }
             else
             {
-                await ctx.Interaction.SendConfirmAsync($"{role.Mention} added as a vote role.");
+                await ctx.Interaction.SendConfirmAsync(Strings.VoteRoleAdded(ctx.Guild.Id, role.Mention));
             }
         }
     }
@@ -193,15 +193,15 @@ public class VoteSlashCommands(InteractiveService interactivity) : MewdekoSlashM
         }
         catch
         {
-            await ctx.Interaction.SendErrorAsync("Invalid time input. Format is 1d3h2s", Config);
+            await ctx.Interaction.SendErrorAsync(Strings.InvalidTimeFormat(ctx.Guild.Id), Config);
             return;
         }
 
-        var update = await Service.UpdateTimer(role.Id, (int)parsedTime.Time.TotalSeconds);
+        var update = await Service.UpdateTimer(ctx.Guild.Id, role.Id, (int)parsedTime.Time.TotalSeconds);
         if (!update.Item1)
         {
             await ctx.Interaction.SendErrorAsync(
-                $"Updating vote role time failed due to the following reason: {update.Item2}", Config);
+                Strings.UpdatingVoteRoleTimeFailed(ctx.Guild.Id, update.Item2), Config);
         }
         else
         {
@@ -234,7 +234,7 @@ public class VoteSlashCommands(InteractiveService interactivity) : MewdekoSlashM
     [RequireContext(ContextType.Guild)]
     public async Task VotePassModal(VotePasswordModal modal)
     {
-        await ctx.Interaction.SendEphemeralConfirmAsync("Vote password set.");
+        await ctx.Interaction.SendEphemeralConfirmAsync(Strings.VotePasswordSet(ctx.Guild.Id));
         await Service.SetVotePassword(ctx.Guild.Id, modal.Password);
     }
 
@@ -262,7 +262,7 @@ public class VoteSlashCommands(InteractiveService interactivity) : MewdekoSlashM
     [CheckPermissions]
     public async Task VotesLeaderboard(bool monthly = false)
     {
-        List<Database.Models.Votes> votes;
+        List<DataModel.Vote> votes;
         if (monthly)
             votes = (await Service.GetVotes(ctx.Guild.Id)).Where(x => x.DateAdded.Value.Month == DateTime.UtcNow.Month)
                 .ToList();
@@ -270,7 +270,7 @@ public class VoteSlashCommands(InteractiveService interactivity) : MewdekoSlashM
         if (votes is null || !votes.Any())
         {
             await ctx.Channel.SendErrorAsync(monthly
-                ? "Not enough monthly votes for a leaderboard."
+                ? Strings.NotEnoughMonthlyVotesLeaderboard(ctx.Guild.Id)
                 : "Not enough votes for a leaderboard.", Config);
             return;
         }
@@ -312,7 +312,10 @@ public class VoteSlashCommands(InteractiveService interactivity) : MewdekoSlashM
         async Task<PageBuilder> PageFactory(int page)
         {
             await Task.CompletedTask;
-            var eb = new PageBuilder().WithTitle(monthly ? "Votes leaaderboard for this month" : "Votes Leaderboard")
+            var eb = new PageBuilder()
+                .WithTitle(monthly
+                    ? Strings.VotesLeaderboardMonthlyFixed(ctx.Guild.Id)
+                    : Strings.VotesLeaderboard(ctx.Guild.Id))
                 .WithOkColor();
 
             for (var i = 0; i < voteList.Count; i++)

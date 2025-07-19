@@ -1,3 +1,4 @@
+using DataModel;
 using Discord.Interactions;
 using ZiggyCreatures.Caching.Fusion;
 
@@ -35,8 +36,7 @@ public class StatusRoleAutocompleter : AutocompleteHandler
         IServiceProvider services)
     {
         var content = (string)interaction.Data.Current.Value;
-        var statusRoles = await cache.GetOrSetAsync<List<StatusRolesTable>>("statusRoles",
-            async _ => []);
+        var statusRoles = await cache.GetOrSetAsync("statusRoles", _ => Task.FromResult<List<StatusRole>>([]));
 
         if (statusRoles == null)
             return AutocompletionResult.FromSuccess([]);

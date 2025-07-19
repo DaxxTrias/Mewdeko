@@ -1,18 +1,14 @@
 ﻿using System.IO;
 using System.Net;
 using System.Net.Http;
-using Google;
 using Google.Apis.Auth.OAuth2;
 using Google.Apis.Services;
-using Google.Apis.Urlshortener.v1;
-using Google.Apis.Urlshortener.v1.Data;
 using Google.Apis.YouTube.v3;
 using Google.Apis.YouTube.v3.Data;
 using Google.Cloud.Vision.V1;
 using Grpc.Auth;
 using Grpc.Core;
 using Newtonsoft.Json.Linq;
-using Serilog;
 using Image = Google.Cloud.Vision.V1.Image;
 
 namespace Mewdeko.Services.Impl;
@@ -417,7 +413,7 @@ public class GoogleApiService : IGoogleApiService
         }
     };
 
-    private readonly UrlshortenerService sh;
+    private readonly ILogger<GoogleApiService> logger;
 
     private readonly ImageAnnotatorClient? visionClient;
 
@@ -428,10 +424,11 @@ public class GoogleApiService : IGoogleApiService
     /// </summary>
     /// <param name="creds">Bot credentials.</param>
     /// <param name="factory">HTTP client factory.</param>
-    public GoogleApiService(IBotCredentials creds, IHttpClientFactory factory)
+    public GoogleApiService(IBotCredentials creds, IHttpClientFactory factory, ILogger<GoogleApiService> logger)
     {
         this.creds = creds;
         httpFactory = factory;
+        this.logger = logger;
 
         var bcs = new BaseClientService.Initializer
         {
@@ -448,14 +445,13 @@ public class GoogleApiService : IGoogleApiService
                 ChannelCredentials = credential.ToChannelCredentials()
             }.Build();
         }
-        catch (Exception e)
+        catch (Exception)
         {
-            Log.Error("Google Cloud Credentials not found. Image command will be unfiltered.");
+            logger.LogError("Google Cloud Credentials not found. Image command will be unfiltered.");
             visionClient = null;
         }
 
         yt = new YouTubeService(bcs);
-        sh = new UrlshortenerService(bcs);
     }
 
 
@@ -520,40 +516,6 @@ public class GoogleApiService : IGoogleApiService
 
 
     /// <summary>
-    ///     Shortens a given url.
-    /// </summary>
-    /// <param name="url">The URL to shorten.</param>
-    /// <returns>The shortened URL.</returns>
-    /// <exception cref="ArgumentNullException"></exception>
-    public async Task<string> ShortenUrl(string url)
-    {
-        await Task.Yield();
-        if (string.IsNullOrWhiteSpace(url))
-            throw new ArgumentNullException(nameof(url));
-
-        if (string.IsNullOrWhiteSpace(creds.GoogleApiKey))
-            return url;
-
-        try
-        {
-            var response = await sh.Url.Insert(new Url
-            {
-                LongUrl = url
-            }).ExecuteAsync().ConfigureAwait(false);
-            return response.Id;
-        }
-        catch (GoogleApiException ex) when (ex.HttpStatusCode == HttpStatusCode.Forbidden)
-        {
-            return url;
-        }
-        catch (Exception ex)
-        {
-            Log.Warning(ex, "Error shortening URL");
-            return url;
-        }
-    }
-
-    /// <summary>
     ///     Gets the list of supported languages.
     /// </summary>
     public IEnumerable<string?> Languages
@@ -572,7 +534,7 @@ public class GoogleApiService : IGoogleApiService
     /// <param name="targetLanguage">The target language.</param>
     /// <returns>The translated text.</returns>
     /// <exception cref="ArgumentException"></exception>
-    public async Task<string> Translate(string sourceText, string? sourceLanguage, string? targetLanguage)
+    public async Task<string> Translate(string sourceText, string sourceLanguage, string targetLanguage)
     {
         await Task.Yield();
         string text;
@@ -595,7 +557,7 @@ public class GoogleApiService : IGoogleApiService
         return string.Concat(JArray.Parse(text)[0].Select(x => x[0]));
     }
 
-    private string ConvertToLanguageCode(string? language)
+    private string? ConvertToLanguageCode(string language)
     {
         languageDictionary.TryGetValue(language, out var mode);
         return mode;

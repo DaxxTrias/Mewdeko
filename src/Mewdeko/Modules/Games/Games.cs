@@ -1,7 +1,7 @@
 ﻿using Discord.Commands;
+using LinqToDB;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Common.Configs;
-using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.Games.Services;
 
 namespace Mewdeko.Modules.Games;
@@ -9,19 +9,19 @@ namespace Mewdeko.Modules.Games;
 public partial class Games : MewdekoModuleBase<GamesService>
 {
     private readonly BotConfig config;
-    private readonly DbContextProvider dbContextProvider;
+    private readonly IDataConnectionFactory dbFactory;
     private readonly MewdekoRandom rng = new();
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="Games" /> class.
     /// </summary>
     /// <param name="data">The data cache service.</param>
-    /// <param name="db">The database service.</param>
+    /// <param name="dbFactory">The database service.</param>
     /// <param name="config">Bot config service.</param>
-    public Games(IDataCache data, DbContextProvider dbProvider, BotConfig config)
+    public Games(IDataCache data, IDataConnectionFactory dbFactory, BotConfig config)
     {
         this.config = config;
-        (_, dbContextProvider) = (data.LocalImages, dbProvider);
+        (_, this.dbFactory) = (data.LocalImages, dbFactory);
     }
 
     /// <summary>
@@ -38,7 +38,8 @@ public partial class Games : MewdekoModuleBase<GamesService>
         var listArr = list.Split(';');
         if (listArr.Length < 2)
             return;
-        await ctx.Channel.SendConfirmAsync("🤔", listArr[rng.Next(0, listArr.Length)]).ConfigureAwait(false);
+        await ctx.Channel.SendConfirmAsync(Strings.ChoiceMade(ctx.Guild.Id, listArr[rng.Next(0, listArr.Length)]))
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -56,8 +57,9 @@ public partial class Games : MewdekoModuleBase<GamesService>
         var res = Service.GetEightballResponse(question);
         await ctx.Channel.EmbedAsync(new EmbedBuilder().WithColor(Mewdeko.OkColor)
             .WithDescription(ctx.User.ToString())
-            .AddField(efb => efb.WithName($"❓ {GetText("question")}").WithValue(question).WithIsInline(false))
-            .AddField($"🎱 {GetText("8ball")}", res));
+            .AddField(efb =>
+                efb.WithName($"❓ {Strings.Question(ctx.Guild.Id)}").WithValue(question).WithIsInline(false))
+            .AddField($"🎱 {Strings.Eightball(ctx.Guild.Id)}", res));
     }
 
     /// <summary>
@@ -70,7 +72,7 @@ public partial class Games : MewdekoModuleBase<GamesService>
     public async Task RateGirl()
     {
         await ctx.Channel.SendErrorAsync(
-            "Calling people a slur isnt nice, NadekoBot. This command has been here since this bot was forked from Nadeko. Here as a fuck you to nadeko and the dev.",
+            Strings.InappropriateContentBlocked(ctx.Guild.Id),
             config);
     }
 
@@ -85,11 +87,7 @@ public partial class Games : MewdekoModuleBase<GamesService>
     public async Task Linux(string guhnoo, string loonix)
     {
         await ctx.Channel.SendConfirmAsync(
-            $@"I'd just like to interject for moment. What you're refering to as {loonix}, is in fact, {guhnoo}/{loonix}, or as I've recently taken to calling it, {guhnoo} plus {loonix}. {loonix} is not an operating system unto itself, but rather another free component of a fully functioning {guhnoo} system made useful by the {guhnoo} corelibs, shell utilities and vital system components comprising a full OS as defined by POSIX.
-
-Many computer users run a modified version of the {guhnoo} system every day, without realizing it. Through a peculiar turn of events, the version of {guhnoo} which is widely used today is often called {loonix}, and many of its users are not aware that it is basically the {guhnoo} system, developed by the {guhnoo} Project.
-
-There really is a {loonix}, and these people are using it, but it is just a part of the system they use. {loonix} is the kernel: the program in the system that allocates the machine's resources to the other programs that you run. The kernel is an essential part of an operating system, but useless by itself; it can only function in the context of a complete operating system. {loonix} is normally used in combination with the {guhnoo} operating system: the whole system is basically {guhnoo} with {loonix} added, or {guhnoo}/{loonix}. All the so-called {loonix} distributions are really distributions of {guhnoo}/{loonix}."
+            Strings.LinuxCopypasta(ctx.Guild.Id, guhnoo, loonix)
         ).ConfigureAwait(false);
     }
 
@@ -102,12 +100,12 @@ There really is a {loonix}, and these people are using it, but it is just a part
     [HelpDisabled]
     public async Task Dragon()
     {
-        await using var dbContext = await dbContextProvider.GetContextAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
         var user = await dbContext.GetOrCreateUser(ctx.User);
         user.IsDragon = !user.IsDragon;
-        await dbContext.SaveChangesAsync();
-        await ReplyConfirmLocalizedAsync(user.IsDragon ? "dragon_set" : "dragon_unset")
+        await dbContext.UpdateAsync(user);
+        await ReplyConfirmAsync(user.IsDragon ? Strings.DragonSet(ctx.Guild.Id) : Strings.DragonUnset(ctx.Guild.Id))
             .ConfigureAwait(false);
     }
 }

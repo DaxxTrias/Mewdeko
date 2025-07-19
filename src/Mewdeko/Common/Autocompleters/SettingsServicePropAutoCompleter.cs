@@ -58,9 +58,11 @@ public class SettingsServicePropAutoCompleter : AutocompleteHandler
         var propValues = names.Select(pr =>
         {
             var val = config.GetSetting(pr);
+            if (val is null)
+                return null;
             if (pr != "currency.sign")
                 val = val.TrimTo(40);
-            return val?.Replace("\n", "") ?? "-";
+            return val.Replace("\n", "") ?? "-";
         });
         return propValues;
     }

@@ -16,20 +16,23 @@ public class ToneTagAutocompleter : AutocompleteHandler
     /// <param name="parameter">The parameter info.</param>
     /// <param name="services">The service provider.</param>
     /// <returns>A task that represents the asynchronous operation. The task result contains the autocomplete result.</returns>
-    public override Task<AutocompletionResult> GenerateSuggestionsAsync(
+    public override async Task<AutocompletionResult> GenerateSuggestionsAsync(
         IInteractionContext context,
         IAutocompleteInteraction inter,
         IParameterInfo parameter,
         IServiceProvider services)
     {
-        return Task.FromResult(AutocompletionResult.FromSuccess(
+        await Task.CompletedTask;
+        if (inter.Data.Current.Value is not string currentValue)
+            return AutocompletionResult.FromSuccess();
+        return AutocompletionResult.FromSuccess(
             (services.GetService(typeof(ToneTagService)) as ToneTagService)
             .Tags.SelectMany(x => x.GetAllValues()).Select(x => '/' + x)
-            .Where(x => x.Contains(inter.Data.Current.Value as string,
+            .Where(x => x.Contains(currentValue,
                 StringComparison.InvariantCultureIgnoreCase))
             .OrderByDescending(x =>
-                x.StartsWith(inter.Data.Current.Value as string,
+                x.StartsWith(currentValue,
                     StringComparison.InvariantCultureIgnoreCase)).Take(25)
-            .Select(x => new AutocompleteResult(x, x))));
+            .Select(x => new AutocompleteResult(x, x)));
     }
 }

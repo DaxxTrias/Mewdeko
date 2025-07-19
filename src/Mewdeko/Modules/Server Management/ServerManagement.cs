@@ -1,8 +1,10 @@
 using System.Net.Http;
+using System.Text.RegularExpressions;
 using Discord.Commands;
 using Discord.Net;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Services.Settings;
+using Serilog;
 using Image = Discord.Image;
 
 namespace Mewdeko.Modules.Server_Management;
@@ -23,7 +25,7 @@ public partial class ServerManagement(IHttpClientFactory factory, BotConfigServi
     {
         var perms = ((IGuildUser)ctx.User).GuildPermissions;
         var eb = new EmbedBuilder();
-        eb.WithTitle("List of allowed perms");
+        eb.WithTitle(Strings.ListAllowedPerms(ctx.Guild.Id));
         eb.WithOkColor();
         var allowed = perms.ToList().Select(i => $"**{i}**").ToList();
 
@@ -43,7 +45,7 @@ public partial class ServerManagement(IHttpClientFactory factory, BotConfigServi
     {
         var perms = user.GuildPermissions;
         var eb = new EmbedBuilder();
-        eb.WithTitle($"List of allowed perms for {user}");
+        eb.WithTitle($"{Strings.ListAllowedPerms(ctx.Guild.Id)} for {user}");
         eb.WithOkColor();
         var allowed = perms.ToList().Select(i => $"**{i}**").ToList();
 
@@ -63,7 +65,7 @@ public partial class ServerManagement(IHttpClientFactory factory, BotConfigServi
     {
         var perms = user.Permissions;
         var eb = new EmbedBuilder();
-        eb.WithTitle($"List of allowed perms for {user}");
+        eb.WithTitle($"{Strings.ListAllowedPerms(ctx.Guild.Id)} for {user}");
         eb.WithOkColor();
         var allowed = perms.ToList().Select(i => $"**{i}**").ToList();
 
@@ -89,7 +91,7 @@ public partial class ServerManagement(IHttpClientFactory factory, BotConfigServi
         var imgStream = imgData.ToStream();
         await using var _ = imgStream.ConfigureAwait(false);
         await guild.ModifyAsync(x => x.Splash = new Image(imgStream)).ConfigureAwait(false);
-        await ctx.Channel.SendConfirmAsync("New splash image has been set!").ConfigureAwait(false);
+        await ctx.Channel.SendConfirmAsync(Strings.SplashImageSet(ctx.Guild.Id)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -110,7 +112,7 @@ public partial class ServerManagement(IHttpClientFactory factory, BotConfigServi
         var imgStream = imgData.ToStream();
         await using var _ = imgStream.ConfigureAwait(false);
         await guild.ModifyAsync(x => x.Icon = new Image(imgStream)).ConfigureAwait(false);
-        await ctx.Channel.SendConfirmAsync("New server icon has been set!").ConfigureAwait(false);
+        await ctx.Channel.SendConfirmAsync(Strings.ServerIconSet(ctx.Guild.Id)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -131,7 +133,7 @@ public partial class ServerManagement(IHttpClientFactory factory, BotConfigServi
         var imgStream = imgData.ToStream();
         await using var _ = imgStream.ConfigureAwait(false);
         await guild.ModifyAsync(x => x.Banner = new Image(imgStream)).ConfigureAwait(false);
-        await ctx.Channel.SendConfirmAsync("New server banner has been set!").ConfigureAwait(false);
+        await ctx.Channel.SendConfirmAsync(Strings.ServerBannerSet(ctx.Guild.Id)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -146,7 +148,7 @@ public partial class ServerManagement(IHttpClientFactory factory, BotConfigServi
     {
         var guild = ctx.Guild;
         await guild.ModifyAsync(x => x.Name = name).ConfigureAwait(false);
-        await ctx.Channel.SendConfirmAsync($"Succesfuly set server name to {name}").ConfigureAwait(false);
+        await ctx.Channel.SendConfirmAsync(Strings.ServerNameSet(ctx.Guild.Id, name)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -217,11 +219,11 @@ public partial class ServerManagement(IHttpClientFactory factory, BotConfigServi
         {
             var emote1 = await ctx.Guild.GetEmoteAsync(tags.Id).ConfigureAwait(false);
             await ctx.Guild.DeleteEmoteAsync(emote1).ConfigureAwait(false);
-            await ctx.Channel.SendConfirmAsync($"{emote1} has been deleted!").ConfigureAwait(false);
+            await ctx.Channel.SendConfirmAsync(Strings.EmoteDeleted(ctx.Guild.Id, emote1)).ConfigureAwait(false);
         }
         catch (HttpException)
         {
-            await ctx.Channel.SendErrorAsync("This emote is not from this guild!", Config).ConfigureAwait(false);
+            await ctx.Channel.SendErrorAsync(Strings.EmoteNotFromGuild(ctx.Guild.Id), Config).ConfigureAwait(false);
         }
     }
 
@@ -239,7 +241,7 @@ public partial class ServerManagement(IHttpClientFactory factory, BotConfigServi
     {
         if (name.StartsWith("<"))
         {
-            await ctx.Channel.SendErrorAsync("You cant use an emote as a name!", Config).ConfigureAwait(false);
+            await ctx.Channel.SendErrorAsync(Strings.EmoteInvalidName(ctx.Guild.Id), Config).ConfigureAwait(false);
             return;
         }
 
@@ -257,7 +259,7 @@ public partial class ServerManagement(IHttpClientFactory factory, BotConfigServi
         }
         catch (HttpException)
         {
-            await ctx.Channel.SendErrorAsync("This emote != from this guild!", Config).ConfigureAwait(false);
+            await ctx.Channel.SendErrorAsync(Strings.EmoteWrongGuild(ctx.Guild.Id), Config).ConfigureAwait(false);
         }
     }
 
@@ -273,31 +275,94 @@ public partial class ServerManagement(IHttpClientFactory factory, BotConfigServi
     [Priority(1)]
     public async Task StealEmotes([Remainder] string e)
     {
-        var eb = new EmbedBuilder
+        var eb = new EmbedBuilder   
         {
-            Description = $"{config.Data.LoadingEmote} Adding Emotes...", Color = Mewdeko.OkColor
+            Description = $"{config.Data.LoadingEmote} Adding Emotes...",
+            Color = Mewdeko.OkColor
         };
         var errored = new List<string>();
         var emotes = new List<string>();
         var tags = ctx.Message.Tags.Where(t => t.Type == TagType.Emoji).Select(x => (Emote)x.Value).Distinct();
-        if (!tags.Any()) return;
+        if (!tags.Any())
+            return;
         var msg = await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
+
         foreach (var i in tags)
         {
+            var emoteName = i.Name; // Default to the emote name
+
+            // Define a pattern to find the emote in the message
+            var pattern = $"<a?:{i.Name}:[0-9]+>";
+            var match = Regex.Match(ctx.Message.Content, pattern);
+
+            if (match.Success && tags.Count() == 1)
+            {
+                // Find the index immediately after the emote match
+                var indexAfterEmote = match.Index + match.Length;
+
+                // Get the substring from the message that comes after the emote
+                var potentialNamePart = ctx.Message.Content.Substring(indexAfterEmote).Trim();
+
+                // Split the remaining message by spaces and take the first word if any
+                var parts = potentialNamePart.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+
+                // Use the provided name only if there is exactly one emote and one potential name
+                if (parts.Length > 0)
+                {
+                    var candidateName = parts[0];
+                    // Validate Discord emote name: 2-32 chars, alphanumeric/underscore only
+                    if (Regex.IsMatch(candidateName, @"^[a-zA-Z0-9_]{2,32}$"))
+                    {
+                        emoteName = candidateName;
+                    }
+                }
+            }
+
             using var http = factory.CreateClient();
             using var sr = await http.GetAsync(i.Url, HttpCompletionOption.ResponseHeadersRead)
                 .ConfigureAwait(false);
             var imgData = await sr.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
             var imgStream = imgData.ToStream();
+
+            try
+            {
+                imgStream = ImageCompressor.EnsureImageUnder256Kb(imgData);
+            }
+            catch (InvalidOperationException)
+            {
+                errored.Add($"Unable to add '{i.Name}'. Image could not be compressed under 256kb.");
+                continue;
+            }
+
             await using var _ = imgStream.ConfigureAwait(false);
             {
                 try
                 {
-                    var emote = await ctx.Guild.CreateEmoteAsync(i.Name, new Image(imgStream)).ConfigureAwait(false);
+                    var emote = await ctx.Guild.CreateEmoteAsync(emoteName, new Image(imgStream)).ConfigureAwait(false);
                     emotes.Add($"{emote} {Format.Code(emote.Name)}");
                 }
-                catch (Exception)
+                catch (HttpException httpEx) when (httpEx.HttpCode == System.Net.HttpStatusCode.BadRequest)
                 {
+                    // check if the error is 30008
+                    if (httpEx.DiscordCode.HasValue && httpEx.DiscordCode.Value == (DiscordErrorCode)30008)
+                    {
+                        errored.Add($"Unable to add '{i.Name}'. Discord server reports no free emoji slots.");
+                    }
+                    // check if the error is 50138
+                    else if (httpEx.DiscordCode.HasValue && httpEx.DiscordCode.Value == (DiscordErrorCode)50138)
+                    {
+                        errored.Add($"Unable to add '{i.Name}'. Discord server reports emoji file size is too large.");
+                    }
+                    else
+                    {
+                        // other HttpExceptions
+                        Log.Information($"Failed to add emotes. Message: {httpEx.Message}");
+                        errored.Add($"{i.Name}\n{i.Url}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Log.Information($"Failed to add emotes. Message: {ex.Message}");
                     errored.Add($"{i.Name}\n{i.Url}");
                 }
             }
@@ -307,8 +372,10 @@ public partial class ServerManagement(IHttpClientFactory factory, BotConfigServi
         {
             Color = Mewdeko.OkColor
         };
-        if (emotes.Count > 0) b.WithDescription($"**Added Emotes**\n{string.Join("\n", emotes)}");
-        if (errored.Count > 0) b.AddField("Errored Emotes", string.Join("\n\n", errored));
+        if (emotes.Count > 0)
+            b.WithDescription($"**Added Emotes**\n{string.Join("\n", emotes)}");
+        if (errored.Count > 0)
+            b.AddField("Errored Emotes", string.Join("\n\n", errored));
         await msg.ModifyAsync(x => x.Embed = b.Build()).ConfigureAwait(false);
     }
 
@@ -365,8 +432,76 @@ public partial class ServerManagement(IHttpClientFactory factory, BotConfigServi
             Color = Mewdeko.OkColor
         };
         if (emotes.Count > 0)
-            b.WithDescription($"**Added {emotes.Count} Emotes to {role.Mention}**\n{string.Join("\n", emotes)}");
+            b.WithDescription(Strings.AddedEmotesToRole(ctx.Guild.Id, emotes.Count, role.Mention,
+                string.Join("\n", emotes)));
         if (errored.Count > 0) b.AddField($"{errored.Count} Errored Emotes", string.Join("\n\n", errored));
+        await msg.ModifyAsync(x => x.Embed = b.Build()).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Steals stickers from a message and adds them to the server.
+    /// </summary>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    [UserPerm(GuildPermission.ManageEmojisAndStickers)]
+    [BotPerm(GuildPermission.ManageEmojisAndStickers)]
+    public async Task StealSticker([Remainder] string? _ = null)
+    {
+        var stickers = ctx.Message.Stickers;
+        if (!stickers.Any())
+        {
+            await ctx.Channel.SendErrorAsync("Message contains no sticker.", Config).ConfigureAwait(false);
+            return;
+        }
+
+        var eb = new EmbedBuilder
+        {
+            Description = $"{config.Data.LoadingEmote} Adding Sticker...",
+            Color = Mewdeko.OkColor
+        };
+        var msg = await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
+
+        var errored = new List<string>();
+        var added = new List<string>();
+
+        foreach (var sticker in stickers)
+        {
+            try
+            {
+                using var http = factory.CreateClient();
+                await using var stream = await http.GetStreamAsync(sticker.GetStickerUrl());
+                var ms = new System.IO.MemoryStream();
+                await stream.CopyToAsync(ms);
+                ms.Position = 0;
+
+                var createdSticker = await ctx.Guild.CreateStickerAsync(sticker.Name, new Image(ms), new[] { "Mewdeko" }, sticker.Name).ConfigureAwait(false);
+                added.Add($"{createdSticker.Name} - [View]({createdSticker.GetStickerUrl()})");
+            }
+            catch (HttpException httpEx) when (httpEx.DiscordCode == (DiscordErrorCode)50138)
+            {
+                errored.Add($"Unable to add '{sticker.Name}'. Sticker file size is too large.");
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Failed to add sticker {StickerName}", sticker.Name);
+                errored.Add($"Unable to add '{sticker.Name}'. An unknown error occurred.");
+            }
+        }
+
+        var b = new EmbedBuilder
+        {
+            Color = Mewdeko.OkColor
+        };
+
+        if (added.Any())
+            b.WithDescription($"**Added Sticker**\n{string.Join("\n", added)}");
+        else
+            b.WithDescription("No sticker added.");
+
+        if (errored.Any())
+            b.AddField("Errored adding sticker", string.Join("\n", errored));
+
         await msg.ModifyAsync(x => x.Embed = b.Build()).ConfigureAwait(false);
     }
 }

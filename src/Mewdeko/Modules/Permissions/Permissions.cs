@@ -1,10 +1,11 @@
-﻿using Discord.Commands;
+﻿using DataModel;
+using Discord.Commands;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
+using LinqToDB;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Common.TypeReaders;
 using Mewdeko.Common.TypeReaders.Models;
-using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.Permissions.Common;
 using Mewdeko.Modules.Permissions.Services;
 
@@ -13,11 +14,11 @@ namespace Mewdeko.Modules.Permissions;
 /// <summary>
 ///     A module for managing permissions for commands.
 /// </summary>
-/// <param name="db">The database service.</param>
+/// <param name="dbFactory">The database service.</param>
 /// <param name="inter">The interactive service.</param>
 /// <param name="guildSettings">The guild settings service.</param>
 public partial class Permissions(
-    DbContextProvider dbProvider,
+    IDataConnectionFactory dbFactory,
     InteractiveService inter,
     GuildSettingsService guildSettings)
     : MewdekoModuleBase<PermissionService>
@@ -43,7 +44,7 @@ public partial class Permissions(
     public async Task ResetPerms()
     {
         await Service.Reset(ctx.Guild.Id).ConfigureAwait(false);
-        await ReplyConfirmLocalizedAsync("perms_reset").ConfigureAwait(false);
+        await ReplyConfirmAsync(Strings.PermsReset(ctx.Guild.Id)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -55,19 +56,27 @@ public partial class Permissions(
     [RequireContext(ContextType.Guild)]
     public async Task Verbose(PermissionAction? action = null)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
-        {
-            var config = await dbContext.GcWithPermissionsv2For(ctx.Guild.Id);
-            action ??= new PermissionAction(config.VerbosePermissions);
-            config.VerbosePermissions = action.Value;
-            await dbContext.SaveChangesAsync().ConfigureAwait(false);
-            Service.UpdateCache(config);
-        }
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
+
+        // Get GuildConfig directly
+        var config = await guildSettings.GetGuildConfig(ctx.Guild.Id);
+
+        action ??= new PermissionAction(!config.VerbosePermissions);
+        config.VerbosePermissions = action.Value;
+
+        await guildSettings.UpdateGuildConfig(ctx.Guild.Id, config);
+
+        // Get permissions for cache update
+        var permissions = await dbContext.Permissions1
+            .Where(p => p.GuildId == ctx.Guild.Id)
+            .ToListAsync();
+
+        Service.UpdateCache(ctx.Guild.Id, permissions, config);
 
         if (action.Value)
-            await ReplyConfirmLocalizedAsync("verbose_true").ConfigureAwait(false);
+            await ReplyConfirmAsync(Strings.VerboseTrue(ctx.Guild.Id)).ConfigureAwait(false);
         else
-            await ReplyConfirmLocalizedAsync("verbose_false").ConfigureAwait(false);
+            await ReplyConfirmAsync(Strings.VerboseFalse(ctx.Guild.Id)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -90,27 +99,34 @@ public partial class Permissions(
             if (!ulong.TryParse(cache.PermRole, out var roleId) ||
                 (role = ((SocketGuild)ctx.Guild).GetRole(roleId)) == null)
             {
-                await ReplyConfirmLocalizedAsync("permrole_not_set", Format.Bold(cache.PermRole))
+                await ReplyConfirmAsync(Strings.PermroleNotSet(ctx.Guild.Id))
                     .ConfigureAwait(false);
             }
             else
             {
-                await ReplyConfirmLocalizedAsync("permrole", Format.Bold(role.ToString())).ConfigureAwait(false);
+                await ReplyConfirmAsync(Strings.Permrole(ctx.Guild.Id, Format.Bold(role.ToString())))
+                    .ConfigureAwait(false);
             }
 
             return;
         }
 
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
-        await using var dbContext = await dbProvider.GetContextAsync();
-        {
-            var config = await dbContext.GcWithPermissionsv2For(ctx.Guild.Id);
-            config.PermissionRole = role.Id.ToString();
-            await dbContext.SaveChangesAsync().ConfigureAwait(false);
-            Service.UpdateCache(config);
-        }
+        // Get GuildConfig directly
+        var config = await guildSettings.GetGuildConfig(ctx.Guild.Id);
 
-        await ReplyConfirmLocalizedAsync("permrole_changed", Format.Bold(role.Name)).ConfigureAwait(false);
+        config.PermissionRole = role.Id.ToString();
+
+
+        // Get permissions for cache update
+        var permissions = await dbContext.Permissions1
+            .Where(p => p.GuildId == ctx.Guild.Id)
+            .ToListAsync();
+
+        Service.UpdateCache(ctx.Guild.Id, permissions, config);
+
+        await ReplyConfirmAsync(Strings.PermroleChanged(ctx.Guild.Id, Format.Bold(role.Name))).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -124,15 +140,24 @@ public partial class Permissions(
     [Priority(1)]
     public async Task PermRole(Reset _)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
-        {
-            var config = await dbContext.GcWithPermissionsv2For(ctx.Guild.Id);
-            config.PermissionRole = null;
-            await dbContext.SaveChangesAsync().ConfigureAwait(false);
-            Service.UpdateCache(config);
-        }
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
-        await ReplyConfirmLocalizedAsync("permrole_reset").ConfigureAwait(false);
+        // Get GuildConfig directly
+        var config = await guildSettings.GetGuildConfig(ctx.Guild.Id);
+
+        config.PermissionRole = null;
+
+        await guildSettings.UpdateGuildConfig(ctx.Guild.Id, config);
+
+
+        // Get permissions for cache update
+        var permissions = await dbContext.Permissions1
+            .Where(p => p.GuildId == ctx.Guild.Id)
+            .ToListAsync();
+
+        Service.UpdateCache(ctx.Guild.Id, permissions, config);
+
+        await ReplyConfirmAsync(Strings.PermroleReset(ctx.Guild.Id)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -143,9 +168,9 @@ public partial class Permissions(
     [RequireContext(ContextType.Guild)]
     public async Task ListPerms()
     {
-        IList<Permissionv2> perms = Service.Cache.TryGetValue(ctx.Guild.Id, out var permCache)
-            ? permCache.Permissions.Source.ToList()
-            : Permissionv2.GetDefaultPermlist;
+        IList<Permission1> perms = Service.Cache.TryGetValue(ctx.Guild.Id, out var permCache)
+            ? permCache.Permissions.ToList()
+            : PermissionExtensions.GetDefaultPermlist;
         var paginator = new LazyPaginatorBuilder()
             .AddUser(ctx.User)
             .WithPageFactory(PageFactory)
@@ -165,9 +190,9 @@ public partial class Permissions(
                     var str =
                         $"`{p.Index + 1}.` {Format.Bold(p.GetCommand(guildSettings.GetPrefix(ctx.Guild).GetAwaiter().GetResult(), (SocketGuild)ctx.Guild))}";
                     if (p.Index == 0)
-                        str += $" [{GetText("uneditable")}]";
+                        str += $" [{Strings.Uneditable(ctx.Guild.Id)}]";
                     return str;
-                }))).WithTitle(Format.Bold(GetText("page", page + 1))).WithOkColor();
+                }))).WithTitle(Format.Bold(Strings.Page(ctx.Guild.Id, page + 1))).WithOkColor();
         }
     }
 
@@ -185,23 +210,33 @@ public partial class Permissions(
             return;
         try
         {
-            await using var dbContext = await dbProvider.GetContextAsync();
-            var config = await dbContext.GcWithPermissionsv2For(ctx.Guild.Id);
-            var permsCol = new PermissionsCollection<Permissionv2>(config.Permissions);
+            await using var dbContext = await dbFactory.CreateConnectionAsync();
+
+            // Get permissions directly
+            var permissions = await dbContext.Permissions1
+                .Where(p => p.GuildId == ctx.Guild.Id)
+                .OrderBy(p => p.Index)
+                .ToListAsync();
+
+            // Get GuildConfig for cache update
+            var config = await guildSettings.GetGuildConfig(ctx.Guild.Id);
+
+            var permsCol = new List<Permission1>(permissions);
             var p = permsCol[index];
             permsCol.RemoveAt(index);
-            dbContext.Remove(p);
-            await dbContext.SaveChangesAsync().ConfigureAwait(false);
-            Service.UpdateCache(config);
+            await dbContext.DeleteAsync(p);
 
-            await ReplyConfirmLocalizedAsync("removed",
+
+            Service.UpdateCache(ctx.Guild.Id, permsCol.ToList(), config);
+
+            await ReplyConfirmAsync(Strings.Removed(ctx.Guild.Id,
                     index + 1,
-                    Format.Code(p.GetCommand(await guildSettings.GetPrefix(ctx.Guild), (SocketGuild)ctx.Guild)))
+                    Format.Code(p.GetCommand(await guildSettings.GetPrefix(ctx.Guild), ctx.Guild as SocketGuild))))
                 .ConfigureAwait(false);
         }
         catch (IndexOutOfRangeException)
         {
-            await ReplyErrorLocalizedAsync("perm_out_of_range").ConfigureAwait(false);
+            await ReplyErrorAsync(Strings.PermOutOfRange(ctx.Guild.Id)).ConfigureAwait(false);
         }
     }
 
@@ -221,22 +256,31 @@ public partial class Permissions(
         {
             try
             {
-                await using var dbContext = await dbProvider.GetContextAsync();
-                var config = await dbContext.GcWithPermissionsv2For(ctx.Guild.Id);
-                var permsCol = new PermissionsCollection<Permissionv2>(config.Permissions);
+                await using var dbContext = await dbFactory.CreateConnectionAsync();
+
+                // Get permissions directly
+                var permissions = await dbContext.Permissions1
+                    .Where(p => p.GuildId == ctx.Guild.Id)
+                    .OrderBy(p => p.Index)
+                    .ToListAsync();
+
+                // Get GuildConfig for cache update
+                var config = await guildSettings.GetGuildConfig(ctx.Guild.Id);
+
+                var permsCol = new List<Permission1>(permissions);
 
                 var fromFound = from < permsCol.Count;
                 var toFound = to < permsCol.Count;
 
                 if (!fromFound)
                 {
-                    await ReplyErrorLocalizedAsync("not_found", ++from).ConfigureAwait(false);
+                    await ReplyErrorAsync(Strings.PermNotFound(ctx.Guild.Id, ++from)).ConfigureAwait(false);
                     return;
                 }
 
                 if (!toFound)
                 {
-                    await ReplyErrorLocalizedAsync("not_found", ++to).ConfigureAwait(false);
+                    await ReplyErrorAsync(Strings.PermNotFound(ctx.Guild.Id, ++to)).ConfigureAwait(false);
                     return;
                 }
 
@@ -244,14 +288,22 @@ public partial class Permissions(
 
                 permsCol.RemoveAt(from);
                 permsCol.Insert(to, fromPerm);
-                await dbContext.SaveChangesAsync().ConfigureAwait(false);
-                Service.UpdateCache(config);
 
-                await ReplyConfirmLocalizedAsync("moved_permission",
+                // Update indices
+                for (var i = 0; i < permsCol.Count; i++)
+                {
+                    permsCol[i].Index = i;
+                    await dbContext.UpdateAsync(permsCol[i]);
+                }
+
+
+                Service.UpdateCache(ctx.Guild.Id, permsCol.ToList(), config);
+
+                await ReplyConfirmAsync(Strings.MovedPermission(ctx.Guild.Id,
                         Format.Code(fromPerm.GetCommand(await guildSettings.GetPrefix(ctx.Guild),
                             (SocketGuild)ctx.Guild)),
                         ++from,
-                        ++to)
+                        ++to))
                     .ConfigureAwait(false);
                 return;
             }
@@ -260,7 +312,7 @@ public partial class Permissions(
             }
         }
 
-        await ReplyErrorLocalizedAsync("perm_out_of_range").ConfigureAwait(false);
+        await ReplyErrorAsync(Strings.PermOutOfRange(ctx.Guild.Id)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -273,11 +325,11 @@ public partial class Permissions(
     [RequireContext(ContextType.Guild)]
     public async Task SrvrCmd(CommandOrCrInfo command, PermissionAction action)
     {
-        await Service.AddPermissions(ctx.Guild.Id, new Permissionv2
+        await Service.AddPermissions(ctx.Guild.Id, new Permission1
         {
-            PrimaryTarget = PrimaryPermissionType.Server,
+            PrimaryTarget = (int)PrimaryPermissionType.Server,
             PrimaryTargetId = 0,
-            SecondaryTarget = SecondaryPermissionType.Command,
+            SecondaryTarget = (int)SecondaryPermissionType.Command,
             SecondaryTargetName = command.Name.ToLowerInvariant(),
             State = action.Value,
             IsCustomCommand = command.IsCustom
@@ -285,15 +337,15 @@ public partial class Permissions(
 
         if (action.Value)
         {
-            await ReplyConfirmLocalizedAsync("sx_enable",
+            await ReplyConfirmAsync(Strings.SxEnable(ctx.Guild.Id,
                 Format.Code(command.Name),
-                GetText("of_command")).ConfigureAwait(false);
+                Strings.OfCommand(ctx.Guild.Id))).ConfigureAwait(false);
         }
         else
         {
-            await ReplyConfirmLocalizedAsync("sx_disable",
+            await ReplyConfirmAsync(Strings.SxDisable(ctx.Guild.Id,
                 Format.Code(command.Name),
-                GetText("of_command")).ConfigureAwait(false);
+                Strings.OfCommand(ctx.Guild.Id))).ConfigureAwait(false);
         }
     }
 
@@ -310,26 +362,26 @@ public partial class Permissions(
     [RequireContext(ContextType.Guild)]
     public async Task SrvrMdl(ModuleOrCrInfo module, PermissionAction action)
     {
-        await Service.AddPermissions(ctx.Guild.Id, new Permissionv2
+        await Service.AddPermissions(ctx.Guild.Id, new Permission1
         {
-            PrimaryTarget = PrimaryPermissionType.Server,
+            PrimaryTarget = (int)PrimaryPermissionType.Server,
             PrimaryTargetId = 0,
-            SecondaryTarget = SecondaryPermissionType.Module,
+            SecondaryTarget = (int)SecondaryPermissionType.Module,
             SecondaryTargetName = module.Name.ToLowerInvariant(),
             State = action.Value
         }).ConfigureAwait(false);
 
         if (action.Value)
         {
-            await ReplyConfirmLocalizedAsync("sx_enable",
+            await ReplyConfirmAsync(Strings.SxEnable(ctx.Guild.Id,
                 Format.Code(module.Name),
-                GetText("of_module")).ConfigureAwait(false);
+                Strings.OfModule(ctx.Guild.Id))).ConfigureAwait(false);
         }
         else
         {
-            await ReplyConfirmLocalizedAsync("sx_disable",
+            await ReplyConfirmAsync(Strings.SxDisable(ctx.Guild.Id,
                 Format.Code(module.Name),
-                GetText("of_module")).ConfigureAwait(false);
+                Strings.OfModule(ctx.Guild.Id))).ConfigureAwait(false);
         }
     }
 
@@ -347,11 +399,11 @@ public partial class Permissions(
     [RequireContext(ContextType.Guild)]
     public async Task UsrCmd(CommandOrCrInfo command, PermissionAction action, [Remainder] IGuildUser user)
     {
-        await Service.AddPermissions(ctx.Guild.Id, new Permissionv2
+        await Service.AddPermissions(ctx.Guild.Id, new Permission1
         {
-            PrimaryTarget = PrimaryPermissionType.User,
+            PrimaryTarget = (int)PrimaryPermissionType.User,
             PrimaryTargetId = user.Id,
-            SecondaryTarget = SecondaryPermissionType.Command,
+            SecondaryTarget = (int)SecondaryPermissionType.Command,
             SecondaryTargetName = command.Name.ToLowerInvariant(),
             State = action.Value,
             IsCustomCommand = command.IsCustom
@@ -359,17 +411,17 @@ public partial class Permissions(
 
         if (action.Value)
         {
-            await ReplyConfirmLocalizedAsync("ux_enable",
+            await ReplyConfirmAsync(Strings.UxEnable(ctx.Guild.Id,
                 Format.Code(command.Name),
-                GetText("of_command"),
-                Format.Code(user.ToString())).ConfigureAwait(false);
+                Strings.OfCommand(ctx.Guild.Id),
+                Format.Code(user.ToString()))).ConfigureAwait(false);
         }
         else
         {
-            await ReplyConfirmLocalizedAsync("ux_disable",
+            await ReplyConfirmAsync(Strings.UxDisable(ctx.Guild.Id,
                 Format.Code(command.Name),
-                GetText("of_command"),
-                Format.Code(user.ToString())).ConfigureAwait(false);
+                Strings.OfCommand(ctx.Guild.Id),
+                Format.Code(user.ToString()))).ConfigureAwait(false);
         }
     }
 
@@ -387,28 +439,28 @@ public partial class Permissions(
     [RequireContext(ContextType.Guild)]
     public async Task UsrMdl(ModuleOrCrInfo module, PermissionAction action, [Remainder] IGuildUser user)
     {
-        await Service.AddPermissions(ctx.Guild.Id, new Permissionv2
+        await Service.AddPermissions(ctx.Guild.Id, new Permission1
         {
-            PrimaryTarget = PrimaryPermissionType.User,
+            PrimaryTarget = (int)PrimaryPermissionType.User,
             PrimaryTargetId = user.Id,
-            SecondaryTarget = SecondaryPermissionType.Module,
+            SecondaryTarget = (int)SecondaryPermissionType.Module,
             SecondaryTargetName = module.Name.ToLowerInvariant(),
             State = action.Value
         }).ConfigureAwait(false);
 
         if (action.Value)
         {
-            await ReplyConfirmLocalizedAsync("ux_enable",
+            await ReplyConfirmAsync(Strings.UxEnable(ctx.Guild.Id,
                 Format.Code(module.Name),
-                GetText("of_module"),
-                Format.Code(user.ToString())).ConfigureAwait(false);
+                Strings.OfModule(ctx.Guild.Id),
+                Format.Code(user.ToString()))).ConfigureAwait(false);
         }
         else
         {
-            await ReplyConfirmLocalizedAsync("ux_disable",
+            await ReplyConfirmAsync(Strings.UxDisable(ctx.Guild.Id,
                 Format.Code(module.Name),
-                GetText("of_module"),
-                Format.Code(user.ToString())).ConfigureAwait(false);
+                Strings.OfModule(ctx.Guild.Id),
+                Format.Code(user.ToString()))).ConfigureAwait(false);
         }
     }
 
@@ -429,11 +481,11 @@ public partial class Permissions(
         if (role == role.Guild.EveryoneRole)
             return;
 
-        await Service.AddPermissions(ctx.Guild.Id, new Permissionv2
+        await Service.AddPermissions(ctx.Guild.Id, new Permission1
         {
-            PrimaryTarget = PrimaryPermissionType.Role,
+            PrimaryTarget = (int)PrimaryPermissionType.Role,
             PrimaryTargetId = role.Id,
-            SecondaryTarget = SecondaryPermissionType.Command,
+            SecondaryTarget = (int)SecondaryPermissionType.Command,
             SecondaryTargetName = command.Name.ToLowerInvariant(),
             State = action.Value,
             IsCustomCommand = command.IsCustom
@@ -441,17 +493,17 @@ public partial class Permissions(
 
         if (action.Value)
         {
-            await ReplyConfirmLocalizedAsync("rx_enable",
+            await ReplyConfirmAsync(Strings.RxEnable(ctx.Guild.Id,
                 Format.Code(command.Name),
-                GetText("of_command"),
-                Format.Code(role.Name)).ConfigureAwait(false);
+                Strings.OfCommand(ctx.Guild.Id),
+                Format.Code(role.Name))).ConfigureAwait(false);
         }
         else
         {
-            await ReplyConfirmLocalizedAsync("rx_disable",
+            await ReplyConfirmAsync(Strings.RxDisable(ctx.Guild.Id,
                 Format.Code(command.Name),
-                GetText("of_command"),
-                Format.Code(role.Name)).ConfigureAwait(false);
+                Strings.OfCommand(ctx.Guild.Id),
+                Format.Code(role.Name))).ConfigureAwait(false);
         }
     }
 
@@ -472,28 +524,28 @@ public partial class Permissions(
         if (role == role.Guild.EveryoneRole)
             return;
 
-        await Service.AddPermissions(ctx.Guild.Id, new Permissionv2
+        await Service.AddPermissions(ctx.Guild.Id, new Permission1
         {
-            PrimaryTarget = PrimaryPermissionType.Role,
+            PrimaryTarget = (int)PrimaryPermissionType.Role,
             PrimaryTargetId = role.Id,
-            SecondaryTarget = SecondaryPermissionType.Module,
+            SecondaryTarget = (int)SecondaryPermissionType.Module,
             SecondaryTargetName = module.Name.ToLowerInvariant(),
             State = action.Value
         }).ConfigureAwait(false);
 
         if (action.Value)
         {
-            await ReplyConfirmLocalizedAsync("rx_enable",
+            await ReplyConfirmAsync(Strings.RxEnable(ctx.Guild.Id,
                 Format.Code(module.Name),
-                GetText("of_module"),
-                Format.Code(role.Name)).ConfigureAwait(false);
+                Strings.OfModule(ctx.Guild.Id),
+                Format.Code(role.Name))).ConfigureAwait(false);
         }
         else
         {
-            await ReplyConfirmLocalizedAsync("rx_disable",
+            await ReplyConfirmAsync(Strings.RxDisable(ctx.Guild.Id,
                 Format.Code(module.Name),
-                GetText("of_module"),
-                Format.Code(role.Name)).ConfigureAwait(false);
+                Strings.OfModule(ctx.Guild.Id),
+                Format.Code(role.Name))).ConfigureAwait(false);
         }
     }
 
@@ -511,11 +563,11 @@ public partial class Permissions(
     [RequireContext(ContextType.Guild)]
     public async Task ChnlCmd(CommandOrCrInfo command, PermissionAction action, [Remainder] ITextChannel chnl)
     {
-        await Service.AddPermissions(ctx.Guild.Id, new Permissionv2
+        await Service.AddPermissions(ctx.Guild.Id, new Permission1
         {
-            PrimaryTarget = PrimaryPermissionType.Channel,
+            PrimaryTarget = (int)PrimaryPermissionType.Channel,
             PrimaryTargetId = chnl.Id,
-            SecondaryTarget = SecondaryPermissionType.Command,
+            SecondaryTarget = (int)SecondaryPermissionType.Command,
             SecondaryTargetName = command.Name.ToLowerInvariant(),
             State = action.Value,
             IsCustomCommand = command.IsCustom
@@ -523,17 +575,17 @@ public partial class Permissions(
 
         if (action.Value)
         {
-            await ReplyConfirmLocalizedAsync("cx_enable",
+            await ReplyConfirmAsync(Strings.CxEnable(ctx.Guild.Id,
                 Format.Code(command.Name),
-                GetText("of_command"),
-                Format.Code(chnl.Name)).ConfigureAwait(false);
+                Strings.OfCommand(ctx.Guild.Id),
+                Format.Code(chnl.Name))).ConfigureAwait(false);
         }
         else
         {
-            await ReplyConfirmLocalizedAsync("cx_disable",
+            await ReplyConfirmAsync(Strings.CxDisable(ctx.Guild.Id,
                 Format.Code(command.Name),
-                GetText("of_command"),
-                Format.Code(chnl.Name)).ConfigureAwait(false);
+                Strings.OfCommand(ctx.Guild.Id),
+                Format.Code(chnl.Name))).ConfigureAwait(false);
         }
     }
 
@@ -551,28 +603,28 @@ public partial class Permissions(
     [RequireContext(ContextType.Guild)]
     public async Task ChnlMdl(ModuleOrCrInfo module, PermissionAction action, [Remainder] ITextChannel chnl)
     {
-        await Service.AddPermissions(ctx.Guild.Id, new Permissionv2
+        await Service.AddPermissions(ctx.Guild.Id, new Permission1
         {
-            PrimaryTarget = PrimaryPermissionType.Channel,
+            PrimaryTarget = (int)PrimaryPermissionType.Channel,
             PrimaryTargetId = chnl.Id,
-            SecondaryTarget = SecondaryPermissionType.Module,
+            SecondaryTarget = (int)SecondaryPermissionType.Module,
             SecondaryTargetName = module.Name.ToLowerInvariant(),
             State = action.Value
         }).ConfigureAwait(false);
 
         if (action.Value)
         {
-            await ReplyConfirmLocalizedAsync("cx_enable",
+            await ReplyConfirmAsync(Strings.CxEnable(ctx.Guild.Id,
                 Format.Code(module.Name),
-                GetText("of_module"),
-                Format.Code(chnl.Name)).ConfigureAwait(false);
+                Strings.OfModule(ctx.Guild.Id),
+                Format.Code(chnl.Name))).ConfigureAwait(false);
         }
         else
         {
-            await ReplyConfirmLocalizedAsync("cx_disable",
+            await ReplyConfirmAsync(Strings.CxDisable(ctx.Guild.Id,
                 Format.Code(module.Name),
-                GetText("of_module"),
-                Format.Code(chnl.Name)).ConfigureAwait(false);
+                Strings.OfModule(ctx.Guild.Id),
+                Format.Code(chnl.Name))).ConfigureAwait(false);
         }
     }
 
@@ -589,24 +641,24 @@ public partial class Permissions(
     [RequireContext(ContextType.Guild)]
     public async Task AllChnlMdls(PermissionAction action, [Remainder] ITextChannel chnl)
     {
-        await Service.AddPermissions(ctx.Guild.Id, new Permissionv2
+        await Service.AddPermissions(ctx.Guild.Id, new Permission1
         {
-            PrimaryTarget = PrimaryPermissionType.Channel,
+            PrimaryTarget = (int)PrimaryPermissionType.Channel,
             PrimaryTargetId = chnl.Id,
-            SecondaryTarget = SecondaryPermissionType.AllModules,
+            SecondaryTarget = (int)SecondaryPermissionType.AllModules,
             SecondaryTargetName = "*",
             State = action.Value
         }).ConfigureAwait(false);
 
         if (action.Value)
         {
-            await ReplyConfirmLocalizedAsync("acm_enable",
-                Format.Code(chnl.Name)).ConfigureAwait(false);
+            await ReplyConfirmAsync(Strings.AcmEnable(ctx.Guild.Id,
+                Format.Code(chnl.Name))).ConfigureAwait(false);
         }
         else
         {
-            await ReplyConfirmLocalizedAsync("acm_disable",
-                Format.Code(chnl.Name)).ConfigureAwait(false);
+            await ReplyConfirmAsync(Strings.AcmDisable(ctx.Guild.Id,
+                Format.Code(chnl.Name))).ConfigureAwait(false);
         }
     }
 
@@ -624,11 +676,11 @@ public partial class Permissions(
     [RequireContext(ContextType.Guild)]
     public async Task CatCmd(CommandOrCrInfo command, PermissionAction action, [Remainder] ICategoryChannel chnl)
     {
-        await Service.AddPermissions(ctx.Guild.Id, new Permissionv2
+        await Service.AddPermissions(ctx.Guild.Id, new Permission1
         {
-            PrimaryTarget = PrimaryPermissionType.Category,
+            PrimaryTarget = (int)PrimaryPermissionType.Category,
             PrimaryTargetId = chnl.Id,
-            SecondaryTarget = SecondaryPermissionType.Command,
+            SecondaryTarget = (int)SecondaryPermissionType.Command,
             SecondaryTargetName = command.Name.ToLowerInvariant(),
             State = action.Value,
             IsCustomCommand = command.IsCustom
@@ -636,17 +688,17 @@ public partial class Permissions(
 
         if (action.Value)
         {
-            await ReplyConfirmLocalizedAsync("cx_enable",
+            await ReplyConfirmAsync(Strings.CxEnable(ctx.Guild.Id,
                 Format.Code(command.Name),
-                GetText("of_command"),
-                Format.Code(chnl.Name)).ConfigureAwait(false);
+                Strings.OfCommand(ctx.Guild.Id),
+                Format.Code(chnl.Name))).ConfigureAwait(false);
         }
         else
         {
-            await ReplyConfirmLocalizedAsync("cx_disable",
+            await ReplyConfirmAsync(Strings.CxDisable(ctx.Guild.Id,
                 Format.Code(command.Name),
-                GetText("of_command"),
-                Format.Code(chnl.Name)).ConfigureAwait(false);
+                Strings.OfCommand(ctx.Guild.Id),
+                Format.Code(chnl.Name))).ConfigureAwait(false);
         }
     }
 
@@ -664,28 +716,28 @@ public partial class Permissions(
     [RequireContext(ContextType.Guild)]
     public async Task CatMdl(ModuleOrCrInfo module, PermissionAction action, [Remainder] ICategoryChannel chnl)
     {
-        await Service.AddPermissions(ctx.Guild.Id, new Permissionv2
+        await Service.AddPermissions(ctx.Guild.Id, new Permission1
         {
-            PrimaryTarget = PrimaryPermissionType.Category,
+            PrimaryTarget = (int)PrimaryPermissionType.Category,
             PrimaryTargetId = chnl.Id,
-            SecondaryTarget = SecondaryPermissionType.Module,
+            SecondaryTarget = (int)SecondaryPermissionType.Module,
             SecondaryTargetName = module.Name.ToLowerInvariant(),
             State = action.Value
         }).ConfigureAwait(false);
 
         if (action.Value)
         {
-            await ReplyConfirmLocalizedAsync("cx_enable",
+            await ReplyConfirmAsync(Strings.CxEnable(ctx.Guild.Id,
                 Format.Code(module.Name),
-                GetText("of_module"),
-                Format.Code(chnl.Name)).ConfigureAwait(false);
+                Strings.OfModule(ctx.Guild.Id),
+                Format.Code(chnl.Name))).ConfigureAwait(false);
         }
         else
         {
-            await ReplyConfirmLocalizedAsync("cx_disable",
+            await ReplyConfirmAsync(Strings.CxDisable(ctx.Guild.Id,
                 Format.Code(module.Name),
-                GetText("of_module"),
-                Format.Code(chnl.Name)).ConfigureAwait(false);
+                Strings.OfModule(ctx.Guild.Id),
+                Format.Code(chnl.Name))).ConfigureAwait(false);
         }
     }
 
@@ -702,24 +754,24 @@ public partial class Permissions(
     [RequireContext(ContextType.Guild)]
     public async Task AllCatMdls(PermissionAction action, [Remainder] ICategoryChannel chnl)
     {
-        await Service.AddPermissions(ctx.Guild.Id, new Permissionv2
+        await Service.AddPermissions(ctx.Guild.Id, new Permission1
         {
-            PrimaryTarget = PrimaryPermissionType.Category,
+            PrimaryTarget = (int)PrimaryPermissionType.Category,
             PrimaryTargetId = chnl.Id,
-            SecondaryTarget = SecondaryPermissionType.AllModules,
+            SecondaryTarget = (int)SecondaryPermissionType.AllModules,
             SecondaryTargetName = "*",
             State = action.Value
         }).ConfigureAwait(false);
 
         if (action.Value)
         {
-            await ReplyConfirmLocalizedAsync("acm_enable",
-                Format.Code(chnl.Name)).ConfigureAwait(false);
+            await ReplyConfirmAsync(Strings.AcmEnable(ctx.Guild.Id,
+                Format.Code(chnl.Name))).ConfigureAwait(false);
         }
         else
         {
-            await ReplyConfirmLocalizedAsync("acm_disable",
-                Format.Code(chnl.Name)).ConfigureAwait(false);
+            await ReplyConfirmAsync(Strings.AcmDisable(ctx.Guild.Id,
+                Format.Code(chnl.Name))).ConfigureAwait(false);
         }
     }
 
@@ -739,24 +791,24 @@ public partial class Permissions(
         if (role == role.Guild.EveryoneRole)
             return;
 
-        await Service.AddPermissions(ctx.Guild.Id, new Permissionv2
+        await Service.AddPermissions(ctx.Guild.Id, new Permission1
         {
-            PrimaryTarget = PrimaryPermissionType.Role,
+            PrimaryTarget = (int)PrimaryPermissionType.Role,
             PrimaryTargetId = role.Id,
-            SecondaryTarget = SecondaryPermissionType.AllModules,
+            SecondaryTarget = (int)SecondaryPermissionType.AllModules,
             SecondaryTargetName = "*",
             State = action.Value
         }).ConfigureAwait(false);
 
         if (action.Value)
         {
-            await ReplyConfirmLocalizedAsync("arm_enable",
-                Format.Code(role.Name)).ConfigureAwait(false);
+            await ReplyConfirmAsync(Strings.ArmEnable(ctx.Guild.Id,
+                Format.Code(role.Name))).ConfigureAwait(false);
         }
         else
         {
-            await ReplyConfirmLocalizedAsync("arm_disable",
-                Format.Code(role.Name)).ConfigureAwait(false);
+            await ReplyConfirmAsync(Strings.ArmDisable(ctx.Guild.Id,
+                Format.Code(role.Name))).ConfigureAwait(false);
         }
     }
 
@@ -773,24 +825,24 @@ public partial class Permissions(
     [RequireContext(ContextType.Guild)]
     public async Task AllUsrMdls(PermissionAction action, [Remainder] IUser user)
     {
-        await Service.AddPermissions(ctx.Guild.Id, new Permissionv2
+        await Service.AddPermissions(ctx.Guild.Id, new Permission1
         {
-            PrimaryTarget = PrimaryPermissionType.User,
+            PrimaryTarget = (int)PrimaryPermissionType.User,
             PrimaryTargetId = user.Id,
-            SecondaryTarget = SecondaryPermissionType.AllModules,
+            SecondaryTarget = (int)SecondaryPermissionType.AllModules,
             SecondaryTargetName = "*",
             State = action.Value
         }).ConfigureAwait(false);
 
         if (action.Value)
         {
-            await ReplyConfirmLocalizedAsync("aum_enable",
-                Format.Code(user.ToString())).ConfigureAwait(false);
+            await ReplyConfirmAsync(Strings.AumEnable(ctx.Guild.Id,
+                Format.Code(user.ToString()))).ConfigureAwait(false);
         }
         else
         {
-            await ReplyConfirmLocalizedAsync("aum_disable",
-                Format.Code(user.ToString())).ConfigureAwait(false);
+            await ReplyConfirmAsync(Strings.AumDisable(ctx.Guild.Id,
+                Format.Code(user.ToString()))).ConfigureAwait(false);
         }
     }
 
@@ -806,20 +858,20 @@ public partial class Permissions(
     [RequireContext(ContextType.Guild)]
     public async Task AllSrvrMdls(PermissionAction action)
     {
-        var newPerm = new Permissionv2
+        var newPerm = new Permission1
         {
-            PrimaryTarget = PrimaryPermissionType.Server,
+            PrimaryTarget = (int)PrimaryPermissionType.Server,
             PrimaryTargetId = 0,
-            SecondaryTarget = SecondaryPermissionType.AllModules,
+            SecondaryTarget = (int)SecondaryPermissionType.AllModules,
             SecondaryTargetName = "*",
             State = action.Value
         };
 
-        var allowUser = new Permissionv2
+        var allowUser = new Permission1
         {
-            PrimaryTarget = PrimaryPermissionType.User,
+            PrimaryTarget = (int)PrimaryPermissionType.User,
             PrimaryTargetId = ctx.User.Id,
-            SecondaryTarget = SecondaryPermissionType.AllModules,
+            SecondaryTarget = (int)SecondaryPermissionType.AllModules,
             SecondaryTargetName = "*",
             State = true
         };
@@ -829,8 +881,8 @@ public partial class Permissions(
             allowUser).ConfigureAwait(false);
 
         if (action.Value)
-            await ReplyConfirmLocalizedAsync("asm_enable").ConfigureAwait(false);
+            await ReplyConfirmAsync(Strings.AsmEnable(ctx.Guild.Id)).ConfigureAwait(false);
         else
-            await ReplyConfirmLocalizedAsync("asm_disable").ConfigureAwait(false);
+            await ReplyConfirmAsync(Strings.AsmDisable(ctx.Guild.Id)).ConfigureAwait(false);
     }
 }

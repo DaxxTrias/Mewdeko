@@ -250,7 +250,7 @@ public static partial class UserExtensions
     /// <param name="user">The user to send the error message to.</param>
     /// <param name="error">The error description.</param>
     /// <returns>A task representing the asynchronous operation. The task result contains the sent message.</returns>
-    public static async Task<IUserMessage> SendErrorAsync(this IUser user, string? error)
+    public static async Task<IUserMessage> SendErrorAsync(this IUser? user, string? error)
     {
         return await (await user.CreateDMChannelAsync().ConfigureAwait(false))
             .SendMessageAsync(embed: new EmbedBuilder().WithErrorColor().WithDescription(error).Build())
@@ -298,25 +298,11 @@ public static partial class UserExtensions
     /// <param name="usr">The user to get the avatar URL for.</param>
     /// <param name="size">The desired size of the avatar image.</param>
     /// <returns>The URL of the user's avatar.</returns>
-    public static Uri RealAvatarUrl(this IUser usr, ushort size = 2048)
+    public static Uri RealAvatarUrl(this IUser? usr, ushort size = 2048)
     {
         return usr.AvatarId == null
             ? new Uri(usr.GetDefaultAvatarUrl())
             : new Uri(usr.GetAvatarUrl(ImageFormat.Auto, size));
-    }
-
-    /// <summary>
-    ///     Gets the real avatar URL of the Discord user.
-    /// </summary>
-    /// <param name="usr">The Discord user to get the avatar URL for.</param>
-    /// <returns>The URL of the user's avatar.</returns>
-    public static Uri? RealAvatarUrl(this DiscordUser usr)
-    {
-        return usr.AvatarId == null
-            ? null
-            : new Uri(usr.AvatarId.StartsWith("a_", StringComparison.InvariantCulture)
-                ? $"{DiscordConfig.CDNUrl}avatars/{usr.UserId}/{usr.AvatarId}.gif?size=2048"
-                : $"{DiscordConfig.CDNUrl}avatars/{usr.UserId}/{usr.AvatarId}.png?size=2048");
     }
 
 

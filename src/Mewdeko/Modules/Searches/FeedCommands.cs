@@ -1,10 +1,9 @@
-﻿using CodeHollow.FeedReader;
+using CodeHollow.FeedReader;
 using Discord.Commands;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Modules.Searches.Services;
-using Serilog;
 
 namespace Mewdeko.Modules.Searches;
 
@@ -14,7 +13,7 @@ public partial class Searches
     ///     Module for managing RSS feeds in the guild.
     /// </summary>
     [Group]
-    public class FeedCommands(InteractiveService serv) : MewdekoSubmodule<FeedsService>
+    public class FeedCommands(InteractiveService serv, ILogger<FeedCommands> logger) : MewdekoSubmodule<FeedsService>
     {
         /// <summary>
         ///     Adds a new RSS feed to the guild's feed list.
@@ -34,25 +33,6 @@ public partial class Searches
         [UserPerm(GuildPermission.ManageMessages)]
         public async Task FeedAdd(string url, [Remainder] ITextChannel? channel = null)
         {
-            // Replace 'twitter.com' with 'nitter.cz'
-            if (url.Contains("twitter.com"))
-            {
-                if (url.StartsWith("https://"))
-                {
-                    var baseString = url;
-                    baseString = url + "/rss";
-                    url = baseString;
-                    url = url.Replace("twitter.com", "nitter.cz");
-                }
-                else
-                {
-                    var baseString = url;
-                    baseString = "https://" + url + "/rss";
-                    url = baseString;
-                    url = url.Replace("twitter.com", "nitter.cz");
-                }
-            }
-
             var success = Uri.TryCreate(url, UriKind.Absolute, out var uri) &&
                           (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
             if (success)
@@ -64,7 +44,7 @@ public partial class Searches
                 }
                 catch (Exception ex)
                 {
-                    Log.Information(ex, "Unable to get feeds from that url: " + url);
+                    logger.LogInformation(ex, "Unable to get feeds from that url");
                     success = false;
                 }
             }
@@ -74,13 +54,12 @@ public partial class Searches
                 success = await Service.AddFeed(ctx.Guild.Id, channel.Id, url);
                 if (success)
                 {
-                    await ReplyConfirmLocalizedAsync("feed_added").ConfigureAwait(false);
+                    await ReplyConfirmAsync(Strings.FeedAdded(ctx.Guild.Id)).ConfigureAwait(false);
                     return;
                 }
             }
 
-            Log.Information("error in url: " + url);
-            await ReplyErrorLocalizedAsync("feed_not_valid").ConfigureAwait(false);
+            await ReplyErrorAsync(Strings.FeedNotValid(ctx.Guild.Id)).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -101,9 +80,9 @@ public partial class Searches
         public async Task FeedRemove(int index)
         {
             if (await Service.RemoveFeed(ctx.Guild.Id, --index))
-                await ReplyConfirmLocalizedAsync("feed_removed").ConfigureAwait(false);
+                await ReplyConfirmAsync(Strings.FeedRemoved(ctx.Guild.Id)).ConfigureAwait(false);
             else
-                await ReplyErrorLocalizedAsync("feed_out_of_range").ConfigureAwait(false);
+                await ReplyErrorAsync(Strings.FeedOutOfRange(ctx.Guild.Id)).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -125,9 +104,9 @@ public partial class Searches
         public async Task FeedMessage(int index, [Remainder] string message)
         {
             if (await Service.AddFeedMessage(ctx.Guild.Id, --index, message).ConfigureAwait(false))
-                await ReplyConfirmLocalizedAsync("feed_msg_updated").ConfigureAwait(false);
+                await ReplyConfirmAsync(Strings.FeedMsgUpdated(ctx.Guild.Id)).ConfigureAwait(false);
             else
-                await ReplyErrorLocalizedAsync("feed_out_of_range").ConfigureAwait(false);
+                await ReplyErrorAsync(Strings.FeedOutOfRange(ctx.Guild.Id)).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -145,16 +124,16 @@ public partial class Searches
         [Aliases]
         [RequireContext(ContextType.Guild)]
         [UserPerm(GuildPermission.ManageMessages)]
-        public async Task RssTest(int index, bool sendBoth = false)
+        public async Task RssTest(int index)
         {
             var feeds = await Service.GetFeeds(ctx.Guild.Id);
             if (feeds.ElementAt(index - 1) is null)
             {
-                await ReplyErrorLocalizedAsync("feed_out_of_range").ConfigureAwait(false);
+                await ReplyErrorAsync(Strings.FeedOutOfRange(ctx.Guild.Id)).ConfigureAwait(false);
                 return;
             }
 
-            await Service.TestRss(feeds.ElementAt(index - 1), ctx.Channel as ITextChannel, sendBoth).ConfigureAwait(false);
+            await Service.TestRss(feeds.ElementAt(index - 1), ctx.Channel as ITextChannel).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -179,7 +158,7 @@ public partial class Searches
             {
                 await ctx.Channel.EmbedAsync(new EmbedBuilder()
                         .WithOkColor()
-                        .WithDescription(GetText("feed_no_feed")))
+                        .WithDescription(Strings.FeedNoFeed(ctx.Guild.Id)))
                     .ConfigureAwait(false);
                 return;
             }
@@ -207,32 +186,6 @@ public partial class Searches
 
                 return embed.WithDescription(fs);
             }
-        }
-
-        /// <summary>
-        ///    Starts the tracking of feed updates
-        /// </summary>
-        /// <returns></returns>
-        [Cmd, Aliases, RequireContext(ContextType.Guild), UserPerm(GuildPermission.ManageMessages)]
-        public async Task FeedStart()
-        {
-            if (Service.StartTracking(ctx.Guild.Id))
-                await ReplyConfirmLocalizedAsync("feed_started").ConfigureAwait(false);
-            else
-                await ReplyErrorLocalizedAsync("feed_already_started").ConfigureAwait(false);
-        }
-
-        /// <summary>
-        ///     Stops the tracking of feed updates
-        /// </summary>
-        /// <returns></returns>
-        [Cmd, Aliases, RequireContext(ContextType.Guild), UserPerm(GuildPermission.ManageMessages)]
-        public async Task FeedStop()
-        {
-            if (Service.StopTracking(ctx.Guild.Id))
-                await ReplyConfirmLocalizedAsync("feed_stopped").ConfigureAwait(false);
-            else
-                await ReplyErrorLocalizedAsync("feed_already_stopped").ConfigureAwait(false);
         }
     }
 }

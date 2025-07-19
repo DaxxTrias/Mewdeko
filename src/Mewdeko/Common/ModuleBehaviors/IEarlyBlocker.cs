@@ -8,12 +8,12 @@ public interface IEarlyBehavior
     /// <summary>
     ///     Gets the priority of the module. The lower the number, the higher the priority.
     /// </summary>
-    int Priority { get; }
+    public int Priority { get; }
 
     /// <summary>
     ///     Gets the type of behavior the module exhibits.
     /// </summary>
-    ModuleBehaviorType BehaviorType { get; }
+    public ModuleBehaviorType BehaviorType { get; }
 
     /// <summary>
     ///     Executes the behavior of the module.
@@ -25,7 +25,7 @@ public interface IEarlyBehavior
     ///     A task that represents the asynchronous operation. The task result contains a boolean indicating whether the
     ///     module blocked the execution.
     /// </returns>
-    Task<bool> RunBehavior(DiscordShardedClient socketClient, IGuild guild, IUserMessage msg);
+    public Task<bool> RunBehavior(DiscordShardedClient socketClient, IGuild? guild, IUserMessage msg);
 }
 
 /// <summary>

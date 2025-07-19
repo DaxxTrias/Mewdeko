@@ -3,7 +3,9 @@
     {
       "src": [
         {
-          "files": ["**.csproj"],
+          "files": [
+            "**.csproj"
+          ],
           "src": "src"
         }
       ],
@@ -50,7 +52,10 @@
     "dest": "_site",
     "globalMetadataFiles": [],
     "fileMetadataFiles": [],
-    "template": ["default", "templates/singulinkfx"],
+    "template": [
+      "default",
+      "templates/singulinkfx"
+    ],
     "postProcessors": [],
     "markdownEngineName": "markdig",
     "noLangKeyword": false,

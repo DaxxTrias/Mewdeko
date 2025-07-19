@@ -8,33 +8,33 @@ public interface IImageCache
     /// <summary>
     ///     Gets the image URLs.
     /// </summary>
-    ImageUrls ImageUrls { get; }
+    public ImageUrls ImageUrls { get; }
 
     /// <summary>
     ///     Gets the background image for XP.
     /// </summary>
-    byte[] XpBackground { get; }
+    public byte[] XpBackground { get; }
 
     /// <summary>
     ///     Gets the image for RIP (rest in peace).
     /// </summary>
-    byte[] Rip { get; }
+    public byte[] Rip { get; }
 
     /// <summary>
     ///     Gets the overlay image for RIP.
     /// </summary>
-    byte[] RipOverlay { get; }
+    public byte[] RipOverlay { get; }
 
     /// <summary>
     ///     Gets a cached image by key.
     /// </summary>
     /// <param name="key">The key associated with the cached image.</param>
     /// <returns>The cached image as a byte array.</returns>
-    byte[] GetCard(string key);
+    public byte[] GetCard(string key);
 
     /// <summary>
     ///     Reloads the image cache.
     /// </summary>
     /// <returns>A task representing the asynchronous operation.</returns>
-    Task Reload();
+    public Task Reload();
 }

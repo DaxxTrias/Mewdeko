@@ -27,14 +27,14 @@ public partial class Suggestions : MewdekoModuleBase<SuggestionsService>
         if (channel == null)
         {
             await Service.SetSuggestionChannelId(ctx.Guild, 0).ConfigureAwait(false);
-            await ctx.Channel.SendConfirmAsync("Suggestions Disabled!").ConfigureAwait(false);
+            await ctx.Channel.SendConfirmAsync(Strings.SuggestionsDisabled(ctx.Guild.Id));
         }
         else
         {
             await Service.SetSuggestionChannelId(ctx.Guild, channel.Id).ConfigureAwait(false);
             var chn2 = await ctx.Guild.GetTextChannelAsync(await Service.GetSuggestionChannel(ctx.Guild.Id))
                 .ConfigureAwait(false);
-            await ctx.Channel.SendConfirmAsync($"Your Suggestion channel has been set to {chn2.Mention}")
+            await ctx.Channel.SendConfirmAsync(Strings.SuggestionChannelSet(ctx.Guild.Id, chn2.Mention))
                 .ConfigureAwait(false);
         }
     }
@@ -56,7 +56,7 @@ public partial class Suggestions : MewdekoModuleBase<SuggestionsService>
         var suggest = (await Service.Suggestions(ctx.Guild.Id, num)).FirstOrDefault();
         if (suggest is null)
         {
-            await ctx.Channel.SendErrorAsync("That suggestion wasn't found! Please double check the number.", Config)
+            await ctx.Channel.SendErrorAsync(Strings.SuggestionNotFound(ctx.Guild.Id), Config)
                 .ConfigureAwait(false);
             return;
         }
@@ -86,7 +86,7 @@ public partial class Suggestions : MewdekoModuleBase<SuggestionsService>
         var eb = new EmbedBuilder()
             .WithOkColor()
             .AddField("Suggestion",
-                $"{suggest.Suggestion.Truncate(256)} \n[Jump To Suggestion](https://discord.com/channels/{ctx.Guild.Id}/{Service.GetSuggestionChannel(ctx.Guild.Id)}/{suggest.MessageId})")
+                $"{suggest.Suggestion1.Truncate(256)} \n[Jump To Suggestion](https://discord.com/channels/{ctx.Guild.Id}/{Service.GetSuggestionChannel(ctx.Guild.Id)}/{suggest.MessageId})")
             .AddField("Suggested By", $"<@{suggest.UserId}> `{suggest.UserId}`")
             .AddField("Curerent State", (SuggestionsService.SuggestState)suggest.CurrentState)
             .AddField("Last Changed By",
@@ -112,15 +112,15 @@ public partial class Suggestions : MewdekoModuleBase<SuggestionsService>
         var suggests = await Service.Suggestions(ctx.Guild.Id);
         if (suggests.Count == 0)
         {
-            await ctx.Channel.SendErrorAsync("There are no suggestions to clear.", Config).ConfigureAwait(false);
+            await ctx.Channel.SendErrorAsync(Strings.NoSuggestionsToClear(ctx.Guild.Id), Config);
             return;
         }
 
-        if (await PromptUserConfirmAsync("Are you sure you want to clear all suggestions? ***This cannot be undone.***",
+        if (await PromptUserConfirmAsync(Strings.ClearSuggestionsConfirm(ctx.Guild.Id),
                 ctx.User.Id).ConfigureAwait(false))
         {
             await Service.SuggestReset(ctx.Guild).ConfigureAwait(false);
-            await ctx.Channel.SendConfirmAsync("Suggestions cleared.").ConfigureAwait(false);
+            await ctx.Channel.SendConfirmAsync(Strings.SuggestionsCleared(ctx.Guild.Id));
         }
     }
 
@@ -182,10 +182,17 @@ public partial class Suggestions : MewdekoModuleBase<SuggestionsService>
     [Aliases]
     [RequireContext(ContextType.Guild)]
     [UserPerm(GuildPermission.ManageMessages)]
-    public Task Deny(ulong sid, [Remainder] string? reason = null)
+    public async Task Deny(ulong sid, [Remainder] string? reason = null)
     {
-        return Service.SendDenyEmbed(ctx.Guild, ctx.User, sid,
-            ctx.Channel as ITextChannel, reason.EscapeWeirdStuff());
+        try
+        {
+            await Service.SendDenyEmbed(ctx.Guild, ctx.User, sid,
+                ctx.Channel as ITextChannel, reason is null ? "" : reason.EscapeWeirdStuff());
+        }
+        catch (InvalidOperationException e)
+        {
+            await ReplyErrorAsync(e.Message);
+        }
     }
 
     /// <summary>
@@ -200,10 +207,17 @@ public partial class Suggestions : MewdekoModuleBase<SuggestionsService>
     [Aliases]
     [RequireContext(ContextType.Guild)]
     [UserPerm(GuildPermission.ManageMessages)]
-    public Task Accept(ulong sid, [Remainder] string? reason = null)
+    public async Task Accept(ulong sid, [Remainder] string? reason = null)
     {
-        return Service.SendAcceptEmbed(ctx.Guild, ctx.User, sid,
-            ctx.Channel as ITextChannel, reason.EscapeWeirdStuff());
+        try
+        {
+            await Service.SendAcceptEmbed(ctx.Guild, ctx.User, sid,
+                ctx.Channel as ITextChannel, reason is null ? "" : reason.EscapeWeirdStuff());
+        }
+        catch (InvalidOperationException e)
+        {
+            await ReplyErrorAsync(e.Message);
+        }
     }
 
     /// <summary>
@@ -218,10 +232,17 @@ public partial class Suggestions : MewdekoModuleBase<SuggestionsService>
     [Aliases]
     [RequireContext(ContextType.Guild)]
     [UserPerm(GuildPermission.ManageMessages)]
-    public Task Implemented(ulong sid, [Remainder] string? reason = null)
+    public async Task Implemented(ulong sid, [Remainder] string? reason = null)
     {
-        return Service.SendImplementEmbed(ctx.Guild, ctx.User, sid,
-            ctx.Channel as ITextChannel, reason.EscapeWeirdStuff());
+        try
+        {
+            await Service.SendImplementEmbed(ctx.Guild, ctx.User, sid,
+                ctx.Channel as ITextChannel, reason is null ? "" : reason.EscapeWeirdStuff());
+        }
+        catch (InvalidOperationException e)
+        {
+            await ReplyErrorAsync(e.Message);
+        }
     }
 
     /// <summary>
@@ -236,9 +257,16 @@ public partial class Suggestions : MewdekoModuleBase<SuggestionsService>
     [Aliases]
     [RequireContext(ContextType.Guild)]
     [UserPerm(GuildPermission.ManageMessages)]
-    public Task Consider(ulong sid, [Remainder] string? reason = null)
+    public async Task Consider(ulong sid, [Remainder] string? reason = null)
     {
-        return Service.SendConsiderEmbed(ctx.Guild, ctx.User, sid,
-            ctx.Channel as ITextChannel, reason.EscapeWeirdStuff());
+        try
+        {
+            await Service.SendConsiderEmbed(ctx.Guild, ctx.User, sid,
+                ctx.Channel as ITextChannel, reason is null ? "" : reason.EscapeWeirdStuff());
+        }
+        catch (InvalidOperationException e)
+        {
+            await ReplyErrorAsync(e.Message);
+        }
     }
 }

@@ -1,16 +1,16 @@
 using System.IO;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Discord.Interactions;
 using Humanizer;
 using Mewdeko.Common.Attributes.InteractionCommands;
 using Mewdeko.Common.Autocompleters;
 using Mewdeko.Common.JsonSettings;
 using Mewdeko.Common.Modals;
-using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.Moderation.Services;
 using Mewdeko.Modules.Utility.Services;
 using Mewdeko.Services.Impl;
 using Mewdeko.Services.Settings;
-using Newtonsoft.Json;
 using static Mewdeko.Services.Impl.StatsService;
 
 namespace Mewdeko.Modules.Utility;
@@ -19,13 +19,13 @@ namespace Mewdeko.Modules.Utility;
 ///     Contains utility commands such as user and server information retrieval.
 /// </summary>
 [Group("utility", "Utility commands like userinfo")]
-public class SlashUtility(
+public partial class SlashUtility(
     DiscordShardedClient client,
     StatsService stats,
     IBotCredentials creds,
     MuteService muteService,
     BotConfigService config,
-    DbContextProvider dbProvider) : MewdekoSlashModuleBase<UtilityService>
+    IDataConnectionFactory dbFactory) : MewdekoSlashModuleBase<UtilityService>
 {
     /// <summary>
     ///     Displays the avatar of a user. This can either be their global Discord avatar or their server-specific avatar if
@@ -157,21 +157,25 @@ public class SlashUtility(
     public async Task GetJson(ulong messageId, ITextChannel channel = null)
     {
         channel ??= ctx.Channel as ITextChannel;
-        var settings = new JsonSerializerSettings
+
+        var options = new JsonSerializerOptions
         {
-            ContractResolver = new LowercaseContractResolver(), NullValueHandling = NullValueHandling.Ignore
+            PropertyNamingPolicy = new LowercaseNamingPolicy(),
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+            WriteIndented = true
         };
 
         var message = await channel.GetMessageAsync(messageId);
-        var serialized = JsonConvert.SerializeObject(message.GetNewEmbedSource(), Formatting.Indented, settings);
-        using var ms = new MemoryStream();
+        var serialized = JsonSerializer.Serialize(message.GetNewEmbedSource(), options);
+
+        await using var ms = new MemoryStream();
         await using var writer = new StreamWriter(ms);
+
         await writer.WriteAsync(serialized);
         await writer.FlushAsync();
         ms.Position = 0;
+
         await ctx.Interaction.RespondWithFileAsync(ms, "EmbedJson.txt");
-        await ms.DisposeAsync();
-        await writer.DisposeAsync();
     }
 
     /// <summary>
@@ -239,7 +243,7 @@ public class SlashUtility(
     [SlashUserPerm(GuildPermission.SendMessages)]
     public async Task Stats()
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
         var time = DateTime.UtcNow.Subtract(TimeSpan.FromSeconds(5));
         var commandStats = dbContext.CommandStats.Count(x => x.DateAdded.Value >= time);
@@ -253,20 +257,33 @@ public class SlashUtility(
 
         await ctx.Interaction.RespondAsync(embed:
                 new EmbedBuilder().WithOkColor()
-                    .WithAuthor($"{client.CurrentUser.Username} v{StatsService.BotVersion}", client.CurrentUser.GetAvatarUrl(), config.Data.SupportServer)
-                    //.AddField(GetText("author"), $"{user.Mention} | {user.Username}#{user.Discriminator}")
-                    .AddField(GetText("commands_ran"), $"{commandStats}/5s")
+                    .WithAuthor(
+                        Strings.BotVersionAuthor(ctx.Guild.Id, client.CurrentUser.Username, StatsService.BotVersion), client.CurrentUser.GetAvatarUrl(), config.Data.SupportServer)
+                    //.AddField(Strings.Author(ctx.Guild.Id), $"{user.Mention} | {user.Username}#{user.Discriminator}")
+                    .AddField(Strings.CommandsRan(ctx.Guild.Id), $"{commandStats}/5s")
                     //.AddField("Library", stats.Library)
-                    .AddField(GetText("library"), $"{targetFramework} \n {libraryInfo.Library} \n {libraryInfo.OpenAILib}")
-                    .AddField(GetText("owner_ids"), string.Join("\n", creds.OwnerIds.Select(x => $"<@{x}>")))
-                    .AddField(GetText("shard"), $"#{client.GetShardFor(ctx.Guild)} / {creds.TotalShards}")
-                    .AddField(GetText("memory"), $"{stats.Heap} MB")
-                    .AddField(GetText("uptime"), stats.GetUptimeString("\n"))
+                    //.AddField(GetText("library"), $"{targetFramework} \n {libraryInfo.Library} \n {libraryInfo.OpenAILib}")
+                    .AddField(Strings.OwnerIds(ctx.Guild.Id), string.Join("\n", creds.OwnerIds.Select(x => $"<@{x}>")))
+                    .AddField(Strings.Shard(ctx.Guild.Id), $"#{client.GetShardFor(ctx.Guild)} / {creds.TotalShards}")
+                    .AddField(Strings.Memory(ctx.Guild.Id), $"{stats.Heap} MB")
+                    .AddField(Strings.Uptime(ctx.Guild.Id), stats.GetUptimeString("\n"))
                     .AddField("Servers", $"{client.Guilds.Count} Servers").Build())
             .ConfigureAwait(false);
     }
 
-    [SlashCommand("docs", "Link to the terminal docs"), CheckPermissions, SlashUserPerm(GuildPermission.SendMessages)]
+    /// <summary>
+    /// Provides a link to the Tealstreet documentation based on the specified platform.
+    /// </summary>
+    /// <param name="platform">
+    /// The platform for which documentation is requested. Examples include "windows", "linux", "mac", etc.
+    /// If no platform is specified, the general documentation link is provided.
+    /// </param>
+    /// <returns>
+    /// A task representing the asynchronous operation of responding with the documentation link.
+    /// </returns>
+    [SlashCommand("docs", "Link to the terminal docs")]
+    [CheckPermissions]
+    [SlashUserPerm(GuildPermission.SendMessages)]
     public async Task Docs(string platform = "")
     {
         var link = platform.ToLower() switch
@@ -275,17 +292,21 @@ public class SlashUtility(
             "windows" or "win" => "https://docs.tealstreet.io/docs/desktopclient/windows",
             "linux" or "nix" => "https://docs.tealstreet.io/docs/desktopclient/linux",
             "mac" or "macos" => "https://docs.tealstreet.io/docs/desktopclient/mac",
-            "binance" or "nance" => "https://docs.tealstreet.io/docs/connect/binance",
             "dualapi" or "dual-api" => "https://docs.tealstreet.io/docs/connect/dual-api",
             "encryption" or "api-encryption" => "https://docs.tealstreet.io/docs/connect/api-encryption",
-            "blofin" => "https://docs.tealstreet.io/docs/connect/blofin",
+            "apex" or "apex-omni" or "apexomni" => "https://docs.tealstreet.io/docs/connect/apex-omni",
+            "binance" or "nance" => "https://docs.tealstreet.io/docs/connect/binance",
+            "blofin" or "blo" => "https://docs.tealstreet.io/docs/connect/blofin",
             "bitget" or "bg" => "https://docs.tealstreet.io/docs/connect/bitget",
             "bitmex" or "bmex" => "https://docs.tealstreet.io/docs/connect/bitmex",
+            "bitrue" => "https://docs.tealstreet.io/docs/connect/bitrue",
+            "bitunix" => "https://docs.tealstreet.io/docs/connect/bitunix",
             "bybit" => "https://docs.tealstreet.io/docs/connect/bybit",
             "brackets" or "bracketorders" or "bracket-orders" => "https://docs.tealstreet.io/docs/trade/bracket-orders",
             "bybitv5" => "https://docs.tealstreet.io/docs/connect/bybitv5",
             "bingx" => "https://docs.tealstreet.io/docs/connect/bingx",
             "coincatch" => "https://docs.tealstreet.io/docs/connect/coincatch",
+            "coinbase" or "cb" => "https://docs.tealstreet.io/docs/connect/coinbase",
             "cli" or "console" or "commandline" => "https://docs.tealstreet.io/docs/cli",
             "okx" or "okex" => "https://docs.tealstreet.io/docs/connect/okex",
             "phm" or "phemex" => "https://docs.tealstreet.io/docs/connect/phemex",
@@ -306,11 +327,10 @@ public class SlashUtility(
             "orders" or "placing-orders" => "https://docs.tealstreet.io/docs/trade/placing-orders",
             "stops" or "stop-orders" or "stoploss" => "https://docs.tealstreet.io/docs/trade/placing-orders#stop-orders",
             "trailingstop" or "trailing-stop" or "trailing" => "https://docs.tealstreet.io/docs/trade/placing-orders#trailing-stop-orders",
+            "troubleshoot" or "troubleshooting" or "trouble-shooting" => "https://docs.tealstreet.io/docs/support/troubleshooting",
             "mobile" or "phone" => "https://docs.tealstreet.io/docs/trade/mobile",
-
-            // default case
             "" => "https://docs.tealstreet.io/",
-            _ => "https://docs.tealstreet.io/" // This is like the default case in traditional switch.
+            _ => "https://docs.tealstreet.io/"
         };
 
         await ctx.Interaction.RespondAsync(embed:
@@ -419,7 +439,7 @@ public class SlashUtility(
         // Because discord is ass and uses int32 instead of int64
         if (!ulong.TryParse(userIdstring, out var userId))
         {
-            await ctx.Interaction.SendEphemeralErrorAsync("Please make sure that you put an ID in.", Config);
+            await ctx.Interaction.SendEphemeralErrorAsync(Strings.EnterValidId(ctx.Guild.Id), Config);
             return;
         }
 
@@ -427,11 +447,11 @@ public class SlashUtility(
         if (usr is null)
         {
             await ctx.Interaction.SendErrorAsync(
-                "That user could not be found. Please ensure that was the correct ID.", Config);
+                Strings.UserNotFoundId(ctx.Guild.Id), Config);
         }
         else
         {
-            var embed = new EmbedBuilder().WithTitle("info for fetched user").AddField("Username", usr)
+            var embed = new EmbedBuilder().WithTitle(Strings.FetchedUserInfo(ctx.Guild.Id)).AddField("Username", usr)
                 .AddField("Created At", TimestampTag.FromDateTimeOffset(usr.CreatedAt))
                 .AddField("Public Flags", usr.PublicFlags).WithImageUrl(usr.RealAvatarUrl().ToString()).WithOkColor();
             await ctx.Interaction.RespondAsync(embed: embed.Build()).ConfigureAwait(false);
@@ -456,7 +476,8 @@ public class SlashUtility(
         var voicechn = guild.VoiceChannels.Count;
 
         var component = new ComponentBuilder().WithButton("More Info", "moreinfo");
-        var embed = new EmbedBuilder().WithAuthor(eab => eab.WithName(GetText("server_info"))).WithTitle(guild.Name)
+        var embed = new EmbedBuilder().WithAuthor(eab => eab.WithName(Strings.ServerInfo(ctx.Guild.Id)))
+            .WithTitle(guild.Name)
             .AddField("Id", guild.Id.ToString())
             .AddField("Owner", ownername.Mention).AddField("Total Users", guild.Users.Count.ToString())
             .AddField("Created On", TimestampTag.FromDateTimeOffset(guild.CreatedAt)).WithColor(Mewdeko.OkColor);
@@ -467,7 +488,7 @@ public class SlashUtility(
         if (guild.Emotes.Count > 0)
         {
             embed.AddField(fb =>
-                fb.WithName($"{GetText("custom_emojis")}({guild.Emotes.Count})")
+                fb.WithName($"{Strings.CustomEmojis(ctx.Guild.Id)}({guild.Emotes.Count})")
                     .WithValue(string.Join(" ", guild.Emotes.Shuffle().Take(30).Select(e => $"{e}")).TrimTo(1024)));
         }
 
@@ -503,9 +524,10 @@ public class SlashUtility(
     public async Task ChannelInfo(ITextChannel channel = null)
     {
         var ch = channel ?? (ITextChannel)ctx.Channel;
-        var embed = new EmbedBuilder().WithTitle(ch.Name).AddField(GetText("id"), ch.Id.ToString())
-            .AddField(GetText("created_at"), TimestampTag.FromDateTimeOffset(ch.CreatedAt))
-            .AddField(GetText("users"), (await ch.GetUsersAsync().FlattenAsync().ConfigureAwait(false)).Count())
+        var embed = new EmbedBuilder().WithTitle(ch.Name).AddField(Strings.Id(ctx.Guild.Id), ch.Id.ToString())
+            .AddField(Strings.CreatedAt(ctx.Guild.Id), TimestampTag.FromDateTimeOffset(ch.CreatedAt))
+            .AddField(Strings.Users(ctx.Guild.Id),
+                (await ch.GetUsersAsync().FlattenAsync().ConfigureAwait(false)).Count())
             .AddField("NSFW", ch.IsNsfw)
             .AddField("Slowmode Interval", TimeSpan.FromSeconds(ch.SlowModeInterval).Humanize())
             .AddField("Default Thread Archive Duration", ch.DefaultArchiveDuration).WithColor(Mewdeko.OkColor);
@@ -654,7 +676,7 @@ public class SlashUtility(
 
         if (avatarUrl == null)
         {
-            await ReplyErrorLocalizedAsync("avatar_none", usr.ToString()).ConfigureAwait(false);
+            await ReplyErrorAsync(Strings.AvatarNone(ctx.Guild.Id, usr.ToString())).ConfigureAwait(false);
             return;
         }
 

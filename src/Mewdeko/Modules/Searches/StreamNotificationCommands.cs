@@ -1,10 +1,10 @@
-﻿using Discord.Commands;
+﻿using DataModel;
+using Discord.Commands;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
+using LinqToDB;
 using Mewdeko.Common.Attributes.TextCommands;
-using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.Searches.Services;
-using Microsoft.EntityFrameworkCore;
 
 namespace Mewdeko.Modules.Searches;
 
@@ -14,7 +14,7 @@ public partial class Searches
     ///     Contains commands for managing stream notifications within a Discord guild.
     /// </summary>
     [Group]
-    public class StreamNotificationCommands(DbContextProvider dbProvider, InteractiveService serv)
+    public class StreamNotificationCommands(IDataConnectionFactory dbFactory, InteractiveService serv)
         : MewdekoSubmodule<StreamNotificationService>
     {
         /// <summary>
@@ -35,12 +35,12 @@ public partial class Searches
             var data = await Service.FollowStream(ctx.Guild.Id, ctx.Channel.Id, link).ConfigureAwait(false);
             if (data is null)
             {
-                await ReplyErrorLocalizedAsync("stream_not_added").ConfigureAwait(false);
+                await ReplyErrorAsync(Strings.StreamNotAdded(ctx.Guild.Id)).ConfigureAwait(false);
                 return;
             }
 
             var embed = Service.GetEmbed(ctx.Guild.Id, data);
-            await ctx.Channel.EmbedAsync(embed, GetText("stream_tracked")).ConfigureAwait(false);
+            await ctx.Channel.EmbedAsync(embed, Strings.StreamTracked(ctx.Guild.Id)).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -64,14 +64,13 @@ public partial class Searches
             var fs = await Service.UnfollowStreamAsync(ctx.Guild.Id, index).ConfigureAwait(false);
             if (fs is null)
             {
-                await ReplyErrorLocalizedAsync("stream_no").ConfigureAwait(false);
+                await ReplyErrorAsync(Strings.StreamNo(ctx.Guild.Id)).ConfigureAwait(false);
                 return;
             }
 
-            await ReplyConfirmLocalizedAsync(
-                "stream_removed",
+            await ReplyConfirmAsync(Strings.StreamRemoved(ctx.Guild.Id,
                 Format.Bold(fs.Username),
-                fs.Type).ConfigureAwait(false);
+                fs.Type)).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -88,7 +87,7 @@ public partial class Searches
         public async Task StreamsClear()
         {
             var count = await Service.ClearAllStreams(ctx.Guild.Id).ConfigureAwait(false);
-            await ReplyConfirmLocalizedAsync("streams_cleared", count).ConfigureAwait(false);
+            await ReplyConfirmAsync(Strings.StreamsCleared(ctx.Guild.Id, count)).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -105,12 +104,13 @@ public partial class Searches
         {
             var streams = new List<FollowedStream>();
 
-            await using var dbContext = await dbProvider.GetContextAsync();
-            var all = (await dbContext
-                    .ForGuildId(ctx.Guild.Id, set => set.Include(gc => gc.FollowedStreams)))
-                .FollowedStreams
+            await using var dbContext = await dbFactory.CreateConnectionAsync();
+
+            // Direct query with GuildId filter
+            var all = await dbContext.FollowedStreams
+                .Where(fs => fs.GuildId == ctx.Guild.Id)
                 .OrderBy(x => x.Id)
-                .ToList();
+                .ToListAsync();
 
             for (var index = all.Count - 1; index >= 0; index--)
             {
@@ -141,12 +141,12 @@ public partial class Searches
                 if (elements.Count == 0)
                 {
                     return new PageBuilder()
-                        .WithDescription(GetText("streams_none"))
+                        .WithDescription(Strings.StreamsNone(ctx.Guild.Id))
                         .WithErrorColor();
                 }
 
                 var eb = new PageBuilder()
-                    .WithTitle(GetText("streams_follow_title"))
+                    .WithTitle(Strings.StreamsFollowTitle(ctx.Guild.Id))
                     .WithOkColor();
                 for (var index = 0; index < elements.Count; index++)
                 {
@@ -177,9 +177,9 @@ public partial class Searches
         {
             var newValue = await Service.ToggleStreamOffline(ctx.Guild.Id);
             if (newValue)
-                await ReplyConfirmLocalizedAsync("stream_off_enabled").ConfigureAwait(false);
+                await ReplyConfirmAsync(Strings.StreamOffEnabled(ctx.Guild.Id)).ConfigureAwait(false);
             else
-                await ReplyConfirmLocalizedAsync("stream_off_disabled").ConfigureAwait(false);
+                await ReplyConfirmAsync(Strings.StreamOffDisabled(ctx.Guild.Id)).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -207,18 +207,18 @@ public partial class Searches
 
             if (!followed)
             {
-                await ReplyConfirmLocalizedAsync("stream_not_following").ConfigureAwait(false);
+                await ReplyConfirmAsync(Strings.StreamNotFollowing(ctx.Guild.Id)).ConfigureAwait(false);
                 return;
             }
 
             if (string.IsNullOrWhiteSpace(message))
             {
-                await ReplyConfirmLocalizedAsync("stream_message_reset", Format.Bold(fs.Username))
+                await ReplyConfirmAsync(Strings.StreamMessageReset(ctx.Guild.Id, Format.Bold(fs.Username)))
                     .ConfigureAwait(false);
             }
             else
             {
-                await ReplyConfirmLocalizedAsync("stream_message_set", Format.Bold(fs.Username))
+                await ReplyConfirmAsync(Strings.StreamMessageSet(ctx.Guild.Id, Format.Bold(fs.Username)))
                     .ConfigureAwait(false);
             }
         }
@@ -241,26 +241,26 @@ public partial class Searches
                 var data = await Service.GetStreamDataAsync(url).ConfigureAwait(false);
                 if (data is null)
                 {
-                    await ReplyErrorLocalizedAsync("no_channel_found").ConfigureAwait(false);
+                    await ReplyErrorAsync(Strings.NoChannelFound(ctx.Guild.Id)).ConfigureAwait(false);
                     return;
                 }
 
                 if (data.IsLive)
                 {
-                    await ReplyConfirmLocalizedAsync("streamer_online",
+                    await ReplyConfirmAsync(Strings.StreamerOnline(ctx.Guild.Id,
                             Format.Bold(data.Name),
-                            Format.Bold(data.Viewers.ToString()))
+                            Format.Bold(data.Viewers.ToString())))
                         .ConfigureAwait(false);
                 }
                 else
                 {
-                    await ReplyConfirmLocalizedAsync("streamer_offline", data.Name)
+                    await ReplyConfirmAsync(Strings.StreamerOffline(ctx.Guild.Id, data.Name))
                         .ConfigureAwait(false);
                 }
             }
             catch
             {
-                await ReplyErrorLocalizedAsync("no_channel_found").ConfigureAwait(false);
+                await ReplyErrorAsync(Strings.NoChannelFound(ctx.Guild.Id)).ConfigureAwait(false);
             }
         }
     }

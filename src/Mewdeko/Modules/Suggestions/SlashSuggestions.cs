@@ -30,14 +30,14 @@ public partial class SlashSuggestions : MewdekoSlashModuleBase<SuggestionsServic
         if (channel == null)
         {
             await Service.SetSuggestionChannelId(ctx.Guild, 0).ConfigureAwait(false);
-            await ctx.Interaction.SendConfirmAsync("Suggestions Disabled!").ConfigureAwait(false);
+            await ctx.Interaction.SendConfirmAsync(Strings.SuggestionsDisabled(ctx.Guild.Id));
         }
         else
         {
             await Service.SetSuggestionChannelId(ctx.Guild, channel.Id).ConfigureAwait(false);
             var chn2 = await ctx.Guild.GetTextChannelAsync(await Service.GetSuggestionChannel(ctx.Guild.Id))
                 .ConfigureAwait(false);
-            await ctx.Interaction.SendConfirmAsync($"Your Suggestion channel has been set to {chn2.Mention}")
+            await ctx.Interaction.SendConfirmAsync(Strings.SuggestionChannelSet(ctx.Guild.Id, chn2.Mention))
                 .ConfigureAwait(false);
         }
     }
@@ -168,7 +168,7 @@ public partial class SlashSuggestions : MewdekoSlashModuleBase<SuggestionsServic
         modal.Suggestion = modal.Suggestion.EscapeWeirdStuff();
         if (await Service.GetSuggestionChannel(ctx.Guild.Id) is 0)
         {
-            await EphemeralReplyErrorLocalizedAsync("suggest_channel_not_set").ConfigureAwait(false);
+            await EphemeralReplyErrorAsync(Strings.SuggestChannelNotSet(ctx.Guild.Id)).ConfigureAwait(false);
         }
 
         await DeferAsync(true).ConfigureAwait(false);
@@ -212,7 +212,7 @@ public partial class SlashSuggestions : MewdekoSlashModuleBase<SuggestionsServic
             return;
         }
 
-        if (await PromptUserConfirmAsync("Are you sure you want to clear all suggestions? ***This cannot be undone.***",
+        if (await PromptUserConfirmAsync(Strings.ClearSuggestionsConfirm(ctx.Guild.Id),
                 ctx.User.Id).ConfigureAwait(false))
         {
             await Service.SuggestReset(ctx.Guild).ConfigureAwait(false);

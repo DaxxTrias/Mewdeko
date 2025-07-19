@@ -59,6 +59,18 @@ public static partial class Extensions
     }
 
     /// <summary>
+    ///     SOmething that really should already have been in dnet.
+    /// </summary>
+    /// <param name="guild"></param>
+    /// <param name="categoryId"></param>
+    /// <returns></returns>
+    public static async Task<ICategoryChannel?> GetCategoryChannelAsync(this IGuild guild, ulong categoryId)
+    {
+        var cats = await guild.GetCategoriesAsync();
+        return cats.FirstOrDefault(x => x.Id == categoryId);
+    }
+
+    /// <summary>
     ///     Implementation that should already have existed in c# but doesnt for some reason
     /// </summary>
     /// <param name="source"></param>
@@ -246,25 +258,6 @@ public static partial class Extensions
         return span < TimeSpan.FromMinutes(2) ? $"{span:mm}m {span:ss}s" : $"{(int)span.TotalHours:D2}h {span:mm}m";
     }
 
-    /// <summary>
-    ///     Tries to retrieve a configuration from the list of guild configurations.
-    /// </summary>
-    /// <param name="configList">List of guild configurations.</param>
-    /// <param name="id">Guild ID.</param>
-    /// <param name="config">Retrieved guild configuration if found, otherwise null.</param>
-    /// <returns>True if the configuration was found, otherwise false.</returns>
-    public static bool TryGetConfig(this List<GuildConfig> configList, ulong id, out GuildConfig config)
-    {
-        var tocheck = configList.Find(x => x.GuildId == id);
-        if (tocheck == null)
-        {
-            config = null;
-            return false;
-        }
-
-        config = tocheck;
-        return true;
-    }
 
     /// <summary>
     ///     Adds a range of items to the list.
@@ -337,7 +330,7 @@ public static partial class Extensions
     /// <param name="emojiStr">String representation of the emoji.</param>
     /// <param name="value">Resulting IEmote instance.</param>
     /// <returns>True if conversion is successful, otherwise false.</returns>
-    public static bool TryToIEmote(this string emojiStr, out IEmote value)
+    public static bool TryToIEmote(this string emojiStr, out IEmote? value)
     {
         value = Emote.TryParse(emojiStr, out var emoteValue)
             ? emoteValue
@@ -369,6 +362,8 @@ public static partial class Extensions
     {
         var sb = new StringBuilder();
         var lastIndex = 0;
+        if (input is null)
+            return null;
 
         foreach (Match match in regex.Matches(input))
         {
@@ -439,7 +434,7 @@ public static partial class Extensions
     /// <returns>Method name of the command.</returns>
     public static string MethodName(this CommandInfo cmd)
     {
-        return ((Cmd)cmd.Attributes.FirstOrDefault(x => x is Cmd))?.MethodName
+        return ((Cmd?)cmd.Attributes.FirstOrDefault(x => x is Cmd))?.MethodName
                ?? cmd.Name;
     }
 
@@ -452,7 +447,8 @@ public static partial class Extensions
     /// <returns>Full usage of the command.</returns>
     public static string GetFullUsage(string commandName, string args, string? prefix)
     {
-        return $"{prefix}{commandName} {(StringExtensions.TryFormat(args, [prefix], out var output) ? output : args)}";
+        return
+            $"{prefix}{commandName} {(prefix != null && StringExtensions.TryFormat(args, [prefix], out var output) ? output : args)}";
     }
 
     /// <summary>
@@ -623,11 +619,16 @@ public static partial class Extensions
     /// <param name="bytes">Collection of bytes to convert.</param>
     /// <param name="canWrite">Boolean indicating if the stream can be written to (default is false).</param>
     /// <returns>Stream containing the bytes.</returns>
-    public static Stream ToStream(this IEnumerable<byte> bytes, bool canWrite = false)
+    public static Stream? ToStream(this IEnumerable<byte>? bytes, bool canWrite = false)
     {
-        var ms = new MemoryStream(bytes as byte[] ?? bytes.ToArray(), canWrite);
-        ms.Seek(0, SeekOrigin.Begin);
-        return ms;
+        if (bytes != null)
+        {
+            var ms = new MemoryStream(bytes as byte[] ?? bytes.ToArray(), canWrite);
+            ms.Seek(0, SeekOrigin.Begin);
+            return ms;
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -635,9 +636,9 @@ public static partial class Extensions
     /// </summary>
     /// <param name="user">User to get the roles for.</param>
     /// <returns>Enumerable collection of roles associated with the user.</returns>
-    public static IEnumerable<IRole> GetRoles(this IGuildUser user)
+    public static IEnumerable<IRole> GetRoles(this IGuildUser? user)
     {
-        return user.RoleIds.Select(r => user.Guild.GetRole(r)).Where(r => r != null);
+        return user?.RoleIds.Select(r => user.Guild.GetRole(r)).Where(r => r != null)!;
     }
 
     /// <summary>
@@ -659,7 +660,7 @@ public static partial class Extensions
     public static bool IsImage(this HttpResponseMessage msg, out string? mimeType)
     {
         if (msg.Content.Headers.ContentType != null) _ = msg.Content.Headers.ContentType.MediaType;
-        mimeType = msg.Content.Headers.ContentType.MediaType;
+        mimeType = msg.Content.Headers.ContentType?.MediaType;
         return mimeType is "image/png" or "image/jpeg" or "image/gif";
     }
 
@@ -695,14 +696,15 @@ public static partial class Extensions
         var sgs = command.Options.Where(x =>
             x.Type is ApplicationCommandOptionType.SubCommand or ApplicationCommandOptionType.SubCommandGroup);
 
-        if (!sgs.Any())
+        var applicationCommandOptions = sgs as IApplicationCommandOption[] ?? sgs.ToArray();
+        if (!applicationCommandOptions.Any())
             return
             [
                 baseName
             ];
 
         var ctNames = new List<string>();
-        foreach (var sg in sgs)
+        foreach (var sg in applicationCommandOptions)
             if (sg.Type == ApplicationCommandOptionType.SubCommand)
                 ctNames.Add(baseName + " " + sg.Name);
             else
@@ -739,8 +741,7 @@ public static partial class Extensions
                         + (sCmd.Data.Options?.FirstOrDefault()?.Options?.FirstOrDefault()?.Type
                            == ApplicationCommandOptionType.SubCommand
                             ? sCmd.Data.Options?.FirstOrDefault()?.Options?.FirstOrDefault()?.Name
-                            : "")
-                        ?? "").Trim();
+                            : "")).Trim();
             }
         }
     }

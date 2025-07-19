@@ -1,11 +1,9 @@
 #nullable enable
 using System.Net.Http;
+using System.Text.Json;
 using Mewdeko.Database.Common;
 using Mewdeko.Modules.Searches.Common.StreamNotifications.Models;
 using Mewdeko.Modules.Searches.Common.StreamNotifications.Providers;
-using Newtonsoft.Json;
-using Serilog;
-using StackExchange.Redis;
 
 namespace Mewdeko.Modules.Searches.Common.StreamNotifications;
 
@@ -14,40 +12,43 @@ namespace Mewdeko.Modules.Searches.Common.StreamNotifications;
 /// </summary>
 public class NotifChecker
 {
+    // Cached JsonSerializerOptions for performance - this is critical for Redis operations
+    private static readonly JsonSerializerOptions CachedJsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
+
     private readonly string key;
-
-    private readonly IDataCache multi;
-    private readonly HashSet<(FollowedStream.FType, string)> offlineBuffer;
-
-    private readonly Dictionary<FollowedStream.FType, Provider> streamProviders;
+    private readonly ILogger<NotifChecker> logger;
+    private readonly HashSet<(FType, string)> offlineBuffer;
+    private readonly ConcurrentDictionary<string, StreamData?> streamCache = new();
+    private readonly Dictionary<FType, Provider> streamProviders;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="NotifChecker" /> class.
     /// </summary>
     /// <param name="httpClientFactory">The HTTP client factory.</param>
     /// <param name="credsProvider">The credentials provider.</param>
-    /// <param name="multi">The Redis connection multiplexer.</param>
     /// <param name="uniqueCacheKey">The unique cache key for storing data.</param>
     /// <param name="isMaster">if set to <c>true</c> clears all data at start.</param>
     public NotifChecker(
         IHttpClientFactory httpClientFactory,
         IBotCredentials credsProvider,
-        IDataCache multi,
         string uniqueCacheKey,
-        bool isMaster)
+        bool isMaster, ILogger<NotifChecker> logger)
     {
-        this.multi = multi;
+        this.logger = logger;
         key = $"{uniqueCacheKey}_followed_streams_data";
-        streamProviders = new Dictionary<FollowedStream.FType, Provider>
+        streamProviders = new Dictionary<FType, Provider>
         {
             {
-                FollowedStream.FType.Twitch, new TwitchHelixProvider(httpClientFactory, credsProvider)
+                FType.Twitch, new TwitchHelixProvider(httpClientFactory, credsProvider)
             },
             {
-                FollowedStream.FType.Picarto, new PicartoProvider(httpClientFactory)
+                FType.Picarto, new PicartoProvider(httpClientFactory)
             },
             {
-                FollowedStream.FType.Trovo, new TrovoProvider(httpClientFactory, credsProvider)
+                FType.Trovo, new TrovoProvider(httpClientFactory, credsProvider)
             }
             // Disabled until google makes their api not shit
             // ,
@@ -111,7 +112,7 @@ public class NotifChecker
                         .GroupBy(entry => entry.Key.Type)
                         .ToDictionary(entry => entry.Key,
                             entry => entry.AsEnumerable()
-                                .ToDictionary(x => x.Key.Name, x => x.Value));
+                                .ToDictionary(x => x.Key.Name ?? string.Empty, x => x.Value));
 
                     var newStreamData = await oldStreamDataDict
                         .Select(x =>
@@ -121,6 +122,7 @@ public class NotifChecker
                                     out var provider))
                             {
                                 return provider.GetStreamDataAsync(x.Value
+                                    .Where(entry => !string.IsNullOrEmpty(entry.Key))
                                     .Select(entry => entry.Key)
                                     .ToList());
                             }
@@ -141,7 +143,7 @@ public class NotifChecker
 
                         // compare old data with new data
                         if (!oldStreamDataDict.TryGetValue(cachekey.Type, out var typeDict)
-                            || !typeDict.TryGetValue(cachekey.Name, out var oldData)
+                            || !typeDict.TryGetValue(cachekey.Name ?? string.Empty, out var oldData)
                             || oldData is null)
                         {
                             await CacheAddData(cachekey, newData, true);
@@ -163,7 +165,7 @@ public class NotifChecker
                         //       (stream is online -> stream is offline -> stream is online again (and stays online))
                         //       This offlineBuffer will make it so that the stream has to be marked as offline TWICE
                         //       before it sends an offline notification to the subscribers.
-                        var streamId = (cachekey.Type, cachekey.Name);
+                        var streamId = (cachekey.Type, cachekey.Name ?? string.Empty);
                         if (!newData.IsLive && offlineBuffer.Remove(streamId))
                         {
                             newlyOffline.Add(newData);
@@ -198,7 +200,7 @@ public class NotifChecker
                 }
                 catch (Exception ex)
                 {
-                    Log.Error(ex, "Error getting stream notifications: {ErrorMessage}", ex.Message);
+                    logger.LogError(ex, "Error getting stream notifications: {ErrorMessage}", ex.Message);
                 }
             }
         });
@@ -211,52 +213,51 @@ public class NotifChecker
     /// <param name="data">The stream data.</param>
     /// <param name="replace">if set to <c>true</c> replaces existing data.</param>
     /// <returns><c>true</c> if data was successfully added or updated; otherwise, <c>false</c>.</returns>
-    public async Task<bool> CacheAddData(StreamDataKey streamDataKey, StreamData? data, bool replace)
+    public Task<bool> CacheAddData(StreamDataKey streamDataKey, StreamData? data, bool replace)
     {
-        var db = multi.Redis.GetDatabase();
-        return await db.HashSetAsync(key,
-            JsonConvert.SerializeObject(streamDataKey),
-            JsonConvert.SerializeObject(data),
-            replace ? When.Always : When.NotExists);
-    }
+        var serializedKey = JsonSerializer.Serialize(streamDataKey, CachedJsonOptions);
 
+        if (replace)
+        {
+            streamCache[serializedKey] = data;
+            return Task.FromResult(true);
+        }
+
+        return Task.FromResult(streamCache.TryAdd(serializedKey, data));
+    }
 
     /// <summary>
     ///     Deletes stream data from the cache.
     /// </summary>
     /// <param name="streamdataKey">The stream data key.</param>
-    private async Task CacheDeleteData(StreamDataKey streamdataKey)
+    private Task CacheDeleteData(StreamDataKey streamdataKey)
     {
-        var db = multi.Redis.GetDatabase();
-        await db.HashDeleteAsync(key, JsonConvert.SerializeObject(streamdataKey));
+        streamCache.TryRemove(JsonSerializer.Serialize(streamdataKey, CachedJsonOptions), out _);
+        return Task.CompletedTask;
     }
 
     /// <summary>
     ///     Clears all stream data from the cache.
     /// </summary>
-    private async void CacheClearAllData()
+    private void CacheClearAllData()
     {
-        var db = multi.Redis.GetDatabase();
-        await db.KeyDeleteAsync(key, CommandFlags.FireAndForget);
+        streamCache.Clear();
     }
 
     /// <summary>
     ///     Gets all stream data from the cache.
     /// </summary>
     /// <returns>A dictionary containing all cached stream data.</returns>
-    private async Task<Dictionary<StreamDataKey, StreamData?>> CacheGetAllData()
+    private Task<Dictionary<StreamDataKey, StreamData?>> CacheGetAllData()
     {
-        var db = multi.Redis.GetDatabase();
-        if (!await db.KeyExistsAsync(key))
-            return new Dictionary<StreamDataKey, StreamData?>();
+        var result = streamCache
+            .Select(pair => (
+                Key: JsonSerializer.Deserialize<StreamDataKey>(pair.Key, CachedJsonOptions),
+                pair.Value))
+            .Where(item => item.Key.Name is not null)
+            .ToDictionary(item => item.Key, item => item.Value);
 
-
-        var getAll = await db.HashGetAllAsync(key);
-
-        return getAll.Select(redisEntry => (Key: JsonConvert.DeserializeObject<StreamDataKey>(redisEntry.Name),
-                Value: JsonConvert.DeserializeObject<StreamData?>(redisEntry.Value)))
-            .Where(keyValuePair => keyValuePair.Key.Name is not null)
-            .ToDictionary(keyValuePair => keyValuePair.Key, entry => entry.Value);
+        return Task.FromResult(result);
     }
 
     /// <summary>
@@ -292,7 +293,6 @@ public class NotifChecker
         return data;
     }
 
-
     private async Task EnsureTracked(StreamData? data)
     {
         // something failed, don't add anything to cache
@@ -303,8 +303,6 @@ public class NotifChecker
         await CacheAddData(data.CreateKey(), data, false);
     }
 
-    // if stream is found, add it to the cache for tracking only if it doesn't already exist
-    // because stream will be checked and events will fire in a loop. We don't want to override old state
     /// <summary>
     ///     Removes a stream from tracking.
     /// </summary>

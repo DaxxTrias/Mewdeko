@@ -1,0 +1,1 @@
+dotnet build --no-incremental -v:diag > buildlog.txt

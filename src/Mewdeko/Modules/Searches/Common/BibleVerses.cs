@@ -1,4 +1,4 @@
-﻿using Newtonsoft.Json;
+﻿using System.Text.Json.Serialization;
 
 namespace Mewdeko.Modules.Searches.Common;
 
@@ -26,7 +26,7 @@ public class BibleVerse
     /// <summary>
     ///     Gets or sets the name of the book where the verse is located.
     /// </summary>
-    [JsonProperty("book_name")]
+    [JsonPropertyName("book_name")]
     public string BookName { get; set; }
 
     /// <summary>

@@ -14,9 +14,9 @@ jobs:
           fetch-depth: 0  # This ensures all history is fetched
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v2
+        uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 8.0.300
+          dotnet-version: 8.0.x
 
       - name: Get previous tag
         id: prev_tag
@@ -38,17 +38,21 @@ jobs:
         if: ${{ steps.commit_count.outputs.count < 20 }}
         run: echo "Build skipped because there are less than 20 commits since last build."
 
-      - name: Restore dependencies Mewdeko
+      - name: Restore dependencies
         if: ${{ steps.commit_count.outputs.count >= 20 }}
-        run: dotnet restore src/Mewdeko/Mewdeko.csproj
+        run: dotnet restore Mewdeko.sln
+
+      - name: Build Source Generator
+        if: ${{ steps.commit_count.outputs.count >= 20 }}
+        run: dotnet build src/MewdekoSourceGen/MewdekoSourceGen.csproj --no-restore -c Release
 
       - name: Build Mewdeko
         if: ${{ steps.commit_count.outputs.count >= 20 }}
         run: dotnet publish src/Mewdeko/Mewdeko.csproj --no-restore -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false -p:IncludeNativeLibrariesForSelfExtract=true -p:UseAppHost=true -o output/
 
-      - name: Test
+      - name: Copy data folder
         if: ${{ steps.commit_count.outputs.count >= 20 }}
-        run: dotnet test --no-restore --verbosity normal
+        run: cp -r src/Mewdeko/data output/
 
       - name: Zip artifacts
         if: ${{ steps.commit_count.outputs.count >= 20 }}

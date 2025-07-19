@@ -3,25 +3,26 @@ using System.Globalization;
 using System.IO;
 using System.Net.Http;
 using System.Runtime.InteropServices;
+using DataModel;
 using Discord.Commands;
 using Discord.Net;
 using Discord.Rest;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
 using LibGit2Sharp;
-using LinqToDB.EntityFrameworkCore;
+using LinqToDB;
+using LinqToDB.Data;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Common.Configs;
 using Mewdeko.Common.DiscordImplementations;
-using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.OwnerOnly.Services;
+using Mewdeko.Services.Impl;
 using Mewdeko.Services.Settings;
 using Mewdeko.Services.strings;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Scripting;
 using Microsoft.CodeAnalysis.Scripting;
-using Microsoft.EntityFrameworkCore;
-using Serilog;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Mewdeko.Modules.OwnerOnly;
 
@@ -33,14 +34,16 @@ namespace Mewdeko.Modules.OwnerOnly;
 /// <param name="bot">The main instance of the Mewdeko bot.</param>
 /// <param name="strings">Provides access to localized strings within the bot.</param>
 /// <param name="serv">Interactive service for handling interactive user commands.</param>
-/// <param name="coord">Coordinator for managing bot operations across different services and modules.</param>
 /// <param name="settingServices">A collection of configuration services for managing bot settings.</param>
-/// <param name="db">Service for database operations and access.</param>
+/// <param name="dbFactory">Service for database operations and access.</param>
 /// <param name="cache">Cache service for storing and retrieving temporary data.</param>
 /// <param name="commandService">Service for handling and executing Discord commands.</param>
 /// <param name="services">The service provider for dependency injection.</param>
 /// <param name="guildSettings">Service for accessing and modifying guild-specific settings.</param>
 /// <param name="commandHandler">Handler for processing and executing commands received from users.</param>
+/// <param name="botConfig">Configuration settings for the bot.</param>
+/// <param name="httpClient">HTTP client for making web requests.</param>
+/// <param name="localization">Service for handling localization and translations.</param>
 [OwnerOnly]
 public class OwnerOnly(
     DiscordShardedClient client,
@@ -48,13 +51,16 @@ public class OwnerOnly(
     IBotStrings strings,
     InteractiveService serv,
     IEnumerable<IConfigService> settingServices,
-    DbContextProvider dbProvider,
+    IDataConnectionFactory dbFactory,
     IDataCache cache,
     CommandService commandService,
     IServiceProvider services,
     GuildSettingsService guildSettings,
     CommandHandler commandHandler,
-    BotConfig botConfig, HttpClient httpClient)
+    BotConfig botConfig,
+    HttpClient httpClient,
+    Localization localization,
+    ILogger<OwnerOnly> logger)
     : MewdekoModuleBase<OwnerOnlyService>
 {
     /// <summary>
@@ -85,27 +91,6 @@ public class OwnerOnly(
 
 
     /// <summary>
-    ///     Clears the count of used GPT tokens after confirming with the user.
-    /// </summary>
-    /// <remarks>
-    ///     This command prompts the user for confirmation before proceeding to clear the used token count.
-    ///     If the user confirms, it clears the count and notifies the user of completion.
-    /// </remarks>
-    [Cmd]
-    [Aliases]
-    public async Task ClearUsedTokens()
-    {
-        // Assuming PromptUserConfirmAsync is a method that prompts the user and waits for a confirmation response.
-        if (await PromptUserConfirmAsync("Are you sure you want to clear the used token count for GPT?", ctx.User.Id))
-        {
-            await Service.ClearUsedTokens();
-            await ctx.Channel.SendErrorAsync("Cleared.",
-                botConfig); // Assuming SendErrorAsync sends a message to the channel.
-        }
-    }
-
-
-    /// <summary>
     ///     Updates the bot to the latest version available on the repository.
     /// </summary>
     [Cmd]
@@ -118,7 +103,7 @@ public class OwnerOnly(
 
         var embed = new EmbedBuilder()
             .WithColor(Color.Orange)
-            .WithDescription("Which version would you like to update to?")
+            .WithDescription(Strings.UpdateVersionSelect(ctx.Guild.Id))
             .Build();
 
         var msg = await ReplyAsync(embed: embed, components: buttons.Build());
@@ -129,7 +114,7 @@ public class OwnerOnly(
         // Provide initial feedback
         var updatingEmbed = new EmbedBuilder()
             .WithColor(Color.Blue)
-            .WithDescription($"Updating to `{branch}` branch. Please wait...")
+            .WithDescription(Strings.UpdateInProgress(ctx.Guild.Id, branch))
             .Build();
         await msg.ModifyAsync(x => x.Embed = updatingEmbed);
 
@@ -140,8 +125,9 @@ public class OwnerOnly(
 
             if (string.IsNullOrWhiteSpace(discovered))
             {
-                throw new Exception("Invalid Git Repo Path.");
+                throw new Exception(Strings.InvalidRepoPath(ctx.Guild.Id));
             }
+
 
             using var repo = new Repository(discovered);
 
@@ -174,7 +160,7 @@ public class OwnerOnly(
             // Provide success feedback
             var successEmbed = new EmbedBuilder()
                 .WithColor(Color.Green)
-                .WithDescription("Update completed successfully.")
+                .WithDescription(Strings.UpdateComplete(ctx.Guild.Id))
                 .AddField("Branch", branch, true)
                 .AddField("Status", result.Status, true)
                 .Build();
@@ -189,8 +175,8 @@ public class OwnerOnly(
             // Handle exceptions and provide error feedback
             var errorEmbed = new EmbedBuilder()
                 .WithColor(Color.Red)
-                .WithTitle("Update Failed")
-                .WithDescription($"An error occurred during the update process:\n```\n{ex.Message}\n```")
+                .WithTitle(Strings.UpdateFailed(ctx.Guild.Id))
+                .WithDescription(Strings.UpdateError(ctx.Guild.Id, ex.Message))
                 .Build();
             await msg.ModifyAsync(x =>
             {
@@ -245,6 +231,27 @@ public class OwnerOnly(
             .ConfigureAwait(false);
     }
 
+    /// <summary>
+    ///     Generates command documentation YML files
+    /// </summary>
+    [Cmd]
+    [Aliases]
+    [OwnerOnly]
+    public async Task GenerateDocs()
+    {
+        await ctx.Channel.SendMessageAsync(Strings.GeneratingDocs(ctx.Guild.Id));
+
+        try
+        {
+            await Service.GenerateDocumentationAsync("/home/sylv/RiderProjects/mewdeko/src/Mewdeko/Modules");
+            await ctx.Channel.SendMessageAsync(Strings.DocsGenerated(ctx.Guild.Id));
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error generating command documentation");
+            await ctx.Channel.SendMessageAsync(Strings.DocsError(ctx.Guild.Id));
+        }
+    }
 
     /// <summary>
     ///     Executes a Redis command and returns the result.
@@ -259,7 +266,7 @@ public class OwnerOnly(
     public async Task RedisExec([Remainder] string command)
     {
         var result = await cache.ExecuteRedisCommand(command).ConfigureAwait(false);
-        var eb = new EmbedBuilder().WithOkColor().WithTitle(result.Resp2Type.ToString())
+        var eb = new EmbedBuilder().WithOkColor().WithTitle(Strings.RedisResponse(ctx.Guild.Id))
             .WithDescription(result.ToString());
         await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
     }
@@ -277,13 +284,14 @@ public class OwnerOnly(
     [Aliases]
     public async Task SqlExec([Remainder] string sql)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
-        if (!await PromptUserConfirmAsync("Are you sure you want to execute this??", ctx.User.Id).ConfigureAwait(false))
+        if (!await PromptUserConfirmAsync(Strings.SqlExecConfirm(ctx.Guild.Id), ctx.User.Id).ConfigureAwait(false))
             return;
 
-        var affected = await dbContext.Database.ExecuteSqlRawAsync(sql).ConfigureAwait(false);
-        await ctx.Channel.SendErrorAsync($"Affected {affected} rows.", botConfig).ConfigureAwait(false);
+        var affected = await dbContext.ExecuteAsync(sql).ConfigureAwait(false);
+        await ctx.Channel.SendErrorAsync(Strings.SqlAffectedRows(ctx.Guild.Id, affected), botConfig)
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -313,13 +321,21 @@ public class OwnerOnly(
         {
             await Task.CompletedTask;
             var newGuilds = guilds.Skip(10 * page);
-            var eb = new PageBuilder().WithOkColor().WithTitle("Servers List");
+            var eb = new PageBuilder()
+                .WithOkColor()
+                .WithTitle(Strings.ServersList(ctx.Guild.Id));
+
             foreach (var i in newGuilds)
             {
-                eb.AddField($"{i.Name} | {i.Id}", $"Members: {i.Users.Count}"
-                                                  + $"\nOnline Members: {i.Users.Count(x => x.Status is UserStatus.Online or UserStatus.DoNotDisturb or UserStatus.Idle)}"
-                                                  + $"\nOwner: {i.Owner} | {i.OwnerId}"
-                                                  + $"\n Created On: {TimestampTag.FromDateTimeOffset(i.CreatedAt)}");
+                eb.AddField(
+                    Strings.ServerInfoName(ctx.Guild.Id, i.Name, i.Id),
+                    Strings.ServerInfoMembers(ctx.Guild.Id, i.Users.Count) + "\n" +
+                    Strings.ServerInfoOnline(ctx.Guild.Id,
+                        i.Users.Count(x =>
+                            x.Status is UserStatus.Online or UserStatus.DoNotDisturb or UserStatus.Idle)) + "\n" +
+                    Strings.ServerInfoOwner(ctx.Guild.Id, i.Owner, i.OwnerId) + "\n" +
+                    Strings.ServerInfoCreated(ctx.Guild.Id, TimestampTag.FromDateTimeOffset(i.CreatedAt))
+                );
             }
 
             return eb;
@@ -339,55 +355,77 @@ public class OwnerOnly(
     [Aliases]
     public async Task CommandStats()
     {
-        await using var context1 = await dbProvider.GetContextAsync();
-        await using var context2 = await dbProvider.GetContextAsync();
-        await using var context3 = await dbProvider.GetContextAsync();
-        await using var context4 = await dbProvider.GetContextAsync();
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
 
-        var topCommandTask = context1.CommandStats
+        var topCommand = await dbContext.CommandStats
             .Where(x => !x.Trigger)
             .GroupBy(q => q.NameOrId)
-            .Select(g => new { g.Key, Count = g.Count() })
+            .Select(g => new
+            {
+                Name = g.Key, Count = g.Count()
+            })
             .OrderByDescending(gc => gc.Count)
-            .FirstOrDefaultAsyncLinqToDB();
+            .FirstOrDefaultAsync();
 
-        var topModuleTask = context2.CommandStats
+        var topModule = await dbContext.CommandStats
             .Where(x => !x.Trigger)
             .GroupBy(q => q.Module)
-            .Select(g => new { g.Key, Count = g.Count() })
+            .Select(g => new
+            {
+                Name = g.Key, Count = g.Count()
+            })
             .OrderByDescending(gc => gc.Count)
-            .FirstOrDefaultAsyncLinqToDB();
+            .FirstOrDefaultAsync();
 
-        var topGuildTask = context3.CommandStats
+        var topGuildStat = await dbContext.CommandStats
             .Where(x => !x.Trigger)
             .GroupBy(q => q.GuildId)
-            .Select(g => new { g.Key, Count = g.Count() })
+            .Select(g => new
+            {
+                GuildId = g.Key, Count = g.Count()
+            })
             .OrderByDescending(gc => gc.Count)
-            .FirstOrDefaultAsyncLinqToDB();
+            .FirstOrDefaultAsync();
 
-        var topUserTask = context4.CommandStats
+        var topUserStat = await dbContext.CommandStats
             .Where(x => !x.Trigger)
             .GroupBy(q => q.UserId)
-            .Select(g => new { g.Key, Count = g.Count() })
+            .Select(g => new
+            {
+                UserId = g.Key, Count = g.Count()
+            })
             .OrderByDescending(gc => gc.Count)
-            .FirstOrDefaultAsyncLinqToDB();
+            .FirstOrDefaultAsync();
 
-        await Task.WhenAll(topCommandTask, topModuleTask, topGuildTask, topUserTask);
+        IGuild? guild = null;
+        IUser? user = null;
 
-        var topCommand = await topCommandTask;
-        var topModule = await topModuleTask;
-        var topGuild = await topGuildTask;
-        var topUser = await topUserTask;
-
-        var guild = await client.Rest.GetGuildAsync(topGuild.Key);
-        var user = await client.Rest.GetUserAsync(topUser.Key);
+        // Parallel fetch of guild and user details
+        await Task.WhenAll(
+            Task.Run(async () =>
+            {
+                if (topGuildStat?.GuildId != null)
+                    guild = await client.Rest.GetGuildAsync(topGuildStat.GuildId);
+            }),
+            Task.Run(async () =>
+            {
+                if (topUserStat?.UserId != null)
+                    user = await client.Rest.GetUserAsync(topUserStat.UserId);
+            })
+        );
 
         var eb = new EmbedBuilder()
             .WithOkColor()
-            .AddField("Top Command", $"{topCommand.Key} was used {topCommand.Count} times!")
-            .AddField("Top Module", $"{topModule.Key} was used {topModule.Count} times!")
-            .AddField("Top User", $"{user} has used commands {topUser.Count} times!")
-            .AddField("Top Guild", $"{guild?.Name ?? "Unknown"} has used commands {topGuild.Count} times!");
+            .WithTitle(Strings.CommandStatsTitle(ctx.Guild.Id))
+            .AddField(Strings.CommandStats(ctx.Guild.Id),
+                Strings.StatsTopCommand(ctx.Guild.Id, topCommand?.Name ?? "N/A", topCommand?.Count ?? 0))
+            .AddField(Strings.ModuleStats(ctx.Guild.Id),
+                Strings.StatsTopModule(ctx.Guild.Id, topModule?.Name ?? "N/A", topModule?.Count ?? 0))
+            .AddField(Strings.UserStats(ctx.Guild.Id),
+                Strings.StatsTopUser(ctx.Guild.Id, user, topUserStat?.Count ?? 0))
+            .AddField(Strings.GuildStats(ctx.Guild.Id),
+                Strings.StatsTopGuild(ctx.Guild.Id, guild?.Name ?? Strings.UnknownGuild(ctx.Guild.Id),
+                    topGuildStat?.Count ?? 0));
 
         await ctx.Channel.SendMessageAsync(embed: eb.Build());
     }
@@ -413,7 +451,7 @@ public class OwnerOnly(
             {
                 var embed = new EmbedBuilder()
                     .WithOkColor()
-                    .WithTitle(GetText("config_list"))
+                    .WithTitle(Strings.ConfigList(ctx.Guild.Id))
                     .WithDescription(string.Join("\n", configNames));
 
                 await ctx.Channel.EmbedAsync(embed).ConfigureAwait(false);
@@ -428,8 +466,8 @@ public class OwnerOnly(
             {
                 var embed = new EmbedBuilder()
                     .WithErrorColor()
-                    .WithDescription(GetText("config_not_found", Format.Code(name)))
-                    .AddField(GetText("config_list"), string.Join("\n", configNames));
+                    .WithDescription(Strings.ConfigNotFound(ctx.Guild.Id, Format.Code(name)))
+                    .AddField(Strings.ConfigList(ctx.Guild.Id), string.Join("\n", configNames));
 
                 await ctx.Channel.EmbedAsync(embed).ConfigureAwait(false);
                 return;
@@ -445,7 +483,7 @@ public class OwnerOnly(
                 var propStrings = GetPropsAndValuesString(setting, propNames);
                 var embed = new EmbedBuilder()
                     .WithOkColor()
-                    .WithTitle($"⚙️ {setting.Name}")
+                    .WithTitle(Strings.OwnerSettingTitle(ctx.Guild.Id, setting.Name))
                     .WithDescription(propStrings);
 
                 await ctx.Channel.EmbedAsync(embed).ConfigureAwait(false);
@@ -460,8 +498,8 @@ public class OwnerOnly(
                 var propStrings = GetPropsAndValuesString(setting, propNames);
                 var propErrorEmbed = new EmbedBuilder()
                     .WithErrorColor()
-                    .WithDescription(GetText("config_prop_not_found", Format.Code(prop), Format.Code(name)))
-                    .AddField($"⚙️ {setting.Name}", propStrings);
+                    .WithDescription(Strings.ConfigPropNotFound(ctx.Guild.Id, Format.Code(prop), Format.Code(name)))
+                    .AddField(Strings.OwnerSettingTitle(ctx.Guild.Id, setting.Name), propStrings);
 
                 await ctx.Channel.EmbedAsync(propErrorEmbed).ConfigureAwait(false);
                 return;
@@ -496,7 +534,7 @@ public class OwnerOnly(
 
             if (!success)
             {
-                await ReplyErrorLocalizedAsync("config_edit_fail", Format.Code(prop), Format.Code(value))
+                await ReplyErrorAsync(Strings.ConfigEditFail(ctx.Guild.Id, Format.Code(prop), Format.Code(value)))
                     .ConfigureAwait(false);
                 return;
             }
@@ -507,7 +545,7 @@ public class OwnerOnly(
         {
             Console.WriteLine(e);
             await ctx.Channel.SendErrorAsync(
-                "There was an error setting or printing the config, please check the logs.", botConfig);
+                Strings.OwnerConfigError(ctx.Guild.Id), botConfig);
         }
     }
 
@@ -538,9 +576,9 @@ public class OwnerOnly(
     public async Task RotatePlaying()
     {
         if (Service.ToggleRotatePlaying())
-            await ReplyConfirmLocalizedAsync("ropl_enabled").ConfigureAwait(false);
+            await ReplyConfirmAsync(Strings.RoplEnabled(ctx.Guild.Id)).ConfigureAwait(false);
         else
-            await ReplyConfirmLocalizedAsync("ropl_disabled").ConfigureAwait(false);
+            await ReplyConfirmAsync(Strings.RoplDisabled(ctx.Guild.Id)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -557,7 +595,7 @@ public class OwnerOnly(
     {
         await Service.AddPlaying(t, status).ConfigureAwait(false);
 
-        await ReplyConfirmLocalizedAsync("ropl_added").ConfigureAwait(false);
+        await ReplyConfirmAsync(Strings.RoplAdded(ctx.Guild.Id)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -574,13 +612,13 @@ public class OwnerOnly(
 
         if (statuses.Count == 0)
         {
-            await ReplyErrorLocalizedAsync("ropl_not_set").ConfigureAwait(false);
+            await ReplyErrorAsync(Strings.RoplNotSet(ctx.Guild.Id)).ConfigureAwait(false);
         }
         else
         {
             var i = 1;
-            await ReplyConfirmLocalizedAsync("ropl_list",
-                    string.Join("\n\t", statuses.Select(rs => $"`{i++}.` *{rs.Type}* {rs.Status}")))
+            await ReplyConfirmAsync(Strings.RoplList(ctx.Guild.Id,
+                    string.Join("\n\t", statuses.Select(rs => $"`{i++}.` *{rs.Type}* {rs.Status}"))))
                 .ConfigureAwait(false);
         }
     }
@@ -599,15 +637,15 @@ public class OwnerOnly(
     {
         if (string.IsNullOrWhiteSpace(prefix))
         {
-            await ReplyConfirmLocalizedAsync("defprefix_current", await guildSettings.GetPrefix())
+            await ReplyConfirmAsync(Strings.DefprefixCurrent(ctx.Guild.Id, await guildSettings.GetPrefix(null)))
                 .ConfigureAwait(false);
             return;
         }
 
-        var oldPrefix = await guildSettings.GetPrefix();
+        var oldPrefix = await guildSettings.GetPrefix(null);
         var newPrefix = Service.SetDefaultPrefix(prefix);
 
-        await ReplyConfirmLocalizedAsync("defprefix_new", Format.Code(oldPrefix), Format.Code(newPrefix))
+        await ReplyConfirmAsync(Strings.DefprefixNew(ctx.Guild.Id, Format.Code(oldPrefix), Format.Code(newPrefix)))
             .ConfigureAwait(false);
     }
 
@@ -629,7 +667,7 @@ public class OwnerOnly(
         if (msg == null)
             return;
 
-        await ReplyConfirmLocalizedAsync("reprm", msg).ConfigureAwait(false);
+        await ReplyConfirmAsync(Strings.Reprm(ctx.Guild.Id, msg)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -652,21 +690,21 @@ public class OwnerOnly(
             CultureInfo? ci;
             if (string.Equals(name.Trim(), "default", StringComparison.InvariantCultureIgnoreCase))
             {
-                Localization.ResetDefaultCulture();
-                ci = Localization.DefaultCultureInfo;
+                localization.ResetDefaultCulture();
+                ci = localization.DefaultCultureInfo;
             }
             else
             {
                 ci = new CultureInfo(name);
-                Localization.SetDefaultCulture(ci);
+                localization.SetDefaultCulture(ci);
             }
 
-            await ReplyConfirmLocalizedAsync("lang_set_bot", Format.Bold(ci.ToString()),
-                Format.Bold(ci.NativeName)).ConfigureAwait(false);
+            await ReplyConfirmAsync(Strings.LangSetBot(ctx.Guild.Id, Format.Bold(ci.ToString()),
+                Format.Bold(ci.NativeName))).ConfigureAwait(false);
         }
         catch (Exception)
         {
-            await ReplyErrorLocalizedAsync("lang_set_fail").ConfigureAwait(false);
+            await ReplyErrorAsync(Strings.LangSetFail(ctx.Guild.Id)).ConfigureAwait(false);
         }
     }
 
@@ -701,15 +739,15 @@ public class OwnerOnly(
             VoiceChannelName = guser.VoiceChannel?.Name,
             Interval = 0
         };
-        Service.AddNewAutoCommand(cmd);
+        _ = Service.AddNewAutoCommand(cmd);
 
         await ctx.Channel.EmbedAsync(new EmbedBuilder().WithOkColor()
-            .WithTitle(GetText("scadd"))
-            .AddField(efb => efb.WithName(GetText("server"))
+            .WithTitle(Strings.Scadd(ctx.Guild.Id))
+            .AddField(efb => efb.WithName(Strings.Server(ctx.Guild.Id))
                 .WithValue(cmd.GuildId == null ? "-" : $"{cmd.GuildName}/{cmd.GuildId}").WithIsInline(true))
-            .AddField(efb => efb.WithName(GetText("channel"))
+            .AddField(efb => efb.WithName(Strings.Channel(ctx.Guild.Id))
                 .WithValue($"{cmd.ChannelName}/{cmd.ChannelId}").WithIsInline(true))
-            .AddField(efb => efb.WithName(GetText("command_text"))
+            .AddField(efb => efb.WithName(Strings.CommandText(ctx.Guild.Id))
                 .WithValue(cmdText).WithIsInline(false))).ConfigureAwait(false);
     }
 
@@ -762,9 +800,9 @@ public class OwnerOnly(
             VoiceChannelName = guser.VoiceChannel?.Name,
             Interval = interval
         };
-        Service.AddNewAutoCommand(cmd);
+        _ = Service.AddNewAutoCommand(cmd);
 
-        await ReplyConfirmLocalizedAsync("autocmd_add", Format.Code(Format.Sanitize(cmdText)), cmd.Interval)
+        await ReplyConfirmAsync(Strings.AutocmdAdd(ctx.Guild.Id, Format.Code(Format.Sanitize(cmdText)), cmd.Interval))
             .ConfigureAwait(false);
     }
 
@@ -792,20 +830,22 @@ public class OwnerOnly(
 
         if (scmds.Count == 0)
         {
-            await ReplyErrorLocalizedAsync("startcmdlist_none").ConfigureAwait(false);
+            await ReplyErrorAsync(Strings.StartcmdlistNone(ctx.Guild.Id)).ConfigureAwait(false);
         }
         else
         {
             var i = 0;
             await ctx.Channel.SendConfirmAsync(
                     text: string.Join("\n", scmds
-                        .Select(x => $@"```css
-#{++i}
-[{GetText("server")}]: {(x.GuildId.HasValue ? $"{x.GuildName} #{x.GuildId}" : "-")}
-[{GetText("channel")}]: {x.ChannelName} #{x.ChannelId}
-[{GetText("command_text")}]: {x.CommandText}```")),
+                        .Select(x => $"""
+                                      ```css
+                                      #{++i}
+                                      [{Strings.Server(ctx.Guild.Id)}]: {(x.GuildId.HasValue ? $"{x.GuildName} #{x.GuildId}" : "-")}
+                                      [{Strings.Channel(ctx.Guild.Id)}]: {x.ChannelName} #{x.ChannelId}
+                                      [{Strings.CommandText(ctx.Guild.Id)}]: {x.CommandText}```
+                                      """)),
                     title: string.Empty,
-                    footer: GetText("page", page + 1))
+                    footer: Strings.Page(ctx.Guild.Id, page + 1))
                 .ConfigureAwait(false);
         }
     }
@@ -835,21 +875,23 @@ public class OwnerOnly(
             .ToList();
         if (scmds.Count == 0)
         {
-            await ReplyErrorLocalizedAsync("autocmdlist_none").ConfigureAwait(false);
+            await ReplyErrorAsync(Strings.AutocmdlistNone(ctx.Guild.Id)).ConfigureAwait(false);
         }
         else
         {
             var i = 0;
             await ctx.Channel.SendConfirmAsync(
                     text: string.Join("\n", scmds
-                        .Select(x => $@"```css
-#{++i}
-[{GetText("server")}]: {(x.GuildId.HasValue ? $"{x.GuildName} #{x.GuildId}" : "-")}
-[{GetText("channel")}]: {x.ChannelName} #{x.ChannelId}
-{GetIntervalText(x.Interval)}
-[{GetText("command_text")}]: {x.CommandText}```")),
+                        .Select(x => $"""
+                                      ```css
+                                      #{++i}
+                                      [{Strings.Server(ctx.Guild.Id)}]: {(x.GuildId.HasValue ? $"{x.GuildName} #{x.GuildId}" : "-")}
+                                      [{Strings.Channel(ctx.Guild.Id)}]: {x.ChannelName} #{x.ChannelId}
+                                      {GetIntervalText(x.Interval)}
+                                      [{Strings.CommandText(ctx.Guild.Id)}]: {x.CommandText}```
+                                      """)),
                     title: string.Empty,
-                    footer: GetText("page", page + 1))
+                    footer: Strings.Page(ctx.Guild.Id, page + 1))
                 .ConfigureAwait(false);
         }
     }
@@ -861,7 +903,7 @@ public class OwnerOnly(
     /// <returns>A string representing the interval in a readable format.</returns>
     private string GetIntervalText(int interval)
     {
-        return $"[{GetText("interval")}]: {interval}";
+        return $"[{Strings.Interval(ctx.Guild.Id)}]: {interval}";
     }
 
     /// <summary>
@@ -882,7 +924,7 @@ public class OwnerOnly(
         ctx.Message.DeleteAfter(0);
         try
         {
-            var msg = await ctx.Channel.SendConfirmAsync($"⏲ {miliseconds}ms")
+            var msg = await ctx.Channel.SendConfirmAsync(Strings.TimingMs(ctx.Guild.Id, miliseconds))
                 .ConfigureAwait(false);
             msg.DeleteAfter(miliseconds / 1000);
         }
@@ -913,7 +955,7 @@ public class OwnerOnly(
     {
         if (!await Service.RemoveAutoCommand(--index))
         {
-            await ReplyErrorLocalizedAsync("acrm_fail").ConfigureAwait(false);
+            await ReplyErrorAsync(Strings.AcrmFail(ctx.Guild.Id)).ConfigureAwait(false);
             return;
         }
 
@@ -936,9 +978,9 @@ public class OwnerOnly(
     public async Task StartupCommandRemove([Remainder] int index)
     {
         if (!await Service.RemoveStartupCommand(--index))
-            await ReplyErrorLocalizedAsync("scrm_fail").ConfigureAwait(false);
+            await ReplyErrorAsync(Strings.ScrmFail(ctx.Guild.Id)).ConfigureAwait(false);
         else
-            await ReplyConfirmLocalizedAsync("scrm").ConfigureAwait(false);
+            await ReplyConfirmAsync(Strings.Scrm(ctx.Guild.Id)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -955,9 +997,9 @@ public class OwnerOnly(
     [OwnerOnly]
     public async Task StartupCommandsClear()
     {
-        Service.ClearStartupCommands();
+        _ = Service.ClearStartupCommands();
 
-        await ReplyConfirmLocalizedAsync("startcmds_cleared").ConfigureAwait(false);
+        await ReplyConfirmAsync(Strings.StartcmdsCleared(ctx.Guild.Id)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -974,9 +1016,9 @@ public class OwnerOnly(
         var enabled = Service.ForwardMessages();
 
         if (enabled)
-            await ReplyConfirmLocalizedAsync("fwdm_start").ConfigureAwait(false);
+            await ReplyConfirmAsync(Strings.FwdmStart(ctx.Guild.Id)).ConfigureAwait(false);
         else
-            await ReplyConfirmLocalizedAsync("fwdm_stop").ConfigureAwait(false);
+            await ReplyConfirmAsync(Strings.FwdmStop(ctx.Guild.Id)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -993,9 +1035,9 @@ public class OwnerOnly(
         var enabled = Service.ForwardToAll();
 
         if (enabled)
-            await ReplyConfirmLocalizedAsync("fwall_start").ConfigureAwait(false);
+            await ReplyConfirmAsync(Strings.FwallStart(ctx.Guild.Id)).ConfigureAwait(false);
         else
-            await ReplyConfirmLocalizedAsync("fwall_stop").ConfigureAwait(false);
+            await ReplyConfirmAsync(Strings.FwallStop(ctx.Guild.Id)).ConfigureAwait(false);
     }
 
 
@@ -1017,19 +1059,24 @@ public class OwnerOnly(
         var status = string.Join(" : ", statuses
             .Select(x => (ConnectionStateToEmoji(x.ConnectionState), x))
             .GroupBy(x => x.Item1)
-            .Select(x => $"`{x.Count()} {x.Key}`")
+            .Select(x => Strings.ShardStatusGroup(ctx.Guild.Id, x.Count(), x.Key))
             .ToArray());
 
-        // Detailed shard status for each shard
         var allShardStrings = statuses
             .Select(st =>
             {
                 var stateStr = ConnectionStateToEmoji(st.ConnectionState);
                 var maxGuildCountLength = statuses.Max(x => x.Guilds.Count).ToString().Length;
-                return
-                    $"`{stateStr} | #{st.ShardId.ToString().PadBoth(3)} | {st.Guilds.Count.ToString().PadBoth(maxGuildCountLength)} | {st.Guilds.Select(x => x.Users.Count).Sum()}`";
+                return Strings.ShardInfo(
+                    ctx.Guild.Id,
+                    stateStr,
+                    st.ShardId.ToString().PadBoth(3),
+                    st.Guilds.Count.ToString().PadBoth(maxGuildCountLength),
+                    st.Guilds.Select(x => x.Users.Count).Sum()
+                );
             })
             .ToArray();
+
 
         // Setup and send a paginator for detailed shard stats
         var paginator = new LazyPaginatorBuilder()
@@ -1049,13 +1096,14 @@ public class OwnerOnly(
             var str = string.Join("\n", allShardStrings.Skip(25 * page).Take(25));
 
             if (string.IsNullOrWhiteSpace(str))
-                str = GetText("no_shards_on_page");
+                str = Strings.NoShardsOnPage(ctx.Guild.Id);
 
             return new PageBuilder()
-                .WithAuthor(a => a.WithName(GetText("shard_stats")))
+                .WithAuthor(a => a.WithName(Strings.ShardStatsTitle(ctx.Guild.Id)))
                 .WithTitle(status)
                 .WithColor(Mewdeko.OkColor)
-                .WithDescription(str);
+                .WithDescription(str)
+                .WithFooter(Strings.PageSuffix(ctx.Guild.Id, page + 1));
         }
     }
     private static string ConnectionStateToEmoji(ConnectionState status)
@@ -1063,7 +1111,9 @@ public class OwnerOnly(
         return status switch
         {
             ConnectionState.Connected => "✅",
-            ConnectionState.Disconnected => "🔻"
+            ConnectionState.Disconnected => "🔻",
+            ConnectionState.Connecting => "🔄",
+            _ => "❓"
         };
     }
 
@@ -1094,7 +1144,7 @@ public class OwnerOnly(
     {
         try
         {
-            await ReplyConfirmLocalizedAsync("shutting_down").ConfigureAwait(false);
+            await ReplyConfirmAsync(Strings.ShuttingDown(ctx.Guild.Id)).ConfigureAwait(false);
         }
         catch
         {
@@ -1129,10 +1179,10 @@ public class OwnerOnly(
         }
         catch (RateLimitedException)
         {
-            Log.Warning("You've been ratelimited. Wait 2 hours to change your name");
+            logger.LogWarning("You've been ratelimited. Wait 2 hours to change your name");
         }
 
-        await ReplyConfirmLocalizedAsync("bot_name", Format.Bold(newName)).ConfigureAwait(false);
+        await ReplyConfirmAsync(Strings.BotName(ctx.Guild.Id, Format.Bold(newName))).ConfigureAwait(false);
     }
 
 
@@ -1149,7 +1199,7 @@ public class OwnerOnly(
     {
         await client.SetStatusAsync(SettableUserStatusToUserStatus(status)).ConfigureAwait(false);
 
-        await ReplyConfirmLocalizedAsync("bot_status", Format.Bold(status.ToString())).ConfigureAwait(false);
+        await ReplyConfirmAsync(Strings.BotStatus(ctx.Guild.Id, Format.Bold(status.ToString()))).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -1169,7 +1219,7 @@ public class OwnerOnly(
         var success = await Service.SetAvatar(img).ConfigureAwait(false);
 
         if (success)
-            await ReplyConfirmLocalizedAsync("set_avatar").ConfigureAwait(false);
+            await ReplyConfirmAsync(Strings.SetAvatar(ctx.Guild.Id)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -1191,7 +1241,7 @@ public class OwnerOnly(
 
         await bot.SetGameAsync(game == null ? game : rep.Replace(game), type).ConfigureAwait(false);
 
-        await ReplyConfirmLocalizedAsync("set_game").ConfigureAwait(false);
+        await ReplyConfirmAsync(Strings.SetGame(ctx.Guild.Id)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -1211,7 +1261,7 @@ public class OwnerOnly(
 
         await client.SetGameAsync(name, url, ActivityType.Streaming).ConfigureAwait(false);
 
-        await ReplyConfirmLocalizedAsync("set_stream").ConfigureAwait(false);
+        await ReplyConfirmAsync(Strings.SetStream(ctx.Guild.Id)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -1251,9 +1301,7 @@ public class OwnerOnly(
             var potentialUser = client.GetUser(whereOrTo);
             if (potentialUser is null)
             {
-                await ctx.Channel.SendErrorAsync("Unable to find that user or guild! Please double check the Id!",
-                        botConfig)
-                    .ConfigureAwait(false);
+                await ctx.Channel.SendErrorAsync(Strings.UserNotFound(ctx.Guild.Id), botConfig);
                 return;
             }
 
@@ -1262,19 +1310,21 @@ public class OwnerOnly(
             {
                 await potentialUser.SendMessageAsync(plainText, embeds: embed, components: components.Build())
                     .ConfigureAwait(false);
-                await ctx.Channel.SendConfirmAsync($"Message sent to {potentialUser.Mention}!").ConfigureAwait(false);
+                await ctx.Channel.SendConfirmAsync(Strings.MessageSentToUser(ctx.Guild.Id, potentialUser.Mention))
+                    .ConfigureAwait(false);
                 return;
             }
 
             await potentialUser.SendMessageAsync(rep.Replace(msg)).ConfigureAwait(false);
-            await ctx.Channel.SendConfirmAsync($"Message sent to {potentialUser.Mention}!").ConfigureAwait(false);
+            await ctx.Channel.SendConfirmAsync(Strings.MessageSentToUser(ctx.Guild.Id, potentialUser.Mention))
+                .ConfigureAwait(false);
             return;
         }
 
         if (to == 0)
         {
-            await ctx.Channel.SendErrorAsync("You need to specify a Channel or User ID after the Server ID!", botConfig)
-                .ConfigureAwait(false);
+            await ctx.Channel.SendErrorAsync(Strings.NeedChannelId(ctx.Guild.Id), botConfig);
+
             return;
         }
 
@@ -1286,23 +1336,23 @@ public class OwnerOnly(
             {
                 await channel.SendMessageAsync(plainText, embeds: embed, components: components?.Build())
                     .ConfigureAwait(false);
-                await ctx.Channel.SendConfirmAsync($"Message sent to {potentialServer} in {channel.Mention}")
+                await ctx.Channel
+                    .SendConfirmAsync(Strings.MessageSentToServer(ctx.Guild.Id, potentialServer, channel.Mention))
                     .ConfigureAwait(false);
                 return;
             }
 
             await channel.SendMessageAsync(rep.Replace(msg)).ConfigureAwait(false);
-            await ctx.Channel.SendConfirmAsync($"Message sent to {potentialServer} in {channel.Mention}")
-                .ConfigureAwait(false);
+            await ctx.Channel.SendConfirmAsync(Strings.MessageSentChannel(ctx.Guild.Id, potentialServer,
+                channel.Mention));
             return;
         }
 
         var user = await potentialServer.GetUserAsync(to).ConfigureAwait(false);
         if (user is null)
         {
-            await ctx.Channel.SendErrorAsync("Unable to find that channel or user! Please check the ID and try again.",
-                    botConfig)
-                .ConfigureAwait(false);
+            await ctx.Channel.SendErrorAsync(Strings.ChannelNotFound(ctx.Guild.Id), botConfig);
+
             return;
         }
 
@@ -1311,14 +1361,13 @@ public class OwnerOnly(
         {
             await channel.SendMessageAsync(plainText1, embeds: embed1, components: components1?.Build())
                 .ConfigureAwait(false);
-            await ctx.Channel.SendConfirmAsync($"Message sent to {potentialServer} to {user.Mention}")
-                .ConfigureAwait(false);
+            await ctx.Channel.SendConfirmAsync(Strings.MessageSentGuild(ctx.Guild.Id, potentialServer, user.Mention));
+
             return;
         }
 
         await channel.SendMessageAsync(rep.Replace(msg)).ConfigureAwait(false);
-        await ctx.Channel.SendConfirmAsync($"Message sent to {potentialServer} in {user.Mention}")
-            .ConfigureAwait(false);
+        await ctx.Channel.SendConfirmAsync(Strings.MessageSentUser(ctx.Guild.Id, user.Mention));
     }
 
     /// <summary>
@@ -1334,7 +1383,7 @@ public class OwnerOnly(
     public async Task ImagesReload()
     {
         Service.ReloadImages();
-        await ReplyConfirmLocalizedAsync("images_loading", 0).ConfigureAwait(false);
+        await ReplyConfirmAsync(Strings.ImagesLoading(ctx.Guild.Id)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -1350,7 +1399,7 @@ public class OwnerOnly(
     public async Task StringsReload()
     {
         strings.Reload();
-        await ReplyConfirmLocalizedAsync("bot_strings_reloaded").ConfigureAwait(false);
+        await ReplyConfirmAsync(Strings.BotStringsReloaded(ctx.Guild.Id)).ConfigureAwait(false);
     }
 
     private static UserStatus SettableUserStatusToUserStatus(SettableUserStatus sus)
@@ -1415,7 +1464,7 @@ public class OwnerOnly(
 
                 if (string.IsNullOrEmpty(output))
                 {
-                    await ctx.Channel.SendMessageAsync("```The output was blank```").ConfigureAwait(false);
+                    await ctx.Channel.SendMessageAsync($"```{Strings.EvalOutputBlank(ctx.Guild.Id)}```");
                     return;
                 }
 
@@ -1449,15 +1498,16 @@ public class OwnerOnly(
                     await Task.CompletedTask;
                     return new PageBuilder()
                         .WithOkColor()
-                        .WithAuthor("Bash Output")
-                        .AddField("Input", message)
-                        .WithDescription($"```{(isLinux ? "bash" : "powershell")}\n{stringList[page]}```");
+                        .WithAuthor(Strings.BashOutput(ctx.Guild.Id))
+                        .AddField(Strings.Input(ctx.Guild.Id), message)
+                        .WithDescription(Strings.CodeBlockShell(ctx.Guild.Id, isLinux ? "bash" : "powershell",
+                            stringList[page]));
                 }
             }
             else
             {
                 process.Kill();
-                await ctx.Channel.SendErrorAsync("The process was hanging and has been terminated.", botConfig)
+                await ctx.Channel.SendErrorAsync(Strings.ProcessTerminated(ctx.Guild.Id), botConfig)
                     .ConfigureAwait(false);
             }
 
@@ -1486,38 +1536,40 @@ public class OwnerOnly(
         var evaluationSource = "code block";
 
         // Check if there's at least one attachment
-        if (ctx.Message.Attachments.Count!=0)
+        if (ctx.Message.Attachments.Count != 0)
         {
             var attachment = Context.Message.Attachments.First();
 
             // Validate the file extension
-                // Optional: Validate the file size (e.g., limit to 100 KB)
-                if (attachment.Size > 100 * 1024)
-                {
-                    await ReplyAsync("❌ **Error:** The attached file is too large. Please ensure it's under 100 KB.");
-                    return;
-                }
+            // Optional: Validate the file size (e.g., limit to 100 KB)
+            if (attachment.Size > 100 * 1024)
+            {
+                await ReplyAsync(Strings.EvalTooLarge(ctx.Guild.Id));
+                return;
+            }
 
-                try
-                {
-                    // Download the attachment content
-                    await using var stream = await httpClient.GetStreamAsync(attachment.Url);
-                    using var reader = new StreamReader(stream);
-                    codeToEvaluate = await reader.ReadToEndAsync();
-                    evaluationSource = $"attachment `{attachment.Filename}`";
-                }
-                catch (Exception ex)
-                {
-                    await ReplyAsync($"❌ **Error:** Failed to read the attached file. {ex.Message}");
-                    return;
-                }
+            try
+            {
+                // Download the attachment content
+                await using var stream = await httpClient.GetStreamAsync(attachment.Url);
+                using var reader = new StreamReader(stream);
+                codeToEvaluate = await reader.ReadToEndAsync();
+                evaluationSource = $"attachment `{attachment.Filename}`";
+            }
+            catch (Exception ex)
+            {
+                await ReplyAsync(Strings.EvalReadError(ctx.Guild.Id, ex.Message));
+                return;
+            }
         }
         else
         {
-            if (code is null)
+            if (string.IsNullOrWhiteSpace(code))
             {
-                await ctx.Channel.SendErrorAsync("No code was provided.", botConfig);
+                await ReplyAsync(Strings.EvalNoCode(ctx.Guild.Id));
+                return;
             }
+
             var startIndex = code.IndexOf("```", StringComparison.Ordinal);
             if (startIndex != -1)
             {
@@ -1537,53 +1589,103 @@ public class OwnerOnly(
 
             if (string.IsNullOrWhiteSpace(codeToEvaluate))
             {
-                await ReplyAsync("❌ **Error:** No code provided. Please include code within code blocks or attach a `.cs` file.");
+                await ReplyAsync(Strings.EvalNoCode(ctx.Guild.Id));
                 return;
             }
         }
 
         var embed = new EmbedBuilder
         {
-            Title = "Evaluating...",
-            Color = new Color(0xD091B2)
+            Title = Strings.EvalCompiling(ctx.Guild.Id), Color = new Color(0xD091B2)
         };
         var msg = await Context.Channel.SendMessageAsync(embed: embed.Build()).ConfigureAwait(false);
 
-        // Set up the script options with necessary imports and references
-        var globals = new EvaluationEnvironment((CommandContext)Context);
+        // Get all namespaces from loaded assemblies
+        var allNamespaces = new HashSet<string>();
+        var assemblies = AppDomain.CurrentDomain.GetAssemblies()
+            .Where(xa => !xa.IsDynamic && !string.IsNullOrWhiteSpace(xa.Location));
+
+        foreach (var assembly in assemblies)
+        {
+            try
+            {
+                var types = assembly.GetExportedTypes();
+                foreach (var type in types)
+                {
+                    if (!string.IsNullOrWhiteSpace(type.Namespace))
+                    {
+                        allNamespaces.Add(type.Namespace);
+                    }
+                }
+            }
+            catch
+            {
+                // Some assemblies might not allow us to get types
+            }
+        }
+
+        // Add commonly used namespaces explicitly (in case they were missed)
+        var additionalNamespaces = new[]
+        {
+            "System", "System.Collections", "System.Collections.Generic", "System.Collections.Concurrent",
+            "System.Diagnostics", "System.Dynamic", "System.IO", "System.Linq", "System.Linq.Expressions", "System.Net",
+            "System.Net.Http", "System.Net.Http.Headers", "System.Reflection", "System.Runtime.CompilerServices",
+            "System.Text", "System.Text.RegularExpressions", "System.Threading", "System.Threading.Tasks",
+            "System.Globalization", "Discord", "Discord.Net", "Discord.Commands", "Discord.WebSocket", "Discord.Rest",
+            "LinqToDB", "LinqToDB.Linq", "Microsoft.Extensions.DependencyInjection", "Newtonsoft.Json",
+            "Newtonsoft.Json.Linq"
+        };
+
+        foreach (var ns in additionalNamespaces)
+        {
+            allNamespaces.Add(ns);
+        }
+
+        // Filter out problematic namespaces
+        var filteredNamespaces = allNamespaces
+            .Where(ns => !ns.StartsWith("Internal.") &&
+                         !ns.StartsWith("Microsoft.CodeAnalysis") &&
+                         !ns.Contains("Private") &&
+                         !ns.Contains("<"))
+            .OrderBy(ns => ns)
+            .ToList();
+
+        // Create globals with access to all major services
+        var globals = new EvaluationEnvironment((CommandContext)Context)
+        {
+            // Add references to commonly used services
+            Client = client,
+            Services = services,
+            DbFactory = dbFactory,
+            Cache = cache,
+            CommandService = commandService,
+            GuildSettings = guildSettings,
+            BotConfig = botConfig,
+            Http = httpClient,
+            Strings = strings,
+            Bot = bot
+        };
+
+        // Set up the script options with all imports and references
         var scriptOptions = ScriptOptions.Default
-            .WithImports(
-                "System",
-                "System.Collections.Generic",
-                "System.Diagnostics",
-                "System.Linq",
-                "System.Net.Http",
-                "System.Net.Http.Headers",
-                "System.Reflection",
-                "System.Text",
-                "System.Threading.Tasks",
-                "Discord.Net",
-                "Discord",
-                "Discord.WebSocket",
-                "Mewdeko.Modules",
-                "Mewdeko.Services",
-                "Mewdeko.Extensions",
-                "Mewdeko.Modules.Administration",
-                "Mewdeko.Modules.Chat_Triggers",
-                "Mewdeko.Modules",
-                "Mewdeko.Modules.Games",
-                "Mewdeko.Modules.Help",
-                "Mewdeko.Modules.Music",
-                "Mewdeko.Modules.Nsfw",
-                "Mewdeko.Modules.Permissions",
-                "Mewdeko.Modules.Searches",
-                "Mewdeko.Modules.Server_Management")
-            .WithReferences(AppDomain.CurrentDomain.GetAssemblies()
-                .Where(xa => !xa.IsDynamic && !string.IsNullOrWhiteSpace(xa.Location)));
+            .WithImports(filteredNamespaces)
+            .WithReferences(assemblies)
+            .WithAllowUnsafe(true);
+
+        // Add a preprocessor to the code to include commonly used extension methods
+        var preprocessedCode = $"""
+
+                                // Auto-imported extension methods and helpers
+                                using static System.Math;
+                                using static System.Console;
+                                using static Newtonsoft.Json.JsonConvert;
+
+                                {codeToEvaluate}
+                                """;
 
         // Start measuring compilation time
         var compilationStopwatch = Stopwatch.StartNew();
-        var script = CSharpScript.Create(codeToEvaluate, scriptOptions, typeof(EvaluationEnvironment));
+        var script = CSharpScript.Create(preprocessedCode, scriptOptions, typeof(EvaluationEnvironment));
         var compilationDiagnostics = script.Compile();
         compilationStopwatch.Stop();
 
@@ -1593,20 +1695,24 @@ public class OwnerOnly(
             embed = new EmbedBuilder
             {
                 Title = "Compilation Failed",
-                Description = $"Compilation failed after {compilationStopwatch.ElapsedMilliseconds:#,##0}ms with {compilationDiagnostics.Length:#,##0} error(s).",
+                Description =
+                    $"Compilation failed after {compilationStopwatch.ElapsedMilliseconds:#,##0}ms with {compilationDiagnostics.Length:#,##0} error(s).",
                 Color = new Color(0xE74C3C)
             };
 
-            foreach (var diagnostic in compilationDiagnostics.Where(diag => diag.Severity == DiagnosticSeverity.Error).Take(3))
+            foreach (var diagnostic in compilationDiagnostics.Where(diag => diag.Severity == DiagnosticSeverity.Error)
+                         .Take(3))
             {
                 var lineSpan = diagnostic.Location.GetLineSpan();
-                embed.AddField($"Error at Line {lineSpan.StartLinePosition.Line + 1}, Character {lineSpan.StartLinePosition.Character + 1}",
+                embed.AddField(
+                    $"Error at Line {lineSpan.StartLinePosition.Line + 1}, Character {lineSpan.StartLinePosition.Character + 1}",
                     $"```csharp\n{diagnostic.GetMessage()}\n```");
             }
 
             if (compilationDiagnostics.Length > 3)
             {
-                embed.AddField("Additional Errors", $"{compilationDiagnostics.Length - 3:#,##0} more error(s) not displayed.");
+                embed.AddField("Additional Errors",
+                    $"{compilationDiagnostics.Length - 3:#,##0} more error(s) not displayed.");
             }
 
             await msg.ModifyAsync(x => x.Embed = embed.Build()).ConfigureAwait(false);
@@ -1626,6 +1732,7 @@ public class OwnerOnly(
         {
             executionException = ex;
         }
+
         executionStopwatch.Stop();
 
         // Handle execution exceptions
@@ -1634,7 +1741,8 @@ public class OwnerOnly(
             embed = new EmbedBuilder
             {
                 Title = "Execution Failed",
-                Description = $"Execution failed after {executionStopwatch.ElapsedMilliseconds:#,##0}ms with `{executionException.GetType()}: {executionException.Message}`.",
+                Description =
+                    $"Execution failed after {executionStopwatch.ElapsedMilliseconds:#,##0}ms with `{executionException.GetType()}: {executionException.Message}`.",
                 Color = new Color(0xE74C3C)
             };
             await msg.ModifyAsync(x => x.Embed = embed.Build()).ConfigureAwait(false);
@@ -1644,16 +1752,15 @@ public class OwnerOnly(
         // Execution succeeded
         embed = new EmbedBuilder
         {
-            Title = "Evaluation Successful",
-            Color = new Color(0x2ECC71)
+            Title = "Evaluation Successful", Color = new Color(0x2ECC71)
         };
 
         var result = scriptState.ReturnValue != null ? scriptState.ReturnValue.ToString() : "No value returned";
 
         embed.AddField("Result", $"```csharp\n{result}\n```")
-             .AddField("Source", evaluationSource, true)
-             .AddField("Compilation Time", $"{compilationStopwatch.ElapsedMilliseconds:#,##0}ms", true)
-             .AddField("Execution Time", $"{executionStopwatch.ElapsedMilliseconds:#,##0}ms", true);
+            .AddField("Source", evaluationSource, true)
+            .AddField("Compilation Time", $"{compilationStopwatch.ElapsedMilliseconds:#,##0}ms", true)
+            .AddField("Execution Time", $"{executionStopwatch.ElapsedMilliseconds:#,##0}ms", true);
 
         if (scriptState.ReturnValue != null)
         {
@@ -1665,93 +1772,118 @@ public class OwnerOnly(
 }
 
 /// <summary>
-///     Represents an environment encapsulating common entities used during command evaluation.
+///     Evaluation environment with additional service references for use in eval commands
 /// </summary>
-/// <remarks>
-///     This class provides quick access to frequently needed Discord entities such as the message,
-///     channel, guild, user, and client related to the current command context. It's designed to
-///     simplify command handling by centralizing access to these entities.
-/// </remarks>
 public sealed class EvaluationEnvironment
 {
     /// <summary>
-    ///     Initializes a new instance of the <see cref="EvaluationEnvironment" /> class with the specified command context.
+    ///     Initializes a new instance of the <see cref="EvaluationEnvironment"/> class with the specified command context
     /// </summary>
-    /// <param name="ctx">The command context associated with the current command execution.</param>
+    /// <param name="ctx">The command context associated with the current eval command execution</param>
     public EvaluationEnvironment(CommandContext ctx)
     {
         Ctx = ctx;
     }
 
     /// <summary>
-    ///     Gets the command context associated with the current command execution.
+    ///     Gets the command context associated with the current eval execution
     /// </summary>
     public CommandContext Ctx { get; }
 
     /// <summary>
-    ///     Gets the message that triggered the current command execution.
+    ///     Gets the message that triggered the current eval command
     /// </summary>
-    public IUserMessage Message
+    public IUserMessage Message => Ctx.Message;
+
+    /// <summary>
+    ///     Gets the channel in which the eval command was executed
+    /// </summary>
+    public IMessageChannel Channel => Ctx.Channel;
+
+    /// <summary>
+    ///     Gets the guild in which the eval command was executed. May be null for commands executed in DMs
+    /// </summary>
+    public IGuild Guild => Ctx.Guild;
+
+    /// <summary>
+    ///     Gets the user who executed the eval command
+    /// </summary>
+    public IUser User => Ctx.User;
+
+    /// <summary>
+    ///     Gets the guild member who executed the eval command. This is a convenience property for accessing the user as an IGuildUser
+    /// </summary>
+    public IGuildUser Member => (IGuildUser)Ctx.User;
+
+    /// <summary>
+    ///     Gets or sets the Discord sharded client instance for interacting with the Discord API
+    /// </summary>
+    public DiscordShardedClient Client { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the service provider for dependency injection and service resolution
+    /// </summary>
+    public IServiceProvider Services { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the database connection factory for creating database connections
+    /// </summary>
+    public IDataConnectionFactory DbFactory { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the cache service for Redis operations and data caching
+    /// </summary>
+    public IDataCache Cache { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the command service for command registration and execution
+    /// </summary>
+    public CommandService CommandService { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the guild settings service for managing guild-specific configurations
+    /// </summary>
+    public GuildSettingsService GuildSettings { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the bot configuration containing global bot settings
+    /// </summary>
+    public BotConfig BotConfig { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the HTTP client for making web requests
+    /// </summary>
+    public HttpClient Http { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the bot strings service for localization and string resources
+    /// </summary>
+    public IBotStrings Strings { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the main Mewdeko bot instance
+    /// </summary>
+    public Mewdeko Bot { get; set; }
+
+    /// <summary>
+    ///     Executes a database operation within a managed connection scope
+    /// </summary>
+    /// <typeparam name="T">The return type of the database operation</typeparam>
+    /// <param name="func">The async function to execute with the database connection</param>
+    /// <returns>The result of the database operation</returns>
+    /// <remarks>
+    ///     This method automatically handles connection lifecycle, ensuring the connection is properly disposed after use
+    /// </remarks>
+    public async Task<T> Db<T>(Func<DataConnection, Task<T>> func)
     {
-        get
-        {
-            return Ctx.Message;
-        }
+        await using var db = await DbFactory.CreateConnectionAsync();
+        return await func(db);
     }
 
     /// <summary>
-    ///     Gets the channel in which the current command was executed.
+    ///     Retrieves a service of the specified type from the dependency injection container
     /// </summary>
-    public IMessageChannel Channel
-    {
-        get
-        {
-            return Ctx.Channel;
-        }
-    }
-
-    /// <summary>
-    ///     Gets the guild in which the current command was executed. May be null for commands executed in direct messages.
-    /// </summary>
-    public IGuild Guild
-    {
-        get
-        {
-            return Ctx.Guild;
-        }
-    }
-
-    /// <summary>
-    ///     Gets the user who executed the current command.
-    /// </summary>
-    public IUser User
-    {
-        get
-        {
-            return Ctx.User;
-        }
-    }
-
-    /// <summary>
-    ///     Gets the guild member who executed the current command. This is a convenience property for accessing the user as an
-    ///     IGuildUser.
-    /// </summary>
-    public IGuildUser Member
-    {
-        get
-        {
-            return (IGuildUser)Ctx.User;
-        }
-    }
-
-    /// <summary>
-    ///     Gets the Discord client instance associated with the current command execution.
-    /// </summary>
-    public DiscordShardedClient Client
-    {
-        get
-        {
-            return Ctx.Client as DiscordShardedClient;
-        }
-    }
+    /// <typeparam name="T">The type of service to retrieve</typeparam>
+    /// <returns>The requested service instance, or null if the service is not registered</returns>
+    public T GetService<T>() => Services.GetService<T>();
 }

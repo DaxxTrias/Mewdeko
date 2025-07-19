@@ -1,17 +1,19 @@
 using System.Net.Http;
+using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
+using DataModel;
+using Hqub.Lastfm;
 using Lavalink4NET;
 using Lavalink4NET.Players;
 using Lavalink4NET.Protocol.Payloads.Events;
 using Lavalink4NET.Rest.Entities.Tracks;
+using LinqToDB;
 using Mewdeko.Common.Configs;
-using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.Music.Common;
-using Mewdeko.Services.strings;
-using Microsoft.EntityFrameworkCore;
+using Mewdeko.Services.Strings;
 using Microsoft.Extensions.DependencyInjection;
-using Newtonsoft.Json;
 using SpotifyAPI.Web;
 using Embed = Discord.Embed;
 
@@ -22,17 +24,27 @@ namespace Mewdeko.Modules.Music.CustomPlayer;
 /// </summary>
 public sealed class MewdekoPlayer : LavalinkPlayer
 {
+    private const ulong SourceGuildId = 843489716674494475;
     private readonly IAudioService audioService;
-    private readonly BotConfig config;
-    private readonly IBotCredentials creds;
-    private readonly HttpClient httpClient;
     private readonly IDataCache cache;
     private readonly IMessageChannel channel;
     private readonly DiscordShardedClient client;
-    private readonly DbContextProvider dbProvider;
-    private readonly IBotStrings strings;
-    private Timer aloneCheckTimer;
-    private int aloneTime;
+    private readonly BotConfig config;
+    private readonly IBotCredentials creds;
+    private readonly IDataConnectionFactory dbFactory;
+    private readonly HttpClient httpClient;
+    private readonly ILogger<MewdekoPlayer> logger;
+    private readonly Random random = new();
+
+    private readonly string[] soundIds =
+    [
+        "1356473693294825603", "1356473638899159050", "1356473603775922256"
+    ];
+
+    private readonly PlayerStateTracker stateTracker;
+
+    private readonly GeneratedBotStrings Strings;
+    private bool isAprilFoolsJokeRunning;
 
     /// <summary>
     ///     Initializes a new instance of <see cref="MewdekoPlayer" />.
@@ -46,39 +58,13 @@ public sealed class MewdekoPlayer : LavalinkPlayer
         creds = properties.ServiceProvider.GetRequiredService<IBotCredentials>();
         channel = properties.Options.Value.Channel;
         client = properties.ServiceProvider.GetRequiredService<DiscordShardedClient>();
-        dbProvider = properties.ServiceProvider.GetRequiredService<DbContextProvider>();
+        dbFactory = properties.ServiceProvider.GetRequiredService<IDataConnectionFactory>();
         cache = properties.ServiceProvider.GetRequiredService<IDataCache>();
-        strings = properties.ServiceProvider.GetRequiredService<IBotStrings>();
-        aloneCheckTimer = new Timer(CheckIfAlone, null, TimeSpan.FromMicroseconds(1), TimeSpan.FromMinutes(1));
+        Strings = properties.ServiceProvider.GetRequiredService<GeneratedBotStrings>();
+        logger = properties.ServiceProvider.GetRequiredService<ILogger<MewdekoPlayer>>();
+        stateTracker = new PlayerStateTracker(this, cache);
     }
 
-    /// <summary>
-    ///     Check if bot is alone in a voice channel and stop the music player if it is.
-    /// </summary>
-    /// <param name="state"></param>
-    private async void CheckIfAlone(object state)
-    {
-        var voicechannel = client.GetGuild(GuildId)?.GetVoiceChannel(VoiceChannelId);
-        if (voicechannel == null)
-            return;
-
-        var userCount = voicechannel.Users.Count;
-        if (userCount == 1)
-        {
-            aloneTime++;
-            if (aloneTime >= 5)
-            {
-                await StopAsync();
-                await cache.SetMusicQueue(GuildId, new List<MewdekoTrack>());
-                await cache.SetCurrentTrack(GuildId, null);
-                aloneTime = 0;
-            }
-        }
-        else
-        {
-            aloneTime = 0;
-        }
-    }
 
     /// <summary>
     ///     Handles the event the track ended, resolves stuff like auto play, auto playing the next track, and looping.
@@ -89,85 +75,73 @@ public sealed class MewdekoPlayer : LavalinkPlayer
     protected override async ValueTask NotifyTrackEndedAsync(ITrackQueueItem item, TrackEndReason reason,
         CancellationToken token = default)
     {
+        if (stateTracker != null && (State == PlayerState.Playing || State == PlayerState.Paused))
+            await stateTracker.ForceUpdate();
         var musicChannel = await GetMusicChannel();
         var queue = await cache.GetMusicQueue(GuildId);
         var currentTrack = await cache.GetCurrentTrack(GuildId);
         var nextTrack = queue.FirstOrDefault(x => x.Index == currentTrack.Index + 1);
-        try
+        switch (reason)
         {
-            switch (reason)
-            {
-                case TrackEndReason.Finished:
-                    var repeatType = await GetRepeatType();
-                    switch (repeatType)
-                    {
-                        case PlayerRepeatType.None:
+            case TrackEndReason.Finished:
+                var repeatType = await GetRepeatType();
+                switch (repeatType)
+                {
+                    case PlayerRepeatType.None:
 
-                            if (nextTrack is null)
-                            {
-                                await musicChannel.SendMessageAsync("Queue is empty. Stopping.");
-                                await StopAsync(token);
-                                await cache.SetCurrentTrack(GuildId, null);
-                            }
-                            else
-                            {
-                                await PlayAsync(nextTrack.Track, cancellationToken: token);
-                                await cache.SetCurrentTrack(GuildId, nextTrack);
-                            }
+                        if (nextTrack is null)
+                        {
+                            await musicChannel.SendMessageAsync(Strings.QueueEmpty(GuildId));
+                            await StopAsync(token);
+                            await cache.SetCurrentTrack(GuildId, null);
+                        }
+                        else
+                        {
+                            await PlayAsync(nextTrack.Track, cancellationToken: token);
+                            await cache.SetCurrentTrack(GuildId, nextTrack);
+                        }
 
-                            break;
-                        case PlayerRepeatType.Track:
-                            await PlayAsync(item.Track, cancellationToken: token);
-                            break;
-                        case PlayerRepeatType.Queue:
-                            if (nextTrack is null)
-                            {
-                                await PlayAsync(queue[0].Track, cancellationToken: token);
-                                await cache.SetCurrentTrack(GuildId, queue[0]);
-                            }
-                            else
-                            {
-                                await PlayAsync(nextTrack.Track, cancellationToken: token);
-                                await cache.SetCurrentTrack(GuildId, nextTrack);
-                            }
-
-                            break;
-                        case PlayerRepeatType.Shuffle:
-                            queue = queue.Shuffle().ToList();
-                            await cache.SetMusicQueue(GuildId, queue);
-                            await PlayAsync(queue[0].Track,
-                                cancellationToken: token);
+                        break;
+                    case PlayerRepeatType.Track:
+                        await PlayAsync(item.Track, cancellationToken: token);
+                        break;
+                    case PlayerRepeatType.Queue:
+                        if (nextTrack is null)
+                        {
+                            await PlayAsync(queue[0].Track, cancellationToken: token);
                             await cache.SetCurrentTrack(GuildId, queue[0]);
-                            break;
-                        default:
-                            throw new ArgumentOutOfRangeException();
-                    }
+                        }
+                        else
+                        {
+                            await PlayAsync(nextTrack.Track, cancellationToken: token);
+                            await cache.SetCurrentTrack(GuildId, nextTrack);
+                        }
 
-                    break;
-                case TrackEndReason.LoadFailed:
-                    var failedEmbed = new EmbedBuilder()
-                        .WithDescription($"Failed to load track {item.Track.Title}. Removing and skipping to the next one.")
-                        .WithOkColor()
-                        .Build();
-                    await musicChannel.SendMessageAsync(embed: failedEmbed);
-                    await PlayAsync(nextTrack.Track, cancellationToken: token);
-                    await cache.SetCurrentTrack(GuildId, nextTrack);
-                    queue.Remove(currentTrack);
-                    await cache.SetMusicQueue(GuildId, queue);
-                    break;
-                case TrackEndReason.Stopped:
-                    return;
-                case TrackEndReason.Replaced:
-                    break;
-                case TrackEndReason.Cleanup:
-                    break;
-                default:
-                    throw new ArgumentOutOfRangeException(nameof(reason), reason, null);
-            }
-        }
-        catch (Exception)
-        {
-            await musicChannel.SendErrorAsync(strings.GetText("music_lavalink_error"), config);
+                        break;
+                    default:
+                        throw new ArgumentOutOfRangeException();
+                }
+
+                break;
+            case TrackEndReason.LoadFailed:
+                var failedEmbed = new EmbedBuilder()
+                    .WithDescription(Strings.TrackLoadFailed(GuildId, item.Track.Title))
+                    .WithOkColor()
+                    .Build();
+                await musicChannel.SendMessageAsync(embed: failedEmbed);
+                await PlayAsync(nextTrack.Track, cancellationToken: token);
+                await cache.SetCurrentTrack(GuildId, nextTrack);
+                queue.Remove(currentTrack);
+                await cache.SetMusicQueue(GuildId, queue);
+                break;
+            case TrackEndReason.Stopped:
+                return;
+            case TrackEndReason.Replaced:
+                break;
+            case TrackEndReason.Cleanup:
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(reason), reason, null);
         }
     }
 
@@ -177,21 +151,102 @@ public sealed class MewdekoPlayer : LavalinkPlayer
     /// <param name="track">The track that started playing.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     protected override async ValueTask NotifyTrackStartedAsync(ITrackQueueItem track,
-        CancellationToken cancellationToken = new())
+    CancellationToken cancellationToken = default)
     {
+        await stateTracker.ForceUpdate();
         var queue = await cache.GetMusicQueue(GuildId);
         var currentTrack = await cache.GetCurrentTrack(GuildId);
         var musicChannel = await GetMusicChannel();
-        await musicChannel.SendMessageAsync(embed: await PrettyNowPlayingAsync(queue));
-        if (currentTrack.Index == queue.Count)
+
+        if (queue == null || currentTrack == null || musicChannel == null)
+        {
+            var nullParts = new List<string>();
+            if (queue == null) nullParts.Add("queue");
+            if (currentTrack == null) nullParts.Add("currentTrack");
+            if (musicChannel == null) nullParts.Add("musicChannel");
+            logger?.LogError("NotifyTrackStartedAsync: {NullParts} is/are null. GuildId: {GuildId}", string.Join(", ", nullParts), GuildId);
+            return;
+        }
+
+        // Create embed and component buttons
+        var embed = await PrettyNowPlayingAsync(queue, true);
+        var components = CreatePlayerControls();
+
+        var message = await musicChannel.SendMessageAsync(embed: embed, components: components);
+
+        if (DateTime.Now.Month == 4 && DateTime.Now.Day == 1 && !isAprilFoolsJokeRunning)
+        {
+            if (random.Next(100) < 30)
+            {
+                isAprilFoolsJokeRunning = true;
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        var guild = client.GetGuild(GuildId);
+                        var chan = guild?.GetVoiceChannel(VoiceChannelId);
+
+                        if (chan != null)
+                        {
+                            await Task.Delay(random.Next(30000, 120000), cancellationToken);
+
+                            await PlaySoundboardEffect(VoiceChannelId, soundIds[0]);
+
+                            await Task.Delay(random.Next(15000, 45000), cancellationToken);
+
+                            await PlaySoundboardEffect(VoiceChannelId, soundIds[1]);
+
+                            await Task.Delay(random.Next(20000, 60000), cancellationToken);
+
+                            await PlaySoundboardEffect(VoiceChannelId, soundIds[2]);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"April Fools prank error: {ex.Message}");
+                    }
+                    finally
+                    {
+                        isAprilFoolsJokeRunning = false;
+                    }
+                }, cancellationToken);
+            }
+        }
+
+        if (currentTrack?.Index == queue.Count)
         {
             var success = await AutoPlay();
             if (!success)
             {
-                await musicChannel.SendErrorAsync(strings.GetText("lastfm_credentials_invalid_autoplay"), config);
+                await musicChannel.SendErrorAsync(Strings.LastfmCredentialsInvalidAutoplay(GuildId), config);
                 await SetAutoPlay(0);
             }
         }
+    }
+
+    /// <summary>
+    ///     Creates the player control buttons.
+    /// </summary>
+    /// <returns>Built component collection.</returns>
+    private MessageComponent CreatePlayerControls()
+    {
+        var isPaused = State == PlayerState.Paused;
+
+        return new ComponentBuilder()
+            // Row 1 - Main controls
+            .WithButton(customId: $"music:prev:{GuildId}", emote: new Emoji("⏮️"), style: ButtonStyle.Secondary)
+            .WithButton(customId: $"music:playpause:{GuildId}", emote: new Emoji(isPaused ? "▶️" : "⏸️"),
+                style: ButtonStyle.Primary)
+            .WithButton(customId: $"music:next:{GuildId}", emote: new Emoji("⏭️"), style: ButtonStyle.Secondary)
+            .WithButton(customId: $"music:stop:{GuildId}", emote: new Emoji("⏹️"), style: ButtonStyle.Danger)
+            // Row 2 - Additional controls
+            .WithButton(customId: $"music:loop:{GuildId}", emote: new Emoji("🔁"), style: ButtonStyle.Secondary, row: 1)
+            .WithButton(customId: $"music:volume_down:{GuildId}", emote: new Emoji("🔉"), style: ButtonStyle.Secondary,
+                row: 1)
+            .WithButton(customId: $"music:volume_up:{GuildId}", emote: new Emoji("🔊"), style: ButtonStyle.Secondary,
+                row: 1)
+            .WithButton(customId: $"music:queue:{GuildId}", label: "Queue", style: ButtonStyle.Secondary, row: 1)
+            .Build();
     }
 
     /// <summary>
@@ -200,17 +255,10 @@ public sealed class MewdekoPlayer : LavalinkPlayer
     /// <returns>The music channel for the player.</returns>
     public async Task<IMessageChannel?> GetMusicChannel()
     {
-        var guildId = GuildId;
-        await using var dbContext = await dbProvider.GetContextAsync();
-
-        var settings = await dbContext.MusicPlayerSettings.FirstOrDefaultAsync(x => x.GuildId == guildId);
-        if (settings is null)
-        {
-            return channel;
-        }
-
-        var channelId = settings.MusicChannelId;
-        return channelId.HasValue ? client.GetGuild(GuildId)?.GetTextChannel(channelId.Value) : channel;
+        var settings = await GetMusicSettings();
+        return settings.MusicChannelId.HasValue
+            ? client.GetGuild(GuildId)?.GetTextChannel(settings.MusicChannelId.Value)
+            : channel;
     }
 
     /// <summary>
@@ -219,149 +267,389 @@ public sealed class MewdekoPlayer : LavalinkPlayer
     /// <param name="channelId">The channel id to set.</param>
     public async Task SetMusicChannelAsync(ulong channelId)
     {
-        var guildId = GuildId;
-        await using var dbContext = await dbProvider.GetContextAsync();
+        var settings = await GetMusicSettings();
+        settings.MusicChannelId = channelId;
 
-        var settings = await dbContext.MusicPlayerSettings.FirstOrDefaultAsync(x => x.GuildId == guildId);
+        await using var db = await dbFactory.CreateConnectionAsync();
+        await db.UpdateAsync(settings);
+        await cache.SetMusicPlayerSettings(GuildId, settings);
+    }
+
+    private async Task<MusicPlayerSetting> GetMusicSettings()
+    {
+        var guildId = GuildId;
+        var settings = await cache.GetMusicPlayerSettings(guildId);
+        if (settings is not null)
+            return settings;
+
+        await using var db = await dbFactory.CreateConnectionAsync();
+        settings = await db.MusicPlayerSettings
+            .FirstOrDefaultAsync(x => x.GuildId == guildId);
+
         if (settings is null)
         {
-            settings = new MusicPlayerSettings
+            settings = new MusicPlayerSetting
             {
-                GuildId = GuildId, MusicChannelId = channelId
+                GuildId = guildId
             };
-            await dbContext.MusicPlayerSettings.AddAsync(settings);
-        }
-        else
-        {
-            settings.MusicChannelId = channelId;
+            await db.InsertAsync(settings);
         }
 
-        await dbContext.SaveChangesAsync();
+        await cache.SetMusicPlayerSettings(guildId, settings);
+        return settings;
+    }
+
+    /// <summary>
+    ///     Sets the DJ role for the guild.
+    /// </summary>
+    public async Task SetDjRole(ulong? roleId)
+    {
+        var settings = await GetMusicSettings();
+        settings.DjRoleId = roleId;
+
+        await using var db = await dbFactory.CreateConnectionAsync();
+        await db.UpdateAsync(settings);
+        await cache.SetMusicPlayerSettings(GuildId, settings);
+    }
+
+    /// <summary>
+    ///     Checks if a user has DJ permissions.
+    /// </summary>
+    public async Task<bool> HasDjAsync(IGuildUser user)
+    {
+        if (user.GuildPermissions.Administrator)
+            return true;
+
+        var settings = await GetMusicSettings();
+        if (!settings.DjRoleId.HasValue)
+            return false;
+
+        return user.RoleIds.Contains(settings.DjRoleId.Value);
+    }
+
+    /// <summary>
+    ///     Gets the DJ role for the guild.
+    /// </summary>
+    public async Task<ulong?> GetDjRole()
+    {
+        var settings = await GetMusicSettings();
+        return settings.DjRoleId;
     }
 
     /// <summary>
     ///     Gets a pretty now playing message for the player.
     /// </summary>
-    public async Task<Embed> PrettyNowPlayingAsync(List<MewdekoTrack> queue)
+    /// <summary>
+    ///     Gets a pretty now playing message for the player.
+    /// </summary>
+    public async Task<Embed> PrettyNowPlayingAsync(List<MewdekoTrack> queue, bool minimal = false)
     {
         var currentTrack = await cache.GetCurrentTrack(GuildId);
+        var position = Position.Value.Position;
+        var duration = CurrentTrack.Duration;
+        var (progressBar, percentage) = CreateProgressBar(position, duration);
+        await GetMusicSettings();
+
+        var description = new StringBuilder();
+        if (!minimal)
+        {
+            description
+            .AppendLine("## 📀 Track Info")
+            .AppendLine($"### [{currentTrack.Track.Title}]({currentTrack.Track.Uri})")
+            .AppendLine()
+            .AppendLine($"🎵 **Artist:** {currentTrack.Track.Author}")
+            .AppendLine($"🎧 **Source:** {currentTrack.Track.Provider}")
+            .AppendLine($"👤 **Requested by:** {currentTrack.Requester.Username}")
+            .AppendLine()
+            .AppendLine("## ⏳ Progress")
+            .AppendLine(progressBar)
+            .AppendLine($"`{position:hh\\:mm\\:ss}/{duration:hh\\:mm\\:ss} ({percentage:F1}%)`");
+        }
+        else
+        {
+            description
+            .AppendLine($"### [{currentTrack.Track.Title}]({currentTrack.Track.Uri})")
+            .AppendLine()
+            .AppendLine($"🎧 **Source:** {currentTrack.Track.Provider}");
+        }
+
+        var activeEffects = GetActiveEffects();
+        if (activeEffects.Any())
+        {
+            description.AppendLine()
+                .AppendLine("## 🎚️ Active Effects")
+                .AppendLine(string.Join(" ", activeEffects));
+        }
+
+        var stats = GetPlayerStats(currentTrack.Index, queue.Count);
+        if (stats.Any())
+        {
+            description.AppendLine()
+                .AppendLine("## ℹ️ Player Stats")
+                .AppendLine(string.Join("\n", stats));
+        }
+
+        var color = GetColorForPercentage(position.TotalMilliseconds / duration.TotalMilliseconds);
+
         var eb = new EmbedBuilder()
-            .WithTitle(strings.GetText("music_now_playing"))
-            .WithDescription($"`Artist:` ***{currentTrack.Track.Author}***" +
-                             $"\n`Name:` ***[{currentTrack.Track.Title}]({currentTrack.Track.Uri})***" +
-                             $"\n`Source:` ***{currentTrack.Track.Provider}***" +
-                             $"\n`Queued By:` ***{currentTrack.Requester.Username}***")
-            .WithOkColor()
-            .WithImageUrl(currentTrack.Track.ArtworkUri?.ToString())
-            .WithFooter(
-                $"Track Number: {currentTrack.Index}/{queue.Count} | {Position.Value.Position:hh\\:mm\\:ss} | {CurrentTrack.Duration} | 🔊: {Volume * 100}% | 🔁: {await GetRepeatType()}");
+            .WithTitle($"🎵 Now Playing {GetRepeatEmoji()}")
+            .WithDescription(description.ToString())
+            .WithColor(color)
+            .WithThumbnailUrl(currentTrack.Track.ArtworkUri?.ToString())
+            .WithFooter(GetVolumeIndicator());
 
         return eb.Build();
     }
 
-    /// <summary>
-    ///     Contains logic for handling autoplay in a server. Requires either a last.fm API key.
-    /// </summary>
-    /// <returns>A bool depending on if the api key was correct.</returns>
-    public async Task<bool> AutoPlay()
+    private string GetVolumeIndicator()
     {
-        var autoPlay = await GetAutoPlay();
-        if (autoPlay == 0)
-            return true;
-        var queue = await cache.GetMusicQueue(GuildId);
-        var lastSong = queue.MaxBy(x => x.Index);
-        if (lastSong is null)
-            return true;
-
-        LastFmResponse response = null;
-        const int maxTries = 5;
-        var tries = 0;
-        var success = false;
-
-        while (!success)
+        var volume = Volume * 100;
+        var icon = volume switch
         {
-            switch (tries)
+            0 => "🔇",
+            <= 33 => "🔈",
+            <= 67 => "🔉",
+            _ => "🔊"
+        };
+        return $"{icon} Volume: {volume}%";
+    }
+
+    private List<string> GetActiveEffects()
+    {
+        var effects = new List<string>();
+
+        if (Filters.Equalizer != null)
+            effects.Add("🎵 Bass");
+
+        if (Filters.Timescale != null)
+        {
+            var speed = Filters.Timescale.Speed;
+            switch (speed)
             {
-                case >= maxTries:
-                    return true;
-                case > 0:
-                    lastSong = queue.FirstOrDefault(x => x.Index == queue.Count - tries);
+                case > 1.0f:
+                    effects.Add("⚡ Nightcore");
+                    break;
+                case < 1.0f:
+                    effects.Add("🌊 Vaporwave");
                     break;
             }
-
-            // sorted info for attempting to fetch data from lastfm
-            var fullTitle = lastSong.Track.Title;
-            var trackTitle = fullTitle;
-            var artistName = lastSong.Track.Author;
-            var hyphenIndex = fullTitle.IndexOf(" - ", StringComparison.Ordinal);
-
-            // if the title has a hyphen, split the title and artist, used in cases where the title is formatted as "Artist - Title"
-            if (hyphenIndex != -1)
-            {
-                artistName = fullTitle.Substring(0, hyphenIndex).Trim();
-                trackTitle = fullTitle.Substring(hyphenIndex + 3).Trim();
-            }
-
-            // remove any extra info from the title that might be in brackets or parentheses
-            trackTitle = Regex.Replace(trackTitle, @"\s*\[.*?\]\s*", "", RegexOptions.Compiled);
-            trackTitle = Regex.Replace(trackTitle, @"\s*\([^)]*\)\s*", "", RegexOptions.Compiled);
-            trackTitle = trackTitle.Trim();
-
-            // Query lastfm the first time with the formatted track title that doesnt contain the artist, with artist data from the track itself
-            var apiResponse = await httpClient.GetStringAsync(
-                $"http://ws.audioscrobbler.com/2.0/?method=track.getsimilar&artist={Uri.EscapeDataString(artistName)}&track={Uri.EscapeDataString(trackTitle)}&autocorrect=1&api_key={Uri.EscapeDataString(creds.LastFmApiKey)}&format=json");
-            response = JsonConvert.DeserializeObject<LastFmResponse>(apiResponse);
-
-            // If the response is null, the api returned an error, try again
-            if (response.Similartracks is null)
-            {
-                tries++;
-                continue;
-            }
-
-            // If the first query returns no results, assume that the title had useful author info, use the split title and author info and try again
-            if (response.Similartracks.Track.Count == 0)
-            {
-                apiResponse = await httpClient.GetStringAsync(
-                    $"http://ws.audioscrobbler.com/2.0/?method=track.getsimilar&artist={Uri.EscapeDataString(lastSong.Track.Author)}&track={Uri.EscapeDataString(trackTitle)}&autocorrect=1&api_key={Uri.EscapeDataString(creds.LastFmApiKey)}&format=json");
-                response = JsonConvert.DeserializeObject<LastFmResponse>(apiResponse);
-            }
-
-            if (response.Similartracks.Track.Count != 0)
-                success = true;
-
-            tries++;
         }
 
-        // If the response is empty, return true
-        if (response.Similartracks.Track.Count == 0)
-            return true;
+        if (Filters.Karaoke != null)
+            effects.Add("🎤 Karaoke");
+        if (Filters.Tremolo != null)
+            effects.Add("〰️ Tremolo");
+        if (Filters.Vibrato != null)
+            effects.Add("📳 Vibrato");
+        if (Filters.Rotation != null)
+            effects.Add("🎧 8D");
+        if (Filters.Distortion != null)
+            effects.Add("🔊 Distort");
+        if (Filters.ChannelMix != null)
+            effects.Add("🔀 Stereo");
 
-        var queuedTrackNames = new HashSet<string>(queue.Select(q => q.Track.Title));
+        return effects;
+    }
 
-        // Filter out tracks that are already in the queue
-        var filteredTracks = response.Similartracks.Track
-            .Where(t => !queuedTrackNames.Contains($"{t.Name}"))
-            .ToList();
-
-        // get the amount of tracks to take, either the amount of tracks in the response or the amount of tracks to autoplay
-        var toTake = Math.Min(autoPlay, filteredTracks.Count);
-
-        foreach (var rec in filteredTracks.Take(toTake))
+    private List<string> GetPlayerStats(int currentIndex, int totalTracks)
+    {
+        var stats = new List<string>
         {
-            var trackToLoad =
-                await audioService.Tracks.LoadTrackAsync($"{rec.Name} {rec.Artist.Name}", TrackSearchMode.YouTube);
-            if (trackToLoad is null)
-                continue;
-            queue.Add(new MewdekoTrack(queue.Count + 1, trackToLoad, new PartialUser
-            {
-                AvatarUrl = client.CurrentUser.GetAvatarUrl(), Username = "Mewdeko", Id = client.CurrentUser.Id
-            }));
-            await cache.SetMusicQueue(GuildId, queue);
+            $"📑 Track **{currentIndex}** of **{totalTracks}**",
+            $"🎚️ Volume at **{Volume * 100}%**",
+            $"🔁 Repeat mode: **{GetRepeatType().GetAwaiter().GetResult()}**"
+        };
+
+        return stats;
+    }
+
+    private string GetRepeatEmoji()
+    {
+        return GetRepeatType().GetAwaiter().GetResult() switch
+        {
+            PlayerRepeatType.None => "",
+            PlayerRepeatType.Track => "🔂",
+            PlayerRepeatType.Queue => "🔁",
+            _ => ""
+        };
+    }
+
+    private (string Bar, double Percentage) CreateProgressBar(TimeSpan position, TimeSpan duration)
+    {
+        const int barLength = 25;
+        var progress = position.TotalMilliseconds / duration.TotalMilliseconds;
+        var progressBarPosition = (int)(progress * barLength);
+        var percentage = progress * 100;
+
+        var bar = new StringBuilder();
+
+        // Add start cap
+        bar.Append('╠');
+
+        // Build progress bar
+        for (var i = 0; i < barLength; i++)
+        {
+            if (i == progressBarPosition)
+                bar.Append("🔘");
+            else if (i < progressBarPosition)
+                bar.Append('═');
+            else
+                bar.Append('─');
         }
 
-        await cache.SetMusicQueue(GuildId, queue);
-        return true;
+        // Add end cap
+        bar.Append('╣');
+
+        return (bar.ToString(), percentage);
+    }
+
+    private static Color GetColorForPercentage(double percentage)
+    {
+        // Interpolate between colors based on progress
+        if (percentage < 0.5)
+        {
+            // Interpolate from blue to purple
+            var t = percentage * 2;
+            return new Color(
+                (byte)(147 * t + 88 * (1 - t)),
+                (byte)(112 * t + 101 * (1 - t)),
+                (byte)(219 * t + 242 * (1 - t))
+            );
+        }
+        else
+        {
+            // Interpolate from purple to pink
+            var t = (percentage - 0.5) * 2;
+            return new Color(
+                (byte)(147 * (1 - t) + 255 * t),
+                (byte)(112 * (1 - t) + 192 * t),
+                (byte)(219 * (1 - t) + 203 * t)
+            );
+        }
+    }
+
+    private async Task<string> GetQueueInfoAsync(List<MewdekoTrack> queue)
+    {
+        var settings = await GetMusicSettings();
+        var totalDuration = TimeSpan.FromMilliseconds(queue.Sum(x => x.Track.Duration.TotalMilliseconds));
+
+        return $"Queue: {queue.Count} tracks | {totalDuration:hh\\:mm\\:ss} total" +
+               (settings.VoteSkipEnabled ? $" | Vote Skip: {settings.VoteSkipThreshold}% needed" : "");
+    }
+
+    /// <summary>
+    ///     Contains logic for handling autoplay in a server using Spotify's recommendation system.
+    /// </summary>
+    /// <returns>A bool indicating if the operation was successful.</returns>
+    /// <summary>
+    ///     Contains logic for handling autoplay in a server using Last.fm's similar tracks API.
+    /// </summary>
+    /// <returns>A bool indicating if the operation was successful.</returns>
+    public async Task<bool> AutoPlay()
+    {
+        try
+        {
+            var autoPlay = await GetAutoPlay();
+            if (autoPlay == 0)
+                return true;
+
+            var queue = await cache.GetMusicQueue(GuildId);
+            var lastSong = queue.MaxBy(x => x.Index);
+            if (lastSong is null)
+                return true;
+
+            // Extract track and artist information
+            var (artistName, trackTitle) = ExtractTrackInfo(lastSong.Track.Title, lastSong.Track.Author);
+
+            // Initialize Last.fm client using API key from credentials
+            if (string.IsNullOrEmpty(creds.LastFmApiKey))
+            {
+                logger.LogWarning("Last.fm API key is not configured. AutoPlay cannot function.");
+                return false;
+            }
+
+            var lastfmClient = new LastfmClient(creds.LastFmApiKey);
+
+            // Get similar tracks from Last.fm
+            var similarTracks = await lastfmClient.Track.GetSimilarAsync(trackTitle, artistName, autoPlay * 2);
+            if (similarTracks == null || !similarTracks.Any())
+            {
+                logger.LogWarning($"No similar tracks found for {trackTitle} by {artistName}");
+                return true;
+            }
+
+            // Filter out tracks that are already in the queue
+            var queuedTrackNames = new HashSet<string>(
+                queue.Select(q => q.Track.Title.ToLower()),
+                StringComparer.OrdinalIgnoreCase);
+
+            var filteredTracks = similarTracks
+                .Where(t => !queuedTrackNames.Contains($"{t.Name} - {t.Artist.Name}".ToLower()))
+                .ToList();
+
+            var toTake = Math.Min(autoPlay, filteredTracks.Count);
+
+            logger.LogInformation($"Last.fm AutoPlay found {filteredTracks.Count} potential tracks, adding {toTake}");
+
+            foreach (var track in filteredTracks.Take(toTake))
+            {
+                // Create search query with track name and artist
+                var searchQuery = $"{track.Name} {track.Artist.Name}";
+
+                var trackToLoad = await audioService.Tracks.LoadTrackAsync(searchQuery, TrackSearchMode.YouTube);
+                if (trackToLoad is null)
+                {
+                    logger.LogDebug($"Could not load track: {searchQuery}");
+                    continue;
+                }
+
+                queue.Add(new MewdekoTrack(queue.Count + 1, trackToLoad, new PartialUser
+                {
+                    AvatarUrl = client.CurrentUser.GetAvatarUrl(),
+                    Username = "Mewdeko (Last.fm AutoPlay)",
+                    Id = client.CurrentUser.Id
+                }));
+
+                logger.LogDebug($"Added track to queue: {trackToLoad.Title}");
+            }
+
+            await cache.SetMusicQueue(GuildId, queue);
+
+            // If we've added tracks, return success
+            return true;
+        }
+        catch (Exception e)
+        {
+            logger.LogError(e, "Last.fm AutoPlay error");
+            return false;
+        }
+    }
+
+    /// <summary>
+    ///     Extracts the artist name and track title from a song's metadata.
+    /// </summary>
+    /// <param name="fullTitle">The full track title</param>
+    /// <param name="authorFromTrack">The author information</param>
+    /// <returns>A tuple containing the artist name and track title</returns>
+    private (string artistName, string trackTitle) ExtractTrackInfo(string fullTitle, string authorFromTrack)
+    {
+        var trackTitle = fullTitle;
+        var artistName = authorFromTrack;
+        var hyphenIndex = fullTitle.IndexOf(" - ", StringComparison.Ordinal);
+
+        // If the title has a hyphen, split the title and artist
+        if (hyphenIndex != -1)
+        {
+            artistName = fullTitle.Substring(0, hyphenIndex).Trim();
+            trackTitle = fullTitle.Substring(hyphenIndex + 3).Trim();
+        }
+
+        // Clean up the track title by removing extra information
+        trackTitle = Regex.Replace(trackTitle, @"\s*\[.*?\]\s*", "", RegexOptions.Compiled);
+        trackTitle = Regex.Replace(trackTitle, @"\s*\([^)]*\)\s*", "", RegexOptions.Compiled);
+        trackTitle = trackTitle.Trim();
+
+        return (artistName, trackTitle);
     }
 
     /// <summary>
@@ -370,11 +658,28 @@ public sealed class MewdekoPlayer : LavalinkPlayer
     /// <returns>An integer representing the guilds player volume</returns>
     public async Task<int> GetVolume()
     {
-        var guildId = GuildId;
-        await using var dbContext = await dbProvider.GetContextAsync();
+        var settings = await GetMusicSettings();
+        return settings.Volume;
+    }
 
-        var settings = await dbContext.MusicPlayerSettings.FirstOrDefaultAsync(x => x.GuildId == guildId);
-        return settings?.Volume ?? 100;
+
+    /// <inheritdoc />
+    public override async ValueTask SeekAsync(TimeSpan position, CancellationToken cancellationToken = default)
+    {
+        await base.SeekAsync(position, cancellationToken);
+
+        var state = new MusicPlayerState
+        {
+            GuildId = GuildId,
+            VoiceChannelId = VoiceChannelId,
+            CurrentPosition = position,
+            IsPlaying = State == PlayerState.Playing,
+            IsPaused = State == PlayerState.Paused,
+            Volume = Volume,
+            LastUpdateTime = DateTime.UtcNow
+        };
+
+        await cache.SetPlayerState(GuildId, state);
     }
 
     /// <summary>
@@ -384,24 +689,24 @@ public sealed class MewdekoPlayer : LavalinkPlayer
     /// <returns>A <see cref="Task" /> representing the asynchronous operation.</returns>
     public async Task SetGuildVolumeAsync(int volume)
     {
-        var guildId = GuildId;
-        await using var dbContext = await dbProvider.GetContextAsync();
+        var settings = await GetMusicSettings();
+        settings.Volume = volume;
 
-        var settings = await dbContext.MusicPlayerSettings.FirstOrDefaultAsync(x => x.GuildId == guildId);
-        if (settings is null)
-        {
-            settings = new MusicPlayerSettings
-            {
-                GuildId = GuildId, Volume = volume
-            };
-            await dbContext.MusicPlayerSettings.AddAsync(settings);
-        }
-        else
-        {
-            settings.Volume = volume;
-        }
+        await using var db = await dbFactory.CreateConnectionAsync();
+        await db.UpdateAsync(settings);
+        await cache.SetMusicPlayerSettings(GuildId, settings);
+    }
 
-        await dbContext.SaveChangesAsync();
+    /// <summary>
+    ///     Sets settings for music.
+    /// </summary>
+    /// <param name="guildId"></param>
+    /// <param name="settings"></param>
+    public async Task SetMusicSettings(ulong guildId, MusicPlayerSetting settings)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+        await db.UpdateAsync(settings);
+        await cache.SetMusicPlayerSettings(guildId, settings);
     }
 
     /// <summary>
@@ -410,11 +715,8 @@ public sealed class MewdekoPlayer : LavalinkPlayer
     /// <returns>A <see cref="PlayerRepeatType" /> for the guild.</returns>
     public async Task<PlayerRepeatType> GetRepeatType()
     {
-        var guildId = GuildId;
-        await using var dbContext = await dbProvider.GetContextAsync();
-
-        var settings = await dbContext.MusicPlayerSettings.FirstOrDefaultAsync(x => x.GuildId == guildId);
-        return settings?.PlayerRepeat ?? PlayerRepeatType.Queue;
+        var settings = await GetMusicSettings();
+        return (PlayerRepeatType)settings.PlayerRepeat;
     }
 
     /// <summary>
@@ -424,24 +726,12 @@ public sealed class MewdekoPlayer : LavalinkPlayer
     /// <returns>A <see cref="Task" /> representing the asynchronous operation.</returns>
     public async Task SetRepeatTypeAsync(PlayerRepeatType repeatType)
     {
-        var guildId = GuildId;
-        await using var dbContext = await dbProvider.GetContextAsync();
+        var settings = await GetMusicSettings();
+        settings.PlayerRepeat = (int)repeatType;
 
-        var settings = await dbContext.MusicPlayerSettings.FirstOrDefaultAsync(x => x.GuildId == guildId);
-        if (settings is null)
-        {
-            settings = new MusicPlayerSettings
-            {
-                GuildId = GuildId, PlayerRepeat = repeatType
-            };
-            await dbContext.MusicPlayerSettings.AddAsync(settings);
-        }
-        else
-        {
-            settings.PlayerRepeat = repeatType;
-        }
-
-        await dbContext.SaveChangesAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
+        await db.UpdateAsync(settings);
+        await cache.SetMusicPlayerSettings(GuildId, settings);
     }
 
     /// <summary>
@@ -449,11 +739,8 @@ public sealed class MewdekoPlayer : LavalinkPlayer
     /// </summary>
     public async Task<int> GetAutoPlay()
     {
-        var guildId = GuildId;
-        await using var dbContext = await dbProvider.GetContextAsync();
-
-        var settings = await dbContext.MusicPlayerSettings.FirstOrDefaultAsync(x => x.GuildId == guildId);
-        return settings?.AutoPlay ?? 0;
+        var settings = await GetMusicSettings();
+        return settings.AutoPlay;
     }
 
     /// <summary>
@@ -462,32 +749,59 @@ public sealed class MewdekoPlayer : LavalinkPlayer
     /// <param name="autoPlay">The amount of songs to autoplay.</param>
     public async Task SetAutoPlay(int autoPlay)
     {
-        var guildId = GuildId;
-        await using var dbContext = await dbProvider.GetContextAsync();
+        var settings = await GetMusicSettings();
+        settings.AutoPlay = autoPlay;
 
-        var settings = await dbContext.MusicPlayerSettings.FirstOrDefaultAsync(x => x.GuildId == guildId);
-        if (settings is null)
-        {
-            settings = new MusicPlayerSettings
-            {
-                GuildId = GuildId, AutoPlay = autoPlay
-            };
-            await dbContext.MusicPlayerSettings.AddAsync(settings);
-        }
-        else
-        {
-            settings.AutoPlay = autoPlay;
-        }
-
-        await dbContext.SaveChangesAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
+        await db.UpdateAsync(settings);
+        await cache.SetMusicPlayerSettings(GuildId, settings);
     }
 
-    private async Task<SpotifyClient> GetSpotifyClient()
+    /// <summary>
+    ///     Gets a spotify client for the bot if the spotify api key is valid.
+    /// </summary>
+    /// <returns>A SpotifyClient</returns>
+    public async Task<SpotifyClient> GetSpotifyClient()
     {
         var spotifyClientConfig = SpotifyClientConfig.CreateDefault();
         var request =
             new ClientCredentialsRequest(creds.SpotifyClientId, creds.SpotifyClientSecret);
         var response = await new OAuthClient(spotifyClientConfig).RequestToken(request).ConfigureAwait(false);
         return new SpotifyClient(spotifyClientConfig.WithToken(response.AccessToken));
+    }
+
+    private async Task PlaySoundboardEffect(ulong channelId, string soundId)
+    {
+        try
+        {
+            var playSoundUrl = $"https://discord.com/api/v10/channels/{channelId}/send-soundboard-sound";
+
+            var playSoundRequest = new HttpRequestMessage(HttpMethod.Post, playSoundUrl);
+            playSoundRequest.Headers.Add("Authorization", $"Bot {creds.Token}");
+
+            var payload = new
+            {
+                sound_id = soundId,
+                source_guild_id = SourceGuildId.ToString()
+            };
+
+            var jsonContent = JsonSerializer.Serialize(payload);
+            playSoundRequest.Content = new StringContent(
+                jsonContent,
+                Encoding.UTF8,
+                "application/json");
+
+            var response = await httpClient.SendAsync(playSoundRequest);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorContent = await response.Content.ReadAsStringAsync();
+                Console.WriteLine($"Failed to play soundboard effect: {response.StatusCode}, Error: {errorContent}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error playing soundboard effect: {ex.Message}");
+        }
     }
 }

@@ -205,10 +205,12 @@ public static class MessageChannelExtensions
         Func<T, string> howToPrint, int columns = 3)
     {
         var i = 0;
-        return ch.SendMessageAsync($@"{seed}```css
-{string.Join("\n", items.GroupBy(_ => i++ / columns)
-    .Select(ig => string.Concat(ig.Select(howToPrint))))}
-```");
+        return ch.SendMessageAsync($"""
+                                    {seed}```css
+                                    {string.Join("\n", items.GroupBy(_ => i++ / columns)
+                                        .Select(ig => string.Concat(ig.Select(howToPrint))))}
+                                    ```
+                                    """);
     }
 
     /// <summary>
