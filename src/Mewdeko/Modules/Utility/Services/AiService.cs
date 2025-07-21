@@ -411,14 +411,14 @@ public class AiService : INService
             if (string.IsNullOrEmpty(rawJson)) continue;
 
             // Log raw response for debugging
-            logger.LogInformation($"{(AiProvider)config.Provider} raw response: {rawJson}");
+            //logger.LogInformation($"{(AiProvider)config.Provider} raw response: {rawJson}");
 
             // IMPORTANT: Parse the delta to extract just the content
             var contentDelta = streamParser.ParseDelta(rawJson, (AiProvider)config.Provider);
             if (!string.IsNullOrEmpty(contentDelta))
             {
                 responseBuilder.Append(contentDelta);
-                logger.LogInformation($"Added content delta: {contentDelta}");
+                //logger.LogInformation($"Added content delta: {contentDelta}");
             }
 
             // Check for usage information
@@ -1108,22 +1108,58 @@ public class AiService : INService
         }
     }
 
+    //private async Task<List<AiModel>> FetchGrokModels(HttpClient http, string apiKey)
+    //{
+    //    http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+    //    var response = await http.GetFromJsonAsync<OpenAiModelsResponse>("https://api.grok.com/v1/models");
 
+    //    return response?.Data
+    //        .Where(m => m.Id.StartsWith("grok"))
+    //        .Select(m => new AiModel
+    //        {
+    //            Id = m.Id,
+    //            Name = FormatModelName(m.Id),
+    //            Provider = AiProvider.Grok
+    //        })
+    //        .ToList() ?? [];
+    //}
 
     private async Task<List<AiModel>> FetchGrokModels(HttpClient http, string apiKey)
     {
         http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
-        var response = await http.GetFromJsonAsync<OpenAiModelsResponse>("https://api.grok.com/v1/models");
-
-        return response?.Data
-            .Where(m => m.Id.StartsWith("grok"))
-            .Select(m => new AiModel
+        try
+        {
+            // Call xAI's model list endpoint
+            var response = await http.GetAsync("https://api.x.ai/v1/models");
+            var content = await response.Content.ReadAsStringAsync();
+            if (!response.IsSuccessStatusCode)
             {
-                Id = m.Id,
-                Name = FormatModelName(m.Id),
-                Provider = AiProvider.Grok
-            })
-            .ToList() ?? [];
+                logger.LogError("Grok models fetch failed: {Status} {Content}", response.StatusCode, content);
+                return new List<AiModel>();
+            }
+            // Parse the response JSON into a model list (reuse OpenAiModelsResponse if compatible)
+            var grokResponse = JsonSerializer.Deserialize<OpenAiModelsResponse>(content);
+            if (grokResponse?.Data == null)
+            {
+                logger.LogError("Grok models fetch: Data field is null. Raw content: {Content}", content);
+                return new List<AiModel>();
+            }
+            // Map to internal AiModel list, filtering relevant model IDs
+            return grokResponse.Data
+                .Where(m => m.Id.StartsWith("grok"))  // Only take Grok models
+                .Select(m => new AiModel
+                {
+                    Id       = m.Id,
+                    Name     = FormatModelName(m.Id),   // e.g. "grok-4" -> "Grok 4"
+                    Provider = AiProvider.Grok
+                })
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Grok models fetch failed with exception");
+            return new List<AiModel>();
+        }
     }
 
     private async Task<List<AiModel>> FetchGroqModels(HttpClient http, string apiKey)

@@ -1,4 +1,5 @@
 using System.ClientModel;
+using System.Text.Json;
 using System.Threading;
 using DataModel;
 using OpenAI;
@@ -35,15 +36,17 @@ public class GrokClient : IAiClient
     {
         await Task.CompletedTask;
 
+        // Configure OpenAI SDK to point to xAI's endpoint
         var options = new OpenAIClientOptions
         {
+            // openai and grok are very similar api wise, only really need to change endpoint afaik
             Endpoint = new Uri("https://api.x.ai/v1"),
         };
 
         var apiKeyCredential = new ApiKeyCredential(apiKey);
-
         var client = new ChatClient(model, apiKeyCredential, options);
 
+        // Convert AiMessage (our internal message type) to OpenAI.ChatMessage format
         var chatMessages = messages.Select<AiMessage, ChatMessage>(m => m.Role switch
         {
             "user" => new UserChatMessage(m.Content),
@@ -52,8 +55,26 @@ public class GrokClient : IAiClient
             _ => throw new ArgumentException($"Unknown role: {m.Role}")
         }).ToList();
 
-        var completionUpdates = client.CompleteChatStreamingAsync(chatMessages, cancellationToken: cancellationToken);
+        // Call the OpenAI-compatible streaming chat completion
+        var completionStream = client.CompleteChatStreamingAsync(chatMessages, cancellationToken: cancellationToken);
 
-        return completionUpdates.Select(update => update.ContentUpdate.FirstOrDefault()?.Text ?? "");
+        //return completionUpdates.Select(update => update.ContentUpdate.FirstOrDefault()?.Text ?? "");
+        // Transform the streaming updates into JSON strings for the parser
+        // Each update’s first content piece is wrapped in a JSON line prefixed with 'data:'.
+        return completionStream.Select(update =>
+        {
+            string text = update.ContentUpdate.FirstOrDefault()?.Text ?? string.Empty;
+            if (string.IsNullOrEmpty(text))
+                return string.Empty;
+            // Form a JSON chunk similar to OpenAI’s streaming format with a delta
+            var dataObj = new
+            {
+                delta = new { text = text },
+                // Optionally include a usage placeholder or other fields if needed
+                // (usage will be updated in final chunk or outside this loop)
+            };
+            string json = JsonSerializer.Serialize(dataObj);
+            return json;  // We can include "data: " prefix if our parser expects it
+        });
     }
 }
