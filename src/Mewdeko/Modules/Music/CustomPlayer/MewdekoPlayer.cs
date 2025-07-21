@@ -160,6 +160,19 @@ public sealed class MewdekoPlayer : LavalinkPlayer
         var currentTrack = await cache.GetCurrentTrack(GuildId);
         var musicChannel = await GetMusicChannel();
 
+        if (queue == null || currentTrack == null || musicChannel == null)
+        {
+            var nullParts = new List<string>();
+            if (queue == null)
+                nullParts.Add("queue");
+            if (currentTrack == null)
+                nullParts.Add("currentTrack");
+            if (musicChannel == null)
+                nullParts.Add("musicChannel");
+            logger?.LogError("NotifyTrackStartedAsync: {NullParts} is/are null. GuildId: {GuildId}", string.Join(", ", nullParts), GuildId);
+            return;
+        }
+
         // Create now playing display with integrated control buttons
         var nowPlayingComponents = await PrettyNowPlayingAsync(queue);
 

@@ -345,7 +345,7 @@ public partial class Music(
             return;
         }
 
-        string removedTrackTitle = trackToRemove.Track.Title;
+        var removedTrackTitle = trackToRemove.Track.Title;
 
         queue.Remove(trackToRemove);
 
