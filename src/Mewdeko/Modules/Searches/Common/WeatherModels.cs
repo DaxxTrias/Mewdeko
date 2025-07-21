@@ -25,7 +25,7 @@ public class Weather
 {
     /// <summary>
     ///     Gets or sets the weather condition ID.
-    /// </summary>
+    /// </summary>  
     public int Id { get; set; }
 
     /// <summary>
@@ -55,14 +55,9 @@ public class Main
     public double Temp { get; set; }
 
     /// <summary>
-    ///     Gets or sets the atmospheric pressure.
+    ///     Gets or sets the temperature that it feels like.
     /// </summary>
-    public float Pressure { get; set; }
-
-    /// <summary>
-    ///     Gets or sets the humidity.
-    /// </summary>
-    public float Humidity { get; set; }
+    public double Feels_Like { get; set; } // Add this
 
     /// <summary>
     ///     Gets or sets the minimum temperature at the moment.
@@ -75,6 +70,26 @@ public class Main
     /// </summary>
     [JsonPropertyName("temp_max")]
     public double TempMax { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the atmospheric pressure.
+    /// </summary>
+    public float Pressure { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the humidity.
+    /// </summary>
+    public float Humidity { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the sea level pressure.
+    /// </summary>
+    public float? Sea_Level { get; set; } // Add this, nullable
+
+    /// <summary>
+    ///     Gets or sets the ground level pressure.
+    /// </summary>
+    public float? Grnd_Level { get; set; } // Add this, nullable
 }
 
 /// <summary>
@@ -91,6 +106,11 @@ public class Wind
     ///     Gets or sets the wind direction, degrees (meteorological).
     /// </summary>
     public double Deg { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the wind gust speed.
+    /// </summary>
+    public double? Gust { get; set; } // Add this, nullable
 }
 
 /// <summary>
@@ -120,11 +140,6 @@ public class Sys
     public int Id { get; set; }
 
     /// <summary>
-    ///     Gets or sets the internal parameter.
-    /// </summary>
-    public double Message { get; set; }
-
-    /// <summary>
     ///     Gets or sets the country code (GB, JP etc.).
     /// </summary>
     public string Country { get; set; }
@@ -138,6 +153,11 @@ public class Sys
     ///     Gets or sets the sunset time.
     /// </summary>
     public double Sunset { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the internal parameter.
+    /// </summary>
+    public double? Message { get; set; } // Remove Message if not used, or make it nullable
 }
 
 /// <summary>
@@ -154,6 +174,11 @@ public class WeatherData
     ///     Gets or sets the weather conditions.
     /// </summary>
     public List<Weather> Weather { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the base station.
+    /// </summary>
+    public string Base { get; set; } // Add this
 
     /// <summary>
     ///     Gets or sets the main weather parameters.
@@ -184,6 +209,11 @@ public class WeatherData
     ///     Gets or sets the system parameters.
     /// </summary>
     public Sys Sys { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the timezone.
+    /// </summary>
+    public int Timezone { get; set; } // Add this
 
     /// <summary>
     ///     Gets or sets the city ID.
