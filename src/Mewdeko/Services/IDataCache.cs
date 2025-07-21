@@ -308,6 +308,13 @@ public interface IDataCache
         TimeSpan expiry) where TOut : class;
 
     /// <summary>
+    ///     Removes cached data for a given key.
+    /// </summary>
+    /// <param name="key">The cache key to remove.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    public Task RemoveCachedDataAsync(string key);
+
+    /// <summary>
     ///     Sets status role cache.
     /// </summary>
     public Task SetStatusRoleCache(List<StatusRole> statusRoles);

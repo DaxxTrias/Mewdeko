@@ -436,6 +436,17 @@ public class SearchesService : INService, IUnloadableService
     }
 
     /// <summary>
+    ///     Clears the weather cache for a given query.
+    /// </summary>
+    /// <param name="query">The location query to clear from cache.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    public Task ClearWeatherCacheAsync(string query)
+    {
+        query = query.Trim().ToLowerInvariant();
+        return cache.RemoveCachedDataAsync($"Mewdeko_weather_{query}");
+    }
+
+    /// <summary>
     ///     Retrieves time data for the specified location.
     /// </summary>
     /// <param name="arg">The query string specifying the location.</param>

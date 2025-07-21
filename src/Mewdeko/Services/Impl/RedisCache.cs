@@ -659,4 +659,15 @@ public class RedisCache : IDataCache
 
         return obj;
     }
+
+    /// <summary>
+    ///     Removes cached data by key.
+    /// </summary>
+    /// <param name="key">The key of the data to remove.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    public async Task RemoveCachedDataAsync(string key)
+    {
+        var db = Redis.GetDatabase();
+        await db.KeyDeleteAsync($"{redisKey}_{key}");
+    }
 }

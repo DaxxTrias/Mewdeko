@@ -285,6 +285,19 @@ public partial class Searches(
     }
 
     /// <summary>
+    ///     Debug command to clear the weather cache for a given query.
+    /// </summary>
+    /// <param name="query">The location query to clear from cache.</param>
+    [Cmd]
+    [Aliases]
+    [OwnerOnly]
+    public async Task WeatherClearCache([Remainder] string query)
+    {
+        await Service.ClearWeatherCacheAsync(query).ConfigureAwait(false);
+        await ctx.Channel.SendConfirmAsync($"Weather cache cleared for: {query}").ConfigureAwait(false);
+    }
+
+    /// <summary>
     ///     Displays the current time in a specified location.
     /// </summary>
     /// <param name="query">The location query to search for the current time.</param>
