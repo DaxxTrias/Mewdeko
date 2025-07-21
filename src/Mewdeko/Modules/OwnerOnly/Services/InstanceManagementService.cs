@@ -116,7 +116,7 @@ public class InstanceManagementService : INService, IReadyExecutor
     public async Task<(bool Success, BotStatusModel? Status, string? Reason)> AddInstanceAsync(int port)
     {
         if (!new BotCredentials().IsApiEnabled)
-        return null; // Or throw, or log, as appropriate
+            return (false, null, "api_disabled");
 
         if (!new BotCredentials().IsMasterInstance)
             throw new InvalidOperationException("Can only add instances from master bot.");
