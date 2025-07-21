@@ -254,11 +254,17 @@ public partial class Searches(
                         .WithIsInline(true))
                 .AddField(fb =>
                     fb.WithName($"💨 {Format.Bold(Strings.WindSpeed(ctx.Guild.Id))}")
-                        .WithValue(data.Wind != null ? $"{data.Wind.Speed} m/s" : "N/A")
+                        .WithValue(data.Wind != null
+                            ? $"{data.Wind.Speed} m/s" +
+                              (data.Wind.Gust > 0 ? $"\nGusts: {data.Wind.Gust} m/s" : "")
+                            : "N/A")
                         .WithIsInline(true))
                 .AddField(fb =>
                     fb.WithName($"🌡 {Format.Bold(Strings.Temperature(ctx.Guild.Id))}")
-                        .WithValue(data.Main != null ? $"{data.Main.Temp:F1}°C / {f(data.Main.Temp):F1}°F" : "N/A").WithIsInline(true))
+                        .WithValue(data.Main != null
+                            ? $"{data.Main.Temp:F1}°C / {f(data.Main.Temp):F1}°F\nFeels like: {data.Main.Feels_Like:F1}°C / {f(data.Main.Feels_Like):F1}°F"
+                            : "N/A")
+                        .WithIsInline(true))
                 .AddField(fb =>
                     fb.WithName($"🔆 {Format.Bold(Strings.MinMax(ctx.Guild.Id))}")
                         .WithValue(data.Main != null

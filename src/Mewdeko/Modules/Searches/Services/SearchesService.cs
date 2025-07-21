@@ -413,14 +413,6 @@ public class SearchesService : INService, IUnloadableService
                 .ConfigureAwait(false);
 
             return string.IsNullOrEmpty(data) ? null : JsonSerializer.Deserialize<WeatherData>(data);
-            //var result = JsonSerializer.Deserialize<WeatherData>(data, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-            
-
-            //if (result == null)
-            //{
-            //    logger.LogWarning("Deserialized WeatherData is null for query: {Query}", query);
-            //}
-            //return result;
         }
         catch (Exception ex)
         {
