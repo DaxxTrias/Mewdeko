@@ -395,9 +395,14 @@ public class SearchesService : INService, IUnloadableService
         query = query.Trim().ToLowerInvariant();
 
         return cache.GetOrAddCachedDataAsync($"Mewdeko_weather_{query}",
-            GetWeatherDataFactory,
-            query,
-            TimeSpan.FromHours(3));
+           GetWeatherDataFactory,
+           query,
+           TimeSpan.FromSeconds(1));
+
+        //return cache.GetOrAddCachedDataAsync($"Mewdeko_weather_{query}",
+        //    GetWeatherDataFactory,
+        //    query,
+        //    TimeSpan.FromHours(3));
     }
 
     private async Task<WeatherData?> GetWeatherDataFactory(string query)
@@ -413,7 +418,15 @@ public class SearchesService : INService, IUnloadableService
                     $"https://api.openweathermap.org/data/2.5/weather?q={query}&appid=42cd627dd60debf25a5739e50a217d74&units=metric")
                 .ConfigureAwait(false);
 
-            return string.IsNullOrEmpty(data) ? null : JsonSerializer.Deserialize<WeatherData>(data);
+            //return string.IsNullOrEmpty(data) ? null : JsonSerializer.Deserialize<WeatherData>(data);
+            var result = JsonSerializer.Deserialize<WeatherData>(data, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            
+
+            if (result == null)
+            {
+                logger.LogWarning("Deserialized WeatherData is null for query: {Query}", query);
+            }
+            return result;
         }
         catch (Exception ex)
         {
