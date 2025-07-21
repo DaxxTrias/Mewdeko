@@ -402,6 +402,9 @@ public class SearchesService : INService, IUnloadableService
 
     private async Task<WeatherData?> GetWeatherDataFactory(string query)
     {
+        // todo theyre EOLing 2.5 api
+        // will need to update to 3.0 sooner or later
+        // docs here: https://openweathermap.org/one-call-transfer
         using var http = httpFactory.CreateClient();
         try
         {
