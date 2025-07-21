@@ -140,7 +140,17 @@ public class AiService : INService
         var config = await GetOrCreateConfig(guildChannel.GuildId);
         if (!config.Enabled || config.ChannelId != msg.Channel.Id) return;
 
-        if (msg.Content == ".deletesession")
+#if DEBUG
+        isDebugMode = true;
+#endif
+
+        if (msg.Content == ".deletesession" && !isDebugMode)
+        {
+            await ClearConversation(guildChannel.GuildId, msg.Author.Id);
+            await msg.Channel.SendConfirmAsync(strings.AiConversationDeleted(guildChannel.GuildId));
+            return;
+        }
+        else if (msg.Content == ",deletesession" && isDebugMode)
         {
             await ClearConversation(guildChannel.GuildId, msg.Author.Id);
             await msg.Channel.SendConfirmAsync(strings.AiConversationDeleted(guildChannel.GuildId));
@@ -152,10 +162,6 @@ public class AiService : INService
             await msg.Channel.SendErrorAsync(strings.AiNoApiKey(guildChannel.GuildId, config.Provider), botConfig);
             return;
         }
-
-#if DEBUG
-        isDebugMode = true;
-#endif
 
         DiscordWebhookClient? webhook = null;
         ulong? webhookMessageId = null;
@@ -560,15 +566,16 @@ public class AiService : INService
 
         var stream = await aiClient.StreamResponseAsync(messagesToSend, config.Model, config.ApiKey);
 
+        string lastRawJson = null;
         await foreach (var rawJson in stream)
         {
             // Ensure that rawJson is explicitly cast to a string before checking for null or empty
             if (rawJson is string jsonString && string.IsNullOrEmpty(jsonString)) continue;
-
             if (string.IsNullOrEmpty(rawJson)) continue;
 
             // Log raw response for debugging
             //logger.LogInformation($"{(AiProvider)config.Provider} raw response: {rawJson}");
+            lastRawJson = rawJson; // Save the last chunk
 
             // IMPORTANT: Parse the delta to extract just the content
             var contentDelta = streamParser.ParseDelta(rawJson, (AiProvider)config.Provider);
@@ -579,11 +586,14 @@ public class AiService : INService
             }
 
             // Check for usage information
-            var usage = streamParser.ParseUsage(rawJson, (AiProvider)config.Provider);
-            if (usage.HasValue)
+            if (config.Provider == (int)AiProvider.Groq || config.Provider == (int)AiProvider.Claude)
             {
-                tokenCount = usage.Value.TotalTokens;
-                logger.LogInformation($"Updated token count: {tokenCount}");
+                var usage = streamParser.ParseUsage(rawJson, (AiProvider)config.Provider);
+                if (usage.HasValue)
+                {
+                    tokenCount = usage.Value.TotalTokens;
+                    logger.LogInformation($"Updated token count: {tokenCount}");
+                }
             }
 
             // Update UI more frequently during stream
@@ -601,10 +611,23 @@ public class AiService : INService
                 break;
             }
 
-            // Safety timeout
-            if (DateTime.UtcNow <= timeout) continue;
-            logger.LogWarning("AI stream timed out");
-            break;
+            if (DateTime.UtcNow > timeout)
+            {
+                logger.LogWarning("AI stream timed out");
+                break;
+            }
+        }
+
+        // Grok and GPT give their usage stats on the final message, not every message like claude/groq
+        if (lastRawJson != null && 
+            (config.Provider == (int)AiProvider.OpenAi || config.Provider == (int)AiProvider.Grok))
+        {
+            var usage = streamParser.ParseUsage(lastRawJson, (AiProvider)config.Provider);
+            if (usage.HasValue)
+            {
+                tokenCount = usage.Value.TotalTokens;
+                logger.LogInformation($"Updated token count: {tokenCount}");
+            }
         }
 
         await db.InsertAsync(new AiMessage
