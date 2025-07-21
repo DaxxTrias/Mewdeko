@@ -887,6 +887,10 @@ considermessage:
   - considermsg
 convert:
   - convert
+convertunits:
+  - convertunits
+  - unitconvert
+  - units
 convertlist:
   - convertlist
 createcatandtxtchannels:
@@ -2798,3 +2802,29 @@ activefilters:
 horserace:
   - horserace
   - hr
+embedsave:
+  - embedsave
+  - esave
+guildembedsave:
+  - guildembedsave
+  - gesave
+  - gembedsave
+embedlist:
+  - embedlist
+  - elist
+guildembedlist:
+  - guildembedlist
+  - gelist
+  - gembedlist
+embeddelete:
+  - embeddelete
+  - edel
+  - edelete
+guildembeddelete:
+  - guildembeddelete
+  - gedel
+  - gembeddelete
+embedpreview:
+  - embedpreview
+  - epreview
+  - eprev

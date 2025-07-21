@@ -291,7 +291,7 @@ public class Patreon(IBotCredentials creds, PatreonApiClient patreonApiClient, I
         try
         {
             // Check if Patreon integration is configured
-            if (string.IsNullOrEmpty(creds?.PatreonClientId))
+            if (string.IsNullOrEmpty(creds.PatreonClientId))
             {
                 await ReplyErrorAsync(
                         "❌ Patreon integration is not configured on this bot instance. Please contact the bot owner.")
@@ -311,7 +311,7 @@ public class Patreon(IBotCredentials creds, PatreonApiClient patreonApiClient, I
             var redirectUri = $"{creds.PatreonBaseUrl}/dashboard/patreon";
             var state = $"{ctx.Guild.Id}:{Guid.NewGuid()}";
 
-            var authUrl = patreonApiClient?.GetAuthorizationUrl(
+            var authUrl = patreonApiClient.GetAuthorizationUrl(
                 creds.PatreonClientId,
                 redirectUri,
                 state);
@@ -505,7 +505,7 @@ public class Patreon(IBotCredentials creds, PatreonApiClient patreonApiClient, I
     {
         var supporters = await Service.GetActiveSupportersAsync(ctx.Guild.Id);
         var tiers = await Service.GetTiersAsync(ctx.Guild.Id);
-        var goals = await Service.GetGoalsAsync(ctx.Guild.Id);
+        var creator = await Service.GetCreatorIdentity(ctx.Guild.Id);
 
         var totalAmount = supporters.Sum(s => s.AmountCents) / 100.0;
         var linkedCount = supporters.Count(s => s.DiscordUserId != 0);
@@ -518,8 +518,18 @@ public class Patreon(IBotCredentials creds, PatreonApiClient patreonApiClient, I
             .AddField(Strings.PatreonStatsLinked(ctx.Guild.Id), linkedCount, true)
             .AddField(Strings.PatreonStatsRevenue(ctx.Guild.Id), $"${totalAmount:F2}", true)
             .AddField(Strings.PatreonStatsAverage(ctx.Guild.Id), $"${averageAmount:F2}", true)
-            .AddField(Strings.PatreonStatsTiers(ctx.Guild.Id), tiers.Count, true)
-            .AddField(Strings.PatreonStatsGoals(ctx.Guild.Id), goals.Count, true);
+            .AddField(Strings.PatreonStatsTiers(ctx.Guild.Id), tiers.Count, true);
+
+        // Add creator information if available
+        if (creator != null)
+        {
+            var creatorName = creator.Attributes.FullName ?? Strings.PatreonCreatorUnknown(ctx.Guild.Id);
+            var creatorInfo = !string.IsNullOrEmpty(creator.Attributes.Url)
+                ? $"[{creatorName}]({creator.Attributes.Url})"
+                : creatorName;
+
+            embed.AddField(Strings.PatreonStatsCreator(ctx.Guild.Id), creatorInfo, true);
+        }
 
         if (supporters.Any())
         {
@@ -527,42 +537,6 @@ public class Patreon(IBotCredentials creds, PatreonApiClient patreonApiClient, I
             embed.AddField(Strings.PatreonStatsTop(ctx.Guild.Id),
                 Strings.PatreonStatsTopSupporter(ctx.Guild.Id,
                     $"{topSupporter.FullName} - ${topSupporter.AmountCents / 100.0:F2}/month"));
-        }
-
-        await ctx.Channel.SendMessageAsync(embed: embed.Build()).ConfigureAwait(false);
-    }
-
-    /// <summary>
-    ///     Shows current Patreon goals
-    /// </summary>
-    /// <example>.patreon goals</example>
-    [Cmd]
-    [Aliases]
-    [Priority(0)]
-    [RequireContext(ContextType.Guild)]
-    public async Task PatreonGoals()
-    {
-        var goals = await Service.GetGoalsAsync(ctx.Guild.Id);
-
-        if (!goals.Any())
-        {
-            await ReplyErrorAsync(Strings.PatreonNoGoals(ctx.Guild.Id)).ConfigureAwait(false);
-            return;
-        }
-
-        var embed = new EmbedBuilder()
-            .WithTitle(Strings.PatreonGoalsTitle(ctx.Guild.Id))
-            .WithColor(0xF96854);
-
-        foreach (var goal in goals.Take(5)) // Limit to 5 goals
-        {
-            var amount = goal.AmountCents / 100.0;
-            var status = goal.ReachedAt.HasValue
-                ? Strings.PatreonGoalReached(ctx.Guild.Id)
-                : Strings.PatreonGoalProgress(ctx.Guild.Id, goal.CompletedPercentage);
-
-            embed.AddField(Strings.PatreonGoalField(ctx.Guild.Id, $"{goal.Title} (${amount:F2})"),
-                $"{goal.Description}\n**{Strings.PatreonGoalStatus(ctx.Guild.Id)}:** {status}");
         }
 
         await ctx.Channel.SendMessageAsync(embed: embed.Build()).ConfigureAwait(false);

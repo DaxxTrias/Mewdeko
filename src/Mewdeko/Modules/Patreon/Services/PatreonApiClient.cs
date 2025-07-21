@@ -42,7 +42,17 @@ public class PatreonApiClient : INService
     /// <returns>A fully-formed URL to redirect the user to for authorization.</returns>
     public string GetAuthorizationUrl(string clientId, string redirectUri, string state)
     {
-        var scope = "identity identity[email] campaigns w:campaigns.webhook campaigns.members";
+        var scope = Scopes.BuildScopeString(
+            Scopes.Identity,
+            Scopes.IdentityEmail,
+            Scopes.IdentityMemberships,
+            Scopes.Campaigns,
+            Scopes.CampaignsMembers,
+            Scopes.CampaignsMembersEmail,
+            Scopes.CampaignsMembersAddress,
+            Scopes.CampaignsPosts,
+            Scopes.CampaignsWebhook
+        );
         var query = HttpUtility.ParseQueryString(string.Empty);
         query["response_type"] = "code";
         query["client_id"] = clientId;
@@ -59,8 +69,8 @@ public class PatreonApiClient : INService
     /// <param name="clientId">Your Patreon client ID.</param>
     /// <param name="clientSecret">Your Patreon client secret.</param>
     /// <param name="redirectUri">The same redirect URI used in the authorization request.</param>
-    /// <returns>A <see cref="PatreonTokenResponse" /> containing the tokens, or null if the request fails.</returns>
-    public async Task<PatreonTokenResponse?> ExchangeCodeForTokenAsync(string code, string clientId,
+    /// <returns>A <see cref="TokenResponse" /> containing the tokens, or null if the request fails.</returns>
+    public async Task<TokenResponse?> ExchangeCodeForTokenAsync(string code, string clientId,
         string clientSecret, string redirectUri)
     {
         try
@@ -86,7 +96,7 @@ public class PatreonApiClient : INService
             }
 
             var responseContent = await response.Content.ReadAsStringAsync();
-            return JsonSerializer.Deserialize<PatreonTokenResponse>(responseContent, CachedJsonOptions);
+            return JsonSerializer.Deserialize<TokenResponse>(responseContent, CachedJsonOptions);
         }
         catch (Exception ex)
         {
@@ -101,8 +111,8 @@ public class PatreonApiClient : INService
     /// <param name="refreshToken">The refresh token obtained during the initial token exchange.</param>
     /// <param name="clientId">Your Patreon client ID.</param>
     /// <param name="clientSecret">Your Patreon client secret.</param>
-    /// <returns>A new <see cref="PatreonTokenResponse" /> containing the refreshed tokens, or null if the request fails.</returns>
-    public async Task<PatreonTokenResponse?> RefreshTokenAsync(string refreshToken, string clientId,
+    /// <returns>A new <see cref="TokenResponse" /> containing the refreshed tokens, or null if the request fails.</returns>
+    public async Task<TokenResponse?> RefreshTokenAsync(string refreshToken, string clientId,
         string clientSecret)
     {
         try
@@ -126,7 +136,7 @@ public class PatreonApiClient : INService
             }
 
             var responseContent = await response.Content.ReadAsStringAsync();
-            return JsonSerializer.Deserialize<PatreonTokenResponse>(responseContent, CachedJsonOptions);
+            return JsonSerializer.Deserialize<TokenResponse>(responseContent, CachedJsonOptions);
         }
         catch (Exception ex)
         {
@@ -140,21 +150,25 @@ public class PatreonApiClient : INService
     /// </summary>
     /// <param name="accessToken">The creator's access token.</param>
     /// <returns>
-    ///     A full API response containing a list of <see cref="PatreonCampaign" /> objects and included data, or null if
+    ///     A full API response containing a list of <see cref="Campaign" /> objects and included data, or null if
     ///     the request fails.
     /// </returns>
-    public async Task<PatreonApiResponse<List<PatreonCampaign>>?> GetCampaignsAsync(string accessToken)
+    public async Task<PatreonResponse<List<Campaign>>?> GetCampaignsAsync(string accessToken)
     {
         try
         {
             using var client = CreateAuthenticatedClient(accessToken);
             var query = new Dictionary<string, string>
             {
-                ["include"] = "tiers,creator,goals",
+                ["include"] = "tiers,creator,benefits",
                 ["fields[campaign]"] =
-                    "created_at,creation_name,discord_server_id,image_small_url,image_url,is_charged_immediately,is_monthly,main_video_url,one_liner,patron_count,pay_per_name,pledge_url,published_at,summary,thanks_embed,thanks_msg,thanks_video_url,url",
-                ["fields[tier]"] = "title,amount_cents,patron_count,description,published,image_url,discord_role_ids",
-                ["fields[goal]"] = "title,amount_cents,completed_percentage,description,reached_at,created_at"
+                    "created_at,creation_name,discord_server_id,google_analytics_id,has_rss,has_sent_rss_notify,image_small_url,image_url,is_charged_immediately,is_monthly,is_nsfw,main_video_embed,main_video_url,one_liner,patron_count,pay_per_name,pledge_url,published_at,rss_artwork_url,rss_feed_title,show_earnings,summary,thanks_embed,thanks_msg,thanks_video_url,url,vanity",
+                ["fields[tier]"] =
+                    "title,amount_cents,patron_count,description,published,image_url,discord_role_ids,created_at,edited_at,published_at,remaining,requires_shipping,unpublished_at,url,user_limit,post_count",
+                ["fields[benefit]"] =
+                    "title,description,benefit_type,created_at,deliverables_due_today_count,delivered_deliverables_count,is_deleted,is_ended,is_published,next_deliverable_due_date,not_delivered_deliverables_count,rule_type,tiers_count",
+                ["fields[user]"] =
+                    "email,first_name,full_name,image_url,last_name,social_connections,thumb_url,url,vanity,about,can_see_nsfw,created,hide_pledges,is_email_verified,is_creator,like_count"
             };
             var queryString = await new FormUrlEncodedContent(query).ReadAsStringAsync();
             var response = await client.GetAsync($"{BaseUrl}/campaigns?{queryString}");
@@ -167,7 +181,7 @@ public class PatreonApiClient : INService
             }
 
             var responseContent = await response.Content.ReadAsStringAsync();
-            return JsonSerializer.Deserialize<PatreonApiResponse<List<PatreonCampaign>>>(responseContent,
+            return JsonSerializer.Deserialize<PatreonResponse<List<Campaign>>>(responseContent,
                 CachedJsonOptions);
         }
         catch (Exception ex)
@@ -183,21 +197,25 @@ public class PatreonApiClient : INService
     /// <param name="accessToken">The creator's access token.</param>
     /// <param name="campaignId">The ID of the campaign to retrieve.</param>
     /// <returns>
-    ///     A full API response containing the single <see cref="PatreonCampaign" /> object and included data, or null if
+    ///     A full API response containing the single <see cref="Campaign" /> object and included data, or null if
     ///     the request fails.
     /// </returns>
-    public async Task<PatreonApiResponse<PatreonCampaign>?> GetCampaignAsync(string accessToken, string campaignId)
+    public async Task<PatreonResponse<Campaign>?> GetCampaignAsync(string accessToken, string campaignId)
     {
         try
         {
             using var client = CreateAuthenticatedClient(accessToken);
             var query = new Dictionary<string, string>
             {
-                ["include"] = "tiers,creator,goals",
+                ["include"] = "tiers,creator,benefits",
                 ["fields[campaign]"] =
-                    "created_at,creation_name,discord_server_id,image_small_url,image_url,is_charged_immediately,is_monthly,main_video_url,one_liner,patron_count,pay_per_name,pledge_url,published_at,summary,thanks_embed,thanks_msg,thanks_video_url,url",
-                ["fields[tier]"] = "title,amount_cents,patron_count,description,published,image_url,discord_role_ids",
-                ["fields[goal]"] = "title,amount_cents,completed_percentage,description,reached_at,created_at"
+                    "created_at,creation_name,discord_server_id,google_analytics_id,has_rss,has_sent_rss_notify,image_small_url,image_url,is_charged_immediately,is_monthly,is_nsfw,main_video_embed,main_video_url,one_liner,patron_count,pay_per_name,pledge_url,published_at,rss_artwork_url,rss_feed_title,show_earnings,summary,thanks_embed,thanks_msg,thanks_video_url,url,vanity",
+                ["fields[tier]"] =
+                    "title,amount_cents,patron_count,description,published,image_url,discord_role_ids,created_at,edited_at,published_at,remaining,requires_shipping,unpublished_at,url,user_limit,post_count",
+                ["fields[benefit]"] =
+                    "title,description,benefit_type,created_at,deliverables_due_today_count,delivered_deliverables_count,is_deleted,is_ended,is_published,next_deliverable_due_date,not_delivered_deliverables_count,rule_type,tiers_count",
+                ["fields[user]"] =
+                    "email,first_name,full_name,image_url,last_name,social_connections,thumb_url,url,vanity,about,can_see_nsfw,created,hide_pledges,is_email_verified,is_creator,like_count"
             };
             var queryString = await new FormUrlEncodedContent(query).ReadAsStringAsync();
             var response = await client.GetAsync($"{BaseUrl}/campaigns/{campaignId}?{queryString}");
@@ -211,7 +229,7 @@ public class PatreonApiClient : INService
             }
 
             var responseContent = await response.Content.ReadAsStringAsync();
-            return JsonSerializer.Deserialize<PatreonApiResponse<PatreonCampaign>>(responseContent, CachedJsonOptions);
+            return JsonSerializer.Deserialize<PatreonResponse<Campaign>>(responseContent, CachedJsonOptions);
         }
         catch (Exception ex)
         {
@@ -227,10 +245,10 @@ public class PatreonApiClient : INService
     /// <param name="campaignId">The ID of the campaign.</param>
     /// <param name="cursor">The pagination cursor for the next page of results. Can be null for the first page.</param>
     /// <returns>
-    ///     A <see cref="PatreonApiResponse{T}" /> containing a list of <see cref="PatreonMember" /> objects and
+    ///     A <see cref="PatreonResponse{T}" /> containing a list of <see cref="Member" /> objects and
     ///     pagination info, or null if the request fails.
     /// </returns>
-    public async Task<PatreonApiResponse<List<PatreonMember>>?> GetCampaignMembersAsync(string accessToken,
+    public async Task<PatreonResponse<List<Member>>?> GetCampaignMembersAsync(string accessToken,
         string campaignId, string? cursor = null)
     {
         try
@@ -238,12 +256,14 @@ public class PatreonApiClient : INService
             using var client = CreateAuthenticatedClient(accessToken);
             var query = new Dictionary<string, string>
             {
-                ["include"] = "currently_entitled_tiers,user",
+                ["include"] = "currently_entitled_tiers,user,address",
                 ["fields[member]"] =
-                    "currently_entitled_amount_cents,email,full_name,is_follower,last_charge_date,last_charge_status,lifetime_support_cents,next_charge_date,note,patron_status,pledge_relationship_start,will_pay_amount_cents",
-                ["fields[user]"] = "email,first_name,full_name,image_url,last_name,thumb_url,url,vanity",
+                    "campaign_lifetime_support_cents,currently_entitled_amount_cents,email,full_name,is_free_trial,is_gifted,last_charge_date,last_charge_status,next_charge_date,note,patron_status,pledge_cadence,pledge_relationship_start,will_pay_amount_cents",
+                ["fields[user]"] =
+                    "email,first_name,full_name,image_url,last_name,social_connections,thumb_url,url,vanity,about,can_see_nsfw,created,hide_pledges,is_email_verified,is_creator,like_count",
                 ["fields[tier]"] =
-                    "amount_cents,created_at,description,discord_role_ids,image_url,patron_count,published,title,url",
+                    "amount_cents,created_at,description,discord_role_ids,edited_at,image_url,patron_count,post_count,published,published_at,remaining,requires_shipping,title,unpublished_at,url,user_limit",
+                ["fields[address]"] = "addressee,city,country,created_at,line_1,line_2,phone_number,postal_code,state",
                 ["page[count]"] = "100"
             };
             if (!string.IsNullOrEmpty(cursor))
@@ -262,7 +282,7 @@ public class PatreonApiClient : INService
             }
 
             var responseContent = await response.Content.ReadAsStringAsync();
-            return JsonSerializer.Deserialize<PatreonApiResponse<List<PatreonMember>>>(responseContent,
+            return JsonSerializer.Deserialize<PatreonResponse<List<Member>>>(responseContent,
                 CachedJsonOptions);
         }
         catch (Exception ex)
@@ -277,18 +297,21 @@ public class PatreonApiClient : INService
     /// </summary>
     /// <param name="accessToken">The user's access token.</param>
     /// <returns>
-    ///     A <see cref="PatreonApiResponse{T}" /> containing the <see cref="PatreonUser" /> data, or null if the request
+    ///     A <see cref="PatreonResponse{T}" /> containing the <see cref="User" /> data, or null if the request
     ///     fails.
     /// </returns>
-    public async Task<PatreonApiResponse<PatreonUser>?> GetUserIdentityAsync(string accessToken)
+    public async Task<PatreonResponse<User>?> GetUserIdentityAsync(string accessToken)
     {
         try
         {
             using var client = CreateAuthenticatedClient(accessToken);
             var query = new Dictionary<string, string>
             {
-                ["fields[user]"] = "email,first_name,full_name,image_url,last_name,social_connections,url,vanity",
-                ["include"] = "memberships"
+                ["fields[user]"] =
+                    "email,first_name,full_name,image_url,last_name,social_connections,thumb_url,url,vanity,about,can_see_nsfw,created,hide_pledges,is_email_verified,is_creator,like_count",
+                ["include"] = "memberships",
+                ["fields[member]"] =
+                    "campaign_lifetime_support_cents,currently_entitled_amount_cents,email,full_name,is_free_trial,is_gifted,last_charge_date,last_charge_status,next_charge_date,note,patron_status,pledge_cadence,pledge_relationship_start,will_pay_amount_cents"
             };
             var queryString = await new FormUrlEncodedContent(query).ReadAsStringAsync();
             var response = await client.GetAsync($"{BaseUrl}/identity?{queryString}");
@@ -301,7 +324,7 @@ public class PatreonApiClient : INService
             }
 
             var responseContent = await response.Content.ReadAsStringAsync();
-            return JsonSerializer.Deserialize<PatreonApiResponse<PatreonUser>>(responseContent, CachedJsonOptions);
+            return JsonSerializer.Deserialize<PatreonResponse<User>>(responseContent, CachedJsonOptions);
         }
         catch (Exception ex)
         {

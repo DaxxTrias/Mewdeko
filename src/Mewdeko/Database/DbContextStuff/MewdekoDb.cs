@@ -646,11 +646,6 @@ public class MewdekoDb : DataConnection
     public ITable<UserRoleState> UserRoleStates => this.GetTable<UserRoleState>();
 
     /// <summary>
-    ///     Gets the user XP stats table.
-    /// </summary>
-    public ITable<UserXpStat> UserXpStats => this.GetTable<UserXpStat>();
-
-    /// <summary>
     ///     Gets the VC roles table.
     /// </summary>
     public ITable<VcRole> VcRoles => this.GetTable<VcRole>();

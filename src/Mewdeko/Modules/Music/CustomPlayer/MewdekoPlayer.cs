@@ -15,7 +15,6 @@ using Mewdeko.Modules.Music.Common;
 using Mewdeko.Services.Strings;
 using Microsoft.Extensions.DependencyInjection;
 using SpotifyAPI.Web;
-using Embed = Discord.Embed;
 
 namespace Mewdeko.Modules.Music.CustomPlayer;
 
@@ -131,11 +130,14 @@ public sealed class MewdekoPlayer : LavalinkPlayer
 
                 break;
             case TrackEndReason.LoadFailed:
-                var failedEmbed = new EmbedBuilder()
-                    .WithDescription(Strings.TrackLoadFailed(GuildId, item.Track.Title))
-                    .WithOkColor()
-                    .Build();
-                await musicChannel.SendMessageAsync(embed: failedEmbed);
+                var components = new ComponentBuilderV2()
+                    .WithContainer([
+                        new TextDisplayBuilder("# ⚠️ Track Load Failed")
+                    ], Mewdeko.ErrorColor)
+                    .WithSeparator()
+                    .WithContainer(new TextDisplayBuilder(Strings.TrackLoadFailed(GuildId, item.Track.Title)));
+                await musicChannel.SendMessageAsync(components: components.Build(), flags: MessageFlags.ComponentsV2,
+                    allowedMentions: AllowedMentions.None);
                 await PlayAsync(nextTrack.Track, cancellationToken: token);
                 await cache.SetCurrentTrack(GuildId, nextTrack);
                 queue.Remove(currentTrack);
@@ -165,11 +167,11 @@ public sealed class MewdekoPlayer : LavalinkPlayer
         var currentTrack = await cache.GetCurrentTrack(GuildId);
         var musicChannel = await GetMusicChannel();
 
-        // Create embed and component buttons
-        var embed = await PrettyNowPlayingAsync(queue);
-        var components = CreatePlayerControls();
+        // Create now playing display with integrated control buttons
+        var nowPlayingComponents = await PrettyNowPlayingAsync(queue);
 
-        var message = await musicChannel.SendMessageAsync(embed: embed, components: components);
+        var message = await musicChannel.SendMessageAsync(components: nowPlayingComponents,
+            flags: MessageFlags.ComponentsV2, allowedMentions: AllowedMentions.None);
 
         if (DateTime.Now.Month == 4 && DateTime.Now.Day == 1 && !isAprilFoolsJokeRunning)
         {
@@ -219,31 +221,6 @@ public sealed class MewdekoPlayer : LavalinkPlayer
                 await SetAutoPlay(0);
             }
         }
-    }
-
-    /// <summary>
-    ///     Creates the player control buttons.
-    /// </summary>
-    /// <returns>Built component collection.</returns>
-    private MessageComponent CreatePlayerControls()
-    {
-        var isPaused = State == PlayerState.Paused;
-
-        return new ComponentBuilder()
-            // Row 1 - Main controls
-            .WithButton(customId: $"music:prev:{GuildId}", emote: new Emoji("⏮️"), style: ButtonStyle.Secondary)
-            .WithButton(customId: $"music:playpause:{GuildId}", emote: new Emoji(isPaused ? "▶️" : "⏸️"),
-                style: ButtonStyle.Primary)
-            .WithButton(customId: $"music:next:{GuildId}", emote: new Emoji("⏭️"), style: ButtonStyle.Secondary)
-            .WithButton(customId: $"music:stop:{GuildId}", emote: new Emoji("⏹️"), style: ButtonStyle.Danger)
-            // Row 2 - Additional controls
-            .WithButton(customId: $"music:loop:{GuildId}", emote: new Emoji("🔁"), style: ButtonStyle.Secondary, row: 1)
-            .WithButton(customId: $"music:volume_down:{GuildId}", emote: new Emoji("🔉"), style: ButtonStyle.Secondary,
-                row: 1)
-            .WithButton(customId: $"music:volume_up:{GuildId}", emote: new Emoji("🔊"), style: ButtonStyle.Secondary,
-                row: 1)
-            .WithButton(customId: $"music:queue:{GuildId}", label: "Queue", style: ButtonStyle.Secondary, row: 1)
-            .Build();
     }
 
 
@@ -340,52 +317,95 @@ public sealed class MewdekoPlayer : LavalinkPlayer
     /// <summary>
     ///     Gets a pretty now playing message for the player.
     /// </summary>
-    public async Task<Embed> PrettyNowPlayingAsync(List<MewdekoTrack> queue)
+    public async Task<MessageComponent> PrettyNowPlayingAsync(List<MewdekoTrack> queue)
     {
         var currentTrack = await cache.GetCurrentTrack(GuildId);
         var position = Position.Value.Position;
         var duration = CurrentTrack.Duration;
         var (progressBar, percentage) = CreateProgressBar(position, duration);
-        await GetMusicSettings();
-
-        var description = new StringBuilder()
-            .AppendLine("## 📀 Track Info")
-            .AppendLine($"### [{currentTrack.Track.Title}]({currentTrack.Track.Uri})")
-            .AppendLine()
-            .AppendLine($"🎵 **Artist:** {currentTrack.Track.Author}")
-            .AppendLine($"🎧 **Source:** {currentTrack.Track.Provider}")
-            .AppendLine($"👤 **Requested by:** {currentTrack.Requester.Username}")
-            .AppendLine()
-            .AppendLine("## ⏳ Progress")
-            .AppendLine(progressBar)
-            .AppendLine($"`{position:hh\\:mm\\:ss}/{duration:hh\\:mm\\:ss} ({percentage:F1}%)`");
-
-        var activeEffects = GetActiveEffects();
-        if (activeEffects.Any())
-        {
-            description.AppendLine()
-                .AppendLine("## 🎚️ Active Effects")
-                .AppendLine(string.Join(" ", activeEffects));
-        }
-
-        var stats = GetPlayerStats(currentTrack.Index, queue.Count);
-        if (stats.Any())
-        {
-            description.AppendLine()
-                .AppendLine("## ℹ️ Player Stats")
-                .AppendLine(string.Join("\n", stats));
-        }
+        var settings = await GetMusicSettings();
 
         var color = GetColorForPercentage(position.TotalMilliseconds / duration.TotalMilliseconds);
+        var containerComponents = new List<IMessageComponentBuilder>();
 
-        var eb = new EmbedBuilder()
-            .WithTitle($"🎵 Now Playing {GetRepeatEmoji()}")
-            .WithDescription(description.ToString())
-            .WithColor(color)
-            .WithThumbnailUrl(currentTrack.Track.ArtworkUri?.ToString())
-            .WithFooter(GetVolumeIndicator());
+        // Clean header without extra emojis
+        containerComponents.Add(new TextDisplayBuilder()
+            .WithContent("# Now Playing"));
 
-        return eb.Build();
+        containerComponents.Add(new SeparatorBuilder());
+
+        // Main track info section with artwork
+        var trackSection = new SectionBuilder()
+            .WithComponents([
+                new TextDisplayBuilder($"## [{currentTrack.Track.Title}]({currentTrack.Track.Uri})\n" +
+                                       $"{currentTrack.Track.Author}\n" +
+                                       $"🎵 {currentTrack.Track.Provider} • 👤 {currentTrack.Requester.Username}")
+            ]);
+
+        if (currentTrack.Track.ArtworkUri != null)
+        {
+            var thumbnailBuilder = new ThumbnailBuilder()
+                .WithMedia(new UnfurledMediaItemProperties
+                {
+                    Url = currentTrack.Track.ArtworkUri.ToString()
+                });
+            trackSection.WithAccessory(thumbnailBuilder);
+        }
+
+        containerComponents.Add(trackSection);
+        containerComponents.Add(new SeparatorBuilder());
+
+        // Progress bar section - spans full width
+        containerComponents.Add(new TextDisplayBuilder()
+            .WithContent($"`{position:mm\\:ss}` {progressBar} `{duration:mm\\:ss}`"));
+
+        containerComponents.Add(new SeparatorBuilder());
+
+        // Main playback controls row
+        var isPaused = State == PlayerState.Paused;
+        var mainControlsRow = new ActionRowBuilder()
+            .WithButton(customId: $"music:loop:{GuildId}", emote: new Emoji("🔁"), style: ButtonStyle.Secondary)
+            .WithButton(customId: $"music:prev:{GuildId}", emote: new Emoji("⏮️"), style: ButtonStyle.Secondary)
+            .WithButton(customId: $"music:playpause:{GuildId}", emote: new Emoji(isPaused ? "▶️" : "⏸️"),
+                style: ButtonStyle.Primary)
+            .WithButton(customId: $"music:next:{GuildId}", emote: new Emoji("⏭️"), style: ButtonStyle.Secondary)
+            .WithButton(customId: $"music:stop:{GuildId}", emote: new Emoji("⏹️"), style: ButtonStyle.Danger);
+
+        containerComponents.Add(mainControlsRow);
+        containerComponents.Add(new SeparatorBuilder());
+
+        // Enhanced footer with more detailed information
+        var activeEffects = GetActiveEffects();
+        var effectsText = activeEffects.Any() ? $" • 🎛️ {string.Join(", ", activeEffects)}" : "";
+        var repeatEmoji = GetRepeatEmoji();
+        var volumeEmoji = GetVolumeEmoji();
+        var repeatText = repeatEmoji != "" ? $" • {repeatEmoji} Repeat" : "";
+
+        var footerText =
+            $"{volumeEmoji} **{Volume * 100:0}%** • 📑 **{currentTrack.Index}** of **{queue.Count}**{repeatText}{effectsText}";
+
+        containerComponents.Add(new TextDisplayBuilder()
+            .WithContent(footerText));
+
+        // Secondary controls at the bottom
+        containerComponents.Add(new SeparatorBuilder());
+
+        var secondaryControlsRow = new ActionRowBuilder()
+            .WithButton(customId: $"music:volume_down:{GuildId}", emote: new Emoji("🔉"), style: ButtonStyle.Secondary)
+            .WithButton(customId: $"music:volume_up:{GuildId}", emote: new Emoji("🔊"), style: ButtonStyle.Secondary)
+            .WithButton(customId: $"music:queue:{GuildId}", label: "View Queue", style: ButtonStyle.Secondary);
+
+        containerComponents.Add(secondaryControlsRow);
+
+        // Create the main container
+        var mainContainer = new ContainerBuilder()
+            .WithComponents(containerComponents)
+            .WithAccentColor(color);
+
+        var componentsV2 = new ComponentBuilderV2()
+            .AddComponent(mainContainer);
+
+        return componentsV2.Build();
     }
 
     private string GetVolumeIndicator()
@@ -406,7 +426,7 @@ public sealed class MewdekoPlayer : LavalinkPlayer
         var effects = new List<string>();
 
         if (Filters.Equalizer != null)
-            effects.Add("🎵 Bass");
+            effects.Add("Bass");
 
         if (Filters.Timescale != null)
         {
@@ -414,20 +434,20 @@ public sealed class MewdekoPlayer : LavalinkPlayer
             switch (speed)
             {
                 case > 1.0f:
-                    effects.Add("⚡ Nightcore");
+                    effects.Add("Nightcore");
                     break;
                 case < 1.0f:
-                    effects.Add("🌊 Vaporwave");
+                    effects.Add("Vaporwave");
                     break;
             }
         }
 
-        if (Filters.Karaoke != null) effects.Add("🎤 Karaoke");
-        if (Filters.Tremolo != null) effects.Add("〰️ Tremolo");
-        if (Filters.Vibrato != null) effects.Add("📳 Vibrato");
-        if (Filters.Rotation != null) effects.Add("🎧 8D");
-        if (Filters.Distortion != null) effects.Add("🔊 Distort");
-        if (Filters.ChannelMix != null) effects.Add("🔀 Stereo");
+        if (Filters.Karaoke != null) effects.Add("Karaoke");
+        if (Filters.Tremolo != null) effects.Add("Tremolo");
+        if (Filters.Vibrato != null) effects.Add("Vibrato");
+        if (Filters.Rotation != null) effects.Add("8D");
+        if (Filters.Distortion != null) effects.Add("Distort");
+        if (Filters.ChannelMix != null) effects.Add("Stereo");
 
         return effects;
     }
@@ -455,31 +475,37 @@ public sealed class MewdekoPlayer : LavalinkPlayer
         };
     }
 
+    private string GetVolumeEmoji()
+    {
+        var volume = Volume * 100;
+        return volume switch
+        {
+            0 => "🔇",
+            <= 33 => "🔈",
+            <= 67 => "🔉",
+            _ => "🔊"
+        };
+    }
+
     private (string Bar, double Percentage) CreateProgressBar(TimeSpan position, TimeSpan duration)
     {
-        const int barLength = 25;
+        const int barLength = 20;
         var progress = position.TotalMilliseconds / duration.TotalMilliseconds;
         var progressBarPosition = (int)(progress * barLength);
         var percentage = progress * 100;
 
         var bar = new StringBuilder();
 
-        // Add start cap
-        bar.Append('╠');
-
-        // Build progress bar
+        // Build progress bar with cleaner style
         for (var i = 0; i < barLength; i++)
         {
             if (i == progressBarPosition)
-                bar.Append("🔘");
+                bar.Append("●"); // Current position indicator
             else if (i < progressBarPosition)
-                bar.Append('═');
+                bar.Append("━"); // Completed portion
             else
-                bar.Append('─');
+                bar.Append("─"); // Remaining portion
         }
-
-        // Add end cap
-        bar.Append('╣');
 
         return (bar.ToString(), percentage);
     }
