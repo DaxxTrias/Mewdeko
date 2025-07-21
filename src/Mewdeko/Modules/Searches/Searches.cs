@@ -196,11 +196,32 @@ public partial class Searches(
             return;
 
         var embed = new EmbedBuilder();
-        var data = await Service.GetWeatherDataAsync(query).ConfigureAwait(false);
+        WeatherData data = null;
+        try
+        {
+            data = await Service.GetWeatherDataAsync(query).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Exception occurred while fetching weather data for query: {Query}", query);
+            embed.WithDescription("An error occurred while fetching weather data. Please try again later.")
+                .WithErrorColor();
+            await ctx.Channel.EmbedAsync(embed).ConfigureAwait(false);
+            return;
+        }
 
         if (data == null)
         {
+            logger.LogWarning("Weather data is null for query: {Query}", query);
             embed.WithDescription(Strings.CityNotFound(ctx.Guild.Id))
+                .WithErrorColor();
+        }
+        else if (data.Weather == null || data.Weather.Count == 0 ||
+                 data.Main == null || data.Sys == null || data.Coord == null ||
+                 string.IsNullOrWhiteSpace(data.Name) || data.Sys.Country == null)
+        {
+            logger.LogWarning("Malformed weather data received for query: {Query}. Data: {@Data}", query, data);
+            embed.WithDescription("Malformed weather data received. Please check your query or try again later.")
                 .WithErrorColor();
         }
         else
@@ -210,11 +231,11 @@ public partial class Searches(
             var tz = Context.Guild is null
                 ? TimeZoneInfo.Utc
                 : tzSvc.GetTimeZoneOrUtc(Context.Guild.Id);
-            var sunrise = data.Sys?.Sunrise.ToUnixTimestamp();
-            var sunset = data.Sys?.Sunset.ToUnixTimestamp();
+            var sunrise = data.Sys?.Sunrise?.ToUnixTimestamp();
+            var sunset = data.Sys?.Sunset?.ToUnixTimestamp();
             sunrise = sunrise?.ToOffset(tz.GetUtcOffset(sunrise.Value));
             sunset = sunset?.ToOffset(tz.GetUtcOffset(sunset.Value));
-            var timezone = $"UTC{sunrise:zzz}";
+            var timezone = sunrise.HasValue ? $"UTC{sunrise:zzz}" : "UTC";
 
             embed.AddField(fb =>
                     fb.WithName($"🌍 {Format.Bold(Strings.Location(ctx.Guild.Id))}")
@@ -223,37 +244,41 @@ public partial class Searches(
                         .WithIsInline(true))
                 .AddField(fb =>
                     fb.WithName($"📏 {Format.Bold(Strings.Latlong(ctx.Guild.Id))}")
-                        .WithValue($"{data.Coord.Lat}, {data.Coord.Lon}").WithIsInline(true))
+                        .WithValue(data.Coord != null ? $"{data.Coord.Lat}, {data.Coord.Lon}" : "N/A").WithIsInline(true))
                 .AddField(fb =>
                     fb.WithName($"☁ {Format.Bold(Strings.Condition(ctx.Guild.Id))}")
-                        .WithValue(string.Join(", ", data.Weather.Select(w => w.Main))).WithIsInline(true))
+                        .WithValue(data.Weather != null ? string.Join(", ", data.Weather.Select(w => w.Main)) : "N/A").WithIsInline(true))
                 .AddField(fb =>
-                    fb.WithName($"😓 {Format.Bold(Strings.Humidity(ctx.Guild.Id))}").WithValue($"{data.Main.Humidity}%")
+                    fb.WithName($"😓 {Format.Bold(Strings.Humidity(ctx.Guild.Id))}")
+                        .WithValue(data.Main != null ? $"{data.Main.Humidity}%" : "N/A")
                         .WithIsInline(true))
                 .AddField(fb =>
                     fb.WithName($"💨 {Format.Bold(Strings.WindSpeed(ctx.Guild.Id))}")
-                        .WithValue($"{data.Wind.Speed} m/s")
+                        .WithValue(data.Wind != null ? $"{data.Wind.Speed} m/s" : "N/A")
                         .WithIsInline(true))
                 .AddField(fb =>
                     fb.WithName($"🌡 {Format.Bold(Strings.Temperature(ctx.Guild.Id))}")
-                        .WithValue($"{data.Main.Temp:F1}°C / {f(data.Main.Temp):F1}°F").WithIsInline(true))
+                        .WithValue(data.Main != null ? $"{data.Main.Temp:F1}°C / {f(data.Main.Temp):F1}°F" : "N/A").WithIsInline(true))
                 .AddField(fb =>
                     fb.WithName($"🔆 {Format.Bold(Strings.MinMax(ctx.Guild.Id))}")
-                        .WithValue(
-                            $"{data.Main.TempMin:F1}°C - {data.Main.TempMax:F1}°C\n{f(data.Main.TempMin):F1}°F - {f(data.Main.TempMax):F1}°F")
+                        .WithValue(data.Main != null
+                            ? $"{data.Main.TempMin:F1}°C - {data.Main.TempMax:F1}°C\n{f(data.Main.TempMin):F1}°F - {f(data.Main.TempMax):F1}°F"
+                            : "N/A")
                         .WithIsInline(true))
                 .AddField(fb =>
                     fb.WithName($"🌄 {Format.Bold(Strings.Sunrise(ctx.Guild.Id))}")
-                        .WithValue($"{sunrise:HH:mm} {timezone}")
+                        .WithValue(sunrise.HasValue ? $"{sunrise:HH:mm} {timezone}" : "N/A")
                         .WithIsInline(true))
                 .AddField(fb =>
                     fb.WithName($"🌇 {Format.Bold(Strings.Sunset(ctx.Guild.Id))}")
-                        .WithValue($"{sunset:HH:mm} {timezone}")
+                        .WithValue(sunset.HasValue ? $"{sunset:HH:mm} {timezone}" : "N/A")
                         .WithIsInline(true))
                 .WithOkColor()
                 .WithFooter(efb =>
                     efb.WithText(Strings.WeatherAttribution(ctx.Guild.Id))
-                        .WithIconUrl($"https://openweathermap.org/img/w/{data.Weather[0].Icon}.png"));
+                        .WithIconUrl(data.Weather != null && data.Weather.Count > 0 && !string.IsNullOrWhiteSpace(data.Weather[0].Icon)
+                            ? $"https://openweathermap.org/img/w/{data.Weather[0].Icon}.png"
+                            : null));
         }
 
         await ctx.Channel.EmbedAsync(embed).ConfigureAwait(false);
