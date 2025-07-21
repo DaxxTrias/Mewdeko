@@ -340,6 +340,7 @@ public class AiService : INService
                             .WithDescription(strings.AiErrorOccurred(guildChannel.GuildId, ex.Message))
                             .Build()
                     };
+
                 });
             }
             else
@@ -750,11 +751,14 @@ public class AiService : INService
                     else
                     {
                         // For non-embed content, create a simple embed
-                        var embed = new EmbedBuilder()
+                        var embedBuilder = new EmbedBuilder()
                             .WithOkColor()
                             .WithDescription(processedContent)
-                            .WithFooter(strings.AiResponseFooter(config.GuildId, userMsg.Author.Username, tokenCount))
-                            .Build();
+                            .WithFooter(strings.AiResponseFooter(config.GuildId, userMsg.Author.Username, tokenCount));
+
+                        AddProviderBranding(embedBuilder, (AiProvider)config.Provider);
+
+                        var embed = embedBuilder.Build();
 
                         await webhook.ModifyMessageAsync(webhookMessageId.Value, x =>
                         {
@@ -828,12 +832,14 @@ public class AiService : INService
                         else
                         {
                             // Update with simple embed
-                            var embed = new EmbedBuilder()
+                            var embedBuilder = new EmbedBuilder()
                                 .WithOkColor()
                                 .WithDescription(processedContent)
-                                .WithFooter(strings.AiResponseFooter(config.GuildId, userMsg.Author.Username,
-                                    tokenCount))
-                                .Build();
+                                .WithFooter(strings.AiResponseFooter(config.GuildId, userMsg.Author.Username, tokenCount));
+
+                            AddProviderBranding(embedBuilder, (AiProvider)config.Provider);
+
+                            var embed = embedBuilder.Build();
 
                             await regularMessage.ModifyAsync(msg =>
                             {
@@ -1333,6 +1339,36 @@ public class AiService : INService
                 .Replace('_', ' '));
     }
 
+    /// <summary>
+    ///     Gets the logo URL for the specified AI provider.
+    /// </summary>
+    /// <param name="provider">The AI provider.</param>
+    /// <returns>The logo URL as a string.</returns>
+    private static string GetProviderLogoUrl(AiProvider provider)
+    {
+        return provider switch
+        {
+            AiProvider.OpenAi => "https://seeklogo.com/images/C/chatgpt-logo-02AFA704B5-seeklogo.com.png",
+            AiProvider.Grok => "https://images.seeklogo.com/logo-png/61/2/grok-logo-png_seeklogo-613403.png",
+            AiProvider.Groq => "https://seeklogo.com/images/G/groq-logo-1B1B1B1B1B-seeklogo.com.png",
+            AiProvider.Claude => "https://assets-global.website-files.com/63f6c7b6b2b1e2b8e7e1e1e1/63f6c7b6b2b1e2b8e7e1e1e1_claude-logo.png",
+            _ => string.Empty
+        };
+    }
+
+    private EmbedBuilder AddProviderBranding(EmbedBuilder builder, AiProvider provider)
+    {
+        var logoUrl = GetProviderLogoUrl(provider);
+        if (!string.IsNullOrEmpty(logoUrl))
+        {
+            builder.WithAuthor(provider.ToString(), logoUrl);
+        }
+        else
+        {
+            builder.WithAuthor(provider.ToString());
+        }
+        return builder;
+    }
     /// <summary>
     ///     Represents an Ai model with its metadata.
     /// </summary>
