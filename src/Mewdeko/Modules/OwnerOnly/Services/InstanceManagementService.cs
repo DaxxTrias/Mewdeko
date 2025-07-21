@@ -51,6 +51,9 @@ public class InstanceManagementService : INService, IReadyExecutor
     {
         var creds = new BotCredentials();
 
+        if (!new BotCredentials().IsApiEnabled)
+            return;
+
         // If master instance, make sure we're registered
         if (creds.IsMasterInstance)
         {
@@ -112,6 +115,9 @@ public class InstanceManagementService : INService, IReadyExecutor
     /// <exception cref="InvalidOperationException">Thrown when not running on master instance.</exception>
     public async Task<(bool Success, BotStatusModel? Status, string? Reason)> AddInstanceAsync(int port)
     {
+        if (!new BotCredentials().IsApiEnabled)
+        return null; // Or throw, or log, as appropriate
+
         if (!new BotCredentials().IsMasterInstance)
             throw new InvalidOperationException("Can only add instances from master bot.");
 
@@ -147,6 +153,9 @@ public class InstanceManagementService : INService, IReadyExecutor
     /// <exception cref="ArgumentOutOfRangeException">Thrown when port number is invalid.</exception>
     public async Task<BotStatusModel?> GetInstanceStatusAsync(int port)
     {
+        if (!new BotCredentials().IsApiEnabled)
+            return null;
+
         if (port is < 1024 or > 65535)
             throw new ArgumentOutOfRangeException(nameof(port), "Port must be between 1024 and 65535");
 
