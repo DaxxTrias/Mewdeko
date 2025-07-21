@@ -57,7 +57,8 @@ public class Main
     /// <summary>
     ///     Gets or sets the temperature that it feels like.
     /// </summary>
-    public double Feels_Like { get; set; } // Add this
+    [JsonPropertyName("feels_like")]
+    public double Feels_Like { get; set; }
 
     /// <summary>
     ///     Gets or sets the minimum temperature at the moment.
