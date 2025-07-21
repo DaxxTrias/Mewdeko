@@ -1,4 +1,6 @@
 using System.ClientModel;
+using System.Net.Http;
+using System.Text;
 using System.Text.Json;
 using System.Threading;
 using DataModel;
@@ -23,6 +25,17 @@ public class GrokClient : IAiClient
         }
     }
 
+    private readonly IHttpClientFactory httpClientFactory;
+
+    /// <summary>
+    ///     Initializes a new instance of the <see cref="ClaudeClient" /> class.
+    /// </summary>
+    /// <param name="httpClientFactory">The HTTP client factory.</param>
+    public GrokClient(IHttpClientFactory httpClientFactory)
+    {
+        this.httpClientFactory = httpClientFactory ?? throw new ArgumentNullException(nameof(httpClientFactory));
+    }
+
     /// <summary>
     ///     Streams a response from the Grok model.
     /// </summary>
@@ -32,10 +45,8 @@ public class GrokClient : IAiClient
     /// <param name="cancellationToken">Optional token to cancel the operation.</param>
     /// <returns>A stream containing the AI response.</returns>
     public async Task<IAsyncEnumerable<string>> StreamResponseAsync(IEnumerable<AiMessage> messages, string model,
-        string apiKey, CancellationToken cancellationToken = default)
+    string apiKey, CancellationToken cancellationToken = default)
     {
-        await Task.CompletedTask;
-
         // Configure OpenAI SDK to point to xAI's endpoint
         var options = new OpenAIClientOptions
         {
@@ -58,23 +69,105 @@ public class GrokClient : IAiClient
         // Call the OpenAI-compatible streaming chat completion
         var completionStream = client.CompleteChatStreamingAsync(chatMessages, cancellationToken: cancellationToken);
 
-        //return completionUpdates.Select(update => update.ContentUpdate.FirstOrDefault()?.Text ?? "");
-        // Transform the streaming updates into JSON strings for the parser
-        // Each update’s first content piece is wrapped in a JSON line prefixed with 'data:'.
-        return completionStream.Select(update =>
+        // Buffer the streamed content so we can fetch usage after the stream
+        async IAsyncEnumerable<string> StreamWithUsage()
         {
-            string text = update.ContentUpdate.FirstOrDefault()?.Text ?? string.Empty;
-            if (string.IsNullOrEmpty(text))
-                return string.Empty;
-            // Form a JSON chunk similar to OpenAI’s streaming format with a delta
-            var dataObj = new
+            var streamedChunks = new List<string>();
+            await foreach (var update in completionStream.WithCancellation(cancellationToken))
             {
-                delta = new { text = text },
-                // Optionally include a usage placeholder or other fields if needed
-                // (usage will be updated in final chunk or outside this loop)
+                var text = update.ContentUpdate.FirstOrDefault()?.Text ?? string.Empty;
+                if (string.IsNullOrEmpty(text))
+                {
+                    yield return string.Empty;
+                    continue;
+                }
+                var dataObj = new
+                {
+                    delta = new { text = text },
+                };
+                var json = JsonSerializer.Serialize(dataObj);
+                streamedChunks.Add(json);
+                yield return json;
+            }
+
+            // After streaming is done, fetch usage and emit a final usage chunk
+            var usage = await FetchGrokUsageAsync(messages, model, apiKey, cancellationToken);
+            if (usage != null)
+            {
+                var usageObj = new
+                {
+                    usage = new
+                    {
+                        prompt_tokens = usage.Value.InputTokens,
+                        completion_tokens = usage.Value.OutputTokens,
+                        total_tokens = usage.Value.TotalTokens
+                    }
+                };
+                var usageJson = JsonSerializer.Serialize(usageObj);
+                yield return usageJson;
+            }
+        }
+
+        return StreamWithUsage();
+    }
+
+    // Helper to fetch usage stats after streaming finishes
+    private async Task<(int InputTokens, int OutputTokens, int TotalTokens)?> FetchGrokUsageAsync(
+        IEnumerable<AiMessage> messages, string model, string apiKey, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            using var httpClient = httpClientFactory.CreateClient();
+            httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
+
+            var requestBody = new
+            {
+                model,
+                messages = messages.Select(m => new
+                {
+                    role = m.Role,
+                    content = m.Content
+                }).ToArray(),
+                stream = false
             };
-            string json = JsonSerializer.Serialize(dataObj);
-            return json;  // We can include "data: " prefix if our parser expects it
-        });
+
+            var jsonRequest = JsonSerializer.Serialize(requestBody);
+            using var content = new StringContent(jsonRequest, Encoding.UTF8, "application/json");
+            using var request = new HttpRequestMessage(HttpMethod.Post, "https://api.x.ai/v1/chat/completions")
+            {
+                Content = content
+            };
+
+            using var response = await httpClient.SendAsync(request, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                var error = await response.Content.ReadAsStringAsync(cancellationToken);
+                Serilog.Log.Error("Failed to fetch Grok usage: {Status} - {Error}", response.StatusCode, error);
+                return null;
+            }
+
+            var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
+            using var doc = JsonDocument.Parse(responseJson);
+            var root = doc.RootElement;
+
+            if (root.TryGetProperty("usage", out var usageElem))
+            {
+                int input = 0, output = 0, total = 0;
+                if (usageElem.TryGetProperty("prompt_tokens", out var promptElem))
+                    input = promptElem.GetInt32();
+                if (usageElem.TryGetProperty("completion_tokens", out var completionElem))
+                    output = completionElem.GetInt32();
+                if (usageElem.TryGetProperty("total_tokens", out var totalElem))
+                    total = totalElem.GetInt32();
+                else
+                    total = input + output;
+                return (input, output, total);
+            }
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Error(ex, "Exception fetching Grok usage");
+        }
+        return null;
     }
 }
