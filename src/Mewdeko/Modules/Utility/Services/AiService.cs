@@ -168,7 +168,6 @@ public class AiService : INService
         IUserMessage? processingMessage = null;
 
         // Determine the prefix based on debug mode
-        // Acceptable prefixes for AI commands
         var prefixes = isDebugMode
             ? new[] { "-frog ", ",frog " }
             : new[] { "!frog ", ".frog " };
@@ -189,11 +188,12 @@ public class AiService : INService
         }
         else
         {
-            // Only show processing message if the message starts with the sanctioned prefix
-            if (msg.Content.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            // Only show processing message if a valid prefix was found and the message starts with it
+            if (!string.IsNullOrEmpty(prefix) && msg.Content.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
             {
                 processingMessage = await msg.Channel.SendConfirmAsync(strings.AiProcessingRequest(guildChannel.GuildId, msg.Author.Mention));
             }
+
         }
 
         try
@@ -1398,6 +1398,7 @@ public class AiService : INService
         }
         return builder;
     }
+
     /// <summary>
     ///     Represents an Ai model with its metadata.
     /// </summary>

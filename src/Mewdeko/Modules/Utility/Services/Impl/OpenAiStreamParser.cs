@@ -84,9 +84,9 @@ namespace Mewdeko.Modules.Utility.Services.Impl
                 // Look for a usage object in the root (present in the final chunk if usage stats are enabled)
                 if (root.TryGetProperty("usage", out var usageElem) && usageElem.ValueKind == JsonValueKind.Object)
                 {
-                    int promptTokens = 0;
-                    int completionTokens = 0;
-                    int totalTokens = 0;
+                    var promptTokens = 0;
+                    var completionTokens = 0;
+                    var totalTokens = 0;
 
                     if (usageElem.TryGetProperty("prompt_tokens", out var prompt))
                         promptTokens = prompt.GetInt32();
@@ -101,6 +101,11 @@ namespace Mewdeko.Modules.Utility.Services.Impl
                 }
 
                 // No usage info in this chunk
+                return null;
+            }
+            catch (JsonException ex)
+            {
+                 Log.Debug($"Failed to parse usage JSON for Grok: {ex.Message}");
                 return null;
             }
             catch (Exception ex)
