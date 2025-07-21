@@ -201,14 +201,14 @@ public partial class Utility
 
             var eb = new EmbedBuilder()
                 .WithTitle(Strings.AiConfigTitle(ctx.Guild.Id))
-                .WithDescription(Strings.AiConfigDescription(
-                    ctx.Guild.Id,
-                    config.Enabled,
-                    config.ChannelId,
-                    config.Provider,
-                    config.Model ?? "Not Set",
-                    config.TokensUsed))
-                .WithOkColor();
+        .WithDescription(Strings.AiConfigDescription(
+            ctx.Guild.Id,
+            config.Enabled,
+            config.ChannelId,
+            $"{config.Provider} ({(AiService.AiProvider)config.Provider} = {config.Provider})",
+            config.Model ?? "Not Set",
+            config.TokensUsed))
+                        .WithOkColor();
 
             await ctx.Channel.SendMessageAsync(embed: eb.Build());
         }
