@@ -326,12 +326,12 @@ public class AiService : INService
                 }
             }
 
-            if (msg.Content.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            if (!string.IsNullOrEmpty(prefix) && msg.Content.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
             {
                 var userQuery = msg.Content.Substring(prefix.Length).Trim();
 
                 logger.LogInformation("Processing AI request from {User} in {Channel}: {userQuery}",
-                msg.Author.Username, msg.Channel.Name, userQuery);
+                    msg.Author.Username, msg.Channel.Name, userQuery);
 
                 // Pass userQuery to your AI logic instead of msg.Content
                 await StreamResponse(config, webhookMessageId, msg, webhook, userQuery);
