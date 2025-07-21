@@ -817,6 +817,8 @@ public class AiService : INService
                                     builder.WithFooter(strings.AiResponseFooter(config.GuildId, userMsg.Author.Username,
                                         tokenCount));
                                 }
+                                // Add provider branding here
+                                AddProviderBranding(builder, (AiProvider)config.Provider);
 
                                 return builder.Build();
                             }).ToList();
