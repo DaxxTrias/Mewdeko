@@ -408,6 +408,7 @@ public class SearchesService : INService, IUnloadableService
         using var http = httpFactory.CreateClient();
         try
         {
+            logger.LogInformation("Fetching weather data for query: {Query}", query);
             var data = await http.GetStringAsync(
                     $"https://api.openweathermap.org/data/2.5/weather?q={query}&appid=42cd627dd60debf25a5739e50a217d74&units=metric")
                 .ConfigureAwait(false);
