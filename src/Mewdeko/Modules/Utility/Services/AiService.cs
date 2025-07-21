@@ -558,7 +558,7 @@ public class AiService : INService
             {
                 ConversationId = convId,
                 Role = "user",
-                Content = userMsg.Content
+                Content = userQuery
             });
         }
 
