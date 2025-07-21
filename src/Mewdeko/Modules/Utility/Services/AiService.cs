@@ -162,7 +162,13 @@ public class AiService : INService
         IUserMessage? processingMessage = null;
 
         // Determine the prefix based on debug mode
-        var prefix = isDebugMode ? "-frog " : "!frog ";
+        // Acceptable prefixes for AI commands
+        var prefixes = isDebugMode
+            ? new[] { "-frog ", ",frog " }
+            : new[] { "!frog ", ".frog " };
+
+        // Find the matching prefix (if any)
+        var prefix = prefixes.FirstOrDefault(p => msg.Content.StartsWith(p, StringComparison.OrdinalIgnoreCase));
 
         if (!string.IsNullOrEmpty(config.WebhookUrl))
         {
