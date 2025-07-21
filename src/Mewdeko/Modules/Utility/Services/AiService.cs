@@ -5,11 +5,13 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Antlr4.Runtime.Misc;
 using DataModel;
 using LinqToDB;
 using Mewdeko.Common.Configs;
 using Mewdeko.Modules.Utility.Services.Impl;
 using Mewdeko.Services.Strings;
+using Serilog;
 using Embed = Discord.Embed;
 
 namespace Mewdeko.Modules.Utility.Services;
@@ -131,13 +133,14 @@ public class AiService : INService
 
     private async Task HandleMessage(SocketMessage msg)
     {
+        var isDebugMode = false;
         if (msg is not IUserMessage || msg.Author.IsBot) return;
         if (msg.Channel is not IGuildChannel guildChannel) return;
 
         var config = await GetOrCreateConfig(guildChannel.GuildId);
         if (!config.Enabled || config.ChannelId != msg.Channel.Id) return;
 
-        if (msg.Content == "deletesession")
+        if (msg.Content == ".deletesession")
         {
             await ClearConversation(guildChannel.GuildId, msg.Author.Id);
             await msg.Channel.SendConfirmAsync(strings.AiConversationDeleted(guildChannel.GuildId));
@@ -150,9 +153,17 @@ public class AiService : INService
             return;
         }
 
+#if DEBUG
+        isDebugMode = true;
+#endif
+
         DiscordWebhookClient? webhook = null;
         ulong? webhookMessageId = null;
         IUserMessage? processingMessage = null;
+
+        // Determine the prefix based on debug mode
+        var prefix = isDebugMode ? "-frog " : "!frog ";
+
         if (!string.IsNullOrEmpty(config.WebhookUrl))
         {
             webhook = new DiscordWebhookClient(config.WebhookUrl);
@@ -166,14 +177,154 @@ public class AiService : INService
         }
         else
         {
-            // Store the processing message so we can delete it later
-            processingMessage = await msg.Channel.SendConfirmAsync(strings.AiProcessingRequest(guildChannel.GuildId, msg.Author.Mention));
+            // Only show processing message if the message starts with the sanctioned prefix
+            if (msg.Content.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                processingMessage = await msg.Channel.SendConfirmAsync(strings.AiProcessingRequest(guildChannel.GuildId, msg.Author.Mention));
+            }
         }
 
         try
         {
-            await StreamResponse(config, webhookMessageId, msg, webhook);
-            await UpdateConfig(config);
+            // lower any capitalization in message content
+            var loweredContents = msg.Content.ToLower();
+
+            // Split the message content into words and take only the first two for checking.
+            var words = loweredContents.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries).Take(2).ToList();
+            var scannedWords = words.Select(w => w.ToLower()).ToList();
+
+            if (scannedWords.Contains("image"))
+            {
+                try
+                {
+                    await msg.Channel.SendMessageAsync("Dall-E disabled.");
+                    return;
+                }
+                catch
+                {
+                    throw;
+                }
+                var authorName = msg.Author.ToString();
+                var prompt = msg.Content.Substring("frog image ".Length).Trim();
+                if (string.IsNullOrEmpty(prompt))
+                {
+                    await msg.Channel.SendMessageAsync("Please provide a prompt for the image.");
+                    return;
+                }
+
+                IUserMessage placeholderMessage = null;
+                try
+                {
+                    // Send a placeholder message directly using the bot's client
+                    placeholderMessage = await msg.Channel.SendConfirmAsync($"Generating image...");
+
+                    // Generate the image
+                    //var images = await api.ImageGenerations.CreateImageAsync(new ImageGenerationRequest
+                    //{
+                    //    Prompt = prompt,  // prompt (text string)
+                    //    NumOfImages = 1, // dall-e2 can provide multiple images, e3 does not support this currently
+                    //    Size = ImageSize._1792x1024, // resolution of the generated images (256x256 | 512x512 | 1024x1024 | 1792x1024) dall-e3 cannot use images below 1024x1024
+                    //    Model = Model.DALLE3, // model (model for this req. defaults to dall-e2
+                    //    User = authorName, // user: author of post, this can be used to help openai detect abuse and rule breaking
+                    //    ResponseFormat = ImageResponseFormat.Url // the format the images can be returned as. must be url or b64_json
+                    //                                             // quality: by default images are generated at standard, but on e3 you can use HD
+                    //});
+
+                    /*
+                    // if dall-e3 ever supports more then 1 image can use this code block instead
+                    // Update the placeholder message with the images
+                    if (images.Data.Count > 0)
+                    {
+                        var embeds = images.Data.Select(image => new EmbedBuilder().WithImageUrl(image.Url).Build()).ToArray(); // Convert to array
+
+                        await placeholderMessage.ModifyAsync(msg =>
+                        {
+                            msg.Content = ""; // Clearing the content
+                            msg.Embeds = new Optional<Embed[]>(embeds); // Wrap the array in an Optional
+                        });
+                    }
+                    else
+                    {
+                        await placeholderMessage.ModifyAsync(msg => msg.Content = "No images were generated.");
+                    }
+                    */
+
+                    // Update the placeholder message with the image
+                    //if (images.Data.Count > 0)
+                    //{
+                    //    var imageUrl = images.Data[0].Url; // Assuming images.Data[0] contains the URL
+                    //    var embed = new EmbedBuilder()
+                    //        .WithImageUrl(imageUrl)
+                    //        .Build();
+                    //    await placeholderMessage.ModifyAsync(msg =>
+                    //    {
+                    //        msg.Content = ""; // Clearing the content
+                    //        msg.Embed = embed;
+                    //    });
+                    //}
+                    //else
+                    //{
+                    //    await placeholderMessage.ModifyAsync(msg => msg.Content = "No image generated.");
+                    //}
+                }
+                catch (HttpRequestException httpEx)
+                {
+                    var content = httpEx.Message; // This is not the response content, but the exception message.
+                    Log.Information("Exception message: {Message}", content);
+
+                    // Log the full exception details for debugging
+                    Log.Error(httpEx, "HttpRequestException occurred while processing the request.");
+
+                    // Clean up the placeholder message if it was assigned
+                    if (placeholderMessage != null)
+                    {
+                        await placeholderMessage.DeleteAsync();
+                    }
+
+                    // Notify the user of a generic error message
+                    await msg.Channel.SendMessageAsync("An error occurred while processing your request. Please try again later.");
+                }
+                catch (Exception ex)
+                {
+                    // Log the error
+                    Log.Error(ex, "Error generating image");
+
+                    // Clean up the placeholder message if it was assigned
+                    if (placeholderMessage != null)
+                    {
+                        await placeholderMessage.DeleteAsync();
+                    }
+                    await msg.Channel.SendMessageAsync($"Failed to generate image due to an unexpected error. Please try again later. Error code: **{ex.HResult}**");
+                }
+                return;
+            }
+
+            if (scannedWords.Contains("scan"))
+            {
+                try
+                {
+                    //todo: should impl this to help with anti bot security (fake support agents)
+                    // https://github.com/OkGoDoIt/OpenAI-API-dotnet/commit/b824ac5b50027af48aa8ea02bf1bc40fac36f390#diff-ba720258629043138df0c8ebea494853e88e2517638a615c4a9c4fdc84a2a168
+                    await msg.Channel.SendMessageAsync("Not Yet Implemented.");
+                    return;
+                }
+                catch
+                {
+                    throw;
+                }
+            }
+
+            if (msg.Content.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                var userQuery = msg.Content.Substring(prefix.Length).Trim();
+
+                logger.LogInformation("Processing AI request from {User} in {Channel}: {userQuery}",
+                msg.Author.Username, msg.Channel.Name, userQuery);
+
+                // Pass userQuery to your AI logic instead of msg.Content
+                await StreamResponse(config, webhookMessageId, msg, webhook, userQuery);
+                await UpdateConfig(config);
+            }
         }
         catch (Exception ex)
         {
@@ -248,9 +399,8 @@ public class AiService : INService
         }
     }
 
-
     private async Task StreamResponse(GuildAiConfig config, ulong? webhookMessageId, SocketMessage userMsg,
-        DiscordWebhookClient? webhook)
+        DiscordWebhookClient? webhook, string userQuery = null)
     {
         
         await using var db = await dbFactory.CreateConnectionAsync();
@@ -304,7 +454,7 @@ public class AiService : INService
         {
             ConversationId = convId,
             Role = "user",
-            Content = userMsg.Content
+            Content = userQuery
         };
 
         // Insert to database
@@ -1107,22 +1257,6 @@ public class AiService : INService
             return new List<AiModel>();
         }
     }
-
-    //private async Task<List<AiModel>> FetchGrokModels(HttpClient http, string apiKey)
-    //{
-    //    http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
-    //    var response = await http.GetFromJsonAsync<OpenAiModelsResponse>("https://api.grok.com/v1/models");
-
-    //    return response?.Data
-    //        .Where(m => m.Id.StartsWith("grok"))
-    //        .Select(m => new AiModel
-    //        {
-    //            Id = m.Id,
-    //            Name = FormatModelName(m.Id),
-    //            Provider = AiProvider.Grok
-    //        })
-    //        .ToList() ?? [];
-    //}
 
     private async Task<List<AiModel>> FetchGrokModels(HttpClient http, string apiKey)
     {
