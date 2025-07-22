@@ -1,8 +1,8 @@
 ﻿using System.IO;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Mewdeko.Common.Yml;
-using Newtonsoft.Json;
 
 namespace Mewdeko.Extensions;
 
@@ -507,7 +507,7 @@ public static partial class StringExtensions
     /// </summary>
     /// <param name="str">The string to check.</param>
     /// <returns>True if the string is null, empty, or contains only white-space characters; otherwise, false.</returns>
-    public static bool IsNullOrWhiteSpace(this string str)
+    public static bool IsNullOrWhiteSpace(this string? str)
     {
         return string.IsNullOrWhiteSpace(str);
     }
@@ -592,7 +592,7 @@ public static partial class StringExtensions
     /// <returns>The deserialized object.</returns>
     public static T MapJson<T>(this string str)
     {
-        return JsonConvert.DeserializeObject<T>(str);
+        return JsonSerializer.Deserialize<T>(str);
     }
 
     /// <summary>
@@ -613,10 +613,9 @@ public static partial class StringExtensions
     /// <returns>The input string converted to title case.</returns>
     public static string ToTitleCase(this string str)
     {
-        var tokens = str.Split(new[]
-        {
+        var tokens = str.Split([
             ' '
-        }, StringSplitOptions.RemoveEmptyEntries);
+        ], StringSplitOptions.RemoveEmptyEntries);
         for (var i = 0; i < tokens.Length; i++)
         {
             var token = tokens[i];

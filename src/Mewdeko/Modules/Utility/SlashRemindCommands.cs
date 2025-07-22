@@ -1,10 +1,9 @@
 using Discord.Interactions;
+using Fergun.Interactive;
+using Fergun.Interactive.Pagination;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Common.Modals;
-using Mewdeko.Database.DbContextStuff;
-using Mewdeko.Modules.Administration.Services;
 using Mewdeko.Modules.Utility.Services;
-using Swan;
 
 namespace Mewdeko.Modules.Utility;
 
@@ -12,8 +11,7 @@ namespace Mewdeko.Modules.Utility;
 ///     Handles commands for setting, viewing, and managing reminders.
 /// </summary>
 [Group("remind", "remind")]
-public class SlashRemindCommands(DbContextProvider dbProvider, GuildTimezoneService tz)
-    : MewdekoSlashModuleBase<RemindService>
+public class SlashRemindCommands(InteractiveService interactivity) : MewdekoSlashModuleBase<RemindService>
 {
     /// <summary>
     ///     Sends a reminder to the user invoking the command.
@@ -22,22 +20,38 @@ public class SlashRemindCommands(DbContextProvider dbProvider, GuildTimezoneServ
     /// <param name="reminder">The message for the reminder. If empty, prompts the user to input the reminder text.</param>
     /// <returns>A task that represents the asynchronous operation of adding a personal reminder.</returns>
     [SlashCommand("me", "Send a reminder to yourself.")]
-    // ReSharper disable once MemberCanBePrivate.Global
-    public async Task Me
-    (
+    public async Task Me(
         [Summary("time", "When should the reminder respond.")]
         TimeSpan time,
         [Summary("reminder", "(optional) what should the reminder message be")]
-        string? reminder = ""
-    )
+        string? reminder = "")
     {
+        await DeferAsync(true);
         if (string.IsNullOrEmpty(reminder))
         {
-            await RespondWithModalAsync<ReminderModal>($"remind:{ctx.User.Id},1,{time};").ConfigureAwait(false);
+            await RespondWithModalAsync<ReminderModal>($"remind:{ctx.User.Id},1,{time};")
+                .ConfigureAwait(false);
             return;
         }
 
-        await RemindInternal(ctx.User.Id, true, time, reminder).ConfigureAwait(false);
+        var (success, message) = await Service.CreateReminderAsync(
+            ctx.User.Id,
+            true,
+            time,
+            reminder,
+            ctx.User.Id,
+            ctx.Guild?.Id,
+            false
+        );
+
+        if (success)
+        {
+            await ReplyConfirmAsync(message).ConfigureAwait(false);
+        }
+        else
+        {
+            await ReplyErrorAsync(Strings.RemindTooLong(ctx.Guild.Id)).ConfigureAwait(false);
+        }
     }
 
     /// <summary>
@@ -47,13 +61,11 @@ public class SlashRemindCommands(DbContextProvider dbProvider, GuildTimezoneServ
     /// <param name="reminder">The message for the reminder. If empty, prompts the user to input the reminder text.</param>
     /// <returns>A task that represents the asynchronous operation of adding a channel reminder.</returns>
     [SlashCommand("here", "Send a reminder to this channel.")]
-    public async Task Here
-    (
+    public async Task Here(
         [Summary("time", "When should the reminder respond.")]
         TimeSpan time,
         [Summary("reminder", "(optional) what should the reminder message be")]
-        string? reminder = ""
-    )
+        string? reminder = "")
     {
         if (ctx.Guild is null)
         {
@@ -63,11 +75,30 @@ public class SlashRemindCommands(DbContextProvider dbProvider, GuildTimezoneServ
 
         if (string.IsNullOrEmpty(reminder))
         {
-            await RespondWithModalAsync<ReminderModal>($"remind:{ctx.Channel.Id},0,{time};").ConfigureAwait(false);
+            await RespondWithModalAsync<ReminderModal>($"remind:{ctx.Channel.Id},0,{time};")
+                .ConfigureAwait(false);
             return;
         }
 
-        await RemindInternal(ctx.Channel.Id, false, time, reminder).ConfigureAwait(false);
+        var shouldSanitize = !((IGuildUser)ctx.User).GetPermissions((IGuildChannel)ctx.Channel).MentionEveryone;
+        var (success, message) = await Service.CreateReminderAsync(
+            ctx.Channel.Id,
+            false,
+            time,
+            reminder,
+            ctx.User.Id,
+            ctx.Guild.Id,
+            shouldSanitize
+        );
+
+        if (success)
+        {
+            await ReplyConfirmAsync(message).ConfigureAwait(false);
+        }
+        else
+        {
+            await ReplyErrorAsync(Strings.RemindTooLong(ctx.Guild.Id)).ConfigureAwait(false);
+        }
     }
 
     /// <summary>
@@ -79,65 +110,46 @@ public class SlashRemindCommands(DbContextProvider dbProvider, GuildTimezoneServ
     /// <returns>A task that represents the asynchronous operation of adding a reminder to a specific channel.</returns>
     [SlashCommand("channel", "Send a reminder to this channel.")]
     [UserPerm(ChannelPermission.ManageMessages)]
-    public async Task Channel
-    (
+    public async Task Channel(
         [Summary("channel", "where should the reminder be sent?")]
         ITextChannel channel,
         [Summary("time", "When should the reminder respond.")]
         TimeSpan time,
         [Summary("reminder", "(optional) what should the reminder message be")]
-        string? reminder = ""
-    )
+        string? reminder = "")
     {
         var perms = ((IGuildUser)ctx.User).GetPermissions(channel);
         if (!perms.SendMessages || !perms.ViewChannel)
         {
-            await ReplyErrorLocalizedAsync("cant_read_or_send").ConfigureAwait(false);
+            await ReplyErrorAsync(Strings.CantReadOrSend(ctx.Guild.Id)).ConfigureAwait(false);
             return;
         }
 
         if (string.IsNullOrEmpty(reminder))
         {
-            await RespondWithModalAsync<ReminderModal>($"remind:{channel.Id},0,{time};").ConfigureAwait(false);
+            await RespondWithModalAsync<ReminderModal>($"remind:{channel.Id},0,{time};")
+                .ConfigureAwait(false);
             return;
         }
 
-        if (!await RemindInternal(channel.Id, false, time, reminder)
-                .ConfigureAwait(false))
-        {
-            await ReplyErrorLocalizedAsync("remind_too_long").ConfigureAwait(false);
-        }
-    }
+        var shouldSanitize = !perms.MentionEveryone;
+        var (success, message) = await Service.CreateReminderAsync(
+            channel.Id,
+            false,
+            time,
+            reminder,
+            ctx.User.Id,
+            ctx.Guild.Id,
+            shouldSanitize
+        );
 
-    /// <summary>
-    ///     Sends a reminder to a specified user.
-    /// </summary>
-    /// <param name="user">The target user for the reminder.</param>
-    /// <param name="time">When the reminder should trigger.</param>
-    /// <param name="reminder">The message for the reminder. If empty, prompts the user to input the reminder text.</param>
-    /// <returns>A task that represents the asynchronous operation of adding a reminder to a specific user.</returns>
-    [SlashCommand("reminduser", "Send a reminder to a user.")]
-    [UserPerm(GuildPermission.ManageMessages)]
-    public async Task RemindUser
-    (
-        [Summary("user", "who should the reminder be sent to?")]
-        IUser user,
-        [Summary("time", "When should the reminder respond.")]
-        TimeSpan time,
-        [Summary("reminder", "(optional) what should the reminder message be")]
-        string? reminder = ""
-    )
-    {
-        if (string.IsNullOrEmpty(reminder))
+        if (success)
         {
-            await RespondWithModalAsync<ReminderModal>($"remind:{user.Id},1,{time};").ConfigureAwait(false);
-            return;
+            await ReplyConfirmAsync(message).ConfigureAwait(false);
         }
-
-        if (!await RemindInternal(user.Id, true, time, reminder)
-                .ConfigureAwait(false))
+        else
         {
-            await ReplyErrorLocalizedAsync("remind_too_long").ConfigureAwait(false);
+            await ReplyErrorAsync(Strings.RemindTooLong(ctx.Guild.Id)).ConfigureAwait(false);
         }
     }
 
@@ -155,57 +167,29 @@ public class SlashRemindCommands(DbContextProvider dbProvider, GuildTimezoneServ
         var id = ulong.Parse(sId);
         var pri = int.Parse(sPri) == 1;
         var time = TimeSpan.Parse(sTime);
+        await DeferAsync(pri);
 
-        await RemindInternal(id, pri, time, modal.Reminder).ConfigureAwait(false);
-    }
+        var shouldSanitize = ctx.Guild != null &&
+                             !((IGuildUser)ctx.User).GetPermissions((IGuildChannel)ctx.Channel).MentionEveryone;
 
-    private async Task<bool> RemindInternal(ulong targetId, bool isPrivate, TimeSpan ts, string? message)
-    {
-        if (ts > TimeSpan.FromDays(60))
-            return false;
+        var (success, message) = await Service.CreateReminderAsync(
+            id,
+            pri,
+            time,
+            modal.Reminder,
+            ctx.User.Id,
+            ctx.Guild?.Id,
+            shouldSanitize
+        );
 
-        var time = DateTime.UtcNow + ts;
-
-        if (ctx.Guild is not null)
+        if (success)
         {
-            var perms = (ctx.User as IGuildUser).GetPermissions(ctx.Channel as IGuildChannel);
-            if (!perms.MentionEveryone) message = message.SanitizeAllMentions();
+            await ReplyConfirmAsync(message).ConfigureAwait(false);
         }
-
-        var rem = new Reminder
+        else
         {
-            ChannelId = targetId,
-            IsPrivate = isPrivate,
-            When = time,
-            Message = message,
-            UserId = ctx.User.Id,
-            ServerId = ctx.Guild?.Id ?? 0
-        };
-
-
-        await using var dbContext = await dbProvider.GetContextAsync();
-        {
-            dbContext.Reminders.Add(rem);
-            await dbContext.SaveChangesAsync().ConfigureAwait(false);
+            await ReplyErrorAsync(Strings.RemindTooLong(ctx.Guild.Id)).ConfigureAwait(false);
         }
-
-        var gTime = ctx.Guild == null
-            ? time
-            : TimeZoneInfo.ConvertTime(time, tz.GetTimeZoneOrUtc(ctx.Guild.Id));
-
-        try
-        {
-            var unixTime = time.ToUnixEpochDate();
-            await RespondAsync(
-                $"⏰ {GetText("remind", Format.Bold(!isPrivate ? $"<#{targetId}>" : ctx.User.Username), Format.Bold(message), $"<t:{unixTime}:R>", gTime, gTime)}",
-                ephemeral: isPrivate).ConfigureAwait(false);
-        }
-        catch
-        {
-            // ignored
-        }
-
-        return true;
     }
 
     /// <summary>
@@ -218,44 +202,56 @@ public class SlashRemindCommands(DbContextProvider dbProvider, GuildTimezoneServ
         [Summary("page", "What page of reminders do you want to load.")]
         int page = 1)
     {
-        if (--page < 0)
-            return;
+        await ctx.Interaction.SendConfirmAsync(Strings.Loading(ctx.Guild.Id)).ConfigureAwait(false);
 
-        var embed = new EmbedBuilder()
-            .WithOkColor()
-            .WithTitle(GetText("reminder_list"));
+        var reminders = await Service.GetUserRemindersAsync(ctx.User.Id);
 
-        List<Reminder> rems;
-
-        await using var dbContext = await dbProvider.GetContextAsync();
+        if (!reminders.Any())
         {
-            rems = dbContext.Reminders.RemindersFor(ctx.User.Id, page)
-                .ToList();
+            await ctx.Interaction.DeleteOriginalResponseAsync().ConfigureAwait(false);
+            await ReplyErrorAsync(Strings.RemindersNone(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
         }
 
-        if (rems.Count > 0)
+        var paginator = new LazyPaginatorBuilder()
+            .AddUser(ctx.User)
+            .WithPageFactory(PageFactory)
+            .WithFooter(PaginatorFooter.PageNumber | PaginatorFooter.Users)
+            .WithMaxPageIndex(reminders.Count / 10)
+            .WithDefaultEmotes()
+            .WithActionOnCancellation(ActionOnStop.DeleteMessage)
+            .Build();
+
+        await ctx.Interaction.DeleteOriginalResponseAsync().ConfigureAwait(false);
+        await interactivity.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60))
+            .ConfigureAwait(false);
+
+        async Task<PageBuilder> PageFactory(int page)
         {
-            var i = 0;
-            foreach (var rem in rems)
+            await Task.CompletedTask.ConfigureAwait(false);
+
+            var pageBuilder = new PageBuilder()
+                .WithOkColor()
+                .WithTitle(Strings.ReminderList(ctx.Guild.Id));
+
+            var pageReminders = reminders.Skip(page * 10).Take(10);
+            var i = page * 10;
+
+            foreach (var rem in pageReminders)
             {
                 var when = rem.When;
                 var diff = when - DateTime.UtcNow;
-                embed.AddField(
-                    $"#{++i + page * 10} {rem.When:HH:mm yyyy-MM-dd} UTC (in {(int)diff.TotalHours}h {diff.Minutes}m)",
+                pageBuilder.AddField(
+                    $"#{++i} {rem.When:HH:mm yyyy-MM-dd} UTC (in {(int)diff.TotalHours}h {diff.Minutes}m)",
                     $"""
                      `Target:` {(rem.IsPrivate ? "DM" : "Channel")}
                      `TargetId:` {rem.ChannelId}
                      `Message:` {rem.Message?.TrimTo(50)}
                      """);
             }
-        }
-        else
-        {
-            embed.WithDescription(GetText("reminders_none"));
-        }
 
-        embed.AddPaginatedFooter(page + 1, null);
-        await RespondAsync(embed: embed.Build()).ConfigureAwait(false);
+            return pageBuilder;
+        }
     }
 
     /// <summary>
@@ -269,24 +265,11 @@ public class SlashRemindCommands(DbContextProvider dbProvider, GuildTimezoneServ
         if (--index < 0)
             return;
 
-        Reminder? rem = null;
+        var success = await Service.DeleteReminderAsync(ctx.User.Id, index);
 
-        await using var dbContext = await dbProvider.GetContextAsync();
-        {
-            var rems = dbContext.Reminders.RemindersFor(ctx.User.Id, index / 10)
-                .ToList();
-            var pageIndex = index % 10;
-            if (rems.Count > pageIndex)
-            {
-                rem = rems[pageIndex];
-                dbContext.Reminders.Remove(rem);
-                await dbContext.SaveChangesAsync().ConfigureAwait(false);
-            }
-        }
-
-        if (rem == null)
-            await ReplyErrorLocalizedAsync("reminder_not_exist").ConfigureAwait(false);
+        if (!success)
+            await ReplyErrorAsync(Strings.ReminderNotExist(ctx.Guild.Id)).ConfigureAwait(false);
         else
-            await ReplyErrorLocalizedAsync("reminder_deleted", index + 1).ConfigureAwait(false);
+            await ReplyConfirmAsync(Strings.ReminderDeleted(ctx.Guild.Id, index + 1)).ConfigureAwait(false);
     }
 }

@@ -3,7 +3,6 @@ using System.Threading;
 using Mewdeko.Modules.Nsfw.Common;
 using Mewdeko.Modules.Nsfw.Common.Downloaders;
 using Microsoft.Extensions.Caching.Memory;
-using Serilog;
 
 namespace Mewdeko.Modules.Nsfw;
 
@@ -23,6 +22,7 @@ public class SearchImageCacher : INService
 
     private readonly IMemoryCache cache;
     private readonly IHttpClientFactory httpFactory;
+    private readonly ILogger<SearchImageCacher> logger;
 
     private readonly ConcurrentDictionary<(Booru, string), int> maxPages = new();
     private readonly Random rng;
@@ -35,11 +35,12 @@ public class SearchImageCacher : INService
     /// </summary>
     /// <param name="httpFactory">The factory to create HttpClient instances.</param>
     /// <param name="cache">The memory cache implementation for caching search results.</param>
-    public SearchImageCacher(IHttpClientFactory httpFactory, IMemoryCache cache)
+    public SearchImageCacher(IHttpClientFactory httpFactory, IMemoryCache cache, ILogger<SearchImageCacher> logger)
     {
         this.httpFactory = httpFactory;
         rng = new MewdekoRandom();
         this.cache = cache;
+        this.logger = logger;
 
         // initialize new cache with empty values
         foreach (var type in Enum.GetValues<Booru>())
@@ -68,11 +69,11 @@ public class SearchImageCacher : INService
         var images = await DownloadImagesAsync(tags, forceExplicit, type, cancel).ConfigureAwait(false);
         if (!images.Any())
         {
-            // Log.Warning("Got no images for {0}, tags: {1}", type, string.Join(", ", tags));
+            // logger.LogWarning("Got no images for {0}, tags: {1}", type, string.Join(", ", tags));
             return false;
         }
 #if DEBUG
-        Log.Information("Updating {0}...", type);
+        logger.LogInformation("Updating {0}...", type);
 #endif
         lock (typeLocks[type])
         {
@@ -277,7 +278,7 @@ public class SearchImageCacher : INService
                 if (maxPage == 0)
                 {
 #if DEBUG
-                    Log.Information("Tag {0} yields no result on {1}, skipping", tagStr, type);
+                    logger.LogInformation("Tag {0} yields no result on {1}, skipping", tagStr, type);
 #endif
                     return new List<ImageData>();
                 }
@@ -293,7 +294,8 @@ public class SearchImageCacher : INService
 
             if (result is not (null or { Count: 0 })) return result;
 #if DEBUG
-            Log.Information("Tag {0}, page {1} has no result on {2}", string.Join(", ", tags), page, type.ToString());
+            logger.LogInformation("Tag {0}, page {1} has no result on {2}", string.Join(", ", tags), page,
+                type.ToString());
 #endif
         }
 
@@ -325,7 +327,7 @@ public class SearchImageCacher : INService
         try
         {
 #if DEBUG
-            Log.Information("Downloading from {0} (page {1})...", type, page);
+            logger.LogInformation("Downloading from {0} (page {1})...", type, page);
 #endif
 
             using var http = httpFactory.CreateClient();
@@ -342,7 +344,7 @@ public class SearchImageCacher : INService
         {
             if (ex is OperationCanceledException or TaskCanceledException)
                 return [];
-            Log.Error(ex, "Error downloading an image:\nTags: {0}\nType: {1}\nPage: {2}\nMessage: {3}",
+            logger.LogError(ex, "Error downloading an image:\nTags: {0}\nType: {1}\nPage: {2}\nMessage: {3}",
                 string.Join(", ", tags),
                 type,
                 page,

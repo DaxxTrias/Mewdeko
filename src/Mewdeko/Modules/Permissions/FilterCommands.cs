@@ -1,11 +1,10 @@
-﻿using Discord.Commands;
+﻿using DataModel;
+using Discord.Commands;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
-using LinqToDB.EntityFrameworkCore;
+using LinqToDB;
 using Mewdeko.Common.Attributes.TextCommands;
-using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.Permissions.Services;
-using Microsoft.EntityFrameworkCore;
 
 namespace Mewdeko.Modules.Permissions;
 
@@ -15,7 +14,7 @@ public partial class Permissions
     ///     Provides commands for managing word filters and automatic bans within guilds.
     /// </summary>
     [Group]
-    public class FilterCommands(DbContextProvider dbProvider, InteractiveService serv, GuildSettingsService gss)
+    public class FilterCommands(IDataConnectionFactory dbFactory, InteractiveService serv, GuildSettingsService gss)
         : MewdekoSubmodule<FilterService>
     {
         /// <summary>
@@ -37,19 +36,21 @@ public partial class Permissions
         [RequireContext(ContextType.Guild)]
         public async Task AutoBanWord([Remainder] string word)
         {
-            await using var dbContext = await dbProvider.GetContextAsync();
+            await using var db = await dbFactory.CreateConnectionAsync();
 
-            var blacklist = dbContext.AutoBanWords;
-            if (blacklist.Count(x => x.Word == word && x.GuildId == ctx.Guild.Id) == 1)
+            var exists = await db.AutoBanWords
+                .AnyAsync(x => x.Word == word && x.GuildId == ctx.Guild.Id);
+
+            if (exists)
             {
-                Service.UnBlacklist(word, ctx.Guild.Id);
-                await ctx.Channel.SendConfirmAsync($"Removed {Format.Code(word)} from the auto bans word list!")
+                await Service.UnBlacklist(word, ctx.Guild.Id);
+                await ctx.Channel.SendConfirmAsync(Strings.AutobanWordRemoved(ctx.Guild.Id, Format.Code(word)))
                     .ConfigureAwait(false);
             }
             else
             {
-                Service.WordBlacklist(word, ctx.Guild.Id);
-                await ctx.Channel.SendConfirmAsync($"Added {Format.Code(word)} to the auto ban words list!")
+                await Service.WordBlacklist(word, ctx.Guild.Id);
+                await ctx.Channel.SendConfirmAsync(Strings.AutobanWordAdded(ctx.Guild.Id, Format.Code(word)))
                     .ConfigureAwait(false);
             }
         }
@@ -71,12 +72,14 @@ public partial class Permissions
         [RequireContext(ContextType.Guild)]
         public async Task AutoBanWordList()
         {
-            await using var dbContext = await dbProvider.GetContextAsync();
+            await using var db = await dbFactory.CreateConnectionAsync();
 
-            var words = dbContext.AutoBanWords.ToLinqToDB().Where(x => x.GuildId == ctx.Guild.Id);
-            if (!words.Any())
+            var words = db.AutoBanWords.Where(x => x.GuildId == ctx.Guild.Id);
+            var count = await words.CountAsync();
+
+            if (count == 0)
             {
-                await ctx.Channel.SendErrorAsync("No AutoBanWords set.", Config).ConfigureAwait(false);
+                await ctx.Channel.SendErrorAsync(Strings.NoAutobanWordsSet(ctx.Guild.Id), Config).ConfigureAwait(false);
             }
             else
             {
@@ -84,7 +87,7 @@ public partial class Permissions
                     .AddUser(ctx.User)
                     .WithPageFactory(PageFactory)
                     .WithFooter(PaginatorFooter.PageNumber | PaginatorFooter.Users)
-                    .WithMaxPageIndex(words.Count() / 10)
+                    .WithMaxPageIndex(count / 10)
                     .WithDefaultEmotes()
                     .WithActionOnCancellation(ActionOnStop.DeleteMessage)
                     .Build();
@@ -95,9 +98,14 @@ public partial class Permissions
                 async Task<PageBuilder> PageFactory(int page)
                 {
                     await Task.CompletedTask.ConfigureAwait(false);
-                    return new PageBuilder().WithTitle("AutoBanWords")
-                        .WithDescription(string.Join("\n",
-                            words.Select(x => x.Word).Skip(page * 10).Take(10)))
+                    var wordList = await words
+                        .Select(x => x.Word)
+                        .Skip(page * 10)
+                        .Take(10)
+                        .ToListAsync();
+
+                    return new PageBuilder().WithTitle(Strings.AutobanWordsTitle(ctx.Guild.Id))
+                        .WithDescription(string.Join("\n", wordList))
                         .WithOkColor();
                 }
             }
@@ -125,10 +133,12 @@ public partial class Permissions
             switch (await Service.GetFw(ctx.Guild.Id))
             {
                 case 1:
-                    await ctx.Channel.SendConfirmAsync("Warn on filtered word is now enabled!").ConfigureAwait(false);
+                    await ctx.Channel.SendConfirmAsync(Strings.WarnFilteredWordEnabled(ctx.Guild.Id))
+                        .ConfigureAwait(false);
                     break;
                 case 0:
-                    await ctx.Channel.SendConfirmAsync("Warn on filtered word is now disabled!").ConfigureAwait(false);
+                    await ctx.Channel.SendConfirmAsync(Strings.WarnFilteredWordDisabled(ctx.Guild.Id))
+                        .ConfigureAwait(false);
                     break;
             }
         }
@@ -155,10 +165,10 @@ public partial class Permissions
             switch (await Service.GetInvWarn(ctx.Guild.Id))
             {
                 case 1:
-                    await ctx.Channel.SendConfirmAsync("Warn on invite post is now enabled!").ConfigureAwait(false);
+                    await ctx.Channel.SendConfirmAsync(Strings.WarnInviteEnabled(ctx.Guild.Id)).ConfigureAwait(false);
                     break;
                 case 0:
-                    await ctx.Channel.SendConfirmAsync("Warn on invite post is now disabled!").ConfigureAwait(false);
+                    await ctx.Channel.SendConfirmAsync(Strings.WarnInviteDisabled(ctx.Guild.Id)).ConfigureAwait(false);
                     break;
             }
         }
@@ -182,7 +192,7 @@ public partial class Permissions
         public async Task FwClear()
         {
             await Service.ClearFilteredWords(ctx.Guild.Id);
-            await ReplyConfirmLocalizedAsync("fw_cleared").ConfigureAwait(false);
+            await ReplyConfirmAsync(Strings.FwCleared(ctx.Guild.Id)).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -203,23 +213,19 @@ public partial class Permissions
         {
             var channel = (ITextChannel)ctx.Channel;
 
-            await using var dbContext = await dbProvider.GetContextAsync();
-
-            await using var disposable = dbContext.ConfigureAwait(false);
-            var config = await dbContext.ForGuildId(channel.Guild.Id, set => set);
+            var config = await gss.GetGuildConfig(channel.Guild.Id);
             config.FilterInvites = !config.FilterInvites;
             await gss.UpdateGuildConfig(ctx.Guild.Id, config).ConfigureAwait(false);
 
             if (config.FilterInvites)
             {
-                await ReplyConfirmLocalizedAsync("invite_filter_server_on").ConfigureAwait(false);
+                await ReplyConfirmAsync(Strings.InviteFilterServerOn(ctx.Guild.Id)).ConfigureAwait(false);
             }
             else
             {
-                await ReplyConfirmLocalizedAsync("invite_filter_server_off").ConfigureAwait(false);
+                await ReplyConfirmAsync(Strings.InviteFilterServerOff(ctx.Guild.Id)).ConfigureAwait(false);
             }
         }
-
 
         /// <summary>
         ///     Toggles the invite link filter for a specific channel on or off.
@@ -238,29 +244,33 @@ public partial class Permissions
         public async Task ChnlFilterInv()
         {
             var channel = (ITextChannel)ctx.Channel;
+            var guildId = channel.Guild.Id;
+            var channelId = channel.Id;
 
-            await using var dbContext = await dbProvider.GetContextAsync();
-            var config = await dbContext.ForGuildId(channel.Guild.Id,
-                set => set.Include(gc => gc.FilterInvitesChannelIds));
-            var match = new FilterInvitesChannelIds
+            await using var db = await dbFactory.CreateConnectionAsync();
+
+            // Check if filter exists
+            var exists = await db.FilterInvitesChannelIds
+                .AnyAsync(fc => fc.GuildId == guildId && fc.ChannelId == channelId);
+
+            if (!exists)
             {
-                ChannelId = channel.Id
-            };
-            var removed = config.FilterInvitesChannelIds.FirstOrDefault(fc => fc.Equals(match));
+                // Add new filter
+                await db.InsertAsync(new FilterInvitesChannelId
+                {
+                    GuildId = guildId, ChannelId = channelId
+                });
 
-            if (removed == null)
-                config.FilterInvitesChannelIds.Add(match);
-            else
-                dbContext.Remove(removed);
-            await dbContext.SaveChangesAsync();
-
-            if (removed == null)
-            {
-                await ReplyConfirmLocalizedAsync("invite_filter_channel_on").ConfigureAwait(false);
+                await ReplyConfirmAsync(Strings.InviteFilterChannelOn(guildId)).ConfigureAwait(false);
             }
             else
             {
-                await ReplyConfirmLocalizedAsync("invite_filter_channel_off").ConfigureAwait(false);
+                // Remove existing filter
+                await db.FilterInvitesChannelIds
+                    .Where(fc => fc.GuildId == guildId && fc.ChannelId == channelId)
+                    .DeleteAsync();
+
+                await ReplyConfirmAsync(Strings.InviteFilterChannelOff(guildId)).ConfigureAwait(false);
             }
         }
 
@@ -281,20 +291,18 @@ public partial class Permissions
         public async Task SrvrFilterLin()
         {
             var channel = (ITextChannel)ctx.Channel;
-            await using var dbContext = await dbProvider.GetContextAsync();
 
-            await using var disposable = dbContext.ConfigureAwait(false);
-            var config = await dbContext.ForGuildId(channel.Guild.Id, set => set);
+            var config = await gss.GetGuildConfig(channel.Guild.Id);
             config.FilterLinks = !config.FilterLinks;
             await gss.UpdateGuildConfig(ctx.Guild.Id, config).ConfigureAwait(false);
 
             if (config.FilterLinks)
             {
-                await ReplyConfirmLocalizedAsync("link_filter_server_on").ConfigureAwait(false);
+                await ReplyConfirmAsync(Strings.LinkFilterServerOn(ctx.Guild.Id)).ConfigureAwait(false);
             }
             else
             {
-                await ReplyConfirmLocalizedAsync("link_filter_server_off").ConfigureAwait(false);
+                await ReplyConfirmAsync(Strings.LinkFilterServerOff(ctx.Guild.Id)).ConfigureAwait(false);
             }
         }
 
@@ -315,29 +323,33 @@ public partial class Permissions
         public async Task ChnlFilterLin()
         {
             var channel = (ITextChannel)ctx.Channel;
+            var guildId = channel.Guild.Id;
+            var channelId = channel.Id;
 
-            await using var dbContext = await dbProvider.GetContextAsync();
-            var config = await dbContext.ForGuildId(channel.Guild.Id,
-                set => set.Include(gc => gc.FilterLinksChannelIds));
-            var match = new FilterLinksChannelId
+            await using var db = await dbFactory.CreateConnectionAsync();
+
+            // Check if filter exists
+            var exists = await db.FilterLinksChannelIds
+                .AnyAsync(fc => fc.GuildId == guildId && fc.ChannelId == channelId);
+
+            if (!exists)
             {
-                ChannelId = channel.Id
-            };
-            var removed = config.FilterLinksChannelIds.FirstOrDefault(fc => fc.Equals(match));
+                // Add new filter
+                await db.InsertAsync(new FilterLinksChannelId
+                {
+                    GuildId = guildId, ChannelId = channelId
+                });
 
-            if (removed == null)
-                config.FilterLinksChannelIds.Add(match);
-            else
-                dbContext.Remove(removed);
-            await gss.UpdateGuildConfig(ctx.Guild.Id, config).ConfigureAwait(false);
-
-            if (removed == null)
-            {
-                await ReplyConfirmLocalizedAsync("link_filter_channel_on").ConfigureAwait(false);
+                await ReplyConfirmAsync(Strings.LinkFilterChannelOn(guildId)).ConfigureAwait(false);
             }
             else
             {
-                await ReplyConfirmLocalizedAsync("link_filter_channel_off").ConfigureAwait(false);
+                // Remove existing filter
+                await db.FilterLinksChannelIds
+                    .Where(fc => fc.GuildId == guildId && fc.ChannelId == channelId)
+                    .DeleteAsync();
+
+                await ReplyConfirmAsync(Strings.LinkFilterChannelOff(guildId)).ConfigureAwait(false);
             }
         }
 
@@ -359,19 +371,17 @@ public partial class Permissions
         {
             var channel = (ITextChannel)ctx.Channel;
 
-            await using var dbContext = await dbProvider.GetContextAsync();
-
-            var config = await dbContext.ForGuildId(channel.Guild.Id, set => set);
+            var config = await gss.GetGuildConfig(channel.Guild.Id);
             config.FilterWords = !config.FilterWords;
             await gss.UpdateGuildConfig(ctx.Guild.Id, config).ConfigureAwait(false);
 
             if (config.FilterWords)
             {
-                await ReplyConfirmLocalizedAsync("word_filter_server_on").ConfigureAwait(false);
+                await ReplyConfirmAsync(Strings.WordFilterServerOn(ctx.Guild.Id)).ConfigureAwait(false);
             }
             else
             {
-                await ReplyConfirmLocalizedAsync("word_filter_server_off").ConfigureAwait(false);
+                await ReplyConfirmAsync(Strings.WordFilterServerOff(ctx.Guild.Id)).ConfigureAwait(false);
             }
         }
 
@@ -392,29 +402,33 @@ public partial class Permissions
         public async Task ChnlFilterWords()
         {
             var channel = (ITextChannel)ctx.Channel;
+            var guildId = channel.Guild.Id;
+            var channelId = channel.Id;
 
-            await using var dbContext = await dbProvider.GetContextAsync();
-            var config = await dbContext.ForGuildId(channel.Guild.Id,
-                set => set.Include(gc => gc.FilterWordsChannelIds));
+            await using var db = await dbFactory.CreateConnectionAsync();
 
-            var match = new FilterWordsChannelIds
+            // Check if filter exists
+            var exists = await db.FilterWordsChannelIds
+                .AnyAsync(fc => fc.GuildId == guildId && fc.ChannelId == channelId);
+
+            if (!exists)
             {
-                ChannelId = channel.Id
-            };
-            var removed = config.FilterWordsChannelIds.FirstOrDefault(fc => fc.Equals(match));
-            if (removed == null)
-                config.FilterWordsChannelIds.Add(match);
-            else
-                dbContext.Remove(removed);
-            await dbContext.SaveChangesAsync().ConfigureAwait(false);
+                // Add new filter
+                await db.InsertAsync(new FilterWordsChannelId
+                {
+                    GuildId = guildId, ChannelId = channelId
+                });
 
-            if (removed == null)
-            {
-                await ReplyConfirmLocalizedAsync("word_filter_channel_on").ConfigureAwait(false);
+                await ReplyConfirmAsync(Strings.WordFilterChannelOn(guildId)).ConfigureAwait(false);
             }
             else
             {
-                await ReplyConfirmLocalizedAsync("word_filter_channel_off").ConfigureAwait(false);
+                // Remove existing filter
+                await db.FilterWordsChannelIds
+                    .Where(fc => fc.GuildId == guildId && fc.ChannelId == channelId)
+                    .DeleteAsync();
+
+                await ReplyConfirmAsync(Strings.WordFilterChannelOff(guildId)).ConfigureAwait(false);
             }
         }
 
@@ -437,34 +451,39 @@ public partial class Permissions
         public async Task FilterWord([Remainder] string? word)
         {
             var channel = (ITextChannel)ctx.Channel;
+            var guildId = channel.Guild.Id;
 
             word = word?.Trim().ToLowerInvariant();
 
             if (string.IsNullOrWhiteSpace(word))
                 return;
 
-            await using var dbContext = await dbProvider.GetContextAsync();
-            var config = await dbContext.ForGuildId(channel.Guild.Id, set => set.Include(gc => gc.FilteredWords));
+            await using var db = await dbFactory.CreateConnectionAsync();
 
-            var removed = config.FilteredWords.FirstOrDefault(fw => fw.Word.Trim().ToLowerInvariant() == word);
+            // Check if word exists
+            var exists = await db.FilteredWords
+                .AnyAsync(fw => fw.GuildId == guildId &&
+                                fw.Word.Trim().ToLowerInvariant() == word);
 
-            if (removed == null)
-                config.FilteredWords.Add(new FilteredWord
-                {
-                    Word = word
-                });
-            else
-                dbContext.Remove(removed);
-
-            await gss.UpdateGuildConfig(ctx.Guild.Id, config).ConfigureAwait(false);
-
-            if (removed == null)
+            if (!exists)
             {
-                await ReplyConfirmLocalizedAsync("filter_word_add", Format.Code(word)).ConfigureAwait(false);
+                // Add new filter word
+                await db.InsertAsync(new FilteredWord
+                {
+                    GuildId = guildId, Word = word
+                });
+
+                await ReplyConfirmAsync(Strings.FilterWordAdd(guildId, Format.Code(word))).ConfigureAwait(false);
             }
             else
             {
-                await ReplyConfirmLocalizedAsync("filter_word_remove", Format.Code(word)).ConfigureAwait(false);
+                // Remove existing filter word
+                await db.FilteredWords
+                    .Where(fw => fw.GuildId == guildId &&
+                                 fw.Word.Trim().ToLowerInvariant() == word)
+                    .DeleteAsync();
+
+                await ReplyConfirmAsync(Strings.FilterWordRemove(guildId, Format.Code(word))).ConfigureAwait(false);
             }
         }
 
@@ -485,17 +504,23 @@ public partial class Permissions
         public async Task LstFilterWords()
         {
             var channel = (ITextChannel)ctx.Channel;
+            var guildId = channel.Guild.Id;
 
-            var config = await gss.GetGuildConfig(channel.Guild.Id);
-            var fwHash = config.FilteredWords.Select(x => x.Word);
+            await using var db = await dbFactory.CreateConnectionAsync();
 
-            var fws = fwHash.ToArray();
+            // Get filtered words
+            var filteredWords = db.FilteredWords
+                .Where(fw => fw.GuildId == guildId)
+                .Select(fw => fw.Word);
+
+            var count = await filteredWords.CountAsync();
+            var words = await filteredWords.ToArrayAsync();
 
             var paginator = new LazyPaginatorBuilder()
                 .AddUser(ctx.User)
                 .WithPageFactory(PageFactory)
                 .WithFooter(PaginatorFooter.PageNumber | PaginatorFooter.Users)
-                .WithMaxPageIndex(fws.Length / 10)
+                .WithMaxPageIndex(count / 10)
                 .WithDefaultEmotes()
                 .WithActionOnCancellation(ActionOnStop.DeleteMessage)
                 .Build();
@@ -505,9 +530,9 @@ public partial class Permissions
             async Task<PageBuilder> PageFactory(int page)
             {
                 await Task.CompletedTask.ConfigureAwait(false);
-                return new PageBuilder().WithTitle(GetText("filter_word_list"))
+                return new PageBuilder().WithTitle(Strings.FilterWordList(guildId))
                     .WithDescription(
-                        string.Join("\n", fws.Skip(page * 10).Take(10)))
+                        string.Join("\n", words.Skip(page * 10).Take(10)))
                     .WithOkColor();
             }
         }

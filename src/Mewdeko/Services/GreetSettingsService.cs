@@ -1,6 +1,5 @@
-﻿using Mewdeko.Database.DbContextStuff;
-using Microsoft.EntityFrameworkCore;
-using Serilog;
+﻿using DataModel;
+using LinqToDB;
 
 namespace Mewdeko.Services;
 
@@ -10,9 +9,7 @@ namespace Mewdeko.Services;
 public class GreetSettingsService : INService
 {
     private readonly DiscordShardedClient client;
-    private readonly DbContextProvider dbProvider;
-
-    private readonly GuildSettingsService gss;
+    private readonly IDataConnectionFactory dbFactory;
 
     private readonly Channel<(GreetSettings, IGuildUser, TaskCompletionSource<bool>)> greetDmQueue =
         Channel.CreateBounded<(GreetSettings, IGuildUser, TaskCompletionSource<bool>)>(new BoundedChannelOptions(60)
@@ -20,28 +17,32 @@ public class GreetSettingsService : INService
             FullMode = BoundedChannelFullMode.DropNewest
         });
 
+    private readonly GuildSettingsService gss;
+    private readonly ILogger<GreetSettingsService> logger;
+
     /// <summary>
     ///     Initializes a new instance of the <see cref="GreetSettingsService" /> class, setting up event handlers for user
     ///     join and leave events, and guild join and leave events.
     /// </summary>
     /// <param name="client">The Discord client instance to interact with the Discord API.</param>
     /// <param name="gss">The service managing guild settings.</param>
-    /// <param name="dbProvider">The db provider</param>
+    /// <param name="dbFactory">The database connection factory.</param>
     /// <param name="eventHandler">The handler managing Discord events.</param>
     /// <remarks>
     ///     Event handlers are set up to listen for specific Discord events, allowing the service to respond to user and guild
     ///     activities such as joining, leaving, or boosting.
     /// </remarks>
-    public GreetSettingsService(DiscordShardedClient client, GuildSettingsService gss, DbContextProvider dbProvider,
-        EventHandler eventHandler)
+    public GreetSettingsService(DiscordShardedClient client, GuildSettingsService gss, IDataConnectionFactory dbFactory,
+        EventHandler eventHandler, ILogger<GreetSettingsService> logger)
     {
-        this.dbProvider = dbProvider;
+        this.dbFactory = dbFactory;
+        this.logger = logger;
         this.client = client;
         this.gss = gss;
 
-        eventHandler.UserJoined += UserJoined;
-        eventHandler.UserLeft += UserLeft;
-        eventHandler.GuildMemberUpdated += ClientOnGuildMemberUpdated;
+        eventHandler.Subscribe("UserJoined", "GreetSettingsService", UserJoined);
+        eventHandler.Subscribe("UserLeft", "GreetSettingsService", UserLeft);
+        eventHandler.Subscribe("GuildMemberUpdated", "GreetSettingsService", ClientOnGuildMemberUpdated);
         _ = RunGreetLoop();
     }
 
@@ -68,6 +69,7 @@ public class GreetSettingsService : INService
         await greetDmQueue.Writer.WriteAsync((conf, user, completionSource));
         return await completionSource.Task;
     }
+
     private async Task<GreetSettings> GetGreetSettings(ulong guildId)
     {
         var guildConfig = await gss.GetGuildConfig(guildId);
@@ -97,7 +99,7 @@ public class GreetSettingsService : INService
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Error sending boost message");
+                logger.LogError(ex, "Error sending boost message");
             }
         }
         else
@@ -111,7 +113,7 @@ public class GreetSettingsService : INService
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Error sending boost message");
+                logger.LogError(ex, "Error sending boost message");
             }
         }
     }
@@ -180,9 +182,7 @@ public class GreetSettingsService : INService
     {
         message = message?.SanitizeMentions();
 
-        await using var dbContext = await dbProvider.GetContextAsync();
-
-        var conf = await dbContext.ForGuildId(guildId, set => set);
+        var conf = await gss.GetGuildConfig(guildId);
         conf.BoostMessage = message;
         await gss.UpdateGuildConfig(guildId, conf);
         return conf.SendBoostMessage;
@@ -205,9 +205,7 @@ public class GreetSettingsService : INService
         if (timer is < 0 or > 90000)
             throw new ArgumentOutOfRangeException(nameof(timer));
 
-        await using var dbContext = await dbProvider.GetContextAsync();
-
-        var conf = await dbContext.ForGuildId(guildId, set => set);
+        var conf = await gss.GetGuildConfig(guildId);
         conf.BoostMessageDeleteAfter = timer;
         await gss.UpdateGuildConfig(guildId, conf);
     }
@@ -230,9 +228,7 @@ public class GreetSettingsService : INService
     /// <returns>A boolean indicating whether the boost message feature is now enabled.</returns>
     public async Task<bool> SetBoost(ulong guildId, ulong channelId)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
-
-        var conf = await dbContext.ForGuildId(guildId, set => set);
+        var conf = await gss.GetGuildConfig(guildId);
         conf.SendBoostMessage = !conf.SendBoostMessage;
         conf.BoostMessageChannelId = channelId;
         await gss.UpdateGuildConfig(guildId, conf);
@@ -250,8 +246,7 @@ public class GreetSettingsService : INService
     /// </remarks>
     public async Task SetWebLeaveUrl(IGuild guild, string url)
     {
-        await using var db = await dbProvider.GetContextAsync();
-        var gc = await db.ForGuildId(guild.Id, set => set);
+        var gc = await gss.GetGuildConfig(guild.Id);
         gc.LeaveHook = url;
         await gss.UpdateGuildConfig(guild.Id, gc);
     }
@@ -313,7 +308,7 @@ public class GreetSettingsService : INService
             }
             catch (Exception ex)
             {
-                Log.Warning(ex, "Error embeding bye message");
+                logger.LogWarning(ex, "Error embeding bye message");
             }
         }
         else
@@ -341,7 +336,7 @@ public class GreetSettingsService : INService
             }
             catch (Exception ex)
             {
-                Log.Warning(ex, "Error sending bye message");
+                logger.LogWarning(ex, "Error sending bye message");
             }
         }
     }
@@ -351,23 +346,10 @@ public class GreetSettingsService : INService
     /// </summary>
     /// <param name="id">The guild's unique identifier.</param>
     /// <returns>The DM greeting message text.</returns>
-    public async Task<string> GetDmGreetMsg(ulong id)
+    public async Task<string?> GetDmGreetMsg(ulong id)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
-
-        return (await dbContext.ForGuildId(id, set => set)).DmGreetMessageText;
-    }
-
-    /// <summary>
-    ///     Retrieves the channel greeting message text for a guild.
-    /// </summary>
-    /// <param name="gid">The guild's unique identifier.</param>
-    /// <returns>The channel greeting message text.</returns>
-    public async Task<string> GetGreetMsg(ulong gid)
-    {
-        await using var dbContext = await dbProvider.GetContextAsync();
-
-        return (await dbContext.ForGuildId(gid, set => set)).ChannelGreetMessageText;
+        var gc = await gss.GetGuildConfig(id);
+        return gc.DmGreetMessageText;
     }
 
     private async Task<bool> GreetDmUserInternal(GreetSettings conf, IGuildUser user)
@@ -375,9 +357,9 @@ public class GreetSettingsService : INService
         if (!conf.SendDmGreetMessage)
             return false;
 
-        await using var db = await dbProvider.GetContextAsync();
+        await using var db = await dbFactory.CreateConnectionAsync();
 
-        var dUser = await db.DiscordUser.FirstOrDefaultAsync(x => x.UserId == user.Id).ConfigureAwait(false);
+        var dUser = await db.DiscordUsers.FirstOrDefaultAsync(x => x.UserId == user.Id).ConfigureAwait(false);
         if (dUser.GreetDmsOptOut)
             return false;
 
@@ -445,11 +427,11 @@ public class GreetSettingsService : INService
     /// </summary>
     /// <param name="gid">The unique identifier of the guild.</param>
     /// <returns>The farewell message text for the guild.</returns>
-    public async Task<string> GetByeMessage(ulong gid)
+    public async Task<string?> GetByeMessage(ulong gid)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
+        var gc = await gss.GetGuildConfig(gid);
 
-        return (await dbContext.ForGuildId(gid, set => set)).ChannelByeMessageText;
+        return gc.ChannelByeMessageText;
     }
 
     /// <summary>
@@ -463,9 +445,7 @@ public class GreetSettingsService : INService
     /// <returns>A boolean indicating whether the DM greeting feature is enabled after the operation.</returns>
     public async Task<bool> SetGreetDm(ulong guildId, bool? value = null)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
-
-        var conf = await dbContext.ForGuildId(guildId, set => set);
+        var conf = await gss.GetGuildConfig(guildId);
         conf.SendDmGreetMessage = !conf.SendDmGreetMessage;
         await gss.UpdateGuildConfig(guildId, conf);
         return conf.SendDmGreetMessage;
@@ -485,9 +465,7 @@ public class GreetSettingsService : INService
         if (string.IsNullOrWhiteSpace(message))
             throw new ArgumentNullException(nameof(message));
 
-        await using var dbContext = await dbProvider.GetContextAsync();
-
-        var conf = await dbContext.ForGuildId(guildId, set => set);
+        var conf = await gss.GetGuildConfig(guildId);
         conf.DmGreetMessageText = message;
         await gss.UpdateGuildConfig(guildId, conf);
         return conf.SendDmGreetMessage;
@@ -505,9 +483,7 @@ public class GreetSettingsService : INService
     /// <returns>A boolean indicating whether the farewell message feature is enabled after the operation.</returns>
     public async Task<bool> SetBye(ulong guildId, ulong channelId, bool? value = null)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
-
-        var conf = await dbContext.ForGuildId(guildId, set => set);
+        var conf = await gss.GetGuildConfig(guildId);
         conf.SendChannelByeMessage = !conf.SendChannelByeMessage;
         conf.ByeMessageChannelId = channelId;
         await gss.UpdateGuildConfig(guildId, conf);
@@ -529,9 +505,8 @@ public class GreetSettingsService : INService
         if (string.IsNullOrWhiteSpace(message))
             throw new ArgumentNullException(nameof(message));
 
-        await using var dbContext = await dbProvider.GetContextAsync();
+        var conf = await gss.GetGuildConfig(guildId);
 
-        var conf = await dbContext.ForGuildId(guildId, set => set);
         conf.ChannelByeMessageText = message;
         await gss.UpdateGuildConfig(guildId, conf);
 
@@ -551,10 +526,8 @@ public class GreetSettingsService : INService
     {
         if (timer is < 0 or > 90000)
             return;
+        var conf = await gss.GetGuildConfig(guildId);
 
-        await using var dbContext = await dbProvider.GetContextAsync();
-
-        var conf = await dbContext.ForGuildId(guildId, set => set);
         conf.AutoDeleteByeMessagesTimer = timer;
         await gss.UpdateGuildConfig(guildId, conf);
     }
@@ -568,9 +541,8 @@ public class GreetSettingsService : INService
     /// <returns>A boolean indicating if the direct message greeting feature is enabled.</returns>
     public async Task<bool> GetGreetDmEnabled(ulong guildId)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
+        var conf = await gss.GetGuildConfig(guildId);
 
-        var conf = await dbContext.ForGuildId(guildId, set => set);
         return conf.SendDmGreetMessage;
     }
 
@@ -581,9 +553,8 @@ public class GreetSettingsService : INService
     /// <returns>A boolean indicating if the boost message feature is enabled.</returns>
     public async Task<bool> GetBoostEnabled(ulong guildId)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
+        var conf = await gss.GetGuildConfig(guildId);
 
-        var conf = await dbContext.ForGuildId(guildId, set => set);
         return conf.SendBoostMessage;
     }
 
@@ -594,9 +565,8 @@ public class GreetSettingsService : INService
     /// <returns>A boolean indicating if the channel farewell message feature is enabled.</returns>
     public async Task<bool> GetByeEnabled(ulong guildId)
     {
-        await using var dbContext = await dbProvider.GetContextAsync();
+        var conf = await gss.GetGuildConfig(guildId);
 
-        var conf = await dbContext.ForGuildId(guildId, set => set);
         return conf.SendChannelByeMessage;
     }
 
@@ -689,6 +659,7 @@ public class GreetSettings
     ///     Gets or sets the direct message greeting text.
     /// </summary>
     public string? DmGreetMessageText { get; set; }
+
     /// <summary>
     ///     Gets or sets a value indicating whether channel farewell messages are enabled for the guild.
     /// </summary>

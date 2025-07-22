@@ -75,27 +75,67 @@ public class BotStrings : IBotStrings
     public CommandStrings GetCommandStrings(string commandName, CultureInfo? cultureInfo)
     {
         var cmdStrings = stringsProvider.GetCommandStrings(cultureInfo.Name, commandName);
+
         if (cmdStrings is not null)
-            return cmdStrings;
-        if (cultureInfo.Name == "owo")
         {
-            cmdStrings = stringsProvider.GetCommandStrings("en-US", commandName);
-            cmdStrings.Desc = OwoServices.OwoIfy(cmdStrings.Desc);
-            cmdStrings.Args = cmdStrings.Args.Select(OwoServices.OwoIfy).ToArray();
+            // Apply owo transformation if needed
+            if (cultureInfo.Name == "owo" && cmdStrings.Overloads.Count == 0)
+            {
+                cmdStrings.Desc = OwoServices.OwoIfy(cmdStrings.Desc);
+                cmdStrings.Args = cmdStrings.Args.Select(OwoServices.OwoIfy).ToArray();
+
+                // Transform parameter descriptions
+                foreach (var param in cmdStrings.Parameters)
+                {
+                    param.Description = OwoServices.OwoIfy(param.Description);
+                }
+            }
+
+            return cmdStrings;
         }
 
+        // Try to get overloads if available
+        var overloadedCmdStrings = stringsProvider.GetCommandOverloads(cultureInfo.Name, commandName);
+        if (overloadedCmdStrings != null && overloadedCmdStrings.Count > 0)
+        {
+            // Construct a unified CommandStrings from overloads
+            var result = new CommandStrings
+            {
+                Desc = overloadedCmdStrings[0].Desc,
+                Args = overloadedCmdStrings[0].Args,
+                IsOverload = false,
+                Overloads = overloadedCmdStrings.Skip(1).ToList() // First one becomes main, rest are overloads
+            };
+
+            if (cultureInfo.Name == "owo")
+            {
+                result.Desc = OwoServices.OwoIfy(result.Desc);
+                result.Args = result.Args.Select(OwoServices.OwoIfy).ToArray();
+                // Transform overloads too
+                foreach (var overload in result.Overloads)
+                {
+                    overload.Desc = OwoServices.OwoIfy(overload.Desc);
+                    overload.Args = overload.Args.Select(OwoServices.OwoIfy).ToArray();
+                    foreach (var param in overload.Parameters)
+                    {
+                        param.Description = OwoServices.OwoIfy(param.Description);
+                    }
+                }
+            }
+
+            return result;
+        }
+
+        // Fall back to US culture if needed
         if (cultureInfo.Name != usCultureInfo.Name)
             return GetCommandStrings(commandName, usCultureInfo);
+
         Log.Warning("'{CommandName}' doesn't exist in 'en-US' command strings. Please report this",
             commandName);
 
         return new CommandStrings
         {
-            Args =
-            [
-                ""
-            ],
-            Desc = "?"
+            Args = [""], Desc = "?", Parameters = [], Overloads = []
         };
     }
 
@@ -150,7 +190,104 @@ public class CommandStrings
     public string Desc { get; set; }
 
     /// <summary>
+    ///     Command usage examples
     /// </summary>
     [YamlMember(Alias = "args")]
     public string[] Args { get; set; }
+
+    /// <summary>
+    ///     Parameter information for this command
+    /// </summary>
+    [YamlMember(Alias = "params")]
+    public List<ParameterString> Parameters { get; set; } = [];
+
+    /// <summary>
+    ///     Overloaded versions of this command (if any)
+    /// </summary>
+    [YamlMember(Alias = "overloads")]
+    public List<CommandOverload> Overloads { get; set; } = [];
+
+    /// <summary>
+    ///     The method signature for this command (for overload identification)
+    /// </summary>
+    [YamlMember(Alias = "signature")]
+    public string Signature { get; set; } = string.Empty;
+
+    /// <summary>
+    ///     Whether this command is an overload of another command
+    /// </summary>
+    [YamlMember(Alias = "isOverload")]
+    public bool IsOverload { get; set; }
+}
+
+/// <summary>
+///     Represents a parameter in a command
+/// </summary>
+public class ParameterString
+{
+    /// <summary>
+    ///     Gets or sets the name of the parameter
+    /// </summary>
+    [YamlMember(Alias = "name")]
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>
+    ///     Gets or sets the description of the parameter
+    /// </summary>
+    [YamlMember(Alias = "desc")]
+    public string Description { get; set; } = string.Empty;
+
+    /// <summary>
+    ///     Gets or sets the type of the parameter
+    /// </summary>
+    [YamlMember(Alias = "type")]
+    public string Type { get; set; } = string.Empty;
+
+    /// <summary>
+    ///     Whether the parameter is optional
+    /// </summary>
+    [YamlMember(Alias = "optional")]
+    public bool IsOptional { get; set; }
+
+    /// <summary>
+    ///     Default value for optional parameters
+    /// </summary>
+    [YamlMember(Alias = "default")]
+    public string DefaultValue { get; set; } = string.Empty;
+
+    /// <summary>
+    ///     Whether this is a params parameter
+    /// </summary>
+    [YamlMember(Alias = "isParams")]
+    public bool IsParams { get; set; }
+}
+
+/// <summary>
+///     Represents an overloaded version of a command
+/// </summary>
+public class CommandOverload
+{
+    /// <summary>
+    ///     Gets or sets the description of this overload
+    /// </summary>
+    [YamlMember(Alias = "desc")]
+    public string Desc { get; set; } = string.Empty;
+
+    /// <summary>
+    ///     Gets or sets the usage examples for this overload
+    /// </summary>
+    [YamlMember(Alias = "args")]
+    public string[] Args { get; set; } = [];
+
+    /// <summary>
+    ///     Gets or sets the parameters for this overload
+    /// </summary>
+    [YamlMember(Alias = "params")]
+    public List<ParameterString> Parameters { get; set; } = [];
+
+    /// <summary>
+    ///     Gets or sets the signature for this overload
+    /// </summary>
+    [YamlMember(Alias = "signature")]
+    public string Signature { get; set; } = string.Empty;
 }

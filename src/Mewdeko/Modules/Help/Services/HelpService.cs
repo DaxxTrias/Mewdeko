@@ -1,14 +1,16 @@
 using System.Reflection;
+using System.Text;
 using CommandLine;
 using Discord.Commands;
 using Discord.Interactions;
 using Mewdeko.Common.Attributes.TextCommands;
-using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Modules.Administration.Services;
+using Mewdeko.Modules.OwnerOnly.Services;
 using Mewdeko.Modules.Permissions.Common;
 using Mewdeko.Modules.Permissions.Services;
 using Mewdeko.Services.Settings;
 using Mewdeko.Services.strings;
+using Mewdeko.Services.Strings;
 using MoreLinq;
 using ModuleInfo = Discord.Commands.ModuleInfo;
 
@@ -17,7 +19,7 @@ namespace Mewdeko.Modules.Help.Services;
 /// <summary>
 ///     A service for handling help commands.
 /// </summary>
-public class HelpService : ILateExecutor, INService
+public class HelpService : INService
 {
     private readonly BlacklistService blacklistService;
     private readonly Mewdeko bot;
@@ -25,6 +27,7 @@ public class HelpService : ILateExecutor, INService
     private readonly DiscordShardedClient client;
     private readonly CommandService cmds;
     private readonly DiscordPermOverrideService dpos;
+    private readonly GeneratedBotStrings genStrings;
     private readonly GuildSettingsService guildSettings;
     private readonly InteractionService interactionService;
     private readonly PermissionService nPerms;
@@ -47,6 +50,7 @@ public class HelpService : ILateExecutor, INService
     /// <param name="interactionService">The discord interaction service</param>
     /// <param name="guildSettings">Service to get guild configs</param>
     /// <param name="eventHandler">The event handler Sylveon made because the events in dnet were single threaded.</param>
+    /// <param name="genStrings">The class that holds generated locale strings.</param>
     public HelpService(
         IBotStrings strings,
         DiscordPermOverrideService dpos,
@@ -58,7 +62,7 @@ public class HelpService : ILateExecutor, INService
         GlobalPermissionService perms,
         PermissionService nPerms,
         InteractionService interactionService,
-        GuildSettingsService guildSettings, EventHandler eventHandler)
+        GuildSettingsService guildSettings, EventHandler eventHandler, GeneratedBotStrings genStrings)
     {
         this.dpos = dpos;
         this.strings = strings;
@@ -67,12 +71,13 @@ public class HelpService : ILateExecutor, INService
         this.blacklistService = blacklistService;
         this.cmds = cmds;
         this.bss = bss;
-        eventHandler.MessageReceived += HandlePing;
-        eventHandler.JoinedGuild += HandleJoin;
+        eventHandler.Subscribe("MessageReceived", "HelpService", HandlePing);
+        eventHandler.Subscribe("JoinedGuild", "HelpService", HandleJoin);
         this.perms = perms;
         this.nPerms = nPerms;
         this.interactionService = interactionService;
         this.guildSettings = guildSettings;
+        this.genStrings = genStrings;
     }
 
     /// <summary>
@@ -82,18 +87,19 @@ public class HelpService : ILateExecutor, INService
     /// <param name="guild">The guild (hopefully null otherwise this method is useless)</param>
     /// <param name="msg">The message of the user</param>
     /// <returns></returns>
-    public Task LateExecute(DiscordShardedClient DiscordShardedClient, IGuild? guild, IUserMessage msg)
+    public async Task BadCommand(DiscordShardedClient DiscordShardedClient, IGuild? guild, IUserMessage msg)
     {
         var settings = bss.Data;
-        if (guild != null) return Task.CompletedTask;
+        if (guild != null) return;
         if (string.IsNullOrWhiteSpace(settings.DmHelpText) || settings.DmHelpText == "-")
-            return Task.CompletedTask;
+            return;
         var replacer = new ReplacementBuilder()
-            .WithDefault(msg.Author, msg.Channel, guild as SocketGuild, DiscordShardedClient).Build();
-        return SmartEmbed.TryParse(replacer.Replace(settings.DmHelpText), null, out var embed, out var plainText,
-            out var components)
-            ? msg.Channel.SendMessageAsync(plainText, embeds: embed, components: components?.Build())
-            : msg.Channel.SendMessageAsync(settings.DmHelpText);
+            .WithDefault(msg.Author, msg.Channel, null, DiscordShardedClient).Build();
+        if (SmartEmbed.TryParse(replacer.Replace(settings.DmHelpText), null, out var embed, out var plainText,
+                out var components))
+            await msg.Channel.SendMessageAsync(plainText, embeds: embed, components: components?.Build());
+        else
+            await msg.Channel.SendMessageAsync(settings.DmHelpText);
     }
 
     /// <summary>
@@ -116,18 +122,20 @@ public class HelpService : ILateExecutor, INService
                          .Where(x => !x.Attributes.Any(attribute => attribute is HelpDisabled)))
             {
                 selMenu.Options.Add(new SelectMenuOptionBuilder()
-                    .WithLabel(i.Name).WithDescription(GetText($"module_description_{i.Name.ToLower()}", guild))
+                    .WithLabel(i.Name).WithDescription(GetModuleDescription(i.Name, guild))
                     .WithValue(i.Name.ToLower()));
             }
 
             compBuilder.WithSelectMenu(selMenu); // add the select menu to the component builder
         }
 
-        compBuilder.WithButton(GetText("toggle_descriptions", guild), $"toggle-descriptions:{descriptions},{user.Id}");
-        compBuilder.WithButton(GetText("invite_me", guild), style: ButtonStyle.Link,
+        compBuilder.WithButton(genStrings.ToggleDescriptions(guild?.Id ?? 0),
+            $"toggle-descriptions:{descriptions},{user.Id}");
+        compBuilder.WithButton(genStrings.InviteMe(guild?.Id ?? 0), style: ButtonStyle.Link,
             url:
             "https://discord.com/oauth2/authorize?client_id=752236274261426212&scope=bot&permissions=66186303&scope=bot%20applications.commands");
-        compBuilder.WithButton(GetText("donatetext", guild), style: ButtonStyle.Link, url: "https://ko-fi.com/mewdeko");
+        compBuilder.WithButton(genStrings.Donatetext(guild?.Id ?? 0), style: ButtonStyle.Link,
+            url: "https://ko-fi.com/mewdeko");
         return compBuilder;
     }
 
@@ -144,12 +152,13 @@ public class HelpService : ILateExecutor, INService
     {
         var prefix = await guildSettings.GetPrefix(guild);
         EmbedBuilder embed = new();
-        embed.WithAuthor(new EmbedAuthorBuilder().WithName(GetText("helpmenu_helptext", guild, client.CurrentUser))
+        embed.WithAuthor(new EmbedAuthorBuilder()
+            .WithName(genStrings.HelpmenuHelptext(guild?.Id ?? 0, client.CurrentUser))
             .WithIconUrl(client.CurrentUser.RealAvatarUrl().AbsoluteUri));
         embed.WithOkColor();
         embed.WithDescription(
-            GetText("command_help_description", guild, prefix) +
-            $"\n{GetText("module_help_description", guild, prefix)}" +
+            genStrings.CommandHelpDescription(guild?.Id ?? 0, prefix) +
+            $"\n{genStrings.ModuleHelpDescription(guild?.Id ?? 0, prefix)}" +
             "\n\n**Youtube Tutorials**\nhttps://www.youtube.com/channel/UCKJEaaZMJQq6lH33L3b_sTg\n\n**Links**\n" +
             $"[Documentation](https://mewdeko.tech) | [Support Server]({bss.Data.SupportServer}) | [Invite Me](https://discord.com/oauth2/authorize?client_id={bot.Client.CurrentUser.Id}&scope=bot&permissions=66186303&scope=bot%20applications.commands) | [Top.gg Listing](https://top.gg/bot/752236274261426212) | [Donate!](https://ko-fi.com/mewdeko)");
         var modules = cmds.Commands.Select(x => x.Module)
@@ -167,11 +176,16 @@ public class HelpService : ILateExecutor, INService
         {
             foreach (var i in modules.Batch(modules.Count() / 2))
             {
-                embed.AddField(count == 0 ? "Categories" : "_ _",
-                    string.Join("\n",
-                        i.Select(x =>
-                            $"> {CheckEnabled(guild?.Id, channel, user, x.Name).GetAwaiter().GetResult()} {Format.Bold(x.Name)}")),
-                    true);
+                var categoryStrings = await Task.WhenAll(i.Select(x =>
+                    CheckEnabled(guild?.Id, channel, user, x.Name)
+                        .ContinueWith(task => $"> {task.Result} {Format.Bold(x.Name)}")
+                ));
+
+                embed.AddField(
+                    count == 0 ? "Categories" : "_ _",
+                    string.Join("\n", categoryStrings),
+                    true
+                );
                 count++;
             }
         }
@@ -190,7 +204,36 @@ public class HelpService : ILateExecutor, INService
 
     private string? GetModuleDescription(string module, IGuild? guild)
     {
-        return GetText($"module_description_{module.ToLower()}", guild);
+        return module.ToLower() switch
+        {
+            "administration" => genStrings.ModuleDescriptionAdministration(guild?.Id ?? 0),
+            "afk" => genStrings.ModuleDescriptionAfk(guild?.Id ?? 0),
+            "chattriggers" => genStrings.ModuleDescriptionChattriggers(guild?.Id ?? 0),
+            "confessions" => genStrings.ModuleDescriptionConfessions(guild?.Id ?? 0),
+            "currency" => genStrings.ModuleDescriptionCurrency(guild?.Id ?? 0),
+            "gambling" => genStrings.ModuleDescriptionGambling(guild?.Id ?? 0),
+            "games" => genStrings.ModuleDescriptionGames(guild?.Id ?? 0),
+            "giveaways" => genStrings.ModuleDescriptionGiveaways(guild?.Id ?? 0),
+            "help" => genStrings.ModuleDescriptionHelp(guild?.Id ?? 0),
+            "highlights" => genStrings.ModuleDescriptionHighlights(guild?.Id ?? 0),
+            "multigreets" => genStrings.ModuleDescriptionMultigreets(guild?.Id ?? 0),
+            "music" => genStrings.ModuleDescriptionMusic(guild?.Id ?? 0),
+            "nsfw" => genStrings.ModuleDescriptionNsfw(guild?.Id ?? 0),
+            "owneronly" => genStrings.ModuleDescriptionOwneronly(guild?.Id ?? 0),
+            "permissions" => genStrings.ModuleDescriptionPermissions(guild?.Id ?? 0),
+            "rolegreets" => genStrings.ModuleDescriptionRolegreets(guild?.Id ?? 0),
+            "rolestates" => genStrings.ModuleDescriptionRolestates(guild?.Id ?? 0),
+            "searches" => genStrings.ModuleDescriptionSearches(guild?.Id ?? 0),
+            "servermanagement" => genStrings.ModuleDescriptionServermanagement(guild?.Id ?? 0),
+            "starboard" => genStrings.ModuleDescriptionStarboard(guild?.Id ?? 0),
+            "statusroles" => genStrings.ModuleDescriptionStatusroles(guild?.Id ?? 0),
+            "suggestions" => genStrings.ModuleDescriptionSuggestions(guild?.Id ?? 0),
+            "userprofile" => genStrings.ModuleDescriptionUserprofile(guild?.Id ?? 0),
+            "utility" => genStrings.ModuleDescriptionUtility(guild?.Id ?? 0),
+            "vote" => genStrings.ModuleDescriptionVote(guild?.Id ?? 0),
+            "xp" => genStrings.ModuleDescriptionXp(guild?.Id ?? 0),
+            _ => null
+        };
     }
 
     private async Task HandlePing(SocketMessage msg)
@@ -251,32 +294,38 @@ public class HelpService : ILateExecutor, INService
             .ConfigureAwait(false);
     }
 
+
     /// <summary>
     ///     Gets the help for a command
     /// </summary>
     /// <param name="com">The command in question</param>
     /// <param name="guild">The guild where this was executed</param>
     /// <param name="user">The user who executed the command</param>
-    /// <returns>A tuple containing a <see cref="ComponentBuilder" /> and <see cref="EmbedBuilder" /></returns>
-    public async Task<(EmbedBuilder, ComponentBuilder)> GetCommandHelp(CommandInfo com, IGuild guild, IGuildUser user)
+    /// <returns>A tuple containing a <see cref="EmbedBuilder" /> and <see cref="ComponentBuilder" /></returns>
+    public async Task<(EmbedBuilder, ComponentBuilder)> GetCommandHelp(CommandInfo com, IGuild? guild, IGuildUser user)
     {
         var actualUrl = GenerateDocumentationUrl(com);
         if (com.Attributes.Any(x => x is HelpDisabled))
-            return (new EmbedBuilder().WithDescription("Help is disabled for this command."), new ComponentBuilder());
+            return (new EmbedBuilder().WithDescription(genStrings.HelpDisabled(guild?.Id ?? 0)),
+                new ComponentBuilder());
+
         var prefix = await guildSettings.GetPrefix(guild);
         var potentialCommand = interactionService.SlashCommands.FirstOrDefault(x =>
             string.Equals(x.MethodName, com.MethodName(), StringComparison.CurrentCultureIgnoreCase));
+
         var str = $"**{prefix + com.Aliases[0]}**";
         var alias = com.Aliases.Skip(1).FirstOrDefault();
         if (alias != null)
             str += $" **| {prefix + alias}**";
+
         var em = new EmbedBuilder().AddField(fb =>
-            fb.WithName(str).WithValue($"{com.RealSummary(strings, guild.Id, prefix)}").WithIsInline(true));
+            fb.WithName(str).WithValue($"{com.RealSummary(strings, guild?.Id, prefix)}").WithIsInline(true));
 
         var tryGetOverrides = dpos.TryGetOverrides(guild.Id, com.Name, out var overrides);
         var reqs = GetCommandRequirements(com, tryGetOverrides ? overrides : null);
         var botReqs = GetCommandBotRequirements(com);
         var attribute = (RatelimitAttribute)com.Preconditions.FirstOrDefault(x => x is RatelimitAttribute);
+
         if (reqs.Length > 0)
             em.AddField("User Permissions", string.Join("\n", reqs));
         if (botReqs.Length > 0)
@@ -284,15 +333,13 @@ public class HelpService : ILateExecutor, INService
         if (actualUrl != null)
             em.AddField("Documentation", $"[Click here]({actualUrl})");
         if (attribute?.Seconds > 0)
-        {
             em.AddField("Cooldown", $"{attribute.Seconds} seconds");
-        }
 
         var cb = new ComponentBuilder()
-            .WithButton(GetText("help_run_cmd", guild), $"runcmd.{com.Aliases[0]}", ButtonStyle.Success);
+            .WithButton(genStrings.HelpRunCmd(guild?.Id ?? 0), $"runcmd.{com.Aliases[0]}", ButtonStyle.Success);
 
         if (user.GuildPermissions.Administrator)
-            cb.WithButton(GetText("help_permenu_link", guild), $"permenu_update.{com.Aliases[0]}", ButtonStyle
+            cb.WithButton(genStrings.HelpPermenuLink(guild.Id), $"permenu_update.{com.Aliases[0]}", ButtonStyle
                 .Primary, Emote.Parse("<:IconPrivacySettings:845090111976636446>"));
 
         if (potentialCommand is not null)
@@ -313,7 +360,63 @@ public class HelpService : ILateExecutor, INService
                         : $"</{potentialCommand.Module.SlashGroupName} {potentialCommand.Name}:{guildCommand.Id}>");
         }
 
-        em.AddField(fb => fb.WithName(GetText("usage", guild)).WithValue(string.Join("\n",
+        // Get command strings from YAML documentation
+        var commandStrings = strings.GetCommandStrings(com.Name, guild?.Id);
+
+        // Add parameter descriptions if available
+        if (commandStrings.Parameters?.Count > 0)
+        {
+            var sb = new StringBuilder();
+            foreach (var param in commandStrings.Parameters)
+            {
+                var optionalText = param.IsOptional
+                    ? $" (Optional{(string.IsNullOrEmpty(param.DefaultValue) ? "" : $", default: {param.DefaultValue}")})"
+                    : "";
+
+                sb.AppendLine($"• `{param.Name}`{optionalText}: {param.Description}");
+            }
+
+            em.AddField(genStrings.Parameters(guild?.Id ?? 0), sb.ToString());
+        }
+
+        // Add overload information if available
+        if (commandStrings.Overloads?.Count > 0)
+        {
+            var sb = new StringBuilder();
+
+            // Show the main command format first
+            var mainParams = string.Join(" ", com.Parameters.Select(p =>
+                p.IsOptional ? $"[{p.Name}]" : p.Name));
+            sb.AppendLine($"**{prefix}{com.Name} {mainParams}**");
+
+            // Show overloads
+            sb.AppendLine("\n**Other versions:**");
+
+            foreach (var overload in commandStrings.Overloads)
+            {
+                var overloadParams = string.Join(" ", overload.Parameters.Select(p =>
+                    p.IsOptional ? $"[{p.Name}]" : p.Name));
+
+                sb.AppendLine($"• **{prefix}{com.Name} {overloadParams}**");
+
+                // Add detailed parameter descriptions for this overload if needed
+                if (overload.Parameters?.Count > 0)
+                {
+                    foreach (var param in overload.Parameters)
+                    {
+                        var optionalText = param.IsOptional
+                            ? $" (Optional{(string.IsNullOrEmpty(param.DefaultValue) ? "" : $", default: {param.DefaultValue}")})"
+                            : "";
+
+                        sb.AppendLine($"  → `{param.Name}`{optionalText}: {param.Description}");
+                    }
+                }
+            }
+
+            em.AddField(genStrings.Overloads(guild?.Id ?? 0), sb.ToString());
+        }
+
+        em.AddField(fb => fb.WithName(genStrings.Usage(guild.Id)).WithValue(string.Join("\n",
                     Array.ConvertAll(com.RealRemarksArr(strings, guild?.Id, prefix),
                         arg => Format.Code(arg))))
                 .WithIsInline(false))
@@ -326,7 +429,7 @@ public class HelpService : ILateExecutor, INService
         if (opt == null) return (em, cb);
         var hs = GetCommandOptionHelp(opt);
         if (!string.IsNullOrWhiteSpace(hs))
-            em.AddField(GetText("options", guild), hs);
+            em.AddField(genStrings.Options(guild.Id), hs);
 
         //if (bss.Data.ShowInviteButton)
             //cb.WithButton(style: ButtonStyle.Link,
@@ -394,6 +497,102 @@ public class HelpService : ILateExecutor, INService
         }
 
         return toReturn.ToArray();
+    }
+
+    /// <summary>
+    /// </summary>
+    /// <param name="commandName"></param>
+    /// <param name="overloads"></param>
+    /// <param name="prefix"></param>
+    /// <returns></returns>
+    public string FormatCommandHelp(string commandName, List<OwnerOnlyService.CommandInfo> overloads, string prefix)
+    {
+        var sb = new StringBuilder();
+
+        // If there's only one version, format it normally
+        if (overloads.Count == 1 && !overloads[0].IsOverload)
+        {
+            var cmd = overloads[0];
+            sb.AppendLine($"**{prefix}{commandName}**");
+            sb.AppendLine(cmd.Desc);
+
+            // Add usage examples
+            if (cmd.Args.Count > 0)
+            {
+                sb.AppendLine("\n**Usage:**");
+                foreach (var usage in cmd.Args)
+                {
+                    sb.AppendLine($"`{prefix}{commandName} {usage}`");
+                }
+            }
+
+            // Add parameter descriptions if available
+            if (cmd.Parameters.Count > 0)
+            {
+                sb.AppendLine("\n**Parameters:**");
+                foreach (var param in cmd.Parameters)
+                {
+                    var optional = param.IsOptional
+                        ? " (Optional" + (param.DefaultValue != null ? $", default: {param.DefaultValue}" : "") + ")"
+                        : "";
+                    var paramDesc = !string.IsNullOrEmpty(param.Description) ? $" - {param.Description}" : "";
+                    sb.AppendLine($"• `{param.Name}`: {param.Type}{optional}{paramDesc}");
+                }
+            }
+        }
+        else
+        {
+            // Multiple overloads
+            sb.AppendLine($"**{prefix}{commandName}** (Multiple Versions)");
+
+            // Add the first description (they should be similar)
+            sb.AppendLine(overloads[0].Desc);
+
+            // Show each overload
+            sb.AppendLine("\n**Overloads:**");
+
+            for (var i = 0; i < overloads.Count; i++)
+            {
+                var cmd = overloads[i];
+
+                // Format parameters for this overload
+                var paramList = string.Join(", ", cmd.Parameters.Select(p =>
+                {
+                    var paramString = $"{p.Name}: {p.Type}";
+                    if (p.IsOptional) paramString = $"[{paramString}]";
+                    return paramString;
+                }));
+
+                sb.AppendLine($"\n**Version {i + 1}:** `{prefix}{commandName} {paramList}`");
+
+                // Add parameter descriptions
+                if (cmd.Parameters.Count > 0)
+                {
+                    sb.AppendLine("Parameters:");
+                    foreach (var param in cmd.Parameters)
+                    {
+                        var optional = param.IsOptional
+                            ? " (Optional" + (param.DefaultValue != null ? $", default: {param.DefaultValue}" : "") +
+                              ")"
+                            : "";
+                        var paramDesc = !string.IsNullOrEmpty(param.Description) ? $" - {param.Description}" : "";
+                        sb.AppendLine($"• `{param.Name}`: {param.Type}{optional}{paramDesc}");
+                    }
+                }
+
+                // Add usage examples for this overload
+                if (cmd.Args.Count > 0)
+                {
+                    sb.AppendLine("Examples:");
+                    foreach (var usage in cmd.Args)
+                    {
+                        sb.AppendLine($"`{prefix}{commandName} {usage}`");
+                    }
+                }
+            }
+        }
+
+        return sb.ToString();
     }
 
     private static string[] GetCommandBotRequirements(CommandInfo cmd)
@@ -480,7 +679,11 @@ public class HelpService : ILateExecutor, INService
                 var methodParams = method.GetParameters();
                 if (methodParams.Length != parameterTypes.Length) continue;
                 var parametersMatch =
-                    !parameterTypes.Where((t, i) => !t.IsAssignableFrom(methodParams[i].ParameterType)).Any();
+                    !parameterTypes.Select((t, i) => new
+                        {
+                            Type = t, Index = i
+                        })
+                        .Any(x => !x.Type.IsAssignableFrom(methodParams[x.Index].ParameterType));
                 if (!parametersMatch) continue;
                 methodInfo = method;
                 break;

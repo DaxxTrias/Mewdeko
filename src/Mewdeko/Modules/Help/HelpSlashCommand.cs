@@ -16,22 +16,22 @@ namespace Mewdeko.Modules.Help;
 /// <summary>
 ///     Slash command module for help commands.
 /// </summary>
-/// <param name="permissionService">The server permission service</param>
 /// <param name="interactivity">The service for embed pagination</param>
 /// <param name="serviceProvider">Service provider</param>
 /// <param name="cmds">The command service</param>
 /// <param name="ch">The command handler (yes they are different now shut up)</param>
 /// <param name="guildSettings">The service to retrieve guildconfigs</param>
 /// <param name="config">Service to retrieve yml based configs</param>
+/// <param name="perms">The global permission service</param>
 [Discord.Interactions.Group("help", "Help Commands, what else is there to say?")]
 public class HelpSlashCommand(
-    GlobalPermissionService permissionService,
     InteractiveService interactivity,
     IServiceProvider serviceProvider,
     CommandService cmds,
     CommandHandler ch,
     GuildSettingsService guildSettings,
-    BotConfigService config, GlobalPermissionService perms)
+    BotConfigService config,
+    GlobalPermissionService perms)
     : MewdekoSlashModuleBase<HelpService>
 {
     private static readonly ConcurrentDictionary<ulong, ulong> HelpMessages = new();
@@ -96,7 +96,7 @@ public class HelpSlashCommand(
 
         if (!commandInfos.Any())
         {
-            await ReplyErrorLocalizedAsync("module_not_found_or_cant_exec").ConfigureAwait(false);
+            await ReplyErrorAsync(Strings.ModuleNotFoundOrCantExec(ctx.Guild.Id)).ConfigureAwait(false);
             return;
         }
 
@@ -137,7 +137,8 @@ public class HelpSlashCommand(
             .WithActionOnCancellation(ActionOnStop.DeleteMessage)
             .Build();
 
-        await interactivity.SendPaginatorAsync(paginator, ctx.Interaction, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
+        await interactivity.SendPaginatorAsync(paginator, ctx.Interaction, TimeSpan.FromMinutes(60))
+            .ConfigureAwait(false);
 
         Task<PageBuilder> PageFactory(int page)
         {
@@ -162,7 +163,9 @@ public class HelpSlashCommand(
                         }
 
                         var cmdString =
+#pragma warning disable CS0184 // 'is' expression's given expression is never of the provided type
                             $"{(succ.Contains(cmd) ? cmd.Preconditions.Any(p => p is RequireDragonAttribute) ? "🐉" : "✅" : "❌")}" +
+#pragma warning restore CS0184 // 'is' expression's given expression is never of the provided type
                             $"{prefix}{cmd.Aliases[0]}" +
                             $"{(cmd.Aliases.Skip(1).FirstOrDefault() is not null ? $"/{prefix}{cmd.Aliases[1]}" : "")}";
                         commandsOnPage.Add(cmdString);
@@ -178,10 +181,10 @@ public class HelpSlashCommand(
             if (commandsOnPage.Any())
                 pageBuilder.AddField(currentModule, $"```css\n{string.Join("\n", commandsOnPage)}\n```");
 
-            pageBuilder.WithDescription(
-                $"✅: You can use this command.\n❌: You cannot use this command.\n" +
-                $"{config.Data.LoadingEmote}: If you need any help don't hesitate to join [The Support Server](https://discord.gg/mewdeko)\n" +
-                $"Do `{prefix}h commandname` to see info on that command");
+            pageBuilder.WithDescription(Strings.HelpCommandListSlash(
+                ctx.Guild?.Id ?? 0,
+                config.Data.LoadingEmote,
+                prefix));
 
             return Task.FromResult(pageBuilder);
         }
@@ -193,15 +196,17 @@ public class HelpSlashCommand(
     /// <returns></returns>
     [SlashCommand("invite", "You should invite me to your server and check all my features!")]
     [CheckPermissions]
-    public Task Invite()
+    public async Task Invite()
     {
         var eb = new EmbedBuilder()
-            .AddField("Invite Link",
-                "[Mewdeko](https://discord.com/oauth2/authorize?client_id=752236274261426212&scope=bot&permissions=66186303)\n[Mewdeko Nightly](https://discord.com/oauth2/authorize?client_id=964590728397344868&scope=bot&permissions=66186303)")
-            .AddField("Website/Docs", "https://mewdeko.tech")
-            .AddField("Support Server", config.Data.SupportServer)
+            .AddField(Strings.InviteFieldInvite(ctx.Guild?.Id ?? 0),
+                Strings.InviteLinkText(ctx.Guild?.Id ?? 0))
+            .AddField(Strings.InviteFieldWebsite(ctx.Guild?.Id ?? 0),
+                "https://mewdeko.tech")
+            .AddField(Strings.InviteFieldSupport(ctx.Guild?.Id ?? 0),
+                config.Data.SupportServer)
             .WithOkColor();
-        return ctx.Interaction.RespondAsync(embed: eb.Build());
+        await ctx.Interaction.RespondAsync(embed: eb.Build());
     }
 
     /// <summary>

@@ -25,7 +25,7 @@ public class Vote(InteractiveService interactivity) : MewdekoModuleBase<VoteServ
     public async Task VoteChannel([Remainder] ITextChannel channel)
     {
         await Service.SetVoteChannel(ctx.Guild.Id, channel.Id);
-        await ctx.Channel.SendConfirmAsync("Sucessfully set the vote channel!");
+        await ctx.Channel.SendConfirmAsync(Strings.VoteChannelSet(ctx.Guild.Id));
     }
 
     /// <summary>
@@ -46,13 +46,13 @@ public class Vote(InteractiveService interactivity) : MewdekoModuleBase<VoteServ
         var votes = await Service.GetVotes(ctx.Guild.Id, ctx.User.Id);
         switch (message)
         {
-            case null when await PromptUserConfirmAsync("Do you want to preview your embed?", ctx.User.Id):
+            case null when await PromptUserConfirmAsync(Strings.PreviewEmbedConfirm(ctx.Guild.Id), ctx.User.Id):
             {
                 if (string.IsNullOrWhiteSpace(voteMessage))
                 {
                     var eb = new EmbedBuilder()
-                        .WithTitle($"Thanks for voting for {ctx.Guild.Name}")
-                        .WithDescription($"You have votedd a total of {votes.Count} times!")
+                        .WithTitle(Strings.ThanksForVoting(ctx.Guild.Id, ctx.Guild.Name))
+                        .WithDescription(Strings.VoteCountTypo(ctx.Guild.Id, votes.Count))
                         .WithThumbnailUrl(ctx.User.RealAvatarUrl().AbsoluteUri)
                         .WithOkColor();
 
@@ -81,17 +81,17 @@ public class Vote(InteractiveService interactivity) : MewdekoModuleBase<VoteServ
                 break;
             }
             case null when string.IsNullOrWhiteSpace(voteMessage):
-                await ctx.Channel.SendConfirmAsync("Using the default vote message.");
+                await ctx.Channel.SendConfirmAsync(Strings.UsingDefaultMessage(ctx.Guild.Id));
                 return;
             case null:
                 await ctx.Channel.SendConfirmAsync(voteMessage);
                 break;
             case "-":
-                await ctx.Channel.SendConfirmAsync("Switched to using the default embed.");
+                await ctx.Channel.SendConfirmAsync(Strings.UsingDefaultEmbed(ctx.Guild.Id));
                 await Service.SetVoteMessage(ctx.Guild.Id, "");
                 break;
             default:
-                await ctx.Channel.SendConfirmAsync("Vote message set.");
+                await ctx.Channel.SendConfirmAsync(Strings.VoteMessageSet(ctx.Guild.Id));
                 await Service.SetVoteMessage(ctx.Guild.Id, message);
                 break;
         }
@@ -134,7 +134,7 @@ public class Vote(InteractiveService interactivity) : MewdekoModuleBase<VoteServ
             }
             else
             {
-                await ctx.Channel.SendConfirmAsync($"{role.Mention} added as a vote role.");
+                await ctx.Channel.SendConfirmAsync(Strings.VoteRoleAdded(ctx.Guild.Id, role.Mention));
             }
         }
     }
@@ -152,7 +152,7 @@ public class Vote(InteractiveService interactivity) : MewdekoModuleBase<VoteServ
     {
         var removed = await Service.RemoveVoteRole(ctx.Guild.Id, role.Id);
         if (removed.Item1)
-            await ctx.Channel.SendConfirmAsync("Vote role removed.");
+            await ctx.Channel.SendConfirmAsync(Strings.VoteRoleRemoved(ctx.Guild.Id));
         else
             await ctx.Channel.SendErrorAsync(
                 $"Vote role remove failed for the following reason:\n{Format.Code(removed.Item2)}", Config);
@@ -171,16 +171,16 @@ public class Vote(InteractiveService interactivity) : MewdekoModuleBase<VoteServ
         var roles = await Service.GetVoteRoles(ctx.Guild.Id);
         if (!roles.Any())
         {
-            await ctx.Channel.SendErrorAsync("There are no vote roles set.", Config);
+            await ctx.Channel.SendErrorAsync(Strings.NoVoteRoles(ctx.Guild.Id), Config);
         }
         else
         {
             var eb = new EmbedBuilder()
-                .WithTitle($"{roles.Count} Vote Roles")
+                .WithTitle(Strings.VoteRolesTitle(ctx.Guild.Id, roles.Count))
                 .WithOkColor()
                 .WithDescription(string.Join("\n",
                     roles.Select(x =>
-                        $"<@&{x.RoleId}>: {(x.Timer == 0 ? "No Timer." : $"{TimeSpan.FromSeconds(x.Timer).Humanize()}")}")));
+                        $"<@&{x.RoleId}>: {(x.Timer == 0 ? Strings.None(ctx.Guild.Id) : $"{TimeSpan.FromSeconds(x.Timer).Humanize()}")}")));
             await ctx.Channel.SendMessageAsync(embed: eb.Build());
         }
     }
@@ -195,12 +195,12 @@ public class Vote(InteractiveService interactivity) : MewdekoModuleBase<VoteServ
     [RequireContext(ContextType.Guild)]
     public async Task VoteRolesClear()
     {
-        if (await PromptUserConfirmAsync("Are you sure you want to clear all vote roles, cannot be undone!",
-                ctx.User.Id))
+        if (await PromptUserConfirmAsync(Strings.ClearVoteRolesConfirm(ctx.Guild.Id), ctx.User.Id))
+
         {
             var cleared = await Service.ClearVoteRoles(ctx.Guild.Id);
             if (cleared.Item1)
-                await ctx.Channel.SendConfirmAsync("Vote roles cleared!");
+                await ctx.Channel.SendConfirmAsync(Strings.VoteRolesCleared(ctx.Guild.Id));
             else
                 await ctx.Channel.SendErrorAsync(
                     $"Vote roles not cleared for the following reason:\n{Format.Code(cleared.Item2)}", Config);
@@ -219,10 +219,10 @@ public class Vote(InteractiveService interactivity) : MewdekoModuleBase<VoteServ
     [Discord.Interactions.RequireContext(Discord.Interactions.ContextType.Guild)]
     public async Task VoteRoleEdit(IRole role, StoopidTime time)
     {
-        var update = await Service.UpdateTimer(role.Id, (int)time.Time.TotalSeconds);
+        var update = await Service.UpdateTimer(ctx.Guild.Id, role.Id, (int)time.Time.TotalSeconds);
         if (!update.Item1)
             await ctx.Channel.SendErrorAsync(
-                $"Updating vote role time failed due to the following reason:\n{Format.Code(update.Item2)}", Config);
+                Strings.VoteRoleUpdateFailed(ctx.Guild.Id, Format.Code(update.Item2)), Config);
         else
             await ctx.Channel.SendConfirmAsync($"Successfuly updated the vote role time to {time.Time.Humanize()}");
     }
@@ -243,7 +243,7 @@ public class Vote(InteractiveService interactivity) : MewdekoModuleBase<VoteServ
         {
             var component = new ComponentBuilder().WithButton(
                 "Press this to set the password. Remember, do not share it to anyone else.", "setvotepassword");
-            await ctx.Channel.SendMessageAsync("_ _", components: component.Build());
+            await ctx.Channel.SendMessageAsync(Strings.EmptyResponse(ctx.Guild.Id), components: component.Build());
         }
     }
 
@@ -272,7 +272,7 @@ public class Vote(InteractiveService interactivity) : MewdekoModuleBase<VoteServ
     [RequireContext(ContextType.Guild)]
     public async Task VotesLeaderboard(bool monthly = false)
     {
-        List<Database.Models.Votes> votes;
+        List<DataModel.Vote> votes;
         if (monthly)
             votes = (await Service.GetVotes(ctx.Guild.Id)).Where(x => x.DateAdded.Value.Month == DateTime.UtcNow.Month)
                 .ToList();
@@ -280,8 +280,8 @@ public class Vote(InteractiveService interactivity) : MewdekoModuleBase<VoteServ
         if (votes is null || !votes.Any())
         {
             await ctx.Channel.SendErrorAsync(monthly
-                ? "Not enough monthly votes for a leaderboard."
-                : "Not enough votes for a leaderboard.", Config);
+                ? Strings.NotEnoughMonthlyVotes(ctx.Guild.Id)
+                : Strings.NotEnoughVotes(ctx.Guild.Id), Config);
             return;
         }
 
@@ -323,7 +323,10 @@ public class Vote(InteractiveService interactivity) : MewdekoModuleBase<VoteServ
         async Task<PageBuilder> PageFactory(int page)
         {
             await Task.CompletedTask;
-            var eb = new PageBuilder().WithTitle(monthly ? "Votes leaaderboard for this month" : "Votes Leaderboard")
+            var eb = new PageBuilder()
+                .WithTitle(monthly
+                    ? Strings.VotesLeaderboardMonthly(ctx.Guild.Id)
+                    : Strings.VotesLeaderboard(ctx.Guild.Id))
                 .WithOkColor();
 
             for (var i = 0; i < voteList.Count; i++)

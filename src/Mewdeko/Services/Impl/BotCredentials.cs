@@ -1,10 +1,11 @@
 using System.Collections.Immutable;
 using System.IO;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using LinqToDB;
+using LinqToDB.Data;
 using Microsoft.Extensions.Configuration;
-using Newtonsoft.Json;
-using Npgsql;
 using Serilog;
-using StackExchange.Redis;
 
 namespace Mewdeko.Services.Impl;
 
@@ -26,7 +27,7 @@ public class BotCredentials : IBotCredentials
             if (!File.Exists(exampleCredentialsPath))
             {
                 File.WriteAllText(exampleCredentialsPath,
-                    JsonConvert.SerializeObject(new CredentialsModel(), Formatting.Indented));
+                    JsonSerializer.Serialize(new CredentialsModel()));
             }
         }
         catch (Exception ex)
@@ -83,9 +84,14 @@ public class BotCredentials : IBotCredentials
     public string PsqlConnectionString { get; set; }
 
     /// <summary>
-    /// Gets or sets whether this is the master mewdeko instance
+    ///     Gets or sets whether this is the master mewdeko instance
     /// </summary>
-    public bool IsMasterInstance { get; set; } = false;
+    public bool IsMasterInstance { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the url used for libretranslate.
+    /// </summary>
+    public string LibreTranslateUrl { get; set; } = "http://localhost:5000";
 
     /// <summary>
     ///     Gets or sets a value indicating whether to use global currency.
@@ -122,6 +128,16 @@ public class BotCredentials : IBotCredentials
     ///     Gets or sets the ID of the channel where global ban reports are sent.
     /// </summary>
     public ulong GlobalBanReportChannelId { get; set; }
+
+    /// <summary>
+    ///     Gets or sets whether grafana metrics are enabled.
+    /// </summary>
+    public bool EnableMetrics { get; set; } = true;
+
+    /// <summary>
+    ///     Sets the port used for grafana metrics.
+    /// </summary>
+    public int MetricsPort { get; set; } = 9090;
 
     /// <summary>
     ///     Gets or sets the ID of the channel where pronoun abuse reports are sent.
@@ -229,6 +245,21 @@ public class BotCredentials : IBotCredentials
     public string LastFmApiSecret { get; set; }
 
     /// <summary>
+    ///     Gets or sets the Patreon client ID.
+    /// </summary>
+    public string PatreonClientId { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the Patreon client secret.
+    /// </summary>
+    public string PatreonClientSecret { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the base URL for Patreon OAuth callbacks.
+    /// </summary>
+    public string PatreonBaseUrl { get; set; }
+
+    /// <summary>
     ///     Gets or sets the list of owner IDs.
     /// </summary>
     public ImmutableArray<ulong> OwnerIds { get; set; }
@@ -298,6 +329,16 @@ public class BotCredentials : IBotCredentials
         return OwnerIds.Contains(u.Id);
     }
 
+    /// <summary>
+    ///     Checks if the specified user is an owner.
+    /// </summary>
+    /// <param name="userId">The user to check.</param>
+    /// <returns><c>true</c> if the user is an owner; otherwise, <c>false</c>.</returns>
+    public bool IsOwner(ulong userId)
+    {
+        return OwnerIds.Contains(userId);
+    }
+
     private void CreateCredentialsFileInteractively()
     {
         Log.Information(
@@ -347,12 +388,110 @@ public class BotCredentials : IBotCredentials
 
         try
         {
-            File.WriteAllText(credsFileName, JsonConvert.SerializeObject(model, Formatting.Indented));
+            File.WriteAllText(credsFileName, JsonSerializer.Serialize(model));
             Log.Information("credentials.json has been created successfully.");
         }
         catch (Exception ex)
         {
             Log.Error("Failed to write credentials.json file.");
+            Log.Error(ex.Message);
+            Environment.Exit(1);
+        }
+    }
+
+    private void UpdateMissingCredentialsInteractively(List<string> missingCredentials)
+    {
+        Log.Information("Updating missing credentials...");
+
+        // Load existing credentials to preserve non-missing values
+        CredentialsModel existingModel = null;
+        if (File.Exists(credsFileName))
+        {
+            try
+            {
+                var existingJson = File.ReadAllText(credsFileName);
+                existingModel = JsonSerializer.Deserialize<CredentialsModel>(existingJson);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning($"Could not parse existing credentials file: {ex.Message}");
+                existingModel = new CredentialsModel();
+            }
+        }
+        else
+        {
+            existingModel = new CredentialsModel();
+        }
+
+        // Update only missing credentials
+        if (missingCredentials.Contains("Bot Token"))
+        {
+            Log.Information(
+                "Please enter your bot's token. You can get it from https://discord.com/developers/applications");
+            var token = Console.ReadLine();
+
+            while (string.IsNullOrWhiteSpace(token))
+            {
+                Log.Error("Bot token cannot be empty. Please enter a valid token:");
+                token = Console.ReadLine();
+            }
+
+            existingModel.Token = token;
+        }
+
+        if (missingCredentials.Contains("Owner IDs"))
+        {
+            Log.Information(
+                "Please enter your ID and any other IDs separated by a space to mark them as owners. You can get your ID by enabling developer mode in Discord and right-clicking your name");
+            var ownersInput = Console.ReadLine();
+            var ownersList = new List<ulong>();
+
+            if (!string.IsNullOrWhiteSpace(ownersInput))
+            {
+                var ownerIds = ownersInput.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                foreach (var ownerId in ownerIds)
+                {
+                    if (ulong.TryParse(ownerId, out var parsedId))
+                    {
+                        ownersList.Add(parsedId);
+                    }
+                    else
+                    {
+                        Log.Warning($"'{ownerId}' is not a valid ID and will be ignored.");
+                    }
+                }
+            }
+
+            existingModel.OwnerIds = ownersList;
+        }
+
+        if (missingCredentials.Contains("PostgreSQL Connection String"))
+        {
+            Log.Information("Please input your PostgreSQL Connection String.");
+            var psqlConnectionString = Console.ReadLine();
+
+            while (string.IsNullOrWhiteSpace(psqlConnectionString))
+            {
+                Log.Error("PostgreSQL Connection String cannot be empty. Please enter a valid connection string:");
+                psqlConnectionString = Console.ReadLine();
+            }
+
+            existingModel.PsqlConnectionString = psqlConnectionString;
+        }
+
+        // Save updated credentials
+        try
+        {
+            var options = new JsonSerializerOptions
+            {
+                WriteIndented = true
+            };
+            File.WriteAllText(credsFileName, JsonSerializer.Serialize(existingModel, options));
+            Log.Information("credentials.json has been updated successfully.");
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Failed to update credentials.json file.");
             Log.Error(ex.Message);
             Environment.Exit(1);
         }
@@ -369,7 +508,8 @@ public class BotCredentials : IBotCredentials
             var data = configBuilder.Build();
 
             Token = data[nameof(Token)];
-            OwnerIds = [
+            OwnerIds =
+            [
                 ..data.GetSection(nameof(OwnerIds)).GetChildren()
                     .Select(c => ulong.Parse(c.Value))
             ];
@@ -385,6 +525,9 @@ public class BotCredentials : IBotCredentials
             ApiPort = int.TryParse(data[nameof(ApiPort)], out var port) ? port : 5001;
             LastFmApiKey = data[nameof(LastFmApiKey)];
             LastFmApiSecret = data[nameof(LastFmApiSecret)];
+            PatreonClientId = data[nameof(PatreonClientId)];
+            PatreonClientSecret = data[nameof(PatreonClientSecret)];
+            PatreonBaseUrl = data[nameof(PatreonBaseUrl)];
             MashapeKey = data[nameof(MashapeKey)];
             OsuApiKey = data[nameof(OsuApiKey)];
             TwitchClientId = data[nameof(TwitchClientId)];
@@ -429,8 +572,10 @@ public class BotCredentials : IBotCredentials
             }
 
             TotalShards = int.TryParse(data[nameof(TotalShards)], out var ts) && ts > 0 ? ts : 1;
-
-            TwitchClientId = data[nameof(TwitchClientId)] ?? "67w6z9i09xv2uoojdm9l0wsyph4hxo6";
+            LibreTranslateUrl = data[nameof(LibreTranslateUrl)] ?? LibreTranslateUrl;
+            EnableMetrics = !bool.TryParse(data[nameof(EnableMetrics)], out var metricsEnabled) || metricsEnabled;
+            MetricsPort = int.TryParse(data[nameof(MetricsPort)], out var metricsPort) ? metricsPort : 0;
+            TwitchClientId = data[nameof(TwitchClientId)] ?? "http://localhost:5000";
             RedisConnections = data[nameof(RedisConnections)];
 
             DebugGuildId = ulong.TryParse(data[nameof(DebugGuildId)], out var dgid) ? dgid : 843489716674494475;
@@ -448,25 +593,52 @@ public class BotCredentials : IBotCredentials
                 : 970086914826858547;
             UseGlobalCurrency = bool.TryParse(data[nameof(UseGlobalCurrency)], out var ugc) && ugc;
 
+            // Check for missing or invalid critical credentials
+            var missingCredentials = new List<string>();
+
             if (string.IsNullOrWhiteSpace(Token))
-            {
-                Log.Error(
-                    "Token is missing from credentials.json or Environment variables. Add it and restart the program");
-                Helpers.ReadErrorAndExit(5);
-            }
+                missingCredentials.Add("Bot Token");
 
             if (string.IsNullOrWhiteSpace(PsqlConnectionString))
+                missingCredentials.Add("PostgreSQL Connection String");
+
+            if (OwnerIds == null || OwnerIds.Length == 0)
+                missingCredentials.Add("Owner IDs");
+
+            // If any critical credentials are missing, offer to fix them
+            if (missingCredentials.Count > 0)
             {
-                Log.Error("PostgreSQL connection string is missing. Please add it and restart.");
-                Helpers.ReadErrorAndExit(5);
+                Log.Error($"The following critical credentials are missing: {string.Join(", ", missingCredentials)}");
+                Log.Information("Would you like to fix these credentials?");
+                Log.Information("1. Update credentials using interactive wizard");
+                Log.Information("2. Exit and fix manually");
+                Log.Information("Enter your choice (1 or 2): ");
+
+                var choice = Console.ReadLine();
+                switch (choice)
+                {
+                    case "1":
+                        UpdateMissingCredentialsInteractively(missingCredentials);
+                        // Reload credentials after update
+                        UpdateCredentials(null, null);
+                        return; // Skip the old validation since we've fixed the issues
+                    case "2":
+                    default:
+                        Log.Error("Please fix the missing credentials and restart the program.");
+                        Helpers.ReadErrorAndExit(5);
+                        break;
+                }
             }
             else
             {
                 // Check if PostgreSQL connection string is valid
                 try
                 {
-                    using var conn = new NpgsqlConnection(PsqlConnectionString);
-                    conn.Open();
+                    var dataOptions = new DataOptions()
+                        .UsePostgreSQL(PsqlConnectionString);
+
+                    using var conn = new DataConnection(dataOptions);
+                    conn.EnsureConnectionAsync().GetAwaiter().GetResult();
                     conn.Close();
                 }
                 catch (Exception ex)
@@ -487,13 +659,18 @@ public class BotCredentials : IBotCredentials
                 // Check if Redis is running
                 try
                 {
-                    var connect = ConnectionMultiplexer.Connect(RedisConnections.Split(";")[0]);
-                    connect.Close();
+                    // Don't create a new connection on every credential update
+                    if (!string.IsNullOrWhiteSpace(RedisConnections) &&
+                        RedisConnectionManager.Connection == null)
+                    {
+                        Log.Information("Initializing Redis with connection: {0}",
+                            RedisConnections.Split(";")[0]);
+                        RedisConnectionManager.Initialize(RedisConnections, TotalShards);
+                    }
                 }
-                catch
+                catch (Exception ex)
                 {
-                    Log.Error("Redis is not running! Make sure it's installed and running, then restart the bot.");
-                    Helpers.ReadErrorAndExit(6);
+                    Log.Warning("Redis initialization will be attempted again when needed: {0}", ex.Message);
                 }
             }
 
@@ -542,10 +719,14 @@ public class BotCredentials : IBotCredentials
         public int ApiPort { get; set; } = 5001;
         public bool SkipApiKey { get; set; } = false;
         public bool IsMasterInstance { get; set; } = false;
+        public string LibreTranslateUrl { get; } = "http://localhost:5000";
         public RestartConfig RestartCommand { get; } = null;
         public string RedisConnections { get; } = "127.0.0.1:6379";
         public string LastFmApiKey { get; } = "";
         public string LastFmApiSecret { get; } = "";
+        public string PatreonClientId { get; } = "";
+        public string PatreonClientSecret { get; } = "";
+        public string PatreonBaseUrl { get; } = "https://yourdomain.com";
         public string Token { get; set; } = "";
         public string ClientSecret { get; } = "";
         public string CfClearance { get; } = "";
@@ -572,13 +753,18 @@ public class BotCredentials : IBotCredentials
         {
             get
             {
-                return OwnerIds.ToImmutableArray();
+                return [..OwnerIds];
             }
         }
 
         public bool IsOwner(IUser u)
         {
             return OwnerIds.Contains(u.Id);
+        }
+
+        public bool IsOwner(ulong userId)
+        {
+            return OwnerIds.Contains(userId);
         }
     }
 }

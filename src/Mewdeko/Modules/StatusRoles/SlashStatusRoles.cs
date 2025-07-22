@@ -1,3 +1,4 @@
+using DataModel;
 using Discord.Interactions;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
@@ -26,16 +27,16 @@ public class SlashStatusRoles(BotConfigService bss, InteractiveService interacti
         if (status.Length > 128)
         {
             await ctx.Interaction.SendErrorAsync(
-                $"{bss.Data.ErrorEmote} That's too long to even fit in a normal status. Try again.", Config);
+                Strings.StatusTooLong(ctx.Guild.Id, bss.Data.ErrorEmote), Config);
             return;
         }
 
         var added = await Service.AddStatusRoleConfig(status, ctx.Guild.Id);
         if (added)
             await ctx.Interaction.SendConfirmAsync(
-                "Added StatusRole config! Please configure it with the other commands.");
+                Strings.StatusRoleConfigAdded(ctx.Guild.Id));
         else
-            await ctx.Interaction.SendErrorAsync($"{bss.Data.ErrorEmote} That StatusRole already exists!", Config);
+            await ctx.Interaction.SendErrorAsync(Strings.StatusRoleExists(ctx.Guild.Id, bss.Data.ErrorEmote), Config);
     }
 
     /// <summary>
@@ -46,10 +47,10 @@ public class SlashStatusRoles(BotConfigService bss, InteractiveService interacti
     [SlashUserPerm(GuildPermission.ManageGuild)]
     public async Task RemoveStatusRole(
         [Autocomplete(typeof(StatusRoleAutocompleter))]
-        StatusRolesTable potentialStatusRole)
+        StatusRole potentialStatusRole)
     {
         await Service.RemoveStatusRoleConfig(potentialStatusRole);
-        await ctx.Interaction.SendConfirmAsync("StatusRole config removed!");
+        await ctx.Interaction.SendConfirmAsync(Strings.StatusroleRemoved(ctx.Guild.Id));
     }
 
     /// <summary>
@@ -61,14 +62,14 @@ public class SlashStatusRoles(BotConfigService bss, InteractiveService interacti
     [SlashUserPerm(GuildPermission.ManageGuild)]
     public async Task SetStatusRoleEmbed(
         [Autocomplete(typeof(StatusRoleAutocompleter))]
-        StatusRolesTable potentialStatusRole, string embedText = null)
+        StatusRole potentialStatusRole, string embedText = null)
     {
         if (string.IsNullOrWhiteSpace(embedText))
         {
             if (string.IsNullOrWhiteSpace(potentialStatusRole.StatusEmbed))
             {
                 await ctx.Interaction.SendErrorAsync(
-                    $"{bss.Data.ErrorEmote} There is no embed/text set for this StatusRole! Please include embed json or text to preview it!",
+                    Strings.StatusroleNoEmbed(ctx.Guild.Id, bss.Data.ErrorEmote),
                     Config);
                 return;
             }
@@ -82,7 +83,7 @@ public class SlashStatusRoles(BotConfigService bss, InteractiveService interacti
             var msgid = await ctx.Interaction.FollowupAsync(embed: new EmbedBuilder()
                 .WithOkColor()
                 .WithDescription(
-                    $"{bss.Data.LoadingEmote} Please select what you want to do with the current StatusRole text")
+                    Strings.StatusroleTextSelection(ctx.Guild.Id, bss.Data.LoadingEmote))
                 .Build(), components: componentBuilder.Build());
 
             var button = await GetButtonInputAsync(ctx.Interaction.Id, msgid.Id, ctx.User.Id);
@@ -108,7 +109,8 @@ public class SlashStatusRoles(BotConfigService bss, InteractiveService interacti
         else
         {
             await Service.SetStatusEmbed(potentialStatusRole, embedText);
-            await ctx.Interaction.SendConfirmAsync($"{bss.Data.SuccessEmote} Succesfully set embed text!");
+            await ctx.Interaction.SendConfirmAsync(
+                Strings.StatusroleEmbedTextSuccess(ctx.Guild.Id, bss.Data.SuccessEmote));
         }
     }
 
@@ -121,18 +123,18 @@ public class SlashStatusRoles(BotConfigService bss, InteractiveService interacti
     [SlashUserPerm(GuildPermission.ManageGuild)]
     public async Task SetStatusRoleChannel(
         [Autocomplete(typeof(StatusRoleAutocompleter))]
-        StatusRolesTable potentialStatusRole, ITextChannel channel)
+        StatusRole potentialStatusRole, ITextChannel channel)
     {
         if (potentialStatusRole.StatusChannelId == channel.Id)
         {
-            await ctx.Interaction.SendErrorAsync($"{bss.Data.ErrorEmote} That's already your StatusEmbedChannel.",
+            await ctx.Interaction.SendErrorAsync(Strings.AlreadyStatusEmbedChannel(ctx.Guild.Id, bss.Data.ErrorEmote),
                 Config);
             return;
         }
 
         await Service.SetStatusChannel(potentialStatusRole, channel.Id);
         await ctx.Interaction.SendConfirmAsync(
-            $"{bss.Data.SuccessEmote} Succesfully set StatusEmbedChannel to {channel.Mention}!");
+            Strings.ChannelSetTo(ctx.Guild.Id, channel.Mention));
     }
 
     /// <summary>
@@ -142,7 +144,7 @@ public class SlashStatusRoles(BotConfigService bss, InteractiveService interacti
     /// <param name="roles">The roles to add.</param>
     [SlashCommand("set-add-roles", "Sets the roles to add when a user has the selected status")]
     [SlashUserPerm(GuildPermission.ManageGuild)]
-    public async Task SetAddRoles([Autocomplete(typeof(StatusRoleAutocompleter))] StatusRolesTable potentialStatusRole,
+    public async Task SetAddRoles([Autocomplete(typeof(StatusRoleAutocompleter))] StatusRole potentialStatusRole,
         IRole[] roles)
     {
         if (string.IsNullOrWhiteSpace(potentialStatusRole.ToAdd))
@@ -150,7 +152,8 @@ public class SlashStatusRoles(BotConfigService bss, InteractiveService interacti
             var splitRoleIds = string.Join(" ", roles.Select(x => x.Id));
             await Service.SetAddRoles(potentialStatusRole, splitRoleIds);
             await ctx.Interaction.SendConfirmAsync(
-                $"{bss.Data.SuccessEmote} Having this status will now add the following roles:\n{string.Join("|", roles.Select(x => x.Mention))}");
+                Strings.StatusRolesAdded(ctx.Guild.Id, bss.Data.SuccessEmote,
+                    string.Join("|", roles.Select(x => x.Mention))));
         }
         else
         {
@@ -158,7 +161,8 @@ public class SlashStatusRoles(BotConfigService bss, InteractiveService interacti
             toModify.AddRange(roles.Select(x => x.Id.ToString()));
             await Service.SetAddRoles(potentialStatusRole, string.Join(" ", toModify));
             await ctx.Interaction.SendConfirmAsync(
-                $"{bss.Data.SuccessEmote} Having this status will now add the following roles:\n{string.Join("|", toModify.Select(x => $"<@&{x}>"))}");
+                Strings.StatusRolesAdded(ctx.Guild.Id, bss.Data.SuccessEmote,
+                    string.Join("|", toModify.Select(x => $"<@&{x}>"))));
         }
     }
 
@@ -171,14 +175,15 @@ public class SlashStatusRoles(BotConfigService bss, InteractiveService interacti
     [SlashUserPerm(GuildPermission.ManageGuild)]
     public async Task SetRemoveRoles(
         [Autocomplete(typeof(StatusRoleAutocompleter))]
-        StatusRolesTable potentialStatusRole, IRole[] roles)
+        StatusRole potentialStatusRole, IRole[] roles)
     {
         if (string.IsNullOrWhiteSpace(potentialStatusRole.ToRemove))
         {
             var splitRoleIds = string.Join(" ", roles.Select(x => x.Id));
             await Service.SetRemoveRoles(potentialStatusRole, splitRoleIds);
             await ctx.Interaction.SendConfirmAsync(
-                $"{bss.Data.SuccessEmote} Having this status will now remove the following roles:\n{string.Join("|", roles.Select(x => x.Mention))}");
+                Strings.StatusRolesRemoved(ctx.Guild.Id, bss.Data.SuccessEmote,
+                    string.Join("|", roles.Select(x => x.Mention))));
         }
         else
         {
@@ -186,7 +191,8 @@ public class SlashStatusRoles(BotConfigService bss, InteractiveService interacti
             toModify.AddRange(roles.Select(x => x.Id.ToString()));
             await Service.SetRemoveRoles(potentialStatusRole, string.Join(" ", toModify));
             await ctx.Interaction.SendConfirmAsync(
-                $"{bss.Data.SuccessEmote} Having this status will now remove the following roles:\n{string.Join("|", toModify.Select(x => $"<@&{x}>"))}");
+                Strings.StatusRolesRemoved(ctx.Guild.Id, bss.Data.SuccessEmote,
+                    string.Join("|", toModify.Select(x => $"<@&{x}>"))));
         }
     }
 
@@ -199,20 +205,21 @@ public class SlashStatusRoles(BotConfigService bss, InteractiveService interacti
     [SlashUserPerm(GuildPermission.ManageGuild)]
     public async Task RemoveAddRoles(
         [Autocomplete(typeof(StatusRoleAutocompleter))]
-        StatusRolesTable potentialStatusRole, IRole[] roles)
+        StatusRole potentialStatusRole, IRole[] roles)
     {
         var addRoles = potentialStatusRole.ToAdd.Split(" ");
         var newList = addRoles.Except(roles.Select(x => $"{x.Id}")).ToList();
         if (addRoles.Length == newList.Count)
         {
             await ctx.Interaction.SendErrorAsync(
-                $"{bss.Data.ErrorEmote} No AddRoles removed, none of the provided roles are in the list.", Config);
+                Strings.StatusAddrolesNoneRemoved(ctx.Guild.Id, bss.Data.ErrorEmote), Config);
             return;
         }
 
         await Service.SetAddRoles(potentialStatusRole, string.Join(" ", newList));
         await ctx.Interaction.SendConfirmAsync(
-            $"{bss.Data.SuccessEmote} Succesfully removed the following roles from AddRoles\n{string.Join("|", roles.Select(x => x.Mention))}");
+            Strings.StatusAddroleSuccessfullyRemoved(ctx.Guild.Id, bss.Data.SuccessEmote,
+                string.Join("|", roles.Select(x => x.Mention))));
     }
 
     /// <summary>
@@ -225,20 +232,21 @@ public class SlashStatusRoles(BotConfigService bss, InteractiveService interacti
     [SlashUserPerm(GuildPermission.ManageGuild)]
     public async Task RemoveRemoveRoles(
         [Autocomplete(typeof(StatusRoleAutocompleter))]
-        StatusRolesTable potentialStatusRole, params IRole[] roles)
+        StatusRole potentialStatusRole, params IRole[] roles)
     {
         var removeRoles = potentialStatusRole.ToRemove.Split(" ");
         var newList = removeRoles.Except(roles.Select(x => $"{x.Id}")).ToList();
         if (removeRoles.Length == newList.Count)
         {
             await ctx.Interaction.SendErrorAsync(
-                $"{bss.Data.ErrorEmote} No RemoveRoles removed, none of the provided roles are in the list.", Config);
+                Strings.StatusRemoveroleNoneRemoved(ctx.Guild.Id, bss.Data.ErrorEmote), Config);
             return;
         }
 
         await Service.SetRemoveRoles(potentialStatusRole, string.Join(" ", newList));
         await ctx.Interaction.SendConfirmAsync(
-            $"{bss.Data.SuccessEmote} Succesfully removed the following roles from RemoveRoles\n{string.Join("|", roles.Select(x => x.Mention))}");
+            Strings.StatusRemoveroleSuccessfullyRemoved(ctx.Guild.Id, bss.Data.SuccessEmote,
+                string.Join("|", roles.Select(x => x.Mention))));
     }
 
     /// <summary>
@@ -249,10 +257,11 @@ public class SlashStatusRoles(BotConfigService bss, InteractiveService interacti
     [SlashUserPerm(GuildPermission.ManageGuild)]
     public async Task ToggleRemoveAdded(
         [Autocomplete(typeof(StatusRoleAutocompleter))]
-        StatusRolesTable potentialStatusRole)
+        StatusRole potentialStatusRole)
     {
         var returned = await Service.ToggleRemoveAdded(potentialStatusRole);
-        await ctx.Interaction.SendConfirmAsync($"{bss.Data.SuccessEmote} RemoveAdded is now `{returned}`");
+        await ctx.Interaction.SendConfirmAsync(Strings.StatusRemoveAddedNow(ctx.Guild.Id, bss.Data.SuccessEmote,
+            returned));
     }
 
     /// <summary>
@@ -263,10 +272,11 @@ public class SlashStatusRoles(BotConfigService bss, InteractiveService interacti
     [SlashUserPerm(GuildPermission.ManageGuild)]
     public async Task ToggleReaddRemoved(
         [Autocomplete(typeof(StatusRoleAutocompleter))]
-        StatusRolesTable potentialStatusRole)
+        StatusRole potentialStatusRole)
     {
         var returned = await Service.ToggleAddRemoved(potentialStatusRole);
-        await ctx.Interaction.SendConfirmAsync($"{bss.Data.SuccessEmote} ReaddRemoved is now `{returned}`");
+        await ctx.Interaction.SendConfirmAsync(Strings.StatusReaddRemovedNow(ctx.Guild.Id, bss.Data.SuccessEmote,
+            returned));
     }
 
     /// <summary>
@@ -279,7 +289,8 @@ public class SlashStatusRoles(BotConfigService bss, InteractiveService interacti
         var statusRoles = await Service.GetStatusRoleConfig(ctx.Guild.Id);
         if (!statusRoles.Any())
         {
-            await ctx.Interaction.SendErrorAsync($"{bss.Data.ErrorEmote} There are no configured StatusRoles!", Config);
+            await ctx.Interaction.SendErrorAsync(
+                $"{bss.Data.ErrorEmote} {Strings.NoConfiguredStatusroles(ctx.Guild.Id)}", Config);
             return;
         }
 

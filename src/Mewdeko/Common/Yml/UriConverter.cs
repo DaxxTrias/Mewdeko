@@ -28,5 +28,4 @@ public class UriConverter : IYamlTypeConverter
         var uri = (Uri)value;
         emitter.Emit(new Scalar(uri.ToString()));
     }
-
 }

@@ -1,9 +1,8 @@
 ﻿using System.Net.Http;
+using System.Text.Json;
 using Discord.Commands;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Modules.Searches.Common;
-using Newtonsoft.Json;
-using Serilog;
 
 namespace Mewdeko.Modules.Searches;
 
@@ -13,7 +12,8 @@ public partial class Searches
     ///     Module for interacting with osu! APIs and retrieving user data.
     /// </summary>
     [Group]
-    public class OsuCommands(IBotCredentials creds, IHttpClientFactory factory) : MewdekoSubmodule
+    public class OsuCommands(IBotCredentials creds, IHttpClientFactory factory, ILogger<OsuCommands> logger)
+        : MewdekoSubmodule
     {
         /// <summary>
         ///     Retrieves osu! user profile information.
@@ -43,7 +43,7 @@ public partial class Searches
             {
                 if (string.IsNullOrWhiteSpace(creds.OsuApiKey))
                 {
-                    await ReplyErrorLocalizedAsync("osu_api_key").ConfigureAwait(false);
+                    await ReplyErrorAsync(Strings.OsuApiKey(ctx.Guild.Id)).ConfigureAwait(false);
                     return;
                 }
 
@@ -51,11 +51,11 @@ public partial class Searches
                 var userReq = $"https://osu.ppy.sh/api/get_user?k={creds.OsuApiKey}&u={user}&m={modeNumber}";
                 var userResString = await http.GetStringAsync(userReq)
                     .ConfigureAwait(false);
-                var objs = JsonConvert.DeserializeObject<List<OsuUserData>>(userResString);
+                var objs = JsonSerializer.Deserialize<List<OsuUserData>>(userResString);
 
                 if (objs.Count == 0)
                 {
-                    await ReplyErrorLocalizedAsync("osu_user_not_found").ConfigureAwait(false);
+                    await ReplyErrorAsync(Strings.OsuUserNotFound(ctx.Guild.Id)).ConfigureAwait(false);
                     return;
                 }
 
@@ -64,25 +64,26 @@ public partial class Searches
 
                 await ctx.Channel.EmbedAsync(new EmbedBuilder()
                     .WithOkColor()
-                    .WithTitle($"osu! {smode} profile for {user}")
+                    .WithTitle(Strings.OsuProfileTitle(ctx.Guild.Id, smode, user))
                     .WithThumbnailUrl($"https://a.ppy.sh/{userId}")
                     .WithDescription($"https://osu.ppy.sh/u/{userId}")
-                    .AddField("Official Rank", $"#{obj.PpRank}", true)
-                    .AddField("Country Rank", $"#{obj.PpCountryRank} :flag_{obj.Country.ToLower()}:", true)
-                    .AddField("Total PP", Math.Round(obj.PpRaw, 2), true)
-                    .AddField("Accuracy", $"{Math.Round(obj.Accuracy, 2)}%", true)
-                    .AddField("Playcount", obj.Playcount, true)
-                    .AddField("Level", Math.Round(obj.Level), true)
+                    .AddField(Strings.OsuOfficialRank(ctx.Guild.Id), $"#{obj.PpRank}", true)
+                    .AddField(Strings.OsuCountryRank(ctx.Guild.Id),
+                        $"#{obj.PpCountryRank} :flag_{obj.Country.ToLower()}:", true)
+                    .AddField(Strings.OsuTotalPp(ctx.Guild.Id), Math.Round(obj.PpRaw, 2), true)
+                    .AddField(Strings.OsuAccuracy(ctx.Guild.Id), $"{Math.Round(obj.Accuracy, 2)}%", true)
+                    .AddField(Strings.OsuPlaycount(ctx.Guild.Id), obj.Playcount, true)
+                    .AddField(Strings.OsuLevel(ctx.Guild.Id), Math.Round(obj.Level), true)
                 ).ConfigureAwait(false);
             }
             catch (ArgumentOutOfRangeException)
             {
-                await ReplyErrorLocalizedAsync("osu_user_not_found").ConfigureAwait(false);
+                await ReplyErrorAsync(Strings.OsuUserNotFound(ctx.Guild.Id)).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
-                await ReplyErrorLocalizedAsync("osu_failed").ConfigureAwait(false);
-                Log.Warning(ex, "Osu command failed");
+                await ReplyErrorAsync(Strings.OsuFailed(ctx.Guild.Id)).ConfigureAwait(false);
+                logger.LogWarning(ex, "Osu command failed");
             }
         }
 
@@ -112,30 +113,31 @@ public partial class Searches
                 .GetStringAsync($"https://api.gatari.pw/user/stats?u={user}&mode={modeNumber}")
                 .ConfigureAwait(false);
 
-            var statsResponse = JsonConvert.DeserializeObject<GatariUserStatsResponse>(resString);
+            var statsResponse = JsonSerializer.Deserialize<GatariUserStatsResponse>(resString);
             if (statsResponse.Code != 200 || statsResponse.Stats.Id == 0)
             {
-                await ReplyErrorLocalizedAsync("osu_user_not_found").ConfigureAwait(false);
+                await ReplyErrorAsync(Strings.OsuUserNotFound(ctx.Guild.Id)).ConfigureAwait(false);
                 return;
             }
 
             var usrResString = await http.GetStringAsync($"https://api.gatari.pw/users/get?u={user}")
                 .ConfigureAwait(false);
 
-            var userData = JsonConvert.DeserializeObject<GatariUserResponse>(usrResString).Users[0];
+            var userData = JsonSerializer.Deserialize<GatariUserResponse>(usrResString).Users[0];
             var userStats = statsResponse.Stats;
 
             var embed = new EmbedBuilder()
                 .WithOkColor()
-                .WithTitle($"osu!Gatari {modeStr} profile for {user}")
+                .WithTitle(Strings.OsuProfileTitle(ctx.Guild.Id, $"Gatari {modeStr}", user))
                 .WithThumbnailUrl($"https://a.gatari.pw/{userStats.Id}")
                 .WithDescription($"https://osu.gatari.pw/u/{userStats.Id}")
-                .AddField("Official Rank", $"#{userStats.Rank}", true)
-                .AddField("Country Rank", $"#{userStats.CountryRank} :flag_{userData.Country.ToLower()}:", true)
-                .AddField("Total PP", userStats.Pp, true)
-                .AddField("Accuracy", $"{Math.Round(userStats.AvgAccuracy, 2)}%", true)
-                .AddField("Playcount", userStats.Playcount, true)
-                .AddField("Level", userStats.Level, true);
+                .AddField(Strings.OsuOfficialRank(ctx.Guild.Id), $"#{userStats.Rank}", true)
+                .AddField(Strings.OsuCountryRank(ctx.Guild.Id),
+                    $"#{userStats.CountryRank} :flag_{userData.Country.ToLower()}:", true)
+                .AddField(Strings.OsuTotalPp(ctx.Guild.Id), userStats.Pp, true)
+                .AddField(Strings.OsuAccuracy(ctx.Guild.Id), $"{Math.Round(userStats.AvgAccuracy, 2)}%", true)
+                .AddField(Strings.OsuPlaycount(ctx.Guild.Id), userStats.Playcount, true)
+                .AddField(Strings.OsuLevel(ctx.Guild.Id), userStats.Level, true);
 
             await ctx.Channel.EmbedAsync(embed).ConfigureAwait(false);
         }
@@ -159,13 +161,13 @@ public partial class Searches
             var channel = (ITextChannel)ctx.Channel;
             if (string.IsNullOrWhiteSpace(creds.OsuApiKey))
             {
-                await channel.SendErrorAsync("An osu! API key is required.", Config).ConfigureAwait(false);
+                await channel.SendErrorAsync(Strings.OsuApiKeyRequired(ctx.Guild.Id), Config).ConfigureAwait(false);
                 return;
             }
 
             if (string.IsNullOrWhiteSpace(user))
             {
-                await channel.SendErrorAsync("Please provide a username.", Config).ConfigureAwait(false);
+                await channel.SendErrorAsync(Strings.OsuUsernameRequired(ctx.Guild.Id), Config).ConfigureAwait(false);
                 return;
             }
 
@@ -177,14 +179,14 @@ public partial class Searches
                 $"https://osu.ppy.sh/api/get_user_best?k={creds.OsuApiKey}&u={Uri.EscapeDataString(user)}&type=string&limit=5&m={m}";
 
             var resString = await http.GetStringAsync(reqString).ConfigureAwait(false);
-            var obj = JsonConvert.DeserializeObject<List<OsuUserBests>>(resString);
+            var obj = JsonSerializer.Deserialize<List<OsuUserBests>>(resString);
 
             var mapTasks = obj.Select(async item =>
             {
                 var mapReqString = $"https://osu.ppy.sh/api/get_beatmaps?k={creds.OsuApiKey}&b={item.BeatmapId}";
 
                 var mapResString = await http.GetStringAsync(mapReqString).ConfigureAwait(false);
-                var map = JsonConvert.DeserializeObject<List<OsuMapData>>(mapResString).FirstOrDefault();
+                var map = JsonSerializer.Deserialize<List<OsuMapData>>(mapResString).FirstOrDefault();
                 if (map is null)
                     return default;
                 var pp = Math.Round(item.Pp, 2);
@@ -192,9 +194,11 @@ public partial class Searches
                 var mods = ResolveMods(item.EnabledMods);
 
                 var title = $"{map.Artist}-{map.Title} ({map.Version})";
-                var desc = $@"[/b/{item.BeatmapId}](https://osu.ppy.sh/b/{item.BeatmapId})
-{$"{pp}pp",-7} | {$"{acc}%",-7}
-";
+                var desc = $"""
+                            [/b/{item.BeatmapId}](https://osu.ppy.sh/b/{item.BeatmapId})
+                            {$"{pp}pp",-7} | {$"{acc}%",-7}
+
+                            """;
                 if (mods != "+") desc += Format.Bold(mods);
 
                 return (title, desc);
@@ -202,7 +206,7 @@ public partial class Searches
 
             var eb = new EmbedBuilder()
                 .WithOkColor()
-                .WithTitle($"Top 5 plays for {user}");
+                .WithTitle(Strings.OsuTopPlays(ctx.Guild.Id, user));
 
             var mapData = await Task.WhenAll(mapTasks).ConfigureAwait(false);
             foreach (var (title, desc) in mapData.Where(x => x != default)) eb.AddField(title, desc);

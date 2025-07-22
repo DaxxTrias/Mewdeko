@@ -1,4 +1,4 @@
-using Newtonsoft.Json;
+using System.Text.Json.Serialization;
 
 namespace Mewdeko.Modules.Utility.Common;
 
@@ -10,6 +10,6 @@ public class PronounDbResult
     /// <summary>
     ///     Gets or sets the pronouns returned by the query.
     /// </summary>
-    [JsonProperty("pronouns")]
+    [JsonPropertyName("pronouns")]
     public string Pronouns { get; set; }
 }

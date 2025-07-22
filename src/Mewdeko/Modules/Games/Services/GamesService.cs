@@ -1,11 +1,10 @@
 ﻿using System.IO;
+using System.Text.Json;
 using Mewdeko.Modules.Games.Common;
 using Mewdeko.Modules.Games.Common.Acrophobia;
 using Mewdeko.Modules.Games.Common.Hangman;
 using Mewdeko.Modules.Games.Common.Nunchi;
 using Mewdeko.Modules.Games.Common.Trivia;
-using Newtonsoft.Json;
-using Serilog;
 
 namespace Mewdeko.Modules.Games.Services;
 
@@ -16,15 +15,18 @@ public class GamesService : INService, IUnloadableService
 {
     private const string TypingArticlesPath = "data/typing_articles3.json";
     private readonly GamesConfigService gamesConfig;
+    private readonly ILogger<GamesService> logger;
     private readonly Random rng;
+
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="GamesService" /> class.
     /// </summary>
     /// <param name="gamesConfig">The configuration service for games.</param>
-    public GamesService(GamesConfigService gamesConfig)
+    public GamesService(GamesConfigService gamesConfig, ILogger<GamesService> logger)
     {
         this.gamesConfig = gamesConfig;
+        this.logger = logger;
 
         rng = new MewdekoRandom();
 
@@ -32,12 +34,12 @@ public class GamesService : INService, IUnloadableService
         try
         {
             TypingArticles =
-                JsonConvert.DeserializeObject<List<TypingArticle>>(File.ReadAllText(TypingArticlesPath));
+                JsonSerializer.Deserialize<List<TypingArticle>>(File.ReadAllText(TypingArticlesPath));
         }
         catch (Exception ex)
         {
             // Log a warning if loading typing articles fails
-            Log.Warning("Error while loading typing articles {0}", ex.ToString());
+            logger.LogWarning("Error while loading typing articles {0}", ex.ToString());
             TypingArticles = [];
         }
     }
@@ -138,7 +140,7 @@ public class GamesService : INService, IUnloadableService
         });
 
         // Save the updated list to the JSON file
-        File.WriteAllText(TypingArticlesPath, JsonConvert.SerializeObject(TypingArticles));
+        File.WriteAllText(TypingArticlesPath, JsonSerializer.Serialize(TypingArticles));
     }
 
     /// <summary>
@@ -165,7 +167,7 @@ public class GamesService : INService, IUnloadableService
         TypingArticles.RemoveAt(index);
 
         // Save the updated list to the JSON file
-        File.WriteAllText(TypingArticlesPath, JsonConvert.SerializeObject(TypingArticles));
+        File.WriteAllText(TypingArticlesPath, JsonSerializer.Serialize(TypingArticles));
         return removed;
     }
 }

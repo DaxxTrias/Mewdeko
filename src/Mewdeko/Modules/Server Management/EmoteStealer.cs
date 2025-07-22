@@ -12,7 +12,8 @@ namespace Mewdeko.Modules.Server_Management;
 /// <summary>
 ///     A module for stealing emotes and stickers from messages and adding them to the server.
 /// </summary>
-public class EmoteStealer(IHttpClientFactory httpFactory, BotConfigService config) : MewdekoSlashCommandModule
+public class EmoteStealer(IHttpClientFactory httpFactory, BotConfigService config, ILogger<EmoteStealer> logger)
+    : MewdekoSlashCommandModule
 {
     /// <summary>
     ///     Steals emotes from a message and adds them to the server's emote collection.
@@ -30,16 +31,16 @@ public class EmoteStealer(IHttpClientFactory httpFactory, BotConfigService confi
     public async Task Steal(IMessage message)
     {
         await ctx.Interaction.DeferAsync(true).ConfigureAwait(false);
-        await ctx.Interaction.FollowupAsync(
-            "If the message below loads infinitely, discord has limited the servers emoji upload limit. And no, this cant be circumvented with other bots (to my knowledge).");
+        await ctx.Interaction.FollowupAsync(Strings.EmoteUploadLimitWarning(ctx.Guild.Id));
         var eb = new EmbedBuilder
         {
-            Description = $"{config.Data.LoadingEmote} Adding Emotes...", Color = Mewdeko.OkColor
+            Description = Strings.AddingEmotes(ctx.Guild.Id, config.Data.LoadingEmote),
+            Color = Mewdeko.OkColor
         };
         var tags = message.Tags.Where(x => x.Type == TagType.Emoji).Select(x => (Emote)x.Value).Distinct();
         if (!tags.Any())
         {
-            await ctx.Interaction.SendEphemeralFollowupErrorAsync("No emotes in this message!", Config)
+            await ctx.Interaction.SendEphemeralFollowupErrorAsync(Strings.NoEmotesInMessage(ctx.Guild.Id), Config)
                 .ConfigureAwait(false);
             return;
         }
@@ -51,11 +52,10 @@ public class EmoteStealer(IHttpClientFactory httpFactory, BotConfigService confi
         {
             var emoteName = i.Name; // Default to the emote name
 
-            // Define a pattern to find the emote in the message
-            var pattern = $"<:{i.Name}:[0-9]+>";
+            var pattern = $"<a?:{i.Name}:[0-9]+>";
             var match = Regex.Match(message.Content, pattern);
 
-            if (match.Success)
+            if (match.Success && tags.Count() == 1)
             {
                 // Find the index immediately after the emote match
                 var indexAfterEmote = match.Index + match.Length;
@@ -67,9 +67,16 @@ public class EmoteStealer(IHttpClientFactory httpFactory, BotConfigService confi
                 var parts = potentialNamePart.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
 
                 // Use the provided name only if there is exactly one emote and one potential name
-                if (parts.Length > 0 && tags.Count() == 1)
+                if (parts.Length > 0)
                 {
-                    emoteName = parts[0]; // Custom name provided by the user
+
+                    // newer newer code
+                    var candidateName = parts[0];
+                    // Validate Discord emote name: 2-32 chars, alphanumeric/underscore only
+                    if (Regex.IsMatch(candidateName, @"^[a-zA-Z0-9_]{2,32}$"))
+                    {
+                        emoteName = candidateName;
+                    }
                 }
             }
 
@@ -92,6 +99,11 @@ public class EmoteStealer(IHttpClientFactory httpFactory, BotConfigService confi
                         // check if the error is 30008
                         errored.Add($"Unable to add '{i.Name}'. Discord server reports no free emoji slots.");
                     }
+                    // check if the error is 50138
+                    else if (httpEx.DiscordCode.HasValue && httpEx.DiscordCode.Value == (DiscordErrorCode)50138)
+                    {
+                        errored.Add($"Unable to add '{i.Name}'. Discord server reports emoji file size is too large.");
+                    }
                     else
                     {
                         // other HttpExceptions
@@ -112,8 +124,10 @@ public class EmoteStealer(IHttpClientFactory httpFactory, BotConfigService confi
         {
             Color = Mewdeko.OkColor
         };
-        if (emotes.Count > 0) b.WithDescription($"**Added Emotes**\n{string.Join("\n", emotes)}");
-        if (errored.Count > 0) b.AddField("Errored Emotes", string.Join("\n\n", errored));
+        if (emotes.Count > 0)
+            b.WithDescription(Strings.EmotesAdded(ctx.Guild.Id, string.Join("\n", emotes)));
+        if (errored.Count > 0)
+            b.AddField("Errored Emotes", string.Join("\n\n", errored));
         await msg.ModifyAsync(x => x.Embed = b.Build()).ConfigureAwait(false);
     }
 
@@ -137,12 +151,13 @@ public class EmoteStealer(IHttpClientFactory httpFactory, BotConfigService confi
             "If the message below loads infinitely, discord has limited the servers stickers upload limit. And no, this cant be circumvented with other bots (to my knowledge).");
         var eb = new EmbedBuilder
         {
-            Description = $"{config.Data.LoadingEmote} Adding stickers...", Color = Mewdeko.OkColor
+            Description = Strings.AddingStickers(ctx.Guild.Id, config.Data.LoadingEmote),
+            Color = Mewdeko.OkColor
         };
         var tags = message.Stickers.Select(x => x as SocketUnknownSticker).Distinct();
         if (!tags.Any())
         {
-            await ctx.Interaction.SendEphemeralFollowupErrorAsync("No stickers in this message!", Config)
+            await ctx.Interaction.SendEphemeralFollowupErrorAsync(Strings.NoStickersInMessage(ctx.Guild.Id), Config)
                 .ConfigureAwait(false);
             return;
         }
@@ -169,7 +184,7 @@ public class EmoteStealer(IHttpClientFactory httpFactory, BotConfigService confi
                 }
                 catch (Exception ex)
                 {
-                    Log.Error(ex.ToString());
+                    logger.LogError(ex.ToString());
                     errored.Add($"{i.Name} | [Url]({i.GetStickerUrl()})");
                 }
             }
@@ -179,8 +194,10 @@ public class EmoteStealer(IHttpClientFactory httpFactory, BotConfigService confi
         {
             Color = Mewdeko.OkColor
         };
-        if (emotes.Count > 0) b.WithDescription($"**Added Stickers**\n{string.Join("\n", emotes)}");
-        if (errored.Count > 0) b.AddField("Errored Stickers", string.Join("\n\n", errored));
+        if (emotes.Count > 0)
+            b.WithDescription(Strings.AddedStickers(ctx.Guild.Id, string.Join("\n", emotes)));
+        if (errored.Count > 0)
+            b.AddField("Errored Stickers", string.Join("\n\n", errored));
         await ctx.Interaction.ModifyOriginalResponseAsync(x => x.Embed = b.Build()).ConfigureAwait(false);
     }
 }

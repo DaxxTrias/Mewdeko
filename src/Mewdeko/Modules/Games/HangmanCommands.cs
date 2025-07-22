@@ -11,10 +11,10 @@ public partial class Games
     /// <summary>
     ///     A module containing Hangman commands.
     /// </summary>
-    /// <param name="client">The discord client</param>
     /// <param name="guildSettings">The guild settings service</param>
+    /// <param name="handler">The event handler service</param>
     [Group]
-    public class HangmanCommands(DiscordShardedClient client, GuildSettingsService guildSettings)
+    public class HangmanCommands(GuildSettingsService guildSettings, EventHandler handler)
         : MewdekoSubmodule<GamesService>
     {
         /// <summary>
@@ -28,7 +28,7 @@ public partial class Games
         {
             await ctx.Channel
                 .SendConfirmAsync(
-                    $"{Format.Code(GetText("hangman_types", await guildSettings.GetPrefix(ctx.Guild.Id)))}\n{string.Join("\n", Service.TermPool.Data.Keys)}")
+                    $"{Format.Code(Strings.HangmanTypes(ctx.Guild.Id, await guildSettings.GetPrefix(ctx.Guild)))}\n{string.Join("\n", Service.TermPool.Data.Keys)}")
                 .ConfigureAwait(false);
         }
 
@@ -55,7 +55,7 @@ public partial class Games
             if (!Service.HangmanGames.TryAdd(ctx.Channel.Id, hm))
             {
                 hm.Dispose();
-                await ReplyErrorLocalizedAsync("hangman_running").ConfigureAwait(false);
+                await ReplyErrorAsync(Strings.HangmanRunning(ctx.Guild.Id)).ConfigureAwait(false);
                 return;
             }
 
@@ -63,11 +63,11 @@ public partial class Games
             hm.OnGuessFailed += Hm_OnGuessFailed;
             hm.OnGuessSucceeded += Hm_OnGuessSucceeded;
             hm.OnLetterAlreadyUsed += Hm_OnLetterAlreadyUsed;
-            client.MessageReceived += ClientMessageReceived;
+            handler.Subscribe("MessageReceived", "HangmanCommands", ClientMessageReceived);
 
             try
             {
-                await ctx.Channel.SendConfirmAsync($"{GetText("hangman_game_started")} ({hm.TermType})",
+                await ctx.Channel.SendConfirmAsync($"{Strings.HangmanGameStarted(ctx.Guild.Id)} ({hm.TermType})",
                         $"{hm.ScrambledWord}\n{hm.GetHangman()}")
                     .ConfigureAwait(false);
             }
@@ -78,19 +78,15 @@ public partial class Games
 
             await hm.EndedTask.ConfigureAwait(false);
 
-            client.MessageReceived -= ClientMessageReceived;
+            handler.Unsubscribe("MessageReceived", "HangmanCommands", ClientMessageReceived);
             Service.HangmanGames.TryRemove(ctx.Channel.Id, out _);
             hm.Dispose();
+            return;
 
-            Task ClientMessageReceived(SocketMessage msg)
+            async Task ClientMessageReceived(SocketMessage msg)
             {
-                _ = Task.Run(() =>
-                {
-                    if (ctx.Channel.Id == msg.Channel.Id && !msg.Author.IsBot)
-                        return hm.Input(msg.Author.Id, msg.Author.ToString(), msg.Content);
-                    return Task.CompletedTask;
-                });
-                return Task.CompletedTask;
+                if (ctx.Channel.Id == msg.Channel.Id && !msg.Author.IsBot)
+                    await hm.Input(msg.Author.Id, msg.Author.ToString(), msg.Content);
             }
         }
 
@@ -104,7 +100,7 @@ public partial class Games
             if (winner == null)
             {
                 var loseEmbed = new EmbedBuilder().WithTitle($"Hangman Game ({game.TermType}) - Ended")
-                    .WithDescription(Format.Bold("You lose."))
+                    .WithDescription(Format.Bold(Strings.HangmanLose(ctx.Guild.Id)))
                     .AddField(efb => efb.WithName("It was").WithValue(game.Term.GetWord()))
                     .WithFooter(efb => efb.WithText(string.Join(" ", game.PreviousGuesses)))
                     .WithErrorColor();
@@ -116,7 +112,7 @@ public partial class Games
             }
 
             var winEmbed = new EmbedBuilder().WithTitle($"Hangman Game ({game.TermType}) - Ended")
-                .WithDescription(Format.Bold($"{winner} Won."))
+                .WithDescription(Format.Bold(Strings.HangmanWin(ctx.Guild.Id, winner)))
                 .AddField(efb => efb.WithName("It was").WithValue(game.Term.GetWord()))
                 .WithFooter(efb => efb.WithText(string.Join(" ", game.PreviousGuesses)))
                 .WithOkColor();
@@ -178,7 +174,7 @@ public partial class Games
             if (Service.HangmanGames.TryRemove(ctx.Channel.Id, out var removed))
             {
                 await removed.Stop().ConfigureAwait(false);
-                await ReplyConfirmLocalizedAsync("hangman_stopped").ConfigureAwait(false);
+                await ReplyConfirmAsync(Strings.HangmanStopped(ctx.Guild.Id)).ConfigureAwait(false);
             }
         }
     }

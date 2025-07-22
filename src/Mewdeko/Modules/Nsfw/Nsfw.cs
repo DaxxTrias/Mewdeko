@@ -11,7 +11,6 @@ using Mewdeko.Common.Collections;
 using Newtonsoft.Json.Linq;
 using NHentaiAPI;
 using Refit;
-using Serilog;
 
 namespace Mewdeko.Modules.Nsfw;
 
@@ -28,7 +27,8 @@ public class Nsfw(
     MartineApi martineApi,
     GuildSettingsService guildSettings,
     HttpClient client,
-    IBotCredentials credentials)
+    IBotCredentials credentials,
+    ILogger<Nsfw> logger)
     : MewdekoModuleBase<ISearchImagesService>
 {
     private static readonly ConcurrentHashSet<ulong> HentaiBombBlacklist = [];
@@ -53,10 +53,10 @@ public class Nsfw(
     public async Task RedditNsfw(string subreddit)
     {
         var msg = await ctx.Channel.SendConfirmAsync(
-            $"{Config.LoadingEmote} Trying to get a post from `{subreddit}`...");
+            Strings.NsfwLoadingSubreddit(ctx.Guild.Id, subreddit));
         try
         {
-            RedditPost image;
+            RedditPost image = null;
             try
             {
                 image = await martineApi.RedditApi.GetRandomFromSubreddit(subreddit, Toptype.year)
@@ -65,13 +65,13 @@ public class Nsfw(
             catch (ApiException ex)
             {
                 await msg.DeleteAsync();
-                Log.Error(
+                logger.LogError(
                     "Seems that NSFW Subreddit fetching has failed. Here\'s the error:\\nCode:{ExStatusCode}\\nContent: {ExContent}",
                     ex.StatusCode, ex.HasContent ? ex.Content : "No Content.");
                 await ctx.Channel.SendErrorAsync(
-                    "Unable to fetch nsfw subreddit. Please check console or report the issue at https://discord.gg/mewdeko.",
-                    Config);
-                return;
+                    Strings.NsfwApiFetchError(ctx.Guild.Id),
+                    Config
+                );
             }
 
             var eb = new EmbedBuilder
@@ -159,9 +159,10 @@ public class Nsfw(
         var tags = book.Tags.Select(i => i.Name).ToList();
         if (tags.Contains("lolicon") || tags.Contains("loli") || tags.Contains("shotacon") || tags.Contains("shota"))
         {
-            await ctx.Channel
-                .SendErrorAsync("This manga contains loli/shota content and is not allowed by Discord TOS!", Config)
-                .ConfigureAwait(false);
+            await ctx.Channel.SendErrorAsync(
+                Strings.NsfwLoliShotaContent(ctx.Guild.Id),
+                Config
+            );
             return;
         }
 
@@ -181,7 +182,7 @@ public class Nsfw(
         {
             await Task.CompletedTask.ConfigureAwait(false);
             return new PageBuilder()
-                .WithTitle($"{Format.Bold($"{title}")} - {book.Images.Pages.Count} pages")
+                .WithTitle(Strings.NsfwTitleFormat(ctx.Guild.Id, Format.Bold($"{title}"), book.Images.Pages.Count))
                 .WithImageUrl(nHentaiClient.GetPictureUrl(book, page + 1))
                 .WithOkColor();
         }
@@ -204,9 +205,10 @@ public class Nsfw(
             .GetSearchPageListAsync($"{search} {exclude} -lolicon -loli -shota -shotacon", page).ConfigureAwait(false);
         if (result.Result.Count == 0)
         {
-            await ctx.Channel
-                .SendErrorAsync("The search returned no results. Try again with a different query!", Config)
-                .ConfigureAwait(false);
+            await ctx.Channel.SendErrorAsync(
+                Strings.NsfwSearchNoResults(ctx.Guild.Id),
+                Config
+            );
             return;
         }
 
@@ -405,7 +407,9 @@ public class Nsfw(
                 return;
             case 0:
                 t.Change(Timeout.Infinite, Timeout.Infinite); //proper way to disable the timer
-                await ReplyConfirmLocalizedAsync("stopped").ConfigureAwait(false);
+                await ReplyConfirmAsync(
+                    Strings.NsfwAutohentaiStopped(ctx.Guild.Id)
+                );
                 return;
             case < 20:
                 return;
@@ -438,9 +442,10 @@ public class Nsfw(
             return t;
         });
 
-        await ReplyConfirmLocalizedAsync("autohentai_started",
-            interval,
-            string.Join(", ", tags)).ConfigureAwait(false);
+
+        await ReplyConfirmAsync(
+            Strings.NsfwAutohentaiStarted(ctx.Guild.Id, interval, string.Join(", ", tags))
+        );
     }
 
     /// <summary>
@@ -463,7 +468,7 @@ public class Nsfw(
             if (!Service.AutoHentaiTimers.TryRemove(ctx.Channel.Id, out t)) return;
 
             t.Change(Timeout.Infinite, Timeout.Infinite); //proper way to disable the timer
-            await ReplyConfirmLocalizedAsync("stopped").ConfigureAwait(false);
+            await ReplyConfirmAsync(Strings.Stopped(ctx.Guild.Id)).ConfigureAwait(false);
             return;
         }
 
@@ -485,7 +490,7 @@ public class Nsfw(
             return t;
         });
 
-        await ReplyConfirmLocalizedAsync("started", interval).ConfigureAwait(false);
+        await ReplyConfirmAsync(Strings.Started(ctx.Guild.Id, interval)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -510,7 +515,7 @@ public class Nsfw(
                 return;
             case 0:
                 t.Change(Timeout.Infinite, Timeout.Infinite); //proper way to disable the timer
-                await ReplyConfirmLocalizedAsync("stopped").ConfigureAwait(false);
+                await ReplyConfirmAsync(Strings.Stopped(ctx.Guild.Id)).ConfigureAwait(false);
                 return;
             case < 20:
                 return;
@@ -534,7 +539,7 @@ public class Nsfw(
             return t;
         });
 
-        await ReplyConfirmLocalizedAsync("started", interval).ConfigureAwait(false);
+        await ReplyConfirmAsync(Strings.Started(ctx.Guild.Id, interval)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -547,6 +552,7 @@ public class Nsfw(
     [Aliases]
     [RequireNsfw(Group = "nsfw_or_dm")]
     [RequireContext(ContextType.DM, Group = "nsfw_or_dm")]
+    [Ratelimit(5)]
     public Task Hentai(params string[] tags)
     {
         return InternalDapiCommand(tags, true, Service.Hentai);
@@ -576,7 +582,7 @@ public class Nsfw(
             var linksEnum = images.Where(l => l != null).ToArray();
             if (!images.Any())
             {
-                await ReplyErrorLocalizedAsync("no_results").ConfigureAwait(false);
+                await ReplyErrorAsync(Strings.NoResults(ctx.Guild.Id)).ConfigureAwait(false);
                 return;
             }
 
@@ -622,7 +628,7 @@ public class Nsfw(
             var linksEnum = images.Where(l => l != null).ToArray();
             if (!images.Any())
             {
-                await ReplyErrorLocalizedAsync("no_results").ConfigureAwait(false);
+                await ReplyErrorAsync(Strings.NoResults(ctx.Guild.Id)).ConfigureAwait(false);
                 return;
             }
 
@@ -838,10 +844,10 @@ public class Nsfw(
         if (string.IsNullOrWhiteSpace(tag))
         {
             var blTags = await Service.GetBlacklistedTags(ctx.Guild.Id).ConfigureAwait(false);
-            await ctx.Channel.SendConfirmAsync(GetText("blacklisted_tag_list"),
-                blTags.Length > 0
-                    ? string.Join(", ", blTags)
-                    : "-").ConfigureAwait(false);
+            await ctx.Channel.SendConfirmAsync(
+                Strings.NsfwBlacklistTitle(ctx.Guild.Id),
+                blTags.Length > 0 ? string.Join(", ", blTags) : "-"
+            );
         }
         else
         {
@@ -849,9 +855,9 @@ public class Nsfw(
             var added = await Service.ToggleBlacklistTag(ctx.Guild.Id, tag).ConfigureAwait(false);
 
             if (added)
-                await ReplyConfirmLocalizedAsync("blacklisted_tag_add", tag).ConfigureAwait(false);
+                await ReplyConfirmAsync(Strings.BlacklistedTagAdd(ctx.Guild.Id, tag)).ConfigureAwait(false);
             else
-                await ReplyConfirmLocalizedAsync("blacklisted_tag_remove", tag).ConfigureAwait(false);
+                await ReplyConfirmAsync(Strings.BlacklistedTagRemove(ctx.Guild.Id, tag)).ConfigureAwait(false);
         }
     }
 
@@ -878,7 +884,7 @@ public class Nsfw(
         }
         catch (HttpRequestException e)
         {
-            Log.Error("Error while fetching RedGif MP4 URL: {0}", e.Message);
+            logger.LogError("Error while fetching RedGif MP4 URL: {0}", e.Message);
             return null;
         }
     }
@@ -891,7 +897,7 @@ public class Nsfw(
 
         if (data is null || !string.IsNullOrWhiteSpace(data.Error))
         {
-            await ReplyErrorLocalizedAsync("no_results").ConfigureAwait(false);
+            await ReplyErrorAsync(Strings.NoResults(ctx.Guild.Id)).ConfigureAwait(false);
             return;
         }
 
@@ -917,7 +923,59 @@ public class Nsfw(
         {
             using var sr = await client.GetAsync(data.Url, HttpCompletionOption.ResponseHeadersRead)
                 .ConfigureAwait(false);
+
+            var fileSize = sr.Content.Headers.ContentLength ?? -1;
+
+            var maxUploadSize = ctx.Guild?.MaxUploadLimit ?? 26214400;
+
+            if (fileSize > (long)maxUploadSize)
+            {
+                await ctx.Channel.SendMessageAsync(
+                    embed: new EmbedBuilder().WithErrorColor()
+                        .WithTitle(Strings.NsfwFileTooLarge(ctx.Guild.Id))
+                        .WithDescription(
+                            $"The file is too large to be uploaded ({fileSize / 1048576.0:F2}MB). [View it here instead]({data.Url})")
+                        .WithFooter(
+                            $"{data.Rating} ({data.Provider}) | {string.Join(" | ", data.Tags.Where(x => !string.IsNullOrWhiteSpace(x)).Take(5))}")
+                        .Build(),
+                    components: Config.ShowInviteButton
+                        ? new ComponentBuilder()
+                            .WithButton(style: ButtonStyle.Link,
+                                url:
+                                "https://discord.com/oauth2/authorize?client_id=752236274261426212&permissions=8&response_type=code&redirect_uri=https%3A%2F%2Fmewdeko.tech&scope=bot%20applications.commands",
+                                label: "Invite Me!",
+                                emote: "<a:HaneMeow:968564817784877066>".ToIEmote())
+                            .WithButton("Support Us!", style: ButtonStyle.Link, url: "https://ko-fi.com/Mewdeko")
+                            .Build()
+                        : null).ConfigureAwait(false);
+                return;
+            }
+
             var imgData = await sr.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
+
+            if (imgData.Length > (int)maxUploadSize)
+            {
+                await ctx.Channel.SendMessageAsync(
+                    embed: new EmbedBuilder().WithErrorColor()
+                        .WithTitle(Strings.NsfwFileTooLarge(ctx.Guild.Id))
+                        .WithDescription(
+                            $"The file is too large to be uploaded ({imgData.Length / 1048576.0:F2}MB). [View it here instead]({data.Url})")
+                        .WithFooter(
+                            $"{data.Rating} ({data.Provider}) | {string.Join(" | ", data.Tags.Where(x => !string.IsNullOrWhiteSpace(x)).Take(5))}")
+                        .Build(),
+                    components: Config.ShowInviteButton
+                        ? new ComponentBuilder()
+                            .WithButton(style: ButtonStyle.Link,
+                                url:
+                                "https://discord.com/oauth2/authorize?client_id=752236274261426212&permissions=8&response_type=code&redirect_uri=https%3A%2F%2Fmewdeko.tech&scope=bot%20applications.commands",
+                                label: "Invite Me!",
+                                emote: "<a:HaneMeow:968564817784877066>".ToIEmote())
+                            .WithButton("Support Us!", style: ButtonStyle.Link, url: "https://ko-fi.com/Mewdeko")
+                            .Build()
+                        : null).ConfigureAwait(false);
+                return;
+            }
+
             var imgStream = imgData.ToStream();
             await using var _ = imgStream.ConfigureAwait(false);
             await ctx.Channel.SendFileAsync(imgStream, "video.mp4",

@@ -78,7 +78,7 @@ public partial class Searches
         {
             if (Service.WowJokes.Count == 0)
             {
-                await ReplyErrorLocalizedAsync("jokes_not_loaded").ConfigureAwait(false);
+                await ReplyErrorAsync(Strings.JokesNotLoaded(ctx.Guild.Id)).ConfigureAwait(false);
                 return;
             }
 
@@ -101,13 +101,14 @@ public partial class Searches
         {
             if (Service.WowJokes.Count == 0)
             {
-                await ReplyErrorLocalizedAsync("magicitems_not_loaded").ConfigureAwait(false);
+                await ReplyErrorAsync(Strings.MagicitemsNotLoaded(ctx.Guild.Id)).ConfigureAwait(false);
                 return;
             }
 
             var item = Service.MagicItems[new MewdekoRandom().Next(0, Service.MagicItems.Count)];
 
-            await ctx.Channel.SendConfirmAsync($"✨{item.Name}", item.Description).ConfigureAwait(false);
+            await ctx.Channel.SendConfirmAsync(Strings.JokeSparkle(ctx.Guild.Id, item.Name), item.Description)
+                .ConfigureAwait(false);
         }
     }
 }

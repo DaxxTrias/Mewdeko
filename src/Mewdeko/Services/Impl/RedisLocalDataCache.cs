@@ -1,6 +1,6 @@
 ﻿using System.IO;
+using System.Text.Json;
 using Mewdeko.Modules.Games.Common.Trivia;
-using Newtonsoft.Json;
 using Serilog;
 using StackExchange.Redis;
 
@@ -20,7 +20,6 @@ public class RedisLocalDataCache : ILocalDataCache
     /// </summary>
     /// <param name="con">The connection multiplexer for Redis.</param>
     /// <param name="creds">The bot credentials.</param>
-    /// <param name="shardId">The shard ID.</param>
     public RedisLocalDataCache(ConnectionMultiplexer con, IBotCredentials creds)
     {
         this.con = con;
@@ -28,7 +27,7 @@ public class RedisLocalDataCache : ILocalDataCache
 
         try
         {
-            TriviaQuestions = JsonConvert.DeserializeObject<TriviaQuestion[]>(File.ReadAllText(QuestionsFile));
+            TriviaQuestions = JsonSerializer.Deserialize<TriviaQuestion[]>(File.ReadAllText(QuestionsFile));
         }
         catch (Exception ex)
         {
@@ -62,11 +61,11 @@ public class RedisLocalDataCache : ILocalDataCache
 
     private T Get<T>(string key) where T : class
     {
-        return JsonConvert.DeserializeObject<T>(Db.StringGet($"{creds.RedisKey()}_localdata_{key}"));
+        return JsonSerializer.Deserialize<T>((string)Db.StringGet($"{creds.RedisKey()}_localdata_{key}"));
     }
 
     private void Set(string key, object obj)
     {
-        Db.StringSet($"{creds.RedisKey()}_localdata_{key}", JsonConvert.SerializeObject(obj));
+        Db.StringSet($"{creds.RedisKey()}_localdata_{key}", JsonSerializer.Serialize(obj));
     }
 }

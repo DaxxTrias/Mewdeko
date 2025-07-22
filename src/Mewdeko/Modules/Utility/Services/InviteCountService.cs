@@ -1,44 +1,99 @@
-﻿using Mewdeko.Common.ModuleBehaviors;
-using Mewdeko.Database.DbContextStuff;
-using Microsoft.EntityFrameworkCore;
+﻿using System.Threading;
+using DataModel;
+using LinqToDB;
+using LinqToDB.Data;
+using Mewdeko.Common.ModuleBehaviors;
 
 namespace Mewdeko.Modules.Utility.Services;
 
 /// <summary>
-/// Invite Count Service
+///     Invite Count Service
 /// </summary>
 public class InviteCountService : INService, IReadyExecutor
 {
-    private readonly DbContextProvider db;
     private readonly DiscordShardedClient client;
+    private readonly IDataConnectionFactory dbFactory;
     private readonly ConcurrentDictionary<ulong, ConcurrentDictionary<string, IInviteMetadata>> guildInvites = new();
-    private readonly ConcurrentDictionary<ulong, InviteCountSettings> inviteCountSettings = new();
+    private readonly ConcurrentDictionary<ulong, InviteCountSetting> inviteCountSettings = new();
+    private readonly ILogger<InviteCountService> logger;
 
     /// <summary>
-    /// Service for counting invites
+    ///     Service for counting invites
     /// </summary>
     /// <param name="handler"></param>
-    /// <param name="db"></param>
-    public InviteCountService(EventHandler handler, DbContextProvider db, DiscordShardedClient client)
+    /// <param name="dbFactory"></param>
+    /// <param name="client"></param>
+    public InviteCountService(EventHandler handler, IDataConnectionFactory dbFactory, DiscordShardedClient client,
+        ILogger<InviteCountService> logger)
     {
-        this.db = db;
+        this.dbFactory = dbFactory;
         this.client = client;
+        this.logger = logger;
 
-        handler.JoinedGuild += UpdateGuildInvites;
-        handler.UserJoined += OnUserJoined;
-        handler.UserLeft += OnUserLeft;
-        handler.InviteCreated += OnInviteCreated;
-        handler.InviteDeleted += OnInviteDeleted;
+        handler.Subscribe("JoinedGuild", "InviteCountService", UpdateGuildInvites);
+        handler.Subscribe("UserJoined", "InviteCountService", OnUserJoined);
+        handler.Subscribe("UserLeft", "InviteCountService", OnUserLeft);
+        handler.Subscribe("InviteCreated", "InviteCountService", OnInviteCreated);
+        handler.Subscribe("InviteDeleted", "InviteCountService", OnInviteDeleted);
     }
 
-     private async Task OnUserLeft(IGuild guild, IUser user)
+    /// <inheritdoc />
+    public async Task OnReadyAsync()
+    {
+        var guilds = client.Guilds.ToHashSet();
+        var guildIds = client.Guilds.Select(g => g.Id).ToHashSet();
+
+        await using var uow = await dbFactory.CreateConnectionAsync();
+        var allSettings = await uow.InviteCountSettings
+            .Where(s => guildIds.Contains(s.GuildId))
+            .ToDictionaryAsync(s => s.GuildId);
+
+        var mergedSettings = guildIds.ToDictionary(
+            guildId => guildId,
+            guildId => allSettings.TryGetValue(guildId, out var settings)
+                ? settings
+                : new InviteCountSetting
+                {
+                    GuildId = guildId, RemoveInviteOnLeave = true, IsEnabled = true
+                }
+        );
+
+        foreach (var kvp in mergedSettings)
+        {
+            inviteCountSettings[kvp.Key] = kvp.Value;
+        }
+
+        var newSettingsList = mergedSettings.Values
+            .Where(s => !allSettings.ContainsKey(s.GuildId))
+            .ToList();
+
+        if (newSettingsList.Count != 0)
+        {
+            var table = uow.GetTable<InviteCountSetting>();
+            await table.BulkCopyAsync(newSettingsList);
+            logger.LogInformation("Bulk inserted {Count} new invite settings", newSettingsList.Count);
+        }
+
+
+        var guildsToUpdate = guilds
+            .Where(i => i.Users.FirstOrDefault(x => x.Id == client.CurrentUser.Id)?.GuildPermissions
+                .Has(GuildPermission.ManageGuild) == true)
+            .ToList();
+
+        var semaphore = new SemaphoreSlim(10);
+        var tasks = guildsToUpdate.Select(guild => ProcessGuildWithRateLimiting(guild, semaphore)).ToList();
+
+        await Task.WhenAll(tasks);
+    }
+
+    private async Task OnUserLeft(IGuild guild, IUser user)
     {
         var settings = await GetInviteCountSettingsAsync(guild.Id);
         if (!settings.IsEnabled || !settings.RemoveInviteOnLeave) return;
 
-        await using var uow = await db.GetContextAsync();
+        await using var uow = await dbFactory.CreateConnectionAsync();
 
-        var invitedBy = await uow.InvitedBy
+        var invitedBy = await uow.InvitedBies
             .FirstOrDefaultAsync(x => x.UserId == user.Id && x.GuildId == guild.Id);
 
         if (invitedBy != null)
@@ -52,64 +107,61 @@ public class InviteCountService : INService, IReadyExecutor
             }
 
             // Remove the InvitedBy record
-            uow.InvitedBy.Remove(invitedBy);
+            await uow.DeleteAsync(invitedBy);
         }
-
-        await uow.SaveChangesAsync();
     }
 
     /// <summary>
-    /// Gets invite count settings for the guild
+    ///     Gets invite count settings for the guild
     /// </summary>
     /// <param name="guildId"></param>
     /// <returns></returns>
-    public async Task<InviteCountSettings> GetInviteCountSettingsAsync(ulong guildId)
+    public async Task<InviteCountSetting> GetInviteCountSettingsAsync(ulong guildId)
     {
         if (inviteCountSettings.TryGetValue(guildId, out var cachedSettings))
         {
             return cachedSettings;
         }
 
-        await using var uow = await db.GetContextAsync();
+        await using var uow = await dbFactory.CreateConnectionAsync();
         var settings = await uow.InviteCountSettings.FirstOrDefaultAsync(x => x.GuildId == guildId);
 
         if (settings == null)
         {
-            settings = new InviteCountSettings
+            settings = new InviteCountSetting
             {
-                GuildId = guildId,
-                RemoveInviteOnLeave = false,
-                MinAccountAge = TimeSpan.Zero,
-                IsEnabled = true
+                GuildId = guildId, RemoveInviteOnLeave = false, MinAccountAge = TimeSpan.Zero, IsEnabled = true
             };
-            uow.InviteCountSettings.Add(settings);
-            await uow.SaveChangesAsync();
+            await uow.InsertAsync(settings);
         }
 
         inviteCountSettings[guildId] = settings;
         return settings;
     }
 
-    private async Task UpdateInviteCountSettingsAsync(ulong guildId, Action<InviteCountSettings> updateAction)
+    private async Task UpdateInviteCountSettingsAsync(ulong guildId, Action<InviteCountSetting> updateAction)
     {
-        await using var uow = await db.GetContextAsync();
+        await using var uow = await dbFactory.CreateConnectionAsync();
         var settings = await uow.InviteCountSettings.FirstOrDefaultAsync(x => x.GuildId == guildId);
 
         if (settings == null)
         {
-            settings = new InviteCountSettings { GuildId = guildId };
-            uow.InviteCountSettings.Add(settings);
+            settings = new InviteCountSetting
+            {
+                GuildId = guildId
+            };
+            await uow.InsertAsync(settings);
         }
 
         updateAction(settings);
-        uow.InviteCountSettings.Update(settings);
-        await uow.SaveChangesAsync();
+        await uow.UpdateAsync(settings);
+
 
         inviteCountSettings[guildId] = settings;
     }
 
     /// <summary>
-    /// Sets whether invite tracking is enabled or disabled
+    ///     Sets whether invite tracking is enabled or disabled
     /// </summary>
     /// <param name="guildId"></param>
     /// <param name="isEnabled"></param>
@@ -121,7 +173,7 @@ public class InviteCountService : INService, IReadyExecutor
     }
 
     /// <summary>
-    /// Sets whether invite count gets removed when a user leaves
+    ///     Sets whether invite count gets removed when a user leaves
     /// </summary>
     /// <param name="guildId"></param>
     /// <param name="removeOnLeave"></param>
@@ -133,7 +185,7 @@ public class InviteCountService : INService, IReadyExecutor
     }
 
     /// <summary>
-    /// Sets the minimum account age for an invite to get counted
+    ///     Sets the minimum account age for an invite to get counted
     /// </summary>
     /// <param name="guildId"></param>
     /// <param name="minAge"></param>
@@ -151,6 +203,9 @@ public class InviteCountService : INService, IReadyExecutor
             if (!settings.IsEnabled)
                 return;
         var guild = user.Guild;
+        var curUser = await guild.GetCurrentUserAsync();
+        if (!curUser.GuildPermissions.Has(GuildPermission.ManageGuild))
+            return;
         var newInvites = await guild.GetInvitesAsync();
         var usedInvite = FindUsedInvite(guild.Id, newInvites);
 
@@ -181,6 +236,7 @@ public class InviteCountService : INService, IReadyExecutor
         {
             invites.TryRemove(code, out _);
         }
+
         return Task.CompletedTask;
     }
 
@@ -216,50 +272,43 @@ public class InviteCountService : INService, IReadyExecutor
 
     private async Task UpdateInviteCount(ulong inviterId, ulong guildId)
     {
-        await using var uow = await db.GetContextAsync();
+        await using var uow = await dbFactory.CreateConnectionAsync();
         var inviter = await uow.InviteCounts.FirstOrDefaultAsync(x => x.UserId == inviterId && x.GuildId == guildId);
 
         if (inviter == null)
         {
             inviter = new InviteCount
             {
-                UserId = inviterId,
-                GuildId = guildId,
-                Count = 1
+                UserId = inviterId, GuildId = guildId, Count = 1
             };
-            uow.InviteCounts.Add(inviter);
+            await uow.InsertAsync(inviter);
         }
         else
         {
             inviter.Count++;
         }
-
-        await uow.SaveChangesAsync();
     }
 
     private async Task UpdateInvitedBy(ulong userId, ulong inviterId, ulong guildId)
     {
-        await using var uow = await db.GetContextAsync();
+        await using var uow = await dbFactory.CreateConnectionAsync();
         var invitedUser = new InvitedBy
         {
-            UserId = userId,
-            InviterId = inviterId,
-            GuildId = guildId
+            UserId = userId, InviterId = inviterId, GuildId = guildId
         };
 
-        uow.InvitedBy.Add(invitedUser);
-        await uow.SaveChangesAsync();
+        await uow.InsertAsync(invitedUser);
     }
 
     /// <summary>
-    /// Gets the invite count for a user
+    ///     Gets the invite count for a user
     /// </summary>
     /// <param name="userId"></param>
     /// <param name="guildId"></param>
     /// <returns></returns>
     public async Task<int> GetInviteCount(ulong userId, ulong guildId)
     {
-        await using var uow = await db.GetContextAsync();
+        await using var uow = await dbFactory.CreateConnectionAsync();
         var inviteCount = await uow.InviteCounts
             .Where(x => x.UserId == userId && x.GuildId == guildId)
             .Select(x => x.Count)
@@ -269,15 +318,15 @@ public class InviteCountService : INService, IReadyExecutor
     }
 
     /// <summary>
-    /// Gets who invited a user
+    ///     Gets who invited a user
     /// </summary>
     /// <param name="userId"></param>
     /// <param name="guild"></param>
     /// <returns></returns>
     public async Task<IUser?> GetInviter(ulong userId, IGuild guild)
     {
-        await using var uow = await db.GetContextAsync();
-        var inviterId = await uow.InvitedBy
+        await using var uow = await dbFactory.CreateConnectionAsync();
+        var inviterId = await uow.InvitedBies
             .Where(x => x.UserId == userId && x.GuildId == guild.Id)
             .Select(x => x.InviterId)
             .FirstOrDefaultAsync();
@@ -286,15 +335,15 @@ public class InviteCountService : INService, IReadyExecutor
     }
 
     /// <summary>
-    /// Gets all users invited by a user
+    ///     Gets all users invited by a user
     /// </summary>
     /// <param name="inviterId"></param>
     /// <param name="guild"></param>
     /// <returns></returns>
     public async Task<List<IUser>> GetInvitedUsers(ulong inviterId, IGuild guild)
     {
-        await using var uow = await db.GetContextAsync();
-        var invitedUserIds = await uow.InvitedBy
+        await using var uow = await dbFactory.CreateConnectionAsync();
+        var invitedUserIds = await uow.InvitedBies
             .Where(x => x.InviterId == inviterId && x.GuildId == guild.Id)
             .Select(x => x.UserId)
             .ToListAsync();
@@ -311,21 +360,25 @@ public class InviteCountService : INService, IReadyExecutor
     }
 
     /// <summary>
-    /// Gets the invite leaderboard
+    ///     Gets the invite leaderboard
     /// </summary>
     /// <param name="guild"></param>
     /// <param name="page"></param>
     /// <param name="pageSize"></param>
     /// <returns></returns>
-    public async Task<List<(ulong UserId, string Username, int InviteCount)>> GetInviteLeaderboardAsync(IGuild guild, int page = 1, int pageSize = 10)
+    public async Task<List<(ulong UserId, string Username, int InviteCount)>> GetInviteLeaderboardAsync(IGuild guild,
+        int page = 1, int pageSize = 10)
     {
-        await using var uow = await db.GetContextAsync();
+        await using var uow = await dbFactory.CreateConnectionAsync();
         var leaderboard = await uow.InviteCounts
             .Where(x => x.GuildId == guild.Id)
             .OrderByDescending(x => x.Count)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
-            .Select(x => new { x.UserId, x.Count })
+            .Select(x => new
+            {
+                x.UserId, x.Count
+            })
             .ToListAsync();
 
 
@@ -340,40 +393,21 @@ public class InviteCountService : INService, IReadyExecutor
         return result;
     }
 
-    /// <inheritdoc />
-    public async Task OnReadyAsync()
+    private async Task ProcessGuildWithRateLimiting(IGuild guild, SemaphoreSlim semaphore)
     {
-        var guilds = client.Guilds.ToHashSet();
-        var guildIds = client.Guilds.Select(g => g.Id).ToHashSet();
-
-        await using var uow = await db.GetContextAsync();
-        var allSettings = await uow.InviteCountSettings
-            .Where(s => guildIds.Contains(s.GuildId))
-            .ToDictionaryAsync(s => s.GuildId);
-
-        var mergedSettings = guildIds.ToDictionary(
-            guildId => guildId,
-            guildId => allSettings.TryGetValue(guildId, out var settings)
-                ? settings
-                : new InviteCountSettings
-                {
-                    GuildId = guildId,
-                    RemoveInviteOnLeave = true,
-                    IsEnabled = true
-                }
-        );
-
-        foreach (var kvp in mergedSettings)
+        try
         {
-            inviteCountSettings[kvp.Key] = kvp.Value;
+            await semaphore.WaitAsync();
+            await UpdateGuildInvites(guild);
         }
-
-        var newSettings = mergedSettings.Values.Where(s => !allSettings.ContainsKey(s.GuildId));
-        uow.InviteCountSettings.AddRange(newSettings);
-        await uow.SaveChangesAsync();
-        foreach (var i in guilds)
+        catch (Exception ex)
         {
-            await UpdateGuildInvites(i);
+            Console.WriteLine($"Error updating invites for guild {guild.Id}: {ex.Message}");
+        }
+        finally
+        {
+            semaphore.Release();
+            await Task.Delay(100);
         }
     }
 }

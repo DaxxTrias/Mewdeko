@@ -10,134 +10,149 @@ public interface IBotCredentials
     /// <summary>
     ///     Gets the bot's token.
     /// </summary>
-    string Token { get; }
+    public string Token { get; }
 
     /// <summary>
     ///     Gets the bot's client secret.
     /// </summary>
-    string ClientSecret { get; }
+    public string ClientSecret { get; }
 
     /// <summary>
     ///     Gets the bot's Google API key.
     /// </summary>
-    string GoogleApiKey { get; }
+    public string GoogleApiKey { get; }
 
     /// <summary>
     ///     The connections to use for connecting to redis. Use a ; separated list to use multiple.
     /// </summary>
-    string RedisConnections { get; }
+    public string RedisConnections { get; }
 
     /// <summary>
     ///     Gets the IDs of the bot's owners.
     /// </summary>
-    ImmutableArray<ulong> OwnerIds { get; }
+    public ImmutableArray<ulong> OwnerIds { get; }
 
     /// <summary>
     ///     Gets the bot's Statcord key.
     /// </summary>
-    string StatcordKey { get; }
+    public string StatcordKey { get; }
 
     /// <summary>
     ///     Gets the bot's Mashape key.
     /// </summary>
-    string MashapeKey { get; }
+    public string MashapeKey { get; }
 
     /// <summary>
     ///     Gets the bot's Spotify client ID.
     /// </summary>
-    string SpotifyClientId { get; }
+    public string SpotifyClientId { get; }
 
     /// <summary>
     ///     Gets the bot's Spotify client secret.
     /// </summary>
-    string SpotifyClientSecret { get; }
+    public string SpotifyClientSecret { get; }
 
     /// <summary>
     ///     Gets the bot's osu! API key.
     /// </summary>
-    string OsuApiKey { get; }
+    public string OsuApiKey { get; }
 
     /// <summary>
     ///     Gets the path where chat logs are saved.
     /// </summary>
-    string ChatSavePath { get; }
+    public string ChatSavePath { get; }
 
     /// <summary>
     ///     Gets the total number of shards the bot has.
     /// </summary>
-    int TotalShards { get; }
+    public int TotalShards { get; }
 
     /// <summary>
     ///     Gets the bot's Twitch client secret.
     /// </summary>
-    string TwitchClientSecret { get; }
+    public string TwitchClientSecret { get; }
 
     /// <summary>
     ///     Gets the bot's Trovo client ID.
     /// </summary>
-    string TrovoClientId { get; }
+    public string TrovoClientId { get; }
 
     /// <summary>
     ///     Gets the command used to restart the bot.
     /// </summary>
-    RestartConfig RestartCommand { get; }
+    public RestartConfig RestartCommand { get; }
 
     /// <summary>
     ///     Gets the token used for voting.
     /// </summary>
-    string VotesToken { get; }
+    public string VotesToken { get; }
 
     /// <summary>
     ///     Gets the bot's Twitch client ID.
     /// </summary>
-    string TwitchClientId { get; }
+    public string TwitchClientId { get; }
 
     /// <summary>
     ///     Gets the LocationIQ API key.
     /// </summary>
-    string LocationIqApiKey { get; }
+    public string LocationIqApiKey { get; }
 
     /// <summary>
     ///     Gets the TimezoneDB API key.
     /// </summary>
-    string TimezoneDbApiKey { get; }
+    public string TimezoneDbApiKey { get; }
 
     /// <summary>
     ///     Gets the channel ID for confession reports.
     /// </summary>
-    ulong ConfessionReportChannelId { get; }
+    public ulong ConfessionReportChannelId { get; }
 
     /// <summary>
     ///     Gets the bot's Cloudflare clearance cookie.
     /// </summary>
-    string CfClearance { get; }
+    public string CfClearance { get; }
 
     /// <summary>
     ///     Gets the bot's user agent used for bypassing Cloudflare.
     /// </summary>
-    string UserAgent { get; }
+    public string UserAgent { get; }
 
     /// <summary>
     ///     Gets the bot's CSRF token used for bypassing Cloudflare.
     /// </summary>
-    string CsrfToken { get; }
+    public string CsrfToken { get; }
 
     /// <summary>
     ///     Last.fm API key
     /// </summary>
-    string LastFmApiKey { get; }
+    public string LastFmApiKey { get; }
 
     /// <summary>
     ///     Last.fm API secret
     /// </summary>
-    string LastFmApiSecret { get; }
+    public string LastFmApiSecret { get; }
+
+    /// <summary>
+    ///     Gets the bot's Patreon client ID.
+    /// </summary>
+    public string PatreonClientId { get; }
+
+    /// <summary>
+    ///     Gets the bot's Patreon client secret.
+    /// </summary>
+    public string PatreonClientSecret { get; }
+
+    /// <summary>
+    ///     Gets the base URL for Patreon OAuth callbacks.
+    /// </summary>
+    public string PatreonBaseUrl { get; }
 
     /// <summary>
     ///     Checks if the given user is an owner of the bot.
     /// </summary>
     /// <param name="u">The user to check.</param>
     /// <returns><see langword="true" /> if the user is an owner; otherwise, <see langword="false" />.</returns>
-    bool IsOwner(IUser u);
+    public bool IsOwner(IUser u);
 }
 
 /// <summary>

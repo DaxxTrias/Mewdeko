@@ -1,3 +1,4 @@
+using DataModel;
 using Mewdeko.Modules.Chat_Triggers.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -38,7 +39,7 @@ public class ChatTriggersController(ChatTriggersService service) : Controller
     /// <param name="toUpdate">The updated trigger info</param>
     /// <returns></returns>
     [HttpPatch]
-    public async Task<IActionResult> UpdateTriggerForGuild(ulong guildId, [FromBody] ChatTriggers toUpdate)
+    public async Task<IActionResult> UpdateTriggerForGuild(ulong guildId, [FromBody] ChatTrigger toUpdate)
     {
         await service.UpdateInternalAsync(guildId, toUpdate);
         return Ok();
@@ -51,7 +52,7 @@ public class ChatTriggersController(ChatTriggersService service) : Controller
     /// <param name="toAdd">The trigger to add</param>
     /// <returns>The model that was added including its ID</returns>
     [HttpPost]
-    public async Task<IActionResult> AddTriggerToGuild(ulong guildId, [FromBody] ChatTriggers toAdd)
+    public async Task<IActionResult> AddTriggerToGuild(ulong guildId, [FromBody] ChatTrigger toAdd)
     {
         var added = await service.AddTrigger(guildId, toAdd);
         return Ok(added);

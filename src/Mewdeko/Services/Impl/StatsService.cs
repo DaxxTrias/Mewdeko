@@ -7,7 +7,6 @@ using System.Threading;
 using Discord.Commands;
 using Humanizer;
 using Mewdeko.Modules.Utility.Services;
-using Serilog;
 using Swan.Formatters;
 
 namespace Mewdeko.Services.Impl;
@@ -20,12 +19,13 @@ public class StatsService : IStatsService, IDisposable
     /// <summary>
     ///     The version of the bot. I should make this set from commits somehow idk
     /// </summary>
-    public const string BotVersion = "7.6.8";
+    public const string BotVersion = "7.8.1";
 
     private readonly IDataCache cache;
     private readonly DiscordShardedClient client;
     private readonly IBotCredentials creds;
     private readonly HttpClient http;
+    private readonly ILogger<StatsService> logger;
 
     private readonly DateTime started;
     private PeriodicTimer topGgTimer;
@@ -41,12 +41,13 @@ public class StatsService : IStatsService, IDisposable
     /// <exception cref="ArgumentNullException"></exception>
     public StatsService(
         DiscordShardedClient client, IBotCredentials creds, CommandService cmdServ,
-        HttpClient http, IDataCache cache)
+        HttpClient http, IDataCache cache, ILogger<StatsService> logger)
     {
         this.client = client ?? throw new ArgumentNullException(nameof(client));
         this.creds = creds ?? throw new ArgumentNullException(nameof(creds));
         this.http = http ?? throw new ArgumentNullException(nameof(http));
         this.cache = cache ?? throw new ArgumentNullException(nameof(cache));
+        this.logger = logger;
 
         started = DateTime.UtcNow;
 
@@ -161,7 +162,7 @@ public class StatsService : IStatsService, IDisposable
             {
                 try
                 {
-                    Log.Information("Updating top guilds");
+                    logger.LogInformation("Updating top guilds");
                     var guilds = await client.Rest.GetGuildsAsync(true);
                     var servers = guilds.OrderByDescending(x => x.ApproximateMemberCount.Value)
                         .Where(x => !x.Name.Contains("botlist", StringComparison.CurrentCultureIgnoreCase)).Take(11)
@@ -176,11 +177,11 @@ public class StatsService : IStatsService, IDisposable
                     var serialied = Json.Serialize(servers);
                     await cache.Redis.GetDatabase().StringSetAsync($"{client.CurrentUser.Id}_topguilds", serialied)
                         .ConfigureAwait(false);
-                    Log.Information("Updated top guilds");
+                    logger.LogInformation("Updated top guilds");
                 }
                 catch
                 {
-                    Log.Error("Failed to update top guilds: {0}");
+                    logger.LogError("Failed to update top guilds: {0}");
                     return;
                 }
             } while (await periodicTimer.WaitForNextTickAsync());
@@ -188,12 +189,10 @@ public class StatsService : IStatsService, IDisposable
         return Task.CompletedTask;
     }
 
-
     private TimeSpan GetUptime()
     {
         return DateTime.UtcNow - started;
     }
-
 
     private async Task PostToTopGg()
     {
@@ -220,7 +219,7 @@ public class StatsService : IStatsService, IDisposable
                 .ConfigureAwait(false);
 
             if (response.IsSuccessStatusCode) continue;
-            Log.Error("Failed to post stats to Top.gg");
+            logger.LogError("Failed to post stats to Top.gg");
             return;
         }
     }
