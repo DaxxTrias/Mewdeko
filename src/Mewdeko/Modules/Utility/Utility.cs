@@ -450,9 +450,8 @@ public partial class Utility(
             components: config.Data.ShowInviteButton
                 ? new ComponentBuilder()
                     .WithButton(style: ButtonStyle.Link,
-                        url:
-                        "",
-                        label: "",
+                        url: "",
+                        label: "Invite!",
                         emote: "".ToIEmote()).Build()
                 : null).ConfigureAwait(false);
     }
