@@ -16,6 +16,9 @@ public class OpenAiStreamWrapper : Stream
     private readonly AsyncCollectionResult<StreamingChatCompletionUpdate> stream;
     private bool endOfStream;
     private IAsyncEnumerator<StreamingChatCompletionUpdate>? enumerator;
+    private readonly StringBuilder streamedContent = new();
+    private int? totalTokens = null;
+    private bool finalUsageEmitted = false;
 
     /// <summary>
     ///     Initializes a new instance of the OpenAiStreamWrapper class.
@@ -50,7 +53,7 @@ public class OpenAiStreamWrapper : Stream
     /// <inheritdoc />
     public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
     {
-        if (endOfStream && this.buffer.Length == 0)
+        if (endOfStream && this.buffer.Length == 0 && finalUsageEmitted)
             return 0;
 
         while (this.buffer.Length < count && !endOfStream)
@@ -68,15 +71,17 @@ public class OpenAiStreamWrapper : Stream
                 var update = enumerator.Current;
                 if (update.ContentUpdate.Count > 0)
                 {
+                    var text = update.ContentUpdate[0].Text;
+                    streamedContent.Append(text);
                     var data = new
                     {
                         delta = new
                         {
-                            text = update.ContentUpdate[0].Text
+                            text = text
                         },
                         usage = new
                         {
-                            total_tokens = 0
+                            total_tokens = 0 // Will be emitted at the end
                         }
                     };
 
@@ -85,12 +90,42 @@ public class OpenAiStreamWrapper : Stream
                     var bytes = Encoding.UTF8.GetBytes(line);
                     await this.buffer.WriteAsync(bytes, cancellationToken);
                 }
+
+                // Try to get token usage if available (SDK may provide it in update.Usage)
+                if (update.Usage is not null)
+                {
+                    // Use reflection to support any property names (Prompt, Completion, Total)
+                    var usageType = update.Usage.GetType();
+                    var prompt = (int?)usageType.GetProperty("Prompt")?.GetValue(update.Usage) ?? 0;
+                    var completion = (int?)usageType.GetProperty("Completion")?.GetValue(update.Usage) ?? 0;
+                    var total = (int?)usageType.GetProperty("Total")?.GetValue(update.Usage);
+
+                    if (total.HasValue && total.Value > 0)
+                        totalTokens = total.Value;
+                    else if (prompt > 0 || completion > 0)
+                        totalTokens = prompt + completion;
+                }
             }
             catch
             {
                 endOfStream = true;
                 break;
             }
+        }
+
+        // After the stream ends, emit a final usage chunk if not already emitted
+        if (endOfStream && !finalUsageEmitted)
+        {
+            finalUsageEmitted = true;
+            var usageData = new
+            {
+                delta = new { text = string.Empty },
+                usage = new { total_tokens = totalTokens ?? 0 }
+            };
+            var json = JsonSerializer.Serialize(usageData);
+            var line = $"data: {json}\n\n";
+            var bytes = Encoding.UTF8.GetBytes(line);
+            await this.buffer.WriteAsync(bytes, cancellationToken);
         }
 
         this.buffer.Position = 0;
