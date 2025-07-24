@@ -52,78 +52,6 @@ public class XpRewardManager : INService
     }
 
     /// <summary>
-    ///     Gets the role reward for a specific level.
-    /// </summary>
-    /// <param name="db">The database connection.</param>
-    /// <param name="guildId">The guild ID.</param>
-    /// <param name="level">The level.</param>
-    /// <returns>The role reward for the specified level, or null if none exists.</returns>
-    public async Task<XpRoleReward?> GetRoleRewardForLevelAsync(MewdekoDb db, ulong guildId, int level)
-    {
-        // Create a cache key for Redis
-        var cacheKey = $"xp:rewards:{guildId}:role:{level}";
-
-        // Get Redis database from cache manager
-        var redis = cacheManager.GetRedisDatabase();
-
-        // Try to get from Redis
-        var cachedValue = await redis.StringGetAsync(cacheKey);
-
-        if (cachedValue.HasValue)
-        {
-            // Deserialize the JSON string back to XpRoleReward object
-            return JsonSerializer.Deserialize<XpRoleReward>((string)cachedValue);
-        }
-
-        // Get from database if not in cache using LinqToDB
-        var reward = await db.XpRoleRewards
-            .FirstOrDefaultAsync(x => x.GuildId == guildId && x.Level == level);
-
-        if (reward == null) return null;
-
-        // Serialize the object to JSON and store in Redis
-        var serializedReward = JsonSerializer.Serialize(reward);
-        await redis.StringSetAsync(cacheKey, serializedReward, TimeSpan.FromMinutes(30));
-
-        return reward;
-    }
-
-    /// <summary>
-    ///     Gets the currency reward for a specific level.
-    /// </summary>
-    /// <param name="db">The database connection.</param>
-    /// <param name="guildId">The guild ID.</param>
-    /// <param name="level">The level.</param>
-    /// <returns>The currency reward for the specified level, or null if none exists.</returns>
-    public async Task<XpCurrencyReward?> GetCurrencyRewardForLevelAsync(MewdekoDb db, ulong guildId, int level)
-    {
-        // Check cache first
-        var cacheKey = $"xp:rewards:{guildId}:currency:{level}";
-        var redis = cacheManager.GetRedisDatabase();
-
-        // Try to get from Redis
-        var cachedValue = await redis.StringGetAsync(cacheKey);
-
-        if (cachedValue.HasValue)
-        {
-            // Deserialize the JSON string back to XpCurrencyReward object
-            return JsonSerializer.Deserialize<XpCurrencyReward>((string)cachedValue);
-        }
-
-        // Get from database if not in cache using LinqToDB
-        var reward = await db.XpCurrencyRewards
-            .FirstOrDefaultAsync(x => x.GuildId == guildId && x.Level == level);
-
-        if (reward == null) return null;
-
-        // Serialize the object to JSON and store in Redis
-        var serializedReward = JsonSerializer.Serialize(reward);
-        await redis.StringSetAsync(cacheKey, serializedReward, TimeSpan.FromMinutes(30));
-
-        return reward;
-    }
-
-    /// <summary>
     ///     Sets a role reward for a specific level.
     /// </summary>
     /// <param name="guildId">The guild ID.</param>
@@ -302,112 +230,6 @@ public class XpRewardManager : INService
     }
 
     /// <summary>
-    ///     Grants role rewards to users.
-    /// </summary>
-    /// <param name="rewards">The list of role rewards to grant.</param>
-    /// <returns>A task representing the asynchronous operation.</returns>
-    public async Task GrantRoleRewardsAsync(List<RoleRewardItem> rewards)
-    {
-        if (rewards.Count == 0)
-            return;
-
-        // Get unique guilds
-        var guildIds = rewards.Select(r => r.GuildId).Distinct().ToList();
-
-        foreach (var guildId in guildIds)
-        {
-            var guild = client.GetGuild(guildId);
-            if (guild == null)
-                continue;
-
-            // Get guild settings to check exclusivity
-            var settings = await cacheManager.GetGuildXpSettingsAsync(guildId);
-
-            // Process rewards by user
-            var userRewards = rewards.Where(r => r.GuildId == guildId).GroupBy(r => r.UserId);
-
-            foreach (var userGroup in userRewards)
-            {
-                var userId = userGroup.Key;
-                var user = guild.GetUser(userId);
-
-                if (user == null)
-                    continue;
-
-                try
-                {
-                    // Apply exclusive role rewards if configured
-                    if (settings.ExclusiveRoleRewards)
-                    {
-                        await ProcessExclusiveRoleRewardsAsync(guild, user, userGroup);
-                    }
-                    else
-                    {
-                        // Just add all role rewards
-                        foreach (var reward in userGroup)
-                        {
-                            var role = guild.GetRole(reward.RoleId);
-                            if (role != null && !user.Roles.Any(r => r.Id == role.Id))
-                            {
-                                await user.AddRoleAsync(role);
-                                await Task.Delay(100); // Avoid rate limiting
-                            }
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    logger.LogError(ex, "Error granting role reward to {UserId} in {GuildId}", userId, guildId);
-                }
-            }
-        }
-    }
-
-    /// <summary>
-    ///     Processes exclusive role rewards, removing old rewards and adding new ones.
-    /// </summary>
-    /// <param name="guild">The guild.</param>
-    /// <param name="user">The user.</param>
-    /// <param name="userRewards">The user's rewards.</param>
-    /// <returns>A task representing the asynchronous operation.</returns>
-    private async Task ProcessExclusiveRoleRewardsAsync(
-        SocketGuild guild,
-        SocketGuildUser user,
-        IGrouping<ulong, RoleRewardItem> userRewards)
-    {
-        await using var db = await dbFactory.CreateConnectionAsync();
-
-        // Get all role rewards for the guild using LinqToDB
-        var allRewardRoles = await db.XpRoleRewards
-            .Where(r => r.GuildId == guild.Id)
-            .Select(r => r.RoleId)
-            .ToListAsync();
-
-        // Remove old reward roles first
-        foreach (var roleId in user.Roles.Where(r => allRewardRoles.Contains(r.Id)).Select(r => r.Id))
-        {
-            var role = guild.GetRole(roleId);
-            if (role != null)
-            {
-                await user.RemoveRoleAsync(role);
-                await Task.Delay(100); // Avoid rate limiting
-            }
-        }
-
-        // Get highest level reward in this batch
-        var highestReward = await GetHighestLevelRewardAsync(db, guild.Id, userRewards);
-
-        if (highestReward != null)
-        {
-            var role = guild.GetRole(highestReward.RoleId);
-            if (role != null)
-            {
-                await user.AddRoleAsync(role);
-            }
-        }
-    }
-
-    /// <summary>
     ///     Gets the highest level reward for a user from a group of rewards.
     /// </summary>
     /// <param name="db">The database connection.</param>
@@ -499,7 +321,7 @@ public class XpRewardManager : INService
                 };
 
                 await SendNotificationsAsync([notification]).ConfigureAwait(false);
-                logger.LogDebug("Sent level up notification for user {UserId} in guild {GuildId}: Level {Level}",
+                logger.LogInformation("Sent level up notification for user {UserId} in guild {GuildId}: Level {Level}",
                     eventArgs.UserId, eventArgs.GuildId, eventArgs.NewLevel);
             }
         }
@@ -522,6 +344,7 @@ public class XpRewardManager : INService
             var settings = await cacheManager.GetGuildXpSettingsAsync(eventArgs.GuildId);
             var redis = cacheManager.GetRedisDatabase();
             var server = redis.Multiplexer.GetServer(redis.Multiplexer.GetEndPoints().First());
+            logger.LogInformation($"Processing rewards for {eventArgs.GuildId}");
 
             var pattern = $"xp:rewards:{eventArgs.GuildId}:role:*";
             var keys = new List<RedisKey>();
@@ -607,7 +430,7 @@ public class XpRewardManager : INService
                 }
             }
 
-            logger.LogDebug("Synchronized role rewards for user {UserId} in guild {GuildId} at level {Level}",
+            logger.LogInformation("Synchronized role rewards for user {UserId} in guild {GuildId} at level {Level}",
                 eventArgs.UserId, eventArgs.GuildId, eventArgs.NewLevel);
         }
         catch (Exception ex)
@@ -674,7 +497,7 @@ public class XpRewardManager : INService
                 if (currencyRewards.Count > 0)
                 {
                     await GrantCurrencyRewardsAsync(currencyRewards).ConfigureAwait(false);
-                    logger.LogDebug(
+                    logger.LogInformation(
                         "Granted {Count} currency rewards for user {UserId} in guild {GuildId}: {OldLevel} -> {NewLevel}",
                         currencyRewards.Count, eventArgs.UserId, eventArgs.GuildId, eventArgs.OldLevel,
                         eventArgs.NewLevel);
@@ -696,7 +519,7 @@ public class XpRewardManager : INService
                 if (currencyRewards.Count > 0)
                 {
                     await GrantCurrencyRewardsAsync(currencyRewards).ConfigureAwait(false);
-                    logger.LogDebug(
+                    logger.LogInformation(
                         "Removed {Count} currency rewards from user {UserId} in guild {GuildId}: {OldLevel} -> {NewLevel}",
                         currencyRewards.Count, eventArgs.UserId, eventArgs.GuildId, eventArgs.OldLevel,
                         eventArgs.NewLevel);

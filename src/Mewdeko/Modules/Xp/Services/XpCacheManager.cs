@@ -489,7 +489,7 @@ public class XpCacheManager : INService
             {
                 // Remove only expired entries instead of clearing all
                 hotGuildCache.Compact(0.25);
-                logger.LogDebug("Compacted hot guild cache");
+                logger.LogInformation("Compacted hot guild cache");
             }
 
             // Process Redis keys in batches to prevent long-running operations
@@ -499,7 +499,7 @@ public class XpCacheManager : INService
             keysRemoved = disconnectedStats.keysRemoved + multiplierStats.keysRemoved;
             keysExamined = disconnectedStats.keysExamined + multiplierStats.keysExamined;
 
-            logger.LogDebug("Cache cleanup stats: {Removed} keys removed, {Examined} keys examined",
+            logger.LogInformation("Cache cleanup stats: {Removed} keys removed, {Examined} keys examined",
                 keysRemoved, keysExamined);
         }
         catch (Exception ex)
@@ -549,7 +549,7 @@ public class XpCacheManager : INService
             if (keysToDelete.Count < MaxBatchSize) continue;
             await redisCache.KeyDeleteAsync(keysToDelete.ToArray()).ConfigureAwait(false);
             keysRemoved += keysToDelete.Count;
-            logger.LogDebug("Deleted {Count} Redis keys for disconnected guilds", keysToDelete.Count);
+            logger.LogInformation("Deleted {Count} Redis keys for disconnected guilds", keysToDelete.Count);
             keysToDelete.Clear();
         }
 
@@ -557,7 +557,7 @@ public class XpCacheManager : INService
         if (keysToDelete.Count <= 0) return (keysRemoved, keysExamined);
         await redisCache.KeyDeleteAsync(keysToDelete.ToArray()).ConfigureAwait(false);
         keysRemoved += keysToDelete.Count;
-        logger.LogDebug("Deleted {Count} Redis keys for disconnected guilds", keysToDelete.Count);
+        logger.LogInformation("Deleted {Count} Redis keys for disconnected guilds", keysToDelete.Count);
 
         return (keysRemoved, keysExamined);
     }
@@ -637,7 +637,7 @@ public class XpCacheManager : INService
                     if (redisKeysToDelete.Count >= MaxBatchSize)
                     {
                         await redisCache.KeyDeleteAsync(redisKeysToDelete.ToArray()).ConfigureAwait(false);
-                        logger.LogDebug("Deleted {Count} Redis keys for guild {GuildId}",
+                        logger.LogInformation("Deleted {Count} Redis keys for guild {GuildId}",
                             redisKeysToDelete.Count, guildId);
                         redisKeysToDelete.Clear();
                     }
@@ -648,7 +648,7 @@ public class XpCacheManager : INService
             if (redisKeysToDelete.Count > 0)
             {
                 await redisCache.KeyDeleteAsync(redisKeysToDelete.ToArray()).ConfigureAwait(false);
-                logger.LogDebug("Deleted {Count} remaining Redis keys for guild {GuildId}",
+                logger.LogInformation("Deleted {Count} remaining Redis keys for guild {GuildId}",
                     redisKeysToDelete.Count, guildId);
             }
         }
