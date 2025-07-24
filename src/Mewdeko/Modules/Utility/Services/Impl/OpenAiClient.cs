@@ -48,10 +48,10 @@ public class OpenAiClient : IAiClient
     /// <param name="cancellationToken">Optional token to cancel the operation.</param>
     /// <returns>A stream containing the AI response.</returns>
     public async Task<IAsyncEnumerable<string>> StreamResponseAsync(
-    IEnumerable<AiMessage> messages,
-    string model,
-    string apiKey,
-    CancellationToken cancellationToken = default)
+        IEnumerable<AiMessage> messages,
+        string model,
+        string apiKey,
+        CancellationToken cancellationToken = default)
     {
         var request = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/chat/completions");
         request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
@@ -72,21 +72,54 @@ public class OpenAiClient : IAiClient
         };
 
         request.Content = new StringContent(
-        JsonSerializer.Serialize(payload),
-        Encoding.UTF8,
-        "application/json");
+            JsonSerializer.Serialize(payload),
+            Encoding.UTF8,
+            "application/json");
 
-        //var payloadJson = JsonSerializer.Serialize(payload);
-        //// Add debug logging for the outgoing payload
-        //Serilog.Log.Information("OpenAI Payload: {Payload}", payloadJson);
+        async IAsyncEnumerable<string> StreamWithUsage()
+        {
+            int? promptTokens = null, completionTokens = null, totalTokens = null;
+            await foreach (var json in StreamChatCompletionsAsync(httpClient, request))
+            {
+                if (!string.IsNullOrWhiteSpace(json))
+                {
+                    // Try to parse usage from the chunk if present
+                    try
+                    {
+                        using var doc = JsonDocument.Parse(json);
+                        if (doc.RootElement.TryGetProperty("usage", out var usageElem))
+                        {
+                            if (usageElem.TryGetProperty("prompt_tokens", out var promptElem))
+                                promptTokens = promptElem.GetInt32();
+                            if (usageElem.TryGetProperty("completion_tokens", out var completionElem))
+                                completionTokens = completionElem.GetInt32();
+                            if (usageElem.TryGetProperty("total_tokens", out var totalElem))
+                                totalTokens = totalElem.GetInt32();
+                        }
+                    }
+                    catch { /* ignore parse errors, just stream the chunk */ }
+                    yield return json;
+                }
+            }
 
-        //request.Content = new StringContent(payloadJson, System.Text.Encoding.UTF8, "application/json");
+            // If usage was found, emit a final usage chunk
+            if (promptTokens.HasValue || completionTokens.HasValue || totalTokens.HasValue)
+            {
+                var usageObj = new
+                {
+                    usage = new
+                    {
+                        prompt_tokens = promptTokens ?? 0,
+                        completion_tokens = completionTokens ?? 0,
+                        total_tokens = totalTokens ?? ((promptTokens ?? 0) + (completionTokens ?? 0))
+                    }
+                };
+                var usageJson = JsonSerializer.Serialize(usageObj);
+                yield return usageJson;
+            }
+        }
 
-        // Use the static method to get the streaming JSON chunks
-        var stream = StreamChatCompletionsAsync(httpClient, request);
-
-        // Optionally, you can wrap this in Task.FromResult to match the signature
-        return await Task.FromResult(stream);
+        return StreamWithUsage();
     }
 
     /// <summary>
