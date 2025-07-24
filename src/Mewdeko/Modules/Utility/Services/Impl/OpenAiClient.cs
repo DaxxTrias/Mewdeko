@@ -48,10 +48,10 @@ public class OpenAiClient : IAiClient
     /// <param name="cancellationToken">Optional token to cancel the operation.</param>
     /// <returns>A stream containing the AI response.</returns>
     public async Task<IAsyncEnumerable<string>> StreamResponseAsync(
-        IEnumerable<AiMessage> messages,
-        string model,
-        string apiKey,
-        CancellationToken cancellationToken = default)
+    IEnumerable<AiMessage> messages,
+    string model,
+    string apiKey,
+    CancellationToken cancellationToken = default)
     {
         var request = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/chat/completions");
         request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
@@ -64,7 +64,11 @@ public class OpenAiClient : IAiClient
         {
             model,
             messages = openAiMessages,
-            stream = true
+            stream = true,
+            stream_options = new
+            {
+                include_usage = true
+            }
         };
 
         request.Content = new StringContent(
