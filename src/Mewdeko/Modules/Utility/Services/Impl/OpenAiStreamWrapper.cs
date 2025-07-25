@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using OpenAI.Chat;
+using Serilog;
 
 namespace Mewdeko.Modules.Utility.Services.Impl;
 
@@ -94,6 +95,7 @@ public class OpenAiStreamWrapper : Stream
                 // Try to get token usage if available (SDK may provide it in update.Usage)
                 if (update.Usage is not null)
                 {
+                    Log.Debug("OpenAI stream usage update: {Usage}", update.Usage);
                     // Use reflection to support any property names (Prompt, Completion, Total)
                     var usageType = update.Usage.GetType();
                     var prompt = (int?)usageType.GetProperty("Prompt")?.GetValue(update.Usage) ?? 0;

@@ -81,6 +81,8 @@ namespace Mewdeko.Modules.Utility.Services.Impl
                 using var doc = JsonDocument.Parse(json);
                 var root = doc.RootElement;
 
+                Log.Debug("Parsing OpenAI stream usage: {Json}", json);
+
                 // Look for a usage object in the root (present in the final chunk if usage stats are enabled)
                 if (root.TryGetProperty("usage", out var usageElem) && usageElem.ValueKind == JsonValueKind.Object)
                 {
@@ -105,7 +107,7 @@ namespace Mewdeko.Modules.Utility.Services.Impl
             }
             catch (JsonException ex)
             {
-                 Log.Debug($"Failed to parse usage JSON for Grok: {ex.Message}");
+                 Log.Debug($"Failed to parse usage JSON for GPT: {ex.Message}");
                 return null;
             }
             catch (Exception ex)

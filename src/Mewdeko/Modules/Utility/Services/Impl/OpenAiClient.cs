@@ -79,7 +79,7 @@ public class OpenAiClient : IAiClient
         async IAsyncEnumerable<string> StreamWithUsage()
         {
             int? promptTokens = null, completionTokens = null, totalTokens = null;
-            bool usageEmitted = false;
+            var usageEmitted = false;
             await foreach (var json in StreamChatCompletionsAsync(httpClient, request))
             {
                 if (!string.IsNullOrWhiteSpace(json))
@@ -88,6 +88,8 @@ public class OpenAiClient : IAiClient
                     try
                     {
                         using var doc = JsonDocument.Parse(json);
+                        Serilog.Log.Debug("Received chunk: {Json}", json);
+
                         if (doc.RootElement.TryGetProperty("usage", out var usageElem))
                         {
                             if (usageElem.TryGetProperty("prompt_tokens", out var promptElem))

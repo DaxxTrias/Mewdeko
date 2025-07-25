@@ -622,6 +622,7 @@ public class AiService : INService
         if (lastRawJson != null && 
             (config.Provider == (int)AiProvider.OpenAi || config.Provider == (int)AiProvider.Grok))
         {
+            logger.LogInformation("Parsing final usage from last raw JSON: {Json}", lastRawJson);
             var usage = streamParser.ParseUsage(lastRawJson, (AiProvider)config.Provider);
             if (usage.HasValue)
             {
