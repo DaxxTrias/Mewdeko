@@ -78,6 +78,10 @@ public class OpenAiStreamWrapper : Stream
                         delta = new
                         {
                             text = text
+                        },
+                        usage = new
+                        {
+                            total_tokens = 0 // Will be emitted at the end
                         }
                     };
 
@@ -86,7 +90,21 @@ public class OpenAiStreamWrapper : Stream
                     var bytes = Encoding.UTF8.GetBytes(line);
                     await this.buffer.WriteAsync(bytes, cancellationToken);
                 }
-                // Remove usage emission from per-chunk updates. Only emit usage at the end.
+
+                // Try to get token usage if available (SDK may provide it in update.Usage)
+                if (update.Usage is not null)
+                {
+                    // Use reflection to support any property names (Prompt, Completion, Total)
+                    var usageType = update.Usage.GetType();
+                    var prompt = (int?)usageType.GetProperty("Prompt")?.GetValue(update.Usage) ?? 0;
+                    var completion = (int?)usageType.GetProperty("Completion")?.GetValue(update.Usage) ?? 0;
+                    var total = (int?)usageType.GetProperty("Total")?.GetValue(update.Usage);
+
+                    if (total.HasValue && total.Value > 0)
+                        totalTokens = total.Value;
+                    else if (prompt > 0 || completion > 0)
+                        totalTokens = prompt + completion;
+                }
             }
             catch
             {
@@ -102,7 +120,7 @@ public class OpenAiStreamWrapper : Stream
             var usageData = new
             {
                 delta = new { text = string.Empty },
-                usage = new { total_tokens = streamedContent.Length > 0 ? streamedContent.ToString().Split(' ').Length : 0 } // fallback: word count as token estimate
+                usage = new { total_tokens = totalTokens ?? 0 }
             };
             var json = JsonSerializer.Serialize(usageData);
             var line = $"data: {json}\n\n";

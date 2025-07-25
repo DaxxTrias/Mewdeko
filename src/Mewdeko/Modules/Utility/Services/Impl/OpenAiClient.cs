@@ -79,6 +79,7 @@ public class OpenAiClient : IAiClient
         async IAsyncEnumerable<string> StreamWithUsage()
         {
             int? promptTokens = null, completionTokens = null, totalTokens = null;
+            bool usageEmitted = false;
             await foreach (var json in StreamChatCompletionsAsync(httpClient, request))
             {
                 if (!string.IsNullOrWhiteSpace(json))
@@ -95,6 +96,7 @@ public class OpenAiClient : IAiClient
                                 completionTokens = completionElem.GetInt32();
                             if (usageElem.TryGetProperty("total_tokens", out var totalElem))
                                 totalTokens = totalElem.GetInt32();
+                            usageEmitted = true;
                         }
                     }
                     catch { /* ignore parse errors, just stream the chunk */ }
@@ -102,24 +104,72 @@ public class OpenAiClient : IAiClient
                 }
             }
 
-            // If usage was found, emit a final usage chunk
-            if (promptTokens.HasValue || completionTokens.HasValue || totalTokens.HasValue)
+            // If usage was not found, make a non-streaming request to get usage
+            if (!usageEmitted)
             {
-                var usageObj = new
+                var usage = await FetchOpenAiUsageAsync(openAiMessages.ToList(), model, apiKey, cancellationToken);
+                if (usage != null)
                 {
-                    usage = new
-                    {
-                        prompt_tokens = promptTokens ?? 0,
-                        completion_tokens = completionTokens ?? 0,
-                        total_tokens = totalTokens ?? ((promptTokens ?? 0) + (completionTokens ?? 0))
-                    }
-                };
-                var usageJson = JsonSerializer.Serialize(usageObj);
-                yield return usageJson;
+                    promptTokens = usage.Value.PromptTokens;
+                    completionTokens = usage.Value.CompletionTokens;
+                    totalTokens = usage.Value.TotalTokens;
+                }
             }
+
+            // Always emit a final usage chunk
+            var usageObj = new
+            {
+                usage = new
+                {
+                    prompt_tokens = promptTokens ?? 0,
+                    completion_tokens = completionTokens ?? 0,
+                    total_tokens = totalTokens ?? ((promptTokens ?? 0) + (completionTokens ?? 0))
+                }
+            };
+            var usageJson = JsonSerializer.Serialize(usageObj);
+            yield return usageJson;
         }
 
         return StreamWithUsage();
+    }
+
+    // Helper to fetch usage stats after streaming finishes
+    private async Task<(int PromptTokens, int CompletionTokens, int TotalTokens)?> FetchOpenAiUsageAsync(
+        IEnumerable<object> messages, string model, string apiKey, CancellationToken cancellationToken)
+    {
+        var payload = new
+        {
+            model,
+            messages,
+            stream = false
+        };
+        var request = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/chat/completions")
+        {
+            Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
+        };
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
+
+        using var response = await httpClient.SendAsync(request, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+            return null;
+
+        var content = await response.Content.ReadAsStringAsync(cancellationToken);
+        using var doc = JsonDocument.Parse(content);
+        var root = doc.RootElement;
+        if (root.TryGetProperty("usage", out var usageElem))
+        {
+            int prompt = 0, completion = 0, total = 0;
+            if (usageElem.TryGetProperty("prompt_tokens", out var promptElem))
+                prompt = promptElem.GetInt32();
+            if (usageElem.TryGetProperty("completion_tokens", out var completionElem))
+                completion = completionElem.GetInt32();
+            if (usageElem.TryGetProperty("total_tokens", out var totalElem))
+                total = totalElem.GetInt32();
+            else
+                total = prompt + completion;
+            return (prompt, completion, total);
+        }
+        return null;
     }
 
     /// <summary>
