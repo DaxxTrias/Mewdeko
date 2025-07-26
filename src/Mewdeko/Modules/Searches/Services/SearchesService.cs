@@ -381,119 +381,411 @@ public class SearchesService : INService, IUnloadableService
 
 
     /// <summary>
-    ///     Fetches weather data for the specified location.
+    /// Gets weather data for the specified location.
     /// </summary>
-    /// <param name="query">The location for which to fetch weather data.</param>
-    /// <returns>
-    ///     A task representing the asynchronous operation, returning the weather data for the specified location.
-    /// </returns>
-    /// <remarks>
-    ///     This method fetches weather data for the specified location using the OpenWeatherMap API.
-    /// </remarks>
-    public Task<WeatherData?> GetWeatherDataAsync(string query)
-    {
-        query = query.Trim().ToLowerInvariant();
-
-        return cache.GetOrAddCachedDataAsync($"Mewdeko_weather_{query}",
-            GetWeatherDataFactory,
-            query,
-            TimeSpan.FromHours(3));
-    }
-
-    private async Task<WeatherData?>? GetWeatherDataFactory(string query)
+    /// <param name="query">The location query.</param>
+    public async Task<OpenMeteoWeatherResponse?> GetWeatherDataAsync(string query)
     {
         using var http = httpFactory.CreateClient();
         try
         {
-            var data = await http.GetStringAsync(
-                    $"https://api.openweathermap.org/data/2.5/weather?q={query}&appid=42cd627dd60debf25a5739e50a217d74&units=metric")
-                .ConfigureAwait(false);
+            // First, geocode the location
+            var geocodeUrl =
+                $"https://geocoding-api.open-meteo.com/v1/search?name={Uri.EscapeDataString(query)}&count=1&language=en";
+            var geocodeResponse = await http.GetStringAsync(geocodeUrl).ConfigureAwait(false);
+            var geocodeData = JsonSerializer.Deserialize<OpenMeteoGeocodingResponse>(geocodeResponse);
 
-            return string.IsNullOrEmpty(data) ? null : JsonSerializer.Deserialize<WeatherData>(data);
+            if (geocodeData?.Results == null || geocodeData.Results.Count == 0)
+            {
+                logger.LogWarning("No location found for query: {Query}", query);
+                return null;
+            }
+
+            var location = geocodeData.Results[0];
+
+            // Now get weather data
+            var weatherUrl =
+                $"{creds.OpenMeteoApiUrl}/v1/forecast?latitude={location.Latitude}&longitude={location.Longitude}" +
+                "&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,surface_pressure," +
+                "wind_speed_10m,wind_direction_10m,wind_gusts_10m,cloud_cover,visibility,is_day" +
+                "&daily=temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max,precipitation_sum" +
+                "&forecast_days=1&timezone=auto";
+
+            var weatherResponse = await http.GetStringAsync(weatherUrl).ConfigureAwait(false);
+            var weatherData = JsonSerializer.Deserialize<OpenMeteoWeatherResponse>(weatherResponse);
+
+            if (weatherData != null)
+            {
+                // Build smart location string avoiding duplicates
+                var locationParts = new List<string>
+                {
+                    location.Name
+                };
+
+                // Only add Admin1 (state/province) if it's different from the city name
+                if (!string.IsNullOrEmpty(location.Admin1) &&
+                    !location.Admin1.Equals(location.Name, StringComparison.OrdinalIgnoreCase))
+                {
+                    locationParts.Add(location.Admin1);
+                }
+
+                // Add location info to the response
+                weatherData.Current.LocationName = string.Join(", ", locationParts);
+                weatherData.Current.Country = location.Country;
+                weatherData.Current.CountryCode = location.CountryCode;
+            }
+
+            return weatherData;
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex.Message);
+            logger.LogWarning(ex, "Error fetching weather data for query: {Query}", query);
             return null;
         }
     }
 
     /// <summary>
-    ///     Retrieves time data for the specified location.
+    /// Gets time data for the specified location using Open-Meteo.
     /// </summary>
-    /// <param name="arg">The query string specifying the location.</param>
-    /// <returns>
-    ///     A tuple containing the address, time, and timezone name for the specified location,
-    ///     along with any errors encountered during the operation.
-    /// </returns>
-    /// <remarks>
-    ///     This method retrieves time data for the specified location by geocoding the query and
-    ///     querying the timezone database API.
-    /// </remarks>
-    public Task<((string Address, DateTime Time, string TimeZoneName), TimeErrors?)> GetTimeDataAsync(string arg)
+    public async Task<((string Address, DateTime Time, string TimeZoneName), TimeErrors?)> GetTimeDataAsync(
+        string query)
     {
-        return GetTimeDataFactory(arg);
+        var result = await GetTimeDataWithCandidatesAsync(query);
+        if (result.candidates?.Count > 0)
+        {
+            var best = result.candidates[0];
+            return ((best.Address, best.Time, best.TimeZoneName), null);
+        }
+
+        return (default, result.error);
     }
 
-    private async Task<((string Address, DateTime Time, string TimeZoneName), TimeErrors?)> GetTimeDataFactory(
-        string query)
+    /// <summary>
+    ///     Gets time data with multiple timezone candidates for disambiguation.
+    /// </summary>
+    public async
+        Task<(List<(string Address, DateTime Time, string TimeZoneName, string TimezoneId)>? candidates, TimeErrors?
+            error)>
+        GetTimeDataWithCandidatesAsync(string query)
     {
         query = query.Trim();
 
-        if (string.IsNullOrEmpty(query)) return (default, TimeErrors.InvalidInput);
+        if (string.IsNullOrEmpty(query))
+            return (null, TimeErrors.InvalidInput);
 
-        if (string.IsNullOrWhiteSpace(creds.LocationIqApiKey)
-            || string.IsNullOrWhiteSpace(creds.TimezoneDbApiKey))
+        // Check if query is a timezone abbreviation or ID - get multiple candidates
+        var timezoneCandidates = GetTimezoneInfoCandidates(query);
+        if (timezoneCandidates.Count > 0)
         {
-            return (default, TimeErrors.ApiKeyMissing);
+            var candidates = new List<(string Address, DateTime Time, string TimeZoneName, string TimezoneId)>();
+
+            foreach (var tz in timezoneCandidates.Take(10)) // Limit to 10 candidates for select menu
+            {
+                var currentTime = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
+                candidates.Add((
+                    Address: $"{tz.DisplayName}",
+                    Time: currentTime,
+                    TimeZoneName: tz.Id,
+                    TimezoneId: tz.Id
+                ));
+            }
+
+            return (candidates, null);
         }
 
+        using var http = httpFactory.CreateClient();
         try
         {
-            using var http = httpFactory.CreateClient();
-            var res = await cache.GetOrAddCachedDataAsync($"geo_{query}", _ =>
+            // First, geocode the location using Open-Meteo
+            var geocodeUrl =
+                $"https://geocoding-api.open-meteo.com/v1/search?name={Uri.EscapeDataString(query)}&count=1&language=en";
+            var geocodeResponse = await http.GetStringAsync(geocodeUrl).ConfigureAwait(false);
+            var geocodeData = JsonSerializer.Deserialize<OpenMeteoGeocodingResponse>(geocodeResponse);
+
+            if (geocodeData?.Results == null || geocodeData.Results.Count == 0)
             {
-                var url =
-                    $"https://eu1.locationiq.com/v1/search.php?{(string.IsNullOrWhiteSpace(creds.LocationIqApiKey) ? "key=" : $"key={creds.LocationIqApiKey}&")}q={Uri.EscapeDataString(query)}&format=json";
-
-                return http.GetStringAsync(url);
-            }, "", TimeSpan.FromHours(1)).ConfigureAwait(false);
-
-            if (res != null)
-            {
-                var responses = JsonSerializer.Deserialize<LocationIqResponse[]>(res);
-                if (responses is null || responses.Length == 0)
-                {
-                    logger.LogWarning("Geocode lookup failed for: {Query}", query);
-                    return (default, TimeErrors.NotFound);
-                }
-
-                var geoData = responses[0];
-
-                using var req = new HttpRequestMessage(HttpMethod.Get,
-                    $"http://api.timezonedb.com/v2.1/get-time-zone?key={creds.TimezoneDbApiKey}&format=json&by=position&lat={geoData.Lat}&lng={geoData.Lon}");
-                using var geoRes = await http.SendAsync(req).ConfigureAwait(false);
-                var resString = await geoRes.Content.ReadAsStringAsync().ConfigureAwait(false);
-                var timeObj = JsonSerializer.Deserialize<TimeZoneResult>(resString);
-
-                var time = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)
-                    .AddSeconds(timeObj.Timestamp);
-
-                return ((
-                    Address: responses[0].DisplayName,
-                    Time: time,
-                    TimeZoneName: timeObj.TimezoneName
-                ), default);
+                logger.LogWarning("Geocoding failed for time query: {Query}", query);
+                return (default, TimeErrors.NotFound);
             }
+
+            var location = geocodeData.Results[0];
+
+            // Get basic weather data to obtain timezone information
+            var weatherUrl =
+                $"{creds.OpenMeteoApiUrl}/v1/forecast?latitude={location.Latitude}&longitude={location.Longitude}&current=temperature_2m&timezone=auto";
+            var weatherResponse = await http.GetStringAsync(weatherUrl).ConfigureAwait(false);
+            var weatherData = JsonSerializer.Deserialize<OpenMeteoWeatherResponse>(weatherResponse);
+
+            if (weatherData == null)
+            {
+                logger.LogWarning("Failed to get timezone data for: {Query}", query);
+                return (default, TimeErrors.NotFound);
+            }
+
+            // Parse the current time from the weather response (it's already in local timezone)
+            var currentTime = DateTime.Parse(weatherData.Current.Time);
+
+            // Build address string, avoiding duplicates
+            var addressParts = new List<string>
+            {
+                location.Name
+            };
+
+            // Only add Admin1 (state/province) if it's different from the city name
+            if (!string.IsNullOrEmpty(location.Admin1) &&
+                !location.Admin1.Equals(location.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                addressParts.Add(location.Admin1);
+            }
+
+            if (!string.IsNullOrEmpty(location.Country))
+                addressParts.Add(location.Country);
+
+            var address = string.Join(", ", addressParts);
+
+            return (new List<(string, DateTime, string, string)>
+            {
+                (address, currentTime, weatherData.Timezone ?? weatherData.TimezoneAbbreviation ?? "Unknown",
+                    weatherData.Timezone ?? "Unknown")
+            }, null);
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Weather error: {Message}", ex.Message);
-            return (default, TimeErrors.NotFound);
+            logger.LogError(ex, "Error getting time data for query: {Query}", query);
+            return (null, TimeErrors.NotFound);
+        }
+    }
+
+    /// <summary>
+    /// Gets multiple timezone candidates for disambiguation.
+    /// </summary>
+    private List<TimeZoneInfo> GetTimezoneInfoCandidates(string query)
+    {
+        // First check if we can get an exact single match
+        var exactMatch = TryGetTimezoneInfo(query);
+        if (exactMatch != null)
+        {
+            return new List<TimeZoneInfo>
+            {
+                exactMatch
+            };
         }
 
-        return (default, TimeErrors.NotFound);
+        // If no exact match, use the intelligent search to get multiple candidates
+        return GetTimezoneSearchCandidates(query);
     }
+
+    /// <summary>
+    ///     Attempts to get TimeZoneInfo from common timezone abbreviations or IDs.
+    /// </summary>
+    private TimeZoneInfo? TryGetTimezoneInfo(string query)
+    {
+        // Try direct timezone ID lookup first
+        try
+        {
+            return TimeZoneInfo.FindSystemTimeZoneById(query);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Direct timezone lookup failed for query: {Query}", query);
+            // Continue to conversion attempts
+        }
+
+        // Try converting IANA to Windows ID
+        if (TimeZoneInfo.TryConvertIanaIdToWindowsId(query, out var windowsId))
+        {
+            try
+            {
+                return TimeZoneInfo.FindSystemTimeZoneById(windowsId);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex,
+                    "Failed to find timezone using converted Windows ID '{WindowsId}' for query: {Query}", windowsId,
+                    query);
+                // Continue to next attempt
+            }
+        }
+
+        // Try converting Windows to IANA ID
+        if (TimeZoneInfo.TryConvertWindowsIdToIanaId(query.ToUpper(), null, out var ianaId))
+        {
+            try
+            {
+                return TimeZoneInfo.FindSystemTimeZoneById(ianaId);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to find timezone using converted IANA ID '{IanaId}' for query: {Query}",
+                    ianaId, query);
+                // Continue to manual mapping
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    ///     Gets multiple timezone candidates using intelligent search.
+    /// </summary>
+    private List<TimeZoneInfo> GetTimezoneSearchCandidates(string query)
+    {
+        var normalizedQuery = query.ToUpperInvariant();
+        var candidates = new List<(TimeZoneInfo tz, int priority, int distance)>();
+
+        foreach (var tz in TimeZoneInfo.GetSystemTimeZones())
+        {
+            try
+            {
+                // Priority 1: Exact abbreviation match from standard/daylight names
+                var standardAbbrev = GetAbbreviation(tz.StandardName);
+                var daylightAbbrev = !string.IsNullOrEmpty(tz.DaylightName) ? GetAbbreviation(tz.DaylightName) : "";
+
+                if (string.Equals(standardAbbrev, normalizedQuery, StringComparison.OrdinalIgnoreCase))
+                {
+                    // Give extra priority to canonical timezone IDs (like America/New_York for EST)
+                    var priority = IsCanonicalTimezone(tz.Id, normalizedQuery) ? 1 : 2;
+                    candidates.Add((tz, priority, 0));
+                    continue;
+                }
+
+                if (string.Equals(daylightAbbrev, normalizedQuery, StringComparison.OrdinalIgnoreCase))
+                {
+                    // Give extra priority to canonical timezone IDs
+                    var priority = IsCanonicalTimezone(tz.Id, normalizedQuery) ? 1 : 2;
+                    candidates.Add((tz, priority, 0));
+                    continue;
+                }
+
+                // Priority 3: Direct timezone ID match
+                if (string.Equals(tz.Id, query, StringComparison.OrdinalIgnoreCase))
+                {
+                    candidates.Add((tz, 3, 0));
+                    continue;
+                }
+
+                // Priority 4: Word matches in standard/daylight names
+                if (tz.StandardName.Split(' ').Any(word =>
+                        string.Equals(word, normalizedQuery, StringComparison.OrdinalIgnoreCase)))
+                {
+                    candidates.Add((tz, 4, 0));
+                    continue;
+                }
+
+                if (!string.IsNullOrEmpty(tz.DaylightName) &&
+                    tz.DaylightName.Split(' ').Any(word =>
+                        string.Equals(word, normalizedQuery, StringComparison.OrdinalIgnoreCase)))
+                {
+                    candidates.Add((tz, 4, 0));
+                    continue;
+                }
+
+                // Priority 5: Fuzzy abbreviation match using Levenshtein distance
+                var standardDistance = standardAbbrev.LevenshteinDistance(normalizedQuery);
+                var daylightDistance = !string.IsNullOrEmpty(daylightAbbrev)
+                    ? daylightAbbrev.LevenshteinDistance(normalizedQuery)
+                    : int.MaxValue;
+
+                var minDistance = Math.Min(standardDistance, daylightDistance);
+                if (minDistance <= 2 && normalizedQuery.Length >= 3) // Allow small typos for 3+ char queries
+                {
+                    candidates.Add((tz, 5, minDistance));
+                    continue;
+                }
+
+                // Priority 6: Display name contains query
+                if (tz.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase))
+                {
+                    var displayDistance = tz.DisplayName.ToUpperInvariant().LevenshteinDistance(normalizedQuery);
+                    candidates.Add((tz, 6, displayDistance));
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogDebug(ex, "Error checking timezone {TimezoneId} for query: {Query}", tz.Id, query);
+            }
+        }
+
+        if (candidates.Count == 0)
+        {
+            logger.LogWarning("No timezone found for query: {Query}", query);
+            return new List<TimeZoneInfo>();
+        }
+
+        // Return multiple candidates ordered by priority and distance
+        var sortedCandidates = candidates
+            .OrderBy(c => c.priority)
+            .ThenBy(c => c.distance)
+            .Take(10) // Limit for select menu
+            .Select(c => c.tz)
+            .ToList();
+
+        logger.LogDebug("Found {Count} timezone candidates for query: {Query}", sortedCandidates.Count, query);
+
+        return sortedCandidates;
+    }
+
+    /// <summary>
+    ///     Determines if a timezone ID is the canonical/primary timezone for a given abbreviation.
+    /// </summary>
+    private static bool IsCanonicalTimezone(string timezoneId, string abbreviation)
+    {
+        return abbreviation.ToUpperInvariant() switch
+        {
+            "EST" or "EDT" or "EASTERN" => timezoneId == "America/New_York",
+            "CST" or "CDT" or "CENTRAL" => timezoneId == "America/Chicago",
+            "MST" or "MDT" or "MOUNTAIN" => timezoneId == "America/Denver",
+            "PST" or "PDT" or "PACIFIC" => timezoneId == "America/Los_Angeles",
+            "GMT" or "UTC" => timezoneId == "UTC",
+            "JST" => timezoneId == "Asia/Tokyo",
+            "CET" or "CEST" => timezoneId == "Europe/Paris",
+            "BST" => timezoneId == "Europe/London",
+            "IST" => timezoneId == "Asia/Kolkata",
+            "AEST" or "AEDT" => timezoneId == "Australia/Sydney",
+            _ => false
+        };
+    }
+
+    /// <summary>
+    ///     Generates an abbreviation from a timezone name.
+    /// </summary>
+    private static string GetAbbreviation(string timezoneName)
+    {
+        if (string.IsNullOrEmpty(timezoneName))
+            return string.Empty;
+
+        // Handle common timezone name patterns
+        var words = timezoneName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+        // For "Eastern Standard Time" -> "EST", "Pacific Daylight Time" -> "PDT", etc.
+        if (words.Length >= 3 &&
+            (words[1].Equals("Standard", StringComparison.OrdinalIgnoreCase) ||
+             words[1].Equals("Daylight", StringComparison.OrdinalIgnoreCase)) &&
+            words[2].Equals("Time", StringComparison.OrdinalIgnoreCase))
+        {
+            var first = words[0][0];
+            var second = words[1][0];
+            var third = words[2][0];
+            return $"{first}{second}{third}".ToUpperInvariant();
+        }
+
+        // For shorter names, take first letter of each word
+        if (words.Length >= 2)
+        {
+            var result = "";
+            foreach (var word in words.Take(3)) // Max 3 letters
+            {
+                if (word.Length > 0)
+                    result += char.ToUpperInvariant(word[0]);
+            }
+
+            return result;
+        }
+
+        // Single word - return as is if short, or first 3 letters if long
+        return timezoneName.Length <= 4 ? timezoneName.ToUpperInvariant() : timezoneName[..3].ToUpperInvariant();
+    }
+
 
     /// <summary>
     ///     Gets a random image from a specified category using the Martine API.

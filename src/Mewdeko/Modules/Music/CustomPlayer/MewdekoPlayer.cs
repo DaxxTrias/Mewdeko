@@ -640,8 +640,8 @@ public sealed class MewdekoPlayer : LavalinkPlayer
         // If the title has a hyphen, split the title and artist
         if (hyphenIndex != -1)
         {
-            artistName = fullTitle.Substring(0, hyphenIndex).Trim();
-            trackTitle = fullTitle.Substring(hyphenIndex + 3).Trim();
+            artistName = fullTitle[..hyphenIndex].Trim();
+            trackTitle = fullTitle[(hyphenIndex + 3)..].Trim();
         }
 
         // Clean up the track title by removing extra information

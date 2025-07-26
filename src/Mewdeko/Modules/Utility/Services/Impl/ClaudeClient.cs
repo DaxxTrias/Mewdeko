@@ -134,11 +134,11 @@ public class ClaudeClient : IAiClient
 
                         if (line.StartsWith("event: "))
                         {
-                            eventType = line.Substring("event: ".Length);
+                            eventType = line["event: ".Length..];
                         }
                         else if (line.StartsWith("data: "))
                         {
-                            data = line.Substring("data: ".Length);
+                            data = line["data: ".Length..];
                         }
                     }
                 }

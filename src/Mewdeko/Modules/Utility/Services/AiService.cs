@@ -961,7 +961,7 @@ public class AiService : INService
             var lastChunk = results[results.Count - 1];
             if (lastChunk.Length > maxChunkSize - 100)
             {
-                lastChunk = lastChunk.Substring(0, maxChunkSize - 100);
+                lastChunk = lastChunk[..(maxChunkSize - 100)];
             }
 
             results[results.Count - 1] = lastChunk + "\n\n... (Response truncated due to length)";

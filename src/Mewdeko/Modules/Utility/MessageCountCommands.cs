@@ -475,7 +475,7 @@ public partial class Utility
             };
             using var font = new SKFont(SKTypeface.Default);
 
-            var data = busiestDays.Select(d => (d.Day.ToString().Substring(0, 3), d.Count)).ToList();
+            var data = busiestDays.Select(d => (d.Day.ToString()[..3], d.Count)).ToList();
             DrawBarGraph(canvas, data, "Busiest Days of the Week", 0, 0, width, height, paint, font);
 
             return surface.Snapshot();
