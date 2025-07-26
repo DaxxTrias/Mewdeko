@@ -97,7 +97,7 @@ public static class ColorUtils
 
         // Try hex format
         if (input.StartsWith("#"))
-            input = input.Substring(1);
+            input = input[1..];
 
         if (Regex.IsMatch(input, "^[0-9a-fA-F]{6}$"))
         {

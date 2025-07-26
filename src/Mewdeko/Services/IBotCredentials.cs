@@ -93,14 +93,9 @@ public interface IBotCredentials
     public string TwitchClientId { get; }
 
     /// <summary>
-    ///     Gets the LocationIQ API key.
+    ///     Gets the Open-Meteo API URL. Defaults to the public API, but can be set to a self-hosted instance.
     /// </summary>
-    public string LocationIqApiKey { get; }
-
-    /// <summary>
-    ///     Gets the TimezoneDB API key.
-    /// </summary>
-    public string TimezoneDbApiKey { get; }
+    public string OpenMeteoApiUrl { get; }
 
     /// <summary>
     ///     Gets the channel ID for confession reports.

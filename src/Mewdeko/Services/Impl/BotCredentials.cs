@@ -65,8 +65,6 @@ public class BotCredentials : IBotCredentials
         UpdateCredentials(null, null);
     }
 
-    // Properties (same as before)
-
 
     /// <summary>
     ///     Gets or sets the command used to run a shard.
@@ -305,14 +303,9 @@ public class BotCredentials : IBotCredentials
     public string VotesToken { get; set; }
 
     /// <summary>
-    ///     Gets or sets the LocationIQ API key.
+    ///     Gets or sets the Open-Meteo API URL. Defaults to the public API, but can be set to a self-hosted instance.
     /// </summary>
-    public string LocationIqApiKey { get; set; }
-
-    /// <summary>
-    ///     Gets or sets the TimezoneDB API key.
-    /// </summary>
-    public string TimezoneDbApiKey { get; set; }
+    public string OpenMeteoApiUrl { get; set; } = "https://api.open-meteo.com";
 
     /// <summary>
     ///     Gets or sets the ID of the channel where confession reports are sent.
@@ -539,8 +532,6 @@ public class BotCredentials : IBotCredentials
             ShardRunArguments = data[nameof(ShardRunArguments)];
             CleverbotApiKey = data[nameof(CleverbotApiKey)];
             IsMasterInstance = Convert.ToBoolean(data[nameof(IsMasterInstance)]);
-            LocationIqApiKey = data[nameof(LocationIqApiKey)];
-            TimezoneDbApiKey = data[nameof(TimezoneDbApiKey)];
             SpotifyClientId = data[nameof(SpotifyClientId)];
             SpotifyClientSecret = data[nameof(SpotifyClientSecret)];
             StatcordKey = data[nameof(StatcordKey)];
@@ -592,6 +583,7 @@ public class BotCredentials : IBotCredentials
                 ? pnrepId
                 : 970086914826858547;
             UseGlobalCurrency = bool.TryParse(data[nameof(UseGlobalCurrency)], out var ugc) && ugc;
+            OpenMeteoApiUrl = data[nameof(OpenMeteoApiUrl)] ?? "https://api.open-meteo.com";
 
             // Check for missing or invalid critical credentials
             var missingCredentials = new List<string>();
@@ -743,8 +735,7 @@ public class BotCredentials : IBotCredentials
         public int TotalShards { get; } = 1;
         public string TwitchClientSecret { get; } = "";
         public string VotesToken { get; } = "";
-        public string LocationIqApiKey { get; } = "";
-        public string TimezoneDbApiKey { get; } = "";
+        public string OpenMeteoApiUrl { get; } = "https://api.open-meteo.com";
         public ulong ConfessionReportChannelId { get; } = 1051401727787671613;
         public string ChatSavePath { get; } = "/usr/share/nginx/cdn/chatlogs/";
 

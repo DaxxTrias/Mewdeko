@@ -60,7 +60,7 @@ public class MusicComponents(IAudioService service, IDataCache cache, GuildSetti
             return;
         }
 
-        var trackIndexStr = selectedValue.Substring("music_track_info:".Length);
+        var trackIndexStr = selectedValue["music_track_info:".Length..];
         if (!int.TryParse(trackIndexStr, out var trackIndex))
         {
             await Context.Interaction.RespondAsync("Invalid track index.", ephemeral: true);

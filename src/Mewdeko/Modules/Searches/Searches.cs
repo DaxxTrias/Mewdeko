@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Net;
 using System.Net.Http;
 using System.Text.Json;
@@ -227,64 +226,115 @@ public partial class Searches(
         else
         {
             var f = StandardConversions.CelsiusToFahrenheit;
+            var current = data.Current;
+            var weatherDesc = WeatherCodeInterpreter.GetDescription(current.WeatherCode);
+            var weatherEmoji = WeatherCodeInterpreter.GetEmoji(current.WeatherCode);
 
-            var tz = Context.Guild is null
-                ? TimeZoneInfo.Utc
-                : tzSvc.GetTimeZoneOrUtc(Context.Guild.Id);
-            var sunrise = data.Sys?.Sunrise.ToUnixTimestamp();
-            var sunset = data.Sys?.Sunset.ToUnixTimestamp();
-            sunrise = sunrise?.ToOffset(tz.GetUtcOffset(sunrise.Value));
-            sunset = sunset?.ToOffset(tz.GetUtcOffset(sunset.Value));
-            var timezone = sunrise.HasValue ? $"UTC{sunrise:zzz}" : "UTC";
+            // Build location display avoiding duplicates
+            var locationParts = new List<string>();
+            if (!string.IsNullOrEmpty(current.LocationName))
+                locationParts.Add(current.LocationName);
+            if (!string.IsNullOrEmpty(current.CountryCode))
+                locationParts.Add(current.CountryCode);
+            var locationDisplay = locationParts.Count > 0 ? string.Join(", ", locationParts) : "Unknown";
 
             embed.AddField(fb =>
                     fb.WithName($"🌍 {Format.Bold(Strings.Location(ctx.Guild.Id))}")
-                        .WithValue(
-                            $"[{data.Name}, {data.Sys.Country}](https://openweathermap.org/city/{data.Id})")
+                        .WithValue(locationDisplay)
                         .WithIsInline(true))
                 .AddField(fb =>
                     fb.WithName($"📏 {Format.Bold(Strings.Latlong(ctx.Guild.Id))}")
-                        .WithValue(data.Coord != null ? $"{data.Coord.Lat}, {data.Coord.Lon}" : "N/A").WithIsInline(true))
+                        .WithValue($"{data.Latitude:F2}, {data.Longitude:F2}").WithIsInline(true))
                 .AddField(fb =>
-                    fb.WithName($"☁ {Format.Bold(Strings.Condition(ctx.Guild.Id))}")
-                        .WithValue(data.Weather != null ? string.Join(", ", data.Weather.Select(w => w.Main)) : "N/A").WithIsInline(true))
+                    fb.WithName($"{weatherEmoji} {Format.Bold(Strings.Condition(ctx.Guild.Id))}")
+                        .WithValue(weatherDesc).WithIsInline(true))
                 .AddField(fb =>
                     fb.WithName($"😓 {Format.Bold(Strings.Humidity(ctx.Guild.Id))}")
-                        .WithValue(data.Main != null ? $"{data.Main.Humidity}%" : "N/A")
+                        .WithValue($"{current.RelativeHumidity}%")
                         .WithIsInline(true))
                 .AddField(fb =>
                     fb.WithName($"💨 {Format.Bold(Strings.WindSpeed(ctx.Guild.Id))}")
-                        .WithValue(data.Wind != null
-                            ? $"{data.Wind.Speed} m/s" +
-                              (data.Wind.Gust > 0 ? $"\nGusts: {data.Wind.Gust} m/s" : "")
-                            : "N/A")
+                        .WithValue($"{current.WindSpeed} km/h ({current.WindSpeed * 0.277778:F1} m/s)")
+                        .WithIsInline(true))
+                .AddField(fb =>
+                    fb.WithName($"🧭 {Format.Bold(Strings.WindDirection(ctx.Guild.Id))}")
+                        .WithValue($"{current.WindDirection}°")
                         .WithIsInline(true))
                 .AddField(fb =>
                     fb.WithName($"🌡 {Format.Bold(Strings.Temperature(ctx.Guild.Id))}")
-                        .WithValue(data.Main != null
-                            ? $"{data.Main.Temp:F1}°C / {f(data.Main.Temp):F1}°F\nFeels like: {data.Main.Feels_Like:F1}°C / {f(data.Main.Feels_Like):F1}°F"
-                            : "N/A")
+                        .WithValue($"{current.Temperature:F1}°C / {f(current.Temperature):F1}°F").WithIsInline(true))
+                .AddField(fb =>
+                    fb.WithName($"🤔 {Format.Bold(Strings.FeelsLike(ctx.Guild.Id))}")
+                        .WithValue($"{current.ApparentTemperature:F1}°C / {f(current.ApparentTemperature):F1}°F")
                         .WithIsInline(true))
                 .AddField(fb =>
-                    fb.WithName($"🔆 {Format.Bold(Strings.MinMax(ctx.Guild.Id))}")
-                        .WithValue(data.Main != null
-                            ? $"{data.Main.TempMin:F1}°C - {data.Main.TempMax:F1}°C\n{f(data.Main.TempMin):F1}°F - {f(data.Main.TempMax):F1}°F"
-                            : "N/A")
+                    fb.WithName($"☁️ {Format.Bold(Strings.CloudCover(ctx.Guild.Id))}")
+                        .WithValue($"{current.CloudCover}%")
                         .WithIsInline(true))
                 .AddField(fb =>
-                    fb.WithName($"🌄 {Format.Bold(Strings.Sunrise(ctx.Guild.Id))}")
-                        .WithValue(sunrise.HasValue ? $"{sunrise:HH:mm} {timezone}" : "N/A")
+                    fb.WithName($"🔭 {Format.Bold(Strings.Pressure(ctx.Guild.Id))}")
+                        .WithValue($"{current.SurfacePressure:F0} hPa")
                         .WithIsInline(true))
                 .AddField(fb =>
-                    fb.WithName($"🌇 {Format.Bold(Strings.Sunset(ctx.Guild.Id))}")
-                        .WithValue(sunset.HasValue ? $"{sunset:HH:mm} {timezone}" : "N/A")
+                    fb.WithName($"🌓 {Format.Bold(Strings.TimeOfDay(ctx.Guild.Id))}")
+                        .WithValue(current.IsDay == 1 ? "☀️ Day" : "🌙 Night")
                         .WithIsInline(true))
-                .WithOkColor()
+                .AddField(fb =>
+                    fb.WithName($"👁️ {Format.Bold(Strings.Visibility(ctx.Guild.Id))}")
+                        .WithValue($"{current.Visibility / 1000:F1} km")
+                        .WithIsInline(true))
+                .AddField(fb =>
+                    fb.WithName($"💨 {Format.Bold(Strings.WindGusts(ctx.Guild.Id))}")
+                        .WithValue($"{current.WindGusts:F1} km/h")
+                        .WithIsInline(true));
+
+            // Add daily data if available
+            if (data.Daily != null && data.Daily.TemperatureMax?.Count > 0)
+            {
+                var daily = data.Daily;
+
+                embed.AddField(fb =>
+                    fb.WithName($"🌡️ {Format.Bold(Strings.MinMax(ctx.Guild.Id))}")
+                        .WithValue(
+                            $"{daily.TemperatureMin[0]:F1}°C - {daily.TemperatureMax[0]:F1}°C\n{f(daily.TemperatureMin[0]):F1}°F - {f(daily.TemperatureMax[0]):F1}°F")
+                        .WithIsInline(true));
+
+                if (daily.Sunrise?.Count > 0 && daily.Sunset?.Count > 0)
+                {
+                    // Parse the timezone-aware timestamps and format as 12-hour time
+                    var sunriseTime = DateTime.Parse(daily.Sunrise[0]).ToString("h:mm tt");
+                    var sunsetTime = DateTime.Parse(daily.Sunset[0]).ToString("h:mm tt");
+
+                    embed.AddField(fb =>
+                            fb.WithName($"🌅 {Format.Bold(Strings.Sunrise(ctx.Guild.Id))}")
+                                .WithValue(sunriseTime)
+                                .WithIsInline(true))
+                        .AddField(fb =>
+                            fb.WithName($"🌇 {Format.Bold(Strings.Sunset(ctx.Guild.Id))}")
+                                .WithValue(sunsetTime)
+                                .WithIsInline(true));
+                }
+
+                if (daily.UvIndexMax?.Count > 0)
+                {
+                    embed.AddField(fb =>
+                        fb.WithName($"☀️ {Format.Bold(Strings.UvIndex(ctx.Guild.Id))}")
+                            .WithValue($"{daily.UvIndexMax[0]:F1}")
+                            .WithIsInline(true));
+                }
+
+                if (daily.PrecipitationSum?.Count > 0 && daily.PrecipitationSum[0] > 0)
+                {
+                    embed.AddField(fb =>
+                        fb.WithName($"🌧️ {Format.Bold(Strings.Precipitation(ctx.Guild.Id))}")
+                            .WithValue($"{daily.PrecipitationSum[0]:F1} mm")
+                            .WithIsInline(true));
+                }
+            }
+
+            embed.WithOkColor()
                 .WithFooter(efb =>
-                    efb.WithText(Strings.WeatherAttribution(ctx.Guild.Id))
-                        .WithIconUrl(data.Weather != null && data.Weather.Count > 0 && !string.IsNullOrWhiteSpace(data.Weather[0].Icon)
-                            ? $"https://openweathermap.org/img/w/{data.Weather[0].Icon}.png"
-                            : null));
+                    efb.WithText(Strings.WeatherAttribution(ctx.Guild.Id)));
         }
 
         await ctx.Channel.EmbedAsync(embed).ConfigureAwait(false);
@@ -323,13 +373,11 @@ public partial class Searches(
 
         await ctx.Channel.TriggerTypingAsync().ConfigureAwait(false);
 
-        var (data, err) = await Service.GetTimeDataAsync(query).ConfigureAwait(false);
+        var (candidates, err) = await Service.GetTimeDataWithCandidatesAsync(query).ConfigureAwait(false);
         if (err is not null)
         {
             var errorMsg = err switch
             {
-                TimeErrors.ApiKeyMissing => Strings.ApiKeyMissing(ctx.Guild.Id),
-                TimeErrors.ApiKey2Missing => "api_key_2_missing",
                 TimeErrors.InvalidInput => Strings.InvalidInput(ctx.Guild.Id),
                 TimeErrors.NotFound => Strings.TimezoneNotFound(ctx.Guild.Id),
                 _ => Strings.ErrorOccured(ctx.Guild.Id)
@@ -339,20 +387,67 @@ public partial class Searches(
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(data.TimeZoneName))
+        if (candidates == null || candidates.Count == 0)
         {
-            await ReplyErrorAsync(Strings.TimezoneDbApiKey(ctx.Guild.Id)).ConfigureAwait(false);
+            await ReplyErrorAsync(Strings.TimezoneNotFound(ctx.Guild.Id)).ConfigureAwait(false);
             return;
         }
 
-        var eb = new EmbedBuilder()
-            .WithOkColor()
-            .WithTitle(Strings.TimeNew(ctx.Guild.Id))
-            .WithDescription(Format.Code(data.Time.ToString(CultureInfo.InvariantCulture)))
-            .AddField(Strings.Location(ctx.Guild.Id), string.Join('\n', data.Address.Split(", ")), true)
-            .AddField(Strings.Timezone(ctx.Guild.Id), data.TimeZoneName, true);
+        // If only one candidate, show it directly
+        if (candidates.Count == 1)
+        {
+            var data = candidates[0];
+            var timeString = data.Time.ToString("h:mm:ss tt");
+            var eb = new EmbedBuilder()
+                .WithOkColor()
+                .WithTitle(Strings.TimeNew(ctx.Guild.Id))
+                .WithDescription(Format.Code(timeString))
+                .AddField(Strings.Location(ctx.Guild.Id), string.Join('\n', data.Address.Split(", ")), true)
+                .AddField(Strings.Timezone(ctx.Guild.Id), data.TimeZoneName, true);
 
-        await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
+            await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
+            return;
+        }
+
+        // Multiple candidates - show select menu
+        await ShowTimezoneSelectMenu(candidates, query);
+    }
+
+    private async Task ShowTimezoneSelectMenu(
+        List<(string Address, DateTime Time, string TimeZoneName, string TimezoneId)> candidates, string originalQuery)
+    {
+        var options = new List<SelectMenuOptionBuilder>();
+
+        for (var i = 0; i < Math.Min(candidates.Count, 25); i++) // Discord limit is 25 options
+        {
+            var candidate = candidates[i];
+            var timeString = candidate.Time.ToString("h:mm tt");
+            var description = $"{timeString} • {candidate.Address}";
+
+            options.Add(new SelectMenuOptionBuilder()
+                .WithLabel(candidate.TimeZoneName.Length > 100
+                    ? candidate.TimeZoneName[..97] + "..."
+                    : candidate.TimeZoneName)
+                .WithDescription(description.Length > 100 ? description[..97] + "..." : description)
+                .WithValue($"timezone_select:{candidate.TimezoneId}"));
+        }
+
+        var selectMenu = new SelectMenuBuilder()
+            .WithCustomId($"timezone_select_menu:{originalQuery}")
+            .WithPlaceholder(Strings.TimezoneSelectPlaceholder(ctx.Guild.Id, candidates.Count, originalQuery))
+            .WithMinValues(1)
+            .WithMaxValues(1)
+            .WithOptions(options);
+
+        var component = new ComponentBuilder()
+            .WithSelectMenu(selectMenu);
+
+        var embed = new EmbedBuilder()
+            .WithOkColor()
+            .WithTitle(Strings.MultipleTimezonesFound(ctx.Guild.Id))
+            .WithDescription(Strings.TimezoneDisambiguationDescription(ctx.Guild.Id, candidates.Count, originalQuery));
+
+        await ctx.Channel.SendMessageAsync(embed: embed.Build(), components: component.Build()).ConfigureAwait(false);
     }
 
     /// <summary>
