@@ -8,7 +8,7 @@ using Mewdeko.Database.Common;
 using Mewdeko.Modules.Searches.Common.StreamNotifications;
 using Mewdeko.Modules.Searches.Common.StreamNotifications.Models;
 using Mewdeko.Modules.Searches.Services.Common;
-using Mewdeko.Services.strings;
+using Mewdeko.Services.Strings;
 
 namespace Mewdeko.Modules.Searches.Services;
 
@@ -23,7 +23,7 @@ public class StreamNotificationService : IReadyExecutor, INService
     private readonly Random rng = new MewdekoRandom();
     private readonly object shardLock = new();
     private readonly NotifChecker streamTracker;
-    private readonly IBotStrings strings;
+    private readonly GeneratedBotStrings strings;
 
     private Dictionary<StreamDataKey, Dictionary<ulong, HashSet<FollowedStream>>> shardTrackedStreams = new();
     private Dictionary<StreamDataKey, HashSet<ulong>> trackCounter = new();
@@ -41,7 +41,7 @@ public class StreamNotificationService : IReadyExecutor, INService
     public StreamNotificationService(
         IDataConnectionFactory dbFactory,
         DiscordShardedClient client,
-        IBotStrings strings,
+        GeneratedBotStrings strings,
         IBotCredentials creds,
         IHttpClientFactory httpFactory,
         Mewdeko bot,
@@ -53,9 +53,19 @@ public class StreamNotificationService : IReadyExecutor, INService
         this.logger = logger;
         streamTracker = new NotifChecker(httpFactory, creds, creds.RedisKey(), true, logger2);
 
-        // Load all followed streams from database
+        // Set up stream notification event handlers
+#if DEBUG
+        logger.LogInformation("[StreamNotificationService] Setting up stream notification event handlers...");
+#endif
+        streamTracker.OnStreamsOffline += HandleStreamsOffline;
+        streamTracker.OnStreamsOnline += HandleStreamsOnline;
+
+        // Load all followed streams from database BEFORE starting the tracker
         _ = Task.Run(async () =>
         {
+#if DEBUG
+            logger.LogInformation("[StreamNotificationService] Starting database loading process...");
+#endif
             await using var db = await dbFactory.CreateConnectionAsync();
 
             // Load offline notification servers
@@ -63,9 +73,19 @@ public class StreamNotificationService : IReadyExecutor, INService
                 .Where(x => x.NotifyStreamOffline)
                 .Select(x => x.GuildId)
                 .ToListAsync();
+#if DEBUG
+            logger.LogInformation(
+                "[StreamNotificationService] Loaded {OfflineNotificationCount} guilds with offline notifications enabled",
+                OfflineNotificationServers.Count);
+#endif
 
             // Load followed streams
             var followedStreams = await db.FollowedStreams.ToListAsync();
+#if DEBUG
+            logger.LogInformation(
+                "[StreamNotificationService] Loaded {TotalStreamCount} followed streams from database",
+                followedStreams.Count);
+#endif
 
             // Group streams by type and name using efficient string comparison
             shardTrackedStreams = followedStreams.GroupBy(x => new
@@ -79,9 +99,30 @@ public class StreamNotificationService : IReadyExecutor, INService
                         .ToDictionary(y => y.Key,
                             y => y.AsEnumerable().ToHashSet()));
 
+            var streamsByType = followedStreams.GroupBy(x => (FType)x.Type).ToDictionary(x => x.Key, x => x.Count());
+            foreach (var kvp in streamsByType)
+            {
+#if DEBUG
+                logger.LogInformation("[StreamNotificationService] Loaded {StreamCount} {Platform} streams", kvp.Value,
+                    kvp.Key);
+#endif
+            }
+
             // Cache all streams in the tracker
+#if DEBUG
+            logger.LogInformation("[StreamNotificationService] Adding {StreamCount} streams to tracker cache...",
+                followedStreams.Count);
+#endif
             foreach (var fs in followedStreams)
-                await streamTracker.CacheAddData(fs.CreateKey(), null, false);
+            {
+                var key = fs.CreateKey();
+                await streamTracker.CacheAddData(key, null, false);
+#if DEBUG
+                logger.LogTrace(
+                    "[StreamNotificationService] Added stream to cache: {Platform}/{Username} for guild {GuildId}",
+                    key.Type, key.Name, fs.GuildId);
+#endif
+            }
 
             // Create counter dictionary for tracking using efficient string comparison
             trackCounter = followedStreams.GroupBy(x => new
@@ -90,14 +131,21 @@ public class StreamNotificationService : IReadyExecutor, INService
                 })
                 .ToDictionary(x => new StreamDataKey((FType)x.Key.Type, x.Key.Name),
                     x => x.Select(fs => fs.GuildId).ToHashSet());
+#if DEBUG
+            logger.LogInformation(
+                "[StreamNotificationService] Created tracking counter for {UniqueStreamCount} unique streams",
+                trackCounter.Count);
+#endif
+#if DEBUG
+            logger.LogInformation("[StreamNotificationService] Database loading completed successfully");
+#endif
+
+            // Start the stream tracker AFTER all streams are loaded and cached
+#if DEBUG
+            logger.LogInformation("[StreamNotificationService] Starting stream tracker after database loading...");
+#endif
+            _ = streamTracker.RunAsync();
         });
-
-        // Set up stream notification event handlers
-        streamTracker.OnStreamsOffline += HandleStreamsOffline;
-        streamTracker.OnStreamsOnline += HandleStreamsOnline;
-
-        // Start the stream tracker
-        _ = streamTracker.RunAsync();
 
         // Register guild events
         eventHandler.Subscribe("JoinedGuild", "StreamNotificationService", ClientOnJoinedGuild);
@@ -161,18 +209,43 @@ public class StreamNotificationService : IReadyExecutor, INService
     /// <param name="onlineStreams">The list of streams that came online.</param>
     private async Task HandleStreamsOnline(List<StreamData> onlineStreams)
     {
+#if DEBUG
+        logger.LogInformation("[StreamNotificationService] HandleStreamsOnline called with {StreamCount} streams",
+            onlineStreams.Count);
+#endif
         foreach (var stream in onlineStreams)
         {
             var key = stream.CreateKey();
+#if DEBUG
+            logger.LogInformation("[StreamNotificationService] Processing online stream: {Platform}/{Username}",
+                key.Type, key.Name);
+#endif
             if (shardTrackedStreams.TryGetValue(key, out var fss))
             {
+                var totalGuilds = fss.SelectMany(x => x.Value).Count();
+#if DEBUG
+                logger.LogInformation(
+                    "[StreamNotificationService] Found {GuildCount} guild subscriptions for {Platform}/{Username}",
+                    totalGuilds, key.Type, key.Name);
+#endif
                 await fss.SelectMany(x => x.Value)
                     .Select(fs =>
                     {
                         var textChannel = client.GetGuild(fs.GuildId)?.GetTextChannel(fs.ChannelId);
 
                         if (textChannel is null)
+                        {
+                            logger.LogWarning(
+                                "[StreamNotificationService] Could not find channel {ChannelId} in guild {GuildId} for stream {Platform}/{Username}",
+                                fs.ChannelId, fs.GuildId, key.Type, key.Name);
                             return Task.CompletedTask;
+                        }
+
+#if DEBUG
+                        logger.LogInformation(
+                            "[StreamNotificationService] Sending online notification for {Platform}/{Username} to guild {GuildId} channel {ChannelId}",
+                            key.Type, key.Name, fs.GuildId, fs.ChannelId);
+#endif
 
                         var rep = new ReplacementBuilder().WithOverride("%user%", () => fs.Username)
                             .WithOverride("%platform%", () => fs.Type.ToString())
@@ -184,6 +257,14 @@ public class StreamNotificationService : IReadyExecutor, INService
                     })
                     .WhenAll().ConfigureAwait(false);
             }
+            else
+            {
+#if DEBUG
+                logger.LogWarning(
+                    "[StreamNotificationService] No tracked guilds found for online stream {Platform}/{Username}",
+                    key.Type, key.Name);
+#endif
+            }
         }
     }
 
@@ -193,22 +274,58 @@ public class StreamNotificationService : IReadyExecutor, INService
     /// <param name="offlineStreams">The list of streams that went offline.</param>
     private async Task HandleStreamsOffline(List<StreamData> offlineStreams)
     {
+#if DEBUG
+        logger.LogInformation("[StreamNotificationService] HandleStreamsOffline called with {StreamCount} streams",
+            offlineStreams.Count);
+#endif
         foreach (var stream in offlineStreams)
         {
             var key = stream.CreateKey();
+#if DEBUG
+            logger.LogInformation("[StreamNotificationService] Processing offline stream: {Platform}/{Username}",
+                key.Type, key.Name);
+#endif
             if (shardTrackedStreams.TryGetValue(key, out var fss))
             {
                 // Only send offline notifications to guilds that have them enabled
-                await fss
-                    .SelectMany(x => x.Value)
-                    .Where(x => OfflineNotificationServers.Contains(x.GuildId))
-                    .Select(fs => client.GetGuild(fs.GuildId)
-                        ?.GetTextChannel(fs.ChannelId)
-                        ?.EmbedAsync(GetEmbed(fs.GuildId, stream)))
+                var eligibleGuilds = fss.SelectMany(x => x.Value)
+                    .Where(x => OfflineNotificationServers.Contains(x.GuildId)).ToList();
+#if DEBUG
+                logger.LogInformation(
+                    "[StreamNotificationService] Found {EligibleGuildCount} guilds with offline notifications enabled for {Platform}/{Username}",
+                    eligibleGuilds.Count, key.Type, key.Name);
+#endif
+
+                await eligibleGuilds
+                    .Select(fs =>
+                    {
+                        var channel = client.GetGuild(fs.GuildId)?.GetTextChannel(fs.ChannelId);
+                        if (channel is null)
+                        {
+                            logger.LogWarning(
+                                "[StreamNotificationService] Could not find channel {ChannelId} in guild {GuildId} for offline stream {Platform}/{Username}",
+                                fs.ChannelId, fs.GuildId, key.Type, key.Name);
+                            return null;
+                        }
+#if DEBUG
+                        logger.LogInformation(
+                            "[StreamNotificationService] Sending offline notification for {Platform}/{Username} to guild {GuildId} channel {ChannelId}",
+                            key.Type, key.Name, fs.GuildId, fs.ChannelId);
+#endif
+                        return channel.EmbedAsync(GetEmbed(fs.GuildId, stream));
+                    })
                     .Where(task => task != null)
                     .Select(task => task!)
                     .WhenAll()
                     .ConfigureAwait(false);
+            }
+            else
+            {
+#if DEBUG
+                logger.LogWarning(
+                    "[StreamNotificationService] No tracked guilds found for offline stream {Platform}/{Username}",
+                    key.Type, key.Name);
+#endif
             }
         }
     }
@@ -341,16 +458,36 @@ public class StreamNotificationService : IReadyExecutor, INService
     private void TrackStream(FollowedStream fs)
     {
         var key = fs.CreateKey();
+#if DEBUG
+        logger.LogInformation(
+            "[StreamNotificationService] TrackStream called for {Platform}/{Username} in guild {GuildId}", key.Type,
+            key.Name, fs.GuildId);
+#endif
+
         if (trackCounter.TryGetValue(key, out _))
         {
             trackCounter[key].Add(fs.GuildId);
+#if DEBUG
+            logger.LogInformation(
+                "[StreamNotificationService] Added guild {GuildId} to existing tracking for {Platform}/{Username} (now {GuildCount} guilds)",
+                fs.GuildId, key.Type, key.Name, trackCounter[key].Count);
+#endif
         }
         else
         {
             trackCounter[key] = [fs.GuildId];
+#if DEBUG
+            logger.LogInformation(
+                "[StreamNotificationService] Started tracking new stream {Platform}/{Username} for guild {GuildId}",
+                key.Type, key.Name, fs.GuildId);
+#endif
         }
 
         _ = streamTracker.CacheAddData(key, null, false);
+#if DEBUG
+        logger.LogTrace("[StreamNotificationService] Added stream to tracker cache: {Platform}/{Username}", key.Type,
+            key.Name);
+#endif
     }
 
     /// <summary>
@@ -360,18 +497,39 @@ public class StreamNotificationService : IReadyExecutor, INService
     private async Task UntrackStream(FollowedStream fs)
     {
         var key = fs.CreateKey();
+#if DEBUG
+        logger.LogInformation(
+            "[StreamNotificationService] UntrackStream called for {Platform}/{Username} in guild {GuildId}", key.Type,
+            key.Name, fs.GuildId);
+#endif
+
         if (!trackCounter.TryGetValue(key, out var set))
         {
-            // It should've been removed already?
+#if DEBUG
+            logger.LogWarning(
+                "[StreamNotificationService] Stream {Platform}/{Username} was not in trackCounter, forcing untrack",
+                key.Type, key.Name);
+#endif
             await streamTracker.UntrackStreamByKey(key);
             return;
         }
 
         set.Remove(fs.GuildId);
+#if DEBUG
+        logger.LogInformation(
+            "[StreamNotificationService] Removed guild {GuildId} from tracking for {Platform}/{Username} (remaining guilds: {GuildCount})",
+            fs.GuildId, key.Type, key.Name, set.Count);
+#endif
+
         if (set.Count != 0)
             return;
 
         trackCounter.Remove(key);
+#if DEBUG
+        logger.LogInformation(
+            "[StreamNotificationService] No guilds left tracking {Platform}/{Username}, removing from tracker",
+            key.Type, key.Name);
+#endif
         // If no other guilds are following this stream, untrack it
         await streamTracker.UntrackStreamByKey(key);
     }
@@ -433,10 +591,10 @@ public class StreamNotificationService : IReadyExecutor, INService
             .WithTitle(status.Name)
             .WithUrl(status.StreamUrl)
             .WithDescription(status.StreamUrl)
-            .AddField(efb => efb.WithName(GetText(guildId, "status"))
+            .AddField(efb => efb.WithName(strings.Status(guildId))
                 .WithValue(status.IsLive ? "🟢 Online" : "🔴 Offline")
                 .WithIsInline(true))
-            .AddField(efb => efb.WithName(GetText(guildId, "viewers"))
+            .AddField(efb => efb.WithName(strings.Viewers(guildId))
                 .WithValue(status.IsLive ? status.Viewers.ToString() : "-")
                 .WithIsInline(true))
             .WithColor(status.IsLive ? Mewdeko.OkColor : Mewdeko.ErrorColor);
@@ -445,7 +603,7 @@ public class StreamNotificationService : IReadyExecutor, INService
             embed.WithAuthor(status.Title);
 
         if (!string.IsNullOrWhiteSpace(status.Game))
-            embed.AddField(GetText(guildId, "streaming"), status.Game, true);
+            embed.AddField(strings.Streaming(guildId), status.Game, true);
 
         if (!string.IsNullOrWhiteSpace(status.AvatarUrl))
             embed.WithThumbnailUrl(status.AvatarUrl);
@@ -456,10 +614,6 @@ public class StreamNotificationService : IReadyExecutor, INService
         return embed;
     }
 
-    private string? GetText(ulong guildId, string key, params object[] replacements)
-    {
-        return strings.GetText(key, guildId, replacements);
-    }
 
     /// <summary>
     ///     Toggles the notification for offline streams for a guild.

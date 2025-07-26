@@ -1,4 +1,5 @@
-﻿using Mewdeko.Modules.Searches.Common.StreamNotifications.Models;
+﻿using System.Text.Json.Serialization;
+using Mewdeko.Modules.Searches.Common.StreamNotifications.Models;
 
 namespace Mewdeko.Database.Common;
 
@@ -12,6 +13,7 @@ public readonly record struct StreamDataKey
     /// </summary>
     /// <param name="type">The type of the stream.</param>
     /// <param name="name">The name of the stream.</param>
+    [JsonConstructor]
     public StreamDataKey(FType type, string? name)
     {
         Type = type;
@@ -22,11 +24,13 @@ public readonly record struct StreamDataKey
     ///     Gets the type of the followed stream.
     /// </summary>
     /// <value>The type of the stream, as defined in the FollowedStream.FType enumeration.</value>
-    public FType Type { get; }
+    [JsonPropertyName("Type")]
+    public FType Type { get; init; }
 
     /// <summary>
     ///     Gets the name of the stream.
     /// </summary>
     /// <value>The name of the stream.</value>
-    public string? Name { get; }
+    [JsonPropertyName("Name")]
+    public string? Name { get; init; }
 }
