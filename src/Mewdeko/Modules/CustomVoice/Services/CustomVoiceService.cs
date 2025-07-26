@@ -1337,7 +1337,7 @@ public class CustomVoiceService : INService, IUnloadableService
 
         // Trim to Discord's maximum length
         if (name.Length > 100)
-            name = name.Substring(0, 100);
+            name = name[..100];
 
         // Remove starting/ending spaces
         return name.Trim();
