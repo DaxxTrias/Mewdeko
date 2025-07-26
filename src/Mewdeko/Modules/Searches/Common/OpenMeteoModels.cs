@@ -114,6 +114,12 @@ public class OpenMeteoWeatherResponse
     /// </summary>
     [JsonPropertyName("daily_units")]
     public DailyUnits DailyUnits { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the hourly weather data.
+    /// </summary>
+    [JsonPropertyName("hourly")]
+    public HourlyWeather Hourly { get; set; }
 }
 
 /// <summary>
@@ -146,6 +152,12 @@ public class CurrentWeather
     public double ApparentTemperature { get; set; }
 
     /// <summary>
+    ///     Gets or sets the dewpoint temperature at 2 meters above ground.
+    /// </summary>
+    [JsonPropertyName("dew_point_2m")]
+    public double? DewPoint { get; set; }
+
+    /// <summary>
     ///     Gets or sets the WMO weather interpretation code.
     /// </summary>
     [JsonPropertyName("weather_code")]
@@ -170,6 +182,12 @@ public class CurrentWeather
     public double SurfacePressure { get; set; }
 
     /// <summary>
+    ///     Gets or sets the atmospheric pressure at sea level in hPa.
+    /// </summary>
+    [JsonPropertyName("pressure_msl")]
+    public double? PressureMsl { get; set; }
+
+    /// <summary>
     ///     Gets or sets the total cloud cover as an area fraction in percent.
     /// </summary>
     [JsonPropertyName("cloud_cover")]
@@ -192,6 +210,66 @@ public class CurrentWeather
     /// </summary>
     [JsonPropertyName("visibility")]
     public double? Visibility { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the precipitation sum in mm.
+    /// </summary>
+    [JsonPropertyName("precipitation")]
+    public double? Precipitation { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the rain sum in mm.
+    /// </summary>
+    [JsonPropertyName("rain")]
+    public double? Rain { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the snowfall sum in cm.
+    /// </summary>
+    [JsonPropertyName("snowfall")]
+    public double? Snowfall { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the UV index.
+    /// </summary>
+    [JsonPropertyName("uv_index")]
+    public double? UvIndex { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the shortwave solar radiation in W/m².
+    /// </summary>
+    [JsonPropertyName("shortwave_radiation")]
+    public double? SolarRadiation { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the evapotranspiration in mm.
+    /// </summary>
+    [JsonPropertyName("evapotranspiration")]
+    public double? Evapotranspiration { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the CAPE (Convective Available Potential Energy) in J/kg.
+    /// </summary>
+    [JsonPropertyName("cape")]
+    public double? Cape { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the freezing level height in meters.
+    /// </summary>
+    [JsonPropertyName("freezing_level_height")]
+    public double? FreezingLevelHeight { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the soil temperature at surface (0cm) in Celsius.
+    /// </summary>
+    [JsonPropertyName("soil_temperature_0cm")]
+    public double? SoilTemperature0cm { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the soil moisture at 0-1cm depth.
+    /// </summary>
+    [JsonPropertyName("soil_moisture_0_to_1cm")]
+    public double? SoilMoisture0to1cm { get; set; }
 
     // Additional properties not from API but added for convenience
     /// <summary>
@@ -389,4 +467,46 @@ public class DailyUnits
     /// </summary>
     [JsonPropertyName("precipitation_sum")]
     public string PrecipitationSum { get; set; }
+}
+
+/// <summary>
+///     Represents hourly weather data
+/// </summary>
+public class HourlyWeather
+{
+    /// <summary>
+    ///     Gets or sets the time array for hourly data.
+    /// </summary>
+    [JsonPropertyName("time")]
+    public List<string> Time { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the hourly temperature at 2 meters above ground.
+    /// </summary>
+    [JsonPropertyName("temperature_2m")]
+    public List<double> Temperature { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the hourly relative humidity at 2 meters above ground.
+    /// </summary>
+    [JsonPropertyName("relative_humidity_2m")]
+    public List<int> RelativeHumidity { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the hourly precipitation probability.
+    /// </summary>
+    [JsonPropertyName("precipitation_probability")]
+    public List<int> PrecipitationProbability { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the hourly weather codes.
+    /// </summary>
+    [JsonPropertyName("weather_code")]
+    public List<int> WeatherCode { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the hourly wind speed at 10 meters above ground.
+    /// </summary>
+    [JsonPropertyName("wind_speed_10m")]
+    public List<double> WindSpeed { get; set; }
 }

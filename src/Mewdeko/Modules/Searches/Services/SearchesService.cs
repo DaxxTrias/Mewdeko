@@ -406,10 +406,18 @@ public class SearchesService : INService, IUnloadableService
             // Now get weather data
             var weatherUrl =
                 $"{creds.OpenMeteoApiUrl}/v1/forecast?latitude={location.Latitude}&longitude={location.Longitude}" +
-                "&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,surface_pressure," +
-                "wind_speed_10m,wind_direction_10m,wind_gusts_10m,cloud_cover,visibility,is_day" +
-                "&daily=temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max,precipitation_sum" +
-                "&forecast_days=1&timezone=auto";
+                "&current=temperature_2m,relative_humidity_2m,dew_point_2m,apparent_temperature,weather_code," +
+                "surface_pressure,pressure_msl,cloud_cover,visibility,is_day,wind_speed_10m,wind_direction_10m," +
+                "wind_gusts_10m,precipitation,rain,snowfall,uv_index,shortwave_radiation,evapotranspiration," +
+                "cape,freezing_level_height,soil_temperature_0cm,soil_moisture_0_to_1cm" +
+                "&hourly=temperature_2m,relative_humidity_2m,dew_point_2m,apparent_temperature,precipitation_probability," +
+                "weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m,pressure_msl,cloud_cover," +
+                "visibility,precipitation,rain,snowfall,uv_index,shortwave_radiation,cape,soil_temperature_0cm" +
+                "&daily=temperature_2m_max,temperature_2m_min,sunrise,sunset,daylight_duration,sunshine_duration," +
+                "uv_index_max,precipitation_sum,precipitation_probability_max,rain_sum,snowfall_sum," +
+                "wind_speed_10m_max,wind_gusts_10m_max,wind_direction_10m_dominant,shortwave_radiation_sum," +
+                "et0_fao_evapotranspiration" +
+                "&forecast_days=7&timezone=auto";
 
             var weatherResponse = await http.GetStringAsync(weatherUrl).ConfigureAwait(false);
             var weatherData = JsonSerializer.Deserialize<OpenMeteoWeatherResponse>(weatherResponse);
