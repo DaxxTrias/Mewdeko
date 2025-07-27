@@ -29,5 +29,6 @@ namespace DataModel
 		[Column("CustomEmbed"                                                                                   )] public string?   CustomEmbed  { get; set; } // text
 		[Column("WebhookUrl"                                                                                    )] public string?   WebhookUrl   { get; set; } // text
 		[Column("WebSearchEnabled"                                                                              )] public bool      WebSearchEnabled { get; set; } // boolean
+		[Column("HideWebSearchMessages"                                                                         )] public bool      HideWebSearchMessages { get; set; } = true; // boolean
 	}
 }

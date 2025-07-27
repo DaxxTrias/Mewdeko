@@ -10,6 +10,7 @@ using LinqToDB;
 using Mewdeko.Common.Configs;
 using Mewdeko.Modules.Utility.Services.Impl;
 using Mewdeko.Services.Strings;
+using Microsoft.Extensions.DependencyInjection;
 using Embed = Discord.Embed;
 
 namespace Mewdeko.Modules.Utility.Services;
@@ -48,7 +49,14 @@ public class AiService : INService
     private readonly ILogger<AiService> logger;
     private readonly ConcurrentDictionary<AiProvider, List<AiModel>> modelCache;
     private readonly TimeSpan modelCacheExpiry = TimeSpan.FromHours(24);
+    private readonly IServiceProvider serviceProvider;
     private readonly GeneratedBotStrings strings;
+    private string currentToolId;
+    private string currentToolInput = "";
+
+    // Tool use tracking
+    private string currentToolName;
+    private bool isCollectingToolInput;
     private DateTime lastModelUpdate = DateTime.MinValue;
 
     /// <summary>
@@ -56,7 +64,7 @@ public class AiService : INService
     /// </summary>
     public AiService(IDataConnectionFactory dbFactory, IHttpClientFactory httpFactory,
         GeneratedBotStrings strings, BotConfig config, EventHandler handler, DiscordShardedClient client,
-        ILogger<AiService> logger)
+        ILogger<AiService> logger, IServiceProvider serviceProvider)
     {
         this.dbFactory = dbFactory;
         this.httpFactory = httpFactory;
@@ -64,6 +72,7 @@ public class AiService : INService
         botConfig = config;
         this.client = client;
         this.logger = logger;
+        this.serviceProvider = serviceProvider;
         aiClientFactory = new AiClientFactory(httpFactory);
         handler.Subscribe("MessageReceived", "AiService", HandleMessage);
         modelCache = new ConcurrentDictionary<AiProvider, List<AiModel>>();
@@ -352,18 +361,23 @@ public class AiService : INService
 
         var timeout = DateTime.UtcNow.AddMinutes(1); // 1-minute timeout as a safety
 
-        // Use web search if enabled and provider is Claude
+        // Use tools if enabled and provider is Claude
         IAsyncEnumerable<string> stream;
-        if (config.Provider == (int)AiProvider.Claude && config.WebSearchEnabled &&
-            aiClient is ClaudeClient claudeClient)
+        if (config.Provider == (int)AiProvider.Claude && aiClient is ClaudeClient claudeClient)
         {
+            var enableWebSearch = config.WebSearchEnabled;
+            var enableUserInfo = true; // Always enable user info for Claude
+
             stream = await claudeClient.StreamResponseAsync(messagesToSend, config.Model, config.ApiKey,
-                true);
+                enableWebSearch, enableUserInfo, guildChannel.Guild.Id);
         }
         else
         {
             stream = await aiClient.StreamResponseAsync(messagesToSend, config.Model, config.ApiKey);
         }
+
+        string stopReason = null;
+        var toolUseRequests = new List<ToolUseRequest>();
 
         await foreach (var rawJson in stream)
         {
@@ -396,10 +410,15 @@ public class AiService : INService
                 await UpdateMessageEmbed(false); // false = not final update
             }
 
-            // Check if stream is finished
-            if (streamParser.IsStreamFinished(rawJson, (AiProvider)config.Provider))
+            // Check for tool use requests
+            HandleToolUseEventIfNeeded(rawJson, toolUseRequests);
+
+            // Check if stream is finished and extract stop reason
+            var streamFinishInfo = streamParser.CheckStreamFinished(rawJson, (AiProvider)config.Provider);
+            if (streamFinishInfo.IsFinished)
             {
-                logger.LogInformation("AI stream finished");
+                stopReason = streamFinishInfo.StopReason;
+                logger.LogInformation($"AI stream finished with stop reason: {stopReason}");
                 break;
             }
 
@@ -407,6 +426,59 @@ public class AiService : INService
             if (DateTime.UtcNow <= timeout) continue;
             logger.LogWarning("AI stream timed out");
             break;
+        }
+
+        // Handle tool use if the stream ended with tool_use stop reason
+        if (stopReason == "tool_use" && toolUseRequests.Any())
+        {
+            logger.LogInformation($"Processing {toolUseRequests.Count} tool use requests");
+
+            // Execute all tool requests and collect results
+            var toolResults = new List<ToolResult>();
+            foreach (var toolRequest in toolUseRequests)
+            {
+                var result = await ExecuteToolRequest(toolRequest, guildChannel.Guild.Id);
+                toolResults.Add(result);
+            }
+
+            // Add the assistant message with tool use to conversation history
+            // When Claude uses tools, the assistant message may have no text content
+            var assistantContent = responseBuilder.ToString();
+            logger.LogInformation(
+                $"Assistant content length: {assistantContent?.Length ?? 0}, tool requests: {toolUseRequests.Count}");
+
+            if (!string.IsNullOrWhiteSpace(assistantContent))
+            {
+                messagesToSend.Add(new AiMessage
+                {
+                    Role = "assistant", Content = assistantContent
+                });
+                logger.LogInformation("Added assistant message with content to conversation history");
+            }
+            else
+            {
+                logger.LogInformation("Skipping empty assistant message - Claude used tools without text content");
+            }
+
+            // Add tool results to conversation history
+            var toolResultsContent = string.Join("\n", toolResults.Select(r =>
+                $"<tool_result>\n<tool_use_id>{r.ToolUseId}</tool_use_id>\n{r.Content}\n</tool_result>"));
+
+            messagesToSend.Add(new AiMessage
+            {
+                Role = "user", Content = toolResultsContent
+            });
+
+            // Continue the conversation with the tool results
+            logger.LogInformation($"Continuing conversation with tool results. Total messages: {messagesToSend.Count}");
+            for (var i = 0; i < messagesToSend.Count; i++)
+            {
+                var msg = messagesToSend[i];
+                logger.LogInformation($"Message {i}: Role={msg.Role}, ContentLength={msg.Content?.Length ?? 0}");
+            }
+
+            await StreamResponse(config, webhookMessageId, userMsg, webhook);
+            return;
         }
 
         await db.InsertAsync(new AiMessage
@@ -1068,6 +1140,191 @@ public class AiService : INService
             modelId.Replace('-', ' ')
                 .Replace('/', ' ')
                 .Replace('_', ' '));
+    }
+
+    /// <summary>
+    ///     Handles tool use events from Claude AI stream and accumulates tool requests.
+    /// </summary>
+    /// <param name="rawJson">The raw JSON from Claude's API</param>
+    /// <param name="toolUseRequests">List to accumulate completed tool requests</param>
+    private void HandleToolUseEventIfNeeded(string rawJson, List<ToolUseRequest> toolUseRequests)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(rawJson);
+            var root = doc.RootElement;
+
+            if (!root.TryGetProperty("type", out var typeProperty))
+                return;
+
+            var eventType = typeProperty.GetString();
+
+            // Handle content_block_start with tool_use
+            if (eventType == "content_block_start")
+            {
+                if (root.TryGetProperty("content_block", out var contentBlock) &&
+                    contentBlock.TryGetProperty("type", out var blockType) &&
+                    blockType.GetString() == "tool_use")
+                {
+                    // Start of a tool use - extract name and ID
+                    if (contentBlock.TryGetProperty("name", out var nameProperty) &&
+                        contentBlock.TryGetProperty("id", out var idProperty))
+                    {
+                        currentToolName = nameProperty.GetString();
+                        currentToolId = idProperty.GetString();
+                        currentToolInput = "";
+                        isCollectingToolInput = true;
+
+                        logger.LogInformation($"Started tool use: {currentToolName} with ID: {currentToolId}");
+                    }
+                }
+
+                return;
+            }
+
+            // Handle content_block_delta with input_json_delta
+            if (eventType == "content_block_delta" && isCollectingToolInput)
+            {
+                if (root.TryGetProperty("delta", out var delta) &&
+                    delta.TryGetProperty("type", out var deltaType) &&
+                    deltaType.GetString() == "input_json_delta" &&
+                    delta.TryGetProperty("partial_json", out var partialJson))
+                {
+                    var jsonPart = partialJson.GetString();
+                    currentToolInput += jsonPart;
+                    logger.LogInformation($"Accumulated tool input: {currentToolInput}");
+                }
+
+                return;
+            }
+
+            // Handle content_block_stop - complete the tool request
+            if (eventType == "content_block_stop" && isCollectingToolInput)
+            {
+                logger.LogInformation($"Tool input complete: {currentToolInput}");
+
+                if (!string.IsNullOrEmpty(currentToolName) && !string.IsNullOrEmpty(currentToolId))
+                {
+                    toolUseRequests.Add(new ToolUseRequest
+                    {
+                        Id = currentToolId, Name = currentToolName, InputJson = currentToolInput
+                    });
+                }
+
+                // Reset tool state
+                currentToolName = null;
+                currentToolId = null;
+                currentToolInput = "";
+                isCollectingToolInput = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error handling tool use event");
+            // Reset tool state on error
+            currentToolName = null;
+            currentToolId = null;
+            currentToolInput = "";
+            isCollectingToolInput = false;
+        }
+    }
+
+    /// <summary>
+    ///     Executes a tool request and returns the result.
+    /// </summary>
+    private async Task<ToolResult> ExecuteToolRequest(ToolUseRequest toolRequest, ulong guildId)
+    {
+        try
+        {
+            logger.LogInformation($"Executing tool: {toolRequest.Name} with input: {toolRequest.InputJson}");
+
+            if (toolRequest.Name == "get_user_info")
+            {
+                string toolResult;
+
+                // Parse the tool input JSON
+                if (!string.IsNullOrEmpty(toolRequest.InputJson))
+                {
+                    using var inputDoc = JsonDocument.Parse(toolRequest.InputJson);
+                    var inputRoot = inputDoc.RootElement;
+
+                    if (inputRoot.TryGetProperty("user_query", out var userQueryProperty))
+                    {
+                        var userQuery = userQueryProperty.GetString();
+                        logger.LogInformation($"Looking up user: {userQuery}");
+
+                        var userInfoService = serviceProvider.GetRequiredService<UserInfoToolService>();
+                        toolResult = await userInfoService.FindUserAsync(guildId, userQuery);
+                    }
+                    else
+                    {
+                        toolResult = JsonSerializer.Serialize(new
+                        {
+                            error = "Missing required parameter: user_query"
+                        });
+                    }
+                }
+                else
+                {
+                    toolResult = JsonSerializer.Serialize(new
+                    {
+                        error = "Empty tool input"
+                    });
+                }
+
+                logger.LogInformation($"Tool result for {toolRequest.Name}: {toolResult.Length} characters");
+
+                return new ToolResult
+                {
+                    ToolUseId = toolRequest.Id, Content = toolResult, IsError = false
+                };
+            }
+
+            logger.LogWarning($"Unknown tool requested: {toolRequest.Name}");
+            return new ToolResult
+            {
+                ToolUseId = toolRequest.Id,
+                Content = JsonSerializer.Serialize(new
+                {
+                    error = $"Unknown tool: {toolRequest.Name}"
+                }),
+                IsError = true
+            };
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, $"Error executing tool {toolRequest.Name}: {ex.Message}");
+
+            return new ToolResult
+            {
+                ToolUseId = toolRequest.Id,
+                Content = JsonSerializer.Serialize(new
+                {
+                    error = $"Tool execution failed: {ex.Message}"
+                }),
+                IsError = true
+            };
+        }
+    }
+
+    /// <summary>
+    ///     Represents a tool use request from Claude
+    /// </summary>
+    private class ToolUseRequest
+    {
+        public string Id { get; set; }
+        public string Name { get; set; }
+        public string InputJson { get; set; }
+    }
+
+    /// <summary>
+    ///     Represents the result of a tool execution
+    /// </summary>
+    private class ToolResult
+    {
+        public string ToolUseId { get; set; }
+        public string Content { get; set; }
+        public bool IsError { get; set; }
     }
 
     /// <summary>

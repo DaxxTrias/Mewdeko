@@ -56,6 +56,24 @@ public class ClaudeClient : IAiClient
     public async Task<IAsyncEnumerable<string>> StreamResponseAsync(IEnumerable<AiMessage> messages, string model,
         string apiKey, bool enableWebSearch, CancellationToken cancellationToken = default)
     {
+        return await StreamResponseAsync(messages, model, apiKey, enableWebSearch, false, 0, cancellationToken);
+    }
+
+    /// <summary>
+    ///     Streams a response from the Claude AI model with optional tools.
+    /// </summary>
+    /// <param name="messages">The conversation history.</param>
+    /// <param name="model">The model identifier to use.</param>
+    /// <param name="apiKey">The API key for authentication.</param>
+    /// <param name="enableWebSearch">Whether to enable web search tool.</param>
+    /// <param name="enableUserInfo">Whether to enable user information tool.</param>
+    /// <param name="guildId">Guild ID for user information context.</param>
+    /// <param name="cancellationToken">Optional token to cancel the operation.</param>
+    /// <returns>A stream containing the raw JSON responses from the Claude API.</returns>
+    public async Task<IAsyncEnumerable<string>> StreamResponseAsync(IEnumerable<AiMessage> messages, string model,
+        string apiKey, bool enableWebSearch, bool enableUserInfo, ulong guildId,
+        CancellationToken cancellationToken = default)
+    {
         try
         {
             var httpClient = httpClientFactory.CreateClient();
@@ -84,16 +102,46 @@ public class ClaudeClient : IAiClient
                 requestBody["system"] = systemMessage;
             }
 
-            // Add web search tool if enabled
+            // Add tools if enabled
+            var tools = new List<Dictionary<string, object>>();
+
             if (enableWebSearch)
             {
-                requestBody["tools"] = new[]
+                tools.Add(new Dictionary<string, object>
                 {
-                    new Dictionary<string, object>
+                    ["type"] = "web_search_20250305", ["name"] = "web_search", ["max_uses"] = 5
+                });
+            }
+
+            if (enableUserInfo)
+            {
+                tools.Add(new Dictionary<string, object>
+                {
+                    ["name"] = "get_user_info",
+                    ["description"] =
+                        "Get detailed information about a Discord user in this guild, including XP stats, profile, warnings, and activity",
+                    ["input_schema"] = new Dictionary<string, object>
                     {
-                        ["type"] = "web_search_20250305", ["name"] = "web_search", ["max_uses"] = 5
+                        ["type"] = "object",
+                        ["properties"] = new Dictionary<string, object>
+                        {
+                            ["user_query"] = new Dictionary<string, object>
+                            {
+                                ["type"] = "string",
+                                ["description"] = "User ID, username, display name, or @mention to look up"
+                            }
+                        },
+                        ["required"] = new[]
+                        {
+                            "user_query"
+                        }
                     }
-                };
+                });
+            }
+
+            if (tools.Any())
+            {
+                requestBody["tools"] = tools.ToArray();
             }
 
             var jsonRequest = JsonSerializer.Serialize(requestBody);
