@@ -49,12 +49,10 @@ public class NotifChecker
             },
             {
                 FType.Trovo, new TrovoProvider(httpClientFactory, credsProvider)
+            },
+            {
+                FType.Youtube, new YoutubeScrapingProvider()
             }
-            // Disabled until google makes their api not shit
-            // ,
-            // {
-            //     FollowedStream.FType.Youtube, new YouTubeProvider(credsProvider)
-            // }
         };
         offlineBuffer = [];
         if (isMaster)
