@@ -25,7 +25,7 @@ public class TwitchHelixProvider : Provider
         clientId = creds.TwitchClientId;
         var clientSecret = creds.TwitchClientSecret;
 
-        Logger.Information("[TwitchHelixProvider] Initializing with ClientId: {ClientId}, HasSecret: {HasSecret}",
+        Logger.Information("Initializing with ClientId: {ClientId}, HasSecret: {HasSecret}",
             string.IsNullOrEmpty(clientId) ? "(empty)" : clientId[..Math.Min(8, clientId.Length)] + "...",
             !string.IsNullOrEmpty(clientSecret));
 
@@ -58,18 +58,18 @@ public class TwitchHelixProvider : Provider
         try
         {
 #if DEBUG
-            Logger.Information("[TwitchHelixProvider] Requesting access token...");
+            Logger.Information("Requesting access token...");
 #endif
             var token = await api.Value.Auth.GetAccessTokenAsync().ConfigureAwait(false);
 
             if (token is null)
             {
-                Logger.Error("[TwitchHelixProvider] Failed to get access token - returned null");
+                Logger.Error("Failed to get access token - returned null");
             }
             else
             {
 #if DEBUG
-                Logger.Information("[TwitchHelixProvider] Successfully obtained access token");
+                Logger.Information("Successfully obtained access token");
 #endif
             }
 
@@ -77,7 +77,7 @@ public class TwitchHelixProvider : Provider
         }
         catch (Exception ex)
         {
-            Logger.Error(ex, "[TwitchHelixProvider] Exception while getting access token: {ErrorMessage}", ex.Message);
+            Logger.Error(ex, "Exception while getting access token: {ErrorMessage}", ex.Message);
             return null;
         }
     }
@@ -115,7 +115,7 @@ public class TwitchHelixProvider : Provider
     public override async Task<IReadOnlyCollection<StreamData>> GetStreamDataAsync(List<string> logins)
     {
 #if DEBUG
-        Logger.Information("[TwitchHelixProvider] GetStreamDataAsync called with {LoginCount} logins: {Logins}",
+        Logger.Information("GetStreamDataAsync called with {LoginCount} logins: {Logins}",
             logins.Count, string.Join(", ", logins));
 #endif
 
