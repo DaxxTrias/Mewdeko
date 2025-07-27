@@ -41,6 +41,21 @@ public class ClaudeClient : IAiClient
     public async Task<IAsyncEnumerable<string>> StreamResponseAsync(IEnumerable<AiMessage> messages, string model,
         string apiKey, CancellationToken cancellationToken = default)
     {
+        return await StreamResponseAsync(messages, model, apiKey, false, cancellationToken);
+    }
+
+    /// <summary>
+    ///     Streams a response from the Claude AI model with optional web search capability.
+    /// </summary>
+    /// <param name="messages">The conversation history.</param>
+    /// <param name="model">The model identifier to use.</param>
+    /// <param name="apiKey">The API key for authentication.</param>
+    /// <param name="enableWebSearch">Whether to enable web search tool.</param>
+    /// <param name="cancellationToken">Optional token to cancel the operation.</param>
+    /// <returns>A stream containing the raw JSON responses from the Claude API.</returns>
+    public async Task<IAsyncEnumerable<string>> StreamResponseAsync(IEnumerable<AiMessage> messages, string model,
+        string apiKey, bool enableWebSearch, CancellationToken cancellationToken = default)
+    {
         try
         {
             var httpClient = httpClientFactory.CreateClient();
@@ -67,6 +82,18 @@ public class ClaudeClient : IAiClient
             if (!string.IsNullOrWhiteSpace(systemMessage))
             {
                 requestBody["system"] = systemMessage;
+            }
+
+            // Add web search tool if enabled
+            if (enableWebSearch)
+            {
+                requestBody["tools"] = new[]
+                {
+                    new Dictionary<string, object>
+                    {
+                        ["type"] = "web_search_20250305", ["name"] = "web_search", ["max_uses"] = 5
+                    }
+                };
             }
 
             var jsonRequest = JsonSerializer.Serialize(requestBody);

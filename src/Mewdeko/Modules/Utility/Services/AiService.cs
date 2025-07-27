@@ -351,7 +351,20 @@ public class AiService : INService
         }
 
         var timeout = DateTime.UtcNow.AddMinutes(1); // 1-minute timeout as a safety
-        var stream = await aiClient.StreamResponseAsync(messagesToSend, config.Model, config.ApiKey);
+
+        // Use web search if enabled and provider is Claude
+        IAsyncEnumerable<string> stream;
+        if (config.Provider == (int)AiProvider.Claude && config.WebSearchEnabled &&
+            aiClient is ClaudeClient claudeClient)
+        {
+            stream = await claudeClient.StreamResponseAsync(messagesToSend, config.Model, config.ApiKey,
+                true);
+        }
+        else
+        {
+            stream = await aiClient.StreamResponseAsync(messagesToSend, config.Model, config.ApiKey);
+        }
+
         await foreach (var rawJson in stream)
         {
             if (string.IsNullOrEmpty(rawJson)) continue;

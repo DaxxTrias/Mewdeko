@@ -49,6 +49,27 @@ public class ClaudeStreamParser : IAiStreamParser
                 }
             }
 
+            // Handle server_tool_use events (e.g., web search)
+            if (eventType == "server_tool_use")
+            {
+                // Log that we're using a tool but don't return text
+                if (root.TryGetProperty("name", out var nameProperty))
+                {
+                    Log.Information($"Server tool use: {nameProperty.GetString()}");
+                }
+
+                return "";
+            }
+
+            // Handle web_search_tool_result events
+            if (eventType == "web_search_tool_result")
+            {
+                // Log that we received search results but don't return text
+                // The actual response will come in subsequent text blocks
+                Log.Information("Received web search results");
+                return "";
+            }
+
             return "";
         }
         catch (Exception ex)
@@ -132,9 +153,10 @@ public class ClaudeStreamParser : IAiStreamParser
                 // Or a message_delta with stop_reason
                 if (eventType == "message_delta" &&
                     root.TryGetProperty("delta", out var deltaProperty) &&
-                    deltaProperty.TryGetProperty("stop_reason", out _))
+                    deltaProperty.TryGetProperty("stop_reason", out var stopReasonProperty))
                 {
-                    Log.Information("Stream finished: received message_delta with stop_reason");
+                    var stopReason = stopReasonProperty.GetString();
+                    Log.Information($"Stream finished: received message_delta with stop_reason: {stopReason}");
                     return true;
                 }
             }
