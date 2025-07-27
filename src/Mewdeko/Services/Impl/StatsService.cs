@@ -38,6 +38,7 @@ public class StatsService : IStatsService, IDisposable
     /// <param name="cmdServ">The command service</param>
     /// <param name="http">The http client</param>
     /// <param name="cache">The caching service</param>
+    /// <param name="logger"></param>
     /// <exception cref="ArgumentNullException"></exception>
     public StatsService(
         DiscordShardedClient client, IBotCredentials creds, CommandService cmdServ,
