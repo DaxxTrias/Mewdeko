@@ -28,4 +28,12 @@ public interface IAiStreamParser
     /// <param name="provider">The AI provider type.</param>
     /// <returns>True if the stream is finished, false otherwise.</returns>
     public bool IsStreamFinished(string json, AiService.AiProvider provider);
+
+    /// <summary>
+    ///     Checks if the stream has finished and returns both status and stop reason.
+    /// </summary>
+    /// <param name="json">The JSON response from the AI provider.</param>
+    /// <param name="provider">The AI provider type.</param>
+    /// <returns>A tuple containing whether the stream is finished and the stop reason.</returns>
+    public (bool IsFinished, string StopReason) CheckStreamFinished(string json, AiService.AiProvider provider);
 }
