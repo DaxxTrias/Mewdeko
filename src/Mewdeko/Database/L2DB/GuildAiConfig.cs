@@ -28,5 +28,6 @@ namespace DataModel
 		[Column("DateAdded"                                                                                     )] public DateTime? DateAdded    { get; set; } // timestamp (6) without time zone
 		[Column("CustomEmbed"                                                                                   )] public string?   CustomEmbed  { get; set; } // text
 		[Column("WebhookUrl"                                                                                    )] public string?   WebhookUrl   { get; set; } // text
+		[Column("WebSearchEnabled"                                                                              )] public bool      WebSearchEnabled { get; set; } // boolean
 	}
 }

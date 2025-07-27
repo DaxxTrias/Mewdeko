@@ -562,11 +562,20 @@ public class AiService : INService
             });
         }
 
-        //logger.LogInformation("Sending to AI provider. Messages: {Json}", JsonSerializer.Serialize(messagesToSend));
+        // Use web search if enabled and provider is Claude
+        IAsyncEnumerable<string> stream;
+        if (config.Provider == (int)AiProvider.Claude && config.WebSearchEnabled &&
+            aiClient is ClaudeClient claudeClient)
+        {
+            stream = await claudeClient.StreamResponseAsync(messagesToSend, config.Model, config.ApiKey,
+                true);
+        }
+        else
+        {
+            stream = await aiClient.StreamResponseAsync(messagesToSend, config.Model, config.ApiKey);
+        }
 
-        var stream = await aiClient.StreamResponseAsync(messagesToSend, config.Model, config.ApiKey);
-
-        string lastRawJson = null;
+        string? lastRawJson = null;
         await foreach (var rawJson in stream)
         {
             // Ensure that rawJson is explicitly cast to a string before checking for null or empty

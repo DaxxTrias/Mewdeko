@@ -23605,6 +23605,16 @@ aikey:
   args:
     - ''
   params: [ ]
+aiwebsearch:
+  desc: Enables or disables web search for AI (Claude only)
+  args:
+    - 'true'
+    - 'false'
+  params:
+    - name: enabled
+      desc: Whether to enable or disable web search
+      type: bool
+      optional: false
 aiprompt:
   desc: Sets the system prompt for the AI
   args:
