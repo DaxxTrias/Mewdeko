@@ -1383,7 +1383,7 @@ public class AiService : INService
             AiProvider.OpenAi => "https://seeklogo.com/images/C/chatgpt-logo-02AFA704B5-seeklogo.com.png",
             AiProvider.Grok => "https://images.seeklogo.com/logo-png/61/2/grok-logo-png_seeklogo-613403.png",
             AiProvider.Groq => "https://seeklogo.com/images/G/groq-logo-1B1B1B1B1B-seeklogo.com.png",
-            AiProvider.Claude => "https://assets-global.website-files.com/63f6c7b6b2b1e2b8e7e1e1e1/63f6c7b6b2b1e2b8e7e1e1e1_claude-logo.png",
+            AiProvider.Claude => "https://images.seeklogo.com/logo-png/55/1/claude-logo-png_seeklogo-554534.png",
             _ => string.Empty
         };
     }
