@@ -407,16 +407,22 @@ public class GiveawayService : INService, IDisposable
             var guild = inputGuild ?? client.GetGuild(giveaway.ServerId);
             if (guild is null)
             {
-                logger.LogWarning("Guild {GuildId} not found for giveaway {GiveawayId}", giveaway.ServerId,
+                logger.LogWarning(
+                    "Guild {GuildId} not found for giveaway {GiveawayId}, marking as completed to clean up",
+                    giveaway.ServerId,
                     giveaway.Id);
+                await MarkGiveawayEnded(giveaway);
                 return;
             }
 
             var channel = inputChannel ?? await guild.GetTextChannelAsync(giveaway.ChannelId);
             if (channel is null)
             {
-                logger.LogWarning("Channel {ChannelId} not found for giveaway {GiveawayId}", giveaway.ChannelId,
+                logger.LogWarning(
+                    "Channel {ChannelId} not found for giveaway {GiveawayId}, marking as completed to clean up",
+                    giveaway.ChannelId,
                     giveaway.Id);
+                await MarkGiveawayEnded(giveaway);
                 return;
             }
 
@@ -426,8 +432,11 @@ public class GiveawayService : INService, IDisposable
             {
                 if (await channel.GetMessageAsync(giveaway.MessageId) is not IUserMessage msg)
                 {
-                    logger.LogWarning("Message {MessageId} not found for giveaway {GiveawayId}", giveaway.MessageId,
+                    logger.LogWarning(
+                        "Message {MessageId} not found for giveaway {GiveawayId}, marking as completed to clean up",
+                        giveaway.MessageId,
                         giveaway.Id);
+                    await MarkGiveawayEnded(giveaway);
                     return;
                 }
 
@@ -1046,9 +1055,18 @@ public class GiveawayService : INService, IDisposable
                 guildConfigCache.TryRemove(guildId, out _);
             }
 
-            // Query for all active giveaways to validate timers
+            // Clean up orphaned giveaways and query for all active giveaways to validate timers
             Task.Run(async () =>
             {
+                try
+                {
+                    await CleanupOrphanedGiveaways();
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Error during orphaned giveaway cleanup");
+                }
+
                 try
                 {
                     await using var dbContext = await dbFactory.CreateConnectionAsync();
@@ -1148,6 +1166,57 @@ public class GiveawayService : INService, IDisposable
         timerLock.Dispose();
 
         logger.LogInformation("GiveawayService disposed");
+    }
+
+    /// <summary>
+    ///     Cleans up giveaways for guilds/channels that are no longer accessible.
+    /// </summary>
+    private async Task CleanupOrphanedGiveaways()
+    {
+        try
+        {
+            await using var dbContext = await dbFactory.CreateConnectionAsync();
+
+            // Get all active giveaways
+            var activeGiveaways = await dbContext.Giveaways
+                .Where(g => g.Ended != 1)
+                .ToListAsync();
+
+            var orphanedCount = 0;
+
+            foreach (var giveaway in activeGiveaways)
+            {
+                var guild = client.GetGuild(giveaway.ServerId);
+                if (guild == null)
+                {
+                    logger.LogDebug(
+                        "Marking orphaned giveaway {GiveawayId} as ended - guild {GuildId} no longer accessible",
+                        giveaway.Id, giveaway.ServerId);
+                    await MarkGiveawayEnded(giveaway);
+                    orphanedCount++;
+                    continue;
+                }
+
+                var channel = guild.GetTextChannel(giveaway.ChannelId);
+                if (channel == null)
+                {
+                    logger.LogDebug(
+                        "Marking orphaned giveaway {GiveawayId} as ended - channel {ChannelId} no longer accessible",
+                        giveaway.Id, giveaway.ChannelId);
+                    await MarkGiveawayEnded(giveaway);
+                    orphanedCount++;
+                }
+            }
+
+            if (orphanedCount > 0)
+            {
+                logger.LogInformation("Cleaned up {Count} orphaned giveaways", orphanedCount);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error during orphaned giveaway cleanup");
+        }
     }
 
     #endregion
