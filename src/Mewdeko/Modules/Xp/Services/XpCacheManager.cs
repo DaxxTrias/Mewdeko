@@ -690,7 +690,7 @@ public class XpCacheManager : INService
                 cacheOperations.AddRange(from roleReward in batch
                     let cacheKey = $"{RedisKeyPrefix}rewards:{roleReward.GuildId}:role:{roleReward.Level}"
                     let serializedReward = JsonSerializer.Serialize(roleReward, CachedJsonOptions)
-                    select redis.StringSetAsync(cacheKey, serializedReward, TimeSpan.FromMinutes(30), When.Always));
+                    select redis.StringSetAsync(cacheKey, serializedReward, null, When.Always));
 
                 await Task.WhenAll(cacheOperations).ConfigureAwait(false);
                 cacheOperations.Clear();
@@ -745,7 +745,7 @@ public class XpCacheManager : INService
                 cacheOperations.AddRange(from currencyReward in batch
                     let cacheKey = $"{RedisKeyPrefix}rewards:{currencyReward.GuildId}:currency:{currencyReward.Level}"
                     let serializedReward = JsonSerializer.Serialize(currencyReward, CachedJsonOptions)
-                    select redis.StringSetAsync(cacheKey, serializedReward, TimeSpan.FromMinutes(30), When.Always));
+                    select redis.StringSetAsync(cacheKey, serializedReward, null, When.Always));
 
                 await Task.WhenAll(cacheOperations).ConfigureAwait(false);
                 cacheOperations.Clear();
