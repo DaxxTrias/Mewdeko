@@ -45,6 +45,7 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
     /// <param name="punishService">The user punish service.</param>
     /// <param name="eventHandler">The event handler.</param>
     /// <param name="gss">The guild settings service.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public ProtectionService(DiscordShardedClient client, Mewdeko bot,
         MuteService mute, IDataConnectionFactory dbFactory, UserPunishService punishService, EventHandler eventHandler,
         GuildSettingsService gss, ILogger<ProtectionService> logger)

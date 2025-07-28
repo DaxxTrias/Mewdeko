@@ -26,6 +26,7 @@ public class LogSlashCommands : MewdekoSlashModuleBase<LogCommandService>
     ///     Initializes a new instance of the LogSlashCommands class.
     /// </summary>
     /// <param name="gss">Service for managing guild settings</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public LogSlashCommands(GuildSettingsService gss, ILogger<LogSlashCommands> logger)
     {
         this.gss = gss;

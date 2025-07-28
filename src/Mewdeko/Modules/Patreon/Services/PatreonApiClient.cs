@@ -27,6 +27,7 @@ public class PatreonApiClient : INService
     ///     Initializes a new instance of the <see cref="PatreonApiClient" /> class.
     /// </summary>
     /// <param name="httpClientFactory">The HTTP client factory.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public PatreonApiClient(IHttpClientFactory httpClientFactory, ILogger<PatreonApiClient> logger)
     {
         this.httpClientFactory = httpClientFactory;

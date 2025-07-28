@@ -30,6 +30,9 @@ public class XpRewardManager : INService
     /// <param name="dbFactory">The database factory.</param>
     /// <param name="currencyService">The currency service.</param>
     /// <param name="cacheManager">The cache manager.</param>
+    /// <param name="strings">The localized strings service.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
+    /// <param name="eventHandler">The event handler service.</param>
     public XpRewardManager(
         DiscordShardedClient client,
         IDataConnectionFactory dbFactory,

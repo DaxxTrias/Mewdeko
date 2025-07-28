@@ -41,6 +41,7 @@ public class AfkService : INService, IReadyExecutor, IDisposable
     /// <param name="eventHandler">Handler for Discord events.</param>
     /// <param name="config">The bot's configuration service.</param>
     /// <param name="strings">The localization service.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public AfkService(
         IDataConnectionFactory dbFactory,
         DiscordShardedClient client,

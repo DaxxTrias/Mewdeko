@@ -38,6 +38,8 @@ public class StreamNotificationService : IReadyExecutor, INService
     /// <param name="httpFactory">The HTTP client factory.</param>
     /// <param name="bot">The bot instance.</param>
     /// <param name="eventHandler">The event handler for guild events.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
+    /// <param name="logger2">The logger instance for structured logging.</param>
     public StreamNotificationService(
         IDataConnectionFactory dbFactory,
         DiscordShardedClient client,

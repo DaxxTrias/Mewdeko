@@ -38,6 +38,10 @@ public class MusicEventManager : INService, IDisposable
     /// <summary>
     ///     Constructor
     /// </summary>
+    /// <param name="cache">The cache service.</param>
+    /// <param name="audioService">The audioservice service.</param>
+    /// <param name="client">The Discord client instance.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public MusicEventManager(
         IDataCache cache,
         IAudioService audioService, DiscordShardedClient client, ILogger<MusicEventManager> logger)

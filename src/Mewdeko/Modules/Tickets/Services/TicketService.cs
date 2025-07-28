@@ -27,6 +27,11 @@ public class TicketService : INService
     /// <summary>
     ///     Initializes a new instance of the <see cref="TicketService" /> class.
     /// </summary>
+    /// <param name="dbFactory">The database connection factory.</param>
+    /// <param name="client">The Discord client instance.</param>
+    /// <param name="eventHandler">The event handler service.</param>
+    /// <param name="strings">The localized strings service.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public TicketService(
         IDataConnectionFactory dbFactory,
         DiscordShardedClient client,

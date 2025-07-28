@@ -34,6 +34,7 @@ public class RoleMonitorService : INService, IReadyExecutor
     /// <param name="userPunishService">The user punishment service.</param>
     /// <param name="botConfigService">The bot configuration service.</param>
     /// <param name="muteService">The mute service for handling user mutes.</param>
+    /// <param name="strings">The localized strings service.</param>
     public RoleMonitorService(DiscordShardedClient client, EventHandler handler, IDataConnectionFactory dbFactory,
         IDataCache dataCache, UserPunishService userPunishService, BotConfigService botConfigService,
         MuteService muteService, GeneratedBotStrings strings)

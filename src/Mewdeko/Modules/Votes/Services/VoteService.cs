@@ -24,6 +24,7 @@ public class VoteService : INService
     /// <param name="dbFactory">The database service for data access.</param>
     /// <param name="client">The Discord client for interacting with the Discord API.</param>
     /// <param name="muteService">The service for managing mutes within the bot.</param>
+    /// <param name="strings">The localized strings service.</param>
     public VoteService(IPubSub pubSub, IDataConnectionFactory dbFactory, DiscordShardedClient client,
         MuteService muteService, GeneratedBotStrings strings)
     {

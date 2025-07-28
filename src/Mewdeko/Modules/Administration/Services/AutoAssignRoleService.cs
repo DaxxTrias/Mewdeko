@@ -30,6 +30,7 @@ public sealed class AutoAssignRoleService : INService
     /// <param name="dbFactory">The database connection factory.</param>
     /// <param name="guildSettings">The guild settings service.</param>
     /// <param name="eventHandler">The event handler.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public AutoAssignRoleService(IDataConnectionFactory dbFactory,
         GuildSettingsService guildSettings, EventHandler eventHandler, ILogger<AutoAssignRoleService> logger)
     {

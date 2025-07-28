@@ -47,6 +47,7 @@ public sealed class EventHandler : IDisposable
     /// <param name="logger">The logger instance for structured logging.</param>
     /// <param name="options">Configuration options for the event handler.</param>
     /// <exception cref="ArgumentNullException">Thrown when any parameter is null.</exception>
+    /// <param name="interaction">The interaction service.</param>
     public EventHandler(
         DiscordShardedClient client,
         InteractionService interaction,

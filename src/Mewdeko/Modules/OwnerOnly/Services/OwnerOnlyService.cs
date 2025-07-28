@@ -72,6 +72,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
     ///     The constructor subscribes to message received events and sets up periodic tasks for rotating statuses
     ///     and checking for updates. It also listens for commands to leave guilds or reload images via Redis subscriptions.
     /// </remarks>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public OwnerOnlyService(DiscordShardedClient client, CommandHandler cmdHandler, IDataConnectionFactory dbFactory,
         GeneratedBotStrings strings, IBotCredentials creds, IDataCache cache, IHttpClientFactory factory,
         BotConfigService bss, IEnumerable<IPlaceholderProvider> phProviders, Mewdeko bot,

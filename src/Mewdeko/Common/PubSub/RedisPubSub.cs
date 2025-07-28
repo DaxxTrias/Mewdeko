@@ -32,6 +32,7 @@ public sealed class RedisPubSub : IPubSub
     /// <param name="multi">The Redis connection multiplexer.</param>
     /// <param name="serializer">The serializer for data.</param>
     /// <param name="creds">The bot credentials.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public RedisPubSub(ConnectionMultiplexer multi, ISeria serializer, IBotCredentials creds,
         ILogger<RedisPubSub> logger)
     {

@@ -61,6 +61,7 @@ public partial class TicketsSlash
         /// </summary>
         /// <param name="interactivity">The interactive service</param>
         /// <param name="cache">The cache service</param>
+        /// <param name="logger">The logger instance for structured logging.</param>
         public TicketSetupWizard(InteractiveService interactivity, IDataCache cache, ILogger<TicketSetupWizard> logger)
         {
             this.interactivity = interactivity;

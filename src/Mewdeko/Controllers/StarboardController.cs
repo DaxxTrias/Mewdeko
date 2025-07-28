@@ -19,6 +19,8 @@ public class StarboardController : Controller
     /// <summary>
     ///     Initializes a new instance of the StarboardController
     /// </summary>
+    /// <param name="starboardService">The starboardservice service.</param>
+    /// <param name="client">The Discord client instance.</param>
     public StarboardController(StarboardService starboardService, DiscordShardedClient client)
     {
         this.starboardService = starboardService;

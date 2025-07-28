@@ -23,6 +23,7 @@ public class XpRoleSyncService : INService
     /// <param name="dbFactory">The database connection factory.</param>
     /// <param name="xpService">The xp service</param>
     /// <param name="cacheManager">The xp cache manager.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public XpRoleSyncService(IDataConnectionFactory dbFactory, XpService xpService, XpCacheManager cacheManager,
         ILogger<XpRoleSyncService> logger)
     {

@@ -16,6 +16,7 @@ public class GameVoiceChannelService : INService
     /// <param name="dbFactory">The database service.</param>
     /// <param name="guildSettings">The guild settings service.</param>
     /// <param name="eventHandler">The event handler.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public GameVoiceChannelService(IDataConnectionFactory dbFactory,
         GuildSettingsService guildSettings, EventHandler eventHandler, ILogger<GameVoiceChannelService> logger)
     {

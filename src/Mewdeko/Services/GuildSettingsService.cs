@@ -32,6 +32,7 @@ public class GuildSettingsService
     /// <param name="memoryCache">Memory cache for storing frequently accessed guild settings.</param>
     /// <param name="perfService">Service for monitoring performance metrics.</param>
     /// <exception cref="ArgumentNullException">Thrown when any required dependency is null.</exception>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public GuildSettingsService(
         IDataConnectionFactory dbFactory,
         BotConfig botSettings,

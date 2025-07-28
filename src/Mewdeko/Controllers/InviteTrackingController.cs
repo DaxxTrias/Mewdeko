@@ -18,6 +18,8 @@ public class InviteTrackingController : Controller
     /// <summary>
     ///     Initializes a new instance of the InviteTrackingController
     /// </summary>
+    /// <param name="inviteService">The inviteservice service.</param>
+    /// <param name="client">The Discord client instance.</param>
     public InviteTrackingController(InviteCountService inviteService, DiscordShardedClient client)
     {
         this.inviteService = inviteService;

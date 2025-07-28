@@ -35,6 +35,7 @@ public class UserPunishService : INService, IDisposable
     /// <param name="blacklistService">An instance of the BlacklistService class.</param>
     /// <param name="client">An instance of the DiscordShardedClient class.</param>
     /// <param name="guildSettings">An instance of the GuildSettingsService class.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public UserPunishService(MuteService mute, IDataConnectionFactory dbFactory, BlacklistService blacklistService,
         DiscordShardedClient client,
         GuildSettingsService guildSettings, ILogger<UserPunishService> logger)

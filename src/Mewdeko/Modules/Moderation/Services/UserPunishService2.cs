@@ -23,6 +23,7 @@ public class UserPunishService2 : INService
     /// <param name="mute">The mute service</param>
     /// <param name="dbFactory">The database service</param>
     /// <param name="guildSettings">The guild settings service</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public UserPunishService2(MuteService mute, IDataConnectionFactory dbFactory,
         GuildSettingsService guildSettings, ILogger<UserPunishService2> logger)
     {

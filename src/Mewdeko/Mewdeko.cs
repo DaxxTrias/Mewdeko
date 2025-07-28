@@ -39,6 +39,7 @@ public class Mewdeko
     ///     Initializes a new instance of the Mewdeko class.
     /// </summary>
     /// <param name="services">The service provider for dependency injection.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public Mewdeko(IServiceProvider services, ILogger<Mewdeko> logger)
     {
         Services = services;

@@ -13,6 +13,7 @@ public class TodoService : INService
     /// <summary>
     ///     Initializes a new instance of the <see cref="TodoService" /> class.
     /// </summary>
+    /// <param name="dbFactory">The database connection factory.</param>
     public TodoService(
         IDataConnectionFactory dbFactory)
     {

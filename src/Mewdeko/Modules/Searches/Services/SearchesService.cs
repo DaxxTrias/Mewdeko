@@ -94,6 +94,8 @@ public class SearchesService : INService, IUnloadableService
     /// <param name="handler">Async discord event handler because stoopid</param>
     /// <param name="martineApi">Reddit!</param>
     /// <param name="dbFactory">The db context provider</param>
+    /// <param name="strings">The localized strings service.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public SearchesService(IGoogleApiService google, IDataCache cache,
         IHttpClientFactory factory,
         IBotCredentials creds, EventHandler handler, MartineApi martineApi, IDataConnectionFactory dbFactory,

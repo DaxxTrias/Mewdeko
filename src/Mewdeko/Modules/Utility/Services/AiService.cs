@@ -62,6 +62,14 @@ public class AiService : INService
     /// <summary>
     ///     Initializes a new instance of the <see cref="AiService" /> class.
     /// </summary>
+    /// <param name="dbFactory">The database connection factory.</param>
+    /// <param name="httpFactory">The httpfactory factory.</param>
+    /// <param name="strings">The localized strings service.</param>
+    /// <param name="config">The bot configuration settings.</param>
+    /// <param name="handler">The handler parameter.</param>
+    /// <param name="client">The Discord client instance.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
+    /// <param name="serviceProvider">The service provider for dependency injection.</param>
     public AiService(IDataConnectionFactory dbFactory, IHttpClientFactory httpFactory,
         GeneratedBotStrings strings, BotConfig config, EventHandler handler, DiscordShardedClient client,
         ILogger<AiService> logger, IServiceProvider serviceProvider)

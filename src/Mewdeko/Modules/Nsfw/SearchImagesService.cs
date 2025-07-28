@@ -53,6 +53,7 @@ public class SearchImagesService : ISearchImagesService, INService
     /// <param name="cacher">The search image cacher.</param>
     /// <param name="dbFactory">The database service.</param>
     /// <param name="service">The guild settings service.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public SearchImagesService(
         IHttpClientFactory http,
         SearchImageCacher cacher,

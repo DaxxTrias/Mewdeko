@@ -63,6 +63,8 @@ public class CommandHandler : INService
     /// <param name="gss">The guild settings service.</param>
     /// <param name="eventHandler">The event handler for discord events.</param>
     /// <param name="cache">The data cache service.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
+    /// <param name="interactiveService">The interactiveservice service.</param>
     public CommandHandler(DiscordShardedClient client, IDataConnectionFactory dbFactory, CommandService commandService,
         BotConfigService bss, Mewdeko bot, IServiceProvider services,
         InteractionService interactionService,

@@ -32,6 +32,7 @@ public class HighlightsService : INService, IReadyExecutor, IUnloadableService
     /// <param name="cache">Fusion cache</param>
     /// <param name="dbFactory">The database provider</param>
     /// <param name="eventHandler">Async event handler because discord stoopid</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public HighlightsService(DiscordShardedClient client, IFusionCache cache, IDataConnectionFactory dbFactory,
         EventHandler eventHandler, ILogger<HighlightsService> logger)
     {
