@@ -131,6 +131,8 @@ public class TicketService : INService
     /// <summary>
     ///     Previews how an embed JSON would look
     /// </summary>
+    /// <param name="channel">The channel parameter.</param>
+    /// <param name="embedJson">The embedjson string.</param>
     public async Task PreviewPanelAsync(ITextChannel channel, string embedJson)
     {
         try
@@ -2062,6 +2064,9 @@ public class TicketService : INService
     /// <summary>
     ///     Sets the priority for a ticket.
     /// </summary>
+    /// <param name="ticket">The ticket parameter.</param>
+    /// <param name="priority">The priority string.</param>
+    /// <param name="staff">The staff parameter.</param>
     public async Task SetTicketPriorityAsync(Ticket ticket, string priority, IGuildUser staff)
     {
         await using var ctx = await dbFactory.CreateConnectionAsync();

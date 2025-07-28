@@ -15,6 +15,8 @@ namespace Mewdeko.Modules.RoleGreets;
 ///     These messages are sent when a user receives a specific role, allowing for custom greetings or information to be
 ///     shared automatically.
 /// </summary>
+/// <param name="interactivity">The interactivity service.</param>
+/// <param name="http">The http parameter.</param>
 public class RoleGreets(InteractiveService interactivity, HttpClient http) : MewdekoModuleBase<RoleGreetService>
 {
     /// <summary>

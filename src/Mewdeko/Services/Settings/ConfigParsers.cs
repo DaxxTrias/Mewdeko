@@ -11,6 +11,8 @@ public static class ConfigParsers
     /// <summary>
     ///     Default string parser. Passes input to output and returns true.
     /// </summary>
+    /// <param name="input">The input string.</param>
+    /// <param name="output">The output string.</param>
     public static bool String(string input, out string output)
     {
         output = input;

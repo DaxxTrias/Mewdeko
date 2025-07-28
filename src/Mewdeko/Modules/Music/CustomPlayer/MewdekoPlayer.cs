@@ -283,6 +283,7 @@ public sealed class MewdekoPlayer : LavalinkPlayer
     /// <summary>
     ///     Sets the DJ role for the guild.
     /// </summary>
+    /// <param name="roleId">The roleid identifier.</param>
     public async Task SetDjRole(ulong? roleId)
     {
         var settings = await GetMusicSettings();

@@ -13,6 +13,7 @@ public static class NotifExtensions
     ///     Creates a key for the stream data.
     /// </summary>
     /// <returns>A key for the stream data.</returns>
+    /// <param name="stream">The stream parameter.</param>
     public static StreamDataKey CreateKey(this FollowedStream stream)
     {
         return new StreamDataKey((FType)stream.Type, stream.Username.ToLower());

@@ -17,6 +17,7 @@ public partial class Administration
     /// </summary>
     /// <param name="services">Main services provider for the bot.</param>
     /// <param name="intserv">Interactive service used for paginated embeds.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public class RoleCommands(IServiceProvider services, InteractiveService intserv, ILogger<RoleCommands> logger)
         : MewdekoSubmodule<RoleCommandsService>
     {

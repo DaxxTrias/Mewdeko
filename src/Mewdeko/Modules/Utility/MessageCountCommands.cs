@@ -12,6 +12,7 @@ public partial class Utility
     /// <summary>
     ///     Commands for message counts
     /// </summary>
+    /// <param name="guildSettingsService">The guildsettingsservice service.</param>
     public class MessageCountCommands(GuildSettingsService guildSettingsService) : MewdekoSubmodule<MessageCountService>
     {
         /// <summary>

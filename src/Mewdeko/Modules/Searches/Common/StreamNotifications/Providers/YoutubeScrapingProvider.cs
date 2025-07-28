@@ -495,7 +495,7 @@ public partial class YoutubeScrapingProvider : Provider, IDisposable
     }
 
     /// <summary>
-    ///     Decodes JSON-encoded strings (e.g., \u0026 to &).
+    ///     Decodes JSON-encoded strings.
     /// </summary>
     private static string DecodeJsonString(string input)
     {

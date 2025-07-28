@@ -110,6 +110,8 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
     /// <summary>
     ///     Sets a custom announcement message for a guild
     /// </summary>
+    /// <param name="guildId">The guild identifier.</param>
+    /// <param name="message">The message string.</param>
     public async Task SetPatreonMessage(ulong guildId, string? message)
     {
         var config = await guildSettings.GetGuildConfig(guildId);

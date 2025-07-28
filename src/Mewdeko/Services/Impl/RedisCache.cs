@@ -225,6 +225,8 @@ public class RedisCache : IDataCache
     /// <summary>
     ///     Saves a playlist for a guild.
     /// </summary>
+    /// <param name="userId">The userid identifier.</param>
+    /// <param name="playlist">The playlist parameter.</param>
     public async Task SavePlaylist(ulong userId, MusicPlaylist playlist)
     {
         var db = Redis.GetDatabase();

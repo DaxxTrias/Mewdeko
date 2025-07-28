@@ -471,6 +471,8 @@ public class PollCommands : MewdekoModuleBase<PollService>
     private async Task<Embed> BuildPollEmbed(string question, List<PollOptionData> options, PollType pollType,
         int? pollId = null)
     {
+        await Task.CompletedTask;
+
         var typeIcon = pollType switch
         {
             PollType.YesNo => "✅❌",

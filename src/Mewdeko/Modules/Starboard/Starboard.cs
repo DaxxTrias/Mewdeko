@@ -9,6 +9,8 @@ namespace Mewdeko.Modules.Starboard;
 /// <summary>
 ///     Module for managing multiple starboard configurations in a guild.
 /// </summary>
+/// <param name="guildSettings">The guildsettings service.</param>
+/// <param name="interactiveService">The interactiveservice service.</param>
 public class Starboard(GuildSettingsService guildSettings, InteractiveService interactiveService)
     : MewdekoSubmodule<StarboardService>
 {

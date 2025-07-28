@@ -11,6 +11,7 @@ public partial class Searches
     /// <summary>
     ///     Submodule containing action commands.
     /// </summary>
+    /// <param name="nekosBestApi">The nekosBestApi parameter.</param>
     public class ActionCommands(NekosBestApi nekosBestApi) : MewdekoSubmodule
     {
         /// <summary>

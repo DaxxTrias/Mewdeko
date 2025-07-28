@@ -10,6 +10,7 @@ using Mewdeko.Modules.Administration;
 using Mewdeko.Modules.Administration.Common;
 using Mewdeko.Modules.Administration.Services;
 using Mewdeko.Modules.Help;
+using Mewdeko.Modules.Moderation.Services;
 using Mewdeko.Modules.Permissions.Services;
 using Mewdeko.Services.Impl;
 using Microsoft.AspNetCore.Authorization;
@@ -40,6 +41,7 @@ public class AdministrationController(
     CmdCdService cmdCdService,
     CommandService commandService,
     IDataConnectionFactory dbFactory,
+    UserPunishService userPunishService,
     DiscordShardedClient client) : Controller
 {
     /// <summary>
@@ -157,7 +159,7 @@ public class AdministrationController(
     ///     Configures anti-raid protection
     /// </summary>
     [HttpPut("protection/anti-raid")]
-    public async Task<IActionResult> ConfigureAntiRaid(ulong guildId, [FromBody] AntiRaidConfigRequest request)
+    public async Task<IActionResult> ConfigureAntiRaid(ulong guildId, [FromBody] AntiRaidConfigRequest? request)
     {
         if (request == null)
             return BadRequest("Invalid request data");
@@ -206,7 +208,7 @@ public class AdministrationController(
     ///     Configures anti-spam protection
     /// </summary>
     [HttpPut("protection/anti-spam")]
-    public async Task<IActionResult> ConfigureAntiSpam(ulong guildId, [FromBody] AntiSpamConfigRequest request)
+    public async Task<IActionResult> ConfigureAntiSpam(ulong guildId, [FromBody] AntiSpamConfigRequest? request)
     {
         if (request == null)
             return BadRequest("Invalid request data");
@@ -259,7 +261,7 @@ public class AdministrationController(
     ///     Configures anti-alt protection
     /// </summary>
     [HttpPut("protection/anti-alt")]
-    public async Task<IActionResult> ConfigureAntiAlt(ulong guildId, [FromBody] AntiAltConfigRequest request)
+    public async Task<IActionResult> ConfigureAntiAlt(ulong guildId, [FromBody] AntiAltConfigRequest? request)
     {
         if (request == null)
             return BadRequest("Invalid request data");
@@ -300,7 +302,7 @@ public class AdministrationController(
     /// </summary>
     [HttpPut("protection/anti-mass-mention")]
     public async Task<IActionResult> ConfigureAntiMassMention(ulong guildId,
-        [FromBody] AntiMassMentionConfigRequest request)
+        [FromBody] AntiMassMentionConfigRequest? request)
     {
         if (request == null)
             return BadRequest("Invalid request data");
@@ -361,14 +363,13 @@ public class AdministrationController(
             {
                 enabled = antiRaidStats != null,
                 usersCount = antiRaidStats?.UsersCount ?? 0,
-                recentUsers = antiRaidStats?.RaidUsers?.Select(u => u.Id).TakeLast(10).ToList() ?? new List<ulong>()
+                recentUsers = antiRaidStats?.RaidUsers.Select(u => u.Id).TakeLast(10).ToList() ?? new List<ulong>()
             },
             antiSpam = new
             {
                 enabled = antiSpamStats != null,
-                userCount = antiSpamStats?.UserStats?.Count ?? 0,
-                topOffenders = antiSpamStats?.UserStats?
-                    .OrderByDescending(x => x.Value.Count)
+                userCount = antiSpamStats?.UserStats.Count ?? 0,
+                topOffenders = antiSpamStats?.UserStats.OrderByDescending(x => x.Value.Count)
                     .Take(10)
                     .ToDictionary(x => x.Key, x => x.Value.Count) ?? new Dictionary<ulong, int>()
             },
@@ -378,7 +379,7 @@ public class AdministrationController(
             },
             antiMassMention = new
             {
-                enabled = antiMassMentionStats != null, userCount = antiMassMentionStats?.UserStats?.Count ?? 0
+                enabled = antiMassMentionStats != null, userCount = antiMassMentionStats?.UserStats.Count ?? 0
             }
         });
     }
@@ -519,7 +520,6 @@ public class AdministrationController(
         {
             "enable" => Administration.State.Enable,
             "disable" => Administration.State.Disable,
-            "inherit" => Administration.State.Inherit,
             _ => Administration.State.Inherit
         };
 
@@ -608,16 +608,15 @@ public class AdministrationController(
     [HttpGet("voice-channel-roles")]
     public async Task<IActionResult> GetVoiceChannelRoles(ulong guildId)
     {
-        var guild = client.GetGuild(guildId);
-        if (guild == null)
+        if (client.GetGuild(guildId) is not IGuild guild)
             return NotFound("Guild not found");
 
         if (!vcRoleService.VcRoles.TryGetValue(guildId, out var vcRoles))
             return Ok(Array.Empty<object>());
 
-        var roleData = vcRoles.Select(kvp =>
+        var roleDataTasks = vcRoles.Select(async kvp =>
         {
-            var channel = guild.GetVoiceChannel(kvp.Key);
+            var channel = await guild.GetVoiceChannelAsync(kvp.Key);
             var role = guild.GetRole(kvp.Value.Id);
             return new
             {
@@ -628,6 +627,7 @@ public class AdministrationController(
             };
         });
 
+        var roleData = await Task.WhenAll(roleDataTasks);
         return Ok(roleData);
     }
 
@@ -661,7 +661,8 @@ public class AdministrationController(
     [HttpPost("self-assignable-roles/groups")]
     public async Task<IActionResult> SetSelfAssignableRoleGroup(ulong guildId, [FromBody] SetGroupRequest request)
     {
-        var success = await selfAssignedRolesService.SetNameAsync(guildId, request.Group, request.Name);
+        var success = request.Name != null &&
+                      await selfAssignedRolesService.SetNameAsync(guildId, request.Group, request.Name);
         return Ok(success);
     }
 
@@ -773,6 +774,7 @@ public class AdministrationController(
     [HttpGet("timezone")]
     public async Task<IActionResult> GetGuildTimezone(ulong guildId)
     {
+        await Task.CompletedTask;
         var timezone = timezoneService.GetTimeZoneOrUtc(guildId);
         return Ok(timezone.Id);
     }
@@ -909,9 +911,8 @@ public class AdministrationController(
     [HttpGet("ban-message")]
     public async Task<IActionResult> GetBanMessage(ulong guildId)
     {
-        // This would need to be implemented in a service that manages ban messages
-        // For now, return empty string
-        return Ok("");
+        var banMsg = await userPunishService.GetBanTemplate(guildId);
+        return Ok(banMsg);
     }
 
     /// <summary>
@@ -920,7 +921,7 @@ public class AdministrationController(
     [HttpPost("ban-message")]
     public async Task<IActionResult> SetBanMessage(ulong guildId, [FromBody] SetBanMessageRequest request)
     {
-        // This would need to be implemented in a service that manages ban messages
+        await userPunishService.SetBanTemplate(guildId, request.Message);
         return Ok();
     }
 

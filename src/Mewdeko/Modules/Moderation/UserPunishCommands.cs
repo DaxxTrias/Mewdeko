@@ -24,6 +24,7 @@ public partial class Moderation : MewdekoModule
     /// <param name="dbFactory">The database service</param>
     /// <param name="serv">The service used to handle embed pagination</param>
     /// <param name="nekos">The NekosBest API</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     [Group]
     public class UserPunishCommands(
         MuteService mute,

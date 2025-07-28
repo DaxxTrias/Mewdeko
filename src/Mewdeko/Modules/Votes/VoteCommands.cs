@@ -11,6 +11,7 @@ namespace Mewdeko.Modules.Votes;
 /// <summary>
 ///     Contains commands related to managing and interacting with voting features in the server.
 /// </summary>
+/// <param name="interactivity">The interactivity service.</param>
 public class Vote(InteractiveService interactivity) : MewdekoModuleBase<VoteService>
 {
     /// <summary>

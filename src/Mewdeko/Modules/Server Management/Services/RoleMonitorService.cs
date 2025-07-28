@@ -151,7 +151,7 @@ public class RoleMonitorService : INService, IReadyExecutor
         if (await IsUserWhitelistedAsync(guild, user.Id) || await IsRoleWhitelistedAsync(guild.Id, user.RoleIds))
             return;
 
-        var addedRoles = roleUpdate.Roles.Where(x => x.Added)?.Select(x => x.RoleId)?.ToList();
+        var addedRoles = roleUpdate.Roles.Where(x => x.Added).Select(x => x.RoleId).ToList();
 
         if (addedRoles.Count == 0)
             return;
@@ -451,6 +451,8 @@ public class RoleMonitorService : INService, IReadyExecutor
     /// <summary>
     ///     Adds a user to the whitelist.
     /// </summary>
+    /// <param name="guild">The Discord guild.</param>
+    /// <param name="user">The user parameter.</param>
     public async Task AddWhitelistedUserAsync(IGuild guild, IGuildUser user)
     {
         await using var context = await dbFactory.CreateConnectionAsync();
@@ -472,6 +474,8 @@ public class RoleMonitorService : INService, IReadyExecutor
     /// <summary>
     ///     Removes a user from the whitelist.
     /// </summary>
+    /// <param name="guild">The Discord guild.</param>
+    /// <param name="user">The user parameter.</param>
     public async Task RemoveWhitelistedUserAsync(IGuild guild, IGuildUser user)
     {
         await using var context = await dbFactory.CreateConnectionAsync();
@@ -490,6 +494,8 @@ public class RoleMonitorService : INService, IReadyExecutor
     /// <summary>
     ///     Adds a role to the whitelist.
     /// </summary>
+    /// <param name="guild">The Discord guild.</param>
+    /// <param name="role">The role parameter.</param>
     public async Task AddWhitelistedRoleAsync(IGuild guild, IRole role)
     {
         await using var context = await dbFactory.CreateConnectionAsync();
@@ -512,6 +518,8 @@ public class RoleMonitorService : INService, IReadyExecutor
     /// <summary>
     ///     Removes a role from the whitelist.
     /// </summary>
+    /// <param name="guild">The Discord guild.</param>
+    /// <param name="role">The role parameter.</param>
     public async Task RemoveWhitelistedRoleAsync(IGuild guild, IRole role)
     {
         await using var context = await dbFactory.CreateConnectionAsync();
@@ -572,6 +580,9 @@ public class RoleMonitorService : INService, IReadyExecutor
     /// <summary>
     ///     Adds a role to the blacklist.
     /// </summary>
+    /// <param name="guild">The Discord guild.</param>
+    /// <param name="role">The role parameter.</param>
+    /// <param name="punishmentAction">The punishmentAction parameter.</param>
     public async Task AddBlacklistedRoleAsync(IGuild guild, IRole role, PunishmentAction? punishmentAction)
     {
         await using var context = await dbFactory.CreateConnectionAsync();
@@ -623,6 +634,8 @@ public class RoleMonitorService : INService, IReadyExecutor
     /// <summary>
     ///     Removes a role from the blacklist.
     /// </summary>
+    /// <param name="guild">The Discord guild.</param>
+    /// <param name="role">The role parameter.</param>
     public async Task RemoveBlacklistedRoleAsync(IGuild guild, IRole role)
     {
         await using var context = await dbFactory.CreateConnectionAsync();
@@ -705,6 +718,8 @@ public class RoleMonitorService : INService, IReadyExecutor
     /// <summary>
     ///     Removes a permission from the blacklist.
     /// </summary>
+    /// <param name="guild">The Discord guild.</param>
+    /// <param name="permission">The permission parameter.</param>
     public async Task RemoveBlacklistedPermissionAsync(IGuild guild, GuildPermission permission)
     {
         await using var context = await dbFactory.CreateConnectionAsync();

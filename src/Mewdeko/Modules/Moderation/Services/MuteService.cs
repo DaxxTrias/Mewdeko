@@ -60,12 +60,6 @@ public class MuteService : INService, IReadyExecutor, IDisposable
         new(addReactions: PermValue.Deny, sendMessages: PermValue.Deny,
             attachFiles: PermValue.Deny, sendMessagesInThreads: PermValue.Deny, createPublicThreads: PermValue.Deny);
 
-    private readonly TimeSpan _checkInterval = TimeSpan.FromSeconds(30);
-    private readonly Timer? _processingTimer = null;
-
-    private readonly ConcurrentDictionary<TimerKey, TimerQueueItem> _scheduledItems = new();
-    private readonly object _timerLock = new();
-
     private readonly DiscordShardedClient client;
 
     private readonly IDataConnectionFactory dbFactory;
@@ -73,8 +67,13 @@ public class MuteService : INService, IReadyExecutor, IDisposable
 
     private readonly GuildSettingsService guildSettings;
     private readonly ILogger<MuteService> logger;
+
+    private readonly Timer? processingTimer = null;
+
+    private readonly ConcurrentDictionary<TimerKey, TimerQueueItem> scheduledItems = new();
     private readonly GeneratedBotStrings strings;
-    private bool _isProcessing;
+    private readonly object timerLock = new();
+    private bool isProcessing;
 
 
     /// <summary>
@@ -89,12 +88,11 @@ public class MuteService : INService, IReadyExecutor, IDisposable
     /// <param name="dbFactory">The database provider</param>
     /// <param name="guildSettings">Service for retrieving guildconfigs</param>
     /// <param name="eventHandler">Handler for async events (Hear that dnet? ASYNC, not GATEWAY THREAD)</param>
-    /// <param name="bot">The bot</param>
     /// <param name="strings">The localization service</param>
     /// <param name="logger">The logger instance for structured logging.</param>
     public MuteService(DiscordShardedClient client, IDataConnectionFactory dbFactory,
         GuildSettingsService guildSettings,
-        EventHandler eventHandler, Mewdeko bot, GeneratedBotStrings strings, ILogger<MuteService> logger)
+        EventHandler eventHandler, GeneratedBotStrings strings, ILogger<MuteService> logger)
     {
         this.client = client;
         this.dbFactory = dbFactory;
@@ -138,7 +136,6 @@ public class MuteService : INService, IReadyExecutor, IDisposable
         try
         {
             await using var dbContext = await dbFactory.CreateConnectionAsync();
-            var now = DateTime.UtcNow;
 
             // Load muted users
             var mutedUsersList = await dbContext.MutedUserIds
@@ -176,7 +173,7 @@ public class MuteService : INService, IReadyExecutor, IDisposable
             {
                 var key = new TimerKey(timer.GuildId.Value, timer.UserId, TimerType.Mute);
                 var item = new TimerQueueItem(key, timer.UnmuteAt);
-                _scheduledItems[key] = item;
+                scheduledItems[key] = item;
             }
 
             // Load unban timers
@@ -192,7 +189,7 @@ public class MuteService : INService, IReadyExecutor, IDisposable
             {
                 var key = new TimerKey(timer.GuildId.Value, timer.UserId, TimerType.Ban);
                 var item = new TimerQueueItem(key, timer.UnbanAt);
-                _scheduledItems[key] = item;
+                scheduledItems[key] = item;
             }
 
             // Load unrole timers
@@ -207,7 +204,7 @@ public class MuteService : INService, IReadyExecutor, IDisposable
             {
                 var key = new TimerKey(timer.GuildId.Value, timer.UserId, TimerType.AddRole, timer.RoleId);
                 var item = new TimerQueueItem(key, timer.UnbanAt);
-                _scheduledItems[key] = item;
+                scheduledItems[key] = item;
             }
 
             logger.LogInformation(
@@ -233,14 +230,14 @@ public class MuteService : INService, IReadyExecutor, IDisposable
 
     private async void ProcessExpiredItemsCallback(object state)
     {
-        if (_isProcessing)
+        if (isProcessing)
             return;
 
-        lock (_timerLock)
+        lock (timerLock)
         {
-            if (_isProcessing)
+            if (isProcessing)
                 return;
-            _isProcessing = true;
+            isProcessing = true;
         }
 
         try
@@ -253,7 +250,7 @@ public class MuteService : INService, IReadyExecutor, IDisposable
         }
         finally
         {
-            _isProcessing = false;
+            isProcessing = false;
         }
     }
 
@@ -264,7 +261,7 @@ public class MuteService : INService, IReadyExecutor, IDisposable
             var now = DateTime.UtcNow;
 
             // Find all expired items
-            var expiredItems = _scheduledItems.Values
+            var expiredItems = scheduledItems.Values
                 .Where(item => !item.IsProcessing && item.ExecuteAt <= now)
                 .ToList();
 
@@ -360,7 +357,7 @@ public class MuteService : INService, IReadyExecutor, IDisposable
                 // Remove from local queue
                 foreach (var item in successfulItems)
                 {
-                    _scheduledItems.TryRemove(item.Key, out _);
+                    scheduledItems.TryRemove(item.Key, out _);
                 }
             }
         }
@@ -433,7 +430,7 @@ public class MuteService : INService, IReadyExecutor, IDisposable
                 // Remove from local queue
                 foreach (var item in successfulItems)
                 {
-                    _scheduledItems.TryRemove(item.Key, out _);
+                    scheduledItems.TryRemove(item.Key, out _);
                 }
             }
         }
@@ -515,7 +512,7 @@ public class MuteService : INService, IReadyExecutor, IDisposable
                 // Remove from local queue
                 foreach (var item in successfulItems)
                 {
-                    _scheduledItems.TryRemove(item.Key, out _);
+                    scheduledItems.TryRemove(item.Key, out _);
                 }
             }
         }
@@ -1001,7 +998,7 @@ public class MuteService : INService, IReadyExecutor, IDisposable
         var item = new TimerQueueItem(key, executeAt);
 
         // Add to queue
-        _scheduledItems[key] = item;
+        scheduledItems[key] = item;
     }
 
 
@@ -1015,21 +1012,19 @@ public class MuteService : INService, IReadyExecutor, IDisposable
     public void StopTimer(ulong guildId, ulong userId, TimerType type, ulong? roleId = null)
     {
         var key = new TimerKey(guildId, userId, type, roleId);
-        _scheduledItems.TryRemove(key, out _);
+        scheduledItems.TryRemove(key, out _);
     }
 
     /// <summary>
     ///     Dispose
     /// </summary>
     /// <param name="disposing">Depose</param>
-    /// <param name="key">The key parameter.</param>
-    /// <param name="executeAt">The executeAt parameter.</param>
     protected virtual void Dispose(bool disposing)
     {
         if (disposing)
         {
             eventHandler.Unsubscribe("UserJoined", "MuteService", Client_UserJoined);
-            _processingTimer?.Dispose();
+            processingTimer?.Dispose();
         }
     }
 

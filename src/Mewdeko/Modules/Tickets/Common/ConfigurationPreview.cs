@@ -14,6 +14,8 @@ public static class ConfigurationPreview
     /// <param name="modalConfig">Modal configuration</param>
     /// <param name="behaviorSettings">Behavior settings</param>
     /// <param name="permissionSettings">Permission settings</param>
+    /// <param name="buttonPreviewLocalized">The localized button preview dictionary.</param>
+    /// <param name="reviewButtonConfigLocalized">The localized review button configuration dictionary.</param>
     /// <returns>An embed showing the button preview</returns>
     public static EmbedBuilder GenerateButtonPreview(
         Dictionary<string, string> basicSettings,
@@ -79,6 +81,8 @@ public static class ConfigurationPreview
     /// <param name="placeholder">The placeholder text</param>
     /// <param name="options">The options configuration</param>
     /// <param name="sharedSettings">Shared settings for all options</param>
+    /// <param name="previewTitle">The preview title.</param>
+    /// <param name="reviewDescription">The review description.</param>
     /// <returns>An embed showing the select menu preview</returns>
     public static EmbedBuilder GenerateSelectMenuPreview(string previewTitle, string placeholder, string options,
         string sharedSettings, string reviewDescription)

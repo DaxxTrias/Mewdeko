@@ -52,6 +52,9 @@ public class DiscordColorConverter : JsonConverter<Color?>
     /// <summary>
     ///     Writes a Color value to JSON.
     /// </summary>
+    /// <param name="writer">The writer parameter.</param>
+    /// <param name="value">The value parameter.</param>
+    /// <param name="options">The configuration options.</param>
     public override void Write(Utf8JsonWriter writer, Color? value, JsonSerializerOptions options)
     {
         if (value.HasValue)

@@ -9,6 +9,8 @@ namespace Mewdeko.Modules.Searches;
 /// <summary>
 ///     Provides slash command interactions for searching and retrieving content from various sources.
 /// </summary>
+/// <param name="martineApi">The martineApi parameter.</param>
+/// <param name="logger">The logger instance for structured logging.</param>
 public class SlashSearches(MartineApi martineApi, ILogger<SlashSearches> logger)
     : MewdekoSlashModuleBase<SearchesService>
 {

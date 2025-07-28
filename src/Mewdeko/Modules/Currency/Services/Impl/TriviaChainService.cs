@@ -10,6 +10,7 @@ namespace Mewdeko.Modules.Currency.Services.Impl;
 /// <summary>
 ///     Service implementation for managing trivia chain games.
 /// </summary>
+/// <param name="strings">The localized strings service.</param>
 public class TriviaChainService(GeneratedBotStrings strings) : ITriviaChainService
 {
     private static readonly Dictionary<ulong, TriviaChainState> TriviaChainStates = new();
