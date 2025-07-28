@@ -10,6 +10,8 @@ namespace Mewdeko.Modules.StatusRoles;
 /// <summary>
 ///     Module for managing roles that are assigned based on user status.
 /// </summary>
+/// <param name="bss">The bss service.</param>
+/// <param name="interactivity">The interactivity service.</param>
 public class StatusRoles(BotConfigService bss, InteractiveService interactivity) : MewdekoModuleBase<StatusRolesService>
 {
     /// <summary>

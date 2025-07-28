@@ -76,7 +76,7 @@ public class TodoSlash : MewdekoSlashModuleBase<TodoService>
         await DeferAsync();
 
         var todoList = await Service.CreateTodoListAsync(ctx.Guild.Id, ctx.User.Id, name, description,
-            true, true);
+            true);
 
         if (todoList is null)
         {

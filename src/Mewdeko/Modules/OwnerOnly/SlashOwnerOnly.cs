@@ -47,8 +47,7 @@ public class SlashOwnerOnly(
     IDataConnectionFactory dbFactory,
     IDataCache cache,
     GuildSettingsService guildSettings,
-    CommandHandler commandHandler,
-    ILogger<SlashOwnerOnly> logger)
+    CommandHandler commandHandler)
     : MewdekoSlashModuleBase<OwnerOnlyService>
 {
     /// <summary>
@@ -741,6 +740,7 @@ public class SlashOwnerOnly(
     /// <param name="client">The Discord client used to interact with the Discord API.</param>
     /// <param name="settingServices">Collection of services for managing bot settings.</param>
     /// <param name="localization">Service for handling localization and translations.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     [Discord.Interactions.Group("config", "Commands to manage various bot things")]
     public class ConfigCommands(
         GuildSettingsService guildSettings,

@@ -11,6 +11,9 @@ namespace Mewdeko.Modules.Music.Components;
 ///     Handles interaction components for the music system.
 ///     Processes select menus and buttons for track selection and queue management.
 /// </summary>
+/// <param name="service">The service service.</param>
+/// <param name="cache">The cache service.</param>
+/// <param name="guildSettingsService">The guildsettingsservice service.</param>
 public class MusicComponents(IAudioService service, IDataCache cache, GuildSettingsService guildSettingsService)
     : MewdekoSlashCommandModule
 {

@@ -142,7 +142,7 @@ public class PollController : Controller
             var message = await channel.SendMessageAsync(embed: embed, components: components);
 
             // Convert request to poll options
-            var pollOptions = request.Options.Select((opt, index) => new PollOptionData
+            var pollOptions = request.Options.Select((opt, _) => new PollOptionData
             {
                 Text = opt.Text, Color = opt.Color, Emote = opt.Emote
             }).ToList();
@@ -335,7 +335,6 @@ public class PollController : Controller
                     var csv = GenerateCsvExport(poll, stats);
                     return File(Encoding.UTF8.GetBytes(csv), "text/csv", $"poll-{pollId}-export.csv");
 
-                case "json":
                 default:
                     var jsonData = new
                     {
@@ -572,7 +571,7 @@ public class PollController : Controller
     /// <param name="file">The JSON file containing templates to import.</param>
     /// <returns>The result of the import operation.</returns>
     [HttpPost("templates/import/{userId}")]
-    public async Task<IActionResult> ImportTemplates(ulong guildId, ulong userId, IFormFile file)
+    public async Task<IActionResult> ImportTemplates(ulong guildId, ulong userId, IFormFile? file)
     {
         try
         {
@@ -777,7 +776,7 @@ public class PollController : Controller
     /// <param name="pollIds">Array of poll IDs to compare.</param>
     /// <returns>Comparative analytics data.</returns>
     [HttpPost("compare")]
-    public async Task<IActionResult> ComparePoll(ulong guildId, [FromBody] int[] pollIds)
+    public async Task<IActionResult> ComparePoll(ulong guildId, [FromBody] int[]? pollIds)
     {
         try
         {
@@ -804,9 +803,9 @@ public class PollController : Controller
                     PollId = poll.Id,
                     Question = poll.Question.Length > 50 ? poll.Question[..47] + "..." : poll.Question,
                     Type = (PollType)poll.Type,
-                    TotalVotes = stats.TotalVotes,
-                    UniqueVoters = stats.UniqueVoters,
-                    ParticipationRate = stats.ParticipationRate,
+                    stats.TotalVotes,
+                    stats.UniqueVoters,
+                    stats.ParticipationRate,
                     Duration = poll.ClosedAt.HasValue
                         ? poll.ClosedAt.Value - poll.CreatedAt
                         : DateTime.UtcNow - poll.CreatedAt,
@@ -892,7 +891,7 @@ public class PollController : Controller
             return Ok(new
             {
                 Message = "Poll scheduled successfully",
-                ScheduledFor = request.ScheduledFor,
+                request.ScheduledFor,
                 ScheduledId = scheduledPoll.Id,
                 TimeUntilExecution = request.ScheduledFor - DateTime.UtcNow
             });
@@ -937,7 +936,7 @@ public class PollController : Controller
 
             return Ok(new
             {
-                GuildId = guildId, ScheduledPolls = pollResponses, Count = pollResponses.Count
+                GuildId = guildId, ScheduledPolls = pollResponses, pollResponses.Count
             });
         }
         catch (Exception ex)
@@ -1007,9 +1006,10 @@ public class PollController : Controller
     /// <param name="creatorName">The name of the creator.</param>
     /// <param name="stats">The poll statistics.</param>
     /// <returns>The mapped poll response.</returns>
-    private async Task<PollResponse> MapToPollResponse(Poll poll, string? channelName,
+    private static async Task<PollResponse> MapToPollResponse(Poll poll, string? channelName,
         string? creatorName, PollStats? stats)
     {
+        await Task.CompletedTask;
         var options = poll.PollOptions.Select(opt => new PollOptionResponse
         {
             Id = opt.Id,
@@ -1098,6 +1098,8 @@ public class PollController : Controller
     /// <returns>The built embed.</returns>
     private async Task<Embed> BuildPollEmbed(CreatePollRequest request, ulong guildId, int? pollId = null)
     {
+        await Task.CompletedTask;
+
         var embed = new EmbedBuilder()
             .WithTitle($"📊 {request.Question}")
             .WithColor(Color.Blue)
@@ -1277,7 +1279,7 @@ public class PollController : Controller
         return voteHistory.OrderBy(v => v.VotedAt)
             .Select((vote, index) => new
             {
-                Timestamp = vote.VotedAt, CumulativeVotes = index + 1, UserId = vote.UserId
+                Timestamp = vote.VotedAt, CumulativeVotes = index + 1, vote.UserId
             })
             .Cast<object>()
             .ToList();
@@ -1319,13 +1321,10 @@ public class PollController : Controller
             return null;
 
         var recentOptionCounts = new Dictionary<int, int>();
-        foreach (var vote in recentVotes)
+        foreach (var optionIndex in recentVotes.SelectMany(vote => vote.OptionIndices))
         {
-            foreach (var optionIndex in vote.OptionIndices)
-            {
-                recentOptionCounts.TryGetValue(optionIndex, out var count);
-                recentOptionCounts[optionIndex] = count + 1;
-            }
+            recentOptionCounts.TryGetValue(optionIndex, out var count);
+            recentOptionCounts[optionIndex] = count + 1;
         }
 
         return recentOptionCounts.OrderByDescending(kvp => kvp.Value).FirstOrDefault().Key;

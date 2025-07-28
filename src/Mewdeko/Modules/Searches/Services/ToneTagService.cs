@@ -128,5 +128,8 @@ public class ToneTagService
     /// <summary>
     ///     Represents the parsing result of tone tags.
     /// </summary>
+    /// <param name="Tags">The Tags parameter.</param>
+    /// <param name="ActualTags">The actualtags string.</param>
+    /// <param name="MissingTags">The missingtags string.</param>
     public record ParseResult(List<ToneTag> Tags, List<string> ActualTags, List<string> MissingTags);
 }

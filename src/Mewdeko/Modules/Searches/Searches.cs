@@ -12,7 +12,6 @@ using MartineApiNet;
 using MartineApiNet.Enums;
 using MartineApiNet.Models.Images;
 using Mewdeko.Common.Attributes.TextCommands;
-using Mewdeko.Modules.Administration.Services;
 using Mewdeko.Modules.Searches.Common;
 using Mewdeko.Modules.Searches.Services;
 using Mewdeko.Services.Settings;
@@ -30,16 +29,15 @@ namespace Mewdeko.Modules.Searches;
 /// <param name="google">The Google API service.</param>
 /// <param name="factory">The HTTP client factory.</param>
 /// <param name="cache">The memory cache service.</param>
-/// <param name="tzSvc">The guild timezone service.</param>
 /// <param name="serv">The interactive service.</param>
 /// <param name="martineApi">The Martine API service.</param>
 /// <param name="toneTagService">The ToneTag service.</param>
 /// <param name="config">The bot configuration service.</param>
+/// <param name="logger">The logger instance for structured logging.</param>
 public partial class Searches(
     IGoogleApiService google,
     IHttpClientFactory factory,
     IMemoryCache cache,
-    GuildTimezoneService tzSvc,
     InteractiveService serv,
     MartineApi martineApi,
     ToneTagService toneTagService,

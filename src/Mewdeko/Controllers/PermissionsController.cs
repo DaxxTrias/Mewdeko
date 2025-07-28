@@ -20,6 +20,7 @@ namespace Mewdeko.Controllers;
 /// <param name="dpoService">Service for managing Discord permission overrides</param>
 /// <param name="cmdServ">Discord command service for command execution and information</param>
 /// <param name="dbFactory">Provider for database contexts</param>
+/// <param name="logger">The logger instance for structured logging.</param>
 [ApiController]
 [Route("botapi/[controller]")]
 [Authorize("ApiKeyPolicy")]

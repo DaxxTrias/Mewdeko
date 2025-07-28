@@ -160,6 +160,7 @@ public static class DependencyInstaller
     ///     - Assists with database setup
     ///     Throws no exceptions - all errors are logged.
     /// </remarks>
+    /// <param name="psqlString">The psqlstring string.</param>
     public static void CheckAndInstallDependencies(string psqlString)
     {
         switch (Environment.OSVersion.Platform)

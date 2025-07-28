@@ -20,6 +20,7 @@ namespace Mewdeko.Modules.Administration.Services;
 /// <param name="handler">The event handler.</param>
 /// <param name="muteService">The mute service.</param>
 /// <param name="strings">The localization service.</param>
+/// <param name="logger">The logger instance for structured logging.</param>
 public class LogCommandService(
     IDataConnectionFactory dbFactory,
     DiscordShardedClient client,
@@ -2347,6 +2348,8 @@ public class LogCommandService(
     /// <summary>
     ///     Checks if a channel is ignored for logging
     /// </summary>
+    /// <param name="guildId">The guild identifier.</param>
+    /// <param name="channelId">The channelid identifier.</param>
     public bool IsChannelIgnored(ulong guildId, ulong channelId)
     {
         if (ignoredChannelsCache.TryGetValue(guildId, out var ignoredChannels))
@@ -2358,6 +2361,8 @@ public class LogCommandService(
     /// <summary>
     ///     Updates the ignored channels for a guild and fires events
     /// </summary>
+    /// <param name="guildId">The guild identifier.</param>
+    /// <param name="channels">The channels identifier.</param>
     public async Task UpdateIgnoredChannelsAsync(ulong guildId, HashSet<ulong> channels)
     {
         try

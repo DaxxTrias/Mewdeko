@@ -8,6 +8,9 @@ namespace Mewdeko.Modules.Patreon;
 /// <summary>
 ///     Commands for managing Patreon integration and announcements.
 /// </summary>
+/// <param name="creds">The creds parameter.</param>
+/// <param name="patreonApiClient">The patreonApiClient parameter.</param>
+/// <param name="logger">The logger instance for structured logging.</param>
 public class Patreon(IBotCredentials creds, PatreonApiClient patreonApiClient, ILogger<Patreon> logger)
     : MewdekoModuleBase<PatreonService>
 {

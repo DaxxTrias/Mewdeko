@@ -35,6 +35,8 @@ namespace Mewdeko.Modules.Utility;
 /// <param name="config"></param>
 /// <param name="dbFactory"></param>
 /// <param name="cache"></param>
+/// <param name="logger">The logger instance for structured logging.</param>
+/// <param name="mediaConversionService">The media conversion service.</param>
 public partial class Utility(
     DiscordShardedClient client,
     IStatsService stats,

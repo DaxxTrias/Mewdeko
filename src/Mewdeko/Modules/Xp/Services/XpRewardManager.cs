@@ -92,7 +92,7 @@ public class XpRewardManager : INService
             // Immediately cache the new/updated reward
             var cacheKey = $"xp:rewards:{guildId}:role:{level}";
             var serializedReward = JsonSerializer.Serialize(rewardToCache);
-            await cacheManager.GetRedisDatabase().StringSetAsync(cacheKey, serializedReward, null);
+            await cacheManager.GetRedisDatabase().StringSetAsync(cacheKey, serializedReward);
 
             logger.LogInformation("Set and cached role reward for guild {GuildId} level {Level}: Role {RoleId}",
                 guildId, level, roleId.Value);

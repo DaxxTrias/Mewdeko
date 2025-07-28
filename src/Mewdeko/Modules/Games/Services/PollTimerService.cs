@@ -319,11 +319,11 @@ public class PollTimerService : INService, IReadyExecutor
             if (stats?.TotalVotes > 0)
             {
                 embed.AddField("Final Results",
-                    $"Total Votes: {stats.TotalVotes}\nUnique Voters: {stats.UniqueVoters}", false);
+                    $"Total Votes: {stats.TotalVotes}\nUnique Voters: {stats.UniqueVoters}");
             }
             else
             {
-                embed.AddField("Final Results", "No votes were cast", false);
+                embed.AddField("Final Results", "No votes were cast");
             }
 
             await message.ModifyAsync(msg =>

@@ -11,6 +11,7 @@ public partial class ServerManagement
     /// <summary>
     ///     Manages role monitoring settings, blacklists, and whitelists.
     /// </summary>
+    /// <param name="dbFactory">The database connection factory.</param>
     public class RoleMonitorCommands(IDataConnectionFactory dbFactory) : MewdekoSubmodule<RoleMonitorService>
     {
         /// <summary>

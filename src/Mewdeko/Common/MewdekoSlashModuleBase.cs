@@ -43,6 +43,7 @@ public abstract class MewdekoSlashCommandModule : InteractionModuleBase
     /// <summary>
     ///     Sends an error message based on the specified key with optional arguments.
     /// </summary>
+    /// <param name="text">The text string.</param>
     public Task ErrorAsync(string text)
     {
         return !ctx.Interaction.HasResponded
@@ -53,6 +54,7 @@ public abstract class MewdekoSlashCommandModule : InteractionModuleBase
     /// <summary>
     ///     Sends an error message as a reply to the user with the specified key and optional arguments.
     /// </summary>
+    /// <param name="text">The text string.</param>
     public Task ReplyErrorAsync(string text)
     {
         return !ctx.Interaction.HasResponded
@@ -81,6 +83,7 @@ public abstract class MewdekoSlashCommandModule : InteractionModuleBase
     /// <summary>
     ///     Sends an ephemeral error message as a reply to the user with the specified key and optional arguments.
     /// </summary>
+    /// <param name="text">The text string.</param>
     public Task EphemeralReplyErrorAsync(string? text)
     {
         return !ctx.Interaction.HasResponded
@@ -91,6 +94,7 @@ public abstract class MewdekoSlashCommandModule : InteractionModuleBase
     /// <summary>
     ///     Sends a confirmation message based on the specified key with optional arguments.
     /// </summary>
+    /// <param name="text">The text string.</param>
     public Task ConfirmAsync(string text)
     {
         return !ctx.Interaction.HasResponded
@@ -101,6 +105,7 @@ public abstract class MewdekoSlashCommandModule : InteractionModuleBase
     /// <summary>
     ///     Sends a confirmation message as a reply to the user with the specified key and optional arguments.
     /// </summary>
+    /// <param name="text">The text string.</param>
     public Task ReplyConfirmAsync(string? text)
     {
         return ctx.Interaction.HasResponded
@@ -111,6 +116,7 @@ public abstract class MewdekoSlashCommandModule : InteractionModuleBase
     /// <summary>
     ///     Sends an ephemeral confirmation message as a reply to the user with the specified key and optional arguments.
     /// </summary>
+    /// <param name="text">The text string.</param>
     public Task EphemeralReplyConfirmAsync(string? text)
     {
         return !ctx.Interaction.HasResponded

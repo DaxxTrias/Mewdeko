@@ -12,9 +12,7 @@ namespace Mewdeko.Controllers;
 [Route("botapi/[controller]/{guildId}")]
 [Authorize("ApiKeyPolicy")]
 public class TodoController(
-    TodoService todoService,
-    DiscordShardedClient client,
-    IDataConnectionFactory dbFactory)
+    TodoService todoService)
     : Controller
 {
     /// <summary>

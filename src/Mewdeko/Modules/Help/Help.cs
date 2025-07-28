@@ -25,6 +25,7 @@ namespace Mewdeko.Modules.Help;
 /// <param name="serv">Service for paginated embeds</param>
 /// <param name="guildSettings">Service for fetching guildconfigs</param>
 /// <param name="config">Service for fetching yml based configs</param>
+/// <param name="logger">The logger instance for structured logging.</param>
 public class Help(
     GlobalPermissionService perms,
     CommandService cmds,

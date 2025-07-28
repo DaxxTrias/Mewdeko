@@ -20,6 +20,7 @@ public partial class Moderation
     /// </summary>
     /// <param name="dbFactory">The db provider</param>
     /// <param name="serv">Fergun.Interactive paginator builder</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     [Group]
     public class UserPunishCommands2(
         IDataConnectionFactory dbFactory,

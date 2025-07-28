@@ -13,6 +13,7 @@ namespace Mewdeko.Modules.Confessions.Services;
 /// <param name="guildSettings">The guild settings service.</param>
 /// <param name="config">The bot configuration.</param>
 /// <param name="strings">The localization service.</param>
+/// <param name="logger">The logger instance for structured logging.</param>
 public class ConfessionService(
     IDataConnectionFactory dbFactory,
     DiscordShardedClient client,

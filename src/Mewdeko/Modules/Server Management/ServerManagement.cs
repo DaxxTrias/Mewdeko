@@ -10,6 +10,8 @@ namespace Mewdeko.Modules.Server_Management;
 /// <summary>
 ///     Contains commands related to server management.
 /// </summary>
+/// <param name="factory">The factory factory.</param>
+/// <param name="config">The bot configuration settings.</param>
 public partial class ServerManagement(IHttpClientFactory factory, BotConfigService config)
     : MewdekoModule
 {

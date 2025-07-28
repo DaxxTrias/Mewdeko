@@ -1,4 +1,3 @@
-using System.Net.Http;
 using DataModel;
 using LinqToDB;
 using Mewdeko.Modules.Xp.Models;
@@ -19,7 +18,6 @@ public class XpController(
     XpService xp,
     DiscordShardedClient client,
     IDataConnectionFactory dbFactory,
-    IHttpClientFactory httpClientFactory,
     ILogger<XpController> logger,
     IServiceProvider serviceProvider) : Controller
 {

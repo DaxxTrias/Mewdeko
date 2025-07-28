@@ -11,6 +11,7 @@ namespace Mewdeko.Modules.UserProfile;
 /// <summary>
 ///     Handles text commands for user profiles, providing functionalities to view and manage user profile details.
 /// </summary>
+/// <param name="dbFactory">The database connection factory.</param>
 public class UserProfile(IDataConnectionFactory dbFactory) : MewdekoModuleBase<UserProfileService>
 {
     /// <summary>
