@@ -24,6 +24,8 @@ public class XpCompetitionManager : INService, IDisposable
     /// </summary>
     /// <param name="client">The Discord client.</param>
     /// <param name="dbFactory">The database context provider.</param>
+    /// <param name="strings">The localized strings service.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public XpCompetitionManager(
         DiscordShardedClient client,
         IDataConnectionFactory dbFactory, GeneratedBotStrings strings, ILogger<XpCompetitionManager> logger)

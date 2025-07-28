@@ -91,6 +91,7 @@ public class MuteService : INService, IReadyExecutor, IDisposable
     /// <param name="eventHandler">Handler for async events (Hear that dnet? ASYNC, not GATEWAY THREAD)</param>
     /// <param name="bot">The bot</param>
     /// <param name="strings">The localization service</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public MuteService(DiscordShardedClient client, IDataConnectionFactory dbFactory,
         GuildSettingsService guildSettings,
         EventHandler eventHandler, Mewdeko bot, GeneratedBotStrings strings, ILogger<MuteService> logger)
@@ -1021,6 +1022,8 @@ public class MuteService : INService, IReadyExecutor, IDisposable
     ///     Dispose
     /// </summary>
     /// <param name="disposing">Depose</param>
+    /// <param name="key">The key parameter.</param>
+    /// <param name="executeAt">The executeAt parameter.</param>
     protected virtual void Dispose(bool disposing)
     {
         if (disposing)

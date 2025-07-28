@@ -25,6 +25,7 @@ public class VcRoleService : INService, IReadyExecutor
     /// <param name="client">The Discord client.</param>
     /// <param name="dbFactory">The database service.</param>
     /// <param name="eventHandler">The event handler.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public VcRoleService(DiscordShardedClient client, IDataConnectionFactory dbFactory,
         EventHandler eventHandler, ILogger<VcRoleService> logger)
     {

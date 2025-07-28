@@ -29,6 +29,7 @@ public partial class UserProfileService : INService
     /// </summary>
     /// <param name="dbFactory">The database service for accessing user data.</param>
     /// <param name="http">The HTTP client used for making external API calls.</param>
+    /// <param name="strings">The localized strings service.</param>
     public UserProfileService(IDataConnectionFactory dbFactory, HttpClient http, GeneratedBotStrings strings)
     {
         this.dbFactory = dbFactory;

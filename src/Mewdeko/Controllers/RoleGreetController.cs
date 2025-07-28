@@ -19,6 +19,8 @@ public class RoleGreetController : Controller
     /// <summary>
     ///     Initializes a new instance of the RoleGreetController
     /// </summary>
+    /// <param name="roleGreetService">The rolegreetservice service.</param>
+    /// <param name="client">The Discord client instance.</param>
     public RoleGreetController(RoleGreetService roleGreetService, DiscordShardedClient client)
     {
         this.roleGreetService = roleGreetService;

@@ -22,6 +22,7 @@ public class RoleGreetService : INService
     /// <param name="client">The Discord client.</param>
     /// <param name="eventHandler">The event handler for guild member update events.</param>
     /// <param name="inviteCountService">The invite count service</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public RoleGreetService(IDataConnectionFactory dbFactory, DiscordShardedClient client, EventHandler eventHandler,
         InviteCountService inviteCountService, ILogger<RoleGreetService> logger)
     {

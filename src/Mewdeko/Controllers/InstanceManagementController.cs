@@ -18,6 +18,8 @@ public class InstanceManagementController : Controller
     /// <summary>
     ///     Initializes a new instance of the controller.
     /// </summary>
+    /// <param name="instanceManagementService">The instancemanagementservice service.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public InstanceManagementController(
         InstanceManagementService instanceManagementService,
         ILogger<InstanceManagementController> logger)

@@ -58,6 +58,7 @@ public class XpCacheManager : INService
     /// <param name="dataCache">The data cache.</param>
     /// <param name="dbFactory">The database context provider.</param>
     /// <param name="client">The current sharded client</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public XpCacheManager(
         IDataCache dataCache,
         IDataConnectionFactory dbFactory,

@@ -19,6 +19,8 @@ public class RoleStatesController : Controller
     /// <summary>
     ///     Initializes a new instance of the RoleStatesController
     /// </summary>
+    /// <param name="roleStatesService">The rolestatesservice service.</param>
+    /// <param name="client">The Discord client instance.</param>
     public RoleStatesController(RoleStatesService roleStatesService, DiscordShardedClient client)
     {
         this.roleStatesService = roleStatesService;

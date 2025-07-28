@@ -32,6 +32,7 @@ public class InstanceManagementService : INService, IReadyExecutor
     /// <param name="dbFactory">The database context provider.</param>
     /// <param name="factory">The HTTP client factory.</param>
     /// <param name="client">The sharded discord client</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public InstanceManagementService(
         IDataConnectionFactory dbFactory,
         IHttpClientFactory factory, DiscordShardedClient client, ILogger<InstanceManagementService> logger)

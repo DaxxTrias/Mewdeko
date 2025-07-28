@@ -25,6 +25,8 @@ public class StarboardService : INService, IReadyExecutor, IUnloadableService
     /// <param name="client">The Discord socket client.</param>
     /// <param name="dbFactory">The database context provider.</param>
     /// <param name="eventHandler">The event handler.</param>
+    /// <param name="strings">The localized strings service.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public StarboardService(DiscordShardedClient client, IDataConnectionFactory dbFactory,
         EventHandler eventHandler, GeneratedBotStrings strings, ILogger<StarboardService> logger)
     {

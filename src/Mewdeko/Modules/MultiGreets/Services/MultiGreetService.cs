@@ -25,6 +25,7 @@ public class MultiGreetService : INService
     /// <param name="guildSettingsService">The guild settings service.</param>
     /// <param name="eventHandler">The event handler for user join events.</param>
     /// <param name="inviteCountService">The invite count service.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public MultiGreetService(IDataConnectionFactory dbFactory, DiscordShardedClient client,
         GuildSettingsService guildSettingsService, EventHandler eventHandler, InviteCountService inviteCountService,
         ILogger<MultiGreetService> logger)

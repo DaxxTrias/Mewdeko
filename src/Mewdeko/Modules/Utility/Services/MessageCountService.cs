@@ -84,6 +84,10 @@ public class MessageCountService : INService
 
     /// <summary>
     /// </summary>
+    /// <param name="dbFactory">The database connection factory.</param>
+    /// <param name="handler">The handler parameter.</param>
+    /// <param name="cache">The cache service.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public MessageCountService(IDataConnectionFactory dbFactory, EventHandler handler, IMemoryCache cache,
         ILogger<MessageCountService> logger)
     {

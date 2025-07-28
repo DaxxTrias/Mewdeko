@@ -84,6 +84,9 @@ public partial class XpService : INService, IUnloadableService
     /// <param name="competitionManager">The XP competition manager.</param>
     /// <param name="voiceTracker">The XP voice tracker.</param>
     /// <param name="backgroundProcessor">The XP background processor.</param>
+    /// <param name="strings">The localized strings service.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
+    /// <param name="serviceProvider">The service provider for dependency injection.</param>
     public XpService(
         DiscordShardedClient client,
         IDataConnectionFactory dbFactory,

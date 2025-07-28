@@ -424,6 +424,7 @@ public class GoogleApiService : IGoogleApiService
     /// </summary>
     /// <param name="creds">Bot credentials.</param>
     /// <param name="factory">HTTP client factory.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public GoogleApiService(IBotCredentials creds, IHttpClientFactory factory, ILogger<GoogleApiService> logger)
     {
         this.creds = creds;

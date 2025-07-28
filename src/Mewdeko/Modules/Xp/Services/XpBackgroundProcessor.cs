@@ -65,6 +65,8 @@ public class XpBackgroundProcessor : INService, IDisposable
     /// <param name="rewardManager">The reward manager for handling XP rewards.</param>
     /// <param name="competitionManager">The competition manager for handling XP competitions.</param>
     /// <param name="client">The Discord sharded client.</param>
+    /// <param name="eventHandler">The event handler service.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public XpBackgroundProcessor(
         IDataConnectionFactory dbFactory,
         XpCacheManager cacheManager,

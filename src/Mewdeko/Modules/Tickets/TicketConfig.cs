@@ -29,6 +29,7 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
         ///     Initializes a new instance of the <see cref="TicketConfig" /> class.
         /// </summary>
         /// <param name="interactivity">The service used for interactive commands.</param>
+        /// <param name="logger">The logger instance for structured logging.</param>
         public TicketConfig(InteractiveService interactivity, ILogger<TicketConfig> logger)
         {
             this.interactivity = interactivity;

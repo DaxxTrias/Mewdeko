@@ -34,6 +34,7 @@ public class VerboseErrorsService : INService, IUnloadableService
     /// <param name="services">The service provider.</param>
     /// <param name="botConfigService">The bot configuration service.</param>
     /// <param name="bot">The bot instance.</param>
+    /// <param name="strings1">The strings1 parameter.</param>
     public VerboseErrorsService(IDataConnectionFactory dbFactory, CommandHandler ch,
         IBotStrings strings,
         GuildSettingsService guildSettings,

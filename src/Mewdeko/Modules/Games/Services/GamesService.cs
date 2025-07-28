@@ -23,6 +23,7 @@ public class GamesService : INService, IUnloadableService
     ///     Initializes a new instance of the <see cref="GamesService" /> class.
     /// </summary>
     /// <param name="gamesConfig">The configuration service for games.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public GamesService(GamesConfigService gamesConfig, ILogger<GamesService> logger)
     {
         this.gamesConfig = gamesConfig;

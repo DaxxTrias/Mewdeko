@@ -32,6 +32,7 @@ public class GreetSettingsService : INService
     ///     Event handlers are set up to listen for specific Discord events, allowing the service to respond to user and guild
     ///     activities such as joining, leaving, or boosting.
     /// </remarks>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public GreetSettingsService(DiscordShardedClient client, GuildSettingsService gss, IDataConnectionFactory dbFactory,
         EventHandler eventHandler, ILogger<GreetSettingsService> logger)
     {

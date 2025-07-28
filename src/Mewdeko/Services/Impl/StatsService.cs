@@ -40,6 +40,7 @@ public class StatsService : IStatsService, IDisposable
     /// <param name="cache">The caching service</param>
     /// <param name="logger"></param>
     /// <exception cref="ArgumentNullException"></exception>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public StatsService(
         DiscordShardedClient client, IBotCredentials creds, CommandService cmdServ,
         HttpClient http, IDataCache cache, ILogger<StatsService> logger)

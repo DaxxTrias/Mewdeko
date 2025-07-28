@@ -75,6 +75,7 @@ public sealed class FusionImagesCache : IImageCache, IReadyExecutor, INService
     /// </summary>
     /// <param name="cache">The FusionCache instance.</param>
     /// <param name="creds">The bot credentials.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public FusionImagesCache(IFusionCache cache, IBotCredentials creds, ILogger<FusionImagesCache> logger)
     {
         this.cache = cache;

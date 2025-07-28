@@ -25,6 +25,7 @@ public class XpCardGenerator : INService
     /// <param name="dbFactory">The database context provider.</param>
     /// <param name="xpService">The XP service.</param>
     /// <param name="httpClientFactory">The HTTP client factory.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public XpCardGenerator(
         IDataConnectionFactory dbFactory,
         XpService xpService,

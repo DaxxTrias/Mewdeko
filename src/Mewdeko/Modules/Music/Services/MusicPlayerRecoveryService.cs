@@ -27,6 +27,7 @@ public class MusicPlayerRecoveryService : INService, IReadyExecutor
     /// <param name="client">The Discord client.</param>
     /// <param name="services">The service provider.</param>
     /// <param name="strings">The localization service.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public MusicPlayerRecoveryService(
         IDataCache cache,
         IAudioService audioService,

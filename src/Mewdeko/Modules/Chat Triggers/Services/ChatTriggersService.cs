@@ -161,6 +161,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
     /// <param name="creds">The bot credentials.</param>
     /// <param name="strings">The bot strings.</param>
     /// <param name="eventHandler">The event handler.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public ChatTriggersService(
         PermissionService perms,
         IDataConnectionFactory dbFactory,

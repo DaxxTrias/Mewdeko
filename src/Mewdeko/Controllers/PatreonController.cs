@@ -24,6 +24,7 @@ public class PatreonController : ControllerBase
     /// <param name="patreonService">The Patreon service.</param>
     /// <param name="patreonApiClient">The Patreon API client.</param>
     /// <param name="credentials">The bot credentials.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public PatreonController(
         PatreonService patreonService,
         PatreonApiClient patreonApiClient,

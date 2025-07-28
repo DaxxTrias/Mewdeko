@@ -31,6 +31,7 @@ public class NotifChecker
     /// <param name="credsProvider">The credentials provider.</param>
     /// <param name="uniqueCacheKey">The unique cache key for storing data.</param>
     /// <param name="isMaster">if set to <c>true</c> clears all data at start.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public NotifChecker(
         IHttpClientFactory httpClientFactory,
         IBotCredentials credsProvider,

@@ -41,6 +41,7 @@ public class GiveawayService : INService, IDisposable
     /// <param name="credentials">Bot credentials.</param>
     /// <param name="msgCntService">Service for tracking message counts.</param>
     /// <param name="strings">Service for localized strings.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public GiveawayService(
         DiscordShardedClient client,
         IDataConnectionFactory dbFactory,
