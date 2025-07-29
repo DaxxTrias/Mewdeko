@@ -18160,6 +18160,44 @@ setstarthreshold:
       desc: The star threshold to set.
       type: int
       optional: false
+addstarboardemote:
+  desc: Adds an emote to an existing starboard configuration.
+  args:
+    - number emote
+  params:
+    - *o457
+    - &o468
+      name: emote
+      desc: The emote to add.
+      type: IEmote
+      optional: false
+removestarboardemote:
+  desc: Removes an emote from an existing starboard configuration.
+  args:
+    - number emote
+  params:
+    - *o457
+    - &o469
+      name: emote
+      desc: The emote to remove.
+      type: IEmote
+      optional: false
+starboardstats:
+  desc: Shows starboard statistics for the guild.
+  args:
+    - ''
+  params: [ ]
+starboarduserstats:
+  desc: Shows starboard statistics for a specific user.
+  args:
+    - '@user'
+    - ''
+  params:
+    - &o470
+      name: user
+      desc: The user to show stats for. Defaults to command invoker.
+      type: IUser
+      optional: true
 createstarboard_ITextChannel_IEmote_=:
   desc: Alias for Blacklist mode.
   args:

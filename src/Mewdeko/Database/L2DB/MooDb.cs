@@ -130,6 +130,8 @@ namespace DataModel
 		public ITable<ServerRecoveryStore>       ServerRecoveryStores       => this.GetTable<ServerRecoveryStore>();
 		public ITable<StarboardPost>             StarboardPosts             => this.GetTable<StarboardPost>();
 		public ITable<Starboard>                 Starboards                 => this.GetTable<Starboard>();
+		public ITable<StarboardStats>            StarboardStats             => this.GetTable<StarboardStats>();
+		public ITable<StarboardReaction>         StarboardReactions         => this.GetTable<StarboardReaction>();
 		public ITable<StatusRole>                StatusRoles                => this.GetTable<StatusRole>();
 		public ITable<StreamRoleBlacklistedUser> StreamRoleBlacklistedUsers => this.GetTable<StreamRoleBlacklistedUser>();
 		public ITable<StreamRoleSetting>         StreamRoleSettings         => this.GetTable<StreamRoleSetting>();

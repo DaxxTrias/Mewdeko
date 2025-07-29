@@ -106,6 +106,30 @@ starboardallowbots:
   - starbots
   - starbotsallow
   - starbab
+setstarthreshold:
+  - setstarthreshold
+  - starthreshold
+  - setstarth
+addstarboardemote:
+  - addstarboardemote
+  - addstaremote
+  - starboardaddemote
+  - asbe
+removestarboardemote:
+  - removestarboardemote
+  - removestaremote
+  - starboardremoveemote
+  - rsbe
+starboardstats:
+  - starboardstats
+  - starstats
+  - starboardstatistics
+  - sbstats
+starboarduserstats:
+  - starboarduserstats
+  - staruserstats
+  - userstarstats
+  - sbuserstats
 toggleinvitetracking:
   - toggleinvitetracking
 toggleremoveinviteonleave:

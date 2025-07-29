@@ -536,6 +536,28 @@ public class MewdekoDb : DataConnection
     public ITable<Starboard> Starboards => this.GetTable<Starboard>();
 
     /// <summary>
+    ///     Gets the starboard statistics table.
+    /// </summary>
+    public ITable<StarboardStats> StarboardStats
+    {
+        get
+        {
+            return this.GetTable<StarboardStats>();
+        }
+    }
+
+    /// <summary>
+    ///     Gets the starboard reactions table.
+    /// </summary>
+    public ITable<StarboardReaction> StarboardReactions
+    {
+        get
+        {
+            return this.GetTable<StarboardReaction>();
+        }
+    }
+
+    /// <summary>
     ///     Gets the status roles table.
     /// </summary>
     public ITable<StatusRole> StatusRoles => this.GetTable<StatusRole>();

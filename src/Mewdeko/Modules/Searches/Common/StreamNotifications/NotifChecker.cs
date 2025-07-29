@@ -98,9 +98,6 @@ public class NotifChecker
     /// <returns>A <see cref="Task" /> representing the asynchronous operation.</returns>
     public Task RunAsync()
     {
-#if DEBUG
-        logger.LogInformation("[NotifChecker] Starting notification checker loop...");
-#endif
         return Task.Run(async () =>
         {
             var loopIteration = 0;
@@ -109,15 +106,8 @@ public class NotifChecker
                 try
                 {
                     loopIteration++;
-#if DEBUG
-                    logger.LogInformation("[NotifChecker] Starting check iteration #{LoopIteration}", loopIteration);
-#endif
 
                     var allStreamData = await CacheGetAllData();
-#if DEBUG
-                    logger.LogInformation("[NotifChecker] Retrieved {CachedStreamCount} streams from cache",
-                        allStreamData.Count);
-#endif
 
                     var oldStreamDataDict = allStreamData
                         // group by type
@@ -125,14 +115,6 @@ public class NotifChecker
                         .ToDictionary(entry => entry.Key,
                             entry => entry.AsEnumerable()
                                 .ToDictionary(x => x.Key.Name ?? string.Empty, x => x.Value));
-
-                    foreach (var typeGroup in oldStreamDataDict)
-                    {
-#if DEBUG
-                        logger.LogInformation("[NotifChecker] Found {StreamCount} {Platform} streams in cache",
-                            typeGroup.Value.Count, typeGroup.Key);
-#endif
-                    }
 
                     var newStreamData = await oldStreamDataDict
                         .Select(x =>
@@ -144,29 +126,16 @@ public class NotifChecker
                                     .Where(entry => !string.IsNullOrEmpty(entry.Key))
                                     .Select(entry => entry.Key)
                                     .ToList();
-#if DEBUG
-                                logger.LogInformation(
-                                    "[NotifChecker] Checking {StreamCount} {Platform} streams: {StreamNames}",
-                                    streamNames.Count, x.Key, string.Join(", ", streamNames));
-#endif
                                 return provider.GetStreamDataAsync(streamNames);
                             }
 
                             // this means there's no provider for this stream data, (and there was before?)
-#if DEBUG
-                            logger.LogWarning("[NotifChecker] No provider found for platform {Platform}", x.Key);
-#endif
                             return Task.FromResult<IReadOnlyCollection<StreamData>>(
                                 new List<StreamData>());
                         })
                         .WhenAll().ConfigureAwait(false);
 
                     var totalNewStreams = newStreamData.SelectMany(x => x).Count();
-#if DEBUG
-                    logger.LogInformation(
-                        "[NotifChecker] Received {TotalNewStreams} stream data responses from providers",
-                        totalNewStreams);
-#endif
 
                     var newlyOnline = new List<StreamData>();
                     var newlyOffline = new List<StreamData>();
@@ -175,22 +144,12 @@ public class NotifChecker
                     {
                         // update cached data
                         var cachekey = newData.CreateKey();
-#if DEBUG
-                        logger.LogTrace(
-                            "[NotifChecker] Processing stream data for {Platform}/{Username}, IsLive: {IsLive}",
-                            cachekey.Type, cachekey.Name, newData.IsLive);
-#endif
 
                         // compare old data with new data
                         if (!oldStreamDataDict.TryGetValue(cachekey.Type, out var typeDict)
                             || !typeDict.TryGetValue(cachekey.Name ?? string.Empty, out var oldData)
                             || oldData is null)
                         {
-#if DEBUG
-                            logger.LogInformation(
-                                "[NotifChecker] First time seeing stream {Platform}/{Username}, adding to cache",
-                                cachekey.Type, cachekey.Name);
-#endif
                             await CacheAddData(cachekey, newData, true);
                             continue;
                         }
@@ -201,16 +160,6 @@ public class NotifChecker
 
                         await CacheAddData(cachekey, newData, true);
 
-                        // Log status changes
-                        if (oldData.IsLive != newData.IsLive)
-                        {
-#if DEBUG
-                            logger.LogInformation(
-                                "[NotifChecker] Stream status changed for {Platform}/{Username}: {OldStatus} -> {NewStatus}",
-                                cachekey.Type, cachekey.Name, oldData.IsLive ? "Online" : "Offline",
-                                newData.IsLive ? "Online" : "Offline");
-#endif
-                        }
 
                         // if the stream is offline, we need to check if it was
                         // marked as offline once previously
@@ -224,11 +173,6 @@ public class NotifChecker
                         var streamId = (cachekey.Type, cachekey.Name ?? string.Empty);
                         if (!newData.IsLive && offlineBuffer.Remove(streamId))
                         {
-#if DEBUG
-                            logger.LogInformation(
-                                "[NotifChecker] Stream {Platform}/{Username} confirmed offline (second check), adding to offline notifications",
-                                cachekey.Type, cachekey.Name);
-#endif
                             newlyOffline.Add(newData);
                         }
                         else if (newData.IsLive != oldData.IsLive)
@@ -236,21 +180,11 @@ public class NotifChecker
                             if (newData.IsLive)
                             {
                                 offlineBuffer.Remove(streamId);
-#if DEBUG
-                                logger.LogInformation(
-                                    "[NotifChecker] Stream {Platform}/{Username} came online, adding to online notifications",
-                                    cachekey.Type, cachekey.Name);
-#endif
                                 newlyOnline.Add(newData);
                             }
                             else
                             {
                                 offlineBuffer.Add(streamId);
-#if DEBUG
-                                logger.LogInformation(
-                                    "[NotifChecker] Stream {Platform}/{Username} went offline (first check), adding to buffer",
-                                    cachekey.Type, cachekey.Name);
-#endif
                                 // newlyOffline.Add(newData);
                             }
                         }
@@ -260,44 +194,20 @@ public class NotifChecker
 
                     if (newlyOnline.Count > 0)
                     {
-#if DEBUG
-                        logger.LogInformation("[NotifChecker] Firing OnStreamsOnline event for {OnlineCount} streams",
-                            newlyOnline.Count);
-#endif
                         tasks.Add(OnStreamsOnline(newlyOnline));
                     }
 
                     if (newlyOffline.Count > 0)
                     {
-#if DEBUG
-                        logger.LogInformation("[NotifChecker] Firing OnStreamsOffline event for {OfflineCount} streams",
-                            newlyOffline.Count);
-#endif
                         tasks.Add(OnStreamsOffline(newlyOffline));
-                    }
-
-                    if (tasks.Count == 0)
-                    {
-#if DEBUG
-                        logger.LogInformation("[NotifChecker] No status changes detected in iteration #{LoopIteration}",
-                            loopIteration);
-#endif
                     }
 
                     await Task.WhenAll(tasks).ConfigureAwait(false);
 
-#if DEBUG
-                    logger.LogInformation("[NotifChecker] Completed iteration #{LoopIteration}, waiting 3 seconds...",
-                        loopIteration);
-#endif
                     await Task.Delay(3000).ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
-#if DEBUG
-                    logger.LogError(ex, "[NotifChecker] Error in iteration #{LoopIteration}: {ErrorMessage}",
-                        loopIteration, ex.Message);
-#endif
                     await Task.Delay(10000).ConfigureAwait(false); // Wait 10 seconds before retrying
                 }
             }
@@ -314,39 +224,14 @@ public class NotifChecker
     public Task<bool> CacheAddData(StreamDataKey streamDataKey, StreamData? data, bool replace)
     {
         var serializedKey = JsonSerializer.Serialize(streamDataKey, CachedJsonOptions);
-#if DEBUG
-        logger.LogInformation(
-            "[NotifChecker] Cache: CacheAddData called - Platform: {Platform}, Name: {Name}, SerializedKey: {SerializedKey}, Data: {Data}, Replace: {Replace}",
-            streamDataKey.Type, streamDataKey.Name, serializedKey, data != null ? "NotNull" : "Null", replace);
-#endif
 
         if (replace)
         {
             streamCache[serializedKey] = data;
-#if DEBUG
-            logger.LogInformation("[NotifChecker] Cache: Updated data for {Platform}/{Username}, IsLive: {IsLive}",
-                streamDataKey.Type, streamDataKey.Name, data?.IsLive);
-#endif
             return Task.FromResult(true);
         }
 
         var added = streamCache.TryAdd(serializedKey, data);
-        if (added)
-        {
-#if DEBUG
-            logger.LogInformation(
-                "[NotifChecker] Cache: Added new entry for {Platform}/{Username}, total cache size now: {CacheSize}",
-                streamDataKey.Type, streamDataKey.Name, streamCache.Count);
-#endif
-        }
-        else
-        {
-#if DEBUG
-            logger.LogInformation("[NotifChecker] Cache: Entry already exists for {Platform}/{Username}, not added",
-                streamDataKey.Type, streamDataKey.Name);
-#endif
-        }
-
         return Task.FromResult(added);
     }
 
@@ -357,22 +242,7 @@ public class NotifChecker
     private Task CacheDeleteData(StreamDataKey streamdataKey)
     {
         var serializedKey = JsonSerializer.Serialize(streamdataKey, CachedJsonOptions);
-        var removed = streamCache.TryRemove(serializedKey, out _);
-
-        if (removed)
-        {
-#if DEBUG
-            logger.LogInformation("[NotifChecker] Cache: Removed entry for {Platform}/{Username}", streamdataKey.Type,
-                streamdataKey.Name);
-#endif
-        }
-        else
-        {
-#if DEBUG
-            logger.LogWarning("[NotifChecker] Cache: Attempted to remove non-existent entry for {Platform}/{Username}",
-                streamdataKey.Type, streamdataKey.Name);
-#endif
-        }
+        streamCache.TryRemove(serializedKey, out _);
 
         return Task.CompletedTask;
     }
@@ -382,11 +252,7 @@ public class NotifChecker
     /// </summary>
     private void CacheClearAllData()
     {
-        var count = streamCache.Count;
         streamCache.Clear();
-#if DEBUG
-        logger.LogInformation("[NotifChecker] Cache: Cleared all data ({ClearedCount} entries)", count);
-#endif
     }
 
     /// <summary>
@@ -395,10 +261,6 @@ public class NotifChecker
     /// <returns>A dictionary containing all cached stream data.</returns>
     private Task<Dictionary<StreamDataKey, StreamData?>> CacheGetAllData()
     {
-#if DEBUG
-        logger.LogInformation("[NotifChecker] Cache: Raw cache contains {RawCacheCount} entries", streamCache.Count);
-#endif
-
         var allPairs = streamCache
             .Select(pair => (
                 RawKey: pair.Key,
@@ -406,25 +268,7 @@ public class NotifChecker
                 pair.Value))
             .ToList();
 
-#if DEBUG
-        logger.LogInformation("[NotifChecker] Cache: After deserialization, found {DeserializedCount} entries",
-            allPairs.Count);
-#endif
-
-        foreach (var pair in allPairs)
-        {
-#if DEBUG
-            logger.LogInformation(
-                "[NotifChecker] Cache: Entry - RawKey: {RawKey}, Platform: {Platform}, Name: {Name}, IsNameNull: {IsNameNull}",
-                pair.RawKey, pair.Key.Type, pair.Key.Name ?? "(null)", pair.Key.Name is null);
-#endif
-        }
-
         var filtered = allPairs.Where(item => item.Key.Name is not null).ToList();
-#if DEBUG
-        logger.LogInformation("[NotifChecker] Cache: After filtering null names, {FilteredCount} entries remain",
-            filtered.Count);
-#endif
 
         var result = filtered.ToDictionary(item => item.Key, item => item.Value);
 
@@ -480,10 +324,6 @@ public class NotifChecker
     /// <param name="streamDataKey">The stream data key.</param>
     public async Task UntrackStreamByKey(StreamDataKey streamDataKey)
     {
-#if DEBUG
-        logger.LogInformation("[NotifChecker] Untracking stream: {Platform}/{Username}", streamDataKey.Type,
-            streamDataKey.Name);
-#endif
         await CacheDeleteData(streamDataKey);
     }
 }

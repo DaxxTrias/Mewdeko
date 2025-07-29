@@ -57,20 +57,11 @@ public class TwitchHelixProvider : Provider
     {
         try
         {
-#if DEBUG
-            Logger.Information("Requesting access token...");
-#endif
             var token = await api.Value.Auth.GetAccessTokenAsync().ConfigureAwait(false);
 
             if (token is null)
             {
                 Logger.Error("Failed to get access token - returned null");
-            }
-            else
-            {
-#if DEBUG
-                Logger.Information("Successfully obtained access token");
-#endif
             }
 
             return token;
@@ -114,16 +105,8 @@ public class TwitchHelixProvider : Provider
     /// <inheritdoc />
     public override async Task<IReadOnlyCollection<StreamData>> GetStreamDataAsync(List<string> logins)
     {
-#if DEBUG
-        Logger.Information("GetStreamDataAsync called with {LoginCount} logins: {Logins}",
-            logins.Count, string.Join(", ", logins));
-#endif
-
         if (logins.Count == 0)
         {
-#if DEBUG
-            Logger.Information("[TwitchHelixProvider] No logins provided, returning empty result");
-#endif
             return [];
         }
 
@@ -131,16 +114,9 @@ public class TwitchHelixProvider : Provider
 
         if (token is null)
         {
-#if DEBUG
-            Logger.Error(
-                "[TwitchHelixProvider] Failed to get valid token - Twitch client ID and Secret are incorrect! Please go to https://dev.twitch.tv and create an application!");
-#endif
             return [];
         }
 
-#if DEBUG
-        Logger.Information("[TwitchHelixProvider] Setting up HTTP client with authentication headers");
-#endif
         using var http = httpClientFactory.CreateClient();
         http.DefaultRequestHeaders.Clear();
         http.DefaultRequestHeaders.Add("Client-Id", clientId);
@@ -149,69 +125,35 @@ public class TwitchHelixProvider : Provider
         var loginsSet = logins.Select(x => x.ToLowerInvariant())
             .Distinct()
             .ToHashSet();
-#if DEBUG
-        Logger.Information("[TwitchHelixProvider] Processing {UniqueLoginCount} unique logins after deduplication",
-            loginsSet.Count);
-#endif
 
         var dataDict = new Dictionary<string, StreamData>();
 
-#if DEBUG
-        Logger.Information("[TwitchHelixProvider] Starting user data retrieval phase");
-#endif
         foreach (var chunk in logins.Chunk(100))
         {
             try
             {
                 var url = $"https://api.twitch.tv/helix/users?{chunk.Select(x => $"login={x}").Join('&')}&first=100";
-#if DEBUG
-                Logger.Information(
-                    "[TwitchHelixProvider] Requesting user data for chunk of {ChunkSize} users: {UserChunk}",
-                    chunk.Length, string.Join(", ", chunk));
-#endif
 
                 var str = await http.GetStringAsync(url).ConfigureAwait(false);
-#if DEBUG
-                Logger.Information("[TwitchHelixProvider] Received user data response, length: {ResponseLength}",
-                    str.Length);
-#endif
 
                 var resObj = JsonSerializer.Deserialize<HelixUsersResponse>(str);
 
                 if (resObj?.Data is null || resObj.Data.Count == 0)
                 {
-#if DEBUG
-                    Logger.Warning("[TwitchHelixProvider] No user data returned for chunk: {UserChunk}",
-                        string.Join(", ", chunk));
-#endif
                     continue;
                 }
 
-#if DEBUG
-                Logger.Information("[TwitchHelixProvider] Successfully parsed {UserCount} users from response",
-                    resObj.Data.Count);
-#endif
                 foreach (var user in resObj.Data)
                 {
                     var lowerLogin = user.Login.ToLowerInvariant();
                     if (loginsSet.Remove(lowerLogin))
                     {
                         dataDict[lowerLogin] = UserToStreamData(user);
-#if DEBUG
-                        Logger.Information(
-                            "[TwitchHelixProvider] Added user data for {Username} (DisplayName: {DisplayName})",
-                            user.Login, user.DisplayName);
-#endif
                     }
                 }
             }
             catch (Exception ex)
             {
-#if DEBUG
-                Logger.Error(ex,
-                    "[TwitchHelixProvider] Error retrieving user data for chunk {UserChunk}: {ErrorMessage}",
-                    string.Join(", ", chunk), ex.Message);
-#endif
                 return new List<StreamData>();
             }
         }
@@ -219,10 +161,6 @@ public class TwitchHelixProvider : Provider
         // any item left over loginsSet is an invalid username
         if (loginsSet.Count > 0)
         {
-#if DEBUG
-            Logger.Warning("[TwitchHelixProvider] {InvalidUserCount} usernames were not found: {InvalidUsers}",
-                loginsSet.Count, string.Join(", ", loginsSet));
-#endif
             foreach (var login in loginsSet)
             {
                 FailingStreams.TryAdd(login, DateTime.UtcNow);
@@ -230,66 +168,34 @@ public class TwitchHelixProvider : Provider
         }
 
         // only get streams for users which exist
-#if DEBUG
-        Logger.Information(
-            "[TwitchHelixProvider] Starting stream data retrieval phase for {ValidUserCount} valid users",
-            dataDict.Count);
-#endif
+
         foreach (var chunk in dataDict.Keys.Chunk(100))
         {
             try
             {
                 var url =
                     $"https://api.twitch.tv/helix/streams?{chunk.Select(x => $"user_login={x}").Join('&')}&first=100";
-#if DEBUG
-                Logger.Information(
-                    "[TwitchHelixProvider] Requesting stream data for chunk of {ChunkSize} users: {UserChunk}",
-                    chunk.Length, string.Join(", ", chunk));
-#endif
 
                 var str = await http.GetStringAsync(url).ConfigureAwait(false);
-#if DEBUG
-                Logger.Information("[TwitchHelixProvider] Received stream data response, length: {ResponseLength}",
-                    str.Length);
-#endif
 
                 var res = JsonSerializer.Deserialize<HelixStreamsResponse>(str);
 
                 if (res?.Data is null || res.Data.Count == 0)
                 {
-#if DEBUG
-                    Logger.Information("[TwitchHelixProvider] No streams currently live for chunk: {UserChunk}",
-                        string.Join(", ", chunk));
-#endif
                     continue;
                 }
 
-#if DEBUG
-                Logger.Information("[TwitchHelixProvider] Found {LiveStreamCount} live streams in response",
-                    res.Data.Count);
-#endif
                 foreach (var helixStreamData in res.Data)
                 {
                     var login = helixStreamData.UserLogin.ToLowerInvariant();
                     if (dataDict.TryGetValue(login, out var old))
                     {
                         dataDict[login] = FillStreamData(old, helixStreamData);
-#if DEBUG
-                        Logger.Information(
-                            "[TwitchHelixProvider] Updated stream data for {Username}: Live={IsLive}, Game={Game}, Viewers={Viewers}",
-                            helixStreamData.UserLogin, helixStreamData.Type == "live",
-                            helixStreamData.GameName ?? "(none)", helixStreamData.ViewerCount);
-#endif
                     }
                 }
             }
             catch (Exception ex)
             {
-#if DEBUG
-                Logger.Error(ex,
-                    "[TwitchHelixProvider] Error retrieving stream data for chunk {UserChunk}: {ErrorMessage}",
-                    string.Join(", ", chunk), ex.Message);
-#endif
                 return new List<StreamData>();
             }
         }
@@ -297,11 +203,6 @@ public class TwitchHelixProvider : Provider
         var result = dataDict.Values.ToList();
         var liveCount = result.Count(x => x.IsLive);
         var offlineCount = result.Count - liveCount;
-#if DEBUG
-        Logger.Information(
-            "[TwitchHelixProvider] Returning {TotalStreamCount} streams: {LiveCount} live, {OfflineCount} offline",
-            result.Count, liveCount, offlineCount);
-#endif
 
         return result;
     }
