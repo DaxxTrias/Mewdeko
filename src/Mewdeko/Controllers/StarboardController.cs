@@ -47,9 +47,16 @@ public class StarboardController : Controller
         if (guild == null)
             return NotFound("Guild not found");
 
-        var starboardId =
-            await starboardService.CreateStarboard(guild, request.ChannelId, request.Emote, request.Threshold);
-        return Ok(starboardId);
+        try
+        {
+            var starboardId =
+                await starboardService.CreateStarboard(guild, request.ChannelId, request.Emote, request.Threshold);
+            return Ok(starboardId);
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("already used"))
+        {
+            return BadRequest("Emote is already in use by another starboard configuration.");
+        }
     }
 
     /// <summary>
@@ -221,5 +228,66 @@ public class StarboardController : Controller
 
         var highlights = await starboardService.GetRecentHighlights(guildId, limit);
         return Ok(highlights);
+    }
+
+    /// <summary>
+    ///     Adds an emote to an existing starboard configuration
+    /// </summary>
+    [HttpPost("{starboardId}/add-emote")]
+    public async Task<IActionResult> AddEmoteToStarboard(ulong guildId, int starboardId, [FromBody] string emote)
+    {
+        var guild = client.GetGuild(guildId);
+        if (guild == null)
+            return NotFound("Guild not found");
+
+        try
+        {
+            var success = await starboardService.AddEmoteToStarboard(guild, starboardId, emote);
+            if (!success)
+                return NotFound("Starboard configuration not found");
+
+            return Ok(emote);
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("already used"))
+        {
+            return BadRequest("Emote is already in use by another starboard configuration.");
+        }
+    }
+
+    /// <summary>
+    ///     Removes an emote from an existing starboard configuration
+    /// </summary>
+    [HttpPost("{starboardId}/remove-emote")]
+    public async Task<IActionResult> RemoveEmoteFromStarboard(ulong guildId, int starboardId, [FromBody] string emote)
+    {
+        var guild = client.GetGuild(guildId);
+        if (guild == null)
+            return NotFound("Guild not found");
+
+        try
+        {
+            var success = await starboardService.RemoveEmoteFromStarboard(guild, starboardId, emote);
+            if (!success)
+                return NotFound("Emote not found in starboard configuration");
+
+            return Ok(emote);
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("Cannot remove the last emote"))
+        {
+            return BadRequest("Cannot remove the last emote from a starboard. Delete the starboard instead.");
+        }
+    }
+
+    /// <summary>
+    ///     Gets starboard statistics for a guild
+    /// </summary>
+    [HttpGet("stats")]
+    public async Task<IActionResult> GetStarboardStats(ulong guildId)
+    {
+        var stats = await starboardService.GetStarboardStats(guildId);
+        if (stats == null)
+            return NotFound("No starboard statistics available for this guild.");
+
+        return Ok(stats);
     }
 }

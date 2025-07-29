@@ -110,9 +110,6 @@ public partial class YoutubeScrapingProvider : Provider, IDisposable
         }
         catch
         {
-#if DEBUG
-            Logger.Information("Failed to get data for username: {Username}", username);
-#endif
             FailingStreams[username] = DateTime.UtcNow;
             return null;
         }
@@ -179,18 +176,6 @@ public partial class YoutubeScrapingProvider : Provider, IDisposable
         }
 
         var isLive = detectionReasons.Count > 0;
-
-#if DEBUG
-        if (isLive)
-        {
-            Logger.Information("@{Username} detected as LIVE due to: {Reasons}", username,
-                string.Join(", ", detectionReasons));
-        }
-        else
-        {
-            Logger.Information("@{Username} detected as OFFLINE - no live indicators found", username);
-        }
-#endif
 
         var channelName = ExtractChannelName(html);
         var avatarUrl = ExtractChannelAvatar(html);
