@@ -106,10 +106,6 @@ starboardallowbots:
   - starbots
   - starbotsallow
   - starbab
-setstarthreshold:
-  - setstarthreshold
-  - starthreshold
-  - setstarth
 addstarboardemote:
   - addstarboardemote
   - addstaremote
