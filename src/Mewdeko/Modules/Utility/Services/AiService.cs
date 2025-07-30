@@ -192,6 +192,12 @@ public class AiService : INService
         // Find the matching prefix (if any)
         var prefix = prefixes.FirstOrDefault(p => msg.Content.StartsWith(p, StringComparison.OrdinalIgnoreCase));
 
+        // After determining the prefix
+        if (string.IsNullOrEmpty(prefix) || !msg.Content.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return; // Quit early if no valid prefix
+        }
+
         if (!string.IsNullOrEmpty(config.WebhookUrl))
         {
             webhook = new DiscordWebhookClient(config.WebhookUrl);
