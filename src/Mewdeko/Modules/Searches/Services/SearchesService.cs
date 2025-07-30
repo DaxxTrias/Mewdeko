@@ -595,9 +595,14 @@ public class SearchesService : INService, IUnloadableService
         {
             return TimeZoneInfo.FindSystemTimeZoneById(query);
         }
+        catch (TimeZoneNotFoundException)
+        {
+            // This is expected for invalid timezone IDs, just continue to conversion attempts
+            logger.LogDebug("Direct timezone lookup failed for query: {Query} - not a valid timezone ID", query);
+        }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Direct timezone lookup failed for query: {Query}", query);
+            logger.LogError(ex, "Unexpected error during direct timezone lookup for query: {Query}", query);
             // Continue to conversion attempts
         }
 
@@ -608,10 +613,14 @@ public class SearchesService : INService, IUnloadableService
             {
                 return TimeZoneInfo.FindSystemTimeZoneById(windowsId);
             }
+            catch (TimeZoneNotFoundException)
+            {
+                logger.LogDebug("Failed to find timezone using converted Windows ID '{WindowsId}' for query: {Query}", windowsId, query);
+            }
             catch (Exception ex)
             {
                 logger.LogError(ex,
-                    "Failed to find timezone using converted Windows ID '{WindowsId}' for query: {Query}", windowsId,
+                    "Unexpected error finding timezone using converted Windows ID '{WindowsId}' for query: {Query}", windowsId,
                     query);
                 // Continue to next attempt
             }
@@ -624,9 +633,13 @@ public class SearchesService : INService, IUnloadableService
             {
                 return TimeZoneInfo.FindSystemTimeZoneById(ianaId);
             }
+            catch (TimeZoneNotFoundException)
+            {
+                logger.LogDebug("Failed to find timezone using converted IANA ID '{IanaId}' for query: {Query}", ianaId, query);
+            }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Failed to find timezone using converted IANA ID '{IanaId}' for query: {Query}",
+                logger.LogError(ex, "Unexpected error finding timezone using converted IANA ID '{IanaId}' for query: {Query}",
                     ianaId, query);
                 // Continue to manual mapping
             }
