@@ -100,7 +100,7 @@ public class BotStrings : IBotStrings
 
         // Try to get overloads if available
         var overloadedCmdStrings = stringsProvider.GetCommandOverloads(cultureInfo.Name, commandName);
-        if (overloadedCmdStrings != null && overloadedCmdStrings.Count > 0)
+        if (overloadedCmdStrings is { Count: > 0 })
         {
             // Construct a unified CommandStrings from overloads
             var result = new CommandStrings

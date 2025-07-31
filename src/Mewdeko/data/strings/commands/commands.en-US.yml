@@ -2864,6 +2864,377 @@ reactionrolesremove:
       desc: The index of the reaction role to remove.
       type: int
       optional: false
+rep:
+  desc: Gives reputation to a specified user.
+  args:
+    - '@user reptype text'
+  params:
+    - &o801
+      name: target
+      desc: The user to give reputation to.
+      type: IGuildUser
+      optional: true
+    - &o802
+      name: repType
+      desc: The type of reputation to give.
+      type: string
+      optional: true
+    - &o803
+      name: reason
+      desc: Optional reason or comment for giving reputation.
+      type: string
+      optional: true
+repgive:
+  desc: Gives reputation to a specified user.
+  args:
+    - '@user reptype text'
+  params:
+    - *o801
+    - *o802
+    - *o803
+giverep:
+  desc: Gives reputation to a specified user.
+  args:
+    - '@user reptype text'
+  params:
+    - *o801
+    - *o802
+    - *o803
+repcheck:
+  desc: Checks the reputation of a user.
+  args:
+    - '@user'
+  params:
+    - &o804
+      name: target
+      desc: The user to check reputation for. If null, checks the command invoker's reputation.
+      type: IGuildUser
+      optional: true
+myrep:
+  desc: Checks the current user's reputation.
+  args:
+    - ''
+  params: [ ]
+checkrep:
+  desc: Checks the reputation of a user.
+  args:
+    - '@user'
+  params:
+    - *o804
+repleaderboard:
+  desc: Shows the reputation leaderboard for the server.
+  args:
+    - number
+  params:
+    - &o805
+      name: page
+      desc: The page number to display.
+      type: int
+      optional: true
+replb:
+  desc: Shows the reputation leaderboard for the server.
+  args:
+    - number
+  params:
+    - *o805
+reptop:
+  desc: Shows the reputation leaderboard for the server.
+  args:
+    - number
+  params:
+    - *o805
+toprep:
+  desc: Shows the reputation leaderboard for the server.
+  args:
+    - number
+  params:
+    - *o805
+rephistory:
+  desc: Shows the reputation history for a user.
+  args:
+    - '@user'
+  params:
+    - *o804
+repstats:
+  desc: Shows detailed reputation statistics for a user.
+  args:
+    - '@user'
+  params:
+    - *o804
+anonrep:
+  desc: Gives anonymous reputation to a specified user.
+  args:
+    - '@user reptype text'
+  params:
+    - *o801
+    - *o802
+    - *o803
+repanon:
+  desc: Gives anonymous reputation to a specified user.
+  args:
+    - '@user reptype text'
+  params:
+    - *o801
+    - *o802
+    - *o803
+reptake:
+  desc: Removes reputation from a user.
+  args:
+    - '@user number'
+  params:
+    - &o806
+      name: user
+      desc: The user to remove reputation from.
+      type: IGuildUser
+      optional: false
+    - &o807
+      name: amount
+      desc: The amount of reputation to remove.
+      type: int
+      optional: true
+repset:
+  desc: Sets a user's reputation to a specific value.
+  args:
+    - '@user number'
+  params:
+    - *o806
+    - &o808
+      name: amount
+      desc: The amount to set reputation to.
+      type: int
+      optional: false
+represet:
+  desc: Resets reputation for a user or all users in the server.
+  args:
+    - text
+  params:
+    - &o809
+      name: target
+      desc: The user to reset, or "all" to reset everyone.
+      type: string
+      optional: false
+repfreeze:
+  desc: Freezes a user's reputation, preventing them from gaining or losing reputation.
+  args:
+    - '@user'
+  params:
+    - *o806
+repunfreeze:
+  desc: Unfreezes a user's reputation, allowing them to gain and lose reputation again.
+  args:
+    - '@user'
+  params:
+    - *o806
+repconfig:
+  desc: Shows the current reputation configuration for the server.
+  args:
+    - ''
+  params: [ ]
+repchannel:
+  desc: Configures channel-specific reputation settings.
+  args:
+    - '#channel state number'
+  params:
+    - &o810
+      name: channel
+      desc: The channel to configure.
+      type: ITextChannel
+      optional: false
+    - &o811
+      name: state
+      desc: The state to set (enabled/disabled/readonly).
+      type: string
+      optional: true
+    - &o812
+      name: multiplier
+      desc: The reputation multiplier for this channel.
+      type: decimal
+      optional: true
+repreaction:
+  desc: Configures reaction-based reputation giving.
+  args:
+    - emoji number reptype
+  params:
+    - &o813
+      name: emoji
+      desc: The emoji to use for reputation.
+      type: string
+      optional: false
+    - &o814
+      name: amount
+      desc: The amount of reputation to give.
+      type: int
+      optional: true
+    - &o815
+      name: repType
+      desc: The type of reputation (standard, helper, artist, memer).
+      type: string
+      optional: true
+repreactionremove:
+  desc: Removes a reaction-based reputation configuration.
+  args:
+    - emoji
+  params:
+    - &o816
+      name: emoji
+      desc: The emoji to remove.
+      type: string
+      optional: false
+repreactionlist:
+  desc: Lists all configured reaction-based reputation settings.
+  args:
+    - ''
+  params: [ ]
+reprole:
+  desc: Configures role rewards for reputation milestones.
+  args:
+    - '@role number'
+  params:
+    - &o817
+      name: role
+      desc: The role to reward.
+      type: IRole
+      optional: false
+    - &o818
+      name: reputation
+      desc: The reputation required to earn this role.
+      type: int
+      optional: false
+reproleremove:
+  desc: Removes a role reward configuration.
+  args:
+    - '@role'
+  params:
+    - *o817
+repcommandreq:
+  desc: Sets reputation requirements for a command.
+  args:
+    - commandname number reptype
+  params:
+    - &o819
+      name: commandName
+      desc: The command name.
+      type: string
+      optional: false
+    - &o820
+      name: minReputation
+      desc: The minimum reputation required.
+      type: int
+      optional: false
+    - &o821
+      name: repType
+      desc: The specific reputation type required (optional).
+      type: string
+      optional: true
+repcommandreqchannels:
+  desc: Sets reputation requirements for a command in specific channels.
+  args:
+    - commandname number reptype '#channel'
+  params:
+    - *o819
+    - *o820
+    - *o821
+    - &o822
+      name: channels
+      desc: The channels where this requirement applies.
+      type: ITextChannel[]
+      optional: false
+repcommandbypass:
+  desc: Sets bypass roles for a command requirement.
+  args:
+    - commandname '@role'
+  params:
+    - *o819
+    - &o823
+      name: roles
+      desc: The roles that can bypass the requirement.
+      type: IRole[]
+      optional: false
+repcommandreqremove:
+  desc: Removes reputation requirements from a command.
+  args:
+    - commandname
+  params:
+    - *o819
+repcommandreqlist:
+  desc: Lists all command requirements for the server.
+  args:
+    - ''
+  params: [ ]
+repcommandinfo:
+  desc: Shows reputation requirements for a specific command.
+  args:
+    - commandname
+  params:
+    - *o819
+reproleadd:
+  desc: Adds a role reward for reaching a specific reputation milestone.
+  args:
+    - '@role number'
+  params:
+    - &o824
+      name: role
+      desc: The role to award.
+      type: IRole
+      optional: false
+    - &o825
+      name: reputation
+      desc: The reputation required to earn the role.
+      type: int
+      optional: false
+reproleadvanced:
+  desc: Adds a role reward with advanced configuration options.
+  args:
+    - '@role number bool #channel bool number'
+  params:
+    - *o824
+    - *o825
+    - &o826
+      name: removeOnDrop
+      desc: Whether to remove the role if reputation drops.
+      type: bool
+      optional: true
+    - &o827
+      name: announceChannel
+      desc: Optional channel to announce role awards.
+      type: ITextChannel
+      optional: true
+    - &o828
+      name: announceDm
+      desc: Whether to send DM notifications.
+      type: bool
+      optional: true
+    - &o829
+      name: xpReward
+      desc: Optional XP reward for reaching milestone.
+      type: int
+      optional: true
+reprolelist:
+  desc: Lists all configured role rewards for the server.
+  args:
+    - ''
+  params: [ ]
+reproleinfo:
+  desc: Shows detailed information about a specific role reward.
+  args:
+    - '@role'
+  params:
+    - *o824
+repexport:
+  desc: Exports the current reputation configuration to JSON.
+  args:
+    - ''
+  params: [ ]
+repimport:
+  desc: Imports reputation configuration from uploaded JSON file.
+  args:
+    - ''
+  params: [ ]
+repstatus:
+  desc: Shows the current reputation configuration in a detailed embed.
+  args:
+    - ''
+  params: [ ]
 setrole:
   desc: Sets a role to a user.
   args:

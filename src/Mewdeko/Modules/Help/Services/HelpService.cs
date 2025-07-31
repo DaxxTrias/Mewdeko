@@ -221,6 +221,7 @@ public class HelpService : INService
             "nsfw" => genStrings.ModuleDescriptionNsfw(guild?.Id ?? 0),
             "owneronly" => genStrings.ModuleDescriptionOwneronly(guild?.Id ?? 0),
             "permissions" => genStrings.ModuleDescriptionPermissions(guild?.Id ?? 0),
+            "reputation" => genStrings.ModuleDescriptionReputation(guild?.Id ?? 0),
             "rolegreets" => genStrings.ModuleDescriptionRolegreets(guild?.Id ?? 0),
             "rolestates" => genStrings.ModuleDescriptionRolestates(guild?.Id ?? 0),
             "searches" => genStrings.ModuleDescriptionSearches(guild?.Id ?? 0),

@@ -1400,7 +1400,7 @@ public class SlashMusic(
                 case "prev":
                     var queue = await cache.GetMusicQueue(ctx.Guild.Id);
                     var currentTrack = await cache.GetCurrentTrack(ctx.Guild.Id);
-                    if (currentTrack != null && currentTrack.Index > 1)
+                    if (currentTrack is { Index: > 1 })
                     {
                         var prevTrack = queue.FirstOrDefault(x => x.Index == currentTrack.Index - 1);
                         if (prevTrack != null)

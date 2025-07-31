@@ -1942,7 +1942,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
 
         // Generate first-letter abbreviation (main chkdsk style)
         var firstLetters = string.Join("", words.Select(w => w[0]));
-        if (firstLetters.Length >= 2 && firstLetters.Length <= 5) // Reasonable length
+        if (firstLetters.Length is >= 2 and <= 5) // Reasonable length
         {
             abbreviations.Add(firstLetters);
         }
@@ -2176,7 +2176,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         }
 
         var result = actionAbbrev + objectPart;
-        return result.Length >= 2 && result.Length <= 6 ? result : null;
+        return result.Length is >= 2 and <= 6 ? result : null;
     }
 
     /// <summary>

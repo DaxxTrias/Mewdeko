@@ -66,7 +66,7 @@ public class PollTimerService : INService, IReadyExecutor
             var poll = await db.GetTable<Poll>()
                 .FirstOrDefaultAsync(p => p.Id == pollId);
 
-            if (poll == null || !poll.IsActive)
+            if (poll is not { IsActive: true })
                 return false;
 
             poll.ExpiresAt = DateTime.UtcNow.Add(duration);
@@ -97,7 +97,7 @@ public class PollTimerService : INService, IReadyExecutor
             var poll = await db.GetTable<Poll>()
                 .FirstOrDefaultAsync(p => p.Id == pollId);
 
-            if (poll == null || !poll.IsActive)
+            if (poll is not { IsActive: true })
                 return false;
 
             var newExpiration = poll.ExpiresAt?.Add(additionalTime) ?? DateTime.UtcNow.Add(additionalTime);

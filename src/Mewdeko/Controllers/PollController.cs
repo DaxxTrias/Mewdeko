@@ -584,7 +584,7 @@ public class PollController : Controller
             if (file.Length > 5 * 1024 * 1024) // 5MB limit
                 return BadRequest("File size too large (max 5MB)");
 
-            using var stream = file.OpenReadStream();
+            await using var stream = file.OpenReadStream();
             using var reader = new StreamReader(stream);
             var content = await reader.ReadToEndAsync();
 
