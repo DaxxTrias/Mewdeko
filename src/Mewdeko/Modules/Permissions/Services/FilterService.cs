@@ -501,7 +501,7 @@ public class FilterService : IEarlyBehavior, INService
         var guildConfig = await db.GuildConfigs
             .FirstOrDefaultAsync(gc => gc.GuildId == guild.Id);
 
-        if (guildConfig == null || !guildConfig.FilterInvites)
+        if (guildConfig is not { FilterInvites: true })
             return false;
 
         // Check if there are any channel IDs to filter or if the current channel is in the list

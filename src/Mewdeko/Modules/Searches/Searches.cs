@@ -320,13 +320,13 @@ public partial class Searches(
         // Precipitation and weather phenomena
         var precipComponents = new List<TextDisplayBuilder>();
 
-        if (current.Precipitation.HasValue && current.Precipitation > 0)
+        if (current.Precipitation is > 0)
             precipComponents.Add(new TextDisplayBuilder($"🌧️ Precipitation: {current.Precipitation:F1} mm"));
 
-        if (current.Rain.HasValue && current.Rain > 0)
+        if (current.Rain is > 0)
             precipComponents.Add(new TextDisplayBuilder($"☔ Rain: {current.Rain:F1} mm"));
 
-        if (current.Snowfall.HasValue && current.Snowfall > 0)
+        if (current.Snowfall is > 0)
             precipComponents.Add(
                 new TextDisplayBuilder($"❄️ {Strings.Snowfall(ctx.Guild.Id)}: {current.Snowfall:F1} cm"));
 

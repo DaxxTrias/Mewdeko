@@ -453,7 +453,7 @@ public class AfkService : INService, IReadyExecutor, IDisposable
                 .FirstOrDefaultAsync(a => a.GuildId == state.GuildId && a.UserId == state.UserId).ConfigureAwait(false);
 
             // Only proceed if AFK exists and was timed and is now due
-            if (afk?.WasTimed == true && afk.When.HasValue && afk.When.Value <= DateTime.UtcNow)
+            if (afk is { WasTimed: true, When: not null } && afk.When.Value <= DateTime.UtcNow)
             {
                 await TimedAfkFinished(afk);
             }

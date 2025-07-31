@@ -2,6 +2,182 @@ accept:
   - accept
   - suggestaccept
   - acceptsuggest
+rep:
+  - rep
+  - +rep
+  - giverep
+  - gr
+repgive:
+  - repgive
+  - giverep
+  - gr
+giverep:
+  - giverep
+  - rep
+  - +rep
+  - gr
+repcheck:
+  - repcheck
+  - rc
+  - myrep
+  - checkrep
+myrep:
+  - myrep
+  - repcheck
+  - rc
+checkrep:
+  - checkrep
+  - repcheck
+  - rc
+repleaderboard:
+  - repleaderboard
+  - replb
+  - reptop
+  - toprep
+replb:
+  - replb
+  - repleaderboard
+  - reptop
+  - toprep
+reptop:
+  - reptop
+  - repleaderboard
+  - replb
+  - toprep
+toprep:
+  - toprep
+  - repleaderboard
+  - replb
+  - reptop
+rephistory:
+  - rephistory
+  - rephist
+repstats:
+  - repstats
+  - repstat
+reptake:
+  - reptake
+  - -rep
+  - takerep
+repset:
+  - repset
+  - setrep
+represet:
+  - represet
+  - resetrep
+repfreeze:
+  - repfreeze
+  - freezerep
+repunfreeze:
+  - repunfreeze
+  - unfreeze
+  - unfreezerep
+repconfig:
+  - repconfig
+  - repcfg
+repchannel:
+  - repchannel
+  - repch
+reprole:
+  - reprole
+reproleremove:
+  - reproleremove
+  - reprr
+repreaction:
+  - repreaction
+  - repemoji
+  - rre
+repreactionremove:
+  - repreactionremove
+  - repemojiremove
+  - rrer
+repreactionlist:
+  - repreactionlist
+  - repemojilist
+  - rrel
+reptypeadd:
+  - reptypeadd
+  - repaddtype
+  - rta
+reptyperemove:
+  - reptyperemove
+  - repremovetype
+  - rtr
+reptypelist:
+  - reptypelist
+  - replisttypes
+  - rtl
+anonrep:
+  - anonrep
+  - repanon
+  - anongiverep
+repanon:
+  - repanon
+  - anonrep
+  - anongiverep
+repchannel:
+  - repchannel
+  - repch
+  - repchannelconfig
+repreaction:
+  - repreaction
+  - repemoji
+  - rre
+repreactionremove:
+  - repreactionremove
+  - repemojiremove
+  - rrer
+repreactionlist:
+  - repreactionlist
+  - repemojilist
+  - rrel
+repcommandreq:
+  - repcommandreq
+  - repcmdreq
+  - rcr
+repcommandreqchannels:
+  - repcommandreqchannels
+  - repcmdreqchannels
+  - rcrc
+repcommandbypass:
+  - repcommandbypass
+  - repcmdbypass
+  - rcb
+repcommandreqremove:
+  - repcommandreqremove
+  - repcmdreqremove
+  - rcrr
+repcommandreqlist:
+  - repcommandreqlist
+  - repcmdreqlist
+  - rcrl
+repcommandinfo:
+  - repcommandinfo
+  - repcmdinfo
+  - rci
+reproleadd:
+  - reproleadd
+  - reprla
+reproleadvanced:
+  - reproleadvanced
+  - reprolead
+  - reprladv
+reprolelist:
+  - reprolelist
+  - reprll
+  - reprolelist
+reproleinfo:
+  - reproleinfo
+  - reprli
+repexport:
+  - repexport
+  - repex
+repimport:
+  - repimport
+  - repim
+repstatus:
+  - repstatus
+  - repstat
 autobanroleadd:
   - autobanroleadd
   - abra

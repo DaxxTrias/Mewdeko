@@ -184,7 +184,7 @@ public class RoleCommandsService : INService
     public async Task<(bool Success, HashSet<ReactionRoleMessage>? Messages)> Get(ulong guildId)
     {
         var reactRoles = await guildSettings.GetReactionRoles(guildId);
-        return (reactRoles != null && reactRoles.Count > 0, reactRoles);
+        return (reactRoles is { Count: > 0 }, reactRoles);
     }
 
     /// <summary>

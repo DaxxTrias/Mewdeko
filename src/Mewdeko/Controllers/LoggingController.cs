@@ -257,7 +257,7 @@ public class LoggingController(LogCommandService logService, IDataConnectionFact
         foreach (var prop in properties)
         {
             var value = prop.GetValue(logSettings) as ulong?;
-            if (value.HasValue && value.Value > 0)
+            if (value is > 0)
                 configuredTypes++;
         }
 

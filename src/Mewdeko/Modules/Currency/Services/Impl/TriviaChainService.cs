@@ -251,7 +251,7 @@ public class TriviaChainService(GeneratedBotStrings strings) : ITriviaChainServi
             var response = await httpClient.GetStringAsync(url);
             var triviaResponse = JsonSerializer.Deserialize<OpenTDBResponse>(response);
 
-            if (triviaResponse?.response_code == 0 && triviaResponse.results?.Length > 0)
+            if (triviaResponse is { response_code: 0, results.Length: > 0 })
             {
                 var question = triviaResponse.results[0];
 

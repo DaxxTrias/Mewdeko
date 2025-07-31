@@ -917,7 +917,7 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
 
             // Determine target role based on supporter status and amount
             IRole? targetRole = null;
-            if (supporter != null && supporter.AmountCents > 0 && (
+            if (supporter is { AmountCents: > 0 } && (
                     supporter.PatronStatus == "active_patron" ||
                     supporter.PatronStatus == "declined_patron" ||
                     (supporter.PatronStatus == null && supporter.CurrentlyEntitledAmountCents > 0)))

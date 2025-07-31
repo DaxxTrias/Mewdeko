@@ -2785,7 +2785,7 @@ public class TicketService : INService
             .LoadWithAsTable(t => t.SelectOption)
             .FirstOrDefaultAsync(t => t.ChannelId == channelId && t.GuildId == guild.Id);
 
-        if (ticket == null || ticket.ClosedAt.HasValue)
+        if (ticket is not { ClosedAt: null })
             return false;
 
         try
@@ -3127,7 +3127,7 @@ public class TicketService : INService
             .LoadWithAsTable(t => t.SelectOption)
             .FirstOrDefaultAsync(t => t.ChannelId == channelId && t.GuildId == guild.Id);
 
-        if (ticket == null || ticket.ClosedAt.HasValue || ticket.ClaimedBy.HasValue)
+        if (ticket is not { ClosedAt: null } || ticket.ClaimedBy.HasValue)
             return false;
 
         // Verify staff member has permission to claim using existing SupportRoles
@@ -3205,7 +3205,7 @@ public class TicketService : INService
         var ticket = await ctx.Tickets
             .FirstOrDefaultAsync(t => t.ChannelId == channelId && t.GuildId == guild.Id);
 
-        if (ticket == null || ticket.ClosedAt.HasValue || !ticket.ClaimedBy.HasValue)
+        if (ticket is not { ClosedAt: null } || !ticket.ClaimedBy.HasValue)
             return false;
 
         // Only allow the claimer or admins to unclaim
@@ -3282,7 +3282,7 @@ public class TicketService : INService
         var ticket = await ctx.Tickets
             .FirstOrDefaultAsync(t => t.ChannelId == channelId && t.GuildId == author.GuildId);
 
-        if (ticket == null || ticket.ClosedAt.HasValue)
+        if (ticket is not { ClosedAt: null })
             return false;
 
         try
@@ -3358,7 +3358,7 @@ public class TicketService : INService
         var ticket = await ctx.Tickets
             .FirstOrDefaultAsync(t => t.Id == note.TicketId);
 
-        if (ticket == null || ticket.ClosedAt.HasValue)
+        if (ticket is not { ClosedAt: null })
             return false;
 
         // Only allow the original author or admins to edit
@@ -3881,7 +3881,7 @@ public class TicketService : INService
             .LoadWithAsTable(t => t.SelectOption)
             .FirstOrDefaultAsync(t => t.ChannelId == channelId && t.GuildId == guild.Id);
 
-        if (ticket == null || ticket.ClosedAt.HasValue)
+        if (ticket is not { ClosedAt: null })
             return false;
 
         var priority = await ctx.TicketPriorities
@@ -4029,7 +4029,7 @@ public class TicketService : INService
         var ticket = await ctx.Tickets
             .FirstOrDefaultAsync(t => t.ChannelId == channelId && t.GuildId == guild.Id);
 
-        if (ticket == null || ticket.ClosedAt.HasValue)
+        if (ticket is not { ClosedAt: null })
             return false;
 
         try
@@ -4125,7 +4125,7 @@ public class TicketService : INService
         var ticket = await ctx.Tickets
             .FirstOrDefaultAsync(t => t.ChannelId == channelId && t.GuildId == guild.Id);
 
-        if (ticket == null || ticket.ClosedAt.HasValue || ticket.Tags == null)
+        if (ticket is not { ClosedAt: null } || ticket.Tags == null)
             return false;
 
         try
