@@ -143,6 +143,11 @@ public interface IBotCredentials
     public string PatreonBaseUrl { get; }
 
     /// <summary>
+    ///     Gets or sets whether the PostgreSQL setup has been completed.
+    /// </summary>
+    public bool PostgresSetupCompleted { get; set; }
+
+    /// <summary>
     ///     Checks if the given user is an owner of the bot.
     /// </summary>
     /// <param name="u">The user to check.</param>

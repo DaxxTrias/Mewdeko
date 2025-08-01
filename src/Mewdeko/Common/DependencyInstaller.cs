@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.IO;
 using System.ServiceProcess;
+using System.Text;
+using System.Text.Json;
 using Serilog;
 
 namespace Mewdeko.Common;
@@ -161,7 +163,8 @@ public static class DependencyInstaller
     ///     Throws no exceptions - all errors are logged.
     /// </remarks>
     /// <param name="psqlString">The psqlstring string.</param>
-    public static void CheckAndInstallDependencies(string psqlString)
+    /// <param name="setupCompleted">Whether PostgreSQL setup has been completed before.</param>
+    public static void CheckAndInstallDependencies(string psqlString, bool setupCompleted = false)
     {
         switch (Environment.OSVersion.Platform)
         {
@@ -178,15 +181,18 @@ public static class DependencyInstaller
                     else
                     {
                         Log.Information("PostgreSQL and Redis are already installed.");
-                        if (!string.IsNullOrWhiteSpace(psqlString))
+                        if (!string.IsNullOrWhiteSpace(psqlString) && setupCompleted)
                         {
-                            Log.Information("PSQL string is already set.");
+                            Log.Information("PSQL string is already set and setup is completed.");
                             return;
                         }
 
-                        if (!PromptForDatabaseSetup()) return;
-                        var (dbName, dbUser, dbPassword) = GetDatabaseDetails();
-                        SetupPostgresDb(dbName, dbUser, dbPassword);
+                        if (!setupCompleted && PromptForDatabaseSetup())
+                        {
+                            var (dbName, dbUser, dbPassword) = GetDatabaseDetails();
+                            SetupPostgresDb(dbName, dbUser, dbPassword);
+                            MarkSetupCompleted();
+                        }
                     }
                 }
                 else
@@ -207,15 +213,18 @@ public static class DependencyInstaller
                 else
                 {
                     Log.Information("PostgreSQL and Redis are already installed.");
-                    if (!string.IsNullOrWhiteSpace(psqlString))
+                    if (!string.IsNullOrWhiteSpace(psqlString) && setupCompleted)
                     {
-                        Log.Information("PSQL string is already set.");
+                        Log.Information("PSQL string is already set and setup is completed.");
                         return;
                     }
 
-                    if (!PromptForDatabaseSetup()) return;
-                    var (dbName, dbUser, dbPassword) = GetDatabaseDetails();
-                    ShowWindowsDatabaseSetup(dbName, dbUser, dbPassword);
+                    if (!setupCompleted && PromptForDatabaseSetup())
+                    {
+                        var (dbName, dbUser, dbPassword) = GetDatabaseDetails();
+                        ShowWindowsDatabaseSetup(dbName, dbUser, dbPassword);
+                        MarkSetupCompleted();
+                    }
                 }
 
                 break;
@@ -413,6 +422,7 @@ public static class DependencyInstaller
         {
             var (dbName, dbUser, dbPassword) = GetDatabaseDetails();
             SetupPostgresDb(dbName, dbUser, dbPassword);
+            MarkSetupCompleted();
         }
     }
 
@@ -547,6 +557,7 @@ public static class DependencyInstaller
         if (PromptForDatabaseSetup())
         {
             ShowWindowsDatabaseSetup();
+            MarkSetupCompleted();
         }
     }
 
@@ -598,6 +609,62 @@ public static class DependencyInstaller
                         """);
     }
 
+    /// <summary>
+    ///     Marks the PostgreSQL setup as completed in the credentials file.
+    /// </summary>
+    private static void MarkSetupCompleted()
+    {
+        try
+        {
+            var credsFileName = Path.Combine(Directory.GetCurrentDirectory(), "credentials.json");
+            if (!File.Exists(credsFileName))
+            {
+                Log.Warning("credentials.json not found, cannot mark setup as completed");
+                return;
+            }
+
+            var json = File.ReadAllText(credsFileName);
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement.Clone();
+
+            var options = new JsonWriterOptions
+            {
+                Indented = true
+            };
+            using var stream = new MemoryStream();
+            using var writer = new Utf8JsonWriter(stream, options);
+
+            writer.WriteStartObject();
+            foreach (var property in root.EnumerateObject())
+            {
+                if (property.Name == "PostgresSetupCompleted")
+                {
+                    writer.WriteBoolean(property.Name, true);
+                }
+                else
+                {
+                    property.WriteTo(writer);
+                }
+            }
+
+            // Add the property if it doesn't exist
+            if (!root.TryGetProperty("PostgresSetupCompleted", out _))
+            {
+                writer.WriteBoolean("PostgresSetupCompleted", true);
+            }
+
+            writer.WriteEndObject();
+            writer.Flush();
+
+            var updatedJson = Encoding.UTF8.GetString(stream.ToArray());
+            File.WriteAllText(credsFileName, updatedJson);
+            Log.Information("Marked PostgreSQL setup as completed in credentials.json");
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Failed to mark setup as completed in credentials.json");
+        }
+    }
 
     private enum LinuxDistro
     {

@@ -87,8 +87,8 @@ public class RepService : INService, IReadyExecutor, IUnloadableService
         }
 
         // Subscribe to reaction events
-        eventHandler.Subscribe("MessageReactionAdded", "RepService", HandleReactionAdded);
-        eventHandler.Subscribe("MessageReactionRemoved", "RepService", HandleReactionRemoved);
+        eventHandler.Subscribe("ReactionAdded", "RepService", HandleReactionAdded);
+        eventHandler.Subscribe("ReactionRemoved", "RepService", HandleReactionRemoved);
 
         logger.LogInformation(
             "Reputation Cache Ready - {ConfigCount} guild configs, {ChannelCount} channel configs, {ReactionCount} reaction configs",
@@ -112,7 +112,8 @@ public class RepService : INService, IReadyExecutor, IUnloadableService
     /// </summary>
     public async Task<GiveRepResult> GiveReputationAsync(ulong guildId, ulong giverId, ulong receiverId,
         ulong channelId, string repType = "standard", string? reason = null, int? customAmount = null,
-        bool anonymous = false)
+        bool anonymous = false, int? customCooldownMinutes = null, IUserMessage? processAllReactionsOnMessage = null,
+        IEmote? reactionEmote = null)
     {
         // Get guild configuration
         var config = await GetOrCreateConfigAsync(guildId);
@@ -232,17 +233,32 @@ public class RepService : INService, IReadyExecutor, IUnloadableService
             };
             await db.InsertAsync(historyEntry);
 
-            // Add cooldown (only for positive reputation)
+            // Add or update cooldown (only for positive reputation)
             if (finalAmount > 0)
             {
-                var cooldown = new RepCooldowns
+                var cooldownMinutes = customCooldownMinutes ?? config.DefaultCooldownMinutes;
+                var newExpiresAt = DateTime.UtcNow.AddMinutes(cooldownMinutes);
+
+                // Use UPSERT to avoid duplicate key violations
+                var existingCooldown = await db.RepCooldowns
+                    .FirstOrDefaultAsync(x =>
+                        x.GiverId == giverId && x.ReceiverId == receiverId && x.GuildId == guildId);
+
+                if (existingCooldown != null)
                 {
-                    GiverId = giverId,
-                    ReceiverId = receiverId,
-                    GuildId = guildId,
-                    ExpiresAt = DateTime.UtcNow.AddMinutes(config.DefaultCooldownMinutes)
-                };
-                await db.InsertAsync(cooldown);
+                    // Update existing cooldown with new expiry time
+                    existingCooldown.ExpiresAt = newExpiresAt;
+                    await db.UpdateAsync(existingCooldown);
+                }
+                else
+                {
+                    // Insert new cooldown
+                    var cooldown = new RepCooldowns
+                    {
+                        GiverId = giverId, ReceiverId = receiverId, GuildId = guildId, ExpiresAt = newExpiresAt
+                    };
+                    await db.InsertAsync(cooldown);
+                }
             }
 
             await transaction.CommitAsync();
@@ -253,6 +269,24 @@ public class RepService : INService, IReadyExecutor, IUnloadableService
             // Send notifications
             await notificationService.SendReputationNotificationAsync(guildId, receiverId, giverId,
                 finalAmount, userRep.TotalRep, repType, reason, config.EnableAnonymous && anonymous);
+
+            // If requested, process all other reactions of the same type on the message
+            if (processAllReactionsOnMessage != null && reactionEmote != null)
+            {
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await ProcessAllOtherReactionsAsync(guildId, channelId, processAllReactionsOnMessage,
+                            reactionEmote, repType, reason, customAmount, customCooldownMinutes, giverId);
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogWarning(ex, "Error processing other reactions on message {MessageId}",
+                            processAllReactionsOnMessage.Id);
+                    }
+                });
+            }
 
             return new GiveRepResult
             {
@@ -653,16 +687,21 @@ public class RepService : INService, IReadyExecutor, IUnloadableService
     /// <summary>
     ///     Handles when a reaction is added to a message, potentially giving reputation.
     /// </summary>
+    /// <param name="channel">The channel this reaction was added in.</param>
     /// <param name="reaction">The reaction event arguments.</param>
+    /// <param name="message">The message this reaction was added to</param>
     /// <returns>A task that represents the asynchronous operation.</returns>
-    private async Task HandleReactionAdded(SocketReaction reaction)
+    private async Task HandleReactionAdded(Cacheable<IUserMessage, ulong> message,
+        Cacheable<IMessageChannel, ulong> channel, SocketReaction reaction)
     {
         try
         {
             // Only process reactions in guilds
-            if (reaction.Channel is not SocketTextChannel channel) return;
+            if (channel.Value is not SocketTextChannel text ||
+                await message.GetOrDownloadAsync() is not { } reactionMessage) return;
 
-            var guildId = channel.Guild.Id;
+            ITextChannel textChannel = text;
+            var guildId = textChannel.Guild.Id;
             var reactorId = reaction.UserId;
 
             // Don't give rep for own reactions or bot reactions
@@ -672,8 +711,6 @@ public class RepService : INService, IReadyExecutor, IUnloadableService
             if (!reactionConfigCache.ContainsKey(guildId)) return;
 
             // Get the message to find the author
-            var message = await channel.GetMessageAsync(reaction.MessageId);
-            if (message == null || message.Author.IsBot || message.Author.Id == reactorId) return;
 
             // Find matching reaction config
             var matchingConfig = FindMatchingReactionConfig(guildId, reaction.Emote);
@@ -682,12 +719,13 @@ public class RepService : INService, IReadyExecutor, IUnloadableService
             // Check message age requirements
             if (matchingConfig.MinMessageAgeMinutes > 0)
             {
-                var messageAge = DateTime.UtcNow - message.CreatedAt.UtcDateTime;
+                var messageAge = DateTime.UtcNow - reactionMessage.CreatedAt.UtcDateTime;
                 if (messageAge.TotalMinutes < matchingConfig.MinMessageAgeMinutes) return;
             }
 
             // Check message length requirements
-            if (matchingConfig.MinMessageLength > 0 && message.Content.Length < matchingConfig.MinMessageLength) return;
+            if (matchingConfig.MinMessageLength > 0 &&
+                reactionMessage.Content.Length < matchingConfig.MinMessageLength) return;
 
             // Check channel restrictions
             if (!string.IsNullOrEmpty(matchingConfig.AllowedChannels))
@@ -699,8 +737,8 @@ public class RepService : INService, IReadyExecutor, IUnloadableService
             // Check role requirements for reactor
             if (matchingConfig.RequiredRoleId.HasValue)
             {
-                var reactor = channel.Guild.GetUser(reactorId);
-                if (reactor == null || reactor.Roles.All(r => r.Id != matchingConfig.RequiredRoleId.Value)) return;
+                var reactor = await textChannel.Guild.GetUserAsync(reactorId);
+                if (reactor == null || reactor.RoleIds.All(r => r != matchingConfig.RequiredRoleId.Value)) return;
             }
 
             // Check role restrictions for receiver
@@ -709,37 +747,16 @@ public class RepService : INService, IReadyExecutor, IUnloadableService
                 var allowedRoles = JsonConvert.DeserializeObject<List<ulong>>(matchingConfig.AllowedReceiverRoles);
                 if (allowedRoles != null)
                 {
-                    var receiver = channel.Guild.GetUser(message.Author.Id);
-                    if (receiver == null || !receiver.Roles.Any(r => allowedRoles.Contains(r.Id))) return;
+                    var receiver = await textChannel.Guild.GetUserAsync(reactionMessage.Author.Id);
+                    if (receiver == null || !receiver.RoleIds.Any(r => allowedRoles.Contains(r))) return;
                 }
             }
 
-            // Check reaction-specific cooldown
-            await using var db = await dbFactory.CreateConnectionAsync();
-            // Check reaction-specific cooldown (not using cooldownKey for now)
-            var existingCooldown = await db.RepCooldowns
-                .Where(x => x.GiverId == reactorId && x.ReceiverId == message.Author.Id &&
-                            x.GuildId == guildId && x.ExpiresAt > DateTime.UtcNow)
-                .FirstOrDefaultAsync();
-
-            if (existingCooldown != null) return;
-
-            // Give reputation using the existing service method with reaction-specific amount
-            var result = await GiveReputationAsync(guildId, reactorId, message.Author.Id, channel.Id,
-                matchingConfig.RepType, $"Reaction: {matchingConfig.EmojiName}", matchingConfig.RepAmount);
-
-            // Set reaction-specific cooldown
-            if (result.Result == GiveRepResultType.Success)
-            {
-                var reactionCooldown = new RepCooldowns
-                {
-                    GiverId = reactorId,
-                    ReceiverId = message.Author.Id,
-                    GuildId = guildId,
-                    ExpiresAt = DateTime.UtcNow.AddMinutes(matchingConfig.CooldownMinutes)
-                };
-                await db.InsertAsync(reactionCooldown);
-            }
+            // Pass the message and emote to process all existing reactions of this type
+            await GiveReputationAsync(guildId, reactorId, reactionMessage.Author.Id, channel.Id,
+                matchingConfig.RepType, $"Reaction: {matchingConfig.EmojiName}", matchingConfig.RepAmount,
+                customCooldownMinutes: matchingConfig.CooldownMinutes,
+                processAllReactionsOnMessage: reactionMessage, reactionEmote: reaction.Emote);
         }
         catch (Exception ex)
         {
@@ -750,16 +767,22 @@ public class RepService : INService, IReadyExecutor, IUnloadableService
     /// <summary>
     ///     Handles when a reaction is removed from a message, potentially removing reputation.
     /// </summary>
+    /// <param name="channel">The channel this reaction happened in. </param>
     /// <param name="reaction">The reaction event arguments.</param>
+    /// <param name="message">The message this reaction was attached to</param>
     /// <returns>A task that represents the asynchronous operation.</returns>
-    private async Task HandleReactionRemoved(SocketReaction reaction)
+    private async Task HandleReactionRemoved(Cacheable<IUserMessage, ulong> message,
+        Cacheable<IMessageChannel, ulong> channel, SocketReaction reaction)
     {
         try
         {
             // Only process reactions in guilds
-            if (reaction.Channel is not SocketTextChannel channel) return;
+            if (channel.Value is not SocketTextChannel text ||
+                await message.GetOrDownloadAsync() is not { } reactionMessage) return;
 
-            var guildId = channel.Guild.Id;
+            ITextChannel textChannel = text;
+
+            var guildId = textChannel.Guild.Id;
 
             // Check if we have reaction configs for this guild
             if (!reactionConfigCache.ContainsKey(guildId)) return;
@@ -769,11 +792,9 @@ public class RepService : INService, IReadyExecutor, IUnloadableService
             if (matchingConfig is not { IsEnabled: true }) return;
 
             // Get the message to find the author
-            var message = await channel.GetMessageAsync(reaction.MessageId);
-            if (message == null) return;
 
             // Remove reputation by giving negative amount
-            await GiveReputationAsync(guildId, reaction.UserId, message.Author.Id, channel.Id,
+            await GiveReputationAsync(guildId, reaction.UserId, reactionMessage.Author.Id, channel.Id,
                 matchingConfig.RepType, $"Reaction removed: {matchingConfig.EmojiName}", -matchingConfig.RepAmount);
         }
         catch (Exception ex)
@@ -1041,5 +1062,66 @@ public class RepService : INService, IReadyExecutor, IUnloadableService
 
         return await db.RepRoleRewards
             .FirstOrDefaultAsync(x => x.GuildId == guildId && x.RoleId == roleId);
+    }
+
+    /// <summary>
+    ///     Processes all other reactions of the same type on a message to give reputation for any missed reactions.
+    /// </summary>
+    private async Task ProcessAllOtherReactionsAsync(ulong guildId, ulong channelId, IUserMessage message,
+        IEmote targetEmote, string repType, string? baseReason, int? customAmount, int? customCooldownMinutes,
+        ulong skipUserId)
+    {
+        try
+        {
+            // Find the matching reaction on the message
+            var matchingReaction = message.Reactions.FirstOrDefault(kvp =>
+                DoesEmoteMatch(kvp.Key, targetEmote));
+
+            if (matchingReaction.Key == null || matchingReaction.Value.ReactionCount <= 1)
+                return; // No reactions or only the one we just processed
+
+            // Get all users who reacted with this emote
+            var users = await message.GetReactionUsersAsync(matchingReaction.Key, matchingReaction.Value.ReactionCount)
+                .FlattenAsync();
+
+            // Process each user's reaction (except the one we just processed and bots)
+            foreach (var user in users)
+            {
+                // Skip the user we just processed, bots, and the message author
+                if (user.Id == skipUserId || user.IsBot || user.Id == message.Author.Id)
+                    continue;
+
+                try
+                {
+                    // Give reputation for this user's reaction (without processing all reactions again)
+                    await GiveReputationAsync(guildId, user.Id, message.Author.Id, channelId,
+                        repType, baseReason, customAmount, customCooldownMinutes: customCooldownMinutes);
+                }
+                catch (Exception ex)
+                {
+                    // Log but continue processing other reactions - likely cooldown or other anti-abuse
+                    logger.LogDebug(ex,
+                        "Could not give reputation from user {UserId} reaction on message {MessageId}: {Message}",
+                        user.Id, message.Id, ex.Message);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error processing all reactions on message {MessageId}", message.Id);
+        }
+    }
+
+    /// <summary>
+    ///     Checks if an emote matches another emote.
+    /// </summary>
+    private static bool DoesEmoteMatch(IEmote emote1, IEmote emote2)
+    {
+        return (emote1, emote2) switch
+        {
+            (Emote custom1, Emote custom2) => custom1.Id == custom2.Id,
+            (Emoji unicode1, Emoji unicode2) => unicode1.Name == unicode2.Name,
+            _ => false
+        };
     }
 }
