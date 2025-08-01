@@ -73,7 +73,7 @@ public class RepCommandRequirementsService : INService, ILateBlocker
 
         try
         {
-            var requirement = await GetCommandRequirementAsync(ctx.Guild.Id, command.Name);
+            var requirement = await GetCommandRequirementInternalAsync(ctx.Guild.Id, command.Name);
             if (requirement is not { IsActive: true }) return false;
 
             // Check if user has bypass roles
@@ -121,7 +121,7 @@ public class RepCommandRequirementsService : INService, ILateBlocker
 
         try
         {
-            var requirement = await GetCommandRequirementAsync(ctx.Guild.Id, command.MethodName);
+            var requirement = await GetCommandRequirementInternalAsync(ctx.Guild.Id, command.MethodName);
             if (requirement is not { IsActive: true }) return false;
 
             // Check if user has bypass roles
@@ -245,12 +245,23 @@ public class RepCommandRequirementsService : INService, ILateBlocker
     }
 
     /// <summary>
+    ///     Gets a specific command requirement for a guild and command.
+    /// </summary>
+    /// <param name="guildId">The guild ID.</param>
+    /// <param name="commandName">The command name.</param>
+    /// <returns>The command requirement or null if not found.</returns>
+    public async Task<RepCommandRequirement?> GetCommandRequirementAsync(ulong guildId, string commandName)
+    {
+        return await GetCommandRequirementInternalAsync(guildId, commandName);
+    }
+
+    /// <summary>
     ///     Gets a command requirement from cache or database.
     /// </summary>
     /// <param name="guildId">The guild ID.</param>
     /// <param name="commandName">The command name.</param>
     /// <returns>The command requirement or null if not found.</returns>
-    private async Task<RepCommandRequirement?> GetCommandRequirementAsync(ulong guildId, string commandName)
+    private async Task<RepCommandRequirement?> GetCommandRequirementInternalAsync(ulong guildId, string commandName)
     {
         var key = (guildId, commandName.ToLowerInvariant());
 

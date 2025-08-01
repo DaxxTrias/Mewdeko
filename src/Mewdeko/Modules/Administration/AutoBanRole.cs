@@ -41,7 +41,7 @@ public partial class Administration
             }
 
             var embed = new EmbedBuilder()
-                .WithTitle("Auto-Ban Roles")
+                .WithTitle(Strings.AutoBanRolesTitle(Context.Guild.Id))
                 .WithDescription(string.Join("\n", roleList))
                 .WithColor(Mewdeko.ErrorColor)
                 .WithFooter($"Total: {roleList.Count} role(s)")

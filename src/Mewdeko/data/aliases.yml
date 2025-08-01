@@ -135,10 +135,6 @@ repcommandreq:
   - repcommandreq
   - repcmdreq
   - rcr
-repcommandreqchannels:
-  - repcommandreqchannels
-  - repcmdreqchannels
-  - rcrc
 repcommandbypass:
   - repcommandbypass
   - repcmdbypass
@@ -155,20 +151,6 @@ repcommandinfo:
   - repcommandinfo
   - repcmdinfo
   - rci
-reproleadd:
-  - reproleadd
-  - reprla
-reproleadvanced:
-  - reproleadvanced
-  - reprolead
-  - reprladv
-reprolelist:
-  - reprolelist
-  - reprll
-  - reprolelist
-reproleinfo:
-  - reproleinfo
-  - reprli
 repexport:
   - repexport
   - repex
@@ -2708,9 +2690,6 @@ patreonsyncall:
 patreonstats:
   - patreonstats
   - ptstats
-patreongoals:
-  - patreongoals
-  - ptgoals
 patreontop:
   - patreontop
   - pttop
@@ -2762,6 +2741,12 @@ todocleardue:
 todosetreminder:
   - todosetreminder
   - tsr
+aiwebsearch:
+  - aiwebsearch
+  - aws
+autobanrolelist:
+  - autobanrolelist
+  - abrl
 todoclearreminder:
   - todoclearreminder
   - tcr
@@ -3036,3 +3021,57 @@ embedpreview:
   - embedpreview
   - epreview
   - eprev
+repenable:
+  - repenable
+  - repe
+repcooldown:
+  - repcooldown
+  - repcd
+repdailylimit:
+  - repdailylimit
+  - repdl
+repweeklylimit:
+  - repweeklylimit
+  - repwl
+repminage:
+  - repminage
+  - repma
+repminmembership:
+  - repminmembership
+  - repmm
+repminmessages:
+  - repminmessages
+  - repmsg
+repnegative:
+  - repnegative
+  - repneg
+repanonymous:
+  - repanonymous
+  - repanon
+repnotificationchannel:
+  - repnotificationchannel
+  - repnotify
+repdecay:
+  - repdecay
+  - repd
+repdecaytype:
+  - repdecaytype
+  - repdt
+repdecayamount:
+  - repdecayamount
+  - repda
+repdecayinactive:
+  - repdecayinactive
+  - repdi
+reprolechannel:
+  - reprolechannel
+  - reprc
+repeventcreate:
+  - repeventcreate
+  - repec
+repeventend:
+  - repeventend
+  - repee
+repmilestonelost:
+  - repmilestonelost
+  - repml

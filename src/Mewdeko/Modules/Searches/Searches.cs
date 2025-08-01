@@ -477,9 +477,11 @@ public partial class Searches(
 
             options.Add(new SelectMenuOptionBuilder()
                 .WithLabel(candidate.TimeZoneName.Length > 100
-                    ? candidate.TimeZoneName[..97] + "..."
+                    ? candidate.TimeZoneName[..97] + Strings.Ellipsis(ctx.Guild.Id)
                     : candidate.TimeZoneName)
-                .WithDescription(description.Length > 100 ? description[..97] + "..." : description)
+                .WithDescription(description.Length > 100
+                    ? description[..97] + Strings.Ellipsis(ctx.Guild.Id)
+                    : description)
                 .WithValue($"timezone_select:{candidate.TimezoneId}"));
         }
 

@@ -1124,4 +1124,777 @@ public class RepService : INService, IReadyExecutor, IUnloadableService
             _ => false
         };
     }
+
+    #region Role Reward Extensions
+
+    /// <summary>
+    ///     Updates just the announcement channel for a role reward.
+    /// </summary>
+    /// <param name="guildId">The guild ID.</param>
+    /// <param name="roleId">The role ID.</param>
+    /// <param name="channelId">The channel ID (null to disable).</param>
+    /// <returns>True if updated, false if role reward not found.</returns>
+    public async Task<bool> UpdateRoleRewardChannelAsync(ulong guildId, ulong roleId, ulong? channelId)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+        var roleReward = await db.RepRoleRewards
+            .Where(x => x.GuildId == guildId && x.RoleId == roleId)
+            .FirstOrDefaultAsync();
+
+        if (roleReward == null)
+            return false;
+
+        roleReward.AnnounceChannel = channelId;
+        await db.UpdateAsync(roleReward);
+        return true;
+    }
+
+    #endregion
+
+    #region Configuration Methods
+
+    /// <summary>
+    ///     Updates the reputation system enabled status for a guild.
+    /// </summary>
+    /// <param name="guildId">The guild ID.</param>
+    /// <param name="enabled">Whether to enable the system.</param>
+    /// <returns>A task that represents the asynchronous operation.</returns>
+    public async Task SetEnabledAsync(ulong guildId, bool enabled)
+    {
+        var config = await GetOrCreateConfigAsync(guildId);
+        config.Enabled = enabled;
+
+        await using var db = await dbFactory.CreateConnectionAsync();
+        await db.UpdateAsync(config);
+
+        // Update cache
+        configCache.TryRemove(guildId, out _);
+        configCache.TryAdd(guildId, config);
+    }
+
+    /// <summary>
+    ///     Updates the default cooldown for a guild.
+    /// </summary>
+    /// <param name="guildId">The guild ID.</param>
+    /// <param name="minutes">Cooldown in minutes.</param>
+    /// <returns>A task that represents the asynchronous operation.</returns>
+    public async Task SetDefaultCooldownAsync(ulong guildId, int minutes)
+    {
+        var config = await GetOrCreateConfigAsync(guildId);
+        config.DefaultCooldownMinutes = minutes;
+
+        await using var db = await dbFactory.CreateConnectionAsync();
+        await db.UpdateAsync(config);
+
+        // Update cache
+        configCache.TryRemove(guildId, out _);
+        configCache.TryAdd(guildId, config);
+    }
+
+    /// <summary>
+    ///     Updates the daily limit for a guild.
+    /// </summary>
+    /// <param name="guildId">The guild ID.</param>
+    /// <param name="limit">Daily limit.</param>
+    /// <returns>A task that represents the asynchronous operation.</returns>
+    public async Task SetDailyLimitAsync(ulong guildId, int limit)
+    {
+        var config = await GetOrCreateConfigAsync(guildId);
+        config.DailyLimit = limit;
+
+        await using var db = await dbFactory.CreateConnectionAsync();
+        await db.UpdateAsync(config);
+
+        // Update cache
+        configCache.TryRemove(guildId, out _);
+        configCache.TryAdd(guildId, config);
+    }
+
+    /// <summary>
+    ///     Updates the weekly limit for a guild.
+    /// </summary>
+    /// <param name="guildId">The guild ID.</param>
+    /// <param name="limit">Weekly limit (null to disable).</param>
+    /// <returns>A task that represents the asynchronous operation.</returns>
+    public async Task SetWeeklyLimitAsync(ulong guildId, int? limit)
+    {
+        var config = await GetOrCreateConfigAsync(guildId);
+        config.WeeklyLimit = limit;
+
+        await using var db = await dbFactory.CreateConnectionAsync();
+        await db.UpdateAsync(config);
+
+        // Update cache
+        configCache.TryRemove(guildId, out _);
+        configCache.TryAdd(guildId, config);
+    }
+
+    /// <summary>
+    ///     Updates the minimum account age requirement for a guild.
+    /// </summary>
+    /// <param name="guildId">The guild ID.</param>
+    /// <param name="days">Minimum account age in days.</param>
+    /// <returns>A task that represents the asynchronous operation.</returns>
+    public async Task SetMinAccountAgeAsync(ulong guildId, int days)
+    {
+        var config = await GetOrCreateConfigAsync(guildId);
+        config.MinAccountAgeDays = days;
+
+        await using var db = await dbFactory.CreateConnectionAsync();
+        await db.UpdateAsync(config);
+
+        // Update cache
+        configCache.TryRemove(guildId, out _);
+        configCache.TryAdd(guildId, config);
+    }
+
+    /// <summary>
+    ///     Updates the minimum server membership requirement for a guild.
+    /// </summary>
+    /// <param name="guildId">The guild ID.</param>
+    /// <param name="hours">Minimum membership hours.</param>
+    /// <returns>A task that represents the asynchronous operation.</returns>
+    public async Task SetMinServerMembershipAsync(ulong guildId, int hours)
+    {
+        var config = await GetOrCreateConfigAsync(guildId);
+        config.MinServerMembershipHours = hours;
+
+        await using var db = await dbFactory.CreateConnectionAsync();
+        await db.UpdateAsync(config);
+
+        // Update cache
+        configCache.TryRemove(guildId, out _);
+        configCache.TryAdd(guildId, config);
+    }
+
+    /// <summary>
+    ///     Updates the minimum message count requirement for a guild.
+    /// </summary>
+    /// <param name="guildId">The guild ID.</param>
+    /// <param name="count">Minimum message count.</param>
+    /// <returns>A task that represents the asynchronous operation.</returns>
+    public async Task SetMinMessageCountAsync(ulong guildId, int count)
+    {
+        var config = await GetOrCreateConfigAsync(guildId);
+        config.MinMessageCount = count;
+
+        await using var db = await dbFactory.CreateConnectionAsync();
+        await db.UpdateAsync(config);
+
+        // Update cache
+        configCache.TryRemove(guildId, out _);
+        configCache.TryAdd(guildId, config);
+    }
+
+    /// <summary>
+    ///     Updates negative reputation setting for a guild.
+    /// </summary>
+    /// <param name="guildId">The guild ID.</param>
+    /// <param name="enabled">Whether to enable negative reputation.</param>
+    /// <returns>A task that represents the asynchronous operation.</returns>
+    public async Task SetNegativeReputationAsync(ulong guildId, bool enabled)
+    {
+        var config = await GetOrCreateConfigAsync(guildId);
+        config.EnableNegativeRep = enabled;
+
+        await using var db = await dbFactory.CreateConnectionAsync();
+        await db.UpdateAsync(config);
+
+        // Update cache
+        configCache.TryRemove(guildId, out _);
+        configCache.TryAdd(guildId, config);
+    }
+
+    /// <summary>
+    ///     Updates anonymous reputation setting for a guild.
+    /// </summary>
+    /// <param name="guildId">The guild ID.</param>
+    /// <param name="enabled">Whether to enable anonymous reputation.</param>
+    /// <returns>A task that represents the asynchronous operation.</returns>
+    public async Task SetAnonymousReputationAsync(ulong guildId, bool enabled)
+    {
+        var config = await GetOrCreateConfigAsync(guildId);
+        config.EnableAnonymous = enabled;
+
+        await using var db = await dbFactory.CreateConnectionAsync();
+        await db.UpdateAsync(config);
+
+        // Update cache
+        configCache.TryRemove(guildId, out _);
+        configCache.TryAdd(guildId, config);
+    }
+
+    /// <summary>
+    ///     Updates the notification channel for a guild.
+    /// </summary>
+    /// <param name="guildId">The guild ID.</param>
+    /// <param name="channelId">The notification channel ID (null to disable).</param>
+    /// <returns>A task that represents the asynchronous operation.</returns>
+    public async Task SetNotificationChannelAsync(ulong guildId, ulong? channelId)
+    {
+        var config = await GetOrCreateConfigAsync(guildId);
+        config.NotificationChannel = channelId;
+
+        await using var db = await dbFactory.CreateConnectionAsync();
+        await db.UpdateAsync(config);
+
+        // Update cache
+        configCache.TryRemove(guildId, out _);
+        configCache.TryAdd(guildId, config);
+    }
+
+    /// <summary>
+    ///     Updates decay settings for a guild.
+    /// </summary>
+    /// <param name="guildId">The guild ID.</param>
+    /// <param name="enabled">Whether to enable decay.</param>
+    /// <param name="type">The decay type.</param>
+    /// <param name="amount">The decay amount.</param>
+    /// <param name="inactiveDays">Days of inactivity before decay starts.</param>
+    /// <returns>A task that represents the asynchronous operation.</returns>
+    public async Task SetDecaySettingsAsync(ulong guildId, bool enabled, string? type = null, int? amount = null,
+        int? inactiveDays = null)
+    {
+        var config = await GetOrCreateConfigAsync(guildId);
+        config.EnableDecay = enabled;
+
+        if (type != null) config.DecayType = type;
+        if (amount.HasValue) config.DecayAmount = amount.Value;
+        if (inactiveDays.HasValue) config.DecayInactiveDays = inactiveDays.Value;
+
+        await using var db = await dbFactory.CreateConnectionAsync();
+        await db.UpdateAsync(config);
+
+        // Update cache
+        configCache.TryRemove(guildId, out _);
+        configCache.TryAdd(guildId, config);
+    }
+
+    /// <summary>
+    ///     Gets the configuration for a guild.
+    /// </summary>
+    /// <param name="guildId">The guild ID.</param>
+    /// <returns>The guild's reputation configuration.</returns>
+    public async Task<RepConfig> GetConfigAsync(ulong guildId)
+    {
+        return await GetOrCreateConfigAsync(guildId);
+    }
+
+    #endregion
+
+    #region User Reputation Management
+
+    /// <summary>
+    ///     Takes reputation from a user (admin command).
+    /// </summary>
+    /// <param name="guildId">The guild ID.</param>
+    /// <param name="userId">The user ID.</param>
+    /// <param name="amount">The amount to remove.</param>
+    /// <param name="adminId">The admin performing the action.</param>
+    /// <returns>The user's new total reputation.</returns>
+    public async Task<int> TakeReputationAsync(ulong guildId, ulong userId, int amount, ulong adminId)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+        var userRep = await db.UserReputations
+            .Where(x => x.UserId == userId && x.GuildId == guildId)
+            .FirstOrDefaultAsync();
+
+        if (userRep == null)
+            return 0;
+
+        userRep.TotalRep = Math.Max(0, userRep.TotalRep - amount);
+        await db.UpdateAsync(userRep);
+
+        // Add to history
+        var historyEntry = new RepHistory
+        {
+            GiverId = adminId,
+            ReceiverId = userId,
+            GuildId = guildId,
+            ChannelId = 0, // Admin action, no specific channel
+            Amount = -amount,
+            RepType = "admin_take",
+            Reason = $"Admin removal by {adminId}",
+            IsAnonymous = false,
+            Timestamp = DateTime.UtcNow
+        };
+        await db.InsertAsync(historyEntry);
+
+        // Check for role changes
+        await CheckRoleRewardsAsync(guildId, userId, userRep.TotalRep);
+
+        return userRep.TotalRep;
+    }
+
+    /// <summary>
+    ///     Sets a user's reputation to a specific value (admin command).
+    /// </summary>
+    /// <param name="guildId">The guild ID.</param>
+    /// <param name="userId">The user ID.</param>
+    /// <param name="amount">The amount to set reputation to.</param>
+    /// <param name="adminId">The admin performing the action.</param>
+    /// <returns>A task that represents the asynchronous operation.</returns>
+    public async Task SetReputationAsync(ulong guildId, ulong userId, int amount, ulong adminId)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+        var userRep = await db.UserReputations
+            .Where(x => x.UserId == userId && x.GuildId == guildId)
+            .FirstOrDefaultAsync();
+
+        if (userRep == null)
+        {
+            userRep = new UserReputation
+            {
+                UserId = userId, GuildId = guildId, TotalRep = amount, DateAdded = DateTime.UtcNow
+            };
+            await db.InsertAsync(userRep);
+        }
+        else
+        {
+            userRep.TotalRep = amount;
+            await db.UpdateAsync(userRep);
+        }
+
+        // Add to history
+        var historyEntry = new RepHistory
+        {
+            GiverId = adminId,
+            ReceiverId = userId,
+            GuildId = guildId,
+            ChannelId = 0, // Admin action, no specific channel
+            Amount = amount,
+            RepType = "admin_set",
+            Reason = $"Admin set by {adminId}",
+            IsAnonymous = false,
+            Timestamp = DateTime.UtcNow
+        };
+        await db.InsertAsync(historyEntry);
+
+        // Check for role changes
+        await CheckRoleRewardsAsync(guildId, userId, amount);
+    }
+
+    /// <summary>
+    ///     Freezes a user's reputation, preventing them from gaining or losing reputation.
+    /// </summary>
+    /// <param name="guildId">The guild ID.</param>
+    /// <param name="userId">The user ID.</param>
+    /// <returns>A task that represents the asynchronous operation.</returns>
+    public async Task FreezeUserAsync(ulong guildId, ulong userId)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+        var userRep = await db.UserReputations
+            .Where(x => x.UserId == userId && x.GuildId == guildId)
+            .FirstOrDefaultAsync();
+
+        if (userRep == null)
+        {
+            userRep = new UserReputation
+            {
+                UserId = userId, GuildId = guildId, IsFrozen = true, DateAdded = DateTime.UtcNow
+            };
+            await db.InsertAsync(userRep);
+        }
+        else
+        {
+            userRep.IsFrozen = true;
+            await db.UpdateAsync(userRep);
+        }
+    }
+
+    /// <summary>
+    ///     Unfreezes a user's reputation, allowing them to gain and lose reputation again.
+    /// </summary>
+    /// <param name="guildId">The guild ID.</param>
+    /// <param name="userId">The user ID.</param>
+    /// <returns>True if the user was unfrozen, false if they weren't frozen.</returns>
+    public async Task<bool> UnfreezeUserAsync(ulong guildId, ulong userId)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+        var userRep = await db.UserReputations
+            .Where(x => x.UserId == userId && x.GuildId == guildId)
+            .FirstOrDefaultAsync();
+
+        if (userRep == null || !userRep.IsFrozen)
+            return false;
+
+        userRep.IsFrozen = false;
+        await db.UpdateAsync(userRep);
+        return true;
+    }
+
+    /// <summary>
+    ///     Resets reputation for a specific user in the guild.
+    /// </summary>
+    /// <param name="guildId">The guild ID.</param>
+    /// <param name="userId">The user ID.</param>
+    /// <returns>True if data was reset, false if no data existed.</returns>
+    public async Task<bool> ResetUserReputationAsync(ulong guildId, ulong userId)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        var deletedRep = await db.UserReputations
+            .Where(x => x.UserId == userId && x.GuildId == guildId)
+            .DeleteAsync();
+
+        var deletedHistory = await db.RepHistories
+            .Where(x => x.ReceiverId == userId && x.GuildId == guildId)
+            .DeleteAsync();
+
+        var deletedCooldowns = await db.RepCooldowns
+            .Where(x => x.ReceiverId == userId && x.GuildId == guildId)
+            .DeleteAsync();
+
+        var deletedBadges = await db.RepBadges
+            .Where(x => x.UserId == userId && x.GuildId == guildId)
+            .DeleteAsync();
+
+        return deletedRep > 0 || deletedHistory > 0 || deletedCooldowns > 0 || deletedBadges > 0;
+    }
+
+    /// <summary>
+    ///     Resets ALL reputation data for the entire guild.
+    /// </summary>
+    /// <param name="guildId">The guild ID.</param>
+    /// <returns>A task that represents the asynchronous operation.</returns>
+    public async Task ResetAllReputationAsync(ulong guildId)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        await db.UserReputations.Where(x => x.GuildId == guildId).DeleteAsync();
+        await db.RepHistories.Where(x => x.GuildId == guildId).DeleteAsync();
+        await db.RepCooldowns.Where(x => x.GuildId == guildId).DeleteAsync();
+        await db.RepBadges.Where(x => x.GuildId == guildId).DeleteAsync();
+        await db.UserCustomReputations.Where(x => x.GuildId == guildId).DeleteAsync();
+    }
+
+    #endregion
+
+    #region Channel Configuration
+
+    /// <summary>
+    ///     Sets or updates channel-specific reputation configuration.
+    /// </summary>
+    /// <param name="guildId">The guild ID.</param>
+    /// <param name="channelId">The channel ID.</param>
+    /// <param name="state">The channel state (enabled/disabled/readonly).</param>
+    /// <param name="multiplier">The reputation multiplier for this channel.</param>
+    /// <returns>A task that represents the asynchronous operation.</returns>
+    public async Task SetChannelConfigAsync(ulong guildId, ulong channelId, string state, decimal multiplier)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+        var channelConfig = await db.RepChannelConfigs
+            .Where(x => x.GuildId == guildId && x.ChannelId == channelId)
+            .FirstOrDefaultAsync();
+
+        if (channelConfig == null)
+        {
+            channelConfig = new RepChannelConfig
+            {
+                GuildId = guildId,
+                ChannelId = channelId,
+                State = state.ToLower(),
+                Multiplier = multiplier,
+                DateAdded = DateTime.UtcNow
+            };
+            await db.InsertAsync(channelConfig);
+        }
+        else
+        {
+            channelConfig.State = state.ToLower();
+            channelConfig.Multiplier = multiplier;
+            await db.UpdateAsync(channelConfig);
+        }
+
+        // Update cache
+        channelConfigCache.TryRemove((guildId, channelId), out _);
+        channelConfigCache.TryAdd((guildId, channelId), channelConfig);
+    }
+
+    /// <summary>
+    ///     Gets all channel configurations for a guild.
+    /// </summary>
+    /// <param name="guildId">The guild ID.</param>
+    /// <returns>List of channel configurations.</returns>
+    public async Task<List<RepChannelConfig>> GetChannelConfigsAsync(ulong guildId)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+        return await db.RepChannelConfigs
+            .Where(x => x.GuildId == guildId)
+            .ToListAsync();
+    }
+
+    /// <summary>
+    ///     Removes channel configuration.
+    /// </summary>
+    /// <param name="guildId">The guild ID.</param>
+    /// <param name="channelId">The channel ID.</param>
+    /// <returns>True if removed, false if didn't exist.</returns>
+    public async Task<bool> RemoveChannelConfigAsync(ulong guildId, ulong channelId)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+        var deleted = await db.RepChannelConfigs
+            .Where(x => x.GuildId == guildId && x.ChannelId == channelId)
+            .DeleteAsync();
+
+        if (deleted > 0)
+        {
+            channelConfigCache.TryRemove((guildId, channelId), out _);
+            return true;
+        }
+
+        return false;
+    }
+
+    #endregion
+
+    #region Reaction Configuration
+
+    /// <summary>
+    ///     Adds or updates a reaction-based reputation configuration.
+    /// </summary>
+    /// <param name="guildId">The guild ID.</param>
+    /// <param name="emoji">The emoji string.</param>
+    /// <param name="amount">The reputation amount.</param>
+    /// <param name="repType">The reputation type.</param>
+    /// <returns>True if added, false if updated.</returns>
+    public async Task<bool> AddOrUpdateReactionConfigAsync(ulong guildId, string emoji, int amount, string repType)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        // Parse emoji
+        ulong? emojiId = null;
+        var emojiName = emoji;
+
+        if (Emote.TryParse(emoji, out var customEmote))
+        {
+            emojiId = customEmote.Id;
+            emojiName = customEmote.Name;
+        }
+
+        var existingConfig = await db.RepReactionConfigs
+            .Where(x => x.GuildId == guildId && x.EmojiName == emojiName && x.EmojiId == emojiId)
+            .FirstOrDefaultAsync();
+
+        var isNew = existingConfig == null;
+
+        if (existingConfig != null)
+        {
+            existingConfig.RepAmount = amount;
+            existingConfig.RepType = repType.ToLower();
+            existingConfig.IsEnabled = true;
+            await db.UpdateAsync(existingConfig);
+        }
+        else
+        {
+            var reactionConfig = new RepReactionConfig
+            {
+                GuildId = guildId,
+                EmojiName = emojiName,
+                EmojiId = emojiId,
+                RepAmount = amount,
+                RepType = repType.ToLower(),
+                IsEnabled = true
+            };
+            await db.InsertAsync(reactionConfig);
+            existingConfig = reactionConfig;
+        }
+
+        // Update cache
+        if (!reactionConfigCache.ContainsKey(guildId))
+            reactionConfigCache.TryAdd(guildId, []);
+
+        if (!isNew)
+        {
+            reactionConfigCache[guildId].RemoveAll(x => x.EmojiName == emojiName && x.EmojiId == emojiId);
+        }
+
+        reactionConfigCache[guildId].Add(existingConfig);
+
+        return isNew;
+    }
+
+    /// <summary>
+    ///     Removes a reaction configuration.
+    /// </summary>
+    /// <param name="guildId">The guild ID.</param>
+    /// <param name="emoji">The emoji string.</param>
+    /// <returns>True if removed, false if didn't exist.</returns>
+    public async Task<bool> RemoveReactionConfigAsync(ulong guildId, string emoji)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        // Parse emoji
+        ulong? emojiId = null;
+        var emojiName = emoji;
+
+        if (Emote.TryParse(emoji, out var customEmote))
+        {
+            emojiId = customEmote.Id;
+            emojiName = customEmote.Name;
+        }
+
+        var deleted = await db.RepReactionConfigs
+            .Where(x => x.GuildId == guildId && x.EmojiName == emojiName && x.EmojiId == emojiId)
+            .DeleteAsync();
+
+        if (deleted > 0 && reactionConfigCache.TryGetValue(guildId, out var configs))
+        {
+            configs.RemoveAll(x => x.EmojiName == emojiName && x.EmojiId == emojiId);
+        }
+
+        return deleted > 0;
+    }
+
+    /// <summary>
+    ///     Gets all reaction configurations for a guild.
+    /// </summary>
+    /// <param name="guildId">The guild ID.</param>
+    /// <returns>List of reaction configurations.</returns>
+    public async Task<List<RepReactionConfig>> GetReactionConfigsAsync(ulong guildId)
+    {
+        if (reactionConfigCache.TryGetValue(guildId, out var cached))
+            return cached.ToList(); // Return a copy
+
+        await using var db = await dbFactory.CreateConnectionAsync();
+        return await db.RepReactionConfigs
+            .Where(x => x.GuildId == guildId)
+            .ToListAsync();
+    }
+
+    #endregion
+
+    #region Custom Type Management
+
+    /// <summary>
+    ///     Adds a custom reputation type.
+    /// </summary>
+    /// <param name="guildId">The guild ID.</param>
+    /// <param name="typeName">The internal name of the type.</param>
+    /// <param name="displayName">The display name of the type.</param>
+    /// <returns>True if added, false if already exists.</returns>
+    public async Task<bool> AddCustomTypeAsync(ulong guildId, string typeName, string displayName)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        var existing = await db.RepCustomTypes
+            .Where(x => x.GuildId == guildId && x.TypeName == typeName.ToLower())
+            .FirstOrDefaultAsync();
+
+        if (existing != null)
+            return false;
+
+        var customType = new RepCustomType
+        {
+            GuildId = guildId,
+            TypeName = typeName.ToLower(),
+            DisplayName = displayName,
+            DateAdded = DateTime.UtcNow,
+            IsActive = true
+        };
+
+        await db.InsertAsync(customType);
+        return true;
+    }
+
+    /// <summary>
+    ///     Removes a custom reputation type.
+    /// </summary>
+    /// <param name="guildId">The guild ID.</param>
+    /// <param name="typeName">The type name to remove.</param>
+    /// <returns>True if removed, false if didn't exist.</returns>
+    public async Task<bool> RemoveCustomTypeAsync(ulong guildId, string typeName)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        var deleted = await db.RepCustomTypes
+            .Where(x => x.GuildId == guildId && x.TypeName == typeName.ToLower())
+            .DeleteAsync();
+
+        return deleted > 0;
+    }
+
+    /// <summary>
+    ///     Gets all custom reputation types for a guild.
+    /// </summary>
+    /// <param name="guildId">The guild ID.</param>
+    /// <returns>List of custom reputation types.</returns>
+    public async Task<List<RepCustomType>> GetCustomTypesAsync(ulong guildId)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+        return await db.RepCustomTypes
+            .Where(x => x.GuildId == guildId)
+            .ToListAsync();
+    }
+
+    #endregion
+
+    #region Event Management
+
+    /// <summary>
+    ///     Creates a reputation multiplier event.
+    /// </summary>
+    /// <param name="guildId">The guild ID.</param>
+    /// <param name="name">The event name.</param>
+    /// <param name="multiplier">The reputation multiplier.</param>
+    /// <param name="durationHours">Duration in hours.</param>
+    /// <returns>The created event.</returns>
+    public async Task<RepEvent> CreateEventAsync(ulong guildId, string name, decimal multiplier, int durationHours)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        var endTime = DateTime.UtcNow.AddHours(durationHours);
+        var repEvent = new RepEvent
+        {
+            GuildId = guildId,
+            Name = name,
+            Multiplier = multiplier,
+            StartTime = DateTime.UtcNow,
+            EndTime = endTime,
+            IsEnabled = true,
+            DateAdded = DateTime.UtcNow
+        };
+
+        await db.InsertAsync(repEvent);
+        return repEvent;
+    }
+
+    /// <summary>
+    ///     Ends a reputation event early.
+    /// </summary>
+    /// <param name="guildId">The guild ID.</param>
+    /// <param name="name">The event name.</param>
+    /// <returns>True if ended, false if not found or already ended.</returns>
+    public async Task<bool> EndEventAsync(ulong guildId, string name)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        var repEvent = await db.RepEvents
+            .Where(x => x.GuildId == guildId && x.Name == name && x.IsEnabled)
+            .FirstOrDefaultAsync();
+
+        if (repEvent == null)
+            return false;
+
+        repEvent.IsEnabled = false;
+        repEvent.EndTime = DateTime.UtcNow;
+        await db.UpdateAsync(repEvent);
+
+        return true;
+    }
+
+    /// <summary>
+    ///     Gets all active events for a guild.
+    /// </summary>
+    /// <param name="guildId">The guild ID.</param>
+    /// <returns>List of active events.</returns>
+    public async Task<List<RepEvent>> GetActiveEventsAsync(ulong guildId)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+        return await db.RepEvents
+            .Where(x => x.GuildId == guildId && x.IsEnabled && x.EndTime > DateTime.UtcNow)
+            .ToListAsync();
+    }
+
+    #endregion
 }

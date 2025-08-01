@@ -27,7 +27,7 @@ public class MusicComponents(IAudioService service, IDataCache cache, GuildSetti
     {
         if (values.Length == 0 || string.IsNullOrEmpty(values[0]))
         {
-            await Context.Interaction.RespondAsync("No track selected.", ephemeral: true);
+            await Context.Interaction.RespondAsync(Strings.MusicNoTrackSelected(Context.Guild.Id), ephemeral: true);
             return;
         }
 
@@ -35,7 +35,7 @@ public class MusicComponents(IAudioService service, IDataCache cache, GuildSetti
         var voiceState = Context.User as IVoiceState;
         if (voiceState?.VoiceChannel == null)
         {
-            await Context.Interaction.RespondAsync("You must be in a voice channel to interact with the music queue.",
+            await Context.Interaction.RespondAsync(Strings.MusicVoiceRequired(Context.Guild.Id),
                 ephemeral: true);
             return;
         }
@@ -44,14 +44,14 @@ public class MusicComponents(IAudioService service, IDataCache cache, GuildSetti
         var (player, _) = await GetPlayerAsync();
         if (player == null)
         {
-            await Context.Interaction.RespondAsync("There is no active music player in this server.", ephemeral: true);
+            await Context.Interaction.RespondAsync(Strings.MusicNoPlayer(Context.Guild.Id), ephemeral: true);
             return;
         }
 
         if (voiceState.VoiceChannel.Id != player.VoiceChannelId)
         {
             await Context.Interaction.RespondAsync(
-                "You must be in the same voice channel as the bot to interact with the music queue.", ephemeral: true);
+                Strings.MusicSameVoiceRequired(Context.Guild.Id), ephemeral: true);
             return;
         }
 
@@ -59,14 +59,14 @@ public class MusicComponents(IAudioService service, IDataCache cache, GuildSetti
         var selectedValue = values[0];
         if (!selectedValue.StartsWith("music_track_info:"))
         {
-            await Context.Interaction.RespondAsync("Invalid selection.", ephemeral: true);
+            await Context.Interaction.RespondAsync(Strings.MusicInvalidSelection(Context.Guild.Id), ephemeral: true);
             return;
         }
 
         var trackIndexStr = selectedValue["music_track_info:".Length..];
         if (!int.TryParse(trackIndexStr, out var trackIndex))
         {
-            await Context.Interaction.RespondAsync("Invalid track index.", ephemeral: true);
+            await Context.Interaction.RespondAsync(Strings.MusicInvalidTrackIndex(Context.Guild.Id), ephemeral: true);
             return;
         }
 
@@ -87,7 +87,7 @@ public class MusicComponents(IAudioService service, IDataCache cache, GuildSetti
 
         if (track == null)
         {
-            await Context.Interaction.FollowupAsync("That track no longer exists in the queue.", ephemeral: true);
+            await Context.Interaction.FollowupAsync(Strings.MusicTrackNotExists(Context.Guild.Id), ephemeral: true);
             return;
         }
 
@@ -160,20 +160,20 @@ public class MusicComponents(IAudioService service, IDataCache cache, GuildSetti
         var voiceState = Context.User as IVoiceState;
         if (voiceState?.VoiceChannel == null)
         {
-            await Context.Interaction.RespondAsync("You must be in a voice channel to skip tracks.", ephemeral: true);
+            await Context.Interaction.RespondAsync(Strings.MusicVoiceRequiredSkip(Context.Guild.Id), ephemeral: true);
             return;
         }
 
         var (player, _) = await GetPlayerAsync();
         if (player == null)
         {
-            await Context.Interaction.RespondAsync("There is no active music player in this server.", ephemeral: true);
+            await Context.Interaction.RespondAsync(Strings.MusicNoPlayer(Context.Guild.Id), ephemeral: true);
             return;
         }
 
         if (voiceState.VoiceChannel.Id != player.VoiceChannelId)
         {
-            await Context.Interaction.RespondAsync("You must be in the same voice channel as the bot to skip tracks.",
+            await Context.Interaction.RespondAsync(Strings.MusicSameVoiceRequiredSkip(Context.Guild.Id),
                 ephemeral: true);
             return;
         }
@@ -185,7 +185,7 @@ public class MusicComponents(IAudioService service, IDataCache cache, GuildSetti
 
         if (track == null)
         {
-            await Context.Interaction.FollowupAsync("That track no longer exists in the queue.", ephemeral: true);
+            await Context.Interaction.FollowupAsync(Strings.MusicTrackNotExists(Context.Guild.Id), ephemeral: true);
             return;
         }
 
@@ -217,20 +217,20 @@ public class MusicComponents(IAudioService service, IDataCache cache, GuildSetti
         var voiceState = Context.User as IVoiceState;
         if (voiceState?.VoiceChannel == null)
         {
-            await Context.Interaction.RespondAsync("You must be in a voice channel to remove tracks.", ephemeral: true);
+            await Context.Interaction.RespondAsync(Strings.MusicVoiceRequiredRemove(Context.Guild.Id), ephemeral: true);
             return;
         }
 
         var (player, _) = await GetPlayerAsync();
         if (player == null)
         {
-            await Context.Interaction.RespondAsync("There is no active music player in this server.", ephemeral: true);
+            await Context.Interaction.RespondAsync(Strings.MusicNoPlayer(Context.Guild.Id), ephemeral: true);
             return;
         }
 
         if (voiceState.VoiceChannel.Id != player.VoiceChannelId)
         {
-            await Context.Interaction.RespondAsync("You must be in the same voice channel as the bot to remove tracks.",
+            await Context.Interaction.RespondAsync(Strings.MusicSameVoiceRequiredRemove(Context.Guild.Id),
                 ephemeral: true);
             return;
         }
@@ -242,14 +242,14 @@ public class MusicComponents(IAudioService service, IDataCache cache, GuildSetti
 
         if (track == null)
         {
-            await Context.Interaction.FollowupAsync("That track no longer exists in the queue.", ephemeral: true);
+            await Context.Interaction.FollowupAsync(Strings.MusicTrackNotExists(Context.Guild.Id), ephemeral: true);
             return;
         }
 
         var currentTrack = await cache.GetCurrentTrack(Context.Guild.Id);
         if (currentTrack?.Index == trackIndex)
         {
-            await Context.Interaction.FollowupAsync("Cannot remove the currently playing track. Use skip instead.",
+            await Context.Interaction.FollowupAsync(Strings.MusicCannotRemoveCurrent(Context.Guild.Id),
                 ephemeral: true);
             return;
         }

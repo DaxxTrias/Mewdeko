@@ -120,7 +120,7 @@ public class RepNotificationService : INService
                 .WithTitle(strings.RepNotificationTitle(guildId))
                 .WithDescription(BuildNotificationMessage(guildId, amount, newTotal, repType,
                     giver, isAnonymous, reason))
-                .WithFooter($"In {guild.Name}")
+                .WithFooter(strings.RepFooterGuild(guildId, guild.Name))
                 .WithTimestamp(DateTimeOffset.UtcNow);
 
             await user.SendMessageAsync(embed: embed.Build());
@@ -193,7 +193,7 @@ public class RepNotificationService : INService
 
             var embed = new EmbedBuilder()
                 .WithColor(Color.Gold)
-                .WithTitle("🏆 Reputation Milestone!")
+                .WithTitle(strings.RepMilestoneTitle(guildId))
                 .WithDescription(message)
                 .WithThumbnailUrl(user?.GetAvatarUrl() ?? user?.GetDefaultAvatarUrl())
                 .WithTimestamp(DateTimeOffset.UtcNow)
@@ -245,7 +245,7 @@ public class RepNotificationService : INService
 
             var embed = new EmbedBuilder()
                 .WithColor(amount > 0 ? Color.Green : Color.Red)
-                .WithTitle("📊 Reputation Activity")
+                .WithTitle(strings.RepActivityTitle(guildId))
                 .AddField("User", receiverName, true)
                 .AddField("Amount", $"{(amount > 0 ? "+" : "")}{amount}", true)
                 .AddField("New Total", newTotal.ToString(), true)
