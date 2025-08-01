@@ -8,11 +8,11 @@ using Discord.Net;
 using Discord.Rest;
 using Figgle.Fonts;
 using Lavalink4NET;
-using Mewdeko.Common.Configs;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Common.TypeReaders;
 using Mewdeko.Common.TypeReaders.Interactions;
 using Mewdeko.Services.Impl;
+using Mewdeko.Services.Settings;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 using Serilog.Events;
@@ -33,6 +33,8 @@ public class Mewdeko
         PropertyNameCaseInsensitive = true
     };
 
+    private readonly BotConfigService bss;
+
     private readonly ILogger<Mewdeko> logger;
 
     /// <summary>
@@ -45,10 +47,11 @@ public class Mewdeko
         Services = services;
         this.logger = logger;
         Credentials = Services.GetRequiredService<BotCredentials>();
-        Cache = Services.GetRequiredService<IDataCache>();
+        Services.GetRequiredService<IDataCache>();
         Client = Services.GetRequiredService<DiscordShardedClient>();
         CommandService = Services.GetRequiredService<CommandService>();
         GuildSettingsService = Services.GetRequiredService<GuildSettingsService>();
+        bss = Services.GetRequiredService<BotConfigService>();
     }
 
     /// <summary>
@@ -83,7 +86,6 @@ public class Mewdeko
     public TaskCompletionSource<bool> Ready { get; } = new();
 
     private IServiceProvider Services { get; }
-    private IDataCache Cache { get; }
 
     /// <summary>
     ///     Event that occurs when the bot joins a guild.
@@ -129,8 +131,8 @@ public class Mewdeko
             new TryParseTypeReader<Emoji>(Emoji.TryParse));
 
         interactionService.AddTypeConverter<TimeSpan>(new TimeSpanConverter());
-        interactionService.AddTypeConverter(typeof(IRole[]), new RoleArrayConverter());
-        interactionService.AddTypeConverter(typeof(IUser[]), new UserArrayConverter());
+        interactionService.AddTypeConverter<IRole[]>(new RoleArrayConverter());
+        interactionService.AddTypeConverter<IUser[]>(new UserArrayConverter());
         interactionService.AddTypeConverter<StatusRole>(new StatusRolesTypeConverter());
 
 
@@ -143,17 +145,6 @@ public class Mewdeko
         Client.Log += Client_Log;
         var clientReady = new TaskCompletionSource<bool>();
 
-        Task SetClientReady(DiscordSocketClient unused)
-        {
-            ReadyCount++;
-            logger.LogInformation($"Shard {unused.ShardId} is ready");
-            logger.LogInformation($"{ReadyCount}/{Client.Shards.Count} shards connected");
-            if (ReadyCount != Client.Shards.Count)
-                return Task.CompletedTask;
-            _ = Task.Run(() => clientReady.TrySetResult(true));
-            return Task.CompletedTask;
-        }
-
         logger.LogInformation("Logging in...");
         try
         {
@@ -165,7 +156,8 @@ public class Mewdeko
 
             // Start shards in rate-limited batches according to max concurrency
             var totalShards = Client.Shards.Count;
-            logger.LogInformation($"Starting {totalShards} shards with max concurrency of {maxConcurrency}");
+            logger.LogInformation("Starting {TotalShards} shards with max concurrency of {MaxConcurrency}", totalShards,
+                maxConcurrency);
 
             // Group shards by their rate limit bucket using the formula from Discord docs
             var shardGroups = Client.Shards
@@ -177,12 +169,9 @@ public class Mewdeko
             foreach (var group in shardGroups)
             {
                 var tasks = group.Select(shard => shard.StartAsync()).ToList();
-                logger.LogInformation($"Starting shard bucket {group.Key} with {tasks.Count} shards");
+                logger.LogInformation("Starting shard bucket {BucketKey} with {ShardCount} shards", group.Key,
+                    tasks.Count);
                 await Task.WhenAll(tasks);
-
-                // If not the last group, add a small delay between buckets
-                if (group != shardGroups.Last())
-                    await Task.Delay(5000);
             }
         }
         catch (HttpException ex)
@@ -204,6 +193,18 @@ public class Mewdeko
         logger.LogInformation("Logged in.");
         logger.LogInformation("Logged in as:");
         Console.WriteLine(FiggleFonts.Digital.Render(Client.CurrentUser.Username));
+        return;
+
+        Task SetClientReady(DiscordSocketClient unused)
+        {
+            ReadyCount++;
+            logger.LogInformation("Shard {ShardId} is ready", unused.ShardId);
+            logger.LogInformation("{ReadyCount}/{TotalShards} shards connected", ReadyCount, Client.Shards.Count);
+            if (ReadyCount != Client.Shards.Count)
+                return Task.CompletedTask;
+            _ = Task.Run(() => clientReady.TrySetResult(true));
+            return Task.CompletedTask;
+        }
     }
 
     private Task Client_LeftGuild(SocketGuild arg)
@@ -213,7 +214,7 @@ public class Mewdeko
             try
             {
                 var chan = await Client.Rest.GetChannelAsync(Credentials.GuildJoinsChannelId).ConfigureAwait(false);
-                await ((RestTextChannel)chan).SendErrorAsync($"Left server: {arg.Name} [{arg.Id}]", new BotConfig(),
+                await ((RestTextChannel)chan).SendErrorAsync($"Left server: {arg.Name} [{arg.Id}]", bss.Data,
                 [
                     new EmbedFieldBuilder().WithName("Total Guilds")
                         .WithValue(Client.Guilds.Count)
@@ -264,20 +265,6 @@ public class Mewdeko
     {
         var sw = Stopwatch.StartNew();
 
-        var circularDependencies = FindCircularDependencies();
-
-        if (circularDependencies.Count > 0)
-        {
-            logger.LogError("Circular dependencies found:");
-            foreach (var dependency in circularDependencies)
-            {
-                logger.LogError(dependency);
-            }
-        }
-        else
-        {
-            logger.LogInformation("No circular dependencies found.");
-        }
 
         await LoginAsync(Credentials.Token).ConfigureAwait(false);
 
@@ -302,7 +289,7 @@ public class Mewdeko
         }
         catch (Exception ex)
         {
-            logger.LogError($"Error adding services: {ex}");
+            logger.LogError(ex, "Error adding services");
             Helpers.ReadErrorAndExit(9);
         }
 
@@ -319,7 +306,7 @@ public class Mewdeko
         }
         catch (Exception e)
         {
-            Console.WriteLine(e);
+            logger.LogError(e, "Failed to add modules to command/interaction service");
             throw;
         }
 #if !DEBUG
@@ -337,7 +324,7 @@ public class Mewdeko
         }
 #endif
         _ = Task.Run(HandleStatusChanges);
-        _ = Task.Run(async () => await ExecuteReadySubscriptions());
+        _ = Task.Run(ExecuteReadySubscriptions);
         var performanceMonitor = Services.GetRequiredService<PerformanceMonitorService>();
         performanceMonitor.Initialize(typeof(Mewdeko).Assembly, "Mewdeko");
         Ready.TrySetResult(true);
@@ -366,7 +353,7 @@ public class Mewdeko
                     ex.Message);
             }
         });
-        await tasks.WhenAll();
+        await Task.WhenAll(tasks);
     }
 
     private async Task Client_Log(LogMessage arg)
@@ -389,11 +376,11 @@ public class Mewdeko
     {
         var sub = Services.GetService<IDataCache>().Redis.GetSubscriber();
 
-        sub.Subscribe(RedisChannel.Literal($"{Client.CurrentUser.Id}_status.game_set"), async (_, game) =>
+        sub.Subscribe(RedisChannel.Literal($"{Client.CurrentUser.Id}_status.game_set"), async void (_, game) =>
         {
             try
             {
-                var status = JsonSerializer.Deserialize<GameStatus>((string)game, CachedJsonOptions);
+                var status = JsonSerializer.Deserialize<GameStatus>(game, CachedJsonOptions);
                 await Client.SetGameAsync(status?.Name, type: status?.Activity ?? ActivityType.Playing)
                     .ConfigureAwait(false);
             }
@@ -403,11 +390,11 @@ public class Mewdeko
             }
         }, CommandFlags.FireAndForget);
 
-        sub.Subscribe(RedisChannel.Literal($"{Client.CurrentUser.Id}_status.stream_set"), async (_, streamData) =>
+        sub.Subscribe(RedisChannel.Literal($"{Client.CurrentUser.Id}_status.stream_set"), async void (_, streamData) =>
         {
             try
             {
-                var stream = JsonSerializer.Deserialize<StreamStatus>((string)streamData, CachedJsonOptions);
+                var stream = JsonSerializer.Deserialize<StreamStatus>(streamData, CachedJsonOptions);
                 await Client.SetGameAsync(stream?.Name, stream?.Url, ActivityType.Streaming)
                     .ConfigureAwait(false);
             }
@@ -434,56 +421,5 @@ public class Mewdeko
         await sub.PublishAsync(RedisChannel.Literal($"{Client.CurrentUser.Id}_status.game_set"),
                 JsonSerializer.Serialize(obj))
             .ConfigureAwait(false);
-    }
-
-    /// <summary>
-    ///     Self explanatory
-    /// </summary>
-    /// <returns></returns>
-    private static List<string> FindCircularDependencies()
-    {
-        var assembly = Assembly.GetExecutingAssembly();
-        var types = assembly.GetTypes();
-
-        return (from type in types
-            let path = new HashSet<Type>
-            {
-                type
-            }
-            where HasCircularDependency(type, path)
-            select string.Join(" -> ", path.Select(t => t.Name))).ToList();
-    }
-
-    private static bool HasCircularDependency(Type type, HashSet<Type> path)
-    {
-        var constructors = type.GetConstructors();
-
-        foreach (var constructor in constructors)
-        {
-            var parameters = constructor.GetParameters();
-
-            foreach (var parameter in parameters)
-            {
-                var parameterType = parameter.ParameterType;
-
-                if (path.Contains(parameterType))
-                {
-                    path.Add(parameterType);
-                    return true;
-                }
-
-                if (parameterType.Assembly != type.Assembly) continue;
-
-                path.Add(parameterType);
-                if (HasCircularDependency(parameterType, path))
-                {
-                    return true;
-                }
-
-                path.Remove(parameterType);
-            }
-        }
-
-        return false;
     }
 }

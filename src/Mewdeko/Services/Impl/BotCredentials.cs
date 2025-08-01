@@ -313,6 +313,11 @@ public class BotCredentials : IBotCredentials
     public ulong ConfessionReportChannelId { get; set; }
 
     /// <summary>
+    ///     Gets or sets whether the PostgreSQL setup has been completed.
+    /// </summary>
+    public bool PostgresSetupCompleted { get; set; }
+
+    /// <summary>
     ///     Checks if the specified user is an owner.
     /// </summary>
     /// <param name="u">The user to check.</param>
@@ -584,6 +589,7 @@ public class BotCredentials : IBotCredentials
                 : 970086914826858547;
             UseGlobalCurrency = bool.TryParse(data[nameof(UseGlobalCurrency)], out var ugc) && ugc;
             OpenMeteoApiUrl = data[nameof(OpenMeteoApiUrl)] ?? "https://api.open-meteo.com";
+            PostgresSetupCompleted = bool.TryParse(data[nameof(PostgresSetupCompleted)], out var pgSetup) && pgSetup;
 
             // Check for missing or invalid critical credentials
             var missingCredentials = new List<string>();
@@ -738,6 +744,7 @@ public class BotCredentials : IBotCredentials
         public string OpenMeteoApiUrl { get; } = "https://api.open-meteo.com";
         public ulong ConfessionReportChannelId { get; } = 1051401727787671613;
         public string ChatSavePath { get; } = "/usr/share/nginx/cdn/chatlogs/";
+        public bool PostgresSetupCompleted { get; set; }
 
         [JsonIgnore]
         ImmutableArray<ulong> IBotCredentials.OwnerIds
