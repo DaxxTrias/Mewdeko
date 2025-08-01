@@ -11,6 +11,17 @@ namespace Mewdeko.Modules.Reputation;
 [Group("rep", "Reputation system commands")]
 public class SlashReputation : MewdekoSlashModuleBase<RepService>
 {
+    private readonly RepConfigService configService;
+
+    /// <summary>
+    ///     Initializes a new instance of the <see cref="SlashReputation" /> class.
+    /// </summary>
+    /// <param name="configService">The reputation configuration service.</param>
+    public SlashReputation(RepConfigService configService)
+    {
+        this.configService = configService;
+    }
+
     /// <summary>
     ///     Gives reputation to a specified user.
     /// </summary>
@@ -235,4 +246,225 @@ public class SlashReputation : MewdekoSlashModuleBase<RepService>
 
         await ReplyAsync(embed: eb.Build()).ConfigureAwait(false);
     }
+
+    #region Component Interactions
+
+    /// <summary>
+    ///     Handles reputation configuration category selection.
+    /// </summary>
+    /// <param name="category">The selected configuration category.</param>
+    /// <returns>A task that represents the asynchronous operation.</returns>
+    [ComponentInteraction("rep_config_category", true)]
+    public async Task RepConfigCategory(string category)
+    {
+        await configService.HandleCategorySelectionAsync(ctx, category);
+    }
+
+    /// <summary>
+    ///     Handles saving reputation configuration changes.
+    /// </summary>
+    /// <returns>A task that represents the asynchronous operation.</returns>
+    [ComponentInteraction("rep_config_save", true)]
+    public async Task RepConfigSave()
+    {
+        await configService.HandleSaveAsync(ctx);
+    }
+
+    /// <summary>
+    ///     Handles resetting reputation configuration to defaults.
+    /// </summary>
+    /// <returns>A task that represents the asynchronous operation.</returns>
+    [ComponentInteraction("rep_config_reset", true)]
+    public async Task RepConfigReset()
+    {
+        await configService.HandleResetAsync(ctx);
+    }
+
+    /// <summary>
+    ///     Handles exporting reputation configuration.
+    /// </summary>
+    /// <returns>A task that represents the asynchronous operation.</returns>
+    [ComponentInteraction("rep_config_export", true)]
+    public async Task RepConfigExport()
+    {
+        await configService.HandleExportAsync(ctx);
+    }
+
+    /// <summary>
+    ///     Handles closing the reputation configuration menu.
+    /// </summary>
+    /// <returns>A task that represents the asynchronous operation.</returns>
+    [ComponentInteraction("rep_config_close", true)]
+    public async Task RepConfigClose()
+    {
+        await ((SocketMessageComponent)ctx.Interaction).Message.DeleteAsync();
+    }
+
+    /// <summary>
+    ///     Handles toggling the reputation system enabled/disabled.
+    /// </summary>
+    /// <returns>A task that represents the asynchronous operation.</returns>
+    [ComponentInteraction("rep_toggle_enabled", true)]
+    public async Task RepToggleEnabled()
+    {
+        await configService.HandleToggleAsync(ctx, "enabled");
+    }
+
+    /// <summary>
+    ///     Handles toggling anonymous reputation.
+    /// </summary>
+    /// <returns>A task that represents the asynchronous operation.</returns>
+    [ComponentInteraction("rep_toggle_anonymous", true)]
+    public async Task RepToggleAnonymous()
+    {
+        await configService.HandleToggleAsync(ctx, "anonymous");
+    }
+
+    /// <summary>
+    ///     Handles toggling negative reputation.
+    /// </summary>
+    /// <returns>A task that represents the asynchronous operation.</returns>
+    [ComponentInteraction("rep_toggle_negative", true)]
+    public async Task RepToggleNegative()
+    {
+        await configService.HandleToggleAsync(ctx, "negative");
+    }
+
+    /// <summary>
+    ///     Handles toggling reputation decay.
+    /// </summary>
+    /// <returns>A task that represents the asynchronous operation.</returns>
+    [ComponentInteraction("rep_toggle_decay", true)]
+    public async Task RepToggleDecay()
+    {
+        await configService.HandleToggleAsync(ctx, "decay");
+    }
+
+    /// <summary>
+    ///     Handles editing cooldown settings.
+    /// </summary>
+    /// <returns>A task that represents the asynchronous operation.</returns>
+    [ComponentInteraction("rep_edit_cooldown", true)]
+    public async Task RepEditCooldown()
+    {
+        await configService.HandleEditAsync(ctx, "cooldown");
+    }
+
+    /// <summary>
+    ///     Handles editing daily limit settings.
+    /// </summary>
+    /// <returns>A task that represents the asynchronous operation.</returns>
+    [ComponentInteraction("rep_edit_daily_limit", true)]
+    public async Task RepEditDailyLimit()
+    {
+        await configService.HandleEditAsync(ctx, "daily_limit");
+    }
+
+    /// <summary>
+    ///     Handles editing weekly limit settings.
+    /// </summary>
+    /// <returns>A task that represents the asynchronous operation.</returns>
+    [ComponentInteraction("rep_edit_weekly_limit", true)]
+    public async Task RepEditWeeklyLimit()
+    {
+        await configService.HandleEditAsync(ctx, "weekly_limit");
+    }
+
+    /// <summary>
+    ///     Handles editing account age requirements.
+    /// </summary>
+    /// <returns>A task that represents the asynchronous operation.</returns>
+    [ComponentInteraction("rep_edit_account_age", true)]
+    public async Task RepEditAccountAge()
+    {
+        await configService.HandleEditAsync(ctx, "account_age");
+    }
+
+    /// <summary>
+    ///     Handles editing membership requirements.
+    /// </summary>
+    /// <returns>A task that represents the asynchronous operation.</returns>
+    [ComponentInteraction("rep_edit_membership", true)]
+    public async Task RepEditMembership()
+    {
+        await configService.HandleEditAsync(ctx, "membership");
+    }
+
+    /// <summary>
+    ///     Handles editing message requirements.
+    /// </summary>
+    /// <returns>A task that represents the asynchronous operation.</returns>
+    [ComponentInteraction("rep_edit_messages", true)]
+    public async Task RepEditMessages()
+    {
+        await configService.HandleEditAsync(ctx, "messages");
+    }
+
+    /// <summary>
+    ///     Handles editing decay amount.
+    /// </summary>
+    /// <returns>A task that represents the asynchronous operation.</returns>
+    [ComponentInteraction("rep_edit_decay_amount", true)]
+    public async Task RepEditDecayAmount()
+    {
+        await configService.HandleEditAsync(ctx, "decay_amount");
+    }
+
+    /// <summary>
+    ///     Handles editing inactive days.
+    /// </summary>
+    /// <returns>A task that represents the asynchronous operation.</returns>
+    [ComponentInteraction("rep_edit_inactive_days", true)]
+    public async Task RepEditInactiveDays()
+    {
+        await configService.HandleEditAsync(ctx, "inactive_days");
+    }
+
+    /// <summary>
+    ///     Handles notification channel selection.
+    /// </summary>
+    /// <param name="channels">The selected channels.</param>
+    /// <returns>A task that represents the asynchronous operation.</returns>
+    [ComponentInteraction("rep_select_notification_channel", true)]
+    public async Task RepSelectNotificationChannel(IChannel[] channels)
+    {
+        var channel = channels.FirstOrDefault();
+        await configService.HandleChannelSelectAsync(ctx, channel?.Id);
+    }
+
+    /// <summary>
+    ///     Handles decay type selection.
+    /// </summary>
+    /// <param name="decayTypes">The selected decay types.</param>
+    /// <returns>A task that represents the asynchronous operation.</returns>
+    [ComponentInteraction("rep_select_decay_type", true)]
+    public async Task RepSelectDecayType(string[] decayTypes)
+    {
+        var decayType = decayTypes.FirstOrDefault();
+        await configService.HandleDecayTypeSelectAsync(ctx, decayType);
+    }
+
+    /// <summary>
+    ///     Handles clearing the notification channel.
+    /// </summary>
+    /// <returns>A task that represents the asynchronous operation.</returns>
+    [ComponentInteraction("rep_clear_notification_channel", true)]
+    public async Task RepClearNotificationChannel()
+    {
+        await configService.HandleChannelSelectAsync(ctx, null);
+    }
+
+    /// <summary>
+    ///     Handles modal submissions for editing configuration values.
+    /// </summary>
+    /// <param name="setting">The setting being edited.</param>
+    /// <param name="modal">The modal data.</param>
+    /// <returns>A task that represents the asynchronous operation.</returns>
+    [ModalInteraction("rep_modal_*", true)]
+    public async Task RepModalSubmit(string setting, RepEditModal modal)
+    {
+        await configService.HandleModalSubmitAsync(ctx, setting, modal.Value);
+    }
+
+    #endregion
 }
