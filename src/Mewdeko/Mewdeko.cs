@@ -374,7 +374,7 @@ public class Mewdeko
         {
             try
             {
-                var status = JsonSerializer.Deserialize<GameStatus>(game, CachedJsonOptions);
+                var status = JsonSerializer.Deserialize<GameStatus>((string)game, CachedJsonOptions);
                 await Client.SetGameAsync(status?.Name, type: status?.Activity ?? ActivityType.Playing)
                     .ConfigureAwait(false);
             }
@@ -388,7 +388,7 @@ public class Mewdeko
         {
             try
             {
-                var stream = JsonSerializer.Deserialize<StreamStatus>(streamData, CachedJsonOptions);
+                var stream = JsonSerializer.Deserialize<StreamStatus>((string)streamData, CachedJsonOptions);
                 await Client.SetGameAsync(stream?.Name, stream?.Url, ActivityType.Streaming)
                     .ConfigureAwait(false);
             }
