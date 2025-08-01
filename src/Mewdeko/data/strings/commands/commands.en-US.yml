@@ -2039,6 +2039,11 @@ autobanroleremove_IRole_2:
     - '@role'
   params:
     - *o48
+autobanrolelist:
+  desc: Lists all roles that are currently set to auto-ban users.
+  args:
+    - ''
+  params: [ ]
 discordpermoverride:
   desc: Overrides the required permissions for a specific command in the current guild.
   args:
@@ -3087,20 +3092,44 @@ repreactionlist:
     - ''
   params: [ ]
 reprole:
-  desc: Configures role rewards for reputation milestones.
+  desc: Manages role rewards for reputation milestones. Use without parameters to list rewards, with advanced settings for comprehensive configuration.
   args:
-    - '@role number'
+    - ""
+    - "detailed"
+    - "@role"
+    - "@role 100"
+    - "@role 100 false #channel true 50"
   params:
     - &o817
       name: role
-      desc: The role to reward.
+      desc: The role to reward (optional for listing).
       type: IRole
-      optional: false
+      optional: true
     - &o818
       name: reputation
-      desc: The reputation required to earn this role.
+      desc: The reputation required to earn this role (optional for listing).
       type: int
-      optional: false
+      optional: true
+    - name: removeOnDrop
+      desc: Whether to remove the role if reputation drops.
+      type: bool
+      optional: true
+    - name: announceChannel
+      desc: Optional channel to announce role awards.
+      type: ITextChannel
+      optional: true
+    - name: announceDm
+      desc: Whether to send DM notifications.
+      type: bool
+      optional: true
+    - name: xpReward
+      desc: Optional XP reward for reaching milestone.
+      type: int
+      optional: true
+    - name: detailed
+      desc: Show detailed information when listing (use 'detailed' as first parameter).
+      type: string
+      optional: true
 reproleremove:
   desc: Removes a role reward configuration.
   args:
@@ -3108,9 +3137,11 @@ reproleremove:
   params:
     - *o817
 repcommandreq:
-  desc: Sets reputation requirements for a command.
+  desc: Sets reputation requirements for a command, optionally restricted to specific channels.
   args:
-    - commandname number reptype
+    - "commandname 50"
+    - "commandname 50 helper"
+    - "commandname 50 helper #channel1 #channel2"
   params:
     - &o819
       name: commandName
@@ -3124,22 +3155,14 @@ repcommandreq:
       optional: false
     - &o821
       name: repType
-      desc: The specific reputation type required (optional).
+      desc: The specific reputation type required (optional, defaults to total).
       type: string
       optional: true
-repcommandreqchannels:
-  desc: Sets reputation requirements for a command in specific channels.
-  args:
-    - commandname number reptype '#channel'
-  params:
-    - *o819
-    - *o820
-    - *o821
-    - &o822
-      name: channels
-      desc: The channels where this requirement applies.
+    - name: channels
+      desc: Optional channels where this requirement applies (if none specified, applies globally).
       type: ITextChannel[]
-      optional: false
+      optional: true
+
 repcommandbypass:
   desc: Sets bypass roles for a command requirement.
   args:
@@ -3168,59 +3191,6 @@ repcommandinfo:
     - commandname
   params:
     - *o819
-reproleadd:
-  desc: Adds a role reward for reaching a specific reputation milestone.
-  args:
-    - '@role number'
-  params:
-    - &o824
-      name: role
-      desc: The role to award.
-      type: IRole
-      optional: false
-    - &o825
-      name: reputation
-      desc: The reputation required to earn the role.
-      type: int
-      optional: false
-reproleadvanced:
-  desc: Adds a role reward with advanced configuration options.
-  args:
-    - '@role number bool #channel bool number'
-  params:
-    - *o824
-    - *o825
-    - &o826
-      name: removeOnDrop
-      desc: Whether to remove the role if reputation drops.
-      type: bool
-      optional: true
-    - &o827
-      name: announceChannel
-      desc: Optional channel to announce role awards.
-      type: ITextChannel
-      optional: true
-    - &o828
-      name: announceDm
-      desc: Whether to send DM notifications.
-      type: bool
-      optional: true
-    - &o829
-      name: xpReward
-      desc: Optional XP reward for reaching milestone.
-      type: int
-      optional: true
-reprolelist:
-  desc: Lists all configured role rewards for the server.
-  args:
-    - ''
-  params: [ ]
-reproleinfo:
-  desc: Shows detailed information about a specific role reward.
-  args:
-    - '@role'
-  params:
-    - *o824
 repexport:
   desc: Exports the current reputation configuration to JSON.
   args:
@@ -28354,11 +28324,6 @@ patreonstats:
   args:
     - ''
   params: [ ]
-patreongoals:
-  desc: Show current Patreon goals.
-  args:
-    - ''
-  params: [ ]
 patreontop:
   desc: Show top Patreon supporters.
   args:
@@ -29085,4 +29050,213 @@ embedpreview:
     - name: name
       desc: The name of the embed template to preview.
       type: string
+      optional: false
+repenable:
+  desc: Enables or disables the reputation system for this server.
+  args:
+    - "enabled"
+  params:
+    - name: enabled
+      desc: True to enable, false to disable.
+      type: bool
+      optional: true
+repcooldown:
+  desc: Sets the default cooldown between giving reputation.
+  args:
+    - "minutes"
+  params:
+    - name: minutes
+      desc: Cooldown in minutes (1-1440).
+      type: int
+      optional: false
+repdailylimit:
+  desc: Sets the daily limit for giving reputation.
+  args:
+    - "limit"
+  params:
+    - name: limit
+      desc: Daily limit (1-100).
+      type: int
+      optional: false
+repweeklylimit:
+  desc: Sets the weekly limit for giving reputation.
+  args:
+    - "limit"
+  params:
+    - name: limit
+      desc: Weekly limit (null to disable, 1-500).
+      type: int
+      optional: true
+repminage:
+  desc: Sets the minimum account age required to give reputation.
+  args:
+    - "days"
+  params:
+    - name: days
+      desc: Minimum account age in days (0-365).
+      type: int
+      optional: false
+repminmembership:
+  desc: Sets the minimum server membership time required to give reputation.
+  args:
+    - "hours"
+  params:
+    - name: hours
+      desc: Minimum membership time in hours (0-720).
+      type: int
+      optional: false
+repminmessages:
+  desc: Sets the minimum message count required to give reputation.
+  args:
+    - "count"
+  params:
+    - name: count
+      desc: Minimum message count (0-1000).
+      type: int
+      optional: false
+repnegative:
+  desc: Enables or disables negative reputation.
+  args:
+    - "enabled"
+  params:
+    - name: enabled
+      desc: True to enable negative reputation.
+      type: bool
+      optional: false
+repanonymous:
+  desc: Enables or disables anonymous reputation giving.
+  args:
+    - "enabled"
+  params:
+    - name: enabled
+      desc: True to enable anonymous reputation.
+      type: bool
+      optional: false
+repnotificationchannel:
+  desc: Sets the notification channel for reputation events.
+  args:
+    - "channel"
+  params:
+    - name: channel
+      desc: The channel to send notifications to (null to disable).
+      type: ITextChannel
+      optional: true
+repdecay:
+  desc: Enables or disables reputation decay for inactive users.
+  args:
+    - "enabled"
+  params:
+    - name: enabled
+      desc: True to enable decay.
+      type: bool
+      optional: false
+repdecaytype:
+  desc: Sets the decay type (daily, weekly, monthly).
+  args:
+    - "type"
+  params:
+    - name: type
+      desc: The decay type.
+      type: string
+      optional: false
+repdecayamount:
+  desc: Sets the decay amount.
+  args:
+    - "amount"
+  params:
+    - name: amount
+      desc: The decay amount (1-100).
+      type: int
+      optional: false
+repdecayinactive:
+  desc: Sets the number of inactive days before decay starts.
+  args:
+    - "days"
+  params:
+    - name: days
+      desc: Days of inactivity (1-365).
+      type: int
+      optional: false
+reptypeadd:
+  desc: Adds a custom reputation type.
+  args:
+    - "typeName displayName"
+  params:
+    - name: typeName
+      desc: The name of the reputation type.
+      type: string
+      optional: false
+    - name: displayName
+      desc: The display name for the type.
+      type: string
+      optional: false
+reptyperemove:
+  desc: Removes a custom reputation type.
+  args:
+    - "typeName"
+  params:
+    - name: typeName
+      desc: The name of the reputation type to remove.
+      type: string
+      optional: false
+reptypelist:
+  desc: Lists all custom reputation types for this server.
+  args:
+    - ""
+  params: [ ]
+reprolechannel:
+  desc: Sets the announcement channel for a role reward.
+  args:
+    - "role channel"
+  params:
+    - name: role
+      desc: The role to configure.
+      type: IRole
+      optional: false
+    - name: channel
+      desc: The channel for announcements (null to disable).
+      type: ITextChannel
+      optional: true
+repeventcreate:
+  desc: Creates a reputation multiplier event.
+  args:
+    - "name multiplier duration"
+  params:
+    - name: name
+      desc: Name of the event.
+      type: string
+      optional: false
+    - name: multiplier
+      desc: Reputation multiplier.
+      type: decimal
+      optional: false
+    - name: duration
+      desc: Duration in hours.
+      type: int
+      optional: false
+repeventend:
+  desc: Ends a reputation event early.
+  args:
+    - "name"
+  params:
+    - name: name
+      desc: Name of the event to end.
+      type: string
+      optional: false
+repmilestonelost:
+  desc: Manually triggers milestone lost event for testing.
+  args:
+    - "user role threshold"
+  params:
+    - name: user
+      desc: The user who lost the milestone.
+      type: IGuildUser
+      optional: false
+    - name: role
+      desc: The role that was lost.
+      type: IRole
+      optional: false
+    - name: threshold
+      desc: The reputation threshold.
+      type: int
       optional: false

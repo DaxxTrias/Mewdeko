@@ -151,6 +151,7 @@
     <None Remove="DiscordChatExporter\DiscordChatExporter.Cli.deps.json"/>
     <None Remove="DiscordChatExporter\CliFx.dll"/>
     <None Remove="data\http.txt"/>
+    <None Remove="data\strings\responses\unused_keys.txt"/>
   </ItemGroup>
 
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">

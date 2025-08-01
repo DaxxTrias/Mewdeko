@@ -1016,7 +1016,8 @@ public partial class Music(
                         .WithLabel(
                             $"{track.Index}. {(track.Track.Title.Length > 80 ? track.Track.Title[..77] + "..." : track.Track.Title)}")
                         .WithValue($"music_track_info:{track.Index}")
-                        .WithDescription($"{track.Track.Duration} | {track.Requester.Username}")
+                        .WithDescription(Strings.MusicTrackInfo(Context.Guild.Id, track.Track.Duration,
+                            track.Requester.Username))
                 ).ToList();
 
                 var selectMenuRow = new ActionRowBuilder()
