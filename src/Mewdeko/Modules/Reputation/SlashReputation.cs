@@ -255,6 +255,7 @@ public class SlashReputation : MewdekoSlashModuleBase<RepService>
     /// <param name="category">The selected configuration category.</param>
     /// <returns>A task that represents the asynchronous operation.</returns>
     [ComponentInteraction("rep_config_category", true)]
+    [SlashUserPerm(GuildPermission.Administrator)]
     public async Task RepConfigCategory(string category)
     {
         await configService.HandleCategorySelectionAsync(ctx, category);
@@ -265,6 +266,7 @@ public class SlashReputation : MewdekoSlashModuleBase<RepService>
     /// </summary>
     /// <returns>A task that represents the asynchronous operation.</returns>
     [ComponentInteraction("rep_config_save", true)]
+    [SlashUserPerm(GuildPermission.Administrator)]
     public async Task RepConfigSave()
     {
         await configService.HandleSaveAsync(ctx);
@@ -275,6 +277,7 @@ public class SlashReputation : MewdekoSlashModuleBase<RepService>
     /// </summary>
     /// <returns>A task that represents the asynchronous operation.</returns>
     [ComponentInteraction("rep_config_reset", true)]
+    [SlashUserPerm(GuildPermission.Administrator)]
     public async Task RepConfigReset()
     {
         await configService.HandleResetAsync(ctx);
@@ -285,6 +288,7 @@ public class SlashReputation : MewdekoSlashModuleBase<RepService>
     /// </summary>
     /// <returns>A task that represents the asynchronous operation.</returns>
     [ComponentInteraction("rep_config_export", true)]
+    [SlashUserPerm(GuildPermission.Administrator)]
     public async Task RepConfigExport()
     {
         await configService.HandleExportAsync(ctx);
@@ -295,6 +299,7 @@ public class SlashReputation : MewdekoSlashModuleBase<RepService>
     /// </summary>
     /// <returns>A task that represents the asynchronous operation.</returns>
     [ComponentInteraction("rep_config_close", true)]
+    [SlashUserPerm(GuildPermission.Administrator)]
     public async Task RepConfigClose()
     {
         await ((SocketMessageComponent)ctx.Interaction).Message.DeleteAsync();
@@ -305,6 +310,7 @@ public class SlashReputation : MewdekoSlashModuleBase<RepService>
     /// </summary>
     /// <returns>A task that represents the asynchronous operation.</returns>
     [ComponentInteraction("rep_toggle_enabled", true)]
+    [SlashUserPerm(GuildPermission.Administrator)]
     public async Task RepToggleEnabled()
     {
         await configService.HandleToggleAsync(ctx, "enabled");
@@ -315,6 +321,7 @@ public class SlashReputation : MewdekoSlashModuleBase<RepService>
     /// </summary>
     /// <returns>A task that represents the asynchronous operation.</returns>
     [ComponentInteraction("rep_toggle_anonymous", true)]
+    [SlashUserPerm(GuildPermission.Administrator)]
     public async Task RepToggleAnonymous()
     {
         await configService.HandleToggleAsync(ctx, "anonymous");
@@ -325,6 +332,7 @@ public class SlashReputation : MewdekoSlashModuleBase<RepService>
     /// </summary>
     /// <returns>A task that represents the asynchronous operation.</returns>
     [ComponentInteraction("rep_toggle_negative", true)]
+    [SlashUserPerm(GuildPermission.Administrator)]
     public async Task RepToggleNegative()
     {
         await configService.HandleToggleAsync(ctx, "negative");
@@ -335,6 +343,7 @@ public class SlashReputation : MewdekoSlashModuleBase<RepService>
     /// </summary>
     /// <returns>A task that represents the asynchronous operation.</returns>
     [ComponentInteraction("rep_toggle_decay", true)]
+    [SlashUserPerm(GuildPermission.Administrator)]
     public async Task RepToggleDecay()
     {
         await configService.HandleToggleAsync(ctx, "decay");
@@ -345,6 +354,7 @@ public class SlashReputation : MewdekoSlashModuleBase<RepService>
     /// </summary>
     /// <returns>A task that represents the asynchronous operation.</returns>
     [ComponentInteraction("rep_edit_cooldown", true)]
+    [SlashUserPerm(GuildPermission.Administrator)]
     public async Task RepEditCooldown()
     {
         await configService.HandleEditAsync(ctx, "cooldown");
@@ -355,6 +365,7 @@ public class SlashReputation : MewdekoSlashModuleBase<RepService>
     /// </summary>
     /// <returns>A task that represents the asynchronous operation.</returns>
     [ComponentInteraction("rep_edit_daily_limit", true)]
+    [SlashUserPerm(GuildPermission.Administrator)]
     public async Task RepEditDailyLimit()
     {
         await configService.HandleEditAsync(ctx, "daily_limit");
@@ -365,6 +376,7 @@ public class SlashReputation : MewdekoSlashModuleBase<RepService>
     /// </summary>
     /// <returns>A task that represents the asynchronous operation.</returns>
     [ComponentInteraction("rep_edit_weekly_limit", true)]
+    [SlashUserPerm(GuildPermission.Administrator)]
     public async Task RepEditWeeklyLimit()
     {
         await configService.HandleEditAsync(ctx, "weekly_limit");
@@ -375,6 +387,7 @@ public class SlashReputation : MewdekoSlashModuleBase<RepService>
     /// </summary>
     /// <returns>A task that represents the asynchronous operation.</returns>
     [ComponentInteraction("rep_edit_account_age", true)]
+    [SlashUserPerm(GuildPermission.Administrator)]
     public async Task RepEditAccountAge()
     {
         await configService.HandleEditAsync(ctx, "account_age");
@@ -385,6 +398,7 @@ public class SlashReputation : MewdekoSlashModuleBase<RepService>
     /// </summary>
     /// <returns>A task that represents the asynchronous operation.</returns>
     [ComponentInteraction("rep_edit_membership", true)]
+    [SlashUserPerm(GuildPermission.Administrator)]
     public async Task RepEditMembership()
     {
         await configService.HandleEditAsync(ctx, "membership");
@@ -395,6 +409,7 @@ public class SlashReputation : MewdekoSlashModuleBase<RepService>
     /// </summary>
     /// <returns>A task that represents the asynchronous operation.</returns>
     [ComponentInteraction("rep_edit_messages", true)]
+    [SlashUserPerm(GuildPermission.Administrator)]
     public async Task RepEditMessages()
     {
         await configService.HandleEditAsync(ctx, "messages");
@@ -405,6 +420,7 @@ public class SlashReputation : MewdekoSlashModuleBase<RepService>
     /// </summary>
     /// <returns>A task that represents the asynchronous operation.</returns>
     [ComponentInteraction("rep_edit_decay_amount", true)]
+    [SlashUserPerm(GuildPermission.Administrator)]
     public async Task RepEditDecayAmount()
     {
         await configService.HandleEditAsync(ctx, "decay_amount");
@@ -415,6 +431,7 @@ public class SlashReputation : MewdekoSlashModuleBase<RepService>
     /// </summary>
     /// <returns>A task that represents the asynchronous operation.</returns>
     [ComponentInteraction("rep_edit_inactive_days", true)]
+    [SlashUserPerm(GuildPermission.Administrator)]
     public async Task RepEditInactiveDays()
     {
         await configService.HandleEditAsync(ctx, "inactive_days");
@@ -426,6 +443,7 @@ public class SlashReputation : MewdekoSlashModuleBase<RepService>
     /// <param name="channels">The selected channels.</param>
     /// <returns>A task that represents the asynchronous operation.</returns>
     [ComponentInteraction("rep_select_notification_channel", true)]
+    [SlashUserPerm(GuildPermission.Administrator)]
     public async Task RepSelectNotificationChannel(IChannel[] channels)
     {
         var channel = channels.FirstOrDefault();
@@ -438,6 +456,7 @@ public class SlashReputation : MewdekoSlashModuleBase<RepService>
     /// <param name="decayTypes">The selected decay types.</param>
     /// <returns>A task that represents the asynchronous operation.</returns>
     [ComponentInteraction("rep_select_decay_type", true)]
+    [SlashUserPerm(GuildPermission.Administrator)]
     public async Task RepSelectDecayType(string[] decayTypes)
     {
         var decayType = decayTypes.FirstOrDefault();
@@ -449,6 +468,7 @@ public class SlashReputation : MewdekoSlashModuleBase<RepService>
     /// </summary>
     /// <returns>A task that represents the asynchronous operation.</returns>
     [ComponentInteraction("rep_clear_notification_channel", true)]
+    [SlashUserPerm(GuildPermission.Administrator)]
     public async Task RepClearNotificationChannel()
     {
         await configService.HandleChannelSelectAsync(ctx, null);
@@ -461,6 +481,7 @@ public class SlashReputation : MewdekoSlashModuleBase<RepService>
     /// <param name="modal">The modal data.</param>
     /// <returns>A task that represents the asynchronous operation.</returns>
     [ModalInteraction("rep_modal_*", true)]
+    [SlashUserPerm(GuildPermission.Administrator)]
     public async Task RepModalSubmit(string setting, RepEditModal modal)
     {
         await configService.HandleModalSubmitAsync(ctx, setting, modal.Value);
