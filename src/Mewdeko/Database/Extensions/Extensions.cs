@@ -13,8 +13,11 @@ public static class Extensions
     /// <param name="hideDots">If true, ellipsis will not be added to the end of the trimmed string.</param>
     /// <returns>The trimmed string.</returns>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when maxLength is negative.</exception>
-    public static string TrimTo(this string str, int maxLength, bool hideDots = false)
+    public static string TrimTo(this string? str, int maxLength, bool hideDots = false)
     {
+        if (str is null)
+            return string.Empty;
+
         switch (maxLength)
         {
             case < 0:
