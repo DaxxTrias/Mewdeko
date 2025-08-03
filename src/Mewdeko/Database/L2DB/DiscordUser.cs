@@ -41,5 +41,7 @@ namespace DataModel
 		[Column("GreetDmsOptOut"                                                                                         )] public bool      GreetDmsOptOut        { get; set; } // boolean
 		[Column("BirthdayAnnouncementsEnabled"                                                                           )] public bool      BirthdayAnnouncementsEnabled { get; set; } // boolean
 		[Column("BirthdayTimezone"                                                                                       )] public string?   BirthdayTimezone      { get; set; } // text
+		[Column("LevelUpPingsDisabled"                                                                                   )] public bool      LevelUpPingsDisabled  { get; set; } // boolean
+		[Column("LevelUpInfoShown"                                                                                       )] public bool      LevelUpInfoShown      { get; set; } // boolean
 	}
 }

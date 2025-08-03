@@ -2516,6 +2516,30 @@ syncmyxproles:
   - syncmyxproles
 syncuserxproles:
   - syncuserxproles
+levelupchannel:
+  - levelupchannel
+  - lvlupchan
+addlevelupmessage:
+  - addlevelupmessage
+  - addlvlupmsg
+levelupmessages:
+  - levelupmessages
+  - lvlupmsgs
+removelevelupmessage:
+  - removelevelupmessage
+  - remlvlupmsg
+togglelevelupmessage:
+  - togglelevelupmessage
+  - togglelvlupmsg
+testlevelupmessage:
+  - testlevelupmessage
+  - testlvlupmsg
+leveluppings:
+  - leveluppings
+  - lvluppings
+levelupplaceholders:
+  - levelupplaceholders
+  - lvlupplaceholders
 ticketpanel:
   - ticketpanel
   - tpanel
