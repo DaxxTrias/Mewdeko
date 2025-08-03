@@ -28,6 +28,7 @@ namespace DataModel
 		[Column("XpGainDisabled"                                                                                              )] public bool      XpGainDisabled            { get; set; } // boolean
 		[Column("CustomXpImageUrl"         , CanBeNull    = false                                                             )] public string    CustomXpImageUrl          { get; set; } = null!; // text
 		[Column("LevelUpMessage"           , CanBeNull    = false                                                             )] public string    LevelUpMessage            { get; set; } = null!; // text
+		[Column("LevelUpChannel"                                                                                              )] public ulong     LevelUpChannel            { get; set; } // numeric(20,0)
 		[Column("ExclusiveRoleRewards"                                                                                        )] public bool      ExclusiveRoleRewards      { get; set; } // boolean
 		[Column("EnableXpDecay"                                                                                               )] public bool      EnableXpDecay             { get; set; } // boolean
 		[Column("InactivityDaysBeforeDecay"                                                                                   )] public int       InactivityDaysBeforeDecay { get; set; } // integer

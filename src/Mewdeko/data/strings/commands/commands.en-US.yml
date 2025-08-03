@@ -28153,6 +28153,74 @@ syncuserxproles:
       desc: The user to synchronize XP roles for.
       type: IGuildUser
       optional: false
+levelupchannel:
+  desc: Sets the channel where level-up notifications will be sent.
+  args:
+    - '#channel'
+  params:
+    - name: channel
+      desc: The channel to send level-up notifications to. Leave empty to use the current channel.
+      type: ITextChannel
+      optional: true
+addlevelupmessage:
+  desc: Adds a custom level-up message template with placeholder support.
+  args:
+    - 'message'
+  params:
+    - name: message
+      desc: The message template with placeholders like %xp.user.mention%, %xp.level.new%, etc.
+      type: string
+      optional: false
+levelupmessages:
+  desc: Lists all custom level-up messages for this server.
+  args:
+    - ''
+  params: [ ]
+removelevelupmessage:
+  desc: Removes a custom level-up message by ID.
+  args:
+    - 'messageId'
+  params:
+    - name: messageId
+      desc: The ID of the message to remove (shown in levelupmessages command).
+      type: int
+      optional: false
+togglelevelupmessage:
+  desc: Enables or disables a custom level-up message.
+  args:
+    - 'messageId enabled'
+  params:
+    - name: messageId
+      desc: The ID of the message to toggle.
+      type: int
+      optional: false
+    - name: enabled
+      desc: Whether to enable (true) or disable (false) the message.
+      type: bool
+      optional: false
+testlevelupmessage:
+  desc: Tests a level-up message template by sending it to the current channel.
+  args:
+    - 'message'
+  params:
+    - name: message
+      desc: The message template to test, or leave empty to test a random custom message.
+      type: string
+      optional: true
+leveluppings:
+  desc: Toggles level-up ping notifications for yourself.
+  args:
+    - 'enabled'
+  params:
+    - name: enabled
+      desc: Whether to enable (true) or disable (false) level-up pings.
+      type: bool
+      optional: false
+levelupplaceholders:
+  desc: Shows available level-up placeholders that can be used in custom messages.
+  args:
+    - ''
+  params: [ ]
 ticketautoarchive:
   desc: Sets auto-archive behavior for a button
   args:

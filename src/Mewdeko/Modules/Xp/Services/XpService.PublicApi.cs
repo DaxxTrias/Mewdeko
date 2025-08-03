@@ -309,8 +309,8 @@ public partial class XpService
         userXp.LastLevelUp = DateTime.UtcNow;
         await db.UpdateAsync(userXp);
 
-        // Update cache
-        _ = cacheManager.UpdateUserXpCacheAsync(userXp);
+        // Update cache synchronously to ensure it's updated before events are fired
+        await cacheManager.UpdateUserXpCacheAsync(userXp);
 
         // Publish level change event if user had a level before reset
         if (oldLevel > 0)
@@ -355,8 +355,8 @@ public partial class XpService
         userXp.LastLevelUp = DateTime.UtcNow;
         await db.UpdateAsync(userXp);
 
-        // Update cache
-        _ = cacheManager.UpdateUserXpCacheAsync(userXp);
+        // Update cache synchronously to ensure it's updated before events are fired
+        await cacheManager.UpdateUserXpCacheAsync(userXp);
 
         // Publish level change event if level changed
         if (newLevel != oldLevel)
@@ -392,8 +392,8 @@ public partial class XpService
         userXp.NotifyType = (int)type;
         await db.UpdateAsync(userXp);
 
-        // Update cache
-        _ = cacheManager.UpdateUserXpCacheAsync(userXp);
+        // Update cache synchronously to ensure consistency
+        await cacheManager.UpdateUserXpCacheAsync(userXp);
     }
 
     /// <summary>
@@ -511,30 +511,6 @@ public partial class XpService
     #endregion
 
     #region Rewards Management
-
-    /// <summary>
-    ///     Sets a role reward for a specific level.
-    /// </summary>
-    /// <param name="guildId">The guild ID.</param>
-    /// <param name="level">The level to set the reward for.</param>
-    /// <param name="roleId">The role ID to award, or null to remove the reward.</param>
-    /// <returns>A task representing the asynchronous operation.</returns>
-    public async Task SetRoleRewardAsync(ulong guildId, int level, ulong? roleId)
-    {
-        await rewardManager.SetRoleRewardAsync(guildId, level, roleId);
-    }
-
-    /// <summary>
-    ///     Sets a currency reward for a specific level.
-    /// </summary>
-    /// <param name="guildId">The guild ID.</param>
-    /// <param name="level">The level to set the reward for.</param>
-    /// <param name="amount">The amount of currency to award, or 0 to remove the reward.</param>
-    /// <returns>A task representing the asynchronous operation.</returns>
-    public async Task SetCurrencyRewardAsync(ulong guildId, int level, long amount)
-    {
-        await rewardManager.SetCurrencyRewardAsync(guildId, level, amount);
-    }
 
     /// <summary>
     ///     Gets all role rewards for a guild.
@@ -970,7 +946,7 @@ public partial class XpService
     public byte[] GetDefaultBackgroundImage()
     {
         // This would be loaded from a resource file or similar
-        // For now, returning a placeholder
+        // Returns a placeholder value
         return File.ReadAllBytes("data/images/default_xp_background.png");
     }
 

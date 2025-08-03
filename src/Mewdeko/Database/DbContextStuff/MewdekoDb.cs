@@ -733,6 +733,17 @@ public class MewdekoDb : DataConnection
     public ITable<XpRoleReward> XpRoleRewards => this.GetTable<XpRoleReward>();
 
     /// <summary>
+    ///     Gets the XP level-up messages table.
+    /// </summary>
+    public ITable<XpLevelUpMessage> XpLevelUpMessages
+    {
+        get
+        {
+            return this.GetTable<XpLevelUpMessage>();
+        }
+    }
+
+    /// <summary>
     ///     Gets the XP role trackings table.
     /// </summary>
     public ITable<XpRoleTracking> XpRoleTrackings => this.GetTable<XpRoleTracking>();

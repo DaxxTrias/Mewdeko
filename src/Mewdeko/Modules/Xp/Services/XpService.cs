@@ -1,4 +1,6 @@
 using System.Net.Http;
+using DataModel;
+using LinqToDB;
 using Mewdeko.Modules.Currency.Services;
 using Mewdeko.Modules.Xp.Models;
 using Mewdeko.Services.Strings;
@@ -64,7 +66,6 @@ public partial class XpService : INService, IUnloadableService
     private readonly XpVoiceTracker voiceTracker;
     private readonly XpCompetitionManager competitionManager;
     private readonly XpCacheManager cacheManager;
-    private readonly XpRewardManager rewardManager;
 
     #endregion
 
@@ -80,7 +81,6 @@ public partial class XpService : INService, IUnloadableService
     /// <param name="currencyService">The currency service.</param>
     /// <param name="httpClientFactory">The http client factory</param>
     /// <param name="cacheManager">The XP cache manager.</param>
-    /// <param name="rewardManager">The XP reward manager.</param>
     /// <param name="competitionManager">The XP competition manager.</param>
     /// <param name="voiceTracker">The XP voice tracker.</param>
     /// <param name="backgroundProcessor">The XP background processor.</param>
@@ -96,7 +96,6 @@ public partial class XpService : INService, IUnloadableService
         IHttpClientFactory httpClientFactory,
         GeneratedBotStrings strings,
         XpCacheManager cacheManager,
-        XpRewardManager rewardManager,
         XpCompetitionManager competitionManager,
         XpVoiceTracker voiceTracker,
         XpBackgroundProcessor backgroundProcessor, ILogger<XpService> logger, IServiceProvider serviceProvider)
@@ -108,7 +107,6 @@ public partial class XpService : INService, IUnloadableService
 
         // Assign injected sub-components
         this.cacheManager = cacheManager;
-        this.rewardManager = rewardManager;
         this.competitionManager = competitionManager;
         this.voiceTracker = voiceTracker;
         this.backgroundProcessor = backgroundProcessor;
@@ -277,6 +275,135 @@ public partial class XpService : INService, IUnloadableService
         var finalAmount = (int)(baseAmount * multiplier);
 
         return finalAmount;
+    }
+
+    #endregion
+
+    #region Level-Up Message Management
+
+    /// <summary>
+    ///     Sets the level-up notification channel for a guild.
+    /// </summary>
+    /// <param name="guildId">The guild ID.</param>
+    /// <param name="channelId">The channel ID, or 0 to clear.</param>
+    public async Task SetLevelUpChannelAsync(ulong guildId, ulong channelId)
+    {
+        // Get current settings from cache/database
+        var settings = await cacheManager.GetGuildXpSettingsAsync(guildId);
+
+        // Update the setting
+        settings.LevelUpChannel = channelId;
+
+        // Update both database and cache
+        await cacheManager.UpdateGuildXpSettingsAsync(settings);
+    }
+
+    /// <summary>
+    ///     Adds a custom level-up message for a guild.
+    /// </summary>
+    /// <param name="guildId">The guild ID.</param>
+    /// <param name="message">The message template.</param>
+    public async Task AddLevelUpMessageAsync(ulong guildId, string message)
+    {
+        await using var db = await DbFactory.CreateConnectionAsync();
+
+        var levelUpMessage = new XpLevelUpMessage
+        {
+            GuildId = guildId, MessageContent = message, IsEnabled = true, DateAdded = DateTime.UtcNow
+        };
+
+        await db.InsertAsync(levelUpMessage);
+    }
+
+    /// <summary>
+    ///     Gets all level-up messages for a guild.
+    /// </summary>
+    /// <param name="guildId">The guild ID.</param>
+    /// <returns>List of level-up messages.</returns>
+    public async Task<List<XpLevelUpMessage>> GetLevelUpMessagesAsync(ulong guildId)
+    {
+        await using var db = await DbFactory.CreateConnectionAsync();
+
+        return await db.XpLevelUpMessages
+            .Where(x => x.GuildId == guildId)
+            .OrderBy(x => x.Id)
+            .ToListAsync();
+    }
+
+    /// <summary>
+    ///     Removes a custom level-up message.
+    /// </summary>
+    /// <param name="guildId">The guild ID.</param>
+    /// <param name="messageId">The message ID.</param>
+    /// <returns>True if removed successfully.</returns>
+    public async Task<bool> RemoveLevelUpMessageAsync(ulong guildId, int messageId)
+    {
+        await using var db = await DbFactory.CreateConnectionAsync();
+
+        var rowsAffected = await db.XpLevelUpMessages
+            .Where(x => x.GuildId == guildId && x.Id == messageId)
+            .DeleteAsync();
+
+        return rowsAffected > 0;
+    }
+
+    /// <summary>
+    ///     Toggles a custom level-up message's enabled state.
+    /// </summary>
+    /// <param name="guildId">The guild ID.</param>
+    /// <param name="messageId">The message ID.</param>
+    /// <param name="enabled">The new enabled state.</param>
+    /// <returns>True if toggled successfully.</returns>
+    public async Task<bool> ToggleLevelUpMessageAsync(ulong guildId, int messageId, bool enabled)
+    {
+        await using var db = await DbFactory.CreateConnectionAsync();
+
+        var rowsAffected = await db.XpLevelUpMessages
+            .Where(x => x.GuildId == guildId && x.Id == messageId)
+            .Set(x => x.IsEnabled, enabled)
+            .UpdateAsync();
+
+        return rowsAffected > 0;
+    }
+
+    /// <summary>
+    ///     Sets a user's level-up ping preference.
+    /// </summary>
+    /// <param name="userId">The user ID.</param>
+    /// <param name="pingsDisabled">Whether to disable pings.</param>
+    public async Task SetUserLevelUpPingsAsync(ulong userId, bool pingsDisabled)
+    {
+        await using var db = await DbFactory.CreateConnectionAsync();
+
+        // Get or create user record
+        var user = await db.DiscordUsers.FirstOrDefaultAsync(x => x.UserId == userId);
+
+        if (user == null)
+        {
+            user = new DiscordUser
+            {
+                UserId = userId, LevelUpPingsDisabled = pingsDisabled, DateAdded = DateTime.UtcNow
+            };
+            await db.InsertAsync(user);
+        }
+        else
+        {
+            await db.DiscordUsers
+                .Where(x => x.UserId == userId)
+                .Set(x => x.LevelUpPingsDisabled, pingsDisabled)
+                .UpdateAsync();
+        }
+    }
+
+    /// <summary>
+    ///     Gets user preferences from the database.
+    /// </summary>
+    /// <param name="userId">The user ID.</param>
+    /// <returns>The user's preferences or null if not found.</returns>
+    public async Task<DiscordUser?> GetUserPreferencesAsync(ulong userId)
+    {
+        await using var db = await DbFactory.CreateConnectionAsync();
+        return await db.DiscordUsers.FirstOrDefaultAsync(x => x.UserId == userId);
     }
 
     #endregion

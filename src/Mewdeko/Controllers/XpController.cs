@@ -19,7 +19,8 @@ public class XpController(
     DiscordShardedClient client,
     IDataConnectionFactory dbFactory,
     ILogger<XpController> logger,
-    IServiceProvider serviceProvider) : Controller
+    IServiceProvider serviceProvider,
+    XpRewardManager xpRewardManager) : Controller
 {
     /// <summary>
     ///     Gets the XP settings for a guild
@@ -267,7 +268,7 @@ public class XpController(
         if (reward.Level < 1)
             return BadRequest("Level must be at least a positive integer");
 
-        await xp.SetRoleRewardAsync(guildId, reward.Level, reward.RoleId);
+        await xpRewardManager.SetRoleRewardAsync(guildId, reward.Level, reward.RoleId);
         return Ok();
     }
 
@@ -323,7 +324,7 @@ public class XpController(
         if (reward.Amount <= 0)
             return BadRequest("Amount must be positive");
 
-        await xp.SetCurrencyRewardAsync(guildId, reward.Level, reward.Amount);
+        await xpRewardManager.SetCurrencyRewardAsync(guildId, reward.Level, reward.Amount);
         return Ok();
     }
 
