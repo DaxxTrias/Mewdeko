@@ -358,7 +358,6 @@ public class Xp(
             .AddField(Strings.XpDisplaySettings(ctx.Guild.Id),
                 Strings.XpSettingsDisplayInfo(
                     ctx.Guild.Id,
-                    settings.LevelUpMessage,
                     string.IsNullOrWhiteSpace(settings.CustomXpImageUrl)
                         ? Strings.No(ctx.Guild.Id)
                         : Strings.Yes(ctx.Guild.Id)
@@ -547,6 +546,25 @@ public class Xp(
                 }
             }
         });
+    }
+
+    /// <summary>
+    ///     Sets whether role rewards are exclusive (only highest level role) or additive (all earned roles).
+    /// </summary>
+    /// <param name="exclusive">Whether role rewards should be exclusive.</param>
+    /// <example>.setxpexclusive true</example>
+    /// <example>.setxpexclusive false</example>
+    [Cmd]
+    [Aliases]
+    [UserPerm(GuildPermission.ManageGuild)]
+    public async Task SetXpExclusive(bool exclusive)
+    {
+        await Service.UpdateGuildXpSettingsAsync(ctx.Guild.Id, settings => settings.ExclusiveRoleRewards = exclusive);
+
+        if (exclusive)
+            await ReplyConfirmAsync(Strings.XpExclusiveEnabled(ctx.Guild.Id)).ConfigureAwait(false);
+        else
+            await ReplyConfirmAsync(Strings.XpExclusiveDisabled(ctx.Guild.Id)).ConfigureAwait(false);
     }
 
     /// <summary>

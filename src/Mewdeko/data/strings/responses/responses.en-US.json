@@ -618,7 +618,7 @@
   "xp_general_settings": "🛠️ General Settings",
   "xp_settings_general_info": "XP Gain Disabled: **{0}**\nExclusive Role Rewards: **{1}**",
   "xp_display_settings": "🎨 Display & Notifications",
-  "xp_settings_display_info": "Level Up Message: ```{0}```\nCustom XP Card Background: **{1}**",
+  "xp_settings_display_info": "Custom XP Card Background: **{0}**",
   "xp_decay_settings": "📉 XP Decay Settings",
   "xp_settings_decay_info": "Decay Enabled: **{0}**\nInactivity Days Before Decay: **{1}**\nDaily Decay Percentage: **{2}%**",
   "xp_exclusions": "🚫 Exclusions",
@@ -1821,8 +1821,6 @@
   "eval_compiling": "Evaluating...",
   "will_not": "will not",
   "regular": "Regular",
-  "enabled": "Enabled",
-  "disabled": "Disabled",
   "mini_warned_on_by": "Mini warned on {0} at {1} by {2}",
   "mini_warn_cleared_by": "Cleared by {0}",
   "mini_warnings_list": "Mini Warnings List",
@@ -3632,5 +3630,7 @@
   "rep_role_xp_reward": "XP Reward: {0}",
   "page_num": "Page {0}",
   "module_description_reputation": "Reputation system for recognizing helpful community members.",
-  "rep_role_announce_channel": "Announcement Channel: {0}"
+  "rep_role_announce_channel": "Announcement Channel: {0}",
+  "xp_exclusive_enabled": "Exclusive Xp Roles Enabled: Users will only retain the highest level role.",
+  "xp_exclusive_disabled": "Exclusive Xp Roles Disabled: Users will retain all level roles."
 }
