@@ -26216,6 +26216,16 @@ setxpcurve:
       desc: 'The XP curve type: Default, Flat, or Steep.'
       type: XpCurveType
       optional: false
+setxpexclusive:
+  desc: Sets whether role rewards are exclusive (only highest level role) or additive (all earned roles).
+  args:
+    - true|false
+  params:
+    - &o641a
+      name: exclusive
+      desc: Whether role rewards should be exclusive.
+      type: bool
+      optional: false
 setchannelxp:
   desc: Sets an XP multiplier for a channel.
   args:

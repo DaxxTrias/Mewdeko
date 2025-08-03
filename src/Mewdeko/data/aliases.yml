@@ -2479,6 +2479,12 @@ setxpmultiplier:
   - xpmult
 setxpcurve:
   - setxpcurve
+setxpexclusive:
+  - setxpexclusive
+  - xpexclusive
+  - exclusivexp
+  - setxpexcl
+  - xpexcl
 setchannelxp:
   - setchannelxp
 setrolexp:
