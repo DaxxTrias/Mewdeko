@@ -1,6 +1,7 @@
 using System.Text.Json;
 using DataModel;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.Currency.Services;
 using Mewdeko.Modules.Xp.Events;
@@ -20,7 +21,6 @@ public class XpRewardManager : INService
     private readonly DiscordShardedClient client;
     private readonly ICurrencyService currencyService;
     private readonly IDataConnectionFactory dbFactory;
-    private readonly EventHandler eventHandler;
     private readonly ILogger<XpRewardManager> logger;
     private readonly GeneratedBotStrings Strings;
     private readonly XpService xpService;
@@ -35,6 +35,7 @@ public class XpRewardManager : INService
     /// <param name="strings">The localized strings service.</param>
     /// <param name="logger">The logger instance for structured logging.</param>
     /// <param name="eventHandler">The event handler service.</param>
+    /// <param name="xpService">The xp service.</param>
     public XpRewardManager(
         DiscordShardedClient client,
         IDataConnectionFactory dbFactory,
@@ -48,7 +49,6 @@ public class XpRewardManager : INService
         this.cacheManager = cacheManager;
         Strings = strings;
         this.logger = logger;
-        this.eventHandler = eventHandler;
         this.xpService = xpService;
 
         // Subscribe individual methods to XP level change events for better separation of concerns

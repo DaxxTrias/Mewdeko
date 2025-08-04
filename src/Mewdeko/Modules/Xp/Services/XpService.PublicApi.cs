@@ -2,6 +2,7 @@ using System.IO;
 using System.Text.Json;
 using DataModel;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Modules.Xp.Events;
 using Mewdeko.Modules.Xp.Models;
 using Microsoft.Extensions.DependencyInjection;

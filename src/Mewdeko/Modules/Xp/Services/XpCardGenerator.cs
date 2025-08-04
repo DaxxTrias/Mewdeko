@@ -3,6 +3,7 @@ using System.Net.Http;
 using DataModel;
 using Humanizer;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Modules.Xp.Models;
 using SkiaSharp;
 

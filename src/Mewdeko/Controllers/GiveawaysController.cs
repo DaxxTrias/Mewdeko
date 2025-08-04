@@ -1,7 +1,7 @@
 using System.Net.Http;
 using System.Text.Json;
 using DataModel;
-using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Controllers.Common.Giveaways;
 using Mewdeko.Modules.Giveaways.Services;
 using Mewdeko.Services.Impl;

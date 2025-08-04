@@ -1,5 +1,6 @@
 using DataModel;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Controllers.Common.Chat;
 using Newtonsoft.Json;
 

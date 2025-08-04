@@ -2,6 +2,7 @@
 using Discord.Commands;
 using Humanizer;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Common.Collections;
 using Mewdeko.Common.TypeReaders;

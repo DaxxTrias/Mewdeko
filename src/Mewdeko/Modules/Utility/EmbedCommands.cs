@@ -1,5 +1,6 @@
 using Discord.Commands;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Modules.Utility.Services;
 using Embed = DataModel.Embed;

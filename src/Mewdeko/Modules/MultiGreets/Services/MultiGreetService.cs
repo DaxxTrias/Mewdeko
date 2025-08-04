@@ -1,6 +1,7 @@
 ﻿using DataModel;
 using Discord.Net;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Modules.Utility.Services;
 
 namespace Mewdeko.Modules.MultiGreets.Services;

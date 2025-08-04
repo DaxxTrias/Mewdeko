@@ -1,5 +1,6 @@
 ﻿using Discord.Commands;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Common.DiscordImplementations;
 using Mewdeko.Modules.Permissions.Common;
 using Mewdeko.Modules.Permissions.Services;

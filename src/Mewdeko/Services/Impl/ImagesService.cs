@@ -15,36 +15,6 @@ public sealed class FusionImagesCache : IImageCache, IReadyExecutor, INService
     public enum ImageKeys
     {
         /// <summary>
-        ///     Coin heads image key.
-        /// </summary>
-        CoinHeads,
-
-        /// <summary>
-        ///     Coin tails image key.
-        /// </summary>
-        CoinTails,
-
-        /// <summary>
-        ///     Dice image key.
-        /// </summary>
-        Dice,
-
-        /// <summary>
-        ///     Slot machine background image key.
-        /// </summary>
-        SlotBg,
-
-        /// <summary>
-        ///     Slot machine emojis image key.
-        /// </summary>
-        SlotEmojis,
-
-        /// <summary>
-        ///     Currency image key.
-        /// </summary>
-        Currency,
-
-        /// <summary>
         ///     Rip overlay image key.
         /// </summary>
         RipOverlay,
@@ -61,9 +31,6 @@ public sealed class FusionImagesCache : IImageCache, IReadyExecutor, INService
     }
 
     private const string BasePath = "data/images/";
-    private const string CardsPath = BasePath + "cards/";
-    private const string CoinPath = BasePath + "coin/";
-    private const string EmojiPath = BasePath + "emoji/";
 
     private readonly IFusionCache cache;
 
@@ -74,18 +41,13 @@ public sealed class FusionImagesCache : IImageCache, IReadyExecutor, INService
     ///     Initializes a new instance of the <see cref="FusionImagesCache" /> class.
     /// </summary>
     /// <param name="cache">The FusionCache instance.</param>
-    /// <param name="creds">The bot credentials.</param>
     /// <param name="logger">The logger instance for structured logging.</param>
-    public FusionImagesCache(IFusionCache cache, IBotCredentials creds, ILogger<FusionImagesCache> logger)
+    public FusionImagesCache(IFusionCache cache, ILogger<FusionImagesCache> logger)
     {
         this.cache = cache;
         this.logger = logger;
     }
 
-    /// <summary>
-    ///     Image URLs.
-    /// </summary>
-    public ImageUrls ImageUrls { get; }
 
     /// <summary>
     ///     Retrieves a byte array representing the background image for the XP system.
@@ -105,7 +67,7 @@ public sealed class FusionImagesCache : IImageCache, IReadyExecutor, INService
     {
         get
         {
-            return GetByteData(ImageKeys.RipBg, EmojiPath, "rip-bg.png");
+            return GetByteData(ImageKeys.RipBg, BasePath, "rip-bg.png");
         }
     }
 
@@ -116,30 +78,16 @@ public sealed class FusionImagesCache : IImageCache, IReadyExecutor, INService
     {
         get
         {
-            return GetByteData(ImageKeys.RipOverlay, EmojiPath, "rip-overlay.png");
+            return GetByteData(ImageKeys.RipOverlay, BasePath, "rip-overlay.png");
         }
     }
 
-
-    /// <summary>
-    ///     Retrieves a card image byte array based on the provided key.
-    /// </summary>
-    /// <param name="key">The key of the card image.</param>
-    /// <returns>The byte array representing the card image.</returns>
-    public byte[] GetCard(string key)
-    {
-        return File.ReadAllBytes(Path.Join(CardsPath, $"{key}.jpg"));
-    }
 
     /// <summary>
     ///     Reloads all image data from the specified sources.
     /// </summary>
     public async Task Reload()
     {
-        await Load(ImageKeys.CoinHeads, Directory.GetFiles(CoinPath, "head-coin.png")).ConfigureAwait(false);
-        await Load(ImageKeys.CoinTails, Directory.GetFiles(CoinPath, "tail-coin.png")).ConfigureAwait(false);
-        await Load(ImageKeys.Dice, Directory.GetFiles(BasePath, "dice*.png")).ConfigureAwait(false);
-        await Load(ImageKeys.SlotEmojis, Directory.GetFiles(EmojiPath)).ConfigureAwait(false);
         await Load(ImageKeys.XpBg, Directory.GetFiles(BasePath + "xp-background/", "xp.png")).ConfigureAwait(false);
     }
 
@@ -148,20 +96,11 @@ public sealed class FusionImagesCache : IImageCache, IReadyExecutor, INService
     /// </summary>
     public async Task OnReadyAsync()
     {
-        logger.LogInformation($"Starting {GetType()} Cache");
+        logger.LogInformation("Starting {GetType} Cache", GetType());
         if (await AllKeysExist().ConfigureAwait(false))
             return;
 
         await Reload().ConfigureAwait(false);
-    }
-
-    private async Task Load(ImageKeys key, string path)
-    {
-        var data = await GetImageDataFromFile(path).ConfigureAwait(false);
-        if (data is null)
-            return;
-
-        await cache.SetAsync(GetCacheKey(key), data).ConfigureAwait(false);
     }
 
     private async Task Load(ImageKeys key, string[] paths)
@@ -207,16 +146,6 @@ public sealed class FusionImagesCache : IImageCache, IReadyExecutor, INService
     private static IEnumerable<ImageKeys> GetAllKeys()
     {
         return Enum.GetValues<ImageKeys>();
-    }
-
-    private IReadOnlyList<byte[]> GetByteArrayData(ImageKeys key, string path, string pattern)
-    {
-        return cache.GetOrSet(GetCacheKey(key), async _ =>
-        {
-            var files = Directory.GetFiles(path, pattern);
-            var data = await Task.WhenAll(files.Select(file => File.ReadAllBytesAsync(file)));
-            return data;
-        }, TimeSpan.FromDays(1)).Result;
     }
 
     private byte[] GetByteData(ImageKeys key, string path, string fileName)

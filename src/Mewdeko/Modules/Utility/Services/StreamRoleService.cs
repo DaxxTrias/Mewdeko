@@ -2,6 +2,7 @@ using System.Net;
 using DataModel;
 using Discord.Net;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Common.TypeReaders;
 using Mewdeko.Modules.Utility.Common;

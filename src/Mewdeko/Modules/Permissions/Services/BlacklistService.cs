@@ -1,5 +1,6 @@
 ﻿using DataModel;
 using LinqToDB;
+using LinqToDB.Async;
 using LinqToDB.Data;
 using Mewdeko.Common.Configs;
 using Mewdeko.Common.ModuleBehaviors;

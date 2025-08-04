@@ -1,5 +1,6 @@
 using DataModel;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Modules.Xp.Models;
 using Mewdeko.Modules.Xp.Services;
 using Microsoft.AspNetCore.Authorization;

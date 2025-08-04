@@ -152,7 +152,7 @@ public class TwitchHelixProvider : Provider
                     }
                 }
             }
-            catch (Exception ex)
+            catch
             {
                 return new List<StreamData>();
             }
@@ -194,7 +194,7 @@ public class TwitchHelixProvider : Provider
                     }
                 }
             }
-            catch (Exception ex)
+            catch
             {
                 return new List<StreamData>();
             }

@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Threading;
 using DataModel;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Controllers.Common.Bot;
 using Mewdeko.Services.Impl;

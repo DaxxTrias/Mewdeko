@@ -1,6 +1,7 @@
 ﻿using System.Collections.Concurrent;
 using System.Data;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Common.ModuleBehaviors;
 using DiscordShardedClient = Discord.WebSocket.DiscordShardedClient;
 using VcRole = DataModel.VcRole;

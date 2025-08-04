@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Threading;
 using DataModel;
-using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Modules.Xp.Models;
 using Microsoft.Extensions.Caching.Memory;
 

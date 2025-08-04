@@ -2,7 +2,7 @@
 using System.Text.Json;
 using System.Threading;
 using DataModel;
-using LinqToDB;
+using LinqToDB.Async;
 using LinqToDB.Data;
 using SkiaSharp;
 using StackExchange.Redis;

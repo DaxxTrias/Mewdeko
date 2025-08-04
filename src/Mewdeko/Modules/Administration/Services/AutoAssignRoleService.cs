@@ -2,6 +2,7 @@
 using DataModel;
 using Discord.Net;
 using LinqToDB;
+using LinqToDB.Async;
 
 namespace Mewdeko.Modules.Administration.Services;
 

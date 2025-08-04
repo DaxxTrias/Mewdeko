@@ -2,6 +2,7 @@
 using DataModel;
 using Humanizer;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Services.Settings;
 using Mewdeko.Services.Strings;

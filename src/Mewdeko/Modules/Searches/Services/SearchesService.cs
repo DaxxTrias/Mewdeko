@@ -8,7 +8,7 @@ using System.Threading;
 using AngleSharp.Html.Dom;
 using AngleSharp.Html.Parser;
 using GTranslate.Translators;
-using LinqToDB;
+using LinqToDB.Async;
 using MartineApiNet;
 using MartineApiNet.Enums;
 using MartineApiNet.Models.Images;

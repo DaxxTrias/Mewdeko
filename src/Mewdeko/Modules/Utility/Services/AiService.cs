@@ -8,6 +8,7 @@ using System.Text.Json.Serialization;
 using Antlr4.Runtime.Misc;
 using DataModel;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Common.Configs;
 using Mewdeko.Modules.Utility.Services.Impl;
 using Mewdeko.Services.Strings;

@@ -10,7 +10,7 @@ using Discord.Rest;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
 using LibGit2Sharp;
-using LinqToDB;
+using LinqToDB.Async;
 using LinqToDB.Data;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Common.Configs;

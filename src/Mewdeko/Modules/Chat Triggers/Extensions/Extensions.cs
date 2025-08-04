@@ -2,7 +2,7 @@ using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 using AngleSharp;
 using AngleSharp.Html.Dom;
-using LinqToDB;
+using LinqToDB.Async;
 using Serilog;
 using ChatTrigger = DataModel.ChatTrigger;
 

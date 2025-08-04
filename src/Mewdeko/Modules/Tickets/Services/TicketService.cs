@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using DataModel;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Database.L2DB;
 using Mewdeko.Modules.Tickets.Common;
 using Mewdeko.Services.Strings;

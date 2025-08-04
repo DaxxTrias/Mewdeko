@@ -206,7 +206,7 @@ public class NotifChecker
 
                     await Task.Delay(3000).ConfigureAwait(false);
                 }
-                catch (Exception ex)
+                catch
                 {
                     await Task.Delay(10000).ConfigureAwait(false); // Wait 10 seconds before retrying
                 }

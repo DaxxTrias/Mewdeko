@@ -1,6 +1,7 @@
 using System.Net.Http;
 using DataModel;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Modules.Currency.Services;
 using Mewdeko.Modules.Xp.Models;
 using Mewdeko.Services.Strings;

@@ -2,6 +2,7 @@
 using System.Net.Http;
 using DataModel;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Modules.Starboard.Common;
 using Mewdeko.Services.Strings;
