@@ -1624,6 +1624,7 @@ public class Xp(
 
         async Task<PageBuilder> PageFactory(int page)
         {
+            await Task.CompletedTask;
             var embed = new PageBuilder()
                 .WithTitle(Strings.LevelUpMessagesTitle(ctx.Guild.Id))
                 .WithOkColor();

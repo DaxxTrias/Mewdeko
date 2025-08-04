@@ -1,6 +1,6 @@
 ﻿using Discord.Commands;
 using Discord.Interactions;
-using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Common.Collections;
 using Mewdeko.Common.ModuleBehaviors;
 using CommandInfo = Discord.Commands.CommandInfo;

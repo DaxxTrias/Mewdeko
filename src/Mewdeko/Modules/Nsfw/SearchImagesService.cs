@@ -2,6 +2,7 @@ using System.Net.Http;
 using System.Threading;
 using DataModel;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Modules.Nsfw.Common;
 
 namespace Mewdeko.Modules.Nsfw;

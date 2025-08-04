@@ -1,4 +1,4 @@
-using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Controllers.Common.Birthday;
 using Mewdeko.Modules.Birthday.Common;
 using Mewdeko.Modules.Birthday.Services;

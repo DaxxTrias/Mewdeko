@@ -15,10 +15,10 @@ public class RepCustomType
     public ulong GuildId { get; set; }
 
     [Column("TypeName")]
-    public string TypeName { get; set; }
+    public string? TypeName { get; set; }
 
     [Column("DisplayName")]
-    public string DisplayName { get; set; }
+    public string? DisplayName { get; set; }
 
     [Column("Description")]
     public string? Description { get; set; }

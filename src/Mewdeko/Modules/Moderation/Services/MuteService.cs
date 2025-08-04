@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Threading;
 using DataModel;
 using LinqToDB;
+using LinqToDB.Async;
 using LinqToDB.Data;
 using Mewdeko.Common.Collections;
 using Mewdeko.Common.ModuleBehaviors;

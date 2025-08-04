@@ -1,6 +1,7 @@
 using System.Threading;
 using DataModel;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Common.Configs;
 using Mewdeko.Modules.Birthday.Common;
 using Mewdeko.Modules.UserProfile.Common;

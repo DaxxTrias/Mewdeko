@@ -1,6 +1,7 @@
 ﻿using DataModel;
 using Discord.Commands;
 using LinqToDB;
+using LinqToDB.Async;
 
 namespace Mewdeko.Modules.Administration.Services;
 

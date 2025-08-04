@@ -12,10 +12,6 @@ public interface IBotCredentials
     /// </summary>
     public string Token { get; }
 
-    /// <summary>
-    ///     Gets the bot's client secret.
-    /// </summary>
-    public string ClientSecret { get; }
 
     /// <summary>
     ///     Gets the bot's Google API key.
@@ -32,15 +28,6 @@ public interface IBotCredentials
     /// </summary>
     public ImmutableArray<ulong> OwnerIds { get; }
 
-    /// <summary>
-    ///     Gets the bot's Statcord key.
-    /// </summary>
-    public string StatcordKey { get; }
-
-    /// <summary>
-    ///     Gets the bot's Mashape key.
-    /// </summary>
-    public string MashapeKey { get; }
 
     /// <summary>
     ///     Gets the bot's Spotify client ID.
@@ -77,10 +64,6 @@ public interface IBotCredentials
     /// </summary>
     public string TrovoClientId { get; }
 
-    /// <summary>
-    ///     Gets the command used to restart the bot.
-    /// </summary>
-    public RestartConfig RestartCommand { get; }
 
     /// <summary>
     ///     Gets the token used for voting.
@@ -122,10 +105,6 @@ public interface IBotCredentials
     /// </summary>
     public string LastFmApiKey { get; }
 
-    /// <summary>
-    ///     Last.fm API secret
-    /// </summary>
-    public string LastFmApiSecret { get; }
 
     /// <summary>
     ///     Gets the bot's Patreon client ID.

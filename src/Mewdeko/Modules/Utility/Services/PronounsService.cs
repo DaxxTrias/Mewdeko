@@ -1,6 +1,6 @@
 using System.Net.Http;
 using System.Text.Json;
-using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Modules.UserProfile.Common;
 using Mewdeko.Modules.Utility.Common;
 

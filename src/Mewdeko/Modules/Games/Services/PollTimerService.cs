@@ -1,5 +1,6 @@
 using System.Threading;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Services.Strings;
 using Poll = DataModel.Poll;

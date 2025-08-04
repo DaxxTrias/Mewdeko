@@ -1,6 +1,6 @@
 using DataModel;
 using Discord.Net;
-using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Modules.Xp.Models;
 
 namespace Mewdeko.Modules.Xp.Services;

@@ -2,6 +2,7 @@
 using System.Threading;
 using DataModel;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Services.Strings;
 
 namespace Mewdeko.Modules.CustomVoice.Services;
