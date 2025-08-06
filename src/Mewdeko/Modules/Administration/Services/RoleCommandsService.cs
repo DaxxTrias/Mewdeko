@@ -202,7 +202,8 @@ public class RoleCommandsService : INService
         try
         {
             // Insert main message
-            await db.InsertAsync(reactionRoleMessage).ConfigureAwait(false);
+            var id = await db.InsertWithInt32IdentityAsync(reactionRoleMessage).ConfigureAwait(false);
+            reactionRoleMessage.Id = id;
             if (reactionRoleMessage.ReactionRoles != null && reactionRoleMessage.ReactionRoles.Any())
             {
                 foreach (var rr in reactionRoleMessage.ReactionRoles)

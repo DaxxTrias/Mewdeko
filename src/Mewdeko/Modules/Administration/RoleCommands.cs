@@ -34,87 +34,94 @@ public partial class Administration
 
         private async Task InternalReactionRoles(bool exclusive, ulong? messageId, params string[] input)
         {
-            var target = messageId is { } msgId
-                ? await ctx.Channel.GetMessageAsync(msgId).ConfigureAwait(false)
-                : (await ctx.Channel.GetMessagesAsync(2).FlattenAsync().ConfigureAwait(false))
-                .Skip(1)
-                .FirstOrDefault();
-
-            if (input.Length % 2 != 0)
-                return;
-
-            var grp = 0;
-            var results = input
-                .GroupBy(_ => grp++ / 2)
-                .Select(async x =>
-                {
-                    var inputRoleStr = x.First();
-                    var roleReader = new RoleTypeReader<SocketRole>();
-                    var roleResult = await roleReader.ReadAsync(ctx, inputRoleStr, services).ConfigureAwait(false);
-                    if (!roleResult.IsSuccess)
-                    {
-                        logger.LogWarning("Role {0} not found", inputRoleStr);
-                        return null;
-                    }
-
-                    var role = (IRole)roleResult.BestMatch;
-                    if (role.Position > ((IGuildUser)ctx.User).GetRoles().Select(r => r.Position).Max()
-                        && ctx.User.Id != ctx.Guild.OwnerId)
-                    {
-                        return null;
-                    }
-
-                    var emote = x.Last().ToIEmote();
-                    return new
-                    {
-                        role, emote
-                    };
-                })
-                .Where(x => x != null);
-
-            var all = await Task.WhenAll(results).ConfigureAwait(false);
-
-            if (all.Length == 0)
-                return;
-
-            foreach (var x in all)
+            try
             {
-                try
-                {
-                    if (target != null)
-                    {
-                        await target.AddReactionAsync(x.emote, new RequestOptions
-                        {
-                            RetryMode = RetryMode.Retry502 | RetryMode.RetryRatelimit
-                        }).ConfigureAwait(false);
-                    }
-                }
-                catch (HttpException ex) when (ex.HttpCode == HttpStatusCode.BadRequest)
-                {
-                    await ReplyErrorAsync(Strings.ReactionCantAccess(ctx.Guild.Id, Format.Code(x.emote.ToString())))
-                        .ConfigureAwait(false);
+                var target = messageId is { } msgId
+                    ? await ctx.Channel.GetMessageAsync(msgId).ConfigureAwait(false)
+                    : (await ctx.Channel.GetMessagesAsync(2).FlattenAsync().ConfigureAwait(false))
+                    .Skip(1)
+                    .FirstOrDefault();
+
+                if (input.Length % 2 != 0)
                     return;
+
+                var grp = 0;
+                var results = input
+                    .GroupBy(_ => grp++ / 2)
+                    .Select(async x =>
+                    {
+                        var inputRoleStr = x.First();
+                        var roleReader = new RoleTypeReader<SocketRole>();
+                        var roleResult = await roleReader.ReadAsync(ctx, inputRoleStr, services).ConfigureAwait(false);
+                        if (!roleResult.IsSuccess)
+                        {
+                            logger.LogWarning("Role {0} not found", inputRoleStr);
+                            return null;
+                        }
+
+                        var role = (IRole)roleResult.BestMatch;
+                        if (role.Position > ((IGuildUser)ctx.User).GetRoles().Select(r => r.Position).Max()
+                            && ctx.User.Id != ctx.Guild.OwnerId)
+                        {
+                            return null;
+                        }
+
+                        var emote = x.Last().ToIEmote();
+                        return new
+                        {
+                            role, emote
+                        };
+                    })
+                    .Where(x => x != null);
+
+                var all = await Task.WhenAll(results).ConfigureAwait(false);
+
+                if (all.Length == 0)
+                    return;
+
+                foreach (var x in all)
+                {
+                    try
+                    {
+                        if (target != null)
+                        {
+                            await target.AddReactionAsync(x.emote, new RequestOptions
+                            {
+                                RetryMode = RetryMode.Retry502 | RetryMode.RetryRatelimit
+                            }).ConfigureAwait(false);
+                        }
+                    }
+                    catch (HttpException ex) when (ex.HttpCode == HttpStatusCode.BadRequest)
+                    {
+                        await ReplyErrorAsync(Strings.ReactionCantAccess(ctx.Guild.Id, Format.Code(x.emote.ToString())))
+                            .ConfigureAwait(false);
+                        return;
+                    }
+
+                    await Task.Delay(500).ConfigureAwait(false);
                 }
 
-                await Task.Delay(500).ConfigureAwait(false);
-            }
-
-            if (target != null && await Service.Add(ctx.Guild.Id, new ReactionRoleMessage
-                {
-                    Exclusive = exclusive,
-                    MessageId = target.Id,
-                    ChannelId = target.Channel.Id,
-                    ReactionRoles = all.Select(x => new ReactionRole
+                if (target != null && await Service.Add(ctx.Guild.Id, new ReactionRoleMessage
                     {
-                        EmoteName = x.emote.ToString(), RoleId = x.role.Id
-                    }).ToList()
-                }))
-            {
-                await ctx.OkAsync().ConfigureAwait(false);
+                        Exclusive = exclusive,
+                        MessageId = target.Id,
+                        ChannelId = target.Channel.Id,
+                        ReactionRoles = all.Select(x => new ReactionRole
+                        {
+                            EmoteName = x.emote.ToString(), RoleId = x.role.Id
+                        }).ToList()
+                    }))
+                {
+                    await ctx.OkAsync().ConfigureAwait(false);
+                }
+                else
+                {
+                    await ReplyErrorAsync(Strings.ReactionRolesError(ctx.Guild.Id)).ConfigureAwait(false);
+                }
             }
-            else
+            catch (Exception e)
             {
-                await ReplyErrorAsync(Strings.ReactionRolesFull(ctx.Guild.Id)).ConfigureAwait(false);
+                logger.LogError("There was an error adding a reaction role, see below exception: {Exception}", e);
             }
         }
 
