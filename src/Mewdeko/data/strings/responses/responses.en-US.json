@@ -610,6 +610,7 @@
   "xp_added": "Added {0} XP to {1}.",
   "xp_set": "Set {0}'s XP to {1}.",
   "xp_reset": "Reset {0}'s XP to zero.",
+
   "xp_reset_with_bonus": "Reset {0}'s XP and bonus XP to zero.",
   "xp_notification_set": "Your level-up notifications are now set to: {0}",
   "xp_settings_title": "⚙️ XP Settings for {0}",
@@ -2069,7 +2070,7 @@
   "rc": "Color of {0} role has been changed.",
   "reaction_cant_access": "I can't access {0} reaction. You can only use emotes from servers I'm in.",
   "reaction_role_removed": "Removed ReactionRole message #{0}",
-  "reaction_roles_full": "You've reached the limit on ReactionRole messages. You have to delete some.",
+  "reaction_roles_error": "There was an error adding a reaction role, please either see console or join the support server below.",
   "reason": "Reason",
   "redacted_too_long": "Redacted because it's too long.",
   "remind_invalid_format": "Not a valid remind format. Check the command list.",
