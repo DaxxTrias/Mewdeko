@@ -17,6 +17,7 @@ using Mewdeko.Services.Strings;
 using Newtonsoft.Json.Linq;
 using Refit;
 using SkiaSharp;
+using System.Globalization;
 
 namespace Mewdeko.Modules.Searches.Services;
 
@@ -388,22 +389,16 @@ public class SearchesService : INService, IUnloadableService
     /// <param name="query">The location query.</param>
     public async Task<OpenMeteoWeatherResponse?> GetWeatherDataAsync(string query)
     {
-        using var http = httpFactory.CreateClient();
+        using var http = httpFactory.CreateClient("openmeteo");
         try
         {
-            // First, geocode the location
-            var geocodeUrl =
-                $"https://geocoding-api.open-meteo.com/v1/search?name={Uri.EscapeDataString(query)}&count=1&language=en";
-            var geocodeResponse = await http.GetStringAsync(geocodeUrl).ConfigureAwait(false);
-            var geocodeData = JsonSerializer.Deserialize<OpenMeteoGeocodingResponse>(geocodeResponse);
-
-            if (geocodeData?.Results == null || geocodeData.Results.Count == 0)
+            // Geocode with fallback (Open‑Meteo → OSM Nominatim)
+            var location = await GeocodeWithFallbackAsync(query, http).ConfigureAwait(false);
+            if (location == null)
             {
                 logger.LogWarning("No location found for query: {Query}", query);
                 return null;
             }
-
-            var location = geocodeData.Results[0];
 
             // Now get weather data
             var weatherUrl =
@@ -503,22 +498,16 @@ public class SearchesService : INService, IUnloadableService
             return (candidates, null);
         }
 
-        using var http = httpFactory.CreateClient();
+        using var http = httpFactory.CreateClient("openmeteo");
         try
         {
-            // First, geocode the location using Open-Meteo
-            var geocodeUrl =
-                $"https://geocoding-api.open-meteo.com/v1/search?name={Uri.EscapeDataString(query)}&count=1&language=en";
-            var geocodeResponse = await http.GetStringAsync(geocodeUrl).ConfigureAwait(false);
-            var geocodeData = JsonSerializer.Deserialize<OpenMeteoGeocodingResponse>(geocodeResponse);
-
-            if (geocodeData?.Results == null || geocodeData.Results.Count == 0)
+            // Geocode with fallback (Open‑Meteo → OSM Nominatim)
+            var location = await GeocodeWithFallbackAsync(query, http).ConfigureAwait(false);
+            if (location == null)
             {
                 logger.LogWarning("Geocoding failed for time query: {Query}", query);
                 return (default, TimeErrors.NotFound);
             }
-
-            var location = geocodeData.Results[0];
 
             // Get basic weather data to obtain timezone information
             var weatherUrl =
@@ -1278,6 +1267,103 @@ public class SearchesService : INService, IUnloadableService
             results.AsReadOnly(),
             fullQueryLink,
             "0");
+    }
+
+    private async Task<LocationEntry?> GeocodeWithFallbackAsync(string query, HttpClient http)
+    {
+        // Try Open‑Meteo geocoding first
+        try
+        {
+            var geocodeUrl = $"https://geocoding-api.open-meteo.com/v1/search?name={Uri.EscapeDataString(query)}&count=1&language=en";
+            var geocodeResponse = await http.GetStringAsync(geocodeUrl).ConfigureAwait(false);
+            var geocodeData = JsonSerializer.Deserialize<OpenMeteoGeocodingResponse>(geocodeResponse);
+            if (geocodeData?.Results?.Count > 0)
+            {
+                var r = geocodeData.Results[0];
+                return new LocationEntry
+                {
+                    Name = r.Name,
+                    Admin1 = r.Admin1,
+                    Country = r.Country,
+                    CountryCode = r.CountryCode,
+                    Latitude = r.Latitude,
+                    Longitude = r.Longitude
+                };
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogDebug(ex, "Primary geocoding failed, will try fallback");
+        }
+
+        // Fallback: OSM Nominatim
+        try
+        {
+            var osmUrl = $"https://nominatim.openstreetmap.org/search?q={Uri.EscapeDataString(query)}&format=json&limit=1&addressdetails=1";
+            using var req = new HttpRequestMessage(HttpMethod.Get, osmUrl);
+            // Ensure User-Agent to satisfy Nominatim policy
+            if (!req.Headers.UserAgent.Any())
+                req.Headers.UserAgent.ParseAdd("MewdekoBot/1.0 (+https://github.com/)");
+            var res = await http.SendAsync(req).ConfigureAwait(false);
+            res.EnsureSuccessStatusCode();
+            await using var stream = await res.Content.ReadAsStreamAsync().ConfigureAwait(false);
+            var osm = await JsonSerializer.DeserializeAsync<List<NominatimItem>>(stream, CachedJsonOptions).ConfigureAwait(false);
+            var item = osm?.FirstOrDefault();
+            if (item == null)
+                return null;
+
+            var name = item.address?.city ?? item.address?.town ?? item.address?.village ?? (item.display_name?.Split(',').FirstOrDefault()?.Trim() ?? query);
+            var admin1 = item.address?.state;
+            var country = item.address?.country ?? string.Empty;
+            var countryCode = item.address?.country_code?.ToUpperInvariant();
+            if (!double.TryParse(item.lat, NumberStyles.Float, CultureInfo.InvariantCulture, out var lat))
+                return null;
+            if (!double.TryParse(item.lon, NumberStyles.Float, CultureInfo.InvariantCulture, out var lon))
+                return null;
+
+            return new LocationEntry
+            {
+                Name = name,
+                Admin1 = admin1,
+                Country = country,
+                CountryCode = countryCode,
+                Latitude = lat,
+                Longitude = lon
+            };
+        }
+        catch (Exception ex)
+        {
+            logger.LogDebug(ex, "Fallback geocoding failed");
+            return null;
+        }
+    }
+
+    private sealed class LocationEntry
+    {
+        public string Name { get; set; } = string.Empty;
+        public string? Admin1 { get; set; }
+        public string? Country { get; set; }
+        public string? CountryCode { get; set; }
+        public double Latitude { get; set; }
+        public double Longitude { get; set; }
+    }
+
+    private sealed class NominatimItem
+    {
+        public string? display_name { get; set; }
+        public string? lat { get; set; }
+        public string? lon { get; set; }
+        public NominatimAddress? address { get; set; }
+    }
+
+    private sealed class NominatimAddress
+    {
+        public string? city { get; set; }
+        public string? town { get; set; }
+        public string? village { get; set; }
+        public string? state { get; set; }
+        public string? country { get; set; }
+        public string? country_code { get; set; }
     }
 }
 

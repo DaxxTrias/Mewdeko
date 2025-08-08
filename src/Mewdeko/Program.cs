@@ -1,5 +1,8 @@
 using System.IO;
+using System.Net;
 using System.Net.Http;
+using System.Net.Security;
+using System.Security.Authentication;
 using System.Text;
 using System.Text.Json.Serialization;
 using Discord.Commands;
@@ -415,6 +418,23 @@ public class Program
         {
             AllowAutoRedirect = false
         });
+        services.AddHttpClient("openmeteo")
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+            {
+                AutomaticDecompression = DecompressionMethods.All,
+                SslOptions = new SslClientAuthenticationOptions
+                {
+                    EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13
+                }
+            })
+            .ConfigureHttpClient(client =>
+            {
+                client.DefaultRequestVersion = HttpVersion.Version11;
+                client.DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrLower;
+                client.DefaultRequestHeaders.Add("User-Agent", "MewdekoBot/1.0 (+https://github.com/)");
+                client.DefaultRequestHeaders.Accept.ParseAdd("application/json");
+                client.Timeout = TimeSpan.FromSeconds(15);
+            });
 
         services.Scan(scan => scan.FromAssemblyOf<IReadyExecutor>()
             .AddClasses(classes => classes.AssignableToAny(
