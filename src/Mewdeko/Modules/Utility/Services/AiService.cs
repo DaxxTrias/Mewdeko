@@ -835,7 +835,7 @@ public class AiService : INService
                         if (needsSplitting)
                         {
                             // Handle multi-part response with JSON template
-                            await SendMultipartJsonEmbeds(responseChunks);
+                            await SendMultipartJsonEmbeds(responseChunks, isFinalUpdate);
                             return;
                         }
 
@@ -913,7 +913,7 @@ public class AiService : INService
             if (needsSplitting)
             {
                 // Send multiple regular embeds
-                await SendMultipartRegularEmbeds(responseChunks);
+                await SendMultipartRegularEmbeds(responseChunks, isFinalUpdate);
             }
             else
             {
@@ -1069,97 +1069,149 @@ public class AiService : INService
             }
 
             // Helper method to send multiple embeds when using JSON templates
-            async Task SendMultipartJsonEmbeds(List<string> chunks)
+            async Task SendMultipartJsonEmbeds(List<string> chunks, bool isFinalUpdate)
             {
-                // For the initial message (or webhook update)
-                var allEmbeds = new List<Embed>();
+                // If not final, only render the first chunk into the main message to avoid exceeding limits
+                var processAllChunks = isFinalUpdate;
 
-                for (var i = 0; i < chunks.Count; i++)
+                // Build the embed(s) for the first chunk using the template
+                try
+                {
+                    var escapedChunk = EscapeJsonString(chunks[0]);
+                    var jsonTemplate = initialTemplate.Replace("%airesponse%", escapedChunk);
+
+                    var newEmbed = JsonSerializer.Deserialize<NewEmbed>(jsonTemplate);
+                    if (newEmbed != null && (newEmbed.Embeds?.Count > 0 || newEmbed.Embed != null))
+                    {
+                        var firstMessageEmbeds = GetDiscordEmbeds(newEmbed);
+
+                        if (webhook != null && webhookMessageId.HasValue)
+                        {
+                            await webhook.ModifyMessageAsync(webhookMessageId.Value, msg =>
+                            {
+                                msg.Content = newEmbed.Content;
+                                msg.Embeds = firstMessageEmbeds;
+                            });
+                        }
+                        else if (regularMessage != null)
+                        {
+                            await regularMessage.ModifyAsync(msg =>
+                            {
+                                msg.Content = newEmbed.Content;
+                                msg.Embeds = firstMessageEmbeds.ToArray();
+                            });
+                        }
+                        else
+                        {
+                            regularMessage = await userMsg.Channel.SendMessageAsync(
+                                newEmbed.Content,
+                                embeds: firstMessageEmbeds.ToArray(),
+                                allowedMentions: AllowedMentions.None);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning($"Error creating JSON embed for first chunk: {ex.Message}");
+
+                    // Fallback for the first chunk
+                    var fallbackEmbed = new EmbedBuilder()
+                        .WithOkColor()
+                        .WithTitle($"Response (Part 1/{chunks.Count})")
+                        .WithDescription(chunks[0])
+                        .WithFooter(strings.AiResponseFooter(config.GuildId, userMsg.Author.Username, tokenCount))
+                        .Build();
+
+                    if (webhook != null && webhookMessageId.HasValue)
+                    {
+                        await webhook.ModifyMessageAsync(webhookMessageId.Value, msg =>
+                        {
+                            msg.Content = null;
+                            msg.Embeds = new List<Embed> { fallbackEmbed };
+                        });
+                    }
+                    else if (regularMessage != null)
+                    {
+                        await regularMessage.ModifyAsync(msg =>
+                        {
+                            msg.Content = null;
+                            msg.Embeds = new[] { fallbackEmbed };
+                        });
+                    }
+                    else
+                    {
+                        regularMessage = await userMsg.Channel.SendMessageAsync(
+                            embeds: new[] { fallbackEmbed },
+                            allowedMentions: AllowedMentions.None);
+                    }
+                }
+
+                // For non-final updates, don't send additional parts yet to avoid duplicates during streaming
+                if (!processAllChunks)
+                    return;
+
+                // Send remaining chunks as separate follow-up messages (simple embeds to ensure safety)
+                for (var i = 1; i < chunks.Count; i++)
                 {
                     try
                     {
-                        // Create a new JSON embed for each chunk by using the template
-                        var escapedChunk = EscapeJsonString(chunks[i]);
-                        var jsonTemplate = initialTemplate.Replace("%airesponse%", escapedChunk);
+                        var embedBuilder = new EmbedBuilder()
+                            .WithOkColor()
+                            .WithTitle($"Continued (Part {i + 1}/{chunks.Count})")
+                            .WithDescription(chunks[i]);
 
-                        var newEmbed = JsonSerializer.Deserialize<NewEmbed>(jsonTemplate);
-
-                        if (newEmbed != null && (newEmbed.Embeds?.Count > 0 || newEmbed.Embed != null))
+                        if (i == chunks.Count - 1)
                         {
-                            var discordEmbeds = new List<Embed>();
+                            embedBuilder.WithFooter(strings.AiResponseFooter(config.GuildId, userMsg.Author.Username,
+                                tokenCount));
+                        }
 
-                            if (newEmbed.Embeds?.Count > 0)
-                            {
-                                // Add part indicator to first embed title or description if missing
-                                if (i > 0 && newEmbed.Embeds[0] != null)
-                                {
-                                    // If there's a title, append to it, otherwise add to description
-                                    if (!string.IsNullOrEmpty(newEmbed.Embeds[0].Title))
-                                    {
-                                        newEmbed.Embeds[0].Title =
-                                            $"{newEmbed.Embeds[0].Title} (Part {i + 1}/{chunks.Count})";
-                                    }
-                                    else if (!string.IsNullOrEmpty(newEmbed.Embeds[0].Description))
-                                    {
-                                        // For the description, we'll prepend the part indicator
-                                        newEmbed.Embeds[0].Description =
-                                            $"**Part {i + 1}/{chunks.Count}**\n\n{newEmbed.Embeds[0].Description}";
-                                    }
-                                }
+                        var embed = embedBuilder.Build();
 
-                                discordEmbeds.AddRange(NewEmbed.ToEmbedArray(newEmbed.Embeds));
-                            }
-                            else if (newEmbed.Embed != null)
-                            {
-                                // Add part indicator to single embed
-                                if (i > 0)
-                                {
-                                    if (!string.IsNullOrEmpty(newEmbed.Embed.Title))
-                                    {
-                                        newEmbed.Embed.Title = $"{newEmbed.Embed.Title} (Part {i + 1}/{chunks.Count})";
-                                    }
-                                    else if (!string.IsNullOrEmpty(newEmbed.Embed.Description))
-                                    {
-                                        newEmbed.Embed.Description =
-                                            $"**Part {i + 1}/{chunks.Count}**\n\n{newEmbed.Embed.Description}";
-                                    }
-                                }
-
-                                discordEmbeds.AddRange(NewEmbed.ToEmbedArray(new List<global::Mewdeko.Common.Embed>
-                                {
-                                    newEmbed.Embed
-                                }));
-                            }
-
-                            // Add to our collection
-                            allEmbeds.AddRange(discordEmbeds);
+                        if (webhook != null && webhookMessageId.HasValue)
+                        {
+                            // Send a new webhook message for each additional part
+                            await webhook.SendMessageAsync(embeds: new[] { embed });
+                        }
+                        else
+                        {
+                            await userMsg.Channel.SendMessageAsync(embeds: new[] { embed },
+                                allowedMentions: AllowedMentions.None);
                         }
                     }
                     catch (Exception ex)
                     {
-                        logger.LogWarning($"Error creating JSON embed for chunk {i + 1}: {ex.Message}");
-
-                        // Fallback for this chunk
-                        var fallbackEmbed = new EmbedBuilder()
-                            .WithOkColor()
-                            .WithTitle($"Response (Part {i + 1}/{chunks.Count})")
-                            .WithDescription(chunks[i])
-                            .WithFooter(i == chunks.Count - 1
-                                ? strings.AiResponseFooter(config.GuildId, userMsg.Author.Username, tokenCount)
-                                : null)
-                            .Build();
-
-                        allEmbeds.Add(fallbackEmbed);
+                        logger.LogWarning($"Error sending JSON multipart chunk {i + 1}: {ex.Message}");
                     }
                 }
+            }
 
-                // Send or update the message with all embeds
+            // Helper method to send multiple standard embeds (non-JSON template)
+            async Task SendMultipartRegularEmbeds(List<string> chunks, bool isFinalUpdate)
+            {
+                // If not final, only show the first chunk in the main message to prevent hitting 6000 total per message
+                var showAllChunks = isFinalUpdate;
+
+                // Build the first embed
+                var firstEmbedBuilder = new EmbedBuilder()
+                    .WithOkColor()
+                    .WithDescription(chunks[0]);
+
+                if (showAllChunks && chunks.Count == 1)
+                {
+                    firstEmbedBuilder.WithFooter(strings.AiResponseFooter(config.GuildId, userMsg.Author.Username,
+                        tokenCount));
+                }
+
+                var firstEmbed = firstEmbedBuilder.Build();
+
+                // Send/modify the main message with only the first chunk
                 if (webhook != null && webhookMessageId.HasValue)
                 {
                     await webhook.ModifyMessageAsync(webhookMessageId.Value, msg =>
                     {
                         msg.Content = null;
-                        msg.Embeds = allEmbeds;
+                        msg.Embeds = new List<Embed> { firstEmbed };
                     });
                 }
                 else if (regularMessage != null)
@@ -1167,73 +1219,45 @@ public class AiService : INService
                     await regularMessage.ModifyAsync(msg =>
                     {
                         msg.Content = null;
-                        msg.Embeds = allEmbeds.ToArray();
+                        msg.Embeds = new[] { firstEmbed };
                     });
                 }
                 else
                 {
-                    // First message
                     regularMessage = await userMsg.Channel.SendMessageAsync(
-                        embeds: allEmbeds.ToArray(),
+                        embeds: new[] { firstEmbed },
                         allowedMentions: AllowedMentions.None);
                 }
-            }
 
-            // Helper method to send multiple standard embeds (non-JSON template)
-            async Task SendMultipartRegularEmbeds(List<string> chunks)
-            {
-                // Create a collection of embeds
-                var allEmbeds = new List<Embed>();
+                // During streaming, stop here to avoid duplicate additional messages
+                if (!showAllChunks)
+                    return;
 
-                for (var i = 0; i < chunks.Count; i++)
+                // Send the remaining chunks as separate follow-up messages, one embed per message
+                for (var i = 1; i < chunks.Count; i++)
                 {
                     var embedBuilder = new EmbedBuilder()
-                        .WithOkColor();
+                        .WithOkColor()
+                        .WithTitle($"Continued (Part {i + 1}/{chunks.Count})")
+                        .WithDescription(chunks[i]);
 
-                    // First part doesn't need a part indicator in the title
-                    if (i == 0)
-                    {
-                        embedBuilder.WithDescription(chunks[i]);
-                    }
-                    else
-                    {
-                        embedBuilder.WithTitle($"Continued (Part {i + 1}/{chunks.Count})")
-                            .WithDescription(chunks[i]);
-                    }
-
-                    // Add footer to last part only
-                    if (i == chunks.Count - 1 || isFinalUpdate)
+                    if (i == chunks.Count - 1)
                     {
                         embedBuilder.WithFooter(strings.AiResponseFooter(config.GuildId, userMsg.Author.Username,
                             tokenCount));
                     }
 
-                    allEmbeds.Add(embedBuilder.Build());
-                }
+                    var embed = embedBuilder.Build();
 
-                // Send or update with all embeds
-                if (webhook != null && webhookMessageId.HasValue)
-                {
-                    await webhook.ModifyMessageAsync(webhookMessageId.Value, msg =>
+                    if (webhook != null && webhookMessageId.HasValue)
                     {
-                        msg.Content = null;
-                        msg.Embeds = allEmbeds;
-                    });
-                }
-                else if (regularMessage != null)
-                {
-                    await regularMessage.ModifyAsync(msg =>
+                        await webhook.SendMessageAsync(embeds: new[] { embed });
+                    }
+                    else
                     {
-                        msg.Content = null;
-                        msg.Embeds = allEmbeds.ToArray();
-                    });
-                }
-                else
-                {
-                    // First message
-                    regularMessage = await userMsg.Channel.SendMessageAsync(
-                        embeds: allEmbeds.ToArray(),
-                        allowedMentions: AllowedMentions.None);
+                        await userMsg.Channel.SendMessageAsync(embeds: new[] { embed },
+                            allowedMentions: AllowedMentions.None);
+                    }
                 }
             }
         }
