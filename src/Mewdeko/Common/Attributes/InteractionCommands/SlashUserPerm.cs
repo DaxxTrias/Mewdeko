@@ -61,6 +61,14 @@ public class SlashUserPermAttribute : PreconditionAttribute
                     ? PreconditionResult.FromError("You must be a bot owner to add global Chat Triggers!")
                     : PreconditionResult.FromSuccess();
             }
+
+            // If a DPO override exists for chat triggers in this guild, it REPLACES the base requirement.
+            if (permResult)
+            {
+                return ((IGuildUser)context.User).GuildPermissions.Has(perm)
+                    ? PreconditionResult.FromSuccess()
+                    : PreconditionResult.FromError($"You need the `{perm}` permission to use this command.");
+            }
         }
 
         // If the user does not have the required permissions, return an error.

@@ -56,10 +56,15 @@ public class UserPermAttribute : PreconditionAttribute
                     : PreconditionResult.FromSuccess();
             }
 
-            // ReSharper disable once InvertIf (stupid)
+            // If a DPO override exists for chat triggers in this guild, it REPLACES the base requirement.
             if (permResult)
-                if (!((IGuildUser)context.User).GuildPermissions.Has(perm))
-                    return PreconditionResult.FromError($"You need the `{perm}` permission to use this command.");
+            {
+                return ((IGuildUser)context.User).GuildPermissions.Has(perm)
+                    ? PreconditionResult.FromSuccess()
+                    : PreconditionResult.FromError($"You need the `{perm}` permission to use this command.");
+            }
+
+            // No DPO override -> fall back to the base attribute check
             return await UserPermissionAttribute.CheckPermissionsAsync(context, command, services);
         }
 
