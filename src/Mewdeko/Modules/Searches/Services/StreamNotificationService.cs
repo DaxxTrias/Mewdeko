@@ -20,14 +20,15 @@ public class StreamNotificationService : IReadyExecutor, INService
 {
     private readonly DiscordShardedClient client;
     private readonly IDataConnectionFactory dbFactory;
+    private readonly GuildSettingsService guildSettings;
     private readonly ILogger<StreamNotificationService> logger;
     private readonly Random rng = new MewdekoRandom();
-    private readonly object shardLock = new();
     private readonly NotifChecker streamTracker;
     private readonly GeneratedBotStrings strings;
 
-    private Dictionary<StreamDataKey, Dictionary<ulong, HashSet<FollowedStream>>> shardTrackedStreams = new();
-    private Dictionary<StreamDataKey, HashSet<ulong>> trackCounter = new();
+    private ConcurrentDictionary<StreamDataKey, ConcurrentDictionary<ulong, HashSet<FollowedStream>>> shardTrackedStreams = new();
+    private ConcurrentDictionary<StreamDataKey, HashSet<ulong>> trackCounter = new();
+    private readonly object hashSetLock = new();
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="StreamNotificationService" /> class.
@@ -41,6 +42,7 @@ public class StreamNotificationService : IReadyExecutor, INService
     /// <param name="eventHandler">The event handler for guild events.</param>
     /// <param name="logger">The logger instance for structured logging.</param>
     /// <param name="logger2">The logger instance for structured logging.</param>
+    /// <param name="guildSettings">The guild settings service.</param>
     public StreamNotificationService(
         IDataConnectionFactory dbFactory,
         DiscordShardedClient client,
@@ -48,12 +50,13 @@ public class StreamNotificationService : IReadyExecutor, INService
         IBotCredentials creds,
         IHttpClientFactory httpFactory,
         Mewdeko bot,
-        EventHandler eventHandler, ILogger<StreamNotificationService> logger, ILogger<NotifChecker> logger2)
+        EventHandler eventHandler, ILogger<StreamNotificationService> logger, ILogger<NotifChecker> logger2, GuildSettingsService guildSettings)
     {
         this.dbFactory = dbFactory;
         this.client = client;
         this.strings = strings;
         this.logger = logger;
+        this.guildSettings = guildSettings;
         streamTracker = new NotifChecker(httpFactory, creds, creds.RedisKey(), true, logger2);
 
         // Set up stream notification event handlers
@@ -91,16 +94,24 @@ public class StreamNotificationService : IReadyExecutor, INService
 #endif
 
             // Group streams by type and name using efficient string comparison
-            shardTrackedStreams = followedStreams.GroupBy(x => new
+            var groupedStreams = followedStreams.GroupBy(x => new
                 {
                     x.Type, Name = x.Username?.ToLowerInvariant()
                 })
-                .ToList()
-                .ToDictionary(
-                    x => new StreamDataKey((FType)x.Key.Type, x.Key.Name?.ToLowerInvariant()),
-                    x => x.GroupBy(y => y.GuildId)
-                        .ToDictionary(y => y.Key,
-                            y => y.AsEnumerable().ToHashSet()));
+                .ToList();
+
+            foreach (var streamGroup in groupedStreams)
+            {
+                var key = new StreamDataKey((FType)streamGroup.Key.Type, streamGroup.Key.Name?.ToLowerInvariant());
+                var guildMap = new ConcurrentDictionary<ulong, HashSet<FollowedStream>>();
+
+                foreach (var guildGroup in streamGroup.GroupBy(y => y.GuildId))
+                {
+                    guildMap[guildGroup.Key] = guildGroup.AsEnumerable().ToHashSet();
+                }
+
+                shardTrackedStreams[key] = guildMap;
+            }
 
             var streamsByType = followedStreams.GroupBy(x => (FType)x.Type).ToDictionary(x => x.Key, x => x.Count());
             foreach (var kvp in streamsByType)
@@ -128,12 +139,16 @@ public class StreamNotificationService : IReadyExecutor, INService
             }
 
             // Create counter dictionary for tracking using efficient string comparison
-            trackCounter = followedStreams.GroupBy(x => new
+            var counterGroups = followedStreams.GroupBy(x => new
                 {
                     x.Type, Name = x.Username?.ToLowerInvariant()
-                })
-                .ToDictionary(x => new StreamDataKey((FType)x.Key.Type, x.Key.Name),
-                    x => x.Select(fs => fs.GuildId).ToHashSet());
+                });
+
+            foreach (var group in counterGroups)
+            {
+                var key = new StreamDataKey((FType)group.Key.Type, group.Key.Name);
+                trackCounter[key] = group.Select(fs => fs.GuildId).ToHashSet();
+            }
 #if DEBUG
             logger.LogInformation(
                 "[StreamNotificationService] Created tracking counter for {UniqueStreamCount} unique streams",
@@ -217,9 +232,15 @@ public class StreamNotificationService : IReadyExecutor, INService
             var key = stream.CreateKey();
             if (shardTrackedStreams.TryGetValue(key, out var fss))
             {
-                var totalGuilds = fss.SelectMany(x => x.Value).Count();
-                await fss.SelectMany(x => x.Value)
-                    .Select(fs =>
+                // Group by guild to get custom message once per guild
+                var guildGroups = fss.SelectMany(x => x.Value).GroupBy(fs => fs.GuildId);
+
+                foreach (var guildGroup in guildGroups)
+                {
+                    var guildId = guildGroup.Key;
+                    var customMessage = await GetCustomStreamMessageAsync(guildId);
+
+                    await guildGroup.Select(async fs =>
                     {
                         var textChannel = client.GetGuild(fs.GuildId)?.GetTextChannel(fs.ChannelId);
 
@@ -228,18 +249,12 @@ public class StreamNotificationService : IReadyExecutor, INService
                             logger.LogWarning(
                                 "[StreamNotificationService] Could not find channel {ChannelId} in guild {GuildId} for stream {Platform}/{Username}",
                                 fs.ChannelId, fs.GuildId, key.Type, key.Name);
-                            return Task.CompletedTask;
+                            return;
                         }
 
-                        var rep = new ReplacementBuilder().WithOverride("%user%", () => fs.Username)
-                            .WithOverride("%platform%", () => fs.Type.ToString())
-                            .Build();
-
-                        var message = string.IsNullOrWhiteSpace(fs.Message) ? "" : rep.Replace(fs.Message);
-
-                        return textChannel.EmbedAsync(GetEmbed(fs.GuildId, stream), message);
-                    })
-                    .WhenAll().ConfigureAwait(false);
+                        await SendStreamNotificationAsync(textChannel, stream, fs, customMessage);
+                    }).WhenAll().ConfigureAwait(false);
+                }
             }
 
             // Add 120 second delay after each loop, dont need to hit the api so fast
@@ -261,11 +276,18 @@ public class StreamNotificationService : IReadyExecutor, INService
             if (shardTrackedStreams.TryGetValue(key, out var fss))
             {
                 // Only send offline notifications to guilds that have them enabled
-                var eligibleGuilds = fss.SelectMany(x => x.Value)
+                var eligibleStreams = fss.SelectMany(x => x.Value)
                     .Where(x => OfflineNotificationServers.Contains(x.GuildId)).ToList();
 
-                await eligibleGuilds
-                    .Select(fs =>
+                // Group by guild to get custom message once per guild
+                var guildGroups = eligibleStreams.GroupBy(fs => fs.GuildId);
+
+                foreach (var guildGroup in guildGroups)
+                {
+                    var guildId = guildGroup.Key;
+                    var customMessage = await GetCustomStreamMessageAsync(guildId);
+
+                    await guildGroup.Select(async fs =>
                     {
                         var channel = client.GetGuild(fs.GuildId)?.GetTextChannel(fs.ChannelId);
                         if (channel is null)
@@ -273,15 +295,12 @@ public class StreamNotificationService : IReadyExecutor, INService
                             logger.LogWarning(
                                 "[StreamNotificationService] Could not find channel {ChannelId} in guild {GuildId} for offline stream {Platform}/{Username}",
                                 fs.ChannelId, fs.GuildId, key.Type, key.Name);
-                            return null;
+                            return;
                         }
 
-                        return channel.EmbedAsync(GetEmbed(fs.GuildId, stream));
-                    })
-                    .Where(task => task != null)
-                    .Select(task => task!)
-                    .WhenAll()
-                    .ConfigureAwait(false);
+                        await SendStreamNotificationAsync(channel, stream, fs, customMessage);
+                    }).WhenAll().ConfigureAwait(false);
+                }
             }
         }
     }
@@ -310,7 +329,10 @@ public class StreamNotificationService : IReadyExecutor, INService
         {
             var key = followedStream.CreateKey();
             var streams = GetLocalGuildStreams(key, guildId);
-            streams.Add(followedStream);
+            lock (hashSetLock)
+            {
+                streams.Add(followedStream);
+            }
             TrackStream(followedStream);
         }
     }
@@ -331,7 +353,10 @@ public class StreamNotificationService : IReadyExecutor, INService
         foreach (var followedStream in followedStreams)
         {
             var streams = GetLocalGuildStreams(followedStream.CreateKey(), guildId);
-            streams.Remove(followedStream);
+            lock (hashSetLock)
+            {
+                streams.Remove(followedStream);
+            }
             await UntrackStream(followedStream);
         }
     }
@@ -395,10 +420,10 @@ public class StreamNotificationService : IReadyExecutor, INService
             .DeleteAsync();
 
         // Remove from local cache
-        lock (shardLock)
+        var key = fs.CreateKey();
+        var streams = GetLocalGuildStreams(key, guildId);
+        lock (hashSetLock)
         {
-            var key = fs.CreateKey();
-            var streams = GetLocalGuildStreams(key, guildId);
             streams.Remove(fs);
         }
 
@@ -446,7 +471,7 @@ public class StreamNotificationService : IReadyExecutor, INService
         if (set.Count != 0)
             return;
 
-        trackCounter.Remove(key);
+        trackCounter.TryRemove(key, out _);
         // If no other guilds are following this stream, untrack it
         await streamTracker.UntrackStreamByKey(key);
     }
@@ -485,10 +510,10 @@ public class StreamNotificationService : IReadyExecutor, INService
         await db.InsertAsync(fs);
 
         // Add to local cache
-        lock (shardLock)
+        var key = data.CreateKey();
+        var streams = GetLocalGuildStreams(key, guildId);
+        lock (hashSetLock)
         {
-            var key = data.CreateKey();
-            var streams = GetLocalGuildStreams(key, guildId);
             streams.Add(fs);
         }
 
@@ -531,6 +556,136 @@ public class StreamNotificationService : IReadyExecutor, INService
         return embed;
     }
 
+    /// <summary>
+    ///     Gets custom stream notification message for a guild.
+    /// </summary>
+    /// <param name="guildId">The guild ID.</param>
+    /// <returns>The custom message or null if not set.</returns>
+    public async Task<string?> GetCustomStreamMessageAsync(ulong guildId)
+    {
+        var guildConfig = await guildSettings.GetGuildConfig(guildId);
+        return guildConfig?.StreamMessage;
+    }
+
+    /// <summary>
+    ///     Creates a replacement builder with stream-specific placeholders.
+    /// </summary>
+    /// <param name="stream">The stream data.</param>
+    /// <param name="followedStream">The followed stream configuration.</param>
+    /// <param name="guildId">The guild ID for localization.</param>
+    /// <returns>A replacement builder with stream placeholders.</returns>
+    private ReplacementBuilder CreateStreamReplacer(StreamData stream, FollowedStream followedStream, ulong guildId)
+    {
+        var guild = client.GetGuild(guildId);
+
+        return new ReplacementBuilder()
+            // Stream-specific data only
+            .WithOverride("%stream.name%", () => stream.Name ?? "Unknown")
+            .WithOverride("%stream.username%", () => stream.UniqueName ?? "Unknown")
+            .WithOverride("%stream.url%", () => stream.StreamUrl ?? "")
+            .WithOverride("%stream.title%", () => stream.Title ?? "No title")
+            .WithOverride("%stream.game%", () => stream.Game ?? "No category")
+            .WithOverride("%stream.viewers%", () => stream.IsLive ? stream.Viewers.ToString("N0") : "-")
+            .WithOverride("%stream.platform%", () => stream.StreamType.ToString())
+            .WithOverride("%stream.avatar%", () => stream.AvatarUrl ?? "")
+            .WithOverride("%stream.preview%", () => stream.Preview ?? "")
+            .WithOverride("%stream.status%", () => stream.IsLive ? "🟢 Online" : "🔴 Offline")
+            .WithOverride("%stream.channelid%", () => stream.ChannelId ?? "");
+    }
+
+    /// <summary>
+    ///     Sends a stream notification using custom message format or fallback to embed.
+    /// </summary>
+    /// <param name="textChannel">The channel to send to.</param>
+    /// <param name="stream">The stream data.</param>
+    /// <param name="followedStream">The followed stream configuration.</param>
+    /// <param name="customMessage">The custom message template (optional).</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    /// <summary>
+    ///     Sends a stream notification using hierarchical message priority.
+    /// </summary>
+    /// <param name="textChannel">The channel to send to.</param>
+    /// <param name="stream">The stream data.</param>
+    /// <param name="followedStream">The followed stream configuration.</param>
+    /// <param name="guildTemplate">The guild-wide custom template (optional).</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    private async Task SendStreamNotificationAsync(ITextChannel textChannel, StreamData stream, FollowedStream followedStream, string? guildTemplate = null)
+    {
+        try
+        {
+            var replacer = CreateStreamReplacer(stream, followedStream, followedStream.GuildId).Build();
+
+            // Priority 1: Per-streamer custom message (check both online/offline variants)
+            var streamerMessage = GetStreamerCustomMessage(followedStream, stream.IsLive);
+            if (!string.IsNullOrWhiteSpace(streamerMessage))
+            {
+                var processedMessage = replacer.Replace(streamerMessage);
+
+                // Try to parse as SmartEmbed (JSON)
+                if (SmartEmbed.TryParse(processedMessage, followedStream.GuildId, out var embed, out var plainText, out var components))
+                {
+                    // Valid JSON - use SmartEmbed
+                    await textChannel.SendMessageAsync(plainText, embeds: embed, components: components?.Build());
+                    return;
+                }
+                else
+                {
+                    // Not valid JSON - treat as text above default embed
+                    await textChannel.EmbedAsync(GetEmbed(followedStream.GuildId, stream), processedMessage);
+                    return;
+                }
+            }
+
+            // Priority 2: Guild-wide template
+            if (!string.IsNullOrWhiteSpace(guildTemplate))
+            {
+                var processedTemplate = replacer.Replace(guildTemplate);
+
+                if (SmartEmbed.TryParse(processedTemplate, followedStream.GuildId, out var embed, out var plainText, out var components))
+                {
+                    await textChannel.SendMessageAsync(plainText, embeds: embed, components: components?.Build());
+                    return;
+                }
+                else
+                {
+                    // Fall back to simple message
+                    await textChannel.SendMessageAsync(processedTemplate);
+                    return;
+                }
+            }
+
+            // Priority 3: Default embed (existing system)
+            await textChannel.EmbedAsync(GetEmbed(followedStream.GuildId, stream));
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error sending stream notification for {Platform}/{Username} in guild {GuildId}",
+                stream.StreamType, stream.UniqueName, followedStream.GuildId);
+        }
+    }
+
+    /// <summary>
+    ///     Gets the appropriate custom message for a streamer based on online/offline status.
+    /// </summary>
+    /// <param name="followedStream">The followed stream configuration.</param>
+    /// <param name="isOnline">Whether the stream is online.</param>
+    /// <returns>The custom message or null if not set.</returns>
+    private string? GetStreamerCustomMessage(FollowedStream followedStream, bool isOnline)
+    {
+        // Check for status-specific messages first
+        if (isOnline && !string.IsNullOrWhiteSpace(followedStream.OnlineMessage))
+        {
+            return followedStream.OnlineMessage;
+        }
+
+        if (!isOnline && !string.IsNullOrWhiteSpace(followedStream.OfflineMessage))
+        {
+            return followedStream.OfflineMessage;
+        }
+
+        // If no status-specific message, return null (use guild template or default embed)
+        return null;
+    }
 
     /// <summary>
     ///     Toggles the notification for offline streams for a guild.
@@ -575,20 +730,8 @@ public class StreamNotificationService : IReadyExecutor, INService
 
     private HashSet<FollowedStream> GetLocalGuildStreams(in StreamDataKey key, ulong guildId)
     {
-        if (shardTrackedStreams.TryGetValue(key, out var map))
-        {
-            if (map.TryGetValue(guildId, out var set))
-                return set;
-            return map[guildId] = [];
-        }
-
-        shardTrackedStreams[key] = new Dictionary<ulong, HashSet<FollowedStream>>
-        {
-            {
-                guildId, []
-            }
-        };
-        return shardTrackedStreams[key][guildId];
+        var guildMap = shardTrackedStreams.GetOrAdd(key, _ => new ConcurrentDictionary<ulong, HashSet<FollowedStream>>());
+        return guildMap.GetOrAdd(guildId, _ => new HashSet<FollowedStream>());
     }
 
     /// <summary>
@@ -617,22 +760,102 @@ public class StreamNotificationService : IReadyExecutor, INService
         }
 
         var fs = fss[index];
-        fs.Message = message;
+        fs.OnlineMessage = message;
 
         // Update database
         await db.UpdateAsync(fs);
 
         // Update local cache
-        lock (shardLock)
-        {
-            var streams = GetLocalGuildStreams(fs.CreateKey(), guildId);
+        var streams = GetLocalGuildStreams(fs.CreateKey(), guildId);
 
-            // Message doesn't participate in equality checking
-            // Removing and adding = update
+        // Message doesn't participate in equality checking
+        // Removing and adding = update
+        lock (hashSetLock)
+        {
             streams.Remove(fs);
             streams.Add(fs);
         }
 
         return (true, fs);
+    }
+
+    /// <summary>
+    ///     Sets the offline message for a specific stream.
+    /// </summary>
+    /// <param name="guildId">The guild ID.</param>
+    /// <param name="index">The stream index.</param>
+    /// <param name="message">The offline message.</param>
+    /// <returns>Whether the operation succeeded and the stream data.</returns>
+    public async Task<(bool, FollowedStream)> SetStreamOfflineMessage(
+        ulong guildId,
+        int index,
+        string message)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        var fss = await db.FollowedStreams
+            .Where(x => x.GuildId == guildId)
+            .OrderBy(x => x.Id)
+            .ToListAsync();
+
+        if (fss.Count <= index)
+        {
+            return (false, null)!;
+        }
+
+        var fs = fss[index];
+        fs.OfflineMessage = message;
+
+        await db.UpdateAsync(fs);
+
+        // Update local cache
+        var streams = GetLocalGuildStreams(fs.CreateKey(), guildId);
+        lock (hashSetLock)
+        {
+            streams.Remove(fs);
+            streams.Add(fs);
+        }
+
+        return (true, fs);
+    }
+
+    /// <summary>
+    ///     Sets the custom stream notification message for a guild.
+    /// </summary>
+    /// <param name="guildId">The guild ID.</param>
+    /// <param name="message">The custom message template. Use null or empty to disable custom messages.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    public async Task SetCustomStreamMessageAsync(ulong guildId, string? message)
+    {
+        var guildConfig = await guildSettings.GetGuildConfig(guildId);
+        if (guildConfig == null) return;
+
+        guildConfig.StreamMessage = string.IsNullOrWhiteSpace(message) ? null : message;
+        await guildSettings.UpdateGuildConfig(guildId, guildConfig);
+    }
+
+    /// <summary>
+    ///     Gets available stream placeholder information for help text.
+    /// </summary>
+    /// <returns>A dictionary of placeholder categories and their placeholders.</returns>
+    public static Dictionary<string, List<(string Placeholder, string Description)>> GetStreamPlaceholders()
+    {
+        return new Dictionary<string, List<(string, string)>>
+        {
+            ["Stream Information"] = new List<(string, string)>
+            {
+                ("%stream.name%", "Display name of the streamer"),
+                ("%stream.username%", "Login name/username of the streamer"),
+                ("%stream.url%", "Direct URL to the stream"),
+                ("%stream.title%", "Current stream title"),
+                ("%stream.game%", "Game/category being streamed"),
+                ("%stream.viewers%", "Current viewer count (- if offline)"),
+                ("%stream.platform%", "Platform name (Twitch, YouTube, etc.)"),
+                ("%stream.avatar%", "URL to streamer's avatar"),
+                ("%stream.preview%", "URL to stream preview/thumbnail"),
+                ("%stream.status%", "🟢 Online or 🔴 Offline"),
+                ("%stream.channelid%", "Platform-specific channel ID")
+            }
+        };
     }
 }

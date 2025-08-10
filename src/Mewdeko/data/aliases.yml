@@ -2133,6 +2133,14 @@ streamoffline:
 streamremove:
   - streamremove
   - strm
+streamtemplate:
+  - streamtemplate
+  - stt
+  - sttemplate
+streamofflinemessage:
+  - streamofflinemessage
+  - stofmsg
+  - stoffline
 streamrole:
   - streamrole
 streamroleblacklist:

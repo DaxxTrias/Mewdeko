@@ -81,6 +81,7 @@ namespace DataModel
 		[Column("SuggestButtonRepostThreshold"                                                                                        )] public int       SuggestButtonRepostThreshold       { get; set; } // integer
 		[Column("SuggestButtonColor"                                                                                                  )] public int       SuggestButtonColor                 { get; set; } // integer
 		[Column("AfkMessage"                                                                                                          )] public string?   AfkMessage                         { get; set; } // text
+		[Column("StreamMessage"                                                                                                       )] public string?   StreamMessage                      { get; set; } // text
 		[Column("AutoBotRoleIds"                                                                                                      )] public string?   AutoBotRoleIds                     { get; set; } // text
 		[Column("GBEnabled"                                                                                                           )] public int       GbEnabled                          { get; set; } // integer
 		[Column("GBAction"                                                                                                            )] public bool      GbAction                           { get; set; } // boolean

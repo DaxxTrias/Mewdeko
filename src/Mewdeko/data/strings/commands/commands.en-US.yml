@@ -15520,6 +15520,32 @@ streamremove:
       desc: The 1-based index of the stream in the notification list to be removed.
       type: int
       optional: false
+streamtemplate:
+  desc: Sets or shows the custom stream notification message template for all streams in the guild.
+  args:
+    - text
+  params:
+    - &o367
+      name: template
+      desc: The custom message template with placeholders. Leave empty to show current template, use "reset" to disable custom messages.
+      type: string
+      optional: true
+streamofflinemessage:
+  desc: Sets the offline message for a specific stream.
+  args:
+    - number
+    - text
+  params:
+    - &o368
+      name: index
+      desc: The 1-based index of the stream.
+      type: int
+      optional: false
+    - &o369
+      name: message
+      desc: The offline message template with placeholders.
+      type: string
+      optional: false
 streamsclear:
   desc: Clears all streams from the guild's notification list.
   args:
