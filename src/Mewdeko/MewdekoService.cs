@@ -1,5 +1,6 @@
 using System.Threading;
 using Microsoft.Extensions.Hosting;
+using Serilog;
 
 namespace Mewdeko;
 
@@ -12,7 +13,9 @@ namespace Mewdeko;
 /// </remarks>
 public class MewdekoService : IHostedService
 {
+    private readonly CancellationTokenSource cancellationTokenSource = new();
     private readonly Mewdeko mewdeko;
+    private Task? runningTask;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="MewdekoService" /> class.
@@ -28,9 +31,30 @@ public class MewdekoService : IHostedService
     /// </summary>
     /// <param name="cancellationToken">A <see cref="CancellationToken" /> that can be used to cancel the start operation.</param>
     /// <returns>A <see cref="Task" /> representing the asynchronous operation of starting the bot.</returns>
-    public Task StartAsync(CancellationToken cancellationToken)
+    public async Task StartAsync(CancellationToken cancellationToken)
     {
-        return mewdeko.RunAsync();
+        var combinedToken = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken,
+            cancellationTokenSource.Token
+        ).Token;
+
+        // Start the bot initialization
+        await mewdeko.RunAsync();
+
+        // Keep the service running until cancellation is requested
+        runningTask = Task.Run(async () =>
+        {
+            try
+            {
+                // Wait indefinitely until cancellation is requested
+                await Task.Delay(Timeout.Infinite, combinedToken);
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected when cancellation is requested
+                Log.Information("Mewdeko service is shutting down gracefully");
+            }
+        }, combinedToken);
     }
 
     /// <summary>
@@ -38,9 +62,42 @@ public class MewdekoService : IHostedService
     /// </summary>
     /// <param name="cancellationToken">A <see cref="CancellationToken" /> that can be used to cancel the stop operation.</param>
     /// <returns>A <see cref="Task" /> representing the asynchronous operation of stopping the bot.</returns>
-    public Task StopAsync(CancellationToken cancellationToken)
+    public async Task StopAsync(CancellationToken cancellationToken)
     {
-        Environment.Exit(0);
-        return Task.CompletedTask;
+        Log.Information("Stopping Mewdeko service...");
+
+        try
+        {
+            // Signal cancellation
+            await cancellationTokenSource.CancelAsync();
+
+            // Wait for the running task to complete with timeout
+            if (runningTask != null)
+            {
+                await runningTask.WaitAsync(TimeSpan.FromSeconds(30), cancellationToken);
+            }
+
+            // Gracefully disconnect Discord client
+            if (mewdeko.Client?.ConnectionState == ConnectionState.Connected)
+            {
+                Log.Information("Disconnecting Discord client...");
+                await mewdeko.Client.StopAsync();
+                await mewdeko.Client.LogoutAsync();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected during shutdown
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Error during graceful shutdown, forcing exit");
+        }
+        finally
+        {
+            cancellationTokenSource.Dispose();
+        }
+
+        Log.Information("Mewdeko service stopped");
     }
 }

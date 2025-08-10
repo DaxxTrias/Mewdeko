@@ -35,6 +35,7 @@ public class SearchImageCacher : INService
     /// </summary>
     /// <param name="httpFactory">The factory to create HttpClient instances.</param>
     /// <param name="cache">The memory cache implementation for caching search results.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public SearchImageCacher(IHttpClientFactory httpFactory, IMemoryCache cache, ILogger<SearchImageCacher> logger)
     {
         this.httpFactory = httpFactory;

@@ -132,7 +132,7 @@ public class GroqClient : IAiClient
 
                         if (line.StartsWith("data: "))
                         {
-                            var data = line.Substring("data: ".Length);
+                            var data = line["data: ".Length..];
 
                             // The stream ends with "data: [DONE]"
                             if (data == "[DONE]")

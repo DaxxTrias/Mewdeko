@@ -21,5 +21,6 @@ namespace DataModel
 		[Column("PostId"                                                                                             )] public ulong   PostId            { get; set; } // numeric(20,0)
 		[Column("StarboardConfigId"                                                                                  )] public int       StarboardConfigId { get; set; } // integer
 		[Column("DateAdded"                                                                                          )] public DateTime? DateAdded         { get; set; } // timestamp (6) without time zone
+		[Column("ReactionCount"    , CanBeNull = true                                                                )] public int?      ReactionCount     { get; set; } // integer
 	}
 }

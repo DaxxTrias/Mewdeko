@@ -10,6 +10,7 @@ using Lavalink4NET.Players;
 using Lavalink4NET.Protocol.Payloads.Events;
 using Lavalink4NET.Rest.Entities.Tracks;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Common.Configs;
 using Mewdeko.Modules.Music.Common;
 using Mewdeko.Services.Strings;
@@ -283,6 +284,7 @@ public sealed class MewdekoPlayer : LavalinkPlayer
     /// <summary>
     ///     Sets the DJ role for the guild.
     /// </summary>
+    /// <param name="roleId">The roleid identifier.</param>
     public async Task SetDjRole(ulong? roleId)
     {
         var settings = await GetMusicSettings();
@@ -653,8 +655,8 @@ public sealed class MewdekoPlayer : LavalinkPlayer
         // If the title has a hyphen, split the title and artist
         if (hyphenIndex != -1)
         {
-            artistName = fullTitle.Substring(0, hyphenIndex).Trim();
-            trackTitle = fullTitle.Substring(hyphenIndex + 3).Trim();
+            artistName = fullTitle[..hyphenIndex].Trim();
+            trackTitle = fullTitle[(hyphenIndex + 3)..].Trim();
         }
 
         // Clean up the track title by removing extra information

@@ -33,6 +33,7 @@ public class MusicController : Controller
     /// <param name="cache">The data cache for storing and retrieving music-related information</param>
     /// <param name="client">The Discord client for accessing guild and user information</param>
     /// <param name="eventManager">The event manager for music events</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public MusicController(
         IAudioService audioService,
         IDataCache cache,

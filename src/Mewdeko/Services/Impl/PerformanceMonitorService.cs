@@ -19,6 +19,7 @@ public class PerformanceMonitorService : INService, IDisposable
     /// <summary>
     ///     Initializes a new instance of the <see cref="PerformanceMonitorService" /> class.
     /// </summary>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public PerformanceMonitorService(ILogger<PerformanceMonitorService> logger)
     {
         this.logger = logger;

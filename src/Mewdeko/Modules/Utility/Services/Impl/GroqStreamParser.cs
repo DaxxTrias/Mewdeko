@@ -111,6 +111,13 @@ public class GroqStreamParser : IAiStreamParser
     /// <inheritdoc />
     public bool IsStreamFinished(string json, AiService.AiProvider provider)
     {
+        var result = CheckStreamFinished(json, provider);
+        return result.IsFinished;
+    }
+
+    /// <inheritdoc />
+    public (bool IsFinished, string StopReason) CheckStreamFinished(string json, AiService.AiProvider provider)
+    {
         try
         {
             using var doc = JsonDocument.Parse(json);
@@ -123,15 +130,18 @@ public class GroqStreamParser : IAiStreamParser
             {
                 // "stop" is the normal completion reason for Groq
                 var reason = finishReason.ValueKind == JsonValueKind.Null ? null : finishReason.GetString();
-                return !string.IsNullOrEmpty(reason);
+                if (!string.IsNullOrEmpty(reason))
+                {
+                    return (true, reason);
+                }
             }
 
-            return false;
+            return (false, null);
         }
         catch (Exception ex)
         {
             Log.Error(ex, "Error checking if Groq stream finished: {Json}", json);
-            return false;
+            return (false, null);
         }
     }
 }

@@ -64,25 +64,114 @@ public class OpenAiClient : IAiClient
         {
             model,
             messages = openAiMessages,
-            stream = true
+            stream = true,
+            stream_options = new
+            {
+                include_usage = true
+            }
         };
 
         request.Content = new StringContent(
-        JsonSerializer.Serialize(payload),
-        Encoding.UTF8,
-        "application/json");
+            JsonSerializer.Serialize(payload),
+            Encoding.UTF8,
+            "application/json");
 
-        //var payloadJson = JsonSerializer.Serialize(payload);
-        //// Add debug logging for the outgoing payload
-        //Serilog.Log.Information("OpenAI Payload: {Payload}", payloadJson);
+        async IAsyncEnumerable<string> StreamWithUsage()
+        {
+            int? promptTokens = null, completionTokens = null, totalTokens = null;
+            var usageEmitted = false;
+            await foreach (var json in StreamChatCompletionsAsync(httpClient, request))
+            {
+                if (!string.IsNullOrWhiteSpace(json))
+                {
+                    // Try to parse usage from the chunk if present
+                    try
+                    {
+                        using var doc = JsonDocument.Parse(json);
+                        Serilog.Log.Debug("Received chunk: {Json}", json);
 
-        //request.Content = new StringContent(payloadJson, System.Text.Encoding.UTF8, "application/json");
+                        if (doc.RootElement.TryGetProperty("usage", out var usageElem))
+                        {
+                            if (usageElem.TryGetProperty("prompt_tokens", out var promptElem))
+                                promptTokens = promptElem.GetInt32();
+                            if (usageElem.TryGetProperty("completion_tokens", out var completionElem))
+                                completionTokens = completionElem.GetInt32();
+                            if (usageElem.TryGetProperty("total_tokens", out var totalElem))
+                                totalTokens = totalElem.GetInt32();
+                            usageEmitted = true;
+                        }
+                    }
+                    catch { /* ignore parse errors, just stream the chunk */ }
+                    yield return json;
+                }
+            }
 
-        // Use the static method to get the streaming JSON chunks
-        var stream = StreamChatCompletionsAsync(httpClient, request);
+            // If usage was not found, make a non-streaming request to get usage
+            if (!usageEmitted)
+            {
+                var usage = await FetchOpenAiUsageAsync(openAiMessages.ToList(), model, apiKey, cancellationToken);
+                if (usage != null)
+                {
+                    promptTokens = usage.Value.PromptTokens;
+                    completionTokens = usage.Value.CompletionTokens;
+                    totalTokens = usage.Value.TotalTokens;
+                }
+            }
 
-        // Optionally, you can wrap this in Task.FromResult to match the signature
-        return await Task.FromResult(stream);
+            // Always emit a final usage chunk
+            var usageObj = new
+            {
+                usage = new
+                {
+                    prompt_tokens = promptTokens ?? 0,
+                    completion_tokens = completionTokens ?? 0,
+                    total_tokens = totalTokens ?? ((promptTokens ?? 0) + (completionTokens ?? 0))
+                }
+            };
+            var usageJson = JsonSerializer.Serialize(usageObj);
+            yield return usageJson;
+        }
+
+        return StreamWithUsage();
+    }
+
+    // Helper to fetch usage stats after streaming finishes
+    private async Task<(int PromptTokens, int CompletionTokens, int TotalTokens)?> FetchOpenAiUsageAsync(
+        IEnumerable<object> messages, string model, string apiKey, CancellationToken cancellationToken)
+    {
+        var payload = new
+        {
+            model,
+            messages,
+            stream = false
+        };
+        var request = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/chat/completions")
+        {
+            Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
+        };
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
+
+        using var response = await httpClient.SendAsync(request, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+            return null;
+
+        var content = await response.Content.ReadAsStringAsync(cancellationToken);
+        using var doc = JsonDocument.Parse(content);
+        var root = doc.RootElement;
+        if (root.TryGetProperty("usage", out var usageElem))
+        {
+            int prompt = 0, completion = 0, total = 0;
+            if (usageElem.TryGetProperty("prompt_tokens", out var promptElem))
+                prompt = promptElem.GetInt32();
+            if (usageElem.TryGetProperty("completion_tokens", out var completionElem))
+                completion = completionElem.GetInt32();
+            if (usageElem.TryGetProperty("total_tokens", out var totalElem))
+                total = totalElem.GetInt32();
+            else
+                total = prompt + completion;
+            return (prompt, completion, total);
+        }
+        return null;
     }
 
     /// <summary>

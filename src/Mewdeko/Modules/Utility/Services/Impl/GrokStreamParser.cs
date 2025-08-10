@@ -124,24 +124,34 @@ namespace Mewdeko.Modules.Utility.Services.Impl
         /// <inheritdoc/>
         public bool IsStreamFinished(string json, AiService.AiProvider provider)
         {
+            var result = CheckStreamFinished(json, provider);
+            return result.IsFinished;
+        }
+
+        /// <inheritdoc/>
+        public (bool IsFinished, string StopReason) CheckStreamFinished(string json, AiService.AiProvider provider)
+        {
             if (provider != AiService.AiProvider.Grok)
-                return false;
+                return (false, null);
             if (string.IsNullOrWhiteSpace(json))
-                return false;
+                return (false, null);
+            
             // Trim SSE prefix and whitespace
             var content = json;
             if (content.StartsWith("data:"))
             {
                 content = content.Substring("data:".Length).Trim();
             }
+            
             // If we receive the SSE termination signal
             if (content == "[DONE]")
-                return true;
+                return (true, "done");
 
             try
             {
                 using var doc = JsonDocument.Parse(content);
                 var root = doc.RootElement;
+                
                 // Check for an explicit finish reason (OpenAI-style) indicating end of stream
                 if (root.TryGetProperty("choices", out var choicesElem) && choicesElem.ValueKind == JsonValueKind.Array)
                 {
@@ -151,20 +161,21 @@ namespace Mewdeko.Modules.Utility.Services.Impl
                     {
                         var reason = finishElem.GetString();
                         if (!string.IsNullOrEmpty(reason) && reason != "null")
-                            return true;
+                            return (true, reason);
                     }
                 }
+                
                 // Alternatively, if usage info appears (usually final chunk), treat as finished
                 if (root.TryGetProperty("usage", out _))
                 {
-                    return true;
+                    return (true, "usage_final");
                 }
             }
             catch (JsonException)
             {
                 // If we cannot parse it, assume not finished (to continue streaming)
             }
-            return false;
+            return (false, null);
         }
     }
 }

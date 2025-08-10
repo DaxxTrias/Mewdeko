@@ -10,7 +10,7 @@ using Discord.Rest;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
 using LibGit2Sharp;
-using LinqToDB;
+using LinqToDB.Async;
 using LinqToDB.Data;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Common.Configs;
@@ -44,6 +44,7 @@ namespace Mewdeko.Modules.OwnerOnly;
 /// <param name="botConfig">Configuration settings for the bot.</param>
 /// <param name="httpClient">HTTP client for making web requests.</param>
 /// <param name="localization">Service for handling localization and translations.</param>
+/// <param name="logger">The logger instance for structured logging.</param>
 [OwnerOnly]
 public class OwnerOnly(
     DiscordShardedClient client,

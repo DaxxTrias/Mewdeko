@@ -190,6 +190,34 @@ public partial class Utility
         }
 
         /// <summary>
+        ///     Enables or disables web search for AI (Claude only)
+        /// </summary>
+        /// <param name="enabled">Whether to enable or disable web search</param>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.ManageGuild)]
+        public async Task AiWebSearch(bool enabled)
+        {
+            var config = await Service.GetOrCreateConfig(ctx.Guild.Id);
+
+            // Check if using Claude
+            if (config.Provider != (int)AiService.AiProvider.Claude)
+            {
+                await ctx.Channel.SendErrorAsync(Strings.AiWebSearchClaudeOnly(ctx.Guild.Id), Config);
+                return;
+            }
+
+            config.WebSearchEnabled = enabled;
+            await Service.UpdateConfig(config);
+
+            if (enabled)
+                await ctx.Channel.SendConfirmAsync(Strings.AiWebSearchEnabled(ctx.Guild.Id));
+            else
+                await ctx.Channel.SendConfirmAsync(Strings.AiWebSearchDisabled(ctx.Guild.Id));
+        }
+
+        /// <summary>
         ///     Shows current AI configuration
         /// </summary>
         [Cmd]
@@ -209,6 +237,14 @@ public partial class Utility
             config.Model ?? "Not Set",
             config.TokensUsed))
                         .WithOkColor();
+
+            // Add web search status if using Claude
+            if (config.Provider == (int)AiService.AiProvider.Claude)
+            {
+                eb.AddField(Strings.WebSearchStatus(ctx.Guild.Id),
+                    config.WebSearchEnabled ? "✅ Enabled" : "❌ Disabled",
+                    true);
+            }
 
             await ctx.Channel.SendMessageAsync(embed: eb.Build());
         }

@@ -4,7 +4,6 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Reflection;
 using System.Threading;
-using Discord.Commands;
 using Humanizer;
 using Mewdeko.Modules.Utility.Services;
 using Swan.Formatters;
@@ -19,7 +18,7 @@ public class StatsService : IStatsService, IDisposable
     /// <summary>
     ///     The version of the bot. I should make this set from commits somehow idk
     /// </summary>
-    public const string BotVersion = "7.8.1";
+    public const string BotVersion = "7.8.5";
 
     private readonly IDataCache cache;
     private readonly DiscordShardedClient client;
@@ -35,12 +34,13 @@ public class StatsService : IStatsService, IDisposable
     /// </summary>
     /// <param name="client">The discord client</param>
     /// <param name="creds">The bots credentials</param>
-    /// <param name="cmdServ">The command service</param>
     /// <param name="http">The http client</param>
     /// <param name="cache">The caching service</param>
+    /// <param name="logger"></param>
     /// <exception cref="ArgumentNullException"></exception>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public StatsService(
-        DiscordShardedClient client, IBotCredentials creds, CommandService cmdServ,
+        DiscordShardedClient client, IBotCredentials creds,
         HttpClient http, IDataCache cache, ILogger<StatsService> logger)
     {
         this.client = client ?? throw new ArgumentNullException(nameof(client));
@@ -179,9 +179,9 @@ public class StatsService : IStatsService, IDisposable
                         .ConfigureAwait(false);
                     logger.LogInformation("Updated top guilds");
                 }
-                catch
+                catch (Exception e)
                 {
-                    logger.LogError("Failed to update top guilds: {0}");
+                    logger.LogError("Failed to update top guilds: {0}", e);
                     return;
                 }
             } while (await periodicTimer.WaitForNextTickAsync());

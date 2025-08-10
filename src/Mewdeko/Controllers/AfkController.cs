@@ -1,5 +1,5 @@
 ﻿using DataModel;
-using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Common.TypeReaders.Models;
 using Mewdeko.Modules.Afk.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -26,6 +26,7 @@ public class AfkController : Controller
     /// <param name="afk">The AFK service instance.</param>
     /// <param name="client">The Discord sharded client instance.</param>
     /// <param name="dbFactory">The factory for creating database connections.</param>
+    /// <param name="logger">Logger for this class.</param>
     public AfkController(AfkService afk, DiscordShardedClient client, IDataConnectionFactory dbFactory,
         ILogger<AfkController> logger)
     {

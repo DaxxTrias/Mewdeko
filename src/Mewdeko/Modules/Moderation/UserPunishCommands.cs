@@ -3,7 +3,7 @@ using Discord.Commands;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
 using Humanizer;
-using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Common.TypeReaders.Models;
 using Mewdeko.Modules.Administration.Common;
@@ -24,6 +24,7 @@ public partial class Moderation : MewdekoModule
     /// <param name="dbFactory">The database service</param>
     /// <param name="serv">The service used to handle embed pagination</param>
     /// <param name="nekos">The NekosBest API</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     [Group]
     public class UserPunishCommands(
         MuteService mute,

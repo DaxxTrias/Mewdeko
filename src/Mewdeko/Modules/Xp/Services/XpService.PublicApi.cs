@@ -2,6 +2,8 @@ using System.IO;
 using System.Text.Json;
 using DataModel;
 using LinqToDB;
+using LinqToDB.Async;
+using Mewdeko.Modules.Xp.Events;
 using Mewdeko.Modules.Xp.Models;
 using Microsoft.Extensions.DependencyInjection;
 using StackExchange.Redis;
@@ -293,6 +295,10 @@ public partial class XpService
         await using var db = await DbFactory.CreateConnectionAsync();
 
         var userXp = await cacheManager.GetOrCreateGuildUserXpAsync(db, guildId, userId);
+        var settings = await cacheManager.GetGuildXpSettingsAsync(guildId);
+
+        // Calculate old level before reset
+        var oldLevel = XpCalculator.CalculateLevel(userXp.TotalXp, (XpCurveType)settings.XpCurveType);
 
         userXp.TotalXp = 0;
 
@@ -304,8 +310,25 @@ public partial class XpService
         userXp.LastLevelUp = DateTime.UtcNow;
         await db.UpdateAsync(userXp);
 
-        // Update cache
-        _ = cacheManager.UpdateUserXpCacheAsync(userXp);
+        // Update cache synchronously to ensure it's updated before events are fired
+        await cacheManager.UpdateUserXpCacheAsync(userXp);
+
+        // Publish level change event if user had a level before reset
+        if (oldLevel > 0)
+        {
+            _ = EventHandler.PublishEventAsync("XpLevelChanged", new XpLevelChangedEventArgs
+            {
+                GuildId = guildId,
+                UserId = userId,
+                OldLevel = oldLevel,
+                NewLevel = 0,
+                TotalXp = 0,
+                ChannelId = 0, // No specific channel for manual XP reset
+                Source = XpSource.Manual,
+                IsLevelUp = false, // This is a level down/reset
+                NotificationType = (XpNotificationType)userXp.NotifyType
+            });
+        }
     }
 
     /// <summary>
@@ -323,13 +346,35 @@ public partial class XpService
         await using var db = await DbFactory.CreateConnectionAsync();
 
         var userXp = await cacheManager.GetOrCreateGuildUserXpAsync(db, guildId, userId);
+        var settings = await cacheManager.GetGuildXpSettingsAsync(guildId);
+
+        // Calculate old and new levels
+        var oldLevel = XpCalculator.CalculateLevel(userXp.TotalXp, (XpCurveType)settings.XpCurveType);
+        var newLevel = XpCalculator.CalculateLevel(xpAmount, (XpCurveType)settings.XpCurveType);
 
         userXp.TotalXp = xpAmount;
         userXp.LastLevelUp = DateTime.UtcNow;
         await db.UpdateAsync(userXp);
 
-        // Update cache
-        _ = cacheManager.UpdateUserXpCacheAsync(userXp);
+        // Update cache synchronously to ensure it's updated before events are fired
+        await cacheManager.UpdateUserXpCacheAsync(userXp);
+
+        // Publish level change event if level changed
+        if (newLevel != oldLevel)
+        {
+            _ = EventHandler.PublishEventAsync("XpLevelChanged", new XpLevelChangedEventArgs
+            {
+                GuildId = guildId,
+                UserId = userId,
+                OldLevel = oldLevel,
+                NewLevel = newLevel,
+                TotalXp = xpAmount,
+                ChannelId = 0, // No specific channel for manual XP setting
+                Source = XpSource.Manual,
+                IsLevelUp = newLevel > oldLevel,
+                NotificationType = (XpNotificationType)userXp.NotifyType
+            });
+        }
     }
 
     /// <summary>
@@ -348,8 +393,8 @@ public partial class XpService
         userXp.NotifyType = (int)type;
         await db.UpdateAsync(userXp);
 
-        // Update cache
-        _ = cacheManager.UpdateUserXpCacheAsync(userXp);
+        // Update cache synchronously to ensure consistency
+        await cacheManager.UpdateUserXpCacheAsync(userXp);
     }
 
     /// <summary>
@@ -467,30 +512,6 @@ public partial class XpService
     #endregion
 
     #region Rewards Management
-
-    /// <summary>
-    ///     Sets a role reward for a specific level.
-    /// </summary>
-    /// <param name="guildId">The guild ID.</param>
-    /// <param name="level">The level to set the reward for.</param>
-    /// <param name="roleId">The role ID to award, or null to remove the reward.</param>
-    /// <returns>A task representing the asynchronous operation.</returns>
-    public async Task SetRoleRewardAsync(ulong guildId, int level, ulong? roleId)
-    {
-        await rewardManager.SetRoleRewardAsync(guildId, level, roleId);
-    }
-
-    /// <summary>
-    ///     Sets a currency reward for a specific level.
-    /// </summary>
-    /// <param name="guildId">The guild ID.</param>
-    /// <param name="level">The level to set the reward for.</param>
-    /// <param name="amount">The amount of currency to award, or 0 to remove the reward.</param>
-    /// <returns>A task representing the asynchronous operation.</returns>
-    public async Task SetCurrencyRewardAsync(ulong guildId, int level, long amount)
-    {
-        await rewardManager.SetCurrencyRewardAsync(guildId, level, amount);
-    }
 
     /// <summary>
     ///     Gets all role rewards for a guild.
@@ -926,7 +947,7 @@ public partial class XpService
     public byte[] GetDefaultBackgroundImage()
     {
         // This would be loaded from a resource file or similar
-        // For now, returning a placeholder
+        // Returns a placeholder value
         return File.ReadAllBytes("data/images/default_xp_background.png");
     }
 

@@ -1,7 +1,7 @@
 using System.Net.Http;
 using System.Text.Json;
 using DataModel;
-using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Controllers.Common.Giveaways;
 using Mewdeko.Modules.Giveaways.Services;
 using Mewdeko.Services.Impl;
@@ -31,6 +31,7 @@ public class GiveawaysController : Controller
     /// <param name="creds">The bot credentials instance.</param>
     /// <param name="client">The HTTP client instance.</param>
     /// <param name="dbFactory">The factory for creating database connections.</param>
+    /// <param name="logger">Logger for this class.</param>
     public GiveawaysController(
         GiveawayService service,
         BotCredentials creds,

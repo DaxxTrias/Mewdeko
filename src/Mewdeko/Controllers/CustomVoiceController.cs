@@ -1,8 +1,8 @@
 using System.Text.Json;
 using DataModel;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Controllers.Common.CustomVoice;
-using Mewdeko.Modules.CustomVoice.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -14,7 +14,7 @@ namespace Mewdeko.Controllers;
 [ApiController]
 [Route("botapi/[controller]/{guildId}")]
 [Authorize("ApiKeyPolicy")]
-public class CustomVoiceController(CustomVoiceService customVoiceService, IDataConnectionFactory dbFactory) : Controller
+public class CustomVoiceController(IDataConnectionFactory dbFactory) : Controller
 {
     /// <summary>
     ///     Gets the custom voice configuration for a guild
@@ -67,15 +67,10 @@ public class CustomVoiceController(CustomVoiceService customVoiceService, IDataC
     {
         await using var db = await dbFactory.CreateConnectionAsync();
 
-        var config = await db.CustomVoiceConfigs.FirstOrDefaultAsync(c => c.GuildId == guildId);
-
-        if (config == null)
+        var config = await db.CustomVoiceConfigs.FirstOrDefaultAsync(c => c.GuildId == guildId) ?? new CustomVoiceConfig
         {
-            config = new CustomVoiceConfig
-            {
-                GuildId = guildId, DateAdded = DateTime.UtcNow
-            };
-        }
+            GuildId = guildId, DateAdded = DateTime.UtcNow
+        };
 
         // Update all configurable properties
         config.HubVoiceChannelId = request.HubVoiceChannelId;

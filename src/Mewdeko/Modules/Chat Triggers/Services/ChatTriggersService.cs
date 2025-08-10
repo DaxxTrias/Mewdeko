@@ -2,6 +2,7 @@
 using System.Text.RegularExpressions;
 using DataModel;
 using LinqToDB;
+using LinqToDB.Async;
 using LinqToDB.Data;
 using Mewdeko.Common.DiscordImplementations;
 using Mewdeko.Common.ModuleBehaviors;
@@ -161,6 +162,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
     /// <param name="creds">The bot credentials.</param>
     /// <param name="strings">The bot strings.</param>
     /// <param name="eventHandler">The event handler.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public ChatTriggersService(
         PermissionService perms,
         IDataConnectionFactory dbFactory,
@@ -862,7 +864,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
                     // If the trigger has ContainsAnywhere enabled, check if it is contained as a word within the content
                     if (ct.ContainsAnywhere)
                     {
-                        var wp = content.GetWordPosition(trigger);
+                        var wp = content.AsSpan().GetWordPosition(trigger);
                         if (wp != WordPosition.None)
                             result.Add(ct);
                         continue;

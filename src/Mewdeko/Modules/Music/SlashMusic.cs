@@ -614,9 +614,10 @@ public class SlashMusic(
                 var selectOptions = tracksOnPage.Select(track =>
                     new SelectMenuOptionBuilder()
                         .WithLabel(
-                            $"{track.Index}. {(track.Track.Title.Length > 80 ? track.Track.Title.Substring(0, 77) + "..." : track.Track.Title)}")
+                            $"{track.Index}. {(track.Track.Title.Length > 80 ? track.Track.Title[..77] + "..." : track.Track.Title)}")
                         .WithValue($"music_track_info:{track.Index}")
-                        .WithDescription($"{track.Track.Duration} | {track.Requester.Username}")
+                        .WithDescription(Strings.MusicTrackInfo(Context.Guild.Id, track.Track.Duration,
+                            track.Requester.Username))
                 ).ToList();
 
                 var selectMenuRow = new ActionRowBuilder()
@@ -1273,7 +1274,7 @@ public class SlashMusic(
 
             // Add summary of added tracks
             var trackList = string.Join("\n", addedTracks.Take(5).Select(t =>
-                $"**{t.Index}.** {(t.Track.Title.Length > 50 ? t.Track.Title.Substring(0, 47) + "..." : t.Track.Title)}"));
+                $"**{t.Index}.** {(t.Track.Title.Length > 50 ? t.Track.Title[..47] + "..." : t.Track.Title)}"));
 
             if (addedTracks.Count > 5)
                 trackList += $"\n*...and {addedTracks.Count - 5} more tracks*";
@@ -1400,7 +1401,7 @@ public class SlashMusic(
                 case "prev":
                     var queue = await cache.GetMusicQueue(ctx.Guild.Id);
                     var currentTrack = await cache.GetCurrentTrack(ctx.Guild.Id);
-                    if (currentTrack != null && currentTrack.Index > 1)
+                    if (currentTrack is { Index: > 1 })
                     {
                         var prevTrack = queue.FirstOrDefault(x => x.Index == currentTrack.Index - 1);
                         if (prevTrack != null)

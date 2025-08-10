@@ -62,17 +62,19 @@ public class SlashUserPermAttribute : PreconditionAttribute
                     : PreconditionResult.FromSuccess();
             }
 
-            // If the user does not have the required permissions, return an error.
+            // If a DPO override exists for chat triggers in this guild, it REPLACES the base requirement.
             if (permResult)
-                if (!((IGuildUser)context.User).GuildPermissions.Has(perm))
-                    return PreconditionResult.FromError($"You need the `{perm}` permission to use this command.");
-            return await UserPermissionAttribute.CheckRequirementsAsync(context, command, services);
+            {
+                return ((IGuildUser)context.User).GuildPermissions.Has(perm)
+                    ? PreconditionResult.FromSuccess()
+                    : PreconditionResult.FromError($"You need the `{perm}` permission to use this command.");
+            }
         }
 
         // If the user does not have the required permissions, return an error.
-        if (permResult)
-            if (!((IGuildUser)context.User).GuildPermissions.Has(perm))
-                return PreconditionResult.FromError($"You need the `{perm}` permission to use this command.");
+        if (!permResult) return await UserPermissionAttribute.CheckRequirementsAsync(context, command, services);
+        if (!((IGuildUser)context.User).GuildPermissions.Has(perm))
+            return PreconditionResult.FromError($"You need the `{perm}` permission to use this command.");
         return await UserPermissionAttribute.CheckRequirementsAsync(context, command, services);
     }
 }

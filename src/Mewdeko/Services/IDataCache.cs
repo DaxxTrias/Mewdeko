@@ -53,6 +53,9 @@ public interface IDataCache
     /// <summary>
     ///     Caches AFK status for a user in a guild.
     /// </summary>
+    /// <param name="guildId">The guild identifier.</param>
+    /// <param name="userId">The userid identifier.</param>
+    /// <param name="afk">The afk parameter.</param>
     public Task CacheAfk(ulong guildId, ulong userId, Afk afk);
 
     /// <summary>
@@ -63,6 +66,8 @@ public interface IDataCache
     /// <summary>
     ///     Clears AFK status for a user in a guild.
     /// </summary>
+    /// <param name="guildId">The guild identifier.</param>
+    /// <param name="userId">The userid identifier.</param>
     public Task ClearAfk(ulong guildId, ulong userId);
 
     #endregion
@@ -198,21 +203,29 @@ public interface IDataCache
     /// <summary>
     ///     Caches highlights for a guild.
     /// </summary>
+    /// <param name="id">The id identifier.</param>
+    /// <param name="highlights">The highlights parameter.</param>
     public Task CacheHighlights(ulong id, List<Highlight> highlights);
 
     /// <summary>
     ///     Caches highlight settings for a guild.
     /// </summary>
+    /// <param name="id">The id identifier.</param>
+    /// <param name="highlightSettings">The highlightSettings parameter.</param>
     public Task CacheHighlightSettings(ulong id, List<HighlightSetting> highlightSettings);
 
     /// <summary>
     ///     Adds highlights to cache for a guild.
     /// </summary>
+    /// <param name="id">The id identifier.</param>
+    /// <param name="newHighlight">The newHighlight parameter.</param>
     public Task AddHighlightToCache(ulong id, List<Highlight?> newHighlight);
 
     /// <summary>
     ///     Removes highlights from cache for a guild.
     /// </summary>
+    /// <param name="id">The id identifier.</param>
+    /// <param name="newHighlight">The newHighlight parameter.</param>
     public Task RemoveHighlightFromCache(ulong id, List<Highlight?> newHighlight);
 
     /// <summary>
@@ -223,6 +236,8 @@ public interface IDataCache
     /// <summary>
     ///     Adds a highlight setting to cache for a guild.
     /// </summary>
+    /// <param name="id">The id identifier.</param>
+    /// <param name="newHighlightSetting">The newHighlightSetting parameter.</param>
     public Task AddHighlightSettingToCache(ulong id, List<HighlightSetting?> newHighlightSetting);
 
     /// <summary>
@@ -248,6 +263,8 @@ public interface IDataCache
     /// <summary>
     ///     Caches snipes for a guild.
     /// </summary>
+    /// <param name="id">The id identifier.</param>
+    /// <param name="newAfk">The newAfk parameter.</param>
     public Task AddSnipeToCache(ulong id, List<SnipeStore> newAfk);
 
     #endregion
@@ -262,6 +279,8 @@ public interface IDataCache
     /// <summary>
     ///     Sets image data asynchronously.
     /// </summary>
+    /// <param name="key">The key parameter.</param>
+    /// <param name="data">The data parameter.</param>
     public Task SetImageDataAsync(Uri key, byte[] data);
 
     #endregion
@@ -271,6 +290,9 @@ public interface IDataCache
     /// <summary>
     ///     Sets ship cache.
     /// </summary>
+    /// <param name="user1">The user1 identifier.</param>
+    /// <param name="user2">The user2 identifier.</param>
+    /// <param name="score">The score parameter.</param>
     public Task SetShip(ulong user1, ulong user2, int score);
 
     /// <summary>

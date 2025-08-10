@@ -6,6 +6,7 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using DataModel;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Common.Configs;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Services.Settings;
@@ -72,6 +73,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
     ///     The constructor subscribes to message received events and sets up periodic tasks for rotating statuses
     ///     and checking for updates. It also listens for commands to leave guilds or reload images via Redis subscriptions.
     /// </remarks>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public OwnerOnlyService(DiscordShardedClient client, CommandHandler cmdHandler, IDataConnectionFactory dbFactory,
         GeneratedBotStrings strings, IBotCredentials creds, IDataCache cache, IHttpClientFactory factory,
         BotConfigService bss, IEnumerable<IPlaceholderProvider> phProviders, Mewdeko bot,
@@ -1941,7 +1943,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
 
         // Generate first-letter abbreviation (main chkdsk style)
         var firstLetters = string.Join("", words.Select(w => w[0]));
-        if (firstLetters.Length >= 2 && firstLetters.Length <= 5) // Reasonable length
+        if (firstLetters.Length is >= 2 and <= 5) // Reasonable length
         {
             abbreviations.Add(firstLetters);
         }
@@ -2175,7 +2177,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         }
 
         var result = actionAbbrev + objectPart;
-        return result.Length >= 2 && result.Length <= 6 ? result : null;
+        return result.Length is >= 2 and <= 6 ? result : null;
     }
 
     /// <summary>

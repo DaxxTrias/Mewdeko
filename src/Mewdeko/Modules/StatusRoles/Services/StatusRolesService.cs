@@ -1,5 +1,6 @@
 ﻿using DataModel;
 using LinqToDB;
+using LinqToDB.Async;
 using ZiggyCreatures.Caching.Fusion;
 
 namespace Mewdeko.Modules.StatusRoles.Services;
@@ -22,6 +23,7 @@ public class StatusRolesService : INService
     /// <param name="dbFactory">The database context provider.</param>
     /// <param name="eventHandler">The event handler.</param>
     /// <param name="cache">The data cache service.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public StatusRolesService(DiscordShardedClient client, IDataConnectionFactory dbFactory, EventHandler eventHandler,
         IFusionCache cache, ILogger<StatusRolesService> logger)
     {

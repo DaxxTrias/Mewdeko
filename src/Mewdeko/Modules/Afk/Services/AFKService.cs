@@ -2,6 +2,7 @@
 using DataModel;
 using Humanizer;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Services.Settings;
 using Mewdeko.Services.Strings;
@@ -41,6 +42,7 @@ public class AfkService : INService, IReadyExecutor, IDisposable
     /// <param name="eventHandler">Handler for Discord events.</param>
     /// <param name="config">The bot's configuration service.</param>
     /// <param name="strings">The localization service.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public AfkService(
         IDataConnectionFactory dbFactory,
         DiscordShardedClient client,
@@ -452,7 +454,7 @@ public class AfkService : INService, IReadyExecutor, IDisposable
                 .FirstOrDefaultAsync(a => a.GuildId == state.GuildId && a.UserId == state.UserId).ConfigureAwait(false);
 
             // Only proceed if AFK exists and was timed and is now due
-            if (afk?.WasTimed == true && afk.When.HasValue && afk.When.Value <= DateTime.UtcNow)
+            if (afk is { WasTimed: true, When: not null } && afk.When.Value <= DateTime.UtcNow)
             {
                 await TimedAfkFinished(afk);
             }

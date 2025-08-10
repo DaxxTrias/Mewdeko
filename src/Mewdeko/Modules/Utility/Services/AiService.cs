@@ -8,9 +8,11 @@ using System.Text.Json.Serialization;
 using Antlr4.Runtime.Misc;
 using DataModel;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Common.Configs;
 using Mewdeko.Modules.Utility.Services.Impl;
 using Mewdeko.Services.Strings;
+using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 using Embed = Discord.Embed;
 
@@ -55,15 +57,30 @@ public class AiService : INService
     private readonly ILogger<AiService> logger;
     private readonly ConcurrentDictionary<AiProvider, List<AiModel>> modelCache;
     private readonly TimeSpan modelCacheExpiry = TimeSpan.FromHours(24);
+    private readonly IServiceProvider serviceProvider;
     private readonly GeneratedBotStrings strings;
+    private string currentToolId;
+    private string currentToolInput = "";
+
+    // Tool use tracking
+    private string currentToolName;
+    private bool isCollectingToolInput;
     private DateTime lastModelUpdate = DateTime.MinValue;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="AiService" /> class.
     /// </summary>
+    /// <param name="dbFactory">The database connection factory.</param>
+    /// <param name="httpFactory">The httpfactory factory.</param>
+    /// <param name="strings">The localized strings service.</param>
+    /// <param name="config">The bot configuration settings.</param>
+    /// <param name="handler">The handler parameter.</param>
+    /// <param name="client">The Discord client instance.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
+    /// <param name="serviceProvider">The service provider for dependency injection.</param>
     public AiService(IDataConnectionFactory dbFactory, IHttpClientFactory httpFactory,
         GeneratedBotStrings strings, BotConfig config, EventHandler handler, DiscordShardedClient client,
-        ILogger<AiService> logger)
+        ILogger<AiService> logger, IServiceProvider serviceProvider)
     {
         this.dbFactory = dbFactory;
         this.httpFactory = httpFactory;
@@ -71,6 +88,7 @@ public class AiService : INService
         botConfig = config;
         this.client = client;
         this.logger = logger;
+        this.serviceProvider = serviceProvider;
         aiClientFactory = new AiClientFactory(httpFactory);
         handler.Subscribe("MessageReceived", "AiService", HandleMessage);
         modelCache = new ConcurrentDictionary<AiProvider, List<AiModel>>();
@@ -174,6 +192,12 @@ public class AiService : INService
 
         // Find the matching prefix (if any)
         var prefix = prefixes.FirstOrDefault(p => msg.Content.StartsWith(p, StringComparison.OrdinalIgnoreCase));
+
+        // After determining the prefix
+        if (string.IsNullOrEmpty(prefix) || !msg.Content.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return; // Quit early if no valid prefix
+        }
 
         if (!string.IsNullOrEmpty(config.WebhookUrl))
         {
@@ -562,11 +586,41 @@ public class AiService : INService
             });
         }
 
-        //logger.LogInformation("Sending to AI provider. Messages: {Json}", JsonSerializer.Serialize(messagesToSend));
+        // Filter out empty assistant messages
+        messagesToSend = messagesToSend
+            .Where(m => m.Role != "assistant" || !string.IsNullOrWhiteSpace(m.Content))
+            .ToList();
 
-        var stream = await aiClient.StreamResponseAsync(messagesToSend, config.Model, config.ApiKey);
+        // Ensure last message is a user message (for current prompt)
+        if (messagesToSend.Count == 0 || messagesToSend.Last().Role != "user")
+        {
+            messagesToSend.Add(new AiMessage
+            {
+                ConversationId = convId,
+                Role = "user",
+                Content = userQuery
+            });
+        }
 
-        string lastRawJson = null;
+        // Use tools if enabled and provider is Claude
+        IAsyncEnumerable<string> stream;
+        if (config.Provider == (int)AiProvider.Claude && aiClient is ClaudeClient claudeClient)
+        {
+            var enableWebSearch = config.WebSearchEnabled;
+            var enableUserInfo = true; // Always enable user info for Claude
+
+            stream = await claudeClient.StreamResponseAsync(messagesToSend, config.Model, config.ApiKey,
+                enableWebSearch, enableUserInfo, guildChannel.Guild.Id);
+        }
+        else
+        {
+            stream = await aiClient.StreamResponseAsync(messagesToSend, config.Model, config.ApiKey);
+        }
+
+        string stopReason = null;
+        var toolUseRequests = new List<ToolUseRequest>();
+
+        string? lastRawJson = null;
         await foreach (var rawJson in stream)
         {
             // Ensure that rawJson is explicitly cast to a string before checking for null or empty
@@ -604,10 +658,15 @@ public class AiService : INService
                 await UpdateMessageEmbed(false); // false = not final update
             }
 
-            // Check if stream is finished
-            if (streamParser.IsStreamFinished(rawJson, (AiProvider)config.Provider))
+            // Check for tool use requests
+            HandleToolUseEventIfNeeded(rawJson, toolUseRequests);
+
+            // Check if stream is finished and extract stop reason
+            var streamFinishInfo = streamParser.CheckStreamFinished(rawJson, (AiProvider)config.Provider);
+            if (streamFinishInfo.IsFinished)
             {
-                logger.LogInformation("AI stream finished");
+                stopReason = streamFinishInfo.StopReason;
+                logger.LogInformation($"AI stream finished with stop reason: {stopReason}");
                 break;
             }
 
@@ -622,12 +681,119 @@ public class AiService : INService
         if (lastRawJson != null && 
             (config.Provider == (int)AiProvider.OpenAi || config.Provider == (int)AiProvider.Grok))
         {
+            logger.LogInformation("Parsing final usage from last raw JSON: {Json}", lastRawJson);
             var usage = streamParser.ParseUsage(lastRawJson, (AiProvider)config.Provider);
             if (usage.HasValue)
             {
                 tokenCount = usage.Value.TotalTokens;
                 logger.LogInformation($"Updated token count: {tokenCount}");
             }
+        }
+
+        // Handle tool use if the stream ended with tool_use stop reason
+        if (stopReason == "tool_use" && toolUseRequests.Any())
+        {
+            logger.LogInformation($"Processing {toolUseRequests.Count} tool use requests");
+
+            // Execute all tool requests and collect results
+            var toolResults = new List<ToolResult>();
+            foreach (var toolRequest in toolUseRequests)
+            {
+                var result = await ExecuteToolRequest(toolRequest, guildChannel.Guild.Id);
+                toolResults.Add(result);
+            }
+
+            // Add the assistant message with tool use to conversation history
+            // When Claude uses tools, the assistant message may have no text content
+            var assistantContent = responseBuilder.ToString();
+            logger.LogInformation(
+                $"Assistant content length: {assistantContent?.Length ?? 0}, tool requests: {toolUseRequests.Count}");
+
+            if (!string.IsNullOrWhiteSpace(assistantContent))
+            {
+                messagesToSend.Add(new AiMessage
+                {
+                    Role = "assistant", Content = assistantContent
+                });
+                logger.LogInformation("Added assistant message with content to conversation history");
+            }
+            else
+            {
+                logger.LogInformation("Skipping empty assistant message - Claude used tools without text content");
+            }
+
+            // Add tool results to conversation history
+            var toolResultsContent = string.Join("\n", toolResults.Select(r =>
+                $"<tool_result>\n<tool_use_id>{r.ToolUseId}</tool_use_id>\n{r.Content}\n</tool_result>"));
+
+            messagesToSend.Add(new AiMessage
+            {
+                Role = "user", Content = toolResultsContent
+            });
+
+            // Continue the conversation with the tool results
+            logger.LogInformation($"Continuing conversation with tool results. Total messages: {messagesToSend.Count}");
+            for (var i = 0; i < messagesToSend.Count; i++)
+            {
+                var msg = messagesToSend[i];
+                logger.LogInformation($"Message {i}: Role={msg.Role}, ContentLength={msg.Content?.Length ?? 0}");
+            }
+
+            await StreamResponse(config, webhookMessageId, userMsg, webhook);
+            return;
+        }
+
+        // Handle tool use if the stream ended with tool_use stop reason
+        if (stopReason == "tool_use" && toolUseRequests.Any())
+        {
+            logger.LogInformation($"Processing {toolUseRequests.Count} tool use requests");
+
+            // Execute all tool requests and collect results
+            var toolResults = new List<ToolResult>();
+            foreach (var toolRequest in toolUseRequests)
+            {
+                var result = await ExecuteToolRequest(toolRequest, guildChannel.Guild.Id);
+                toolResults.Add(result);
+            }
+
+            // Add the assistant message with tool use to conversation history
+            // When Claude uses tools, the assistant message may have no text content
+            var assistantContent = responseBuilder.ToString();
+            logger.LogInformation(
+                $"Assistant content length: {assistantContent?.Length ?? 0}, tool requests: {toolUseRequests.Count}");
+
+            if (!string.IsNullOrWhiteSpace(assistantContent))
+            {
+                messagesToSend.Add(new AiMessage
+                {
+                    Role = "assistant", Content = assistantContent
+                });
+                logger.LogInformation("Added assistant message with content to conversation history");
+            }
+            else
+            {
+                logger.LogInformation("Skipping empty assistant message - Claude used tools without text content");
+            }
+
+            // Add tool results to conversation history
+            var toolResultsContent = string.Join("\n", toolResults.Select(r =>
+                $"<tool_result>\n<tool_use_id>{r.ToolUseId}</tool_use_id>\n{r.Content}\n</tool_result>"));
+
+            messagesToSend.Add(new AiMessage
+            {
+                Role = "user", Content = toolResultsContent
+            });
+
+            // Continue the conversation with the tool results
+            logger.LogInformation($"Continuing conversation with tool results. Total messages: {messagesToSend.Count}");
+            for (var i = 0; i < messagesToSend.Count; i++)
+            {
+                var msg = messagesToSend[i];
+                logger.LogInformation($"Message {i}: Role={msg.Role}, ContentLength={msg.Content?.Length ?? 0}");
+            }
+
+            await StreamResponse(config, webhookMessageId, userMsg, webhook);
+            return;
         }
 
         await db.InsertAsync(new AiMessage
@@ -669,7 +835,7 @@ public class AiService : INService
                         if (needsSplitting)
                         {
                             // Handle multi-part response with JSON template
-                            await SendMultipartJsonEmbeds(responseChunks);
+                            await SendMultipartJsonEmbeds(responseChunks, isFinalUpdate);
                             return;
                         }
 
@@ -747,7 +913,7 @@ public class AiService : INService
             if (needsSplitting)
             {
                 // Send multiple regular embeds
-                await SendMultipartRegularEmbeds(responseChunks);
+                await SendMultipartRegularEmbeds(responseChunks, isFinalUpdate);
             }
             else
             {
@@ -903,97 +1069,149 @@ public class AiService : INService
             }
 
             // Helper method to send multiple embeds when using JSON templates
-            async Task SendMultipartJsonEmbeds(List<string> chunks)
+            async Task SendMultipartJsonEmbeds(List<string> chunks, bool isFinalUpdate)
             {
-                // For the initial message (or webhook update)
-                var allEmbeds = new List<Embed>();
+                // If not final, only render the first chunk into the main message to avoid exceeding limits
+                var processAllChunks = isFinalUpdate;
 
-                for (var i = 0; i < chunks.Count; i++)
+                // Build the embed(s) for the first chunk using the template
+                try
+                {
+                    var escapedChunk = EscapeJsonString(chunks[0]);
+                    var jsonTemplate = initialTemplate.Replace("%airesponse%", escapedChunk);
+
+                    var newEmbed = JsonSerializer.Deserialize<NewEmbed>(jsonTemplate);
+                    if (newEmbed != null && (newEmbed.Embeds?.Count > 0 || newEmbed.Embed != null))
+                    {
+                        var firstMessageEmbeds = GetDiscordEmbeds(newEmbed);
+
+                        if (webhook != null && webhookMessageId.HasValue)
+                        {
+                            await webhook.ModifyMessageAsync(webhookMessageId.Value, msg =>
+                            {
+                                msg.Content = newEmbed.Content;
+                                msg.Embeds = firstMessageEmbeds;
+                            });
+                        }
+                        else if (regularMessage != null)
+                        {
+                            await regularMessage.ModifyAsync(msg =>
+                            {
+                                msg.Content = newEmbed.Content;
+                                msg.Embeds = firstMessageEmbeds.ToArray();
+                            });
+                        }
+                        else
+                        {
+                            regularMessage = await userMsg.Channel.SendMessageAsync(
+                                newEmbed.Content,
+                                embeds: firstMessageEmbeds.ToArray(),
+                                allowedMentions: AllowedMentions.None);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning($"Error creating JSON embed for first chunk: {ex.Message}");
+
+                    // Fallback for the first chunk
+                    var fallbackEmbed = new EmbedBuilder()
+                        .WithOkColor()
+                        .WithTitle($"Response (Part 1/{chunks.Count})")
+                        .WithDescription(chunks[0])
+                        .WithFooter(strings.AiResponseFooter(config.GuildId, userMsg.Author.Username, tokenCount))
+                        .Build();
+
+                    if (webhook != null && webhookMessageId.HasValue)
+                    {
+                        await webhook.ModifyMessageAsync(webhookMessageId.Value, msg =>
+                        {
+                            msg.Content = null;
+                            msg.Embeds = new List<Embed> { fallbackEmbed };
+                        });
+                    }
+                    else if (regularMessage != null)
+                    {
+                        await regularMessage.ModifyAsync(msg =>
+                        {
+                            msg.Content = null;
+                            msg.Embeds = new[] { fallbackEmbed };
+                        });
+                    }
+                    else
+                    {
+                        regularMessage = await userMsg.Channel.SendMessageAsync(
+                            embeds: new[] { fallbackEmbed },
+                            allowedMentions: AllowedMentions.None);
+                    }
+                }
+
+                // For non-final updates, don't send additional parts yet to avoid duplicates during streaming
+                if (!processAllChunks)
+                    return;
+
+                // Send remaining chunks as separate follow-up messages (simple embeds to ensure safety)
+                for (var i = 1; i < chunks.Count; i++)
                 {
                     try
                     {
-                        // Create a new JSON embed for each chunk by using the template
-                        var escapedChunk = EscapeJsonString(chunks[i]);
-                        var jsonTemplate = initialTemplate.Replace("%airesponse%", escapedChunk);
+                        var embedBuilder = new EmbedBuilder()
+                            .WithOkColor()
+                            .WithTitle($"Continued (Part {i + 1}/{chunks.Count})")
+                            .WithDescription(chunks[i]);
 
-                        var newEmbed = JsonSerializer.Deserialize<NewEmbed>(jsonTemplate);
-
-                        if (newEmbed != null && (newEmbed.Embeds?.Count > 0 || newEmbed.Embed != null))
+                        if (i == chunks.Count - 1)
                         {
-                            var discordEmbeds = new List<Embed>();
+                            embedBuilder.WithFooter(strings.AiResponseFooter(config.GuildId, userMsg.Author.Username,
+                                tokenCount));
+                        }
 
-                            if (newEmbed.Embeds?.Count > 0)
-                            {
-                                // Add part indicator to first embed title or description if missing
-                                if (i > 0 && newEmbed.Embeds[0] != null)
-                                {
-                                    // If there's a title, append to it, otherwise add to description
-                                    if (!string.IsNullOrEmpty(newEmbed.Embeds[0].Title))
-                                    {
-                                        newEmbed.Embeds[0].Title =
-                                            $"{newEmbed.Embeds[0].Title} (Part {i + 1}/{chunks.Count})";
-                                    }
-                                    else if (!string.IsNullOrEmpty(newEmbed.Embeds[0].Description))
-                                    {
-                                        // For the description, we'll prepend the part indicator
-                                        newEmbed.Embeds[0].Description =
-                                            $"**Part {i + 1}/{chunks.Count}**\n\n{newEmbed.Embeds[0].Description}";
-                                    }
-                                }
+                        var embed = embedBuilder.Build();
 
-                                discordEmbeds.AddRange(NewEmbed.ToEmbedArray(newEmbed.Embeds));
-                            }
-                            else if (newEmbed.Embed != null)
-                            {
-                                // Add part indicator to single embed
-                                if (i > 0)
-                                {
-                                    if (!string.IsNullOrEmpty(newEmbed.Embed.Title))
-                                    {
-                                        newEmbed.Embed.Title = $"{newEmbed.Embed.Title} (Part {i + 1}/{chunks.Count})";
-                                    }
-                                    else if (!string.IsNullOrEmpty(newEmbed.Embed.Description))
-                                    {
-                                        newEmbed.Embed.Description =
-                                            $"**Part {i + 1}/{chunks.Count}**\n\n{newEmbed.Embed.Description}";
-                                    }
-                                }
-
-                                discordEmbeds.AddRange(NewEmbed.ToEmbedArray(new List<global::Mewdeko.Common.Embed>
-                                {
-                                    newEmbed.Embed
-                                }));
-                            }
-
-                            // Add to our collection
-                            allEmbeds.AddRange(discordEmbeds);
+                        if (webhook != null && webhookMessageId.HasValue)
+                        {
+                            // Send a new webhook message for each additional part
+                            await webhook.SendMessageAsync(embeds: new[] { embed });
+                        }
+                        else
+                        {
+                            await userMsg.Channel.SendMessageAsync(embeds: new[] { embed },
+                                allowedMentions: AllowedMentions.None);
                         }
                     }
                     catch (Exception ex)
                     {
-                        logger.LogWarning($"Error creating JSON embed for chunk {i + 1}: {ex.Message}");
-
-                        // Fallback for this chunk
-                        var fallbackEmbed = new EmbedBuilder()
-                            .WithOkColor()
-                            .WithTitle($"Response (Part {i + 1}/{chunks.Count})")
-                            .WithDescription(chunks[i])
-                            .WithFooter(i == chunks.Count - 1
-                                ? strings.AiResponseFooter(config.GuildId, userMsg.Author.Username, tokenCount)
-                                : null)
-                            .Build();
-
-                        allEmbeds.Add(fallbackEmbed);
+                        logger.LogWarning($"Error sending JSON multipart chunk {i + 1}: {ex.Message}");
                     }
                 }
+            }
 
-                // Send or update the message with all embeds
+            // Helper method to send multiple standard embeds (non-JSON template)
+            async Task SendMultipartRegularEmbeds(List<string> chunks, bool isFinalUpdate)
+            {
+                // If not final, only show the first chunk in the main message to prevent hitting 6000 total per message
+                var showAllChunks = isFinalUpdate;
+
+                // Build the first embed
+                var firstEmbedBuilder = new EmbedBuilder()
+                    .WithOkColor()
+                    .WithDescription(chunks[0]);
+
+                if (showAllChunks && chunks.Count == 1)
+                {
+                    firstEmbedBuilder.WithFooter(strings.AiResponseFooter(config.GuildId, userMsg.Author.Username,
+                        tokenCount));
+                }
+
+                var firstEmbed = firstEmbedBuilder.Build();
+
+                // Send/modify the main message with only the first chunk
                 if (webhook != null && webhookMessageId.HasValue)
                 {
                     await webhook.ModifyMessageAsync(webhookMessageId.Value, msg =>
                     {
                         msg.Content = null;
-                        msg.Embeds = allEmbeds;
+                        msg.Embeds = new List<Embed> { firstEmbed };
                     });
                 }
                 else if (regularMessage != null)
@@ -1001,73 +1219,45 @@ public class AiService : INService
                     await regularMessage.ModifyAsync(msg =>
                     {
                         msg.Content = null;
-                        msg.Embeds = allEmbeds.ToArray();
+                        msg.Embeds = new[] { firstEmbed };
                     });
                 }
                 else
                 {
-                    // First message
                     regularMessage = await userMsg.Channel.SendMessageAsync(
-                        embeds: allEmbeds.ToArray(),
+                        embeds: new[] { firstEmbed },
                         allowedMentions: AllowedMentions.None);
                 }
-            }
 
-            // Helper method to send multiple standard embeds (non-JSON template)
-            async Task SendMultipartRegularEmbeds(List<string> chunks)
-            {
-                // Create a collection of embeds
-                var allEmbeds = new List<Embed>();
+                // During streaming, stop here to avoid duplicate additional messages
+                if (!showAllChunks)
+                    return;
 
-                for (var i = 0; i < chunks.Count; i++)
+                // Send the remaining chunks as separate follow-up messages, one embed per message
+                for (var i = 1; i < chunks.Count; i++)
                 {
                     var embedBuilder = new EmbedBuilder()
-                        .WithOkColor();
+                        .WithOkColor()
+                        .WithTitle($"Continued (Part {i + 1}/{chunks.Count})")
+                        .WithDescription(chunks[i]);
 
-                    // First part doesn't need a part indicator in the title
-                    if (i == 0)
-                    {
-                        embedBuilder.WithDescription(chunks[i]);
-                    }
-                    else
-                    {
-                        embedBuilder.WithTitle($"Continued (Part {i + 1}/{chunks.Count})")
-                            .WithDescription(chunks[i]);
-                    }
-
-                    // Add footer to last part only
-                    if (i == chunks.Count - 1 || isFinalUpdate)
+                    if (i == chunks.Count - 1)
                     {
                         embedBuilder.WithFooter(strings.AiResponseFooter(config.GuildId, userMsg.Author.Username,
                             tokenCount));
                     }
 
-                    allEmbeds.Add(embedBuilder.Build());
-                }
+                    var embed = embedBuilder.Build();
 
-                // Send or update with all embeds
-                if (webhook != null && webhookMessageId.HasValue)
-                {
-                    await webhook.ModifyMessageAsync(webhookMessageId.Value, msg =>
+                    if (webhook != null && webhookMessageId.HasValue)
                     {
-                        msg.Content = null;
-                        msg.Embeds = allEmbeds;
-                    });
-                }
-                else if (regularMessage != null)
-                {
-                    await regularMessage.ModifyAsync(msg =>
+                        await webhook.SendMessageAsync(embeds: new[] { embed });
+                    }
+                    else
                     {
-                        msg.Content = null;
-                        msg.Embeds = allEmbeds.ToArray();
-                    });
-                }
-                else
-                {
-                    // First message
-                    regularMessage = await userMsg.Channel.SendMessageAsync(
-                        embeds: allEmbeds.ToArray(),
-                        allowedMentions: AllowedMentions.None);
+                        await userMsg.Channel.SendMessageAsync(embeds: new[] { embed },
+                            allowedMentions: AllowedMentions.None);
+                    }
                 }
             }
         }
@@ -1210,7 +1400,7 @@ public class AiService : INService
             var lastChunk = results[results.Count - 1];
             if (lastChunk.Length > maxChunkSize - 100)
             {
-                lastChunk = lastChunk.Substring(0, maxChunkSize - 100);
+                lastChunk = lastChunk[..(maxChunkSize - 100)];
             }
 
             results[results.Count - 1] = lastChunk + "\n\n... (Response truncated due to length)";
@@ -1371,6 +1561,191 @@ public class AiService : INService
     }
 
     /// <summary>
+    ///     Handles tool use events from Claude AI stream and accumulates tool requests.
+    /// </summary>
+    /// <param name="rawJson">The raw JSON from Claude's API</param>
+    /// <param name="toolUseRequests">List to accumulate completed tool requests</param>
+    private void HandleToolUseEventIfNeeded(string rawJson, List<ToolUseRequest> toolUseRequests)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(rawJson);
+            var root = doc.RootElement;
+
+            if (!root.TryGetProperty("type", out var typeProperty))
+                return;
+
+            var eventType = typeProperty.GetString();
+
+            // Handle content_block_start with tool_use
+            if (eventType == "content_block_start")
+            {
+                if (root.TryGetProperty("content_block", out var contentBlock) &&
+                    contentBlock.TryGetProperty("type", out var blockType) &&
+                    blockType.GetString() == "tool_use")
+                {
+                    // Start of a tool use - extract name and ID
+                    if (contentBlock.TryGetProperty("name", out var nameProperty) &&
+                        contentBlock.TryGetProperty("id", out var idProperty))
+                    {
+                        currentToolName = nameProperty.GetString();
+                        currentToolId = idProperty.GetString();
+                        currentToolInput = "";
+                        isCollectingToolInput = true;
+
+                        logger.LogInformation($"Started tool use: {currentToolName} with ID: {currentToolId}");
+                    }
+                }
+
+                return;
+            }
+
+            // Handle content_block_delta with input_json_delta
+            if (eventType == "content_block_delta" && isCollectingToolInput)
+            {
+                if (root.TryGetProperty("delta", out var delta) &&
+                    delta.TryGetProperty("type", out var deltaType) &&
+                    deltaType.GetString() == "input_json_delta" &&
+                    delta.TryGetProperty("partial_json", out var partialJson))
+                {
+                    var jsonPart = partialJson.GetString();
+                    currentToolInput += jsonPart;
+                    logger.LogInformation($"Accumulated tool input: {currentToolInput}");
+                }
+
+                return;
+            }
+
+            // Handle content_block_stop - complete the tool request
+            if (eventType == "content_block_stop" && isCollectingToolInput)
+            {
+                logger.LogInformation($"Tool input complete: {currentToolInput}");
+
+                if (!string.IsNullOrEmpty(currentToolName) && !string.IsNullOrEmpty(currentToolId))
+                {
+                    toolUseRequests.Add(new ToolUseRequest
+                    {
+                        Id = currentToolId, Name = currentToolName, InputJson = currentToolInput
+                    });
+                }
+
+                // Reset tool state
+                currentToolName = null;
+                currentToolId = null;
+                currentToolInput = "";
+                isCollectingToolInput = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error handling tool use event");
+            // Reset tool state on error
+            currentToolName = null;
+            currentToolId = null;
+            currentToolInput = "";
+            isCollectingToolInput = false;
+        }
+    }
+
+    /// <summary>
+    ///     Executes a tool request and returns the result.
+    /// </summary>
+    private async Task<ToolResult> ExecuteToolRequest(ToolUseRequest toolRequest, ulong guildId)
+    {
+        try
+        {
+            logger.LogInformation($"Executing tool: {toolRequest.Name} with input: {toolRequest.InputJson}");
+
+            if (toolRequest.Name == "get_user_info")
+            {
+                string toolResult;
+
+                // Parse the tool input JSON
+                if (!string.IsNullOrEmpty(toolRequest.InputJson))
+                {
+                    using var inputDoc = JsonDocument.Parse(toolRequest.InputJson);
+                    var inputRoot = inputDoc.RootElement;
+
+                    if (inputRoot.TryGetProperty("user_query", out var userQueryProperty))
+                    {
+                        var userQuery = userQueryProperty.GetString();
+                        logger.LogInformation($"Looking up user: {userQuery}");
+
+                        var userInfoService = serviceProvider.GetRequiredService<UserInfoToolService>();
+                        toolResult = await userInfoService.FindUserAsync(guildId, userQuery);
+                    }
+                    else
+                    {
+                        toolResult = JsonSerializer.Serialize(new
+                        {
+                            error = "Missing required parameter: user_query"
+                        });
+                    }
+                }
+                else
+                {
+                    toolResult = JsonSerializer.Serialize(new
+                    {
+                        error = "Empty tool input"
+                    });
+                }
+
+                logger.LogInformation($"Tool result for {toolRequest.Name}: {toolResult.Length} characters");
+
+                return new ToolResult
+                {
+                    ToolUseId = toolRequest.Id, Content = toolResult, IsError = false
+                };
+            }
+
+            logger.LogWarning($"Unknown tool requested: {toolRequest.Name}");
+            return new ToolResult
+            {
+                ToolUseId = toolRequest.Id,
+                Content = JsonSerializer.Serialize(new
+                {
+                    error = $"Unknown tool: {toolRequest.Name}"
+                }),
+                IsError = true
+            };
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, $"Error executing tool {toolRequest.Name}: {ex.Message}");
+
+            return new ToolResult
+            {
+                ToolUseId = toolRequest.Id,
+                Content = JsonSerializer.Serialize(new
+                {
+                    error = $"Tool execution failed: {ex.Message}"
+                }),
+                IsError = true
+            };
+        }
+    }
+
+    /// <summary>
+    ///     Represents a tool use request from Claude
+    /// </summary>
+    private class ToolUseRequest
+    {
+        public string Id { get; set; }
+        public string Name { get; set; }
+        public string InputJson { get; set; }
+    }
+
+    /// <summary>
+    ///     Represents the result of a tool execution
+    /// </summary>
+    private class ToolResult
+    {
+        public string ToolUseId { get; set; }
+        public string Content { get; set; }
+        public bool IsError { get; set; }
+    }
+
+    /// <summary>
     ///     Gets the logo URL for the specified AI provider.
     /// </summary>
     /// <param name="provider">The AI provider.</param>
@@ -1382,7 +1757,7 @@ public class AiService : INService
             AiProvider.OpenAi => "https://seeklogo.com/images/C/chatgpt-logo-02AFA704B5-seeklogo.com.png",
             AiProvider.Grok => "https://images.seeklogo.com/logo-png/61/2/grok-logo-png_seeklogo-613403.png",
             AiProvider.Groq => "https://seeklogo.com/images/G/groq-logo-1B1B1B1B1B-seeklogo.com.png",
-            AiProvider.Claude => "https://assets-global.website-files.com/63f6c7b6b2b1e2b8e7e1e1e1/63f6c7b6b2b1e2b8e7e1e1e1_claude-logo.png",
+            AiProvider.Claude => "https://images.seeklogo.com/logo-png/55/1/claude-logo-png_seeklogo-554534.png",
             _ => string.Empty
         };
     }

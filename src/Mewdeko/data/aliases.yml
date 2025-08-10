@@ -2,6 +2,164 @@ accept:
   - accept
   - suggestaccept
   - acceptsuggest
+rep:
+  - rep
+  - +rep
+  - giverep
+  - gr
+repgive:
+  - repgive
+  - giverep
+  - gr
+giverep:
+  - giverep
+  - rep
+  - +rep
+  - gr
+repcheck:
+  - repcheck
+  - rc
+  - myrep
+  - checkrep
+myrep:
+  - myrep
+  - repcheck
+  - rc
+checkrep:
+  - checkrep
+  - repcheck
+  - rc
+repleaderboard:
+  - repleaderboard
+  - replb
+  - reptop
+  - toprep
+replb:
+  - replb
+  - repleaderboard
+  - reptop
+  - toprep
+reptop:
+  - reptop
+  - repleaderboard
+  - replb
+  - toprep
+toprep:
+  - toprep
+  - repleaderboard
+  - replb
+  - reptop
+rephistory:
+  - rephistory
+  - rephist
+repstats:
+  - repstats
+  - repstat
+reptake:
+  - reptake
+  - -rep
+  - takerep
+repset:
+  - repset
+  - setrep
+represet:
+  - represet
+  - resetrep
+repfreeze:
+  - repfreeze
+  - freezerep
+repunfreeze:
+  - repunfreeze
+  - unfreeze
+  - unfreezerep
+repconfig:
+  - repconfig
+  - repcfg
+repchannel:
+  - repchannel
+  - repch
+reprole:
+  - reprole
+reproleremove:
+  - reproleremove
+  - reprr
+repreaction:
+  - repreaction
+  - repemoji
+  - rre
+repreactionremove:
+  - repreactionremove
+  - repemojiremove
+  - rrer
+repreactionlist:
+  - repreactionlist
+  - repemojilist
+  - rrel
+reptypeadd:
+  - reptypeadd
+  - repaddtype
+  - rta
+reptyperemove:
+  - reptyperemove
+  - repremovetype
+  - rtr
+reptypelist:
+  - reptypelist
+  - replisttypes
+  - rtl
+anonrep:
+  - anonrep
+  - repanon
+  - anongiverep
+repanon:
+  - repanon
+  - anonrep
+  - anongiverep
+repchannel:
+  - repchannel
+  - repch
+  - repchannelconfig
+repreaction:
+  - repreaction
+  - repemoji
+  - rre
+repreactionremove:
+  - repreactionremove
+  - repemojiremove
+  - rrer
+repreactionlist:
+  - repreactionlist
+  - repemojilist
+  - rrel
+repcommandreq:
+  - repcommandreq
+  - repcmdreq
+  - rcr
+repcommandbypass:
+  - repcommandbypass
+  - repcmdbypass
+  - rcb
+repcommandreqremove:
+  - repcommandreqremove
+  - repcmdreqremove
+  - rcrr
+repcommandreqlist:
+  - repcommandreqlist
+  - repcmdreqlist
+  - rcrl
+repcommandinfo:
+  - repcommandinfo
+  - repcmdinfo
+  - rci
+repexport:
+  - repexport
+  - repex
+repimport:
+  - repimport
+  - repim
+repstatus:
+  - repstatus
+  - repstat
 autobanroleadd:
   - autobanroleadd
   - abra
@@ -106,6 +264,26 @@ starboardallowbots:
   - starbots
   - starbotsallow
   - starbab
+addstarboardemote:
+  - addstarboardemote
+  - addstaremote
+  - starboardaddemote
+  - asbe
+removestarboardemote:
+  - removestarboardemote
+  - removestaremote
+  - starboardremoveemote
+  - rsbe
+starboardstats:
+  - starboardstats
+  - starstats
+  - starboardstatistics
+  - sbstats
+starboarduserstats:
+  - starboarduserstats
+  - staruserstats
+  - userstarstats
+  - sbuserstats
 toggleinvitetracking:
   - toggleinvitetracking
 toggleremoveinviteonleave:
@@ -2301,6 +2479,12 @@ setxpmultiplier:
   - xpmult
 setxpcurve:
   - setxpcurve
+setxpexclusive:
+  - setxpexclusive
+  - xpexclusive
+  - exclusivexp
+  - setxpexcl
+  - xpexcl
 setchannelxp:
   - setchannelxp
 setrolexp:
@@ -2350,6 +2534,30 @@ syncmyxproles:
   - syncmyxproles
 syncuserxproles:
   - syncuserxproles
+levelupchannel:
+  - levelupchannel
+  - lvlupchan
+addlevelupmessage:
+  - addlevelupmessage
+  - addlvlupmsg
+levelupmessages:
+  - levelupmessages
+  - lvlupmsgs
+removelevelupmessage:
+  - removelevelupmessage
+  - remlvlupmsg
+togglelevelupmessage:
+  - togglelevelupmessage
+  - togglelvlupmsg
+testlevelupmessage:
+  - testlevelupmessage
+  - testlvlupmsg
+leveluppings:
+  - leveluppings
+  - lvluppings
+levelupplaceholders:
+  - levelupplaceholders
+  - lvlupplaceholders
 ticketpanel:
   - ticketpanel
   - tpanel
@@ -2512,9 +2720,6 @@ patreonsyncall:
 patreonstats:
   - patreonstats
   - ptstats
-patreongoals:
-  - patreongoals
-  - ptgoals
 patreontop:
   - patreontop
   - pttop
@@ -2566,6 +2771,12 @@ todocleardue:
 todosetreminder:
   - todosetreminder
   - tsr
+aiwebsearch:
+  - aiwebsearch
+  - aws
+autobanrolelist:
+  - autobanrolelist
+  - abrl
 todoclearreminder:
   - todoclearreminder
   - tcr
@@ -2840,3 +3051,57 @@ embedpreview:
   - embedpreview
   - epreview
   - eprev
+repenable:
+  - repenable
+  - repe
+repcooldown:
+  - repcooldown
+  - repcd
+repdailylimit:
+  - repdailylimit
+  - repdl
+repweeklylimit:
+  - repweeklylimit
+  - repwl
+repminage:
+  - repminage
+  - repma
+repminmembership:
+  - repminmembership
+  - repmm
+repminmessages:
+  - repminmessages
+  - repmsg
+repnegative:
+  - repnegative
+  - repneg
+repanonymous:
+  - repanonymous
+  - repanon
+repnotificationchannel:
+  - repnotificationchannel
+  - repnotify
+repdecay:
+  - repdecay
+  - repd
+repdecaytype:
+  - repdecaytype
+  - repdt
+repdecayamount:
+  - repdecayamount
+  - repda
+repdecayinactive:
+  - repdecayinactive
+  - repdi
+reprolechannel:
+  - reprolechannel
+  - reprc
+repeventcreate:
+  - repeventcreate
+  - repec
+repeventend:
+  - repeventend
+  - repee
+repmilestonelost:
+  - repmilestonelost
+  - repml

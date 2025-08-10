@@ -1,6 +1,7 @@
 ﻿using DataModel;
 using Discord.Commands;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Modules.UserProfile.Common;
 using Mewdeko.Modules.UserProfile.Services;
@@ -11,6 +12,7 @@ namespace Mewdeko.Modules.UserProfile;
 /// <summary>
 ///     Handles text commands for user profiles, providing functionalities to view and manage user profile details.
 /// </summary>
+/// <param name="dbFactory">The database connection factory.</param>
 public class UserProfile(IDataConnectionFactory dbFactory) : MewdekoModuleBase<UserProfileService>
 {
     /// <summary>

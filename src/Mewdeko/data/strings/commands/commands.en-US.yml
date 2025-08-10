@@ -2038,6 +2038,11 @@ autobanroleremove_IRole_2:
     - '@role'
   params:
     - *o48
+autobanrolelist:
+  desc: Lists all roles that are currently set to auto-ban users.
+  args:
+    - ''
+  params: [ ]
 discordpermoverride:
   desc: Overrides the required permissions for a specific command in the current guild.
   args:
@@ -2864,6 +2869,342 @@ reactionrolesremove:
       desc: The index of the reaction role to remove.
       type: int
       optional: false
+rep:
+  desc: Gives reputation to a specified user.
+  args:
+    - '@user reptype text'
+  params:
+    - &o801
+      name: target
+      desc: The user to give reputation to.
+      type: IGuildUser
+      optional: true
+    - &o802
+      name: repType
+      desc: The type of reputation to give.
+      type: string
+      optional: true
+    - &o803
+      name: reason
+      desc: Optional reason or comment for giving reputation.
+      type: string
+      optional: true
+repgive:
+  desc: Gives reputation to a specified user.
+  args:
+    - '@user reptype text'
+  params:
+    - *o801
+    - *o802
+    - *o803
+giverep:
+  desc: Gives reputation to a specified user.
+  args:
+    - '@user reptype text'
+  params:
+    - *o801
+    - *o802
+    - *o803
+repcheck:
+  desc: Checks the reputation of a user.
+  args:
+    - '@user'
+  params:
+    - &o804
+      name: target
+      desc: The user to check reputation for. If null, checks the command invoker's reputation.
+      type: IGuildUser
+      optional: true
+myrep:
+  desc: Checks the current user's reputation.
+  args:
+    - ''
+  params: [ ]
+checkrep:
+  desc: Checks the reputation of a user.
+  args:
+    - '@user'
+  params:
+    - *o804
+repleaderboard:
+  desc: Shows the reputation leaderboard for the server.
+  args:
+    - number
+  params:
+    - &o805
+      name: page
+      desc: The page number to display.
+      type: int
+      optional: true
+replb:
+  desc: Shows the reputation leaderboard for the server.
+  args:
+    - number
+  params:
+    - *o805
+reptop:
+  desc: Shows the reputation leaderboard for the server.
+  args:
+    - number
+  params:
+    - *o805
+toprep:
+  desc: Shows the reputation leaderboard for the server.
+  args:
+    - number
+  params:
+    - *o805
+rephistory:
+  desc: Shows the reputation history for a user.
+  args:
+    - '@user'
+  params:
+    - *o804
+repstats:
+  desc: Shows detailed reputation statistics for a user.
+  args:
+    - '@user'
+  params:
+    - *o804
+anonrep:
+  desc: Gives anonymous reputation to a specified user.
+  args:
+    - '@user reptype text'
+  params:
+    - *o801
+    - *o802
+    - *o803
+repanon:
+  desc: Gives anonymous reputation to a specified user.
+  args:
+    - '@user reptype text'
+  params:
+    - *o801
+    - *o802
+    - *o803
+reptake:
+  desc: Removes reputation from a user.
+  args:
+    - '@user number'
+  params:
+    - &o806
+      name: user
+      desc: The user to remove reputation from.
+      type: IGuildUser
+      optional: false
+    - &o807
+      name: amount
+      desc: The amount of reputation to remove.
+      type: int
+      optional: true
+repset:
+  desc: Sets a user's reputation to a specific value.
+  args:
+    - '@user number'
+  params:
+    - *o806
+    - &o808
+      name: amount
+      desc: The amount to set reputation to.
+      type: int
+      optional: false
+represet:
+  desc: Resets reputation for a user or all users in the server.
+  args:
+    - text
+  params:
+    - &o809
+      name: target
+      desc: The user to reset, or "all" to reset everyone.
+      type: string
+      optional: false
+repfreeze:
+  desc: Freezes a user's reputation, preventing them from gaining or losing reputation.
+  args:
+    - '@user'
+  params:
+    - *o806
+repunfreeze:
+  desc: Unfreezes a user's reputation, allowing them to gain and lose reputation again.
+  args:
+    - '@user'
+  params:
+    - *o806
+repconfig:
+  desc: Shows the current reputation configuration for the server.
+  args:
+    - ''
+  params: [ ]
+repchannel:
+  desc: Configures channel-specific reputation settings.
+  args:
+    - '#channel state number'
+  params:
+    - &o810
+      name: channel
+      desc: The channel to configure.
+      type: ITextChannel
+      optional: false
+    - &o811
+      name: state
+      desc: The state to set (enabled/disabled/readonly).
+      type: string
+      optional: true
+    - &o812
+      name: multiplier
+      desc: The reputation multiplier for this channel.
+      type: decimal
+      optional: true
+repreaction:
+  desc: Configures reaction-based reputation giving.
+  args:
+    - emoji number reptype
+  params:
+    - &o813
+      name: emoji
+      desc: The emoji to use for reputation.
+      type: string
+      optional: false
+    - &o814
+      name: amount
+      desc: The amount of reputation to give.
+      type: int
+      optional: true
+    - &o815
+      name: repType
+      desc: The type of reputation (standard, helper, artist, memer).
+      type: string
+      optional: true
+repreactionremove:
+  desc: Removes a reaction-based reputation configuration.
+  args:
+    - emoji
+  params:
+    - &o816
+      name: emoji
+      desc: The emoji to remove.
+      type: string
+      optional: false
+repreactionlist:
+  desc: Lists all configured reaction-based reputation settings.
+  args:
+    - ''
+  params: [ ]
+reprole:
+  desc: Manages role rewards for reputation milestones. Use without parameters to list rewards, with advanced settings for comprehensive configuration.
+  args:
+    - ""
+    - "detailed"
+    - "@role"
+    - "@role 100"
+    - "@role 100 false #channel true 50"
+  params:
+    - &o817
+      name: role
+      desc: The role to reward (optional for listing).
+      type: IRole
+      optional: true
+    - &o818
+      name: reputation
+      desc: The reputation required to earn this role (optional for listing).
+      type: int
+      optional: true
+    - name: removeOnDrop
+      desc: Whether to remove the role if reputation drops.
+      type: bool
+      optional: true
+    - name: announceChannel
+      desc: Optional channel to announce role awards.
+      type: ITextChannel
+      optional: true
+    - name: announceDm
+      desc: Whether to send DM notifications.
+      type: bool
+      optional: true
+    - name: xpReward
+      desc: Optional XP reward for reaching milestone.
+      type: int
+      optional: true
+    - name: detailed
+      desc: Show detailed information when listing (use 'detailed' as first parameter).
+      type: string
+      optional: true
+reproleremove:
+  desc: Removes a role reward configuration.
+  args:
+    - '@role'
+  params:
+    - *o817
+repcommandreq:
+  desc: Sets reputation requirements for a command, optionally restricted to specific channels.
+  args:
+    - "commandname 50"
+    - "commandname 50 helper"
+    - "commandname 50 helper #channel1 #channel2"
+  params:
+    - &o819
+      name: commandName
+      desc: The command name.
+      type: string
+      optional: false
+    - &o820
+      name: minReputation
+      desc: The minimum reputation required.
+      type: int
+      optional: false
+    - &o821
+      name: repType
+      desc: The specific reputation type required (optional, defaults to total).
+      type: string
+      optional: true
+    - name: channels
+      desc: Optional channels where this requirement applies (if none specified, applies globally).
+      type: ITextChannel[]
+      optional: true
+
+repcommandbypass:
+  desc: Sets bypass roles for a command requirement.
+  args:
+    - commandname '@role'
+  params:
+    - *o819
+    - &o823
+      name: roles
+      desc: The roles that can bypass the requirement.
+      type: IRole[]
+      optional: false
+repcommandreqremove:
+  desc: Removes reputation requirements from a command.
+  args:
+    - commandname
+  params:
+    - *o819
+repcommandreqlist:
+  desc: Lists all command requirements for the server.
+  args:
+    - ''
+  params: [ ]
+repcommandinfo:
+  desc: Shows reputation requirements for a specific command.
+  args:
+    - commandname
+  params:
+    - *o819
+repexport:
+  desc: Exports the current reputation configuration to JSON.
+  args:
+    - ''
+  params: [ ]
+repimport:
+  desc: Imports reputation configuration from uploaded JSON file.
+  args:
+    - ''
+  params: [ ]
+repstatus:
+  desc: Shows the current reputation configuration in a detailed embed.
+  args:
+    - ''
+  params: [ ]
 setrole:
   desc: Sets a role to a user.
   args:
@@ -18160,6 +18501,44 @@ setstarthreshold:
       desc: The star threshold to set.
       type: int
       optional: false
+addstarboardemote:
+  desc: Adds an emote to an existing starboard configuration.
+  args:
+    - number emote
+  params:
+    - *o457
+    - &o468
+      name: emote
+      desc: The emote to add.
+      type: IEmote
+      optional: false
+removestarboardemote:
+  desc: Removes an emote from an existing starboard configuration.
+  args:
+    - number emote
+  params:
+    - *o457
+    - &o469
+      name: emote
+      desc: The emote to remove.
+      type: IEmote
+      optional: false
+starboardstats:
+  desc: Shows starboard statistics for the guild.
+  args:
+    - ''
+  params: [ ]
+starboarduserstats:
+  desc: Shows starboard statistics for a specific user.
+  args:
+    - '@user'
+    - ''
+  params:
+    - &o470
+      name: user
+      desc: The user to show stats for. Defaults to command invoker.
+      type: IUser
+      optional: true
 createstarboard_ITextChannel_IEmote_=:
   desc: Alias for Blacklist mode.
   args:
@@ -23605,6 +23984,16 @@ aikey:
   args:
     - ''
   params: [ ]
+aiwebsearch:
+  desc: Enables or disables web search for AI (Claude only)
+  args:
+    - 'true'
+    - 'false'
+  params:
+    - name: enabled
+      desc: Whether to enable or disable web search
+      type: bool
+      optional: false
 aiprompt:
   desc: Sets the system prompt for the AI
   args:
@@ -25827,6 +26216,16 @@ setxpcurve:
       desc: 'The XP curve type: Default, Flat, or Steep.'
       type: XpCurveType
       optional: false
+setxpexclusive:
+  desc: Sets whether role rewards are exclusive (only highest level role) or additive (all earned roles).
+  args:
+    - true|false
+  params:
+    - &o641a
+      name: exclusive
+      desc: Whether role rewards should be exclusive.
+      type: bool
+      optional: false
 setchannelxp:
   desc: Sets an XP multiplier for a channel.
   args:
@@ -27764,6 +28163,74 @@ syncuserxproles:
       desc: The user to synchronize XP roles for.
       type: IGuildUser
       optional: false
+levelupchannel:
+  desc: Sets the channel where level-up notifications will be sent.
+  args:
+    - '#channel'
+  params:
+    - name: channel
+      desc: The channel to send level-up notifications to. Leave empty to use the current channel.
+      type: ITextChannel
+      optional: true
+addlevelupmessage:
+  desc: Adds a custom level-up message template with placeholder support.
+  args:
+    - 'message'
+  params:
+    - name: message
+      desc: The message template with placeholders like %xp.user.mention%, %xp.level.new%, etc.
+      type: string
+      optional: false
+levelupmessages:
+  desc: Lists all custom level-up messages for this server.
+  args:
+    - ''
+  params: [ ]
+removelevelupmessage:
+  desc: Removes a custom level-up message by ID.
+  args:
+    - 'messageId'
+  params:
+    - name: messageId
+      desc: The ID of the message to remove (shown in levelupmessages command).
+      type: int
+      optional: false
+togglelevelupmessage:
+  desc: Enables or disables a custom level-up message.
+  args:
+    - 'messageId enabled'
+  params:
+    - name: messageId
+      desc: The ID of the message to toggle.
+      type: int
+      optional: false
+    - name: enabled
+      desc: Whether to enable (true) or disable (false) the message.
+      type: bool
+      optional: false
+testlevelupmessage:
+  desc: Tests a level-up message template by sending it to the current channel.
+  args:
+    - 'message'
+  params:
+    - name: message
+      desc: The message template to test, or leave empty to test a random custom message.
+      type: string
+      optional: true
+leveluppings:
+  desc: Toggles level-up ping notifications for yourself.
+  args:
+    - 'enabled'
+  params:
+    - name: enabled
+      desc: Whether to enable (true) or disable (false) level-up pings.
+      type: bool
+      optional: false
+levelupplaceholders:
+  desc: Shows available level-up placeholders that can be used in custom messages.
+  args:
+    - ''
+  params: [ ]
 ticketautoarchive:
   desc: Sets auto-archive behavior for a button
   args:
@@ -27941,11 +28408,6 @@ patreonsyncall:
   params: [ ]
 patreonstats:
   desc: Show Patreon supporter statistics.
-  args:
-    - ''
-  params: [ ]
-patreongoals:
-  desc: Show current Patreon goals.
   args:
     - ''
   params: [ ]
@@ -28675,4 +29137,213 @@ embedpreview:
     - name: name
       desc: The name of the embed template to preview.
       type: string
+      optional: false
+repenable:
+  desc: Enables or disables the reputation system for this server.
+  args:
+    - "enabled"
+  params:
+    - name: enabled
+      desc: True to enable, false to disable.
+      type: bool
+      optional: true
+repcooldown:
+  desc: Sets the default cooldown between giving reputation.
+  args:
+    - "minutes"
+  params:
+    - name: minutes
+      desc: Cooldown in minutes (1-1440).
+      type: int
+      optional: false
+repdailylimit:
+  desc: Sets the daily limit for giving reputation.
+  args:
+    - "limit"
+  params:
+    - name: limit
+      desc: Daily limit (1-100).
+      type: int
+      optional: false
+repweeklylimit:
+  desc: Sets the weekly limit for giving reputation.
+  args:
+    - "limit"
+  params:
+    - name: limit
+      desc: Weekly limit (null to disable, 1-500).
+      type: int
+      optional: true
+repminage:
+  desc: Sets the minimum account age required to give reputation.
+  args:
+    - "days"
+  params:
+    - name: days
+      desc: Minimum account age in days (0-365).
+      type: int
+      optional: false
+repminmembership:
+  desc: Sets the minimum server membership time required to give reputation.
+  args:
+    - "hours"
+  params:
+    - name: hours
+      desc: Minimum membership time in hours (0-720).
+      type: int
+      optional: false
+repminmessages:
+  desc: Sets the minimum message count required to give reputation.
+  args:
+    - "count"
+  params:
+    - name: count
+      desc: Minimum message count (0-1000).
+      type: int
+      optional: false
+repnegative:
+  desc: Enables or disables negative reputation.
+  args:
+    - "enabled"
+  params:
+    - name: enabled
+      desc: True to enable negative reputation.
+      type: bool
+      optional: false
+repanonymous:
+  desc: Enables or disables anonymous reputation giving.
+  args:
+    - "enabled"
+  params:
+    - name: enabled
+      desc: True to enable anonymous reputation.
+      type: bool
+      optional: false
+repnotificationchannel:
+  desc: Sets the notification channel for reputation events.
+  args:
+    - "channel"
+  params:
+    - name: channel
+      desc: The channel to send notifications to (null to disable).
+      type: ITextChannel
+      optional: true
+repdecay:
+  desc: Enables or disables reputation decay for inactive users.
+  args:
+    - "enabled"
+  params:
+    - name: enabled
+      desc: True to enable decay.
+      type: bool
+      optional: false
+repdecaytype:
+  desc: Sets the decay type (daily, weekly, monthly).
+  args:
+    - "type"
+  params:
+    - name: type
+      desc: The decay type.
+      type: string
+      optional: false
+repdecayamount:
+  desc: Sets the decay amount.
+  args:
+    - "amount"
+  params:
+    - name: amount
+      desc: The decay amount (1-100).
+      type: int
+      optional: false
+repdecayinactive:
+  desc: Sets the number of inactive days before decay starts.
+  args:
+    - "days"
+  params:
+    - name: days
+      desc: Days of inactivity (1-365).
+      type: int
+      optional: false
+reptypeadd:
+  desc: Adds a custom reputation type.
+  args:
+    - "typeName displayName"
+  params:
+    - name: typeName
+      desc: The name of the reputation type.
+      type: string
+      optional: false
+    - name: displayName
+      desc: The display name for the type.
+      type: string
+      optional: false
+reptyperemove:
+  desc: Removes a custom reputation type.
+  args:
+    - "typeName"
+  params:
+    - name: typeName
+      desc: The name of the reputation type to remove.
+      type: string
+      optional: false
+reptypelist:
+  desc: Lists all custom reputation types for this server.
+  args:
+    - ""
+  params: [ ]
+reprolechannel:
+  desc: Sets the announcement channel for a role reward.
+  args:
+    - "role channel"
+  params:
+    - name: role
+      desc: The role to configure.
+      type: IRole
+      optional: false
+    - name: channel
+      desc: The channel for announcements (null to disable).
+      type: ITextChannel
+      optional: true
+repeventcreate:
+  desc: Creates a reputation multiplier event.
+  args:
+    - "name multiplier duration"
+  params:
+    - name: name
+      desc: Name of the event.
+      type: string
+      optional: false
+    - name: multiplier
+      desc: Reputation multiplier.
+      type: decimal
+      optional: false
+    - name: duration
+      desc: Duration in hours.
+      type: int
+      optional: false
+repeventend:
+  desc: Ends a reputation event early.
+  args:
+    - "name"
+  params:
+    - name: name
+      desc: Name of the event to end.
+      type: string
+      optional: false
+repmilestonelost:
+  desc: Manually triggers milestone lost event for testing.
+  args:
+    - "user role threshold"
+  params:
+    - name: user
+      desc: The user who lost the milestone.
+      type: IGuildUser
+      optional: false
+    - name: role
+      desc: The role that was lost.
+      type: IRole
+      optional: false
+    - name: threshold
+      desc: The reputation threshold.
+      type: int
       optional: false

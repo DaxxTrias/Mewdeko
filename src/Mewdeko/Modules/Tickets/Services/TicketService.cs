@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using DataModel;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Database.L2DB;
 using Mewdeko.Modules.Tickets.Common;
 using Mewdeko.Services.Strings;
@@ -27,6 +28,11 @@ public class TicketService : INService
     /// <summary>
     ///     Initializes a new instance of the <see cref="TicketService" /> class.
     /// </summary>
+    /// <param name="dbFactory">The database connection factory.</param>
+    /// <param name="client">The Discord client instance.</param>
+    /// <param name="eventHandler">The event handler service.</param>
+    /// <param name="strings">The localized strings service.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public TicketService(
         IDataConnectionFactory dbFactory,
         DiscordShardedClient client,
@@ -126,6 +132,8 @@ public class TicketService : INService
     /// <summary>
     ///     Previews how an embed JSON would look
     /// </summary>
+    /// <param name="channel">The channel parameter.</param>
+    /// <param name="embedJson">The embedjson string.</param>
     public async Task PreviewPanelAsync(ITextChannel channel, string embedJson)
     {
         try
@@ -2057,6 +2065,9 @@ public class TicketService : INService
     /// <summary>
     ///     Sets the priority for a ticket.
     /// </summary>
+    /// <param name="ticket">The ticket parameter.</param>
+    /// <param name="priority">The priority string.</param>
+    /// <param name="staff">The staff parameter.</param>
     public async Task SetTicketPriorityAsync(Ticket ticket, string priority, IGuildUser staff)
     {
         await using var ctx = await dbFactory.CreateConnectionAsync();
@@ -2775,7 +2786,7 @@ public class TicketService : INService
             .LoadWithAsTable(t => t.SelectOption)
             .FirstOrDefaultAsync(t => t.ChannelId == channelId && t.GuildId == guild.Id);
 
-        if (ticket == null || ticket.ClosedAt.HasValue)
+        if (ticket is not { ClosedAt: null })
             return false;
 
         try
@@ -3117,7 +3128,7 @@ public class TicketService : INService
             .LoadWithAsTable(t => t.SelectOption)
             .FirstOrDefaultAsync(t => t.ChannelId == channelId && t.GuildId == guild.Id);
 
-        if (ticket == null || ticket.ClosedAt.HasValue || ticket.ClaimedBy.HasValue)
+        if (ticket is not { ClosedAt: null } || ticket.ClaimedBy.HasValue)
             return false;
 
         // Verify staff member has permission to claim using existing SupportRoles
@@ -3195,7 +3206,7 @@ public class TicketService : INService
         var ticket = await ctx.Tickets
             .FirstOrDefaultAsync(t => t.ChannelId == channelId && t.GuildId == guild.Id);
 
-        if (ticket == null || ticket.ClosedAt.HasValue || !ticket.ClaimedBy.HasValue)
+        if (ticket is not { ClosedAt: null } || !ticket.ClaimedBy.HasValue)
             return false;
 
         // Only allow the claimer or admins to unclaim
@@ -3272,7 +3283,7 @@ public class TicketService : INService
         var ticket = await ctx.Tickets
             .FirstOrDefaultAsync(t => t.ChannelId == channelId && t.GuildId == author.GuildId);
 
-        if (ticket == null || ticket.ClosedAt.HasValue)
+        if (ticket is not { ClosedAt: null })
             return false;
 
         try
@@ -3348,7 +3359,7 @@ public class TicketService : INService
         var ticket = await ctx.Tickets
             .FirstOrDefaultAsync(t => t.Id == note.TicketId);
 
-        if (ticket == null || ticket.ClosedAt.HasValue)
+        if (ticket is not { ClosedAt: null })
             return false;
 
         // Only allow the original author or admins to edit
@@ -3871,7 +3882,7 @@ public class TicketService : INService
             .LoadWithAsTable(t => t.SelectOption)
             .FirstOrDefaultAsync(t => t.ChannelId == channelId && t.GuildId == guild.Id);
 
-        if (ticket == null || ticket.ClosedAt.HasValue)
+        if (ticket is not { ClosedAt: null })
             return false;
 
         var priority = await ctx.TicketPriorities
@@ -4019,7 +4030,7 @@ public class TicketService : INService
         var ticket = await ctx.Tickets
             .FirstOrDefaultAsync(t => t.ChannelId == channelId && t.GuildId == guild.Id);
 
-        if (ticket == null || ticket.ClosedAt.HasValue)
+        if (ticket is not { ClosedAt: null })
             return false;
 
         try
@@ -4115,7 +4126,7 @@ public class TicketService : INService
         var ticket = await ctx.Tickets
             .FirstOrDefaultAsync(t => t.ChannelId == channelId && t.GuildId == guild.Id);
 
-        if (ticket == null || ticket.ClosedAt.HasValue || ticket.Tags == null)
+        if (ticket is not { ClosedAt: null } || ticket.Tags == null)
             return false;
 
         try

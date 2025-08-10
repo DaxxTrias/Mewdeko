@@ -12,6 +12,9 @@ namespace Mewdeko.Modules.Server_Management;
 /// <summary>
 ///     A module for stealing emotes and stickers from messages and adding them to the server.
 /// </summary>
+/// <param name="httpFactory">The httpfactory factory.</param>
+/// <param name="config">The bot configuration settings.</param>
+/// <param name="logger">The logger instance for structured logging.</param>
 public class EmoteStealer(IHttpClientFactory httpFactory, BotConfigService config, ILogger<EmoteStealer> logger)
     : MewdekoSlashCommandModule
 {

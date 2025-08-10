@@ -2,7 +2,7 @@
 using System.Text.Json;
 using System.Threading;
 using DataModel;
-using LinqToDB;
+using LinqToDB.Async;
 using LinqToDB.Data;
 using SkiaSharp;
 using StackExchange.Redis;
@@ -33,6 +33,7 @@ public class JoinLeaveLoggerService : INService, IDisposable
     /// <param name="dbFactory">Database service for storing join and leave logs.</param>
     /// <param name="credentials">Bot credentials for accessing the Redis database.</param>
     /// <param name="guildSettingsService">Service for getting and updating GuildConfigs in the db.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public JoinLeaveLoggerService(EventHandler eventHandler, IDataCache cache, IDataConnectionFactory dbFactory,
         IBotCredentials credentials, GuildSettingsService guildSettingsService, ILogger<JoinLeaveLoggerService> logger)
     {

@@ -1,5 +1,8 @@
 using System.IO;
+using System.Net;
 using System.Net.Http;
+using System.Net.Security;
+using System.Security.Authentication;
 using System.Text;
 using System.Text.Json.Serialization;
 using Discord.Commands;
@@ -59,11 +62,12 @@ public class Program
         AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
         var log = LogSetup.SetupLogger("Startup"); // Initial logger name
 
-        // Check and install dependencies FIRST (with null connection string to trigger setup)
-        DependencyInstaller.CheckAndInstallDependencies(null);
-
-        // THEN load credentials (dependencies should be ready now)
+        // Load credentials first to check if setup was already completed
         var credentials = new BotCredentials();
+
+        // Check and install dependencies (pass setup status to avoid prompting if already done)
+        DependencyInstaller.CheckAndInstallDependencies(credentials.PsqlConnectionString,
+            credentials.PostgresSetupCompleted);
         var dbUpgrader = new DatabaseUpgrader(credentials.PsqlConnectionString);
 
         // Test connection first
@@ -414,6 +418,23 @@ public class Program
         {
             AllowAutoRedirect = false
         });
+        services.AddHttpClient("openmeteo")
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+            {
+                AutomaticDecompression = DecompressionMethods.All,
+                SslOptions = new SslClientAuthenticationOptions
+                {
+                    EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13
+                }
+            })
+            .ConfigureHttpClient(client =>
+            {
+                client.DefaultRequestVersion = HttpVersion.Version11;
+                client.DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrLower;
+                client.DefaultRequestHeaders.Add("User-Agent", "MewdekoBot/1.0 (+https://github.com/)");
+                client.DefaultRequestHeaders.Accept.ParseAdd("application/json");
+                client.Timeout = TimeSpan.FromSeconds(15);
+            });
 
         services.Scan(scan => scan.FromAssemblyOf<IReadyExecutor>()
             .AddClasses(classes => classes.AssignableToAny(

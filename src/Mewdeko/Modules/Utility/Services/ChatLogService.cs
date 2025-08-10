@@ -1,5 +1,7 @@
 using DataModel;
 using LinqToDB;
+using LinqToDB.Async;
+using Mewdeko.Controllers.Common.Chat;
 using Newtonsoft.Json;
 
 namespace Mewdeko.Modules.Utility.Services;
@@ -7,6 +9,8 @@ namespace Mewdeko.Modules.Utility.Services;
 /// <summary>
 ///     Service for managing chat logs
 /// </summary>
+/// <param name="dbFactory">The database connection factory.</param>
+/// <param name="logger">The logger instance for structured logging.</param>
 public class ChatLogService(IDataConnectionFactory dbFactory, ILogger<ChatLogService> logger) : INService
 {
     /// <summary>
@@ -18,7 +22,7 @@ public class ChatLogService(IDataConnectionFactory dbFactory, ILogger<ChatLogSer
         string channelName,
         string name,
         ulong createdBy,
-        IEnumerable<object> messages)
+        IEnumerable<ChatLogMessageDto> messages)
     {
         try
         {
@@ -87,6 +91,8 @@ public class ChatLogService(IDataConnectionFactory dbFactory, ILogger<ChatLogSer
     /// <summary>
     ///     Updates a chat log's name
     /// </summary>
+    /// <param name="logId">The logId parameter.</param>
+    /// <param name="newName">The newname string.</param>
     public async Task UpdateChatLogNameAsync(int logId, string newName)
     {
         try
@@ -110,6 +116,7 @@ public class ChatLogService(IDataConnectionFactory dbFactory, ILogger<ChatLogSer
     /// <summary>
     ///     Deletes a chat log
     /// </summary>
+    /// <param name="logId">The logId parameter.</param>
     public async Task DeleteChatLogAsync(int logId)
     {
         try

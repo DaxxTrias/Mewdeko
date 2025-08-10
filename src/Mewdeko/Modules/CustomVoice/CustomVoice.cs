@@ -3,6 +3,7 @@ using System.Text.Json;
 using DataModel;
 using Discord.Commands;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Modules.CustomVoice.Services;
 
@@ -11,6 +12,8 @@ namespace Mewdeko.Modules.CustomVoice;
 /// <summary>
 ///     Commands for managing custom voice channels.
 /// </summary>
+/// <param name="dbFactory">The database connection factory.</param>
+/// <param name="settingsService">The settingsservice service.</param>
 public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService settingsService)
     : MewdekoModuleBase<CustomVoiceService>
 {

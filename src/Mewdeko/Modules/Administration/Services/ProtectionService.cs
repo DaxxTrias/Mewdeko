@@ -1,6 +1,7 @@
 ﻿using System.Threading;
 using DataModel;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Modules.Administration.Common;
 using Mewdeko.Modules.Moderation.Services;
@@ -16,12 +17,10 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
     private readonly ConcurrentDictionary<ulong, AntiMassMentionStats> antiMassMentionGuilds = new();
     private readonly ConcurrentDictionary<ulong, AntiRaidStats> antiRaidGuilds = new();
     private readonly ConcurrentDictionary<ulong, AntiSpamStats> antiSpamGuilds = new();
-    private readonly Mewdeko bot;
 
     private readonly DiscordShardedClient client;
     private readonly IDataConnectionFactory dbFactory;
     private readonly EventHandler eventHandler;
-    private readonly GuildSettingsService gss;
     private readonly ILogger<ProtectionService> logger;
     private readonly MuteService mute;
     private readonly UserPunishService punishService;
@@ -39,24 +38,21 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
     ///     Constructs a new instance of the ProtectionService.
     /// </summary>
     /// <param name="client">The Discord client.</param>
-    /// <param name="bot">The Mewdeko bot.</param>
     /// <param name="mute">The mute service.</param>
     /// <param name="dbFactory">The database service.</param>
     /// <param name="punishService">The user punish service.</param>
     /// <param name="eventHandler">The event handler.</param>
-    /// <param name="gss">The guild settings service.</param>
-    public ProtectionService(DiscordShardedClient client, Mewdeko bot,
+    /// <param name="logger">The logger instance for structured logging.</param>
+    public ProtectionService(DiscordShardedClient client,
         MuteService mute, IDataConnectionFactory dbFactory, UserPunishService punishService, EventHandler eventHandler,
-        GuildSettingsService gss, ILogger<ProtectionService> logger)
+        ILogger<ProtectionService> logger)
     {
         this.client = client;
         this.mute = mute;
         this.dbFactory = dbFactory;
         this.punishService = punishService;
-        this.gss = gss;
         this.logger = logger;
         this.eventHandler = eventHandler;
-        this.bot = bot;
 
         eventHandler.Subscribe("MessageReceived", "ProtectionService", HandleAntiSpam);
         eventHandler.Subscribe("UserJoined", "ProtectionService", HandleUserJoined);
@@ -117,7 +113,6 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
                 var item = await punishUserQueue.Reader.ReadAsync().ConfigureAwait(false);
                 var muteTime = item.MuteTime;
                 var gu = item.User;
-                if (gu == null) continue;
 
                 var currentUser = client.CurrentUser;
                 if (currentUser == null)
@@ -157,7 +152,6 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
     /// <summary>
     ///     Handles the event when the bot joins a guild.
     /// </summary>
-    /// <param name="gc">The configuration of the guild that the bot has joined.</param>
     /// <returns>A task that represents the asynchronous operation.</returns>
     private async Task _bot_JoinedGuild(SocketGuild guild)
     {
@@ -271,7 +265,7 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
                 else
                 {
                     // Schedule count decrement after delay
-                    _ = Task.Delay(TimeSpan.FromSeconds(stats.AntiRaidSettings.Seconds)).ContinueWith(t =>
+                    _ = Task.Delay(TimeSpan.FromSeconds(stats.AntiRaidSettings.Seconds)).ContinueWith(_ =>
                     {
                         // Just decrement the count after the delay
                         Interlocked.Decrement(ref statsUsersCount);
@@ -345,9 +339,9 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
     /// <param name="roleId">The ID of the role to be added, if applicable.</param>
     /// <param name="gus">The users to be punished.</param>
     /// <returns>A task that represents the asynchronous operation.</returns>
-    private async Task PunishUsers(int action, ProtectionType pt, int muteTime, ulong? roleId, params IGuildUser[] gus)
+    private async Task PunishUsers(int action, ProtectionType pt, int muteTime, ulong? roleId, params IGuildUser[]? gus)
     {
-        if (gus == null || gus.Length == 0 || gus[0] == null) return;
+        if (gus == null || gus.Length == 0) return;
 
         logger.LogInformation("[{PunishType}] - Punishing [{Count}] users with [{PunishAction}] in {GuildName} guild",
             pt,
@@ -355,7 +349,6 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
 
         foreach (var gu in gus)
         {
-            if (gu == null) continue;
             await punishUserQueue.Writer.WriteAsync(new PunishQueueItem
             {
                 Action = action,

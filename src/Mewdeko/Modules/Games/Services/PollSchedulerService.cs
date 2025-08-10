@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Threading;
 using DataModel;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Modules.Games.Common;
 using Mewdeko.Services.Strings;
@@ -357,6 +358,8 @@ public class PollSchedulerService : INService, IReadyExecutor
     private async Task<Embed> BuildScheduledPollEmbed(ScheduledPoll scheduledPoll,
         List<PollOptionData> options, PollType pollType, int pollId)
     {
+        await Task.CompletedTask;
+
         var typeIcon = pollType switch
         {
             PollType.YesNo => "✅❌",
@@ -509,7 +512,7 @@ public class PollSchedulerService : INService, IReadyExecutor
     /// </summary>
     public void Dispose()
     {
-        schedulerTimer?.Dispose();
-        semaphore?.Dispose();
+        schedulerTimer.Dispose();
+        semaphore.Dispose();
     }
 }

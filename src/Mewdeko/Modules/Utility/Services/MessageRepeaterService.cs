@@ -1,5 +1,6 @@
 ﻿using DataModel;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Modules.Utility.Common;
 
@@ -27,6 +28,7 @@ public class MessageRepeaterService : INService, IReadyExecutor, IDisposable
     /// <param name="bot">The main bot instance.</param>
     /// <param name="gss">Service for accessing guild settings.</param>
     /// <param name="handler">Service for handling Discord events asynchronously</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public MessageRepeaterService(
         DiscordShardedClient client,
         IDataConnectionFactory dbFactory,

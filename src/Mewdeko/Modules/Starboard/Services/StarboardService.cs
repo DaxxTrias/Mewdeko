@@ -1,6 +1,10 @@
-﻿using DataModel;
+﻿using System.IO;
+using System.Net.Http;
+using DataModel;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Common.ModuleBehaviors;
+using Mewdeko.Modules.Starboard.Common;
 using Mewdeko.Services.Strings;
 
 namespace Mewdeko.Modules.Starboard.Services;
@@ -16,8 +20,9 @@ public class StarboardService : INService, IReadyExecutor, IUnloadableService
     private readonly ILogger<StarboardService> logger;
     private readonly GeneratedBotStrings strings;
     private List<DataModel.Starboard> starboardConfigs = [];
-
     private List<StarboardPost> starboardPosts = [];
+    private List<StarboardReaction> starboardReactions = [];
+    private List<StarboardStats> starboardStats = [];
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="StarboardService" /> class.
@@ -25,6 +30,8 @@ public class StarboardService : INService, IReadyExecutor, IUnloadableService
     /// <param name="client">The Discord socket client.</param>
     /// <param name="dbFactory">The database context provider.</param>
     /// <param name="eventHandler">The event handler.</param>
+    /// <param name="strings">The localized strings service.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public StarboardService(DiscordShardedClient client, IDataConnectionFactory dbFactory,
         EventHandler eventHandler, GeneratedBotStrings strings, ILogger<StarboardService> logger)
     {
@@ -47,6 +54,8 @@ public class StarboardService : INService, IReadyExecutor, IUnloadableService
 
         starboardPosts = await dbContext.StarboardPosts.ToListAsync();
         starboardConfigs = await dbContext.Starboards.ToListAsync();
+        starboardStats = await dbContext.StarboardStats.Where(x => x.IsActive).ToListAsync();
+        starboardReactions = await dbContext.StarboardReactions.ToListAsync();
         logger.LogInformation("Starboard Cache Ready");
     }
 
@@ -72,6 +81,19 @@ public class StarboardService : INService, IReadyExecutor, IUnloadableService
     /// <returns>The ID of the created starboard configuration.</returns>
     public async Task<int> CreateStarboard(IGuild guild, ulong channelId, string emote, int threshold)
     {
+        // Validate emotes don't collide with existing starboards
+        var emotes = ParseEmotes(emote);
+        var existingStarboards = GetStarboards(guild.Id);
+
+        foreach (var existingStarboard in existingStarboards)
+        {
+            var existingEmotes = ParseEmotes(existingStarboard.Emote);
+            var collision = emotes.Intersect(existingEmotes).FirstOrDefault();
+            if (collision != null)
+                throw new InvalidOperationException(
+                    $"Emote {collision} is already used by another starboard in this guild.");
+        }
+
         await using var db = await dbFactory.CreateConnectionAsync();
         var config = new DataModel.Starboard
         {
@@ -88,7 +110,7 @@ public class StarboardService : INService, IReadyExecutor, IUnloadableService
             RepostThreshold = 0
         };
 
-        await db.InsertAsync(config);
+        config.Id = await db.InsertWithInt32IdentityAsync(config);
         starboardConfigs.Add(config);
         return config.Id;
     }
@@ -166,13 +188,30 @@ public class StarboardService : INService, IReadyExecutor, IUnloadableService
                 if (starboardMessage == null) continue;
 
                 // Parse star count from the starboard message - handle different emotes
-                var starCount = 0;
-                var emote = starboardConfig.Emote ?? "⭐";
-                if (starboardMessage.Content.Contains(emote))
+                var starCount = post.ReactionCount ?? 0;
+                var emoteUsed = "⭐"; // Default fallback
+
+                // Try to parse from message content if ReactionCount is null
+                if (starCount == 0)
                 {
-                    var starText = starboardMessage.Content.Split(' ')[0];
-                    if (int.TryParse(starText.Replace(emote, "").Trim(), out var parsedCount))
-                        starCount = parsedCount;
+                    var starboardEmotes = ParseEmotes(starboardConfig.Emote);
+                    if (starboardEmotes.Count > 0)
+                    {
+                        emoteUsed = starboardEmotes.First();
+                        if (starboardMessage.Content.Contains(emoteUsed))
+                        {
+                            var starText = starboardMessage.Content.Split(' ')[0];
+                            if (int.TryParse(starText.Replace(emoteUsed, "").Trim(), out var parsedCount))
+                                starCount = parsedCount;
+                        }
+                    }
+                }
+                else
+                {
+                    // Use the first emote from the configuration for display
+                    var starboardEmotes = ParseEmotes(starboardConfig.Emote);
+                    if (starboardEmotes.Count > 0)
+                        emoteUsed = starboardEmotes.First();
                 }
 
                 // Try to get original message content and author info
@@ -205,7 +244,7 @@ public class StarboardService : INService, IReadyExecutor, IUnloadableService
                     AuthorName = authorName,
                     AuthorAvatarUrl = authorAvatarUrl,
                     ImageUrl = imageUrl,
-                    StarEmote = emote,
+                    StarEmote = emoteUsed,
                     CreatedAt = post.DateAdded ?? DateTime.UtcNow
                 });
             }
@@ -392,8 +431,432 @@ public class StarboardService : INService, IReadyExecutor, IUnloadableService
         return (false, config);
     }
 
+    /// <summary>
+    ///     Adds a new emote to an existing starboard configuration.
+    /// </summary>
+    public async Task<bool> AddEmoteToStarboard(IGuild guild, int starboardId, string newEmote)
+    {
+        var config = starboardConfigs.FirstOrDefault(x => x.Id == starboardId && x.GuildId == guild.Id);
+        if (config == null)
+            return false;
 
-    private async Task AddStarboardPost(ulong messageId, ulong postId, int starboardId)
+        // Check for collisions
+        var existingStarboards = GetStarboards(guild.Id).Where(x => x.Id != starboardId);
+        foreach (var existingStarboard in existingStarboards)
+        {
+            var existingEmotes = ParseEmotes(existingStarboard.Emote);
+            if (existingEmotes.Contains(newEmote))
+                throw new InvalidOperationException(
+                    $"Emote {newEmote} is already used by another starboard in this guild.");
+        }
+
+        var currentEmotes = ParseEmotes(config.Emote);
+        if (currentEmotes.Contains(newEmote))
+            return false; // Already has this emote
+
+        currentEmotes.Add(newEmote);
+        config.Emote = string.Join("|", currentEmotes);
+
+        await using var db = await dbFactory.CreateConnectionAsync();
+        await db.UpdateAsync(config);
+
+        return true;
+    }
+
+    /// <summary>
+    ///     Removes an emote from a starboard configuration.
+    /// </summary>
+    public async Task<bool> RemoveEmoteFromStarboard(IGuild guild, int starboardId, string emoteToRemove)
+    {
+        var config = starboardConfigs.FirstOrDefault(x => x.Id == starboardId && x.GuildId == guild.Id);
+        if (config == null)
+            return false;
+
+        var currentEmotes = ParseEmotes(config.Emote);
+        if (!currentEmotes.Remove(emoteToRemove))
+            return false; // Didn't have this emote
+
+        if (currentEmotes.Count == 0)
+            throw new InvalidOperationException(
+                "Cannot remove the last emote from a starboard. Delete the starboard instead.");
+
+        config.Emote = string.Join("|", currentEmotes);
+
+        await using var db = await dbFactory.CreateConnectionAsync();
+        await db.UpdateAsync(config);
+
+        return true;
+    }
+
+    /// <summary>
+    ///     Gets starboard statistics for a guild.
+    /// </summary>
+    public async Task<StarboardStatsDto?> GetStarboardStats(ulong guildId)
+    {
+        return await GetGuildStarboardStats(guildId);
+    }
+
+    /// <summary>
+    ///     Gets starboard statistics for a specific user in a guild.
+    /// </summary>
+    public async Task<UserStarboardStatsDto?> GetUserStarboardStats(ulong guildId, ulong userId)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        var guildStarboards = starboardConfigs.Where(x => x.GuildId == guildId).Select(x => x.Id).ToList();
+        if (guildStarboards.Count == 0)
+            return null;
+
+        var userStats = starboardStats.Where(x =>
+            guildStarboards.Contains(x.StarboardId) && x.IsActive && x.AuthorId == userId);
+        var userReactions =
+            starboardReactions.Where(x => guildStarboards.Contains(x.StarboardId) && x.UserId == userId);
+        var receivedReactions = starboardReactions.Where(x => guildStarboards.Contains(x.StarboardId));
+
+        var messagesStarred = userStats.Count();
+        var totalStarsReceived = userStats.Sum(x => x.PeakReactionCount);
+        var totalStarsGiven = userReactions.Count();
+
+        // Get top starred posts by this user
+        var topStarredPosts = userStats.OrderByDescending(x => x.PeakReactionCount)
+            .Take(3)
+            .Select(x => new TopStarredPost(x.MessageId, x.PeakReactionCount, x.Emote))
+            .ToList();
+
+        // Get who this user stars the most (their "idols")
+        var starredUsers = receivedReactions
+            .Where(r => userReactions.Any(ur => ur.MessageId == r.MessageId))
+            .Join(starboardStats.Where(s => guildStarboards.Contains(s.StarboardId)),
+                r => new
+                {
+                    r.MessageId, r.Emote
+                },
+                s => new
+                {
+                    s.MessageId, s.Emote
+                },
+                (r, s) => s.AuthorId)
+            .Where(authorId => authorId != userId)
+            .GroupBy(authorId => authorId)
+            .OrderByDescending(g => g.Count())
+            .Take(3)
+            .Select(g => new UserStarGiven(g.Key, g.Count()))
+            .ToList();
+
+        // Get who stars this user the most (their "fans")
+        var fans = receivedReactions
+            .Join(starboardStats.Where(s => guildStarboards.Contains(s.StarboardId) && s.AuthorId == userId),
+                r => new
+                {
+                    r.MessageId, r.Emote
+                },
+                s => new
+                {
+                    s.MessageId, s.Emote
+                },
+                (r, s) => r.UserId)
+            .Where(fanId => fanId != userId)
+            .GroupBy(fanId => fanId)
+            .OrderByDescending(g => g.Count())
+            .Take(3)
+            .Select(g => new UserStarGiven(g.Key, g.Count()))
+            .ToList();
+
+        return new UserStarboardStatsDto
+        {
+            MessagesStarred = messagesStarred,
+            StarsReceived = totalStarsReceived,
+            StarsGiven = totalStarsGiven,
+            TopStarredPosts = topStarredPosts,
+            MostStarredUsers = starredUsers,
+            TopFans = fans
+        };
+    }
+
+    /// <summary>
+    ///     Gets guild-wide starboard statistics.
+    /// </summary>
+    private async Task<StarboardStatsDto?> GetGuildStarboardStats(ulong guildId)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        var guildStarboards = starboardConfigs.Where(x => x.GuildId == guildId).Select(x => x.Id).ToList();
+        if (guildStarboards.Count == 0)
+            return new StarboardStatsDto();
+
+        var stats = starboardStats.Where(x => guildStarboards.Contains(x.StarboardId) && x.IsActive);
+        var reactions = starboardReactions.Where(x => guildStarboards.Contains(x.StarboardId));
+
+        return new StarboardStatsDto
+        {
+            MostStarredUser = stats
+                .GroupBy(x => x.AuthorId)
+                .OrderByDescending(g => g.Sum(x => x.PeakReactionCount))
+                .Select(g => new UserStarStats
+                {
+                    UserId = g.Key, TotalStars = g.Sum(x => x.PeakReactionCount), MessageCount = g.Count()
+                })
+                .FirstOrDefault(),
+            MostActiveChannel = stats
+                .GroupBy(x => x.ChannelId)
+                .OrderByDescending(g => g.Sum(x => x.PeakReactionCount))
+                .Select(g => new ChannelStarStats
+                {
+                    ChannelId = g.Key, TotalStars = g.Sum(x => x.PeakReactionCount), MessageCount = g.Count()
+                })
+                .FirstOrDefault(),
+            MostActiveStarrer = reactions
+                .GroupBy(x => x.UserId)
+                .OrderByDescending(g => g.Count())
+                .Select(g => new StarrerStats
+                {
+                    UserId = g.Key, StarsGiven = g.Count(), UniqueEmotesUsed = g.Select(x => x.Emote).Distinct().Count()
+                })
+                .FirstOrDefault(),
+            TotalStarredMessages = stats.Count(),
+            TotalStars = stats.Sum(x => x.PeakReactionCount)
+        };
+    }
+
+    /// <summary>
+    ///     Parses emotes from a pipe-separated string.
+    /// </summary>
+    private static List<string> ParseEmotes(string emoteString)
+    {
+        if (string.IsNullOrWhiteSpace(emoteString))
+            return new List<string>();
+
+        return emoteString.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+    }
+
+    /// <summary>
+    ///     Creates a ComponentsV2 message for starboard posts with individual reaction counters and media gallery support.
+    /// </summary>
+    private async Task<(ComponentBuilderV2 Components, List<FileAttachment> Files)> CreateStarboardComponentsV2(
+        IUserMessage message, string content,
+        List<string> starboardEmotes, string authorName, bool allowBots)
+    {
+        var builder = new ComponentBuilderV2();
+
+        // Handle media attachments
+        var attachments = message.Attachments.ToList();
+        var imageUrls = new List<string>();
+        var videoUrls = new List<string>();
+        var otherFiles = new List<IAttachment>();
+
+        foreach (var attachment in attachments)
+        {
+            var extension = Path.GetExtension(attachment.Filename).ToLowerInvariant();
+
+            if (IsImageExtension(extension))
+            {
+                imageUrls.Add(attachment.ProxyUrl);
+            }
+            else if (IsVideoExtension(extension))
+            {
+                videoUrls.Add(attachment.ProxyUrl);
+            }
+            else
+            {
+                otherFiles.Add(attachment);
+            }
+        }
+
+        // Create container components
+        var containerComponents = new List<IMessageComponentBuilder>();
+
+        // Get individual reaction counts for each starboard emote
+        var reactionCountsText = new List<string>();
+
+        foreach (var emote in starboardEmotes.Select(emoteString => emoteString.ToIEmote()))
+        {
+            try
+            {
+                var reactionUsers = await message.GetReactionUsersAsync(emote, int.MaxValue).FlattenAsync();
+                var count = allowBots ? reactionUsers.Count() : reactionUsers.Count(u => !u.IsBot);
+                if (count > 0)
+                {
+                    reactionCountsText.Add($"{emote} **{count}**");
+                }
+            }
+            catch
+            {
+                // Ignore if emote can't be processed
+            }
+        }
+
+        // Add username as a clickable link to user profile
+        containerComponents.Add(
+            new TextDisplayBuilder($"[**{authorName}**](https://discord.com/users/{message.Author.Id})"));
+
+        // Add message content if available
+        if (!string.IsNullOrWhiteSpace(content))
+        {
+            containerComponents.Add(new TextDisplayBuilder(content));
+        }
+
+        // Add media gallery for images and videos
+        var allMediaUrls = imageUrls.Concat(videoUrls).ToList();
+        if (allMediaUrls.Count > 0)
+        {
+            var mediaItems =
+                allMediaUrls.Select(url => new MediaGalleryItemProperties(new UnfurledMediaItemProperties(url)));
+            containerComponents.Add(new MediaGalleryBuilder(mediaItems));
+        }
+
+        // Download non-media files to re-upload with starboard post
+        var filesToUpload = new List<FileAttachment>();
+        if (otherFiles.Count > 0)
+        {
+            using var httpClient = new HttpClient();
+            // Add user agent to mimic browser requests
+            httpClient.DefaultRequestHeaders.Add("User-Agent",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+
+            foreach (var file in otherFiles.Take(3)) // Limit to 3 files to avoid size issues
+            {
+                try
+                {
+                    // Use the original URL instead of ProxyUrl for better compatibility
+                    var downloadUrl = file.Url ?? file.ProxyUrl;
+                    var fileData = await httpClient.GetByteArrayAsync(downloadUrl);
+                    filesToUpload.Add(new FileAttachment(new MemoryStream(fileData), file.Filename));
+
+                    // Add file component referencing the file we'll upload
+                    containerComponents.Add(new FileComponentBuilder
+                    {
+                        File = new UnfurledMediaItemProperties($"attachment://{file.Filename}")
+                    });
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning($"Failed to download file {file.Filename} for starboard: {ex.Message}");
+                    // If download fails, just show the filename as text
+                    containerComponents.Add(new TextDisplayBuilder($"📎 **{file.Filename}** ({file.Size} bytes)"));
+                }
+            }
+        }
+
+        // Stars count display outside container
+        var starsDisplay = string.Join(" ", reactionCountsText);
+
+        // Wrap with stars count outside container, username+thumbnail section inside container
+        var componentsBuilder = builder
+            .WithTextDisplay(!string.IsNullOrWhiteSpace(starsDisplay) ? starsDisplay : "✨")
+            .WithContainer(containerComponents)
+            .WithActionRow([
+                new ButtonBuilder()
+                    .WithLabel("Jump to Message")
+                    .WithStyle(ButtonStyle.Link)
+                    .WithUrl(message.GetJumpUrl())
+            ]);
+
+        return (componentsBuilder, filesToUpload);
+    }
+
+    /// <summary>
+    ///     Checks if a file extension is for an image.
+    /// </summary>
+    private static bool IsImageExtension(string extension)
+    {
+        return extension switch
+        {
+            ".jpg" or ".jpeg" or ".png" or ".gif" or ".webp" or ".bmp" or ".tiff" or ".svg" => true,
+            _ => false
+        };
+    }
+
+    /// <summary>
+    ///     Checks if a file extension is for a video.
+    /// </summary>
+    private static bool IsVideoExtension(string extension)
+    {
+        return extension switch
+        {
+            ".mp4" or ".webm" or ".mov" or ".avi" or ".mkv" or ".flv" or ".wmv" or ".m4v" => true,
+            _ => false
+        };
+    }
+
+    /// <summary>
+    ///     Tracks starboard statistics for a message.
+    /// </summary>
+    private async Task TrackStarboardStats(IUserMessage message, int starboardId, string emote, int reactionCount,
+        ulong channelId)
+    {
+        // Safety check to prevent foreign key constraint violations
+        if (starboardId <= 0)
+        {
+            logger.LogWarning("[Starboard] Attempted to track stats for invalid starboard ID: {StarboardId}",
+                starboardId);
+            return;
+        }
+
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        var existing = starboardStats.FirstOrDefault(x =>
+            x.MessageId == message.Id && x.StarboardId == starboardId && x.Emote == emote);
+
+        if (existing != null)
+        {
+            // Update existing stats
+            existing.ReactionCount = reactionCount;
+            existing.PeakReactionCount = Math.Max(existing.PeakReactionCount, reactionCount);
+            existing.LastUpdatedAt = DateTime.UtcNow;
+            existing.IsActive = reactionCount > 0;
+
+            await db.UpdateAsync(existing);
+        }
+        else if (reactionCount > 0)
+        {
+            // Create new stats entry
+            var newStats = new StarboardStats
+            {
+                StarboardId = starboardId,
+                MessageId = message.Id,
+                ChannelId = channelId,
+                AuthorId = message.Author.Id,
+                Emote = emote,
+                ReactionCount = reactionCount,
+                PeakReactionCount = reactionCount,
+                FirstStarredAt = DateTime.UtcNow,
+                LastUpdatedAt = DateTime.UtcNow,
+                IsActive = true
+            };
+
+            await db.InsertAsync(newStats);
+            starboardStats.Add(newStats);
+        }
+    }
+
+    /// <summary>
+    ///     Tracks an individual star reaction.
+    /// </summary>
+    private async Task TrackStarboardReaction(ulong messageId, int starboardId, ulong userId, string emote)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        var existing = starboardReactions.FirstOrDefault(x =>
+            x.MessageId == messageId && x.UserId == userId && x.Emote == emote);
+
+        if (existing == null)
+        {
+            var newReaction = new StarboardReaction
+            {
+                StarboardId = starboardId,
+                MessageId = messageId,
+                UserId = userId,
+                Emote = emote,
+                DateAdded = DateTime.UtcNow
+            };
+
+            await db.InsertAsync(newReaction);
+            starboardReactions.Add(newReaction);
+        }
+    }
+
+
+    private async Task AddStarboardPost(ulong messageId, ulong postId, int starboardId, int reactionCount = 0)
     {
         await using var dbContext = await dbFactory.CreateConnectionAsync();
 
@@ -402,7 +865,7 @@ public class StarboardService : INService, IReadyExecutor, IUnloadableService
         {
             var toAdd = new StarboardPost
             {
-                MessageId = messageId, PostId = postId, StarboardConfigId = starboardId
+                MessageId = messageId, PostId = postId, StarboardConfigId = starboardId, ReactionCount = reactionCount
             };
             starboardPosts.Add(toAdd);
             await dbContext.InsertAsync(toAdd);
@@ -411,10 +874,20 @@ public class StarboardService : INService, IReadyExecutor, IUnloadableService
         }
 
         if (post.PostId == postId)
+        {
+            // Update reaction count if different
+            if (post.ReactionCount != reactionCount)
+            {
+                post.ReactionCount = reactionCount;
+                await dbContext.UpdateAsync(post);
+            }
+
             return;
+        }
 
         starboardPosts.Remove(post);
         post.PostId = postId;
+        post.ReactionCount = reactionCount;
         await dbContext.UpdateAsync(post);
         starboardPosts.Add(post);
     }
@@ -477,9 +950,16 @@ public class StarboardService : INService, IReadyExecutor, IUnloadableService
         bool isAdd)
     {
         var textChannel = channel.Value as ITextChannel;
-        var emote = starboard.Emote.ToIEmote();
 
-        if (emote.Name == null || !Equals(reaction.Emote, emote))
+        // Check if the reaction matches any of the starboard's emotes
+        var starboardEmotes = ParseEmotes(starboard.Emote);
+        var matchingEmote = starboardEmotes.FirstOrDefault(e =>
+        {
+            var emote = e.ToIEmote();
+            return emote.Name != null && Equals(reaction.Emote, emote);
+        });
+
+        if (matchingEmote == null)
             return;
 
         var starboardChannel = await textChannel.Guild.GetTextChannelAsync(starboard.StarboardChannelId);
@@ -516,9 +996,9 @@ public class StarboardService : INService, IReadyExecutor, IUnloadableService
 
         string content;
         string imageurl;
-        var component = new ComponentBuilder()
-            .WithButton(url: newMessage.GetJumpUrl(), style: ButtonStyle.Link, label: "Jump To Message")
-            .Build();
+
+        // Get all emotes for this starboard to show individual counters
+        starboardEmotes = ParseEmotes(starboard.Emote);
 
         if (newMessage.Author.IsBot)
         {
@@ -541,12 +1021,37 @@ public class StarboardService : INService, IReadyExecutor, IUnloadableService
         if (content is null && imageurl is null)
             return;
 
-        var emoteCount = await newMessage.GetReactionUsersAsync(emote, int.MaxValue).FlattenAsync();
+        var reactionEmote = matchingEmote.ToIEmote();
+        var emoteCount = await newMessage.GetReactionUsersAsync(reactionEmote, int.MaxValue).FlattenAsync();
         var count = emoteCount.Where(x => !x.IsBot);
         var enumerable = count as IUser[] ?? count.ToArray();
         var maybePost = starboardPosts.Find(x => x.MessageId == newMessage.Id && x.StarboardConfigId == starboard.Id);
 
-        if (enumerable.Length < starboard.Threshold)
+        // Track stats and individual reactions
+        await TrackStarboardStats(newMessage, starboard.Id, matchingEmote, enumerable.Length, textChannel.Id);
+        if (isAdd && reaction.User.IsSpecified)
+        {
+            await TrackStarboardReaction(newMessage.Id, starboard.Id, reaction.User.Value.Id, matchingEmote);
+        }
+
+        // Calculate total stars across all emotes for this starboard
+        var totalStars = 0;
+        foreach (var emoteString in starboardEmotes)
+        {
+            var emote = emoteString.ToIEmote();
+            try
+            {
+                var reactions = await newMessage.GetReactionUsersAsync(emote, int.MaxValue).FlattenAsync();
+                var validReactions = reactions.Count(u => !u.IsBot);
+                totalStars += validReactions;
+            }
+            catch
+            {
+                // Ignore if emote can't be processed
+            }
+        }
+
+        if (totalStars < starboard.Threshold)
         {
             if (maybePost != null && starboard.RemoveOnBelowThreshold)
             {
@@ -585,13 +1090,27 @@ public class StarboardService : INService, IReadyExecutor, IUnloadableService
                     if (imageurl is not null)
                         eb1.WithImageUrl(imageurl);
 
-                    await post2.ModifyAsync(x =>
+                    var (updateComponentsV2, files) = await CreateStarboardComponentsV2(newMessage, content,
+                        starboardEmotes, newMessage.Author.ToString(), starboard.AllowBots);
+
+                    // If we have files, we need to delete and recreate the message
+                    if (files.Count > 0)
                     {
-                        x.Content = strings.StarboardMessage(textChannel.Guild.Id, emote, enumerable.Length,
-                            textChannel.Mention);
-                        x.Components = component;
-                        x.Embed = eb1.Build();
-                    });
+                        await post2.DeleteAsync();
+                        var newPost = await starboardChannel.SendFilesAsync(files,
+                            components: updateComponentsV2.Build(),
+                            allowedMentions: AllowedMentions.None);
+                        await AddStarboardPost(newMessage.Id, newPost.Id, starboard.Id, totalStars);
+                    }
+                    else
+                    {
+                        await post2.ModifyAsync(x =>
+                        {
+                            x.Content = null;
+                            x.Components = updateComponentsV2.Build();
+                            x.AllowedMentions = AllowedMentions.None;
+                        });
+                    }
                 }
                 else
                 {
@@ -608,21 +1127,24 @@ public class StarboardService : INService, IReadyExecutor, IUnloadableService
                         }
                     }
 
-                    var eb2 = new EmbedBuilder()
-                        .WithOkColor()
-                        .WithAuthor(newMessage.Author)
-                        .WithDescription(content)
-                        .WithTimestamp(newMessage.Timestamp);
+                    var (newComponentsV2, files) = await CreateStarboardComponentsV2(newMessage, content,
+                        starboardEmotes, newMessage.Author.ToString(), starboard.AllowBots);
 
-                    if (imageurl is not null)
-                        eb2.WithImageUrl(imageurl);
+                    IUserMessage msg1;
+                    if (files.Count > 0)
+                    {
+                        msg1 = await starboardChannel.SendFilesAsync(
+                            files,
+                            components: newComponentsV2.Build(),
+                            allowedMentions: AllowedMentions.None);
+                    }
+                    else
+                    {
+                        msg1 = await starboardChannel.SendMessageAsync(components: newComponentsV2.Build(),
+                            allowedMentions: AllowedMentions.None);
+                    }
 
-                    var msg1 = await starboardChannel.SendMessageAsync(
-                        strings.StarboardMessage(textChannel.Guild.Id, emote, enumerable.Length, textChannel.Mention),
-                        embed: eb2.Build(),
-                        components: component);
-
-                    await AddStarboardPost(message.Id, msg1.Id, starboard.Id);
+                    await AddStarboardPost(message.Id, msg1.Id, starboard.Id, totalStars);
                 }
             }
             else
@@ -640,51 +1162,71 @@ public class StarboardService : INService, IReadyExecutor, IUnloadableService
                     if (imageurl is not null)
                         eb1.WithImageUrl(imageurl);
 
-                    await toModify.ModifyAsync(x =>
+                    var (modifyComponentsV2, files) = await CreateStarboardComponentsV2(newMessage, content,
+                        starboardEmotes, newMessage.Author.ToString(), starboard.AllowBots);
+
+                    // If we have files, we need to delete and recreate the message
+                    if (files.Count > 0)
                     {
-                        x.Content = strings.StarboardMessage(textChannel.Guild.Id, emote, enumerable.Length,
-                            textChannel.Mention);
-                        x.Components = component;
-                        x.Embed = eb1.Build();
-                    });
+                        await toModify.DeleteAsync();
+                        var newPost = await starboardChannel.SendFilesAsync(files,
+                            components: modifyComponentsV2.Build(),
+                            allowedMentions: AllowedMentions.None);
+                        await AddStarboardPost(newMessage.Id, newPost.Id, starboard.Id, totalStars);
+                    }
+                    else
+                    {
+                        await toModify.ModifyAsync(x =>
+                        {
+                            x.Content = null;
+                            x.Components = modifyComponentsV2.Build();
+                            x.AllowedMentions = AllowedMentions.None;
+                        });
+                    }
                 }
                 else
                 {
-                    var eb2 = new EmbedBuilder()
-                        .WithOkColor()
-                        .WithAuthor(newMessage.Author)
-                        .WithDescription(content)
-                        .WithTimestamp(newMessage.Timestamp);
+                    var (elseComponentsV2, files) = await CreateStarboardComponentsV2(newMessage, content,
+                        starboardEmotes, newMessage.Author.ToString(), starboard.AllowBots);
 
-                    if (imageurl is not null)
-                        eb2.WithImageUrl(imageurl);
+                    IUserMessage msg1;
+                    if (files.Count > 0)
+                    {
+                        msg1 = await starboardChannel.SendFilesAsync(
+                            files,
+                            components: elseComponentsV2.Build(),
+                            allowedMentions: AllowedMentions.None);
+                    }
+                    else
+                    {
+                        msg1 = await starboardChannel.SendMessageAsync(components: elseComponentsV2.Build(),
+                            allowedMentions: AllowedMentions.None);
+                    }
 
-                    var msg1 = await starboardChannel.SendMessageAsync(
-                        strings.StarboardMessage(textChannel.Guild.Id, emote, enumerable.Length, textChannel.Mention),
-                        embed: eb2.Build(),
-                        components: component);
-
-                    await AddStarboardPost(message.Id, msg1.Id, starboard.Id);
+                    await AddStarboardPost(message.Id, msg1.Id, starboard.Id, totalStars);
                 }
             }
         }
         else
         {
-            var eb = new EmbedBuilder()
-                .WithOkColor()
-                .WithAuthor(newMessage.Author)
-                .WithDescription(content)
-                .WithTimestamp(newMessage.Timestamp);
+            var (finalComponentsV2, files) = await CreateStarboardComponentsV2(newMessage, content, starboardEmotes,
+                newMessage.Author.ToString(), starboard.AllowBots);
 
-            if (imageurl is not null)
-                eb.WithImageUrl(imageurl);
+            IUserMessage msg;
+            if (files.Count > 0)
+            {
+                msg = await starboardChannel.SendFilesAsync(
+                    files,
+                    components: finalComponentsV2.Build(),
+                    allowedMentions: AllowedMentions.None);
+            }
+            else
+            {
+                msg = await starboardChannel.SendMessageAsync(components: finalComponentsV2.Build(),
+                    allowedMentions: AllowedMentions.None);
+            }
 
-            var msg = await starboardChannel.SendMessageAsync(
-                strings.StarboardMessage(textChannel.Guild.Id, emote, enumerable.Length, textChannel.Mention),
-                embed: eb.Build(),
-                components: component);
-
-            await AddStarboardPost(message.Id, msg.Id, starboard.Id);
+            await AddStarboardPost(message.Id, msg.Id, starboard.Id, totalStars);
         }
     }
 
@@ -819,4 +1361,98 @@ public class StarboardHighlight
     ///     When the message was created
     /// </summary>
     public DateTime CreatedAt { get; set; }
+}
+
+/// <summary>
+///     DTO for starboard statistics
+/// </summary>
+public class StarboardStatsDto
+{
+    /// <summary>
+    ///     The user who gets starred the most.
+    /// </summary>
+    public UserStarStats? MostStarredUser { get; set; }
+
+    /// <summary>
+    ///     The channel with the most starboard activity.
+    /// </summary>
+    public ChannelStarStats? MostActiveChannel { get; set; }
+
+    /// <summary>
+    ///     The user who gives the most stars.
+    /// </summary>
+    public StarrerStats? MostActiveStarrer { get; set; }
+
+    /// <summary>
+    ///     Total number of starred messages.
+    /// </summary>
+    public int TotalStarredMessages { get; set; }
+
+    /// <summary>
+    ///     Total number of stars given.
+    /// </summary>
+    public int TotalStars { get; set; }
+}
+
+/// <summary>
+///     Statistics for a user's starred messages
+/// </summary>
+public class UserStarStats
+{
+    /// <summary>
+    ///     The user's Discord ID.
+    /// </summary>
+    public ulong UserId { get; set; }
+
+    /// <summary>
+    ///     Total number of stars received.
+    /// </summary>
+    public int TotalStars { get; set; }
+
+    /// <summary>
+    ///     Number of messages that were starred.
+    /// </summary>
+    public int MessageCount { get; set; }
+}
+
+/// <summary>
+///     Statistics for a channel's starred messages
+/// </summary>
+public class ChannelStarStats
+{
+    /// <summary>
+    ///     The channel's Discord ID.
+    /// </summary>
+    public ulong ChannelId { get; set; }
+
+    /// <summary>
+    ///     Total number of stars in this channel.
+    /// </summary>
+    public int TotalStars { get; set; }
+
+    /// <summary>
+    ///     Number of starred messages from this channel.
+    /// </summary>
+    public int MessageCount { get; set; }
+}
+
+/// <summary>
+///     Statistics for a user who gives stars
+/// </summary>
+public class StarrerStats
+{
+    /// <summary>
+    ///     The user's Discord ID.
+    /// </summary>
+    public ulong UserId { get; set; }
+
+    /// <summary>
+    ///     Number of stars given by this user.
+    /// </summary>
+    public int StarsGiven { get; set; }
+
+    /// <summary>
+    ///     Number of different emotes used by this user.
+    /// </summary>
+    public int UniqueEmotesUsed { get; set; }
 }

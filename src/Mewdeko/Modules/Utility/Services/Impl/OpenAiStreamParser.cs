@@ -43,35 +43,42 @@ namespace Mewdeko.Modules.Utility.Services.Impl
             }
         }
 
-        /// <inheritdoc />
-        public bool IsStreamFinished(string json, AiService.AiProvider provider)
+            /// <inheritdoc />
+    public bool IsStreamFinished(string json, AiService.AiProvider provider)
+    {
+        var result = CheckStreamFinished(json, provider);
+        return result.IsFinished;
+    }
+
+    /// <inheritdoc />
+    public (bool IsFinished, string StopReason) CheckStreamFinished(string json, AiService.AiProvider provider)
+    {
+        try
         {
-            try
-            {
-                using var doc = JsonDocument.Parse(json);
-                var root = doc.RootElement;
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
 
-                if (root.TryGetProperty("choices", out var choices) &&
-                    choices.GetArrayLength() > 0 &&
-                    choices[0].TryGetProperty("finish_reason", out var finishReason))
+            if (root.TryGetProperty("choices", out var choices) &&
+                choices.GetArrayLength() > 0 &&
+                choices[0].TryGetProperty("finish_reason", out var finishReason))
+            {
+                // finish_reason is null for intermediate chunks, and a string (e.g. "stop") when done
+                var reason = finishReason.ValueKind == JsonValueKind.Null ? null : finishReason.GetString();
+                if (!string.IsNullOrEmpty(reason))
                 {
-                    // finish_reason is null for intermediate chunks, and a string (e.g. "stop") when done
-                    var reason = finishReason.ValueKind == JsonValueKind.Null ? null : finishReason.GetString();
-                    if (!string.IsNullOrEmpty(reason))
-                    {
-                        Log.Information($"Stream finished with reason: {reason}");
-                        return true;
-                    }
+                    Log.Information($"Stream finished with reason: {reason}");
+                    return (true, reason);
                 }
+            }
 
-                return false;
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "Error checking if OpenAI stream is finished: {Json}", json);
-                return false;
-            }
+            return (false, null);
         }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Error checking if OpenAI stream is finished: {Json}", json);
+            return (false, null);
+        }
+    }
 
         /// <inheritdoc />
         public (int InputTokens, int OutputTokens, int TotalTokens)? ParseUsage(string json, AiService.AiProvider provider)
@@ -80,6 +87,8 @@ namespace Mewdeko.Modules.Utility.Services.Impl
             {
                 using var doc = JsonDocument.Parse(json);
                 var root = doc.RootElement;
+
+                Log.Debug("Parsing OpenAI stream usage: {Json}", json);
 
                 // Look for a usage object in the root (present in the final chunk if usage stats are enabled)
                 if (root.TryGetProperty("usage", out var usageElem) && usageElem.ValueKind == JsonValueKind.Object)
@@ -105,7 +114,7 @@ namespace Mewdeko.Modules.Utility.Services.Impl
             }
             catch (JsonException ex)
             {
-                 Log.Debug($"Failed to parse usage JSON for Grok: {ex.Message}");
+                 Log.Debug($"Failed to parse usage JSON for GPT: {ex.Message}");
                 return null;
             }
             catch (Exception ex)
@@ -116,3 +125,5 @@ namespace Mewdeko.Modules.Utility.Services.Impl
         }
     }
 }
+
+

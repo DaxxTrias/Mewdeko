@@ -1,5 +1,6 @@
 using DataModel;
 using LinqToDB;
+using LinqToDB.Async;
 
 namespace Mewdeko.Database.Extensions;
 

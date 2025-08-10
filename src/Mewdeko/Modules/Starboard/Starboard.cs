@@ -9,6 +9,8 @@ namespace Mewdeko.Modules.Starboard;
 /// <summary>
 ///     Module for managing multiple starboard configurations in a guild.
 /// </summary>
+/// <param name="guildSettings">The guildsettings service.</param>
+/// <param name="interactiveService">The interactiveservice service.</param>
 public class Starboard(GuildSettingsService guildSettings, InteractiveService interactiveService)
     : MewdekoSubmodule<StarboardService>
 {
@@ -59,13 +61,6 @@ public class Starboard(GuildSettingsService guildSettings, InteractiveService in
     [UserPerm(GuildPermission.ManageChannels)]
     public async Task CreateStarboard(ITextChannel channel, IEmote emote, int threshold = 1)
     {
-        var existingStarboards = Service.GetStarboards(ctx.Guild.Id);
-        if (existingStarboards.Any(s => s.Emote == emote.ToString()))
-        {
-            await ctx.Channel.SendErrorAsync(Strings.StarboardEmoteInUse(ctx.Guild.Id), Config);
-            return;
-        }
-
         try
         {
             await ctx.Message.AddReactionAsync(emote);
@@ -76,9 +71,16 @@ public class Starboard(GuildSettingsService guildSettings, InteractiveService in
             return;
         }
 
-        await Service.CreateStarboard(ctx.Guild, channel.Id, emote.ToString(), threshold);
-        await ctx.Channel.SendConfirmAsync(Strings.StarboardCreated(ctx.Guild.Id, channel.Mention, emote.ToString(),
-            threshold));
+        try
+        {
+            await Service.CreateStarboard(ctx.Guild, channel.Id, emote.ToString(), threshold);
+            await ctx.Channel.SendConfirmAsync(Strings.StarboardCreated(ctx.Guild.Id, channel.Mention, emote.ToString(),
+                threshold));
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("already used"))
+        {
+            await ctx.Channel.SendErrorAsync(Strings.StarboardEmoteInUse(ctx.Guild.Id), Config);
+        }
     }
 
     /// <summary>
@@ -335,5 +337,156 @@ public class Starboard(GuildSettingsService guildSettings, InteractiveService in
             await ctx.Channel.SendConfirmAsync(Strings.StarboardThresholdSet(ctx.Guild.Id, starboardId, threshold));
         else
             await ctx.Channel.SendErrorAsync(Strings.StarboardNotFound(ctx.Guild.Id, starboardId), Config);
+    }
+
+    /// <summary>
+    ///     Adds an emote to an existing starboard configuration.
+    /// </summary>
+    /// <param name="starboardId">The ID of the starboard configuration.</param>
+    /// <param name="emote">The emote to add.</param>
+    [Cmd]
+    [Aliases]
+    [UserPerm(GuildPermission.ManageChannels)]
+    public async Task AddStarboardEmote(int starboardId, IEmote emote)
+    {
+        try
+        {
+            await ctx.Message.AddReactionAsync(emote);
+        }
+        catch
+        {
+            await ctx.Channel.SendErrorAsync(Strings.InvalidEmote(ctx.Guild.Id), Config);
+            return;
+        }
+
+        try
+        {
+            if (await Service.AddEmoteToStarboard(ctx.Guild, starboardId, emote.ToString()))
+                await ctx.Channel.SendConfirmAsync(Strings.StarboardEmoteAdded(ctx.Guild.Id, emote.ToString(),
+                    starboardId));
+            else
+                await ctx.Channel.SendErrorAsync(Strings.StarboardNotFound(ctx.Guild.Id, starboardId), Config);
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("already used"))
+        {
+            await ctx.Channel.SendErrorAsync(Strings.StarboardEmoteInUse(ctx.Guild.Id), Config);
+        }
+    }
+
+    /// <summary>
+    ///     Removes an emote from an existing starboard configuration.
+    /// </summary>
+    /// <param name="starboardId">The ID of the starboard configuration.</param>
+    /// <param name="emote">The emote to remove.</param>
+    [Cmd]
+    [Aliases]
+    [UserPerm(GuildPermission.ManageChannels)]
+    public async Task RemoveStarboardEmote(int starboardId, IEmote emote)
+    {
+        try
+        {
+            if (await Service.RemoveEmoteFromStarboard(ctx.Guild, starboardId, emote.ToString()))
+                await ctx.Channel.SendConfirmAsync(Strings.StarboardEmoteRemoved(ctx.Guild.Id, emote.ToString(),
+                    starboardId));
+            else
+                await ctx.Channel.SendErrorAsync(
+                    Strings.StarboardEmoteNotFound(ctx.Guild.Id, emote.ToString(), starboardId), Config);
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("Cannot remove the last emote"))
+        {
+            await ctx.Channel.SendErrorAsync(Strings.StarboardCannotRemoveLastEmote(ctx.Guild.Id, starboardId), Config);
+        }
+    }
+
+    /// <summary>
+    ///     Shows starboard statistics for the guild.
+    /// </summary>
+    [Cmd]
+    [Aliases]
+    public async Task StarboardStats()
+    {
+        var stats = await Service.GetStarboardStats(ctx.Guild.Id);
+        if (stats == null)
+        {
+            await ctx.Channel.SendErrorAsync(Strings.NoStarboardStats(ctx.Guild.Id), Config);
+            return;
+        }
+
+        var eb = new EmbedBuilder()
+            .WithOkColor()
+            .WithTitle(Strings.StarboardStatistics(ctx.Guild.Id))
+            .AddField(Strings.TotalStarredMessages(ctx.Guild.Id), stats.TotalStarredMessages, true)
+            .AddField(Strings.TotalStars(ctx.Guild.Id), stats.TotalStars, true);
+
+        if (stats.MostStarredUser != null)
+        {
+            var user = await ctx.Guild.GetUserAsync(stats.MostStarredUser.UserId);
+            eb.AddField(Strings.MostStarredUser(ctx.Guild.Id),
+                $"{user?.Mention ?? "Unknown User"} ({stats.MostStarredUser.TotalStars} ⭐)", true);
+        }
+
+        if (stats.MostActiveChannel != null)
+        {
+            var channel = await ctx.Guild.GetTextChannelAsync(stats.MostActiveChannel.ChannelId);
+            eb.AddField(Strings.MostActiveChannel(ctx.Guild.Id),
+                $"{channel?.Mention ?? "Unknown Channel"} ({stats.MostActiveChannel.TotalStars} ⭐)", true);
+        }
+
+        if (stats.MostActiveStarrer != null)
+        {
+            var user = await ctx.Guild.GetUserAsync(stats.MostActiveStarrer.UserId);
+            eb.AddField(Strings.MostActiveStarrer(ctx.Guild.Id),
+                $"{user?.Mention ?? "Unknown User"} ({stats.MostActiveStarrer.StarsGiven} given)", true);
+        }
+
+        await ctx.Channel.SendMessageAsync(embed: eb.Build());
+    }
+
+    /// <summary>
+    ///     Shows starboard statistics for a specific user.
+    /// </summary>
+    /// <param name="user">The user to show stats for. Defaults to command invoker.</param>
+    [Cmd]
+    [Aliases]
+    public async Task StarboardUserStats(IUser user = null)
+    {
+        user ??= ctx.User;
+        var stats = await Service.GetUserStarboardStats(ctx.Guild.Id, user.Id);
+        if (stats == null)
+        {
+            await ctx.Channel.SendErrorAsync(Strings.NoStarboardStats(ctx.Guild.Id), Config);
+            return;
+        }
+
+        var eb = new EmbedBuilder()
+            .WithOkColor()
+            .WithTitle(Strings.UserStarboardStatistics(ctx.Guild.Id, user.Username))
+            .WithThumbnailUrl(user.GetAvatarUrl())
+            .AddField(Strings.MessagesStarred(ctx.Guild.Id), stats.MessagesStarred, true)
+            .AddField(Strings.StarsReceived(ctx.Guild.Id), stats.StarsReceived, true)
+            .AddField(Strings.StarsGiven(ctx.Guild.Id), stats.StarsGiven, true);
+
+        if (stats.TopStarredPosts.Any())
+        {
+            var topPosts = string.Join("\n", stats.TopStarredPosts.Select(p =>
+                $"{p.Emote}: [{p.MessageId}](https://discord.com/channels/{ctx.Guild.Id}/{ctx.Channel.Id}/{p.MessageId}) ({p.StarCount} ⭐)"));
+            eb.AddField(Strings.TopStarredPosts(ctx.Guild.Id), topPosts);
+        }
+
+        if (stats.MostStarredUsers.Any())
+        {
+            var starredUsers = string.Join("\n", stats.MostStarredUsers.Select(u =>
+                $"<@{u.UserId}> ({u.Count} ⭐)"));
+            eb.AddField(Strings.MostStarredUsers(ctx.Guild.Id), starredUsers, true);
+        }
+
+        if (stats.TopFans.Any())
+        {
+            var fans = string.Join("\n", stats.TopFans.Select(f =>
+                $"<@{f.UserId}> ({f.Count} ⭐)"));
+            eb.AddField(Strings.TopFans(ctx.Guild.Id), fans, true);
+        }
+
+        await ctx.Channel.SendMessageAsync(embed: eb.Build());
     }
 }

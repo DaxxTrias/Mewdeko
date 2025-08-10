@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using DataModel;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.Xp.Models;
 using Microsoft.Extensions.Caching.Memory;
@@ -58,6 +59,7 @@ public class XpCacheManager : INService
     /// <param name="dataCache">The data cache.</param>
     /// <param name="dbFactory">The database context provider.</param>
     /// <param name="client">The current sharded client</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public XpCacheManager(
         IDataCache dataCache,
         IDataConnectionFactory dbFactory,
@@ -489,7 +491,7 @@ public class XpCacheManager : INService
             {
                 // Remove only expired entries instead of clearing all
                 hotGuildCache.Compact(0.25);
-                logger.LogDebug("Compacted hot guild cache");
+                logger.LogInformation("Compacted hot guild cache");
             }
 
             // Process Redis keys in batches to prevent long-running operations
@@ -499,7 +501,7 @@ public class XpCacheManager : INService
             keysRemoved = disconnectedStats.keysRemoved + multiplierStats.keysRemoved;
             keysExamined = disconnectedStats.keysExamined + multiplierStats.keysExamined;
 
-            logger.LogDebug("Cache cleanup stats: {Removed} keys removed, {Examined} keys examined",
+            logger.LogInformation("Cache cleanup stats: {Removed} keys removed, {Examined} keys examined",
                 keysRemoved, keysExamined);
         }
         catch (Exception ex)
@@ -549,7 +551,7 @@ public class XpCacheManager : INService
             if (keysToDelete.Count < MaxBatchSize) continue;
             await redisCache.KeyDeleteAsync(keysToDelete.ToArray()).ConfigureAwait(false);
             keysRemoved += keysToDelete.Count;
-            logger.LogDebug("Deleted {Count} Redis keys for disconnected guilds", keysToDelete.Count);
+            logger.LogInformation("Deleted {Count} Redis keys for disconnected guilds", keysToDelete.Count);
             keysToDelete.Clear();
         }
 
@@ -557,7 +559,7 @@ public class XpCacheManager : INService
         if (keysToDelete.Count <= 0) return (keysRemoved, keysExamined);
         await redisCache.KeyDeleteAsync(keysToDelete.ToArray()).ConfigureAwait(false);
         keysRemoved += keysToDelete.Count;
-        logger.LogDebug("Deleted {Count} Redis keys for disconnected guilds", keysToDelete.Count);
+        logger.LogInformation("Deleted {Count} Redis keys for disconnected guilds", keysToDelete.Count);
 
         return (keysRemoved, keysExamined);
     }
@@ -637,7 +639,7 @@ public class XpCacheManager : INService
                     if (redisKeysToDelete.Count >= MaxBatchSize)
                     {
                         await redisCache.KeyDeleteAsync(redisKeysToDelete.ToArray()).ConfigureAwait(false);
-                        logger.LogDebug("Deleted {Count} Redis keys for guild {GuildId}",
+                        logger.LogInformation("Deleted {Count} Redis keys for guild {GuildId}",
                             redisKeysToDelete.Count, guildId);
                         redisKeysToDelete.Clear();
                     }
@@ -648,7 +650,7 @@ public class XpCacheManager : INService
             if (redisKeysToDelete.Count > 0)
             {
                 await redisCache.KeyDeleteAsync(redisKeysToDelete.ToArray()).ConfigureAwait(false);
-                logger.LogDebug("Deleted {Count} remaining Redis keys for guild {GuildId}",
+                logger.LogInformation("Deleted {Count} remaining Redis keys for guild {GuildId}",
                     redisKeysToDelete.Count, guildId);
             }
         }
@@ -690,7 +692,7 @@ public class XpCacheManager : INService
                 cacheOperations.AddRange(from roleReward in batch
                     let cacheKey = $"{RedisKeyPrefix}rewards:{roleReward.GuildId}:role:{roleReward.Level}"
                     let serializedReward = JsonSerializer.Serialize(roleReward, CachedJsonOptions)
-                    select redis.StringSetAsync(cacheKey, serializedReward, TimeSpan.FromMinutes(30), When.Always));
+                    select redis.StringSetAsync(cacheKey, serializedReward, null, When.Always));
 
                 await Task.WhenAll(cacheOperations).ConfigureAwait(false);
                 cacheOperations.Clear();
@@ -745,7 +747,7 @@ public class XpCacheManager : INService
                 cacheOperations.AddRange(from currencyReward in batch
                     let cacheKey = $"{RedisKeyPrefix}rewards:{currencyReward.GuildId}:currency:{currencyReward.Level}"
                     let serializedReward = JsonSerializer.Serialize(currencyReward, CachedJsonOptions)
-                    select redis.StringSetAsync(cacheKey, serializedReward, TimeSpan.FromMinutes(30), When.Always));
+                    select redis.StringSetAsync(cacheKey, serializedReward, null, When.Always));
 
                 await Task.WhenAll(cacheOperations).ConfigureAwait(false);
                 cacheOperations.Clear();

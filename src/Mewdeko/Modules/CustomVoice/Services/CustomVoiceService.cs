@@ -2,6 +2,7 @@
 using System.Threading;
 using DataModel;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Services.Strings;
 
 namespace Mewdeko.Modules.CustomVoice.Services;
@@ -25,6 +26,11 @@ public class CustomVoiceService : INService, IUnloadableService
     /// <summary>
     ///     Initializes a new instance of the <see cref="CustomVoiceService" /> class.
     /// </summary>
+    /// <param name="dbFactory">The database connection factory.</param>
+    /// <param name="client">The Discord client instance.</param>
+    /// <param name="eventHandler">The event handler service.</param>
+    /// <param name="strings">The localized strings service.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public CustomVoiceService(
         IDataConnectionFactory dbFactory,
         DiscordShardedClient client,
@@ -1337,7 +1343,7 @@ public class CustomVoiceService : INService, IUnloadableService
 
         // Trim to Discord's maximum length
         if (name.Length > 100)
-            name = name.Substring(0, 100);
+            name = name[..100];
 
         // Remove starting/ending spaces
         return name.Trim();

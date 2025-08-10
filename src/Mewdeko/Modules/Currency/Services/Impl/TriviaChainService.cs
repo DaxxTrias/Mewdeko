@@ -10,6 +10,7 @@ namespace Mewdeko.Modules.Currency.Services.Impl;
 /// <summary>
 ///     Service implementation for managing trivia chain games.
 /// </summary>
+/// <param name="strings">The localized strings service.</param>
 public class TriviaChainService(GeneratedBotStrings strings) : ITriviaChainService
 {
     private static readonly Dictionary<ulong, TriviaChainState> TriviaChainStates = new();
@@ -250,7 +251,7 @@ public class TriviaChainService(GeneratedBotStrings strings) : ITriviaChainServi
             var response = await httpClient.GetStringAsync(url);
             var triviaResponse = JsonSerializer.Deserialize<OpenTDBResponse>(response);
 
-            if (triviaResponse?.response_code == 0 && triviaResponse.results?.Length > 0)
+            if (triviaResponse is { response_code: 0, results.Length: > 0 })
             {
                 var question = triviaResponse.results[0];
 

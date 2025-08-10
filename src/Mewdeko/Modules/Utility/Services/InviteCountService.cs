@@ -1,6 +1,7 @@
 ﻿using System.Threading;
 using DataModel;
 using LinqToDB;
+using LinqToDB.Async;
 using LinqToDB.Data;
 using Mewdeko.Common.ModuleBehaviors;
 
@@ -23,6 +24,7 @@ public class InviteCountService : INService, IReadyExecutor
     /// <param name="handler"></param>
     /// <param name="dbFactory"></param>
     /// <param name="client"></param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public InviteCountService(EventHandler handler, IDataConnectionFactory dbFactory, DiscordShardedClient client,
         ILogger<InviteCountService> logger)
     {

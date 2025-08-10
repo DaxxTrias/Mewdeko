@@ -1,5 +1,5 @@
 ﻿using Discord.Commands;
-using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Modules.Administration.Common;
 using Mewdeko.Modules.Server_Management.Services;
@@ -11,6 +11,7 @@ public partial class ServerManagement
     /// <summary>
     ///     Manages role monitoring settings, blacklists, and whitelists.
     /// </summary>
+    /// <param name="dbFactory">The database connection factory.</param>
     public class RoleMonitorCommands(IDataConnectionFactory dbFactory) : MewdekoSubmodule<RoleMonitorService>
     {
         /// <summary>

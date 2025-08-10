@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Threading;
 using DataModel;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Modules.Patreon.Common;
 using Mewdeko.Modules.Patreon.Extensions;
@@ -110,6 +111,8 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
     /// <summary>
     ///     Sets a custom announcement message for a guild
     /// </summary>
+    /// <param name="guildId">The guild identifier.</param>
+    /// <param name="message">The message string.</param>
     public async Task SetPatreonMessage(ulong guildId, string? message)
     {
         var config = await guildSettings.GetGuildConfig(guildId);
@@ -915,7 +918,7 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
 
             // Determine target role based on supporter status and amount
             IRole? targetRole = null;
-            if (supporter != null && supporter.AmountCents > 0 && (
+            if (supporter is { AmountCents: > 0 } && (
                     supporter.PatronStatus == "active_patron" ||
                     supporter.PatronStatus == "declined_patron" ||
                     (supporter.PatronStatus == null && supporter.CurrentlyEntitledAmountCents > 0)))

@@ -8,7 +8,7 @@ using Discord.Commands;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
 using Humanizer;
-using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Common.JsonSettings;
 using Mewdeko.Common.TypeReaders.Models;
@@ -36,6 +36,8 @@ namespace Mewdeko.Modules.Utility;
 /// <param name="config"></param>
 /// <param name="dbFactory"></param>
 /// <param name="cache"></param>
+/// <param name="logger">The logger instance for structured logging.</param>
+/// <param name="mediaConversionService">The media conversion service.</param>
 public partial class Utility(
     DiscordShardedClient client,
     IStatsService stats,
@@ -450,9 +452,8 @@ public partial class Utility(
             components: config.Data.ShowInviteButton
                 ? new ComponentBuilder()
                     .WithButton(style: ButtonStyle.Link,
-                        url:
-                        "",
-                        label: "",
+                        url: "",
+                        label: "Invite!",
                         emote: "".ToIEmote()).Build()
                 : null).ConfigureAwait(false);
     }

@@ -2,6 +2,7 @@
 using CodeHollow.FeedReader.Feeds;
 using DataModel;
 using LinqToDB;
+using LinqToDB.Async;
 using Embed = Discord.Embed;
 
 namespace Mewdeko.Modules.Searches.Services;

@@ -64,6 +64,8 @@ public class BotStrings : IBotStrings
     /// <summary>
     ///     Retrieves the strings associated with a command, optionally for the specified guild.
     /// </summary>
+    /// <param name="commandName">The commandname string.</param>
+    /// <param name="guildId">The guild identifier.</param>
     public CommandStrings GetCommandStrings(string commandName, ulong? guildId = null)
     {
         return GetCommandStrings(commandName, localization.GetCultureInfo(guildId));
@@ -72,6 +74,8 @@ public class BotStrings : IBotStrings
     /// <summary>
     ///     Retrieves the strings associated with a command and the specified culture information.
     /// </summary>
+    /// <param name="commandName">The commandname string.</param>
+    /// <param name="cultureInfo">The cultureInfo parameter.</param>
     public CommandStrings GetCommandStrings(string commandName, CultureInfo? cultureInfo)
     {
         var cmdStrings = stringsProvider.GetCommandStrings(cultureInfo.Name, commandName);
@@ -96,7 +100,7 @@ public class BotStrings : IBotStrings
 
         // Try to get overloads if available
         var overloadedCmdStrings = stringsProvider.GetCommandOverloads(cultureInfo.Name, commandName);
-        if (overloadedCmdStrings != null && overloadedCmdStrings.Count > 0)
+        if (overloadedCmdStrings is { Count: > 0 })
         {
             // Construct a unified CommandStrings from overloads
             var result = new CommandStrings
@@ -155,6 +159,8 @@ public class BotStrings : IBotStrings
     /// <summary>
     ///     Retrieves the localized text corresponding to the specified key and culture information.
     /// </summary>
+    /// <param name="key">The key string.</param>
+    /// <param name="cultureInfo">The cultureInfo parameter.</param>
     public string GetText(string? key, CultureInfo? cultureInfo)
     {
         var text = GetString(key, cultureInfo);

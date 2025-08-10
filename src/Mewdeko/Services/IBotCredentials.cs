@@ -12,10 +12,6 @@ public interface IBotCredentials
     /// </summary>
     public string Token { get; }
 
-    /// <summary>
-    ///     Gets the bot's client secret.
-    /// </summary>
-    public string ClientSecret { get; }
 
     /// <summary>
     ///     Gets the bot's Google API key.
@@ -32,15 +28,6 @@ public interface IBotCredentials
     /// </summary>
     public ImmutableArray<ulong> OwnerIds { get; }
 
-    /// <summary>
-    ///     Gets the bot's Statcord key.
-    /// </summary>
-    public string StatcordKey { get; }
-
-    /// <summary>
-    ///     Gets the bot's Mashape key.
-    /// </summary>
-    public string MashapeKey { get; }
 
     /// <summary>
     ///     Gets the bot's Spotify client ID.
@@ -77,10 +64,6 @@ public interface IBotCredentials
     /// </summary>
     public string TrovoClientId { get; }
 
-    /// <summary>
-    ///     Gets the command used to restart the bot.
-    /// </summary>
-    public RestartConfig RestartCommand { get; }
 
     /// <summary>
     ///     Gets the token used for voting.
@@ -93,14 +76,9 @@ public interface IBotCredentials
     public string TwitchClientId { get; }
 
     /// <summary>
-    ///     Gets the LocationIQ API key.
+    ///     Gets the Open-Meteo API URL. Defaults to the public API, but can be set to a self-hosted instance.
     /// </summary>
-    public string LocationIqApiKey { get; }
-
-    /// <summary>
-    ///     Gets the TimezoneDB API key.
-    /// </summary>
-    public string TimezoneDbApiKey { get; }
+    public string OpenMeteoApiUrl { get; }
 
     /// <summary>
     ///     Gets the channel ID for confession reports.
@@ -127,10 +105,6 @@ public interface IBotCredentials
     /// </summary>
     public string LastFmApiKey { get; }
 
-    /// <summary>
-    ///     Last.fm API secret
-    /// </summary>
-    public string LastFmApiSecret { get; }
 
     /// <summary>
     ///     Gets the bot's Patreon client ID.
@@ -146,6 +120,11 @@ public interface IBotCredentials
     ///     Gets the base URL for Patreon OAuth callbacks.
     /// </summary>
     public string PatreonBaseUrl { get; }
+
+    /// <summary>
+    ///     Gets or sets whether the PostgreSQL setup has been completed.
+    /// </summary>
+    public bool PostgresSetupCompleted { get; set; }
 
     /// <summary>
     ///     Checks if the given user is an owner of the bot.

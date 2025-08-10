@@ -1,6 +1,7 @@
 using System.Text.Json;
 using DataModel;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Modules.Games.Common;
 using Mewdeko.Services.Strings;
@@ -361,7 +362,7 @@ public class PollService : INService, IReadyExecutor
             var poll = await db.Polls
                 .FirstOrDefaultAsync(p => p.Id == pollId);
 
-            if (poll == null || !poll.IsActive)
+            if (poll is not { IsActive: true })
                 return false;
 
             poll.IsActive = false;
@@ -470,7 +471,7 @@ public class PollService : INService, IReadyExecutor
             var poll = await db.Polls
                 .FirstOrDefaultAsync(p => p.Id == pollId);
 
-            if (poll == null || !poll.IsActive)
+            if (poll is not { IsActive: true })
                 return false;
 
             // Parse existing settings
@@ -520,7 +521,7 @@ public class PollService : INService, IReadyExecutor
 
             // Update duration if provided
             var durationProperty = requestType.GetProperty("DurationMinutes");
-            if (durationProperty?.GetValue(request) is int durationMinutes && durationMinutes > 0)
+            if (durationProperty?.GetValue(request) is int durationMinutes and > 0)
             {
                 poll.ExpiresAt = DateTime.UtcNow.AddMinutes(durationMinutes);
             }

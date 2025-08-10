@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Net;
 using System.Net.Http;
 using System.Text.Json;
@@ -13,7 +12,6 @@ using MartineApiNet;
 using MartineApiNet.Enums;
 using MartineApiNet.Models.Images;
 using Mewdeko.Common.Attributes.TextCommands;
-using Mewdeko.Modules.Administration.Services;
 using Mewdeko.Modules.Searches.Common;
 using Mewdeko.Modules.Searches.Services;
 using Mewdeko.Services.Settings;
@@ -31,16 +29,15 @@ namespace Mewdeko.Modules.Searches;
 /// <param name="google">The Google API service.</param>
 /// <param name="factory">The HTTP client factory.</param>
 /// <param name="cache">The memory cache service.</param>
-/// <param name="tzSvc">The guild timezone service.</param>
 /// <param name="serv">The interactive service.</param>
 /// <param name="martineApi">The Martine API service.</param>
 /// <param name="toneTagService">The ToneTag service.</param>
 /// <param name="config">The bot configuration service.</param>
+/// <param name="logger">The logger instance for structured logging.</param>
 public partial class Searches(
     IGoogleApiService google,
     IHttpClientFactory factory,
     IMemoryCache cache,
-    GuildTimezoneService tzSvc,
     InteractiveService serv,
     MartineApi martineApi,
     ToneTagService toneTagService,
@@ -178,12 +175,12 @@ public partial class Searches(
     }
 
     /// <summary>
-    ///     Fetches and displays weather information for a given location query.
+    ///     Displays interactive weather information for a specified location.
     /// </summary>
     /// <param name="query">The location query to search for weather information.</param>
     /// <remarks>
-    ///     This command searches for current weather conditions based on the provided location query.
-    ///     It displays the weather information in an embed format, including temperature, humidity, wind speed, and more.
+    ///     This command displays interactive weather information using Components V2,
+    ///     including current conditions, hourly forecasts, and 7-day outlook.
     /// </remarks>
     /// <example>
     ///     <code>.weather New York</code>
@@ -195,112 +192,216 @@ public partial class Searches(
         if (!await ValidateQuery(ctx.Channel, query).ConfigureAwait(false))
             return;
 
-        var embed = new EmbedBuilder();
-        WeatherData data = null;
-        try
+        await ctx.Channel.TriggerTypingAsync().ConfigureAwait(false);
+
+        var data = await Service.GetWeatherDataAsync(query).ConfigureAwait(false);
+        if (data is null)
         {
-            data = await Service.GetWeatherDataAsync(query).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Exception occurred while fetching weather data for query: {Query}", query);
-            embed.WithDescription("An error occurred while fetching weather data. Please try again later.")
-                .WithErrorColor();
+            var embed = new EmbedBuilder()
+                .WithOkColor()
+                .WithDescription(Format.Bold(Strings.CityNotFound(ctx.Guild.Id)));
             await ctx.Channel.EmbedAsync(embed).ConfigureAwait(false);
             return;
         }
 
-        if (data == null)
-        {
-            logger.LogWarning("Weather data is null for query: {Query}", query);
-            embed.WithDescription(Strings.CityNotFound(ctx.Guild.Id))
-                .WithErrorColor();
-        }
-        else if (data.Weather == null || data.Weather.Count == 0 ||
-                 data.Main == null || data.Sys == null || data.Coord == null ||
-                 string.IsNullOrWhiteSpace(data.Name) || data.Sys.Country == null)
-        {
-            logger.LogWarning("Malformed weather data received for query: {Query}. Data: {@Data}", query, data);
-            embed.WithDescription("Malformed weather data received. Please check your query or try again later.")
-                .WithErrorColor();
-        }
-        else
-        {
-            var f = StandardConversions.CelsiusToFahrenheit;
-
-            var tz = Context.Guild is null
-                ? TimeZoneInfo.Utc
-                : tzSvc.GetTimeZoneOrUtc(Context.Guild.Id);
-            var sunrise = data.Sys?.Sunrise.ToUnixTimestamp();
-            var sunset = data.Sys?.Sunset.ToUnixTimestamp();
-            sunrise = sunrise?.ToOffset(tz.GetUtcOffset(sunrise.Value));
-            sunset = sunset?.ToOffset(tz.GetUtcOffset(sunset.Value));
-            var timezone = sunrise.HasValue ? $"UTC{sunrise:zzz}" : "UTC";
-
-            embed.AddField(fb =>
-                    fb.WithName($"🌍 {Format.Bold(Strings.Location(ctx.Guild.Id))}")
-                        .WithValue(
-                            $"[{data.Name}, {data.Sys.Country}](https://openweathermap.org/city/{data.Id})")
-                        .WithIsInline(true))
-                .AddField(fb =>
-                    fb.WithName($"📏 {Format.Bold(Strings.Latlong(ctx.Guild.Id))}")
-                        .WithValue(data.Coord != null ? $"{data.Coord.Lat}, {data.Coord.Lon}" : "N/A").WithIsInline(true))
-                .AddField(fb =>
-                    fb.WithName($"☁ {Format.Bold(Strings.Condition(ctx.Guild.Id))}")
-                        .WithValue(data.Weather != null ? string.Join(", ", data.Weather.Select(w => w.Main)) : "N/A").WithIsInline(true))
-                .AddField(fb =>
-                    fb.WithName($"😓 {Format.Bold(Strings.Humidity(ctx.Guild.Id))}")
-                        .WithValue(data.Main != null ? $"{data.Main.Humidity}%" : "N/A")
-                        .WithIsInline(true))
-                .AddField(fb =>
-                    fb.WithName($"💨 {Format.Bold(Strings.WindSpeed(ctx.Guild.Id))}")
-                        .WithValue(data.Wind != null
-                            ? $"{data.Wind.Speed} m/s" +
-                              (data.Wind.Gust > 0 ? $"\nGusts: {data.Wind.Gust} m/s" : "")
-                            : "N/A")
-                        .WithIsInline(true))
-                .AddField(fb =>
-                    fb.WithName($"🌡 {Format.Bold(Strings.Temperature(ctx.Guild.Id))}")
-                        .WithValue(data.Main != null
-                            ? $"{data.Main.Temp:F1}°C / {f(data.Main.Temp):F1}°F\nFeels like: {data.Main.Feels_Like:F1}°C / {f(data.Main.Feels_Like):F1}°F"
-                            : "N/A")
-                        .WithIsInline(true))
-                .AddField(fb =>
-                    fb.WithName($"🔆 {Format.Bold(Strings.MinMax(ctx.Guild.Id))}")
-                        .WithValue(data.Main != null
-                            ? $"{data.Main.TempMin:F1}°C - {data.Main.TempMax:F1}°C\n{f(data.Main.TempMin):F1}°F - {f(data.Main.TempMax):F1}°F"
-                            : "N/A")
-                        .WithIsInline(true))
-                .AddField(fb =>
-                    fb.WithName($"🌄 {Format.Bold(Strings.Sunrise(ctx.Guild.Id))}")
-                        .WithValue(sunrise.HasValue ? $"{sunrise:HH:mm} {timezone}" : "N/A")
-                        .WithIsInline(true))
-                .AddField(fb =>
-                    fb.WithName($"🌇 {Format.Bold(Strings.Sunset(ctx.Guild.Id))}")
-                        .WithValue(sunset.HasValue ? $"{sunset:HH:mm} {timezone}" : "N/A")
-                        .WithIsInline(true))
-                .WithOkColor()
-                .WithFooter(efb =>
-                    efb.WithText(Strings.WeatherAttribution(ctx.Guild.Id))
-                        .WithIconUrl(data.Weather != null && data.Weather.Count > 0 && !string.IsNullOrWhiteSpace(data.Weather[0].Icon)
-                            ? $"https://openweathermap.org/img/w/{data.Weather[0].Icon}.png"
-                            : null));
-        }
-
-        await ctx.Channel.EmbedAsync(embed).ConfigureAwait(false);
+        var component = BuildWeatherComponent(data);
+        await ctx.Channel.SendMessageAsync(components: component.Build(), flags: MessageFlags.ComponentsV2)
+            .ConfigureAwait(false);
     }
 
     /// <summary>
-    ///     Debug command to clear the weather cache for a given query.
+    ///     Builds the weather component with Components V2.
     /// </summary>
-    /// <param name="query">The location query to clear from cache.</param>
-    [Cmd]
-    [Aliases]
-    [OwnerOnly]
-    public async Task WeatherClearCache([Remainder] string query)
+    /// <param name="weatherData">The weather data to display.</param>
+    private ComponentBuilderV2 BuildWeatherComponent(OpenMeteoWeatherResponse weatherData)
     {
-        await Service.ClearWeatherCacheAsync(query).ConfigureAwait(false);
-        await ctx.Channel.SendConfirmAsync($"Weather cache cleared for: {query}").ConfigureAwait(false);
+        var current = weatherData.Current;
+        var emoji = WeatherCodeInterpreter.GetEmoji(current.WeatherCode);
+        var condition = WeatherCodeInterpreter.GetDescription(current.WeatherCode);
+
+        var builder = new ComponentBuilderV2();
+
+        var locationDisplay = current.Country == current.LocationName
+            ? current.LocationName
+            : $"{current.LocationName}, {current.Country}";
+
+        // Header container with location and current conditions
+        builder.WithContainer([
+            new TextDisplayBuilder($"# {emoji} Weather for {locationDisplay}"),
+            new TextDisplayBuilder($"-# {condition} • Updated at {DateTime.Parse(current.Time):HH:mm}")
+        ], Mewdeko.OkColor);
+
+        // Interactive controls - single select menu with combined options
+        var weatherOptions = new List<SelectMenuOptionBuilder>
+        {
+            new(Strings.CurrentConditions(ctx.Guild.Id), "current:0",
+                Strings.LiveWeatherData(ctx.Guild.Id), isDefault: true)
+        };
+
+        // Add daily options
+        for (var i = 0; i < Math.Min(weatherData.Daily.Time.Count, 7); i++)
+        {
+            var date = DateTime.Parse(weatherData.Daily.Time[i]);
+            var label = i == 0 ? $"{Strings.Today(ctx.Guild.Id)} ({date:MMM dd})" :
+                i == 1 ? $"{Strings.Tomorrow(ctx.Guild.Id)} ({date:MMM dd})" : date.ToString("ddd, MMM dd");
+            var tempMax = weatherData.Daily.TemperatureMax[i];
+            var tempMin = weatherData.Daily.TemperatureMin[i];
+
+            weatherOptions.Add(new SelectMenuOptionBuilder()
+                .WithLabel(label)
+                .WithDescription(
+                    $"{Strings.High(ctx.Guild.Id)}: {tempMax:F1}°C, {Strings.Low(ctx.Guild.Id)}: {tempMin:F1}°C")
+                .WithValue($"daily:{i}"));
+        }
+
+        // Add hourly forecast option
+        weatherOptions.Add(new SelectMenuOptionBuilder(Strings.HourlyForecast(ctx.Guild.Id), "hourly:0",
+            Strings.DetailedHourlyConditions(ctx.Guild.Id)));
+
+        builder.WithActionRow([
+            new SelectMenuBuilder($"weather_main_select:{current.LocationName}", weatherOptions,
+                Strings.SelectForecastPeriod(ctx.Guild.Id))
+        ]);
+
+        // Current weather data in container
+        BuildCurrentWeatherContainer(builder, current);
+
+        // 7-day summary container
+        BuildWeeklySummaryContainer(builder, weatherData);
+
+        builder.WithSeparator()
+            .WithTextDisplay($"-# {Strings.WeatherAttribution(ctx.Guild.Id)}");
+
+        return builder;
+    }
+
+    /// <summary>
+    ///     Builds the current weather container.
+    /// </summary>
+    private void BuildCurrentWeatherContainer(ComponentBuilderV2 builder, CurrentWeather current)
+    {
+        var f = (double c) => c * 1.8 + 32;
+
+        // Primary conditions container
+        var primaryConditions = new List<TextDisplayBuilder>
+        {
+            new($"🌡️ **{current.Temperature:F1}°C** ({f(current.Temperature):F1}°F)"),
+            new(
+                $"🤔 {Strings.FeelsLike(ctx.Guild.Id)}: {current.ApparentTemperature:F1}°C ({f(current.ApparentTemperature):F1}°F)"),
+            new($"💧 {Strings.Humidity(ctx.Guild.Id)}: {current.RelativeHumidity}%")
+        };
+
+        if (current.DewPoint.HasValue)
+            primaryConditions.Add(
+                new TextDisplayBuilder($"💦 {Strings.Dewpoint(ctx.Guild.Id)}: {current.DewPoint:F1}°C"));
+
+        builder.WithContainer(primaryConditions.ToArray(), new Color(52, 152, 219));
+
+        // Wind and atmospheric conditions
+        var windComponents = new List<TextDisplayBuilder>
+        {
+            new($"💨 {Strings.WindSpeed(ctx.Guild.Id)}: {current.WindSpeed:F1} km/h ({current.WindDirection}°)")
+        };
+
+        if (current.WindGusts.HasValue)
+            windComponents.Add(
+                new TextDisplayBuilder($"💨 {Strings.WindGusts(ctx.Guild.Id)}: {current.WindGusts:F1} km/h"));
+
+        windComponents.Add(
+            new TextDisplayBuilder($"📊 {Strings.Pressure(ctx.Guild.Id)}: {current.SurfacePressure:F1} hPa"));
+        windComponents.Add(new TextDisplayBuilder($"☁️ {Strings.CloudCover(ctx.Guild.Id)}: {current.CloudCover}%"));
+
+        if (current.Visibility.HasValue)
+            windComponents.Add(
+                new TextDisplayBuilder($"👁️ {Strings.Visibility(ctx.Guild.Id)}: {current.Visibility / 1000:F1} km"));
+
+        builder.WithContainer(windComponents.ToArray(), new Color(155, 89, 182));
+
+        // Precipitation and weather phenomena
+        var precipComponents = new List<TextDisplayBuilder>();
+
+        if (current.Precipitation is > 0)
+            precipComponents.Add(new TextDisplayBuilder($"🌧️ Precipitation: {current.Precipitation:F1} mm"));
+
+        if (current.Rain is > 0)
+            precipComponents.Add(new TextDisplayBuilder($"☔ Rain: {current.Rain:F1} mm"));
+
+        if (current.Snowfall is > 0)
+            precipComponents.Add(
+                new TextDisplayBuilder($"❄️ {Strings.Snowfall(ctx.Guild.Id)}: {current.Snowfall:F1} cm"));
+
+        if (current.Cape.HasValue)
+            precipComponents.Add(new TextDisplayBuilder($"⛈️ {Strings.Cape(ctx.Guild.Id)}: {current.Cape:F0} J/kg"));
+
+        if (current.FreezingLevelHeight.HasValue)
+            precipComponents.Add(
+                new TextDisplayBuilder(
+                    $"🧊 {Strings.FreezingLevel(ctx.Guild.Id)}: {current.FreezingLevelHeight / 1000:F1} km"));
+
+        if (precipComponents.Count > 0)
+            builder.WithContainer(precipComponents.ToArray(), new Color(52, 73, 94));
+
+        // Solar and environmental data
+        var solarComponents = new List<TextDisplayBuilder>();
+
+        if (current.UvIndex.HasValue)
+            solarComponents.Add(new TextDisplayBuilder($"☀️ {Strings.UvIndex(ctx.Guild.Id)}: {current.UvIndex:F1}"));
+
+        if (current.SolarRadiation.HasValue)
+            solarComponents.Add(new TextDisplayBuilder($"🌞 Solar Radiation: {current.SolarRadiation:F0} W/m²"));
+
+        if (current.Evapotranspiration.HasValue)
+            solarComponents.Add(
+                new TextDisplayBuilder(
+                    $"🌱 {Strings.Evapotranspiration(ctx.Guild.Id)}: {current.Evapotranspiration:F2} mm"));
+
+        if (solarComponents.Count > 0)
+            builder.WithContainer(solarComponents.ToArray(), new Color(241, 196, 15));
+
+        // Soil conditions
+        var soilComponents = new List<TextDisplayBuilder>();
+
+        if (current.SoilTemperature0cm.HasValue)
+            soilComponents.Add(
+                new TextDisplayBuilder(
+                    $"🌡️ {Strings.SoilTemperature(ctx.Guild.Id)}: {current.SoilTemperature0cm:F1}°C"));
+
+        if (current.SoilMoisture0to1cm.HasValue)
+            soilComponents.Add(
+                new TextDisplayBuilder(
+                    $"💧 {Strings.SoilMoisture(ctx.Guild.Id)}: {current.SoilMoisture0to1cm * 100:F1}%"));
+
+        if (soilComponents.Count > 0)
+            builder.WithContainer(soilComponents.ToArray(), new Color(139, 69, 19));
+    }
+
+    /// <summary>
+    ///     Builds the weekly summary container.
+    /// </summary>
+    private void BuildWeeklySummaryContainer(ComponentBuilderV2 builder, OpenMeteoWeatherResponse weatherData)
+    {
+        var weeklyComponents = new List<TextDisplayBuilder>();
+
+        for (var i = 0; i < Math.Min(weatherData.Daily.Time.Count, 7); i++)
+        {
+            var date = DateTime.Parse(weatherData.Daily.Time[i]);
+            var tempMax = weatherData.Daily.TemperatureMax[i];
+            var tempMin = weatherData.Daily.TemperatureMin[i];
+            var precipitation = weatherData.Daily.PrecipitationSum[i];
+            var uv = weatherData.Daily.UvIndexMax[i];
+
+            var dayLabel = i == 0 ? "Today" : i == 1 ? "Tomorrow" : date.ToString("ddd");
+            var precipText = precipitation > 0 ? $" • {precipitation:F1}mm" : "";
+            var uvText = uv > 5 ? $" • UV: {uv:F1}" : "";
+
+            weeklyComponents.Add(
+                new TextDisplayBuilder($"`{dayLabel,-9}` {tempMax:F1}°/{tempMin:F1}°C{precipText}{uvText}"));
+        }
+
+        builder.WithContainer([
+            new TextDisplayBuilder("## 7-Day Outlook"),
+            ..weeklyComponents
+        ], new Color(46, 204, 113)); // Green for weekly forecast
     }
 
     /// <summary>
@@ -323,13 +424,11 @@ public partial class Searches(
 
         await ctx.Channel.TriggerTypingAsync().ConfigureAwait(false);
 
-        var (data, err) = await Service.GetTimeDataAsync(query).ConfigureAwait(false);
+        var (candidates, err) = await Service.GetTimeDataWithCandidatesAsync(query).ConfigureAwait(false);
         if (err is not null)
         {
             var errorMsg = err switch
             {
-                TimeErrors.ApiKeyMissing => Strings.ApiKeyMissing(ctx.Guild.Id),
-                TimeErrors.ApiKey2Missing => "api_key_2_missing",
                 TimeErrors.InvalidInput => Strings.InvalidInput(ctx.Guild.Id),
                 TimeErrors.NotFound => Strings.TimezoneNotFound(ctx.Guild.Id),
                 _ => Strings.ErrorOccured(ctx.Guild.Id)
@@ -339,20 +438,69 @@ public partial class Searches(
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(data.TimeZoneName))
+        if (candidates == null || candidates.Count == 0)
         {
-            await ReplyErrorAsync(Strings.TimezoneDbApiKey(ctx.Guild.Id)).ConfigureAwait(false);
+            await ReplyErrorAsync(Strings.TimezoneNotFound(ctx.Guild.Id)).ConfigureAwait(false);
             return;
         }
 
-        var eb = new EmbedBuilder()
-            .WithOkColor()
-            .WithTitle(Strings.TimeNew(ctx.Guild.Id))
-            .WithDescription(Format.Code(data.Time.ToString(CultureInfo.InvariantCulture)))
-            .AddField(Strings.Location(ctx.Guild.Id), string.Join('\n', data.Address.Split(", ")), true)
-            .AddField(Strings.Timezone(ctx.Guild.Id), data.TimeZoneName, true);
+        // If only one candidate, show it directly
+        if (candidates.Count == 1)
+        {
+            var data = candidates[0];
+            var timeString = data.Time.ToString("h:mm:ss tt");
+            var eb = new EmbedBuilder()
+                .WithOkColor()
+                .WithTitle(Strings.TimeNew(ctx.Guild.Id))
+                .WithDescription(Format.Code(timeString))
+                .AddField(Strings.Location(ctx.Guild.Id), string.Join('\n', data.Address.Split(", ")), true)
+                .AddField(Strings.Timezone(ctx.Guild.Id), data.TimeZoneName, true);
 
-        await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
+            await ctx.Channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
+            return;
+        }
+
+        // Multiple candidates - show select menu
+        await ShowTimezoneSelectMenu(candidates, query);
+    }
+
+    private async Task ShowTimezoneSelectMenu(
+        List<(string Address, DateTime Time, string TimeZoneName, string TimezoneId)> candidates, string originalQuery)
+    {
+        var options = new List<SelectMenuOptionBuilder>();
+
+        for (var i = 0; i < Math.Min(candidates.Count, 25); i++) // Discord limit is 25 options
+        {
+            var candidate = candidates[i];
+            var timeString = candidate.Time.ToString("h:mm tt");
+            var description = $"{timeString} • {candidate.Address}";
+
+            options.Add(new SelectMenuOptionBuilder()
+                .WithLabel(candidate.TimeZoneName.Length > 100
+                    ? candidate.TimeZoneName[..97] + Strings.Ellipsis(ctx.Guild.Id)
+                    : candidate.TimeZoneName)
+                .WithDescription(description.Length > 100
+                    ? description[..97] + Strings.Ellipsis(ctx.Guild.Id)
+                    : description)
+                .WithValue($"timezone_select:{candidate.TimezoneId}"));
+        }
+
+        var selectMenu = new SelectMenuBuilder()
+            .WithCustomId($"timezone_select_menu:{originalQuery}")
+            .WithPlaceholder(Strings.TimezoneSelectPlaceholder(ctx.Guild.Id, candidates.Count, originalQuery))
+            .WithMinValues(1)
+            .WithMaxValues(1)
+            .WithOptions(options);
+
+        var component = new ComponentBuilder()
+            .WithSelectMenu(selectMenu);
+
+        var embed = new EmbedBuilder()
+            .WithOkColor()
+            .WithTitle(Strings.MultipleTimezonesFound(ctx.Guild.Id))
+            .WithDescription(Strings.TimezoneDisambiguationDescription(ctx.Guild.Id, candidates.Count, originalQuery));
+
+        await ctx.Channel.SendMessageAsync(embed: embed.Build(), components: component.Build()).ConfigureAwait(false);
     }
 
     /// <summary>

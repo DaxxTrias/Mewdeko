@@ -24,6 +24,7 @@ public partial class TicketsSlash : MewdekoSlashModuleBase<TicketService>
     /// </summary>
     /// <param name="interactivity">The interactive service.</param>
     /// <param name="cache">The cache service.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public TicketsSlash(InteractiveService interactivity, IDataCache cache, ILogger<TicketsSlash> logger)
     {
         this.interactivity = interactivity;

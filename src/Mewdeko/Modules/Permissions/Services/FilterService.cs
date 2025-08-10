@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using DataModel;
 using Discord.Net;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Common.Configs;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Common.PubSub;
@@ -38,6 +39,16 @@ public class FilterService : IEarlyBehavior, INService
     ///     On initialization, this service loads filtering configurations from the database and subscribes to necessary events
     ///     for real-time monitoring and filtering of messages across all guilds the bot is part of.
     /// </remarks>
+    /// <param name="client">The Discord client instance.</param>
+    /// <param name="dbFactory">The database connection factory.</param>
+    /// <param name="pubSub">The pubSub parameter.</param>
+    /// <param name="upun2">The upun2 service.</param>
+    /// <param name="strng">The strng parameter.</param>
+    /// <param name="ass">The ass service.</param>
+    /// <param name="gss">The gss service.</param>
+    /// <param name="eventHandler">The event handler service.</param>
+    /// <param name="config">The bot configuration settings.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public FilterService(DiscordShardedClient client, IDataConnectionFactory dbFactory, IPubSub pubSub,
         UserPunishService upun2, GeneratedBotStrings strng, AdministrationService ass,
         GuildSettingsService gss, EventHandler eventHandler, BotConfig config, ILogger<FilterService> logger)
@@ -51,15 +62,16 @@ public class FilterService : IEarlyBehavior, INService
         this.config = config;
         this.logger = logger;
 
-        eventHandler.Subscribe("MessageUpdated", "FilterService", (Cacheable<IMessage, ulong> _, SocketMessage newMsg, ISocketMessageChannel channel) =>
-        {
-            var guild = (channel as ITextChannel)?.Guild;
+        eventHandler.Subscribe("MessageUpdated", "FilterService",
+            (Cacheable<IMessage, ulong> _, SocketMessage newMsg, ISocketMessageChannel channel) =>
+            {
+                var guild = (channel as ITextChannel)?.Guild;
 
-            if (guild == null || newMsg is not IUserMessage usrMsg)
-                return Task.CompletedTask;
+                if (guild == null || newMsg is not IUserMessage usrMsg)
+                    return Task.CompletedTask;
 
-            return RunBehavior(null, guild, usrMsg);
-        });
+                return RunBehavior(null, guild, usrMsg);
+            });
     }
 
     /// <summary>
@@ -490,7 +502,7 @@ public class FilterService : IEarlyBehavior, INService
         var guildConfig = await db.GuildConfigs
             .FirstOrDefaultAsync(gc => gc.GuildId == guild.Id);
 
-        if (guildConfig == null || !guildConfig.FilterInvites)
+        if (guildConfig is not { FilterInvites: true })
             return false;
 
         // Check if there are any channel IDs to filter or if the current channel is in the list

@@ -48,4 +48,6 @@ public class ToneTag
 /// <summary>
 ///     Represents the source of a tone tag, including the title and URL.
 /// </summary>
+/// <param name="Title">The title string.</param>
+/// <param name="Url">The url string.</param>
 public record ToneTagSource(string Title, string? Url);

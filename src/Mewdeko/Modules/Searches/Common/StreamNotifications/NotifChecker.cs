@@ -31,6 +31,7 @@ public class NotifChecker
     /// <param name="credsProvider">The credentials provider.</param>
     /// <param name="uniqueCacheKey">The unique cache key for storing data.</param>
     /// <param name="isMaster">if set to <c>true</c> clears all data at start.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public NotifChecker(
         IHttpClientFactory httpClientFactory,
         IBotCredentials credsProvider,
@@ -49,12 +50,10 @@ public class NotifChecker
             },
             {
                 FType.Trovo, new TrovoProvider(httpClientFactory, credsProvider)
+            },
+            {
+                FType.Youtube, new YoutubeScrapingProvider()
             }
-            // Disabled until google makes their api not shit
-            // ,
-            // {
-            //     FollowedStream.FType.Youtube, new YouTubeProvider(credsProvider)
-            // }
         };
         offlineBuffer = [];
         if (isMaster)
@@ -101,10 +100,13 @@ public class NotifChecker
     {
         return Task.Run(async () =>
         {
+            var loopIteration = 0;
             while (true)
             {
                 try
                 {
+                    loopIteration++;
+
                     var allStreamData = await CacheGetAllData();
 
                     var oldStreamDataDict = allStreamData
@@ -118,13 +120,13 @@ public class NotifChecker
                         .Select(x =>
                         {
                             // get all stream data for the streams of this type
-                            if (streamProviders.TryGetValue(x.Key,
-                                    out var provider))
+                            if (streamProviders.TryGetValue(x.Key, out var provider))
                             {
-                                return provider.GetStreamDataAsync(x.Value
+                                var streamNames = x.Value
                                     .Where(entry => !string.IsNullOrEmpty(entry.Key))
                                     .Select(entry => entry.Key)
-                                    .ToList());
+                                    .ToList();
+                                return provider.GetStreamDataAsync(streamNames);
                             }
 
                             // this means there's no provider for this stream data, (and there was before?)
@@ -132,6 +134,8 @@ public class NotifChecker
                                 new List<StreamData>());
                         })
                         .WhenAll().ConfigureAwait(false);
+
+                    var totalNewStreams = newStreamData.SelectMany(x => x).Count();
 
                     var newlyOnline = new List<StreamData>();
                     var newlyOffline = new List<StreamData>();
@@ -155,6 +159,7 @@ public class NotifChecker
                             newData.Game = oldData.Game;
 
                         await CacheAddData(cachekey, newData, true);
+
 
                         // if the stream is offline, we need to check if it was
                         // marked as offline once previously
@@ -185,22 +190,25 @@ public class NotifChecker
                         }
                     }
 
-                    var tasks = new List<Task>
-                    {
-                        Task.Delay(30_000)
-                    };
+                    var tasks = new List<Task>();
 
                     if (newlyOnline.Count > 0)
+                    {
                         tasks.Add(OnStreamsOnline(newlyOnline));
+                    }
 
                     if (newlyOffline.Count > 0)
+                    {
                         tasks.Add(OnStreamsOffline(newlyOffline));
+                    }
 
                     await Task.WhenAll(tasks).ConfigureAwait(false);
+
+                    await Task.Delay(3000).ConfigureAwait(false);
                 }
-                catch (Exception ex)
+                catch
                 {
-                    logger.LogError(ex, "Error getting stream notifications: {ErrorMessage}", ex.Message);
+                    await Task.Delay(10000).ConfigureAwait(false); // Wait 10 seconds before retrying
                 }
             }
         });
@@ -223,7 +231,8 @@ public class NotifChecker
             return Task.FromResult(true);
         }
 
-        return Task.FromResult(streamCache.TryAdd(serializedKey, data));
+        var added = streamCache.TryAdd(serializedKey, data);
+        return Task.FromResult(added);
     }
 
     /// <summary>
@@ -232,7 +241,9 @@ public class NotifChecker
     /// <param name="streamdataKey">The stream data key.</param>
     private Task CacheDeleteData(StreamDataKey streamdataKey)
     {
-        streamCache.TryRemove(JsonSerializer.Serialize(streamdataKey, CachedJsonOptions), out _);
+        var serializedKey = JsonSerializer.Serialize(streamdataKey, CachedJsonOptions);
+        streamCache.TryRemove(serializedKey, out _);
+
         return Task.CompletedTask;
     }
 
@@ -250,12 +261,16 @@ public class NotifChecker
     /// <returns>A dictionary containing all cached stream data.</returns>
     private Task<Dictionary<StreamDataKey, StreamData?>> CacheGetAllData()
     {
-        var result = streamCache
+        var allPairs = streamCache
             .Select(pair => (
+                RawKey: pair.Key,
                 Key: JsonSerializer.Deserialize<StreamDataKey>(pair.Key, CachedJsonOptions),
                 pair.Value))
-            .Where(item => item.Key.Name is not null)
-            .ToDictionary(item => item.Key, item => item.Value);
+            .ToList();
+
+        var filtered = allPairs.Where(item => item.Key.Name is not null).ToList();
+
+        var result = filtered.ToDictionary(item => item.Key, item => item.Value);
 
         return Task.FromResult(result);
     }

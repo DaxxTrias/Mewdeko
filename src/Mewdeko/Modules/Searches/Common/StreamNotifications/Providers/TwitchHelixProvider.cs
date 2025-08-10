@@ -4,12 +4,14 @@ using System.Text.RegularExpressions;
 using Mewdeko.Modules.Searches.Common.StreamNotifications.Models;
 using Serilog;
 using TwitchLib.Api;
+using ILogger = Serilog.ILogger;
 
 namespace Mewdeko.Modules.Searches.Common.StreamNotifications.Providers;
 
 /// <inheritdoc />
 public class TwitchHelixProvider : Provider
 {
+    private static readonly ILogger Logger = Log.ForContext<TwitchHelixProvider>();
     private readonly Lazy<TwitchAPI> api;
     private readonly string clientId;
     private readonly IHttpClientFactory httpClientFactory;
@@ -22,6 +24,11 @@ public class TwitchHelixProvider : Provider
         var creds = credsProvider;
         clientId = creds.TwitchClientId;
         var clientSecret = creds.TwitchClientSecret;
+
+        Logger.Information("Initializing with ClientId: {ClientId}, HasSecret: {HasSecret}",
+            string.IsNullOrEmpty(clientId) ? "(empty)" : clientId[..Math.Min(8, clientId.Length)] + "...",
+            !string.IsNullOrEmpty(clientSecret));
+
         api = new Lazy<TwitchAPI>(() => new TwitchAPI
         {
             Helix =
@@ -48,7 +55,22 @@ public class TwitchHelixProvider : Provider
 
     private async Task<string?> EnsureTokenValidAsync()
     {
-        return await api.Value.Auth.GetAccessTokenAsync().ConfigureAwait(false);
+        try
+        {
+            var token = await api.Value.Auth.GetAccessTokenAsync().ConfigureAwait(false);
+
+            if (token is null)
+            {
+                Logger.Error("Failed to get access token - returned null");
+            }
+
+            return token;
+        }
+        catch (Exception ex)
+        {
+            Logger.Error(ex, "Exception while getting access token: {ErrorMessage}", ex.Message);
+            return null;
+        }
     }
 
     /// <inheritdoc />
@@ -92,8 +114,6 @@ public class TwitchHelixProvider : Provider
 
         if (token is null)
         {
-            Log.Warning(
-                "Twitch client ID and Secret are incorrect! Please go to https://dev.twitch.tv and create an application!");
             return [];
         }
 
@@ -112,14 +132,16 @@ public class TwitchHelixProvider : Provider
         {
             try
             {
-                var str = await http.GetStringAsync(
-                        $"https://api.twitch.tv/helix/users?{chunk.Select(x => $"login={x}").Join('&')}&first=100")
-                    .ConfigureAwait(false);
+                var url = $"https://api.twitch.tv/helix/users?{chunk.Select(x => $"login={x}").Join('&')}&first=100";
+
+                var str = await http.GetStringAsync(url).ConfigureAwait(false);
 
                 var resObj = JsonSerializer.Deserialize<HelixUsersResponse>(str);
 
                 if (resObj?.Data is null || resObj.Data.Count == 0)
+                {
                     continue;
+                }
 
                 foreach (var user in resObj.Data)
                 {
@@ -130,27 +152,31 @@ public class TwitchHelixProvider : Provider
                     }
                 }
             }
-            catch (Exception ex)
+            catch
             {
-                Log.Warning(ex, "Something went wrong retreiving {StreamPlatform} streams", Platform);
                 return new List<StreamData>();
             }
         }
 
         // any item left over loginsSet is an invalid username
-        foreach (var login in loginsSet)
+        if (loginsSet.Count > 0)
         {
-            FailingStreams.TryAdd(login, DateTime.UtcNow);
+            foreach (var login in loginsSet)
+            {
+                FailingStreams.TryAdd(login, DateTime.UtcNow);
+            }
         }
 
         // only get streams for users which exist
+
         foreach (var chunk in dataDict.Keys.Chunk(100))
         {
             try
             {
-                var str = await http.GetStringAsync(
-                        $"https://api.twitch.tv/helix/streams?{chunk.Select(x => $"user_login={x}").Join('&')}&first=100")
-                    .ConfigureAwait(false);
+                var url =
+                    $"https://api.twitch.tv/helix/streams?{chunk.Select(x => $"user_login={x}").Join('&')}&first=100";
+
+                var str = await http.GetStringAsync(url).ConfigureAwait(false);
 
                 var res = JsonSerializer.Deserialize<HelixStreamsResponse>(str);
 
@@ -168,14 +194,17 @@ public class TwitchHelixProvider : Provider
                     }
                 }
             }
-            catch (Exception ex)
+            catch
             {
-                Log.Warning(ex, "Something went wrong retreiving {StreamPlatform} streams", Platform);
                 return new List<StreamData>();
             }
         }
 
-        return dataDict.Values;
+        var result = dataDict.Values.ToList();
+        var liveCount = result.Count(x => x.IsLive);
+        var offlineCount = result.Count - liveCount;
+
+        return result;
     }
 
     private static StreamData UserToStreamData(HelixUsersResponse.User user)

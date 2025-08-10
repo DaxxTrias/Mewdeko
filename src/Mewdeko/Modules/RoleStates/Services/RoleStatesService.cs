@@ -1,5 +1,6 @@
 using DataModel;
 using LinqToDB;
+using LinqToDB.Async;
 
 namespace Mewdeko.Modules.RoleStates.Services;
 
@@ -17,6 +18,7 @@ public class RoleStatesService : INService
     /// </summary>
     /// <param name="dbFactory">The database service to interact with stored data.</param>
     /// <param name="eventHandler">The event handler to subscribe to guild member events.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public RoleStatesService(IDataConnectionFactory dbFactory, EventHandler eventHandler,
         ILogger<RoleStatesService> logger)
     {

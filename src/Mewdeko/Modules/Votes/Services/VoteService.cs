@@ -1,6 +1,6 @@
 ﻿using DataModel;
 using LinqToDB;
-using Mewdeko.Common.PubSub;
+using LinqToDB.Async;
 using Mewdeko.Modules.Moderation.Services;
 using Mewdeko.Services.Strings;
 
@@ -20,11 +20,11 @@ public class VoteService : INService
     ///     Initializes a new instance of the <see cref="VoteService" /> class, setting up dependencies and subscribing to
     ///     voting-related pub/sub events.
     /// </summary>
-    /// <param name="pubSub">The pub/sub system for event handling.</param>
     /// <param name="dbFactory">The database service for data access.</param>
     /// <param name="client">The Discord client for interacting with the Discord API.</param>
     /// <param name="muteService">The service for managing mutes within the bot.</param>
-    public VoteService(IPubSub pubSub, IDataConnectionFactory dbFactory, DiscordShardedClient client,
+    /// <param name="strings">The localized strings service.</param>
+    public VoteService(IDataConnectionFactory dbFactory, DiscordShardedClient client,
         MuteService muteService, GeneratedBotStrings strings)
     {
         this.dbFactory = dbFactory;
@@ -247,6 +247,7 @@ public class VoteService : INService
     /// </summary>
     /// <param name="roleId">The ID of the role whose timer is to be updated.</param>
     /// <param name="seconds">The new duration in seconds after which the role should be automatically removed.</param>
+    /// <param name="guildId">The guild identifier.</param>
     /// <returns>A tuple indicating success status and an optional error message.</returns>
     public async Task<(bool, string)> UpdateTimer(ulong guildId, ulong roleId, int seconds)
     {

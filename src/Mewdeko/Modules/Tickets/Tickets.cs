@@ -11,6 +11,7 @@ namespace Mewdeko.Modules.Tickets;
 ///     Commands for managing the ticket system, including panels, tickets, cases,
 ///     and administrative functions.
 /// </summary>
+/// <param name="logger">The logger instance for structured logging.</param>
 public partial class Tickets(ILogger<Tickets> logger) : MewdekoModuleBase<TicketService>
 {
     /// <summary>

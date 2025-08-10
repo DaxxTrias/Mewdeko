@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Threading;
 using DataModel;
-using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Modules.Xp.Models;
 using Microsoft.Extensions.Caching.Memory;
 
@@ -51,6 +51,7 @@ public class XpVoiceTracker : INService, IDisposable
     /// <param name="client">The Discord client.</param>
     /// <param name="dbFactory">The database context provider.</param>
     /// <param name="cacheManager">The cache manager.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public XpVoiceTracker(
         DiscordShardedClient client,
         IDataConnectionFactory dbFactory,

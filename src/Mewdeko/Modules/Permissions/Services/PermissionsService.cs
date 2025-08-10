@@ -3,6 +3,7 @@ using DataModel;
 using Discord.Commands;
 using Discord.Interactions;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Common.Configs;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Modules.Permissions.Common;

@@ -5,6 +5,7 @@ using System.Text.Json;
 using DataModel;
 using Discord.Commands;
 using LinqToDB;
+using LinqToDB.Async;
 using LinqToDB.Data;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Modules.Utility.Common;

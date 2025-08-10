@@ -38,6 +38,10 @@ public class MusicEventManager : INService, IDisposable
     /// <summary>
     ///     Constructor
     /// </summary>
+    /// <param name="cache">The cache service.</param>
+    /// <param name="audioService">The audioservice service.</param>
+    /// <param name="client">The Discord client instance.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public MusicEventManager(
         IDataCache cache,
         IAudioService audioService, DiscordShardedClient client, ILogger<MusicEventManager> logger)
@@ -74,6 +78,10 @@ public class MusicEventManager : INService, IDisposable
     /// <summary>
     ///     Handle a new WebSocket connection
     /// </summary>
+    /// <param name="guildId">The guild identifier.</param>
+    /// <param name="userId">The userid identifier.</param>
+    /// <param name="webSocket">The webSocket parameter.</param>
+    /// <param name="context">The context parameter.</param>
     public async Task HandleWebSocketConnection(ulong guildId, ulong userId, WebSocket webSocket, HttpContext context)
     {
         var connectionId = Guid.NewGuid().ToString();
@@ -177,6 +185,10 @@ public class MusicEventManager : INService, IDisposable
     /// <summary>
     ///     Register a new SSE connection
     /// </summary>
+    /// <param name="guildId">The guild identifier.</param>
+    /// <param name="connectionId">The connectionid string.</param>
+    /// <param name="callback">The callback parameter.</param>
+    /// <param name="userId">The userid identifier.</param>
     public void RegisterSseConnection(ulong guildId, string connectionId, Func<object, Task> callback, ulong userId)
     {
         var guildCallbacks = sseCallbacks.GetOrAdd(guildId, _ =>
@@ -193,6 +205,8 @@ public class MusicEventManager : INService, IDisposable
     /// <summary>
     ///     Unregister an SSE connection
     /// </summary>
+    /// <param name="guildId">The guild identifier.</param>
+    /// <param name="connectionId">The connectionid string.</param>
     public void UnregisterSseConnection(ulong guildId, string connectionId)
     {
         if (sseCallbacks.TryGetValue(guildId, out var callbacks))
@@ -491,6 +505,7 @@ public class MusicEventManager : INService, IDisposable
     /// <summary>
     ///     Broadcast player update to all connected clients for a guild
     /// </summary>
+    /// <param name="guildId">The guild identifier.</param>
     public async Task BroadcastPlayerUpdate(ulong guildId)
     {
         // Use semaphore to prevent simultaneous broadcasts

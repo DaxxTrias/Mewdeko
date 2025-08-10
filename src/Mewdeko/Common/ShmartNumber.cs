@@ -29,6 +29,7 @@ public readonly struct ShmartNumber : IEquatable<ShmartNumber>
     /// <summary>
     ///     Implicitly converts an unsigned long integer to a ShmartNumber.
     /// </summary>
+    /// <param name="num">The num identifier.</param>
     public static implicit operator ShmartNumber(ulong num)
     {
         return new ShmartNumber(num);
@@ -37,6 +38,7 @@ public readonly struct ShmartNumber : IEquatable<ShmartNumber>
     /// <summary>
     ///     Implicitly converts a ShmartNumber to an unsigned long integer.
     /// </summary>
+    /// <param name="num">The num parameter.</param>
     public static implicit operator ulong(ShmartNumber num)
     {
         return num.Value;
@@ -45,6 +47,7 @@ public readonly struct ShmartNumber : IEquatable<ShmartNumber>
     /// <summary>
     ///     Implicitly converts an unsigned integer to a ShmartNumber.
     /// </summary>
+    /// <param name="num">The num parameter.</param>
     public static implicit operator ShmartNumber(uint num)
     {
         return new ShmartNumber(num);
@@ -61,6 +64,7 @@ public readonly struct ShmartNumber : IEquatable<ShmartNumber>
     /// <summary>
     ///     Determines whether the specified object is equal to the current ShmartNumber.
     /// </summary>
+    /// <param name="obj">The obj parameter.</param>
     public override bool Equals(object? obj)
     {
         return obj is ShmartNumber sn && Equals(sn);
@@ -69,6 +73,7 @@ public readonly struct ShmartNumber : IEquatable<ShmartNumber>
     /// <summary>
     ///     Indicates whether the current ShmartNumber is equal to another ShmartNumber.
     /// </summary>
+    /// <param name="other">The other parameter.</param>
     public bool Equals(ShmartNumber other)
     {
         return other.Value == Value;
