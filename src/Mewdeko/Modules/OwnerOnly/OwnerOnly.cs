@@ -200,10 +200,8 @@ public class OwnerOnly(
     [Aliases]
     public async Task Sudo(IGuildUser user, [Remainder] string args)
     {
-        var msg = new MewdekoUserMessage
-        {
-            Content = $"{await guildSettings.GetPrefix(ctx.Guild)}{args}", Author = user, Channel = ctx.Channel
-        };
+        var content = $"{await guildSettings.GetPrefix(ctx.Guild)}{args}";
+        var msg = MewdekoUserMessage.CreateWithMentions(content, user, ctx.Channel);
         commandHandler.AddCommandToParseQueue(msg);
         _ = Task.Run(() => commandHandler.ExecuteCommandsInChannelAsync(ctx.Channel.Id))
             .ConfigureAwait(false);
@@ -221,12 +219,8 @@ public class OwnerOnly(
     [Aliases]
     public async Task Sudo([Remainder] string args)
     {
-        var msg = new MewdekoUserMessage
-        {
-            Content = $"{await guildSettings.GetPrefix(ctx.Guild)}{args}",
-            Author = await Context.Guild.GetOwnerAsync(),
-            Channel = ctx.Channel
-        };
+        var content = $"{await guildSettings.GetPrefix(ctx.Guild)}{args}";
+        var msg = MewdekoUserMessage.CreateWithMentions(content, await Context.Guild.GetOwnerAsync(), ctx.Channel);
         commandHandler.AddCommandToParseQueue(msg);
         _ = Task.Run(() => commandHandler.ExecuteCommandsInChannelAsync(ctx.Channel.Id))
             .ConfigureAwait(false);

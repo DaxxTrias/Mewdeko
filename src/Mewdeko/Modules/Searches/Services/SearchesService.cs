@@ -1,10 +1,10 @@
-using System.Diagnostics;
 using System.IO;
 using System.Net;
 using System.Net.Http;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
+using AngleSharp.Dom;
 using AngleSharp.Html.Dom;
 using AngleSharp.Html.Parser;
 using GTranslate.Translators;
@@ -1155,59 +1155,106 @@ public class SearchesService : INService, IUnloadableService
     /// <returns>A task representing the asynchronous operation, returning the Google search results.</returns>
     public async Task<GoogleSearchResultData?> GoogleSearchAsync(string query)
     {
-        query = WebUtility.UrlEncode(query)?.Replace(' ', '+');
+        try
+        {
+            var encodedQuery = WebUtility.UrlEncode(query ?? "");
+            query = encodedQuery?.Replace(' ', '+') ?? "";
 
-        var fullQueryLink = $"https://www.google.ca/search?q={query}&safe=on&lr=lang_eng&hl=en&ie=utf-8&oe=utf-8";
+            var fullQueryLink = $"https://www.google.com/search?q={query}&ie=utf-8&oe=utf-8&num=10&gbv=1";
 
-        using var msg = new HttpRequestMessage(HttpMethod.Get, fullQueryLink);
-        msg.Headers.Add("User-Agent",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.77 Safari/537.36");
-        msg.Headers.Add("Cookie", "CONSENT=YES+shp.gws-20210601-0-RC2.en+FX+423;");
+            using var msg = new HttpRequestMessage(HttpMethod.Get, fullQueryLink);
+            msg.Headers.Add("User-Agent", "Mozilla/5.0 (compatible; bot)");
+            msg.Headers.Add("Accept", "text/html");
+            msg.Headers.Add("Accept-Language", "en");
 
-        using var http = httpFactory.CreateClient();
-        http.DefaultRequestHeaders.Clear();
-        var sw = Stopwatch.StartNew();
-        using var response = await http.SendAsync(msg).ConfigureAwait(false);
-        var content = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
-        sw.Stop();
-        logger.LogInformation("Took {Miliseconds}ms to parse results", sw.ElapsedMilliseconds);
+            using var http = httpFactory.CreateClient();
+            http.DefaultRequestHeaders.Clear();
+            using var response = await http.SendAsync(msg).ConfigureAwait(false);
 
-        using var document = await GoogleParser.ParseDocumentAsync(content).ConfigureAwait(false);
-        var elems = document.QuerySelectorAll("div.g > div > div");
+            var htmlContent = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            var content = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(htmlContent));
+            using var document = await GoogleParser.ParseDocumentAsync(content).ConfigureAwait(false);
 
-        var resultsElem = document.QuerySelectorAll("#resultStats").FirstOrDefault();
-        var totalResults = resultsElem?.TextContent;
-        //var time = resultsElem.Children.FirstOrDefault()?.TextContent
-        //^ this doesn't work for some reason, <nobr> is completely missing in parsed collection
-        if (!elems.Any())
-            return default;
-
-        var results = elems.Select(elem =>
+            if (document.Title?.Contains("robot") == true ||
+                document.Body?.TextContent?.Contains("captcha") == true ||
+                document.Body?.TextContent?.Contains("unusual traffic") == true ||
+                document.Body?.TextContent?.Contains("enablejs") == true ||
+                htmlContent.Contains("enablejs") ||
+                htmlContent.Contains("noscript") ||
+                (document.Title == "Google Search" && htmlContent.Length < 10000))
             {
-                var children = elem.Children.ToList();
-                if (children.Count < 2)
-                    return null;
+                return await DuckDuckGoSearchAsync(query).ConfigureAwait(false);
+            }
 
-                var href = (children[0].QuerySelector("a") as IHtmlAnchorElement)?.Href;
-                var name = children[0].QuerySelector("h3")?.TextContent;
+            var elemsList = document.QuerySelectorAll("div.g").ToList();
+            IEnumerable<IElement> elems = elemsList;
 
-                if (href == null || name == null)
-                    return null;
+            if (!elems.Any())
+                elems = document.QuerySelectorAll(".g");
 
-                var txt = children[1].TextContent;
+            if (!elems.Any())
+                elems = document.QuerySelectorAll("[data-hveid]");
 
-                if (string.IsNullOrWhiteSpace(txt))
-                    return null;
+            if (!elems.Any())
+                elems = document.QuerySelectorAll(".tF2Cxc");
 
-                return new GoogleSearchResult(name, href, txt);
-            })
-            .Where(x => x != null)
-            .ToList();
+            if (!elems.Any())
+            {
+                var allDivs = document.QuerySelectorAll("div");
+                elems = allDivs.Where(d =>
+                    d.QuerySelector("a") != null &&
+                    d.QuerySelector("h3") != null);
+            }
 
-        return new GoogleSearchResultData(
-            results.AsReadOnly(),
-            fullQueryLink,
-            totalResults);
+            var resultsElem = document.QuerySelector("#resultStats")
+                             ?? document.QuerySelector("#result-stats")
+                             ?? document.QuerySelector(".LHJvCe")
+                             ?? document.QuerySelectorAll("div").FirstOrDefault(x => x.TextContent?.Contains("results") == true);
+            var totalResults = resultsElem?.TextContent;
+
+            if (!elems.Any())
+                return default;
+
+            var results = elems.Select(elem =>
+                {
+                    // Try multiple approaches to find the link and title
+                    var linkElem = elem.QuerySelector("a") as IHtmlAnchorElement;
+                    var href = linkElem?.Href;
+
+                    // Try different selectors for title
+                    var name = elem.QuerySelector("h3")?.TextContent
+                              ?? elem.QuerySelector(".LC20lb")?.TextContent
+                              ?? elem.QuerySelector("[role='heading']")?.TextContent
+                              ?? linkElem?.TextContent;
+
+                    if (href == null || string.IsNullOrWhiteSpace(name))
+                        return null;
+
+                    // Try to find description text - look for common description selectors
+                    var txt = elem.QuerySelector(".VwiC3b")?.TextContent  // Current description class
+                             ?? elem.QuerySelector(".s")?.TextContent      // Older description class
+                             ?? elem.QuerySelector(".st")?.TextContent     // Alternative description class
+                             ?? elem.QuerySelectorAll("div").Skip(1).FirstOrDefault()?.TextContent; // Fallback
+
+                    if (string.IsNullOrWhiteSpace(txt))
+                        txt = "No description available";
+
+                    return new GoogleSearchResult(name, href, txt);
+                })
+                .Where(x => x != null)
+                .Take(10) // Limit results to prevent too many
+                .ToList();
+
+            return new GoogleSearchResultData(
+                results.AsReadOnly(),
+                fullQueryLink,
+                totalResults);
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine(e);
+            throw;
+        }
     }
 
     /// <summary>
