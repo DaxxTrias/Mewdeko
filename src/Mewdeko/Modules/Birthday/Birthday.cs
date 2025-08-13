@@ -12,14 +12,17 @@ namespace Mewdeko.Modules.Birthday;
 public class Birthday : MewdekoModuleBase<BirthdayService>
 {
     private readonly IDataConnectionFactory dbFactory;
+    private readonly ILogger<Birthday> logger;
 
     /// <summary>
     ///     Initializes a new instance of the Birthday class.
     /// </summary>
     /// <param name="dbFactory">Database connection factory for data access.</param>
-    public Birthday(IDataConnectionFactory dbFactory)
+    /// <param name="logger">Logger</param>
+    public Birthday(IDataConnectionFactory dbFactory, ILogger<Birthday> logger)
     {
         this.dbFactory = dbFactory;
+        this.logger = logger;
     }
 
     /// <summary>
@@ -300,40 +303,47 @@ public class Birthday : MewdekoModuleBase<BirthdayService>
     [UserPerm(GuildPermission.Administrator)]
     public async Task BirthdayConfig()
     {
-        var config = await Service.GetBirthdayConfigAsync(ctx.Guild.Id);
+        try
+        {
+            var config = await Service.GetBirthdayConfigAsync(ctx.Guild.Id);
 
-        var embed = new EmbedBuilder()
-            .WithTitle(Strings.BirthdayConfigTitle(ctx.Guild.Id))
-            .WithColor(Mewdeko.OkColor);
+            var embed = new EmbedBuilder()
+                .WithTitle(Strings.BirthdayConfigTitle(ctx.Guild.Id))
+                .WithColor(Mewdeko.OkColor);
 
-        var channel = config.BirthdayChannelId.HasValue
-            ? (await ctx.Guild.GetTextChannelAsync(config.BirthdayChannelId.Value))?.Mention ?? "Not found"
-            : "Not set";
+            var channel = config.BirthdayChannelId.HasValue
+                ? (await ctx.Guild.GetTextChannelAsync(config.BirthdayChannelId.Value))?.Mention ?? "Not found"
+                : "Not set";
 
-        var role = config.BirthdayRoleId.HasValue
-            ? ctx.Guild.GetRole(config.BirthdayRoleId.Value)?.Mention ?? "Not found"
-            : "Not set";
+            var role = config.BirthdayRoleId.HasValue
+                ? ctx.Guild.GetRole(config.BirthdayRoleId.Value)?.Mention ?? "Not found"
+                : "Not set";
 
-        var pingRole = config.BirthdayPingRoleId.HasValue
-            ? ctx.Guild.GetRole(config.BirthdayPingRoleId.Value)?.Mention ?? "Not found"
-            : "Not set";
+            var pingRole = config.BirthdayPingRoleId.HasValue
+                ? ctx.Guild.GetRole(config.BirthdayPingRoleId.Value)?.Mention ?? "Not found"
+                : "Not set";
 
-        var message = config.BirthdayMessage ?? "🎉 Happy Birthday {user}! 🎂";
+            var message = config.BirthdayMessage ?? "🎉 Happy Birthday %user%! 🎂";
 
-        var features = Enum.GetValues<BirthdayFeature>()
-            .Where(f => f != BirthdayFeature.None && (config.EnabledFeatures & (int)f) != 0)
-            .Select(f => f.ToString())
-            .ToList();
+            var features = Enum.GetValues<BirthdayFeature>()
+                .Where(f => f != BirthdayFeature.None && (config.EnabledFeatures & (int)f) != 0)
+                .Select(f => f.ToString())
+                .ToList();
 
-        embed.AddField("Channel", channel, true)
-            .AddField("Birthday Role", role, true)
-            .AddField("Ping Role", pingRole, true)
-            .AddField("Message Template", message)
-            .AddField("Default Timezone", config.DefaultTimezone ?? "UTC", true)
-            .AddField("Reminder Days", config.BirthdayReminderDays.ToString(), true)
-            .AddField("Enabled Features", features.Any() ? string.Join(", ", features) : "None");
+            embed.AddField("Channel", channel, true)
+                .AddField("Birthday Role", role, true)
+                .AddField("Ping Role", pingRole, true)
+                .AddField("Message Template", message)
+                .AddField("Default Timezone", config.DefaultTimezone ?? "UTC", true)
+                .AddField("Reminder Days", config.BirthdayReminderDays.ToString(), true)
+                .AddField("Enabled Features", features.Any() ? string.Join(", ", features) : "None");
 
-        await ctx.Channel.SendMessageAsync(embed: embed.Build());
+            await ctx.Channel.SendMessageAsync(embed: embed.Build());
+        }
+        catch (Exception e)
+        {
+            logger.LogError(e, "Error in BirthdayConfig");
+        }
     }
 
     #endregion
