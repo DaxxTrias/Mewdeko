@@ -120,29 +120,6 @@ public partial class UserProfileService : INService
         }, true);
     }
 
-
-    /// <summary>
-    ///     Asynchronously fetches zodiac information for a given Discord user ID.
-    /// </summary>
-    /// <param name="discordId">The Discord user ID to retrieve zodiac information for.</param>
-    /// <returns>A tuple containing a boolean indicating success, and a <see cref="ZodiacResult" /> object if successful.</returns>
-    /// <remarks>
-    ///     The zodiac information is retrieved from an external API and requires the user's zodiac sign to be previously set.
-    /// </remarks>
-    public async Task<(bool, ZodiacResult)> GetZodiacInfo(ulong discordId)
-    {
-        await using var dbContext = await dbFactory.CreateConnectionAsync();
-
-        var user = await dbContext.DiscordUsers.FirstOrDefaultAsync(x => x.UserId == discordId).ConfigureAwait(false);
-        if (string.IsNullOrWhiteSpace(user.ZodiacSign))
-            return (false, null);
-        var client = new HttpClient();
-        var response =
-            await client.PostAsync($"https://aztro.sameerkumar.website/?sign={user.ZodiacSign.ToLower()}&day=today",
-                null);
-        return (true, JsonSerializer.Deserialize<ZodiacResult>(await response.Content.ReadAsStringAsync()));
-    }
-
     /// <summary>
     ///     Asynchronously retrieves the biography of a given user.
     /// </summary>
@@ -374,8 +351,6 @@ public partial class UserProfileService : INService
             eb.WithDescription(dbUser.Bio);
         eb.AddField("Pronouns", (await GetPronounsOrUnspecifiedAsync(user.Id)).Pronouns);
         eb.AddField("Zodiac Sign", string.IsNullOrEmpty(dbUser.ZodiacSign) ? "Unspecified" : dbUser.ZodiacSign);
-        if (!string.IsNullOrEmpty(dbUser.ZodiacSign))
-            eb.AddField("Horoscope", (await GetZodiacInfo(user.Id)).Item2.Description);
         if (dbUser.Birthday.HasValue)
             switch ((BirthdayDisplayModeEnum)dbUser.BirthdayDisplayMode)
             {
