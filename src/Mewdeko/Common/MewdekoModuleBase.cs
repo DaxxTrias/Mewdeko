@@ -224,7 +224,6 @@ public abstract class MewdekoModule : ModuleBase
             if (arg is not SocketMessageComponent c) return;
             if (c.Channel.Id != channelId || c.Message.Id != msgId || c.User.Id != userId)
             {
-                if (!alreadyDeferred) await c.DeferAsync().ConfigureAwait(false);
                 return;
             }
 
