@@ -330,6 +330,7 @@ public class Birthday : MewdekoModuleBase<BirthdayService>
                 .Select(f => f.ToString())
                 .ToList();
 
+            logger.LogInformation($"Params: {channel}, {role}, {pingRole}, {message}, {config.DefaultTimezone}, {config.BirthdayReminderDays}, {features.Any()}");
             embed.AddField("Channel", channel, true)
                 .AddField("Birthday Role", role, true)
                 .AddField("Ping Role", pingRole, true)
