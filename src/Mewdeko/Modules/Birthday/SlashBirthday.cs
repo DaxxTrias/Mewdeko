@@ -243,14 +243,14 @@ public class SlashBirthday : MewdekoSlashModuleBase<BirthdayService>
         [SlashCommand("message", "Set a custom birthday message template")]
         [SlashUserPerm(GuildPermission.Administrator)]
         public async Task Message(
-            [Summary("message", "The message template (use {user} for mentions, leave empty to view current)")]
+            [Summary("message", "The message template (use %user% for mentions, leave empty to view current)")]
             [MaxLength(2000)]
             string? message = null)
         {
             if (string.IsNullOrWhiteSpace(message))
             {
                 var config = await Service.GetBirthdayConfigAsync(ctx.Guild.Id);
-                var currentMessage = config.BirthdayMessage ?? "🎉 Happy Birthday {user}! 🎂";
+                var currentMessage = config.BirthdayMessage ?? "🎉 Happy Birthday %user%! 🎂";
                 await ctx.Interaction.SendConfirmAsync(Strings.BirthdayCurrentMessageMsg(ctx.Guild.Id, currentMessage));
                 return;
             }
@@ -261,7 +261,7 @@ public class SlashBirthday : MewdekoSlashModuleBase<BirthdayService>
             });
 
             await ctx.Interaction.SendConfirmAsync(
-                Strings.BirthdayMessageUpdated(ctx.Guild.Id, message.Replace("{user}", ctx.User.Mention)));
+                Strings.BirthdayMessageUpdated(ctx.Guild.Id, message.Replace("%user%", ctx.User.Mention)));
         }
 
         /// <summary>
