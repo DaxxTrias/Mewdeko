@@ -406,24 +406,24 @@ public class BirthdayService : INService, IDisposable
     }
 
     /// <summary>
-///     Updates the last announcement date for a guild.
-/// </summary>
-/// <param name="guildId">The guild ID.</param>
-/// <param name="date">The date of the last announcement.</param>
-private async Task UpdateLastAnnouncementDateAsync(ulong guildId, DateTime date)
-{
-    try
+    ///     Updates the last announcement date for a guild.
+    /// </summary>
+    /// <param name="guildId">The guild ID.</param>
+    /// <param name="date">The date of the last announcement.</param>
+    private async Task UpdateLastAnnouncementDateAsync(ulong guildId, DateTime date)
     {
-        await UpdateBirthdayConfigAsync(guildId, config =>
+        try
         {
-            config.LastAnnouncementDate = date.Date;
-        });
+            await UpdateBirthdayConfigAsync(guildId, config =>
+            {
+                config.LastAnnouncementDate = date.Date;
+            });
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to update last announcement date for guild {GuildId}", guildId);
+        }
     }
-    catch (Exception ex)
-    {
-        logger.LogError(ex, "Failed to update last announcement date for guild {GuildId}", guildId);
-    }
-}
 
     /// <summary>
     ///     Announces a user's birthday in the configured channel.
