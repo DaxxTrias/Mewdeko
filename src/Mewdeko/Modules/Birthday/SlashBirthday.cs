@@ -321,7 +321,7 @@ public class SlashBirthday : MewdekoSlashModuleBase<BirthdayService>
                 ? ctx.Guild.GetRole(config.BirthdayPingRoleId.Value)?.Mention ?? "Not found"
                 : "Not set";
 
-            var message = config.BirthdayMessage ?? "🎉 Happy Birthday {user}! 🎂";
+            var message = !config.BirthdayMessage.IsNullOrWhiteSpace() ? "Custom Message Set" : "🎉 Happy Birthday %user%! 🎂";
 
             var features = Enum.GetValues<BirthdayFeature>()
                 .Where(f => f != BirthdayFeature.None && (config.EnabledFeatures & (int)f) != 0)
