@@ -25,6 +25,7 @@ namespace DataModel
 		[Column("BirthdayReminderDays"                                                                                )] public int       BirthdayReminderDays { get; set; } // integer
 		[Column("DefaultTimezone"                                                                                     )] public string?   DefaultTimezone     { get; set; } // text
 		[Column("EnabledFeatures"                                                                                     )] public int       EnabledFeatures     { get; set; } // integer
+		[Column("LastAnnouncementDate"                                                                                )] public DateTime? LastAnnouncementDate { get; set; } // date
 		[Column("DateAdded"                                                                                           )] public DateTime? DateAdded           { get; set; } // timestamp (6) without time zone
 		[Column("DateModified"                                                                                        )] public DateTime? DateModified       { get; set; } // timestamp (6) without time zone
 	}
