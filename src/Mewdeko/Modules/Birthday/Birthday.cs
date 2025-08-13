@@ -323,14 +323,13 @@ public class Birthday : MewdekoModuleBase<BirthdayService>
                 ? ctx.Guild.GetRole(config.BirthdayPingRoleId.Value)?.Mention ?? "Not found"
                 : "Not set";
 
-            var message = config.BirthdayMessage ?? "🎉 Happy Birthday %user%! 🎂";
+            var message = !config.BirthdayMessage.IsNullOrWhiteSpace() ? "Custom Message Set" : "🎉 Happy Birthday %user%! 🎂";
 
             var features = Enum.GetValues<BirthdayFeature>()
                 .Where(f => f != BirthdayFeature.None && (config.EnabledFeatures & (int)f) != 0)
                 .Select(f => f.ToString())
                 .ToList();
 
-            logger.LogInformation($"Params: {channel}, {role}, {pingRole}, {message}, {config.DefaultTimezone}, {config.BirthdayReminderDays}, {features.Any()}");
             embed.AddField("Channel", channel, true)
                 .AddField("Birthday Role", role, true)
                 .AddField("Ping Role", pingRole, true)
