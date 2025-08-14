@@ -3,6 +3,115 @@ birthdayannouncements:
   args:
     - ''
   params: [ ]
+countingsetup:
+  desc: Sets up counting in the current channel or specified channel.
+  args:
+    - "channel startNumber increment"
+  params:
+    - name: channel
+      desc: The channel to set up counting in. Defaults to current channel.
+      type: text channel
+      optional: true
+    - name: startNumber
+      desc: The number to start counting from. Default is 1.
+      type: long
+      optional: true
+    - name: increment
+      desc: The increment for each count. Default is 1.
+      type: int
+      optional: true
+countingstatus:
+  desc: Shows the current status of counting in a channel.
+  args:
+    - "channel"
+  params:
+    - name: channel
+      desc: The channel to check. Defaults to current channel.
+      type: text channel
+      optional: true
+countingconfig:
+  desc: Shows configuration settings for a counting channel.
+  args:
+    - "channel"
+  params:
+    - name: channel
+      desc: The channel to show config for. Defaults to current channel.
+      type: text channel
+      optional: true
+countingreset:
+  desc: Resets the counting in a channel to a specific number.
+  args:
+    - "channel newNumber reason"
+  params:
+    - name: channel
+      desc: The channel to reset. Defaults to current channel.
+      type: text channel
+      optional: true
+    - name: newNumber
+      desc: The number to reset to. Default is 0.
+      type: long
+      optional: true
+    - name: reason
+      desc: The reason for the reset.
+      type: string
+      optional: true
+countingstats:
+  desc: Shows counting statistics for a user in a channel.
+  args:
+    - "user channel"
+  params:
+    - name: user
+      desc: The user to show stats for. Defaults to you.
+      type: user
+      optional: true
+    - name: channel
+      desc: The channel to check stats in. Defaults to current channel.
+      type: text channel
+      optional: true
+countingleaderboard:
+  desc: Shows the leaderboard for a counting channel.
+  args:
+    - "type channel"
+  params:
+    - name: type
+      desc: The type of leaderboard (contributions, streak, accuracy, totalnumbers).
+      type: string
+      optional: true
+    - name: channel
+      desc: The channel to show leaderboard for. Defaults to current channel.
+      type: text channel
+      optional: true
+countingsave:
+  desc: Creates a save point for the current counting progress.
+  args:
+    - "channel reason"
+  params:
+    - name: channel
+      desc: The channel to save. Defaults to current channel.
+      type: text channel
+      optional: true
+    - name: reason
+      desc: The reason for creating the save point.
+      type: string
+      optional: true
+countingrestore:
+  desc: Restores counting from a previous save point.
+  args:
+    - "saveId channel"
+  params:
+    - name: saveId
+      desc: The ID of the save point to restore from.
+      type: int
+      optional: false
+    - name: channel
+      desc: The channel to restore. Defaults to current channel.
+      type: text channel
+      optional: true
+countinglist:
+  desc: Lists all counting channels in the server.
+  args:
+    - ''
+  params: [ ]
 birthdaytimezone:
   desc: Sets your personal timezone for birthday calculations.
   args:
