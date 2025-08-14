@@ -1007,4 +1007,39 @@ public class MewdekoDb : DataConnection
             return this.GetTable<RepChannelMetrics>();
         }
     }
+
+    /// <summary>
+    ///     Gets the counting channels table.
+    /// </summary>
+    public ITable<CountingChannel> CountingChannels => this.GetTable<CountingChannel>();
+
+    /// <summary>
+    ///     Gets the counting channel configurations table.
+    /// </summary>
+    public ITable<CountingChannelConfig> CountingChannelConfigs => this.GetTable<CountingChannelConfig>();
+
+    /// <summary>
+    ///     Gets the counting statistics table.
+    /// </summary>
+    public ITable<CountingStats> CountingStats => this.GetTable<CountingStats>();
+
+    /// <summary>
+    ///     Gets the counting milestones table.
+    /// </summary>
+    public ITable<CountingMilestones> CountingMilestones => this.GetTable<CountingMilestones>();
+
+    /// <summary>
+    ///     Gets the counting events table.
+    /// </summary>
+    public ITable<CountingEvents> CountingEvents => this.GetTable<CountingEvents>();
+
+    /// <summary>
+    ///     Gets the counting saves table.
+    /// </summary>
+    public ITable<CountingSaves> CountingSaves => this.GetTable<CountingSaves>();
+
+    /// <summary>
+    ///     Gets the counting leaderboard table.
+    /// </summary>
+    public ITable<CountingLeaderboard> CountingLeaderboard => this.GetTable<CountingLeaderboard>();
 }

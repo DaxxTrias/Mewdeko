@@ -2,6 +2,43 @@ accept:
   - accept
   - suggestaccept
   - acceptsuggest
+countingsetup:
+  - countingsetup
+  - csetup
+  - countsetup
+countingstatus:
+  - countingstatus
+  - cstatus
+  - countstatus
+countingconfig:
+  - countingconfig
+  - cconfig
+  - countconfig
+countingreset:
+  - countingreset
+  - creset
+  - countreset
+countingstats:
+  - countingstats
+  - cstats
+  - countstats
+countingleaderboard:
+  - countingleaderboard
+  - cleaderboard
+  - countleaderboard
+  - clb
+countingsave:
+  - countingsave
+  - csave
+  - countsave
+countingrestore:
+  - countingrestore
+  - crestore
+  - countrestore
+countinglist:
+  - countinglist
+  - clist
+  - countlist
 rep:
   - rep
   - +rep
