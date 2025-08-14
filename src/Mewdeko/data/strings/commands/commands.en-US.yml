@@ -112,6 +112,186 @@ countinglist:
   args:
     - ''
   params: [ ]
+countingdisable:
+  desc: Disables counting in a channel and optionally purges all data.
+  args:
+    - "channel purgeData reason"
+  params:
+    - name: channel
+      desc: The channel to disable counting in. Defaults to current channel.
+      type: text channel
+      optional: true
+    - name: purgeData
+      desc: Whether to delete all counting data for this channel. Defaults to false.
+      type: bool
+      optional: true
+    - name: reason
+      desc: The reason for disabling counting.
+      type: string
+      optional: true
+countingban:
+  desc: Bans a user from counting in a specific channel.
+  args:
+    - "user channel duration reason"
+  params:
+    - name: user
+      desc: The user to ban from counting.
+      type: guild user
+      optional: false
+    - name: channel
+      desc: The counting channel. Defaults to current channel.
+      type: text channel
+      optional: true
+    - name: duration
+      desc: Duration of the ban (e.g., 1h, 1d). Leave empty for permanent.
+      type: stoopid time
+      optional: true
+    - name: reason
+      desc: The reason for the ban.
+      type: string
+      optional: true
+countingunban:
+  desc: Unbans a user from counting in a specific channel.
+  args:
+    - "user channel reason"
+  params:
+    - name: user
+      desc: The user to unban from counting.
+      type: guild user
+      optional: false
+    - name: channel
+      desc: The counting channel. Defaults to current channel.
+      type: text channel
+      optional: true
+    - name: reason
+      desc: The reason for the unban.
+      type: string
+      optional: true
+countingtimeout:
+  desc: Temporarily timeouts a user from counting.
+  args:
+    - "user duration channel reason"
+  params:
+    - name: user
+      desc: The user to timeout from counting.
+      type: guild user
+      optional: false
+    - name: duration
+      desc: Duration of the timeout (e.g., 30m, 2h).
+      type: stoopid time
+      optional: false
+    - name: channel
+      desc: The counting channel. Defaults to current channel.
+      type: text channel
+      optional: true
+    - name: reason
+      desc: The reason for the timeout.
+      type: string
+      optional: true
+countingsuccessmessage:
+  desc: Sets a custom message for successful counts.
+  args:
+    - "channel embed"
+  params:
+    - name: channel
+      desc: The counting channel. Defaults to current channel.
+      type: text channel
+      optional: true
+    - name: embed
+      desc: The message template. Use "-" to reset to default.
+      type: string
+      optional: true
+countingfailuremessage:
+  desc: Sets a custom message for failed counts.
+  args:
+    - "channel embed"
+  params:
+    - name: channel
+      desc: The counting channel. Defaults to current channel.
+      type: text channel
+      optional: true
+    - name: embed
+      desc: The message template. Use "-" to reset to default.
+      type: string
+      optional: true
+countingmilestonemessage:
+  desc: Sets a custom message for milestone achievements.
+  args:
+    - "channel embed"
+  params:
+    - name: channel
+      desc: The counting channel. Defaults to current channel.
+      type: text channel
+      optional: true
+    - name: embed
+      desc: The message template. Use "-" to reset to default.
+      type: string
+      optional: true
+countingmilestonechannel:
+  desc: Sets the channel where milestone achievements are announced.
+  args:
+    - "countingChannel milestoneChannel"
+  params:
+    - name: countingChannel
+      desc: The counting channel.
+      type: text channel
+      optional: true
+    - name: milestoneChannel
+      desc: The channel for milestone announcements. Use null to disable.
+      type: text channel
+      optional: true
+countingfailurechannel:
+  desc: Sets the channel where counting failures are logged.
+  args:
+    - "countingChannel failureChannel"
+  params:
+    - name: countingChannel
+      desc: The counting channel.
+      type: text channel
+      optional: true
+    - name: failureChannel
+      desc: The channel for failure logs. Use null to disable.
+      type: text channel
+      optional: true
+countingmilestones:
+  desc: Sets custom milestone numbers.
+  args:
+    - "channel milestones"
+  params:
+    - name: channel
+      desc: The counting channel. Defaults to current channel.
+      type: text channel
+      optional: true
+    - name: milestones
+      desc: Comma-separated milestone numbers (e.g., 50,100,250,500,1000).
+      type: string
+      optional: true
+countingfailurethreshold:
+  desc: Sets the failure threshold before consequences.
+  args:
+    - "channel threshold"
+  params:
+    - name: channel
+      desc: The counting channel. Defaults to current channel.
+      type: text channel
+      optional: true
+    - name: threshold
+      desc: Number of failures before action (1-10).
+      type: int
+      optional: true
+countingcooldown:
+  desc: Sets the cooldown between user counts.
+  args:
+    - "channel seconds"
+  params:
+    - name: channel
+      desc: The counting channel. Defaults to current channel.
+      type: text channel
+      optional: true
+    - name: seconds
+      desc: Cooldown in seconds (0-300).
+      type: int
+      optional: true
 birthdaytimezone:
   desc: Sets your personal timezone for birthday calculations.
   args:

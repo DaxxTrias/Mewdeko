@@ -1034,6 +1034,17 @@ public class MewdekoDb : DataConnection
     public ITable<CountingEvents> CountingEvents => this.GetTable<CountingEvents>();
 
     /// <summary>
+    ///     Gets the counting user bans table.
+    /// </summary>
+    public ITable<CountingUserBans> CountingUserBans
+    {
+        get
+        {
+            return this.GetTable<CountingUserBans>();
+        }
+    }
+
+    /// <summary>
     ///     Gets the counting saves table.
     /// </summary>
     public ITable<CountingSaves> CountingSaves => this.GetTable<CountingSaves>();

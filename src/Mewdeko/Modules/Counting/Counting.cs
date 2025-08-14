@@ -1,7 +1,9 @@
 using Discord.Commands;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
+using Humanizer;
 using Mewdeko.Common.Attributes.TextCommands;
+using Mewdeko.Common.TypeReaders.Models;
 using Mewdeko.Modules.Counting.Common;
 using Mewdeko.Modules.Counting.Services;
 
@@ -47,11 +49,13 @@ public partial class Counting(
 
         if (!result.Success)
         {
-            await ErrorAsync(Strings.CountingSetupFailed(ctx.Guild.Id, result.ErrorMessage ?? "Unknown error")).ConfigureAwait(false);
+            await ErrorAsync(Strings.CountingSetupFailed(ctx.Guild.Id, result.ErrorMessage ?? "Unknown error"))
+                .ConfigureAwait(false);
             return;
         }
 
-        await ConfirmAsync(Strings.CountingSetupSuccess(ctx.Guild.Id, channel.Mention, startNumber, increment)).ConfigureAwait(false);
+        await ConfirmAsync(Strings.CountingSetupSuccess(ctx.Guild.Id, channel.Mention, startNumber, increment))
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -97,7 +101,8 @@ public partial class Counting(
             var configText = new List<string>();
             if (!config.AllowRepeatedUsers) configText.Add(Strings.CountingNoRepeats(ctx.Guild.Id));
             if (config.Cooldown > 0) configText.Add(Strings.CountingCooldown(ctx.Guild.Id, config.Cooldown));
-            if (config.MaxNumber > 0) configText.Add(Strings.CountingMaxNumber(ctx.Guild.Id, config.MaxNumber.ToString("N0")));
+            if (config.MaxNumber > 0)
+                configText.Add(Strings.CountingMaxNumber(ctx.Guild.Id, config.MaxNumber.ToString("N0")));
             if (config.ResetOnError) configText.Add(Strings.CountingResetOnError(ctx.Guild.Id));
             if (config.DeleteWrongMessages) configText.Add(Strings.CountingDeleteWrongMessages(ctx.Guild.Id));
 
@@ -142,7 +147,8 @@ public partial class Counting(
             .WithTitle(Strings.CountingConfigTitle(ctx.Guild.Id, channel.Name))
             .AddField(Strings.CountingAllowRepeats(ctx.Guild.Id), config.AllowRepeatedUsers ? "✅" : "❌", true)
             .AddField(Strings.CountingCooldownSeconds(ctx.Guild.Id), config.Cooldown.ToString(), true)
-            .AddField(Strings.CountingMaxNumberLimit(ctx.Guild.Id), config.MaxNumber > 0 ? config.MaxNumber.ToString("N0") : Strings.CountingUnlimited(ctx.Guild.Id), true)
+            .AddField(Strings.CountingMaxNumberLimit(ctx.Guild.Id),
+                config.MaxNumber > 0 ? config.MaxNumber.ToString("N0") : Strings.CountingUnlimited(ctx.Guild.Id), true)
             .AddField(Strings.CountingResetOnErrorSetting(ctx.Guild.Id), config.ResetOnError ? "✅" : "❌", true)
             .AddField(Strings.CountingDeleteWrongSetting(ctx.Guild.Id), config.DeleteWrongMessages ? "✅" : "❌", true)
             .AddField(Strings.CountingPatternType(ctx.Guild.Id), ((CountingPattern)config.Pattern).ToString(), true)
@@ -199,7 +205,8 @@ public partial class Counting(
         var success = await countingService.ResetCountingChannelAsync(channel.Id, newNumber, ctx.User.Id, reason);
         if (success)
         {
-            await ConfirmAsync(Strings.CountingResetSuccess(ctx.Guild.Id, channel.Mention, newNumber)).ConfigureAwait(false);
+            await ConfirmAsync(Strings.CountingResetSuccess(ctx.Guild.Id, channel.Mention, newNumber))
+                .ConfigureAwait(false);
         }
         else
         {
@@ -233,7 +240,8 @@ public partial class Counting(
         var userStats = await statsService.GetUserStatsAsync(channel.Id, user.Id);
         if (userStats == null)
         {
-            await ErrorAsync(Strings.CountingNoUserStats(ctx.Guild.Id, user.DisplayName, channel.Mention)).ConfigureAwait(false);
+            await ErrorAsync(Strings.CountingNoUserStats(ctx.Guild.Id, user.DisplayName, channel.Mention))
+                .ConfigureAwait(false);
             return;
         }
 
@@ -249,7 +257,8 @@ public partial class Counting(
             .AddField(Strings.CountingHighestStreak(ctx.Guild.Id), userStats.HighestStreak.ToString("N0"), true)
             .AddField(Strings.CountingAccuracy(ctx.Guild.Id), $"{userStats.Accuracy:F1}%", true)
             .AddField(Strings.CountingErrors(ctx.Guild.Id), userStats.ErrorsCount.ToString("N0"), true)
-            .AddField(Strings.CountingTotalNumbersCounted(ctx.Guild.Id), userStats.TotalNumbersCounted.ToString("N0"), true);
+            .AddField(Strings.CountingTotalNumbersCounted(ctx.Guild.Id), userStats.TotalNumbersCounted.ToString("N0"),
+                true);
 
         if (userStats.LastContribution.HasValue)
         {
@@ -327,7 +336,8 @@ public partial class Counting(
                     .WithOkColor()
                     .WithTitle(Strings.CountingLeaderboardTitle(ctx.Guild.Id, channel.Name, leaderboardType.ToString()))
                     .WithDescription(string.Join("\n", description))
-                    .WithFooter(Strings.CountingLeaderboardPage(ctx.Guild.Id, pageIndex + 1, (leaderboard.Count + 9) / 10));
+                    .WithFooter(Strings.CountingLeaderboardPage(ctx.Guild.Id, pageIndex + 1,
+                        (leaderboard.Count + 9) / 10));
             })
             .ToList();
 
@@ -366,7 +376,8 @@ public partial class Counting(
         var saveId = await countingService.CreateSavePointAsync(channel.Id, ctx.User.Id, reason);
         if (saveId > 0)
         {
-            await ConfirmAsync(Strings.CountingSaveSuccess(ctx.Guild.Id, channel.Mention, countingChannel.CurrentNumber, saveId)).ConfigureAwait(false);
+            await ConfirmAsync(Strings.CountingSaveSuccess(ctx.Guild.Id, channel.Mention, countingChannel.CurrentNumber,
+                saveId)).ConfigureAwait(false);
         }
         else
         {
@@ -408,7 +419,8 @@ public partial class Counting(
         var success = await countingService.RestoreFromSaveAsync(channel.Id, saveId, ctx.User.Id);
         if (success)
         {
-            await ConfirmAsync(Strings.CountingRestoreSuccess(ctx.Guild.Id, channel.Mention, saveId)).ConfigureAwait(false);
+            await ConfirmAsync(Strings.CountingRestoreSuccess(ctx.Guild.Id, channel.Mention, saveId))
+                .ConfigureAwait(false);
         }
         else
         {
@@ -417,12 +429,63 @@ public partial class Counting(
     }
 
     /// <summary>
-    /// Lists all counting channels in the server.
+    /// Disables counting in a channel and optionally purges all data.
+    /// </summary>
+    /// <param name="channel">The channel to disable counting in. Defaults to current channel.</param>
+    /// <param name="purgeData">Whether to delete all counting data for this channel. Defaults to false.</param>
+    /// <param name="reason">The reason for disabling counting.</param>
+    /// <example>.counting disable</example>
+    /// <example>.counting disable #counting-channel true "Channel repurposed"</example>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    [UserPerm(GuildPermission.ManageChannels)]
+    public async Task CountingDisable(ITextChannel? channel = null, bool purgeData = false,
+        [Remainder] string? reason = null)
+    {
+        channel ??= (ITextChannel)ctx.Channel;
+
+        var countingChannel = await Service.GetCountingChannelAsync(channel.Id);
+        if (countingChannel == null)
+        {
+            await ErrorAsync(Strings.CountingNotSetup(ctx.Guild.Id, channel.Mention)).ConfigureAwait(false);
+            return;
+        }
+
+        var success = await Service.DisableCountingChannelAsync(channel.Id, ctx.User.Id, reason);
+
+        if (!success)
+        {
+            await ErrorAsync(Strings.CountingDisableFailed(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
+        if (purgeData)
+        {
+            var purgeSuccess = await Service.PurgeCountingChannelAsync(channel.Id, ctx.User.Id, reason);
+            if (purgeSuccess)
+            {
+                await ConfirmAsync(Strings.CountingPurged(ctx.Guild.Id, channel.Mention)).ConfigureAwait(false);
+            }
+            else
+            {
+                await ErrorAsync(Strings.CountingPurgeFailed(ctx.Guild.Id)).ConfigureAwait(false);
+            }
+        }
+        else
+        {
+            await ConfirmAsync(Strings.CountingDisabled(ctx.Guild.Id, channel.Mention)).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Lists all active counting channels in the server.
     /// </summary>
     /// <example>.counting list</example>
     [Cmd]
     [Aliases]
     [RequireContext(ContextType.Guild)]
+    [UserPerm(GuildPermission.ManageChannels)]
     public async Task CountingList()
     {
         var channels = await countingService.GetGuildCountingChannelsAsync(ctx.Guild.Id);
@@ -444,7 +507,8 @@ public partial class Counting(
             var channelMention = channelObj?.Mention ?? $"#{channelName}";
 
             embed.AddField($"{channelMention}",
-                Strings.CountingChannelInfo(ctx.Guild.Id, channel.CurrentNumber.ToString("N0"), channel.TotalCounts.ToString("N0"), channel.HighestNumber.ToString("N0")),
+                Strings.CountingChannelInfo(ctx.Guild.Id, channel.CurrentNumber.ToString("N0"),
+                    channel.TotalCounts.ToString("N0"), channel.HighestNumber.ToString("N0")),
                 true);
         }
 
@@ -454,5 +518,114 @@ public partial class Counting(
         }
 
         await ReplyAsync(embed: embed.Build()).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Bans a user from counting in a specific channel.
+    /// </summary>
+    /// <param name="user">The user to ban from counting.</param>
+    /// <param name="channel">The counting channel. Defaults to current channel.</param>
+    /// <param name="duration">Duration of the ban (e.g., 1h, 1d). Leave empty for permanent.</param>
+    /// <param name="reason">The reason for the ban.</param>
+    /// <example>.counting ban @user 1d "Repeatedly breaking count"</example>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    [UserPerm(GuildPermission.ManageMessages)]
+    public async Task CountingBan(IGuildUser user, ITextChannel? channel = null, StoopidTime? duration = null,
+        [Remainder] string? reason = null)
+    {
+        channel ??= (ITextChannel)ctx.Channel;
+
+        var countingChannel = await Service.GetCountingChannelAsync(channel.Id);
+        if (countingChannel == null)
+        {
+            await ErrorAsync(Strings.CountingNotSetup(ctx.Guild.Id, channel.Mention));
+            return;
+        }
+
+        var success =
+            await moderationService.BanUserFromCountingAsync(channel.Id, user.Id, ctx.User.Id, duration?.Time, reason);
+
+        if (!success)
+        {
+            await ErrorAsync(Strings.CountingBanFailed(ctx.Guild.Id));
+            return;
+        }
+
+        var durationText = duration?.Time != null
+            ? Strings.CountingBanDuration(ctx.Guild.Id, duration.Time.Humanize())
+            : Strings.CountingBanPermanent(ctx.Guild.Id);
+        await ConfirmAsync(Strings.CountingUserBanned(ctx.Guild.Id, user.Mention, channel.Mention, durationText));
+    }
+
+    /// <summary>
+    ///     Unbans a user from counting in a specific channel.
+    /// </summary>
+    /// <param name="user">The user to unban from counting.</param>
+    /// <param name="channel">The counting channel. Defaults to current channel.</param>
+    /// <param name="reason">The reason for the unban.</param>
+    /// <example>.counting unban @user "Ban lifted early"</example>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    [UserPerm(GuildPermission.ManageMessages)]
+    public async Task CountingUnban(IGuildUser user, ITextChannel? channel = null, [Remainder] string? reason = null)
+    {
+        channel ??= (ITextChannel)ctx.Channel;
+
+        var countingChannel = await Service.GetCountingChannelAsync(channel.Id);
+        if (countingChannel == null)
+        {
+            await ErrorAsync(Strings.CountingNotSetup(ctx.Guild.Id, channel.Mention));
+            return;
+        }
+
+        var success = await moderationService.UnbanUserFromCountingAsync(channel.Id, user.Id, ctx.User.Id, reason);
+
+        if (!success)
+        {
+            await ErrorAsync(Strings.CountingUnbanFailed(ctx.Guild.Id));
+            return;
+        }
+
+        await ConfirmAsync(Strings.CountingUserUnbanned(ctx.Guild.Id, user.Mention, channel.Mention));
+    }
+
+    /// <summary>
+    ///     Temporarily timeouts a user from counting.
+    /// </summary>
+    /// <param name="user">The user to timeout from counting.</param>
+    /// <param name="duration">Duration of the timeout (e.g., 30m, 2h).</param>
+    /// <param name="channel">The counting channel. Defaults to current channel.</param>
+    /// <param name="reason">The reason for the timeout.</param>
+    /// <example>.counting timeout @user 30m "Spamming wrong numbers"</example>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    [UserPerm(GuildPermission.ManageMessages)]
+    public async Task CountingTimeout(IGuildUser user, StoopidTime duration, ITextChannel? channel = null,
+        [Remainder] string? reason = null)
+    {
+        channel ??= (ITextChannel)ctx.Channel;
+
+        var countingChannel = await Service.GetCountingChannelAsync(channel.Id);
+        if (countingChannel == null)
+        {
+            await ErrorAsync(Strings.CountingNotSetup(ctx.Guild.Id, channel.Mention));
+            return;
+        }
+
+        var success =
+            await moderationService.BanUserFromCountingAsync(channel.Id, user.Id, ctx.User.Id, duration.Time, reason);
+
+        if (!success)
+        {
+            await ErrorAsync(Strings.CountingTimeoutFailed(ctx.Guild.Id));
+            return;
+        }
+
+        await ConfirmAsync(Strings.CountingUserTimedOut(ctx.Guild.Id, user.Mention, channel.Mention,
+            duration.Time.Humanize()));
     }
 }

@@ -39,6 +39,54 @@ countinglist:
   - countinglist
   - clist
   - countlist
+countingdisable:
+  - countingdisable
+  - cdisable
+  - countdisable
+countingban:
+  - countingban
+  - cban
+  - countban
+countingunban:
+  - countingunban
+  - cunban
+  - countunban
+countingtimeout:
+  - countingtimeout
+  - ctimeout
+  - counttimeout
+countingsuccessmessage:
+  - countingsuccessmessage
+  - csuccessmessage
+  - countsuccessmessage
+countingfailuremessage:
+  - countingfailuremessage
+  - cfailuremessage
+  - countfailuremessage
+countingmilestonemessage:
+  - countingmilestonemessage
+  - cmilestonemessage
+  - countmilestonemessage
+countingmilestonechannel:
+  - countingmilestonechannel
+  - cmilestonechannel
+  - countmilestonechannel
+countingfailurechannel:
+  - countingfailurechannel
+  - cfailurechannel
+  - countfailurechannel
+countingmilestones:
+  - countingmilestones
+  - cmilestones
+  - countmilestones
+countingfailurethreshold:
+  - countingfailurethreshold
+  - cfailurethreshold
+  - countfailurethreshold
+countingcooldown:
+  - countingcooldown
+  - ccooldown
+  - countcooldown
 rep:
   - rep
   - +rep
