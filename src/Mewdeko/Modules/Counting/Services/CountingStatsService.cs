@@ -12,13 +12,12 @@ namespace Mewdeko.Modules.Counting.Services;
 /// </summary>
 public class CountingStatsService : INService
 {
-    private readonly IDataConnectionFactory dbFactory;
-    private readonly IMemoryCache cache;
-    private readonly ILogger<CountingStatsService> logger;
-
     // Cache keys
     private const string USER_STATS_CACHE_KEY = "counting_user_stats_{0}_{1}";
     private const string LEADERBOARD_CACHE_KEY = "counting_leaderboard_{0}_{1}";
+    private readonly IMemoryCache cache;
+    private readonly IDataConnectionFactory dbFactory;
+    private readonly ILogger<CountingStatsService> logger;
 
     /// <summary>
     /// Initializes a new instance of the CountingStatsService.
@@ -99,7 +98,8 @@ public class CountingStatsService : INService
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error updating user stats for user {UserId} in channel {ChannelId}", userId, channelId);
+            logger.LogError(ex, "Error updating user stats for user {UserId} in channel {ChannelId}", userId,
+                channelId);
         }
     }
 
@@ -144,9 +144,7 @@ public class CountingStatsService : INService
                     .Where(x => x.Id == stats.Id)
                     .UpdateAsync(x => new CountingStats
                     {
-                        CurrentStreak = 0,
-                        ErrorsCount = x.ErrorsCount + 1,
-                        Accuracy = newAccuracy
+                        CurrentStreak = 0, ErrorsCount = x.ErrorsCount + 1, Accuracy = newAccuracy
                     });
             }
 
@@ -156,7 +154,8 @@ public class CountingStatsService : INService
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error incrementing user errors for user {UserId} in channel {ChannelId}", userId, channelId);
+            logger.LogError(ex, "Error incrementing user errors for user {UserId} in channel {ChannelId}", userId,
+                channelId);
         }
     }
 
@@ -185,7 +184,8 @@ public class CountingStatsService : INService
     /// <summary>
     /// Gets leaderboard for a counting channel.
     /// </summary>
-    public async Task<List<CountingLeaderboardEntry>> GetLeaderboardAsync(ulong channelId, LeaderboardType type = LeaderboardType.Contributions, int limit = 10)
+    public async Task<List<CountingLeaderboardEntry>> GetLeaderboardAsync(ulong channelId,
+        LeaderboardType type = LeaderboardType.Contributions, int limit = 10)
     {
         var cacheKey = string.Format(LEADERBOARD_CACHE_KEY, channelId, type);
 
@@ -363,8 +363,10 @@ public class CountingStatsService : INService
         var rank = await db.CountingStats
             .Where(x => x.ChannelId == channelId)
             .CountAsync(x => x.ContributionsCount > userStats.ContributionsCount ||
-                            (x.ContributionsCount == userStats.ContributionsCount && x.HighestStreak > userStats.HighestStreak) ||
-                            (x.ContributionsCount == userStats.ContributionsCount && x.HighestStreak == userStats.HighestStreak && x.Accuracy > userStats.Accuracy));
+                             x.ContributionsCount == userStats.ContributionsCount &&
+                             x.HighestStreak > userStats.HighestStreak ||
+                             x.ContributionsCount == userStats.ContributionsCount &&
+                             x.HighestStreak == userStats.HighestStreak && x.Accuracy > userStats.Accuracy);
 
         return rank + 1;
     }
@@ -386,6 +388,42 @@ public class CountingStatsService : INService
         {
             cache.Remove(string.Format(LEADERBOARD_CACHE_KEY, channelId, type));
         }
+    }
+
+    /// <summary>
+    ///     Clears all cache entries for a specific channel.
+    /// </summary>
+    public Task ClearChannelCacheAsync(ulong channelId)
+    {
+        foreach (var type in Enum.GetValues<LeaderboardType>())
+        {
+            cache.Remove(string.Format(LEADERBOARD_CACHE_KEY, channelId, type));
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    ///     Gets the number of active users in a counting channel.
+    /// </summary>
+    public async Task<int> GetActiveUserCountAsync(ulong channelId)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+        return await db.CountingStats
+            .Where(x => x.ChannelId == channelId && x.ContributionsCount > 0)
+            .CountAsync();
+    }
+
+    /// <summary>
+    ///     Gets the top contributor for a counting channel.
+    /// </summary>
+    public async Task<CountingStats?> GetTopContributorAsync(ulong channelId)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+        return await db.CountingStats
+            .Where(x => x.ChannelId == channelId)
+            .OrderByDescending(x => x.ContributionsCount)
+            .FirstOrDefaultAsync();
     }
 }
 

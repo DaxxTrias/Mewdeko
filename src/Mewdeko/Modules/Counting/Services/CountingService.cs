@@ -14,14 +14,6 @@ namespace Mewdeko.Modules.Counting.Services;
 /// </summary>
 public class CountingService : INService, IReadyExecutor
 {
-    private readonly IDataConnectionFactory dbFactory;
-    private readonly IMemoryCache cache;
-    private readonly ILogger<CountingService> logger;
-    private readonly DiscordShardedClient client;
-    private readonly CountingStatsService statsService;
-    private readonly CountingModerationService moderationService;
-    private readonly EventHandler eventHandler;
-
     // Cache keys
     private const string COUNTING_CHANNEL_CACHE_KEY = "counting_channel_{0}";
     private const string COUNTING_CONFIG_CACHE_KEY = "counting_config_{0}";
@@ -34,8 +26,17 @@ public class CountingService : INService, IReadyExecutor
         [CountingPattern.Roman] = new Regex(@"^\s*([IVXLCDM]+)\s*$", RegexOptions.Compiled | RegexOptions.IgnoreCase),
         [CountingPattern.Binary] = new Regex(@"^\s*([01]+)\s*$", RegexOptions.Compiled),
         [CountingPattern.Hexadecimal] = new Regex(@"^\s*([0-9A-Fa-f]+)\s*$", RegexOptions.Compiled),
-        [CountingPattern.Words] = new Regex(@"^\s*(\w+(?:\s+\w+)*)\s*$", RegexOptions.Compiled | RegexOptions.IgnoreCase)
+        [CountingPattern.Words] =
+            new Regex(@"^\s*(\w+(?:\s+\w+)*)\s*$", RegexOptions.Compiled | RegexOptions.IgnoreCase)
     };
+
+    private readonly IMemoryCache cache;
+    private readonly DiscordShardedClient client;
+    private readonly IDataConnectionFactory dbFactory;
+    private readonly EventHandler eventHandler;
+    private readonly ILogger<CountingService> logger;
+    private readonly CountingModerationService moderationService;
+    private readonly CountingStatsService statsService;
 
     /// <summary>
     /// Initializes a new instance of the CountingService.
@@ -133,9 +134,7 @@ public class CountingService : INService, IReadyExecutor
         {
             return new CountingSetupResult
             {
-                Success = false,
-                ErrorMessage = "Counting is already set up in this channel.",
-                Channel = existing
+                Success = false, ErrorMessage = "Counting is already set up in this channel.", Channel = existing
             };
         }
 
@@ -182,9 +181,7 @@ public class CountingService : INService, IReadyExecutor
 
         return new CountingSetupResult
         {
-            Success = true,
-            Channel = newChannel,
-            Config = config
+            Success = true, Channel = newChannel, Config = config
         };
     }
 
@@ -199,24 +196,39 @@ public class CountingService : INService, IReadyExecutor
     {
         var channel = await GetCountingChannelAsync(channelId);
         if (channel == null)
-            return new CountingResult { Success = false, ErrorType = CountingError.NotSetup };
+            return new CountingResult
+            {
+                Success = false, ErrorType = CountingError.NotSetup
+            };
 
         var config = await GetCountingConfigAsync(channelId);
         if (config == null)
-            return new CountingResult { Success = false, ErrorType = CountingError.ConfigNotFound };
+            return new CountingResult
+            {
+                Success = false, ErrorType = CountingError.ConfigNotFound
+            };
 
         // Check if user is on cooldown
         if (await IsUserOnCooldownAsync(channelId, userId, config.Cooldown))
-            return new CountingResult { Success = false, ErrorType = CountingError.OnCooldown };
+            return new CountingResult
+            {
+                Success = false, ErrorType = CountingError.OnCooldown
+            };
 
         // Check if same user is trying to count again (if not allowed)
         if (!config.AllowRepeatedUsers && channel.LastUserId == userId && userId != 0)
-            return new CountingResult { Success = false, ErrorType = CountingError.SameUserRepeating };
+            return new CountingResult
+            {
+                Success = false, ErrorType = CountingError.SameUserRepeating
+            };
 
         // Parse the number based on the pattern
         var parseResult = await ParseNumberAsync(messageContent, (CountingPattern)config.Pattern, config.NumberBase);
         if (!parseResult.Success)
-            return new CountingResult { Success = false, ErrorType = CountingError.InvalidNumber };
+            return new CountingResult
+            {
+                Success = false, ErrorType = CountingError.InvalidNumber
+            };
 
         // Calculate expected number
         var expectedNumber = channel.CurrentNumber + channel.Increment;
@@ -238,7 +250,10 @@ public class CountingService : INService, IReadyExecutor
         if (config.MaxNumber > 0 && parseResult.Number > config.MaxNumber)
         {
             await HandleMaxNumberReachedAsync(channel, config, userId);
-            return new CountingResult { Success = false, ErrorType = CountingError.MaxNumberReached };
+            return new CountingResult
+            {
+                Success = false, ErrorType = CountingError.MaxNumberReached
+            };
         }
 
         // Update the counting channel
@@ -260,16 +275,15 @@ public class CountingService : INService, IReadyExecutor
 
         return new CountingResult
         {
-            Success = true,
-            Number = parseResult.Number,
-            IsNewRecord = parseResult.Number > channel.HighestNumber
+            Success = true, Number = parseResult.Number, IsNewRecord = parseResult.Number > channel.HighestNumber
         };
     }
 
     /// <summary>
     /// Resets a counting channel to a specific number.
     /// </summary>
-    public async Task<bool> ResetCountingChannelAsync(ulong channelId, long newNumber, ulong resetBy, string? reason = null)
+    public async Task<bool> ResetCountingChannelAsync(ulong channelId, long newNumber, ulong resetBy,
+        string? reason = null)
     {
         var channel = await GetCountingChannelAsync(channelId);
         if (channel == null) return false;
@@ -282,9 +296,7 @@ public class CountingService : INService, IReadyExecutor
             .Where(x => x.ChannelId == channelId)
             .UpdateAsync(x => new CountingChannel
             {
-                CurrentNumber = newNumber,
-                LastUserId = 0,
-                LastMessageId = 0
+                CurrentNumber = newNumber, LastUserId = 0, LastMessageId = 0
             });
 
         // Clear cache
@@ -346,9 +358,7 @@ public class CountingService : INService, IReadyExecutor
             .Where(x => x.ChannelId == channelId)
             .UpdateAsync(x => new CountingChannel
             {
-                CurrentNumber = save.SavedNumber,
-                LastUserId = 0,
-                LastMessageId = 0
+                CurrentNumber = save.SavedNumber, LastUserId = 0, LastMessageId = 0
             });
 
         // Clear cache
@@ -405,7 +415,8 @@ public class CountingService : INService, IReadyExecutor
     /// <summary>
     /// Updates the counting channel with a new valid count.
     /// </summary>
-    private async Task UpdateCountingChannelAsync(CountingChannel channel, long newNumber, ulong userId, ulong messageId)
+    private async Task UpdateCountingChannelAsync(CountingChannel channel, long newNumber, ulong userId,
+        ulong messageId)
     {
         await using var db = await dbFactory.CreateConnectionAsync();
 
@@ -443,13 +454,19 @@ public class CountingService : INService, IReadyExecutor
                 CountingPattern.Words => await ParseWordsNumber(text),
                 CountingPattern.Fibonacci => ParseFibonacci(text),
                 CountingPattern.Primes => ParsePrimes(text),
-                _ => new NumberParseResult { Success = false }
+                _ => new NumberParseResult
+                {
+                    Success = false
+                }
             };
         }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Error parsing number: {Text} with pattern {Pattern}", text, pattern);
-            return new NumberParseResult { Success = false };
+            return new NumberParseResult
+            {
+                Success = false
+            };
         }
     }
 
@@ -459,21 +476,30 @@ public class CountingService : INService, IReadyExecutor
     private NumberParseResult ParseNormalNumber(string text, int numberBase)
     {
         if (!PatternRegexes[CountingPattern.Normal].IsMatch(text))
-            return new NumberParseResult { Success = false };
+            return new NumberParseResult
+            {
+                Success = false
+            };
 
         var cleanText = text.Trim();
 
         if (numberBase == 10)
         {
             if (long.TryParse(cleanText, out var number))
-                return new NumberParseResult { Success = true, Number = number };
+                return new NumberParseResult
+                {
+                    Success = true, Number = number
+                };
         }
         else
         {
             try
             {
                 var number = Convert.ToInt64(cleanText, numberBase);
-                return new NumberParseResult { Success = true, Number = number };
+                return new NumberParseResult
+                {
+                    Success = true, Number = number
+                };
             }
             catch
             {
@@ -481,7 +507,10 @@ public class CountingService : INService, IReadyExecutor
             }
         }
 
-        return new NumberParseResult { Success = false };
+        return new NumberParseResult
+        {
+            Success = false
+        };
     }
 
     /// <summary>
@@ -490,16 +519,25 @@ public class CountingService : INService, IReadyExecutor
     private NumberParseResult ParseRomanNumber(string text)
     {
         if (!PatternRegexes[CountingPattern.Roman].IsMatch(text))
-            return new NumberParseResult { Success = false };
+            return new NumberParseResult
+            {
+                Success = false
+            };
 
         try
         {
             var number = CountingPatternHelper.RomanToDecimal(text.Trim().ToUpper());
-            return new NumberParseResult { Success = true, Number = number };
+            return new NumberParseResult
+            {
+                Success = true, Number = number
+            };
         }
         catch
         {
-            return new NumberParseResult { Success = false };
+            return new NumberParseResult
+            {
+                Success = false
+            };
         }
     }
 
@@ -509,16 +547,25 @@ public class CountingService : INService, IReadyExecutor
     private NumberParseResult ParseBinaryNumber(string text)
     {
         if (!PatternRegexes[CountingPattern.Binary].IsMatch(text))
-            return new NumberParseResult { Success = false };
+            return new NumberParseResult
+            {
+                Success = false
+            };
 
         try
         {
             var number = Convert.ToInt64(text.Trim(), 2);
-            return new NumberParseResult { Success = true, Number = number };
+            return new NumberParseResult
+            {
+                Success = true, Number = number
+            };
         }
         catch
         {
-            return new NumberParseResult { Success = false };
+            return new NumberParseResult
+            {
+                Success = false
+            };
         }
     }
 
@@ -528,16 +575,25 @@ public class CountingService : INService, IReadyExecutor
     private NumberParseResult ParseHexNumber(string text)
     {
         if (!PatternRegexes[CountingPattern.Hexadecimal].IsMatch(text))
-            return new NumberParseResult { Success = false };
+            return new NumberParseResult
+            {
+                Success = false
+            };
 
         try
         {
             var number = Convert.ToInt64(text.Trim(), 16);
-            return new NumberParseResult { Success = true, Number = number };
+            return new NumberParseResult
+            {
+                Success = true, Number = number
+            };
         }
         catch
         {
-            return new NumberParseResult { Success = false };
+            return new NumberParseResult
+            {
+                Success = false
+            };
         }
     }
 
@@ -551,11 +607,17 @@ public class CountingService : INService, IReadyExecutor
         try
         {
             var number = CountingPatternHelper.WordsToNumber(text.Trim());
-            return new NumberParseResult { Success = number > 0, Number = number };
+            return new NumberParseResult
+            {
+                Success = number > 0, Number = number
+            };
         }
         catch
         {
-            return new NumberParseResult { Success = false };
+            return new NumberParseResult
+            {
+                Success = false
+            };
         }
     }
 
@@ -565,15 +627,24 @@ public class CountingService : INService, IReadyExecutor
     private NumberParseResult ParseFibonacci(string text)
     {
         if (!PatternRegexes[CountingPattern.Normal].IsMatch(text))
-            return new NumberParseResult { Success = false };
+            return new NumberParseResult
+            {
+                Success = false
+            };
 
         if (long.TryParse(text.Trim(), out var number))
         {
             if (CountingPatternHelper.IsFibonacci(number))
-                return new NumberParseResult { Success = true, Number = number };
+                return new NumberParseResult
+                {
+                    Success = true, Number = number
+                };
         }
 
-        return new NumberParseResult { Success = false };
+        return new NumberParseResult
+        {
+            Success = false
+        };
     }
 
     /// <summary>
@@ -582,15 +653,24 @@ public class CountingService : INService, IReadyExecutor
     private NumberParseResult ParsePrimes(string text)
     {
         if (!PatternRegexes[CountingPattern.Normal].IsMatch(text))
-            return new NumberParseResult { Success = false };
+            return new NumberParseResult
+            {
+                Success = false
+            };
 
         if (long.TryParse(text.Trim(), out var number))
         {
             if (CountingPatternHelper.IsPrime(number))
-                return new NumberParseResult { Success = true, Number = number };
+                return new NumberParseResult
+                {
+                    Success = true, Number = number
+                };
         }
 
-        return new NumberParseResult { Success = false };
+        return new NumberParseResult
+        {
+            Success = false
+        };
     }
 
     /// <summary>
@@ -618,7 +698,10 @@ public class CountingService : INService, IReadyExecutor
     /// </summary>
     private async Task CheckForMilestonesAsync(ulong channelId, long number, ulong userId)
     {
-        var milestoneTypes = new[] { 100, 500, 1000, 5000, 10000 };
+        var milestoneTypes = new[]
+        {
+            100, 500, 1000, 5000, 10000
+        };
 
         foreach (var milestone in milestoneTypes)
         {
@@ -852,7 +935,67 @@ public class CountingService : INService, IReadyExecutor
         cache.Remove(string.Format(COUNTING_CHANNEL_CACHE_KEY, channelId));
 
         // Log the deletion
-        await LogEventAsync(channelId, CountingEventType.ChannelDeleted, disabledBy, channel.CurrentNumber, null, 0, reason);
+        await LogEventAsync(channelId, CountingEventType.ChannelDeleted, disabledBy, channel.CurrentNumber, null, 0,
+            reason);
+
+        return true;
+    }
+
+    /// <summary>
+    ///     Purges a counting channel and all associated data.
+    /// </summary>
+    public async Task<bool> PurgeCountingChannelAsync(ulong channelId, ulong purgedBy, string? reason = null)
+    {
+        var channel = await GetCountingChannelAsync(channelId);
+        if (channel == null) return false;
+
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        // Delete all counting stats for this channel
+        await db.CountingStats
+            .Where(x => x.ChannelId == channelId)
+            .DeleteAsync();
+
+        // Delete all counting saves for this channel
+        await db.CountingSaves
+            .Where(x => x.ChannelId == channelId)
+            .DeleteAsync();
+
+        // Delete all counting events for this channel
+        await db.CountingEvents
+            .Where(x => x.ChannelId == channelId)
+            .DeleteAsync();
+
+        // Delete all counting user bans for this channel
+        await moderationService.PurgeChannelBansAsync(channelId);
+
+        // Delete counting configuration
+        await db.CountingChannelConfigs
+            .Where(x => x.ChannelId == channelId)
+            .DeleteAsync();
+
+        // Finally delete the channel itself
+        await db.CountingChannels
+            .Where(x => x.ChannelId == channelId)
+            .DeleteAsync();
+
+        // Clear all caches
+        cache.Remove(string.Format(COUNTING_CHANNEL_CACHE_KEY, channelId));
+        cache.Remove(string.Format(COUNTING_CONFIG_CACHE_KEY, channelId));
+
+        // Clear stats cache
+        await statsService.ClearChannelCacheAsync(channelId);
+
+        // Log the purge (will fail since channel is deleted, but that's ok)
+        try
+        {
+            await LogEventAsync(channelId, CountingEventType.ChannelDeleted, purgedBy, channel.CurrentNumber, null, 0,
+                $"PURGED: {reason}");
+        }
+        catch
+        {
+            /* Ignore logging errors after purge */
+        }
 
         return true;
     }
@@ -890,8 +1033,225 @@ public class CountingService : INService, IReadyExecutor
         cache.Remove(string.Format(COUNTING_CONFIG_CACHE_KEY, channelId));
 
         // Log the configuration change
-        await LogEventAsync(channelId, CountingEventType.ConfigChanged, 0, null, null, 0, "Configuration updated via API");
+        await LogEventAsync(channelId, CountingEventType.ConfigChanged, 0, null, null, 0,
+            "Configuration updated via API");
 
         return true;
     }
+
+    #region Customization Methods
+
+    /// <summary>
+    ///     Sets a custom success message for a counting channel.
+    /// </summary>
+    public async Task<bool> SetSuccessMessageAsync(ulong channelId, string message)
+    {
+        var config = await GetCountingConfigAsync(channelId);
+        if (config == null) return false;
+
+        config.SuccessMessage = message;
+        return await UpdateCountingConfigAsync(channelId, config);
+    }
+
+    /// <summary>
+    ///     Gets the custom success message for a counting channel.
+    /// </summary>
+    public async Task<string?> GetSuccessMessageAsync(ulong channelId)
+    {
+        var config = await GetCountingConfigAsync(channelId);
+        return config?.SuccessMessage;
+    }
+
+    /// <summary>
+    ///     Resets the success message to default for a counting channel.
+    /// </summary>
+    public async Task<bool> ResetSuccessMessageAsync(ulong channelId)
+    {
+        var config = await GetCountingConfigAsync(channelId);
+        if (config == null) return false;
+
+        config.SuccessMessage = null;
+        return await UpdateCountingConfigAsync(channelId, config);
+    }
+
+    /// <summary>
+    ///     Sets a custom failure message for a counting channel.
+    /// </summary>
+    public async Task<bool> SetFailureMessageAsync(ulong channelId, string message)
+    {
+        var config = await GetCountingConfigAsync(channelId);
+        if (config == null) return false;
+
+        config.FailureMessage = message;
+        return await UpdateCountingConfigAsync(channelId, config);
+    }
+
+    /// <summary>
+    ///     Gets the custom failure message for a counting channel.
+    /// </summary>
+    public async Task<string?> GetFailureMessageAsync(ulong channelId)
+    {
+        var config = await GetCountingConfigAsync(channelId);
+        return config?.FailureMessage;
+    }
+
+    /// <summary>
+    ///     Resets the failure message to default for a counting channel.
+    /// </summary>
+    public async Task<bool> ResetFailureMessageAsync(ulong channelId)
+    {
+        var config = await GetCountingConfigAsync(channelId);
+        if (config == null) return false;
+
+        config.FailureMessage = null;
+        return await UpdateCountingConfigAsync(channelId, config);
+    }
+
+    /// <summary>
+    ///     Sets a custom milestone message for a counting channel.
+    /// </summary>
+    public async Task<bool> SetMilestoneMessageAsync(ulong channelId, string message)
+    {
+        var config = await GetCountingConfigAsync(channelId);
+        if (config == null) return false;
+
+        config.MilestoneMessage = message;
+        return await UpdateCountingConfigAsync(channelId, config);
+    }
+
+    /// <summary>
+    ///     Gets the custom milestone message for a counting channel.
+    /// </summary>
+    public async Task<string?> GetMilestoneMessageAsync(ulong channelId)
+    {
+        var config = await GetCountingConfigAsync(channelId);
+        return config?.MilestoneMessage;
+    }
+
+    /// <summary>
+    ///     Resets the milestone message to default for a counting channel.
+    /// </summary>
+    public async Task<bool> ResetMilestoneMessageAsync(ulong channelId)
+    {
+        var config = await GetCountingConfigAsync(channelId);
+        if (config == null) return false;
+
+        config.MilestoneMessage = null;
+        return await UpdateCountingConfigAsync(channelId, config);
+    }
+
+    /// <summary>
+    ///     Sets the milestone channel for a counting channel.
+    /// </summary>
+    public async Task<bool> SetMilestoneChannelAsync(ulong channelId, ulong? milestoneChannelId)
+    {
+        var config = await GetCountingConfigAsync(channelId);
+        if (config == null) return false;
+
+        config.MilestoneChannelId = milestoneChannelId;
+        return await UpdateCountingConfigAsync(channelId, config);
+    }
+
+    /// <summary>
+    ///     Sets the failure channel for a counting channel.
+    /// </summary>
+    public async Task<bool> SetFailureChannelAsync(ulong channelId, ulong? failureChannelId)
+    {
+        var config = await GetCountingConfigAsync(channelId);
+        if (config == null) return false;
+
+        config.FailureChannelId = failureChannelId;
+        return await UpdateCountingConfigAsync(channelId, config);
+    }
+
+    /// <summary>
+    ///     Sets custom milestones for a counting channel.
+    /// </summary>
+    public async Task<bool> SetMilestonesAsync(ulong channelId, List<long> milestones)
+    {
+        var config = await GetCountingConfigAsync(channelId);
+        if (config == null) return false;
+
+        config.Milestones = string.Join(",", milestones);
+        return await UpdateCountingConfigAsync(channelId, config);
+    }
+
+    /// <summary>
+    ///     Gets the custom milestones for a counting channel.
+    /// </summary>
+    public async Task<List<long>> GetMilestonesAsync(ulong channelId)
+    {
+        var config = await GetCountingConfigAsync(channelId);
+        if (config?.Milestones == null)
+            return new List<long>
+            {
+                100,
+                250,
+                500,
+                1000,
+                2500,
+                5000,
+                10000
+            };
+
+        return config.Milestones.Split(',', StringSplitOptions.RemoveEmptyEntries)
+            .Select(long.Parse)
+            .ToList();
+    }
+
+    /// <summary>
+    ///     Resets milestones to default for a counting channel.
+    /// </summary>
+    public async Task<bool> ResetMilestonesAsync(ulong channelId)
+    {
+        var config = await GetCountingConfigAsync(channelId);
+        if (config == null) return false;
+
+        config.Milestones = null;
+        return await UpdateCountingConfigAsync(channelId, config);
+    }
+
+    /// <summary>
+    ///     Sets the failure threshold for a counting channel.
+    /// </summary>
+    public async Task<bool> SetFailureThresholdAsync(ulong channelId, int threshold)
+    {
+        var config = await GetCountingConfigAsync(channelId);
+        if (config == null) return false;
+
+        config.FailureThreshold = threshold;
+        return await UpdateCountingConfigAsync(channelId, config);
+    }
+
+    /// <summary>
+    ///     Gets the failure threshold for a counting channel.
+    /// </summary>
+    public async Task<int> GetFailureThresholdAsync(ulong channelId)
+    {
+        var config = await GetCountingConfigAsync(channelId);
+        return config?.FailureThreshold ?? 3;
+    }
+
+    /// <summary>
+    ///     Sets the cooldown for a counting channel.
+    /// </summary>
+    public async Task<bool> SetCooldownAsync(ulong channelId, int seconds)
+    {
+        var config = await GetCountingConfigAsync(channelId);
+        if (config == null) return false;
+
+        config.CooldownSeconds = seconds;
+        return await UpdateCountingConfigAsync(channelId, config);
+    }
+
+    /// <summary>
+    ///     Gets the cooldown for a counting channel.
+    /// </summary>
+    public async Task<int> GetCooldownAsync(ulong channelId)
+    {
+        var config = await GetCountingConfigAsync(channelId);
+        return config?.CooldownSeconds ?? 0;
+    }
+
+    #endregion
 }

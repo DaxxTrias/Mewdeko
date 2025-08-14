@@ -11,14 +11,13 @@ namespace Mewdeko.Modules.Counting.Services;
 /// </summary>
 public class CountingModerationService : INService
 {
-    private readonly IDataConnectionFactory dbFactory;
-    private readonly IMemoryCache cache;
-    private readonly ILogger<CountingModerationService> logger;
-    private readonly DiscordShardedClient client;
-
     // Cache keys
     private const string USER_BAN_CACHE_KEY = "counting_user_ban_{0}_{1}";
     private const string CHANNEL_VIOLATIONS_CACHE_KEY = "counting_violations_{0}";
+    private readonly IMemoryCache cache;
+    private readonly DiscordShardedClient client;
+    private readonly IDataConnectionFactory dbFactory;
+    private readonly ILogger<CountingModerationService> logger;
 
     /// <summary>
     /// Initializes a new instance of the CountingModerationService.
@@ -55,7 +54,7 @@ public class CountingModerationService : INService
             }
             else if (violationCount >= 10)
             {
-                await BanUserFromCountingAsync(channelId, userId, TimeSpan.FromHours(1),
+                await BanUserFromCountingAsync(channelId, userId, client.CurrentUser.Id, TimeSpan.FromHours(1),
                     "Too many counting violations");
             }
         }
@@ -99,11 +98,10 @@ public class CountingModerationService : INService
 
         await using var db = await dbFactory.CreateConnectionAsync();
 
-        var activeBan = await db.CountingEvents
+        var activeBan = await db.CountingUserBans
             .Where(x => x.ChannelId == channelId &&
-                       x.UserId == userId &&
-                       x.EventType == (int)CountingEventType.UserBanned)
-            .OrderByDescending(x => x.Timestamp)
+                        x.UserId == userId &&
+                        x.IsActive)
             .FirstOrDefaultAsync();
 
         if (activeBan == null)
@@ -112,11 +110,21 @@ public class CountingModerationService : INService
             return false;
         }
 
-        // Check if ban has expired (if details contain expiry info)
-        if (activeBan.Details != null &&
-            DateTime.TryParse(activeBan.Details.Split('|').LastOrDefault(), out var expiryTime))
+        // Check if ban has expired
+        if (activeBan.ExpiresAt.HasValue)
         {
-            var isStillBanned = DateTime.UtcNow < expiryTime;
+            var isStillBanned = DateTime.UtcNow < activeBan.ExpiresAt.Value;
+            if (!isStillBanned)
+            {
+                // Ban has expired, deactivate it
+                await db.CountingUserBans
+                    .Where(x => x.Id == activeBan.Id)
+                    .UpdateAsync(x => new CountingUserBans
+                    {
+                        IsActive = false
+                    });
+            }
+
             cache.Set(cacheKey, isStillBanned, TimeSpan.FromMinutes(5));
             return isStillBanned;
         }
@@ -129,13 +137,29 @@ public class CountingModerationService : INService
     /// <summary>
     /// Bans a user from counting in a channel for a specified duration.
     /// </summary>
-    public async Task BanUserFromCountingAsync(ulong channelId, ulong userId, TimeSpan? duration = null, string? reason = null)
+    public async Task<bool> BanUserFromCountingAsync(ulong channelId, ulong userId, ulong bannedBy,
+        TimeSpan? duration = null, string? reason = null)
     {
         try
         {
             await using var db = await dbFactory.CreateConnectionAsync();
 
             var expiryTime = duration.HasValue ? DateTime.UtcNow.Add(duration.Value) : (DateTime?)null;
+
+            // Create counting user ban entry
+            var userBan = new CountingUserBans
+            {
+                ChannelId = channelId,
+                UserId = userId,
+                BannedBy = bannedBy,
+                BannedAt = DateTime.UtcNow,
+                ExpiresAt = expiryTime,
+                Reason = reason ?? "Counting violations",
+                IsActive = true
+            };
+
+            await db.InsertAsync(userBan);
+
             var details = $"{reason ?? "Counting violations"}";
             if (expiryTime.HasValue)
                 details += $"|{expiryTime:O}";
@@ -156,17 +180,21 @@ public class CountingModerationService : INService
 
             // Notify user and moderators
             await NotifyUserBannedAsync(channelId, userId, duration, reason);
+
+            return true;
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Error banning user {UserId} from counting in channel {ChannelId}", userId, channelId);
+            return false;
         }
     }
 
     /// <summary>
     /// Unbans a user from counting in a channel.
     /// </summary>
-    public async Task UnbanUserFromCountingAsync(ulong channelId, ulong userId, ulong unbannedBy, string? reason = null)
+    public async Task<bool> UnbanUserFromCountingAsync(ulong channelId, ulong userId, ulong unbannedBy,
+        string? reason = null)
     {
         try
         {
@@ -175,7 +203,8 @@ public class CountingModerationService : INService
             var unbanEvent = new CountingEvents
             {
                 ChannelId = channelId,
-                EventType = (int)CountingEventType.UserBanned, // We'll use negative event type or details to indicate unban
+                EventType =
+                    (int)CountingEventType.UserBanned, // We'll use negative event type or details to indicate unban
                 UserId = unbannedBy,
                 Timestamp = DateTime.UtcNow,
                 Details = $"Unbanned user {userId}: {reason ?? "Manual unban"}"
@@ -186,19 +215,30 @@ public class CountingModerationService : INService
             // Clear cache
             cache.Remove(string.Format(USER_BAN_CACHE_KEY, channelId, userId));
 
+            // Also update CountingUserBans table
+            await db.CountingUserBans
+                .Where(x => x.ChannelId == channelId && x.UserId == userId && x.IsActive)
+                .UpdateAsync(x => new CountingUserBans
+                {
+                    IsActive = false
+                });
+
             logger.LogInformation("User {UserId} unbanned from counting in channel {ChannelId} by {UnbannedBy}",
                 userId, channelId, unbannedBy);
+            return true;
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error unbanning user {UserId} from counting in channel {ChannelId}", userId, channelId);
+            logger.LogError(ex, "Error unbanning user {UserId} from counting in channel {ChannelId}", userId,
+                channelId);
+            return false;
         }
     }
 
     /// <summary>
     /// Applies a temporary timeout to a user for counting violations.
     /// </summary>
-    public async Task ApplyTemporaryTimeoutAsync(ulong channelId, ulong userId, TimeSpan duration)
+    public async Task<bool> ApplyTemporaryTimeoutAsync(ulong channelId, ulong userId, TimeSpan duration)
     {
         try
         {
@@ -221,10 +261,12 @@ public class CountingModerationService : INService
 
             logger.LogInformation("User {UserId} timed out from counting in channel {ChannelId} for {Duration}",
                 userId, channelId, duration);
+            return true;
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Error applying timeout to user {UserId} in channel {ChannelId}", userId, channelId);
+            return false;
         }
     }
 
@@ -241,14 +283,15 @@ public class CountingModerationService : INService
 
             return await db.CountingEvents
                 .Where(x => x.ChannelId == channelId &&
-                           x.UserId == userId &&
-                           x.EventType == (int)CountingEventType.WrongNumber &&
-                           x.Timestamp >= cutoffTime)
+                            x.UserId == userId &&
+                            x.EventType == (int)CountingEventType.WrongNumber &&
+                            x.Timestamp >= cutoffTime)
                 .CountAsync();
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error getting violation count for user {UserId} in channel {ChannelId}", userId, channelId);
+            logger.LogError(ex, "Error getting violation count for user {UserId} in channel {ChannelId}", userId,
+                channelId);
             return 0;
         }
     }
@@ -256,7 +299,8 @@ public class CountingModerationService : INService
     /// <summary>
     /// Logs a counting violation.
     /// </summary>
-    private async Task LogViolationAsync(ulong channelId, ulong userId, CountingViolationType violationType, string details)
+    private async Task LogViolationAsync(ulong channelId, ulong userId, CountingViolationType violationType,
+        string details)
     {
         try
         {
@@ -351,10 +395,10 @@ public class CountingModerationService : INService
 
             var violations = await db.CountingEvents
                 .Where(x => x.ChannelId == channelId &&
-                           x.Timestamp >= cutoffTime &&
-                           (x.EventType == (int)CountingEventType.WrongNumber ||
-                            x.EventType == (int)CountingEventType.UserTimeout ||
-                            x.EventType == (int)CountingEventType.UserBanned))
+                            x.Timestamp >= cutoffTime &&
+                            (x.EventType == (int)CountingEventType.WrongNumber ||
+                             x.EventType == (int)CountingEventType.UserTimeout ||
+                             x.EventType == (int)CountingEventType.UserBanned))
                 .ToListAsync();
 
             return new CountingViolationStats
@@ -380,6 +424,24 @@ public class CountingModerationService : INService
         {
             logger.LogError(ex, "Error getting violation stats for channel {ChannelId}", channelId);
             return new CountingViolationStats();
+        }
+    }
+
+    /// <summary>
+    ///     Purges all bans for a specific channel.
+    /// </summary>
+    public async Task<bool> PurgeChannelBansAsync(ulong channelId)
+    {
+        try
+        {
+            await using var db = await dbFactory.CreateConnectionAsync();
+            await db.CountingUserBans.Where(x => x.ChannelId == channelId).DeleteAsync();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error purging bans for channel {ChannelId}", channelId);
+            return false;
         }
     }
 }

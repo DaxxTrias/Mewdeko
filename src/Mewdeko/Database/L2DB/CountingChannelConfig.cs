@@ -97,4 +97,52 @@ public class CountingChannelConfig
     /// </summary>
     [Column("EnableCompetitions")]
     public bool EnableCompetitions { get; set; }
+
+    /// <summary>
+    ///     Custom success message template.
+    /// </summary>
+    [Column("SuccessMessage")]
+    public string? SuccessMessage { get; set; }
+
+    /// <summary>
+    ///     Custom failure message template.
+    /// </summary>
+    [Column("FailureMessage")]
+    public string? FailureMessage { get; set; }
+
+    /// <summary>
+    ///     Custom milestone message template.
+    /// </summary>
+    [Column("MilestoneMessage")]
+    public string? MilestoneMessage { get; set; }
+
+    /// <summary>
+    ///     Channel ID for milestone announcements.
+    /// </summary>
+    [Column("MilestoneChannelId")]
+    public ulong? MilestoneChannelId { get; set; }
+
+    /// <summary>
+    ///     Channel ID for failure logs.
+    /// </summary>
+    [Column("FailureChannelId")]
+    public ulong? FailureChannelId { get; set; }
+
+    /// <summary>
+    ///     Custom milestone numbers as comma-separated string.
+    /// </summary>
+    [Column("Milestones")]
+    public string? Milestones { get; set; }
+
+    /// <summary>
+    ///     Failure threshold before consequences.
+    /// </summary>
+    [Column("FailureThreshold")]
+    public int FailureThreshold { get; set; } = 3;
+
+    /// <summary>
+    ///     Cooldown between user counts in seconds.
+    /// </summary>
+    [Column("CooldownSeconds")]
+    public int CooldownSeconds { get; set; } = 0;
 }

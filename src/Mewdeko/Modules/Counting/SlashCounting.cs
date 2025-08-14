@@ -4,6 +4,7 @@ using Fergun.Interactive.Pagination;
 using Mewdeko.Common.Attributes.InteractionCommands;
 using Mewdeko.Modules.Counting.Common;
 using Mewdeko.Modules.Counting.Services;
+using Swan;
 
 namespace Mewdeko.Modules.Counting;
 
@@ -32,9 +33,12 @@ public partial class SlashCounting(
     [RequireContext(ContextType.Guild)]
     [SlashUserPerm(GuildPermission.ManageChannels)]
     public async Task CountingSetup(
-        [Summary("channel", "Channel to set up counting in")] ITextChannel? channel = null,
-        [Summary("start", "Number to start counting from")] long startNumber = 1,
-        [Summary("increment", "Increment for each count")] int increment = 1)
+        [Summary("channel", "Channel to set up counting in")]
+        ITextChannel? channel = null,
+        [Summary("start", "Number to start counting from")]
+        long startNumber = 1,
+        [Summary("increment", "Increment for each count")]
+        int increment = 1)
     {
         await DeferAsync();
 
@@ -50,11 +54,13 @@ public partial class SlashCounting(
 
         if (!result.Success)
         {
-            await ErrorAsync(Strings.CountingSetupFailed(ctx.Guild.Id, result.ErrorMessage ?? "Unknown error")).ConfigureAwait(false);
+            await ErrorAsync(Strings.CountingSetupFailed(ctx.Guild.Id, result.ErrorMessage ?? "Unknown error"))
+                .ConfigureAwait(false);
             return;
         }
 
-        await ConfirmAsync(Strings.CountingSetupSuccess(ctx.Guild.Id, channel.Mention, startNumber, increment)).ConfigureAwait(false);
+        await ConfirmAsync(Strings.CountingSetupSuccess(ctx.Guild.Id, channel.Mention, startNumber, increment))
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -64,7 +70,8 @@ public partial class SlashCounting(
     [SlashCommand("status", "Show the current status of counting in a channel")]
     [RequireContext(ContextType.Guild)]
     public async Task CountingStatus(
-        [Summary("channel", "Channel to check status for")] ITextChannel? channel = null)
+        [Summary("channel", "Channel to check status for")]
+        ITextChannel? channel = null)
     {
         await DeferAsync();
 
@@ -100,7 +107,8 @@ public partial class SlashCounting(
             var configText = new List<string>();
             if (!config.AllowRepeatedUsers) configText.Add(Strings.CountingNoRepeats(ctx.Guild.Id));
             if (config.Cooldown > 0) configText.Add(Strings.CountingCooldown(ctx.Guild.Id, config.Cooldown));
-            if (config.MaxNumber > 0) configText.Add(Strings.CountingMaxNumber(ctx.Guild.Id, config.MaxNumber.ToString("N0")));
+            if (config.MaxNumber > 0)
+                configText.Add(Strings.CountingMaxNumber(ctx.Guild.Id, config.MaxNumber.ToString("N0")));
             if (config.ResetOnError) configText.Add(Strings.CountingResetOnError(ctx.Guild.Id));
             if (config.DeleteWrongMessages) configText.Add(Strings.CountingDeleteWrongMessages(ctx.Guild.Id));
 
@@ -121,7 +129,8 @@ public partial class SlashCounting(
     [RequireContext(ContextType.Guild)]
     [SlashUserPerm(GuildPermission.ManageChannels)]
     public async Task CountingConfig(
-        [Summary("channel", "Channel to show config for")] ITextChannel? channel = null)
+        [Summary("channel", "Channel to show config for")]
+        ITextChannel? channel = null)
     {
         await DeferAsync();
 
@@ -146,7 +155,8 @@ public partial class SlashCounting(
             .WithTitle(Strings.CountingConfigTitle(ctx.Guild.Id, channel.Name))
             .AddField(Strings.CountingAllowRepeats(ctx.Guild.Id), config.AllowRepeatedUsers ? "✅" : "❌", true)
             .AddField(Strings.CountingCooldownSeconds(ctx.Guild.Id), config.Cooldown.ToString(), true)
-            .AddField(Strings.CountingMaxNumberLimit(ctx.Guild.Id), config.MaxNumber > 0 ? config.MaxNumber.ToString("N0") : Strings.CountingUnlimited(ctx.Guild.Id), true)
+            .AddField(Strings.CountingMaxNumberLimit(ctx.Guild.Id),
+                config.MaxNumber > 0 ? config.MaxNumber.ToString("N0") : Strings.CountingUnlimited(ctx.Guild.Id), true)
             .AddField(Strings.CountingResetOnErrorSetting(ctx.Guild.Id), config.ResetOnError ? "✅" : "❌", true)
             .AddField(Strings.CountingDeleteWrongSetting(ctx.Guild.Id), config.DeleteWrongMessages ? "✅" : "❌", true)
             .AddField(Strings.CountingPatternType(ctx.Guild.Id), ((CountingPattern)config.Pattern).ToString(), true)
@@ -177,9 +187,12 @@ public partial class SlashCounting(
     [RequireContext(ContextType.Guild)]
     [SlashUserPerm(GuildPermission.ManageMessages)]
     public async Task CountingReset(
-        [Summary("channel", "Channel to reset")] ITextChannel? channel = null,
-        [Summary("number", "Number to reset to")] long newNumber = 0,
-        [Summary("reason", "Reason for the reset")] string? reason = null)
+        [Summary("channel", "Channel to reset")]
+        ITextChannel? channel = null,
+        [Summary("number", "Number to reset to")]
+        long newNumber = 0,
+        [Summary("reason", "Reason for the reset")]
+        string? reason = null)
     {
         await DeferAsync();
 
@@ -195,7 +208,8 @@ public partial class SlashCounting(
         var confirmEmbed = new EmbedBuilder()
             .WithErrorColor()
             .WithTitle(Strings.CountingResetConfirmTitle(ctx.Guild.Id))
-            .WithDescription(Strings.CountingResetConfirm(ctx.Guild.Id, channel.Mention, countingChannel.CurrentNumber, newNumber))
+            .WithDescription(Strings.CountingResetConfirm(ctx.Guild.Id, channel.Mention, countingChannel.CurrentNumber,
+                newNumber))
             .Build();
 
         var component = new ComponentBuilder()
@@ -238,8 +252,10 @@ public partial class SlashCounting(
     [SlashCommand("stats", "Show counting statistics for a user")]
     [RequireContext(ContextType.Guild)]
     public async Task CountingStats(
-        [Summary("user", "User to show stats for")] IGuildUser? user = null,
-        [Summary("channel", "Channel to check stats in")] ITextChannel? channel = null)
+        [Summary("user", "User to show stats for")]
+        IGuildUser? user = null,
+        [Summary("channel", "Channel to check stats in")]
+        ITextChannel? channel = null)
     {
         await DeferAsync();
 
@@ -256,7 +272,8 @@ public partial class SlashCounting(
         var userStats = await statsService.GetUserStatsAsync(channel.Id, user.Id);
         if (userStats == null)
         {
-            await ErrorAsync(Strings.CountingNoUserStats(ctx.Guild.Id, user.DisplayName, channel.Mention)).ConfigureAwait(false);
+            await ErrorAsync(Strings.CountingNoUserStats(ctx.Guild.Id, user.DisplayName, channel.Mention))
+                .ConfigureAwait(false);
             return;
         }
 
@@ -272,7 +289,8 @@ public partial class SlashCounting(
             .AddField(Strings.CountingHighestStreak(ctx.Guild.Id), userStats.HighestStreak.ToString("N0"), true)
             .AddField(Strings.CountingAccuracy(ctx.Guild.Id), $"{userStats.Accuracy:F1}%", true)
             .AddField(Strings.CountingErrors(ctx.Guild.Id), userStats.ErrorsCount.ToString("N0"), true)
-            .AddField(Strings.CountingTotalNumbersCounted(ctx.Guild.Id), userStats.TotalNumbersCounted.ToString("N0"), true);
+            .AddField(Strings.CountingTotalNumbersCounted(ctx.Guild.Id), userStats.TotalNumbersCounted.ToString("N0"),
+                true);
 
         if (userStats.LastContribution.HasValue)
         {
@@ -291,8 +309,14 @@ public partial class SlashCounting(
     [SlashCommand("leaderboard", "Show the leaderboard for a counting channel")]
     [RequireContext(ContextType.Guild)]
     public async Task CountingLeaderboard(
-        [Summary("type", "Type of leaderboard to show")][Choice("Contributions", "contributions")][Choice("Highest Streak", "streak")][Choice("Accuracy", "accuracy")][Choice("Total Numbers", "totalnumbers")] string type = "contributions",
-        [Summary("channel", "Channel to show leaderboard for")] ITextChannel? channel = null)
+        [Summary("type", "Type of leaderboard to show")]
+        [Choice("Contributions", "contributions")]
+        [Choice("Highest Streak", "streak")]
+        [Choice("Accuracy", "accuracy")]
+        [Choice("Total Numbers", "totalnumbers")]
+        string type = "contributions",
+        [Summary("channel", "Channel to show leaderboard for")]
+        ITextChannel? channel = null)
     {
         await DeferAsync();
 
@@ -350,7 +374,8 @@ public partial class SlashCounting(
                     .WithOkColor()
                     .WithTitle(Strings.CountingLeaderboardTitle(ctx.Guild.Id, channel.Name, leaderboardType.ToString()))
                     .WithDescription(string.Join("\n", description))
-                    .WithFooter(Strings.CountingLeaderboardPage(ctx.Guild.Id, pageIndex + 1, (leaderboard.Count + 9) / 10));
+                    .WithFooter(Strings.CountingLeaderboardPage(ctx.Guild.Id, pageIndex + 1,
+                        (leaderboard.Count + 9) / 10));
             })
             .ToList();
 
@@ -362,7 +387,8 @@ public partial class SlashCounting(
             .WithActionOnTimeout(ActionOnStop.DeleteMessage)
             .Build();
 
-        await interactive.SendPaginatorAsync(paginator, Context.Interaction, responseType: InteractionResponseType.DeferredChannelMessageWithSource).ConfigureAwait(false);
+        await interactive.SendPaginatorAsync(paginator, Context.Interaction,
+            responseType: InteractionResponseType.DeferredChannelMessageWithSource).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -374,8 +400,10 @@ public partial class SlashCounting(
     [RequireContext(ContextType.Guild)]
     [SlashUserPerm(GuildPermission.ManageMessages)]
     public async Task CountingSave(
-        [Summary("channel", "Channel to save")] ITextChannel? channel = null,
-        [Summary("reason", "Reason for creating save point")] string? reason = null)
+        [Summary("channel", "Channel to save")]
+        ITextChannel? channel = null,
+        [Summary("reason", "Reason for creating save point")]
+        string? reason = null)
     {
         await DeferAsync();
 
@@ -391,7 +419,8 @@ public partial class SlashCounting(
         var saveId = await countingService.CreateSavePointAsync(channel.Id, ctx.User.Id, reason);
         if (saveId > 0)
         {
-            await ConfirmAsync(Strings.CountingSaveSuccess(ctx.Guild.Id, channel.Mention, countingChannel.CurrentNumber, saveId)).ConfigureAwait(false);
+            await ConfirmAsync(Strings.CountingSaveSuccess(ctx.Guild.Id, channel.Mention, countingChannel.CurrentNumber,
+                saveId)).ConfigureAwait(false);
         }
         else
         {
@@ -408,8 +437,10 @@ public partial class SlashCounting(
     [RequireContext(ContextType.Guild)]
     [SlashUserPerm(GuildPermission.ManageMessages)]
     public async Task CountingRestore(
-        [Summary("saveid", "ID of save point to restore from")] int saveId,
-        [Summary("channel", "Channel to restore")] ITextChannel? channel = null)
+        [Summary("saveid", "ID of save point to restore from")]
+        int saveId,
+        [Summary("channel", "Channel to restore")]
+        ITextChannel? channel = null)
     {
         await DeferAsync();
 
@@ -425,7 +456,8 @@ public partial class SlashCounting(
         var confirmEmbed = new EmbedBuilder()
             .WithErrorColor()
             .WithTitle(Strings.CountingRestoreConfirmTitle(ctx.Guild.Id))
-            .WithDescription(Strings.CountingRestoreConfirm(ctx.Guild.Id, channel.Mention, saveId, countingChannel.CurrentNumber))
+            .WithDescription(Strings.CountingRestoreConfirm(ctx.Guild.Id, channel.Mention, saveId,
+                countingChannel.CurrentNumber))
             .Build();
 
         var component = new ComponentBuilder()
@@ -461,10 +493,126 @@ public partial class SlashCounting(
     }
 
     /// <summary>
-    /// Lists all counting channels in the server.
+    /// Disables counting in a channel and optionally purges all data.
+    /// </summary>
+    /// <param name="channel">The channel to disable counting in. Defaults to current channel.</param>
+    /// <param name="purgeData">Whether to delete all counting data for this channel.</param>
+    /// <param name="reason">The reason for disabling counting.</param>
+    [SlashCommand("disable", "Disable counting in a channel")]
+    [RequireContext(ContextType.Guild)]
+    [SlashUserPerm(GuildPermission.ManageChannels)]
+    public async Task CountingDisable(ITextChannel? channel = null, bool purgeData = false, string? reason = null)
+    {
+        channel ??= (ITextChannel)ctx.Channel;
+
+        var countingChannel = await Service.GetCountingChannelAsync(channel.Id);
+        if (countingChannel == null)
+        {
+            await ErrorAsync(Strings.CountingNotSetup(ctx.Guild.Id, channel.Mention));
+            return;
+        }
+
+        var success = await Service.DisableCountingChannelAsync(channel.Id, ctx.User.Id, reason);
+
+        if (!success)
+        {
+            await ErrorAsync(Strings.CountingDisableFailed(ctx.Guild.Id));
+            return;
+        }
+
+        if (purgeData)
+        {
+            var purgeSuccess = await Service.PurgeCountingChannelAsync(channel.Id, ctx.User.Id, reason);
+            if (purgeSuccess)
+            {
+                await ConfirmAsync(Strings.CountingPurged(ctx.Guild.Id, channel.Mention));
+            }
+            else
+            {
+                await ErrorAsync(Strings.CountingPurgeFailed(ctx.Guild.Id));
+            }
+        }
+        else
+        {
+            await ConfirmAsync(Strings.CountingDisabled(ctx.Guild.Id, channel.Mention));
+        }
+    }
+
+    /// <summary>
+    ///     Bans a user from counting in a channel.
+    /// </summary>
+    /// <param name="user">The user to ban from counting.</param>
+    /// <param name="channel">The counting channel.</param>
+    /// <param name="duration">Duration in minutes (0 for permanent).</param>
+    /// <param name="reason">The reason for the ban.</param>
+    [SlashCommand("ban", "Ban a user from counting")]
+    [RequireContext(ContextType.Guild)]
+    [SlashUserPerm(GuildPermission.ManageMessages)]
+    public async Task CountingBan(IGuildUser user, ITextChannel? channel = null, int duration = 0,
+        string? reason = null)
+    {
+        channel ??= (ITextChannel)ctx.Channel;
+
+        var countingChannel = await Service.GetCountingChannelAsync(channel.Id);
+        if (countingChannel == null)
+        {
+            await ErrorAsync(Strings.CountingNotSetup(ctx.Guild.Id, channel.Mention));
+            return;
+        }
+
+        TimeSpan? banDuration = duration > 0 ? TimeSpan.FromMinutes(duration) : null;
+        var success =
+            await moderationService.BanUserFromCountingAsync(channel.Id, user.Id, ctx.User.Id, banDuration, reason);
+
+        if (!success)
+        {
+            await ErrorAsync(Strings.CountingBanFailed(ctx.Guild.Id));
+            return;
+        }
+
+        var durationText = banDuration != null
+            ? Strings.CountingBanDuration(ctx.Guild.Id, banDuration.Humanize())
+            : Strings.CountingBanPermanent(ctx.Guild.Id);
+        await ConfirmAsync(Strings.CountingUserBanned(ctx.Guild.Id, user.Mention, channel.Mention, durationText));
+    }
+
+    /// <summary>
+    ///     Unbans a user from counting in a channel.
+    /// </summary>
+    /// <param name="user">The user to unban from counting.</param>
+    /// <param name="channel">The counting channel.</param>
+    /// <param name="reason">The reason for the unban.</param>
+    [SlashCommand("unban", "Unban a user from counting")]
+    [RequireContext(ContextType.Guild)]
+    [SlashUserPerm(GuildPermission.ManageMessages)]
+    public async Task CountingUnban(IGuildUser user, ITextChannel? channel = null, string? reason = null)
+    {
+        channel ??= (ITextChannel)ctx.Channel;
+
+        var countingChannel = await Service.GetCountingChannelAsync(channel.Id);
+        if (countingChannel == null)
+        {
+            await ErrorAsync(Strings.CountingNotSetup(ctx.Guild.Id, channel.Mention));
+            return;
+        }
+
+        var success = await moderationService.UnbanUserFromCountingAsync(channel.Id, user.Id, ctx.User.Id, reason);
+
+        if (!success)
+        {
+            await ErrorAsync(Strings.CountingUnbanFailed(ctx.Guild.Id));
+            return;
+        }
+
+        await ConfirmAsync(Strings.CountingUserUnbanned(ctx.Guild.Id, user.Mention, channel.Mention));
+    }
+
+    /// <summary>
+    /// Lists all active counting channels in the server.
     /// </summary>
     [SlashCommand("list", "List all counting channels in the server")]
     [RequireContext(ContextType.Guild)]
+    [SlashUserPerm(GuildPermission.ManageChannels)]
     public async Task CountingList()
     {
         await DeferAsync();
@@ -488,7 +636,8 @@ public partial class SlashCounting(
             var channelMention = channelObj?.Mention ?? $"#{channelName}";
 
             embed.AddField($"{channelMention}",
-                Strings.CountingChannelInfo(ctx.Guild.Id, channel.CurrentNumber.ToString("N0"), channel.TotalCounts.ToString("N0"), channel.HighestNumber.ToString("N0")),
+                Strings.CountingChannelInfo(ctx.Guild.Id, channel.CurrentNumber.ToString("N0"),
+                    channel.TotalCounts.ToString("N0"), channel.HighestNumber.ToString("N0")),
                 true);
         }
 
