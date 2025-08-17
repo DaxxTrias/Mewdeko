@@ -75,7 +75,7 @@ public class PurgeService : INService
 
                 //this isn't good, because this still work as if i want to remove only specific user's messages from the last
                 //100 messages, Maybe this needs to be reduced by msgs.Length instead of 100
-                amount -= 50;
+                amount -= (ulong)msgs.Length;
                 if (amount > 0)
                 {
                     msgs = (await channel.GetMessagesAsync(lastMessage, Direction.Before).FlattenAsync()
