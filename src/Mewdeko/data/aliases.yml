@@ -87,6 +87,74 @@ countingcooldown:
   - countingcooldown
   - ccooldown
   - countcooldown
+countmodshow:
+  - countmodshow
+  - cmshow
+  - countmoderationshow
+countmoddefaults:
+  - countmoddefaults
+  - cmdefaults
+  - countmoderationdefaults
+countmodenable:
+  - countmodenable
+  - cmenable
+  - countmoderationenable
+countmodthreshold:
+  - countmodthreshold
+  - cmthreshold
+  - countmoderationthreshold
+countmodwindow:
+  - countmodwindow
+  - cmwindow
+  - countmoderationwindow
+countmodpunishment:
+  - countmodpunishment
+  - cmpunishment
+  - countmoderationpunishment
+countmodignore:
+  - countmodignore
+  - cmignore
+  - countmoderationignore
+countmodrequired:
+  - countmodrequired
+  - cmrequired
+  - countmoderationrequired
+countmodbanned:
+  - countmodbanned
+  - cmbanned
+  - countmoderationbanned
+countmodreset:
+  - countmodreset
+  - cmreset
+  - countmoderationreset
+countmodpunish:
+  - countmodpunish
+  - cmpunish
+  - countmoderationpunish
+countmodunpunish:
+  - countmodunpunish
+  - cmunpunish
+  - countmoderationunpunish
+countmodpunishlist:
+  - countmodpunishlist
+  - cmpunishlist
+  - countmoderationpunishlist
+countmodclear:
+  - countmodclear
+  - cmclear
+  - countmoderationclear
+countmodclearall:
+  - countmodclearall
+  - cmclearall
+  - countmoderationclearall
+countmodnonnumbers:
+  - countmodnonnumbers
+  - cmnonnumbers
+  - countmoderationnonnumbers
+countmodedits:
+  - countmodedits
+  - cmedits
+  - countmoderationedits
 rep:
   - rep
   - +rep

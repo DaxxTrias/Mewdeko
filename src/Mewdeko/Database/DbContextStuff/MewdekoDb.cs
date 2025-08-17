@@ -1053,4 +1053,59 @@ public class MewdekoDb : DataConnection
     ///     Gets the counting leaderboard table.
     /// </summary>
     public ITable<CountingLeaderboard> CountingLeaderboard => this.GetTable<CountingLeaderboard>();
+
+    /// <summary>
+    ///     Gets the counting moderation defaults table.
+    /// </summary>
+    public ITable<CountingModerationDefaults> CountingModerationDefaults
+    {
+        get
+        {
+            return this.GetTable<CountingModerationDefaults>();
+        }
+    }
+
+    /// <summary>
+    ///     Gets the counting moderation config table.
+    /// </summary>
+    public ITable<CountingModerationConfig> CountingModerationConfig
+    {
+        get
+        {
+            return this.GetTable<CountingModerationConfig>();
+        }
+    }
+
+    /// <summary>
+    ///     Gets the counting user wrong counts table.
+    /// </summary>
+    public ITable<CountingUserWrongCounts> CountingUserWrongCounts
+    {
+        get
+        {
+            return this.GetTable<CountingUserWrongCounts>();
+        }
+    }
+
+    /// <summary>
+    ///     Gets the counting applied punishments table.
+    /// </summary>
+    public ITable<CountingAppliedPunishments> CountingAppliedPunishments
+    {
+        get
+        {
+            return this.GetTable<CountingAppliedPunishments>();
+        }
+    }
+
+    /// <summary>
+    ///     Gets the counting moderation punishments table.
+    /// </summary>
+    public ITable<CountingModerationPunishments> CountingModerationPunishments
+    {
+        get
+        {
+            return this.GetTable<CountingModerationPunishments>();
+        }
+    }
 }

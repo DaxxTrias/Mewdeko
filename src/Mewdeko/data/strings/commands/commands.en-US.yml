@@ -292,6 +292,259 @@ countingcooldown:
       desc: Cooldown in seconds (0-300).
       type: int
       optional: true
+countmodshow:
+  desc: Shows the current moderation configuration for a counting channel.
+  args:
+    - "channel"
+  params:
+    - name: channel
+      desc: The counting channel. Defaults to current channel.
+      type: text channel
+      optional: true
+countmoddefaults:
+  desc: Sets guild-wide default moderation settings for counting channels.
+  args:
+    - "enabled threshold windowHours punishment durationMinutes punishmentRole"
+  params:
+    - name: enabled
+      desc: Whether moderation is enabled by default.
+      type: bool
+      optional: false
+    - name: threshold
+      desc: Default wrong count threshold before punishment.
+      type: int
+      optional: true
+    - name: windowHours
+      desc: Default time window in hours for tracking wrong counts.
+      type: int
+      optional: true
+    - name: punishment
+      desc: Default punishment action to apply.
+      type: punishment action
+      optional: true
+    - name: durationMinutes
+      desc: Default duration for timed punishments in minutes.
+      type: int
+      optional: true
+    - name: punishmentRole
+      desc: Default role for AddRole punishment type.
+      type: role
+      optional: true
+countmodenable:
+  desc: Enables or disables moderation for a specific counting channel.
+  args:
+    - "enabled channel"
+  params:
+    - name: enabled
+      desc: Whether to enable or disable moderation.
+      type: bool
+      optional: false
+    - name: channel
+      desc: The counting channel. Defaults to current channel.
+      type: text channel
+      optional: true
+countmodthreshold:
+  desc: Sets the wrong count threshold for a counting channel.
+  args:
+    - "threshold channel"
+  params:
+    - name: threshold
+      desc: Number of wrong counts before punishment (1-100).
+      type: int
+      optional: false
+    - name: channel
+      desc: The counting channel. Defaults to current channel.
+      type: text channel
+      optional: true
+countmodwindow:
+  desc: Sets the time window for tracking wrong counts.
+  args:
+    - "hours channel"
+  params:
+    - name: hours
+      desc: Time window in hours (1-168).
+      type: int
+      optional: false
+    - name: channel
+      desc: The counting channel. Defaults to current channel.
+      type: text channel
+      optional: true
+countmodpunishment:
+  desc: Sets the punishment for wrong counts.
+  args:
+    - "punishment durationMinutes role channel"
+  params:
+    - name: punishment
+      desc: The punishment action to apply.
+      type: punishment action
+      optional: false
+    - name: durationMinutes
+      desc: Duration for timed punishments in minutes.
+      type: int
+      optional: true
+    - name: role
+      desc: Role for AddRole punishment type.
+      type: role
+      optional: true
+    - name: channel
+      desc: The counting channel. Defaults to current channel.
+      type: text channel
+      optional: true
+countmodignore:
+  desc: Sets roles to ignore from counting.
+  args:
+    - "deleteMessages channel roles..."
+  params:
+    - name: deleteMessages
+      desc: Whether to delete messages from ignored roles.
+      type: bool
+      optional: false
+    - name: channel
+      desc: The counting channel. Defaults to current channel.
+      type: text channel
+      optional: true
+    - name: roles
+      desc: Roles to ignore from counting.
+      type: role
+      optional: true
+countmodrequired:
+  desc: Sets roles required for counting.
+  args:
+    - "channel roles..."
+  params:
+    - name: channel
+      desc: The counting channel. Defaults to current channel.
+      type: text channel
+      optional: true
+    - name: roles
+      desc: Roles required to count.
+      type: role
+      optional: true
+countmodbanned:
+  desc: Sets roles banned from counting.
+  args:
+    - "channel roles..."
+  params:
+    - name: channel
+      desc: The counting channel. Defaults to current channel.
+      type: text channel
+      optional: true
+    - name: roles
+      desc: Roles banned from counting.
+      type: role
+      optional: true
+countmodreset:
+  desc: Resets a channel to use guild defaults.
+  args:
+    - "channel"
+  params:
+    - name: channel
+      desc: The counting channel. Defaults to current channel.
+      type: text channel
+      optional: true
+countmodpunish:
+  desc: Sets a tiered punishment for a specific wrong count number.
+  args:
+    - "count punishment durationMinutes role channel"
+  params:
+    - name: count
+      desc: The wrong count number that triggers this punishment.
+      type: int
+      optional: false
+    - name: punishment
+      desc: The punishment action to apply.
+      type: punishment action
+      optional: false
+    - name: durationMinutes
+      desc: Duration for timed punishments in minutes.
+      type: int
+      optional: true
+    - name: role
+      desc: Role for AddRole punishment type.
+      type: role
+      optional: true
+    - name: channel
+      desc: The counting channel (NULL for guild defaults).
+      type: text channel
+      optional: true
+countmodunpunish:
+  desc: Removes a tiered punishment for a specific wrong count number.
+  args:
+    - "count channel"
+  params:
+    - name: count
+      desc: The wrong count number to remove punishment for.
+      type: int
+      optional: false
+    - name: channel
+      desc: The counting channel (NULL for guild defaults).
+      type: text channel
+      optional: true
+countmodpunishlist:
+  desc: Lists all tiered punishments for the guild or specific channel.
+  args:
+    - "channel"
+  params:
+    - name: channel
+      desc: The counting channel (NULL for guild defaults).
+      type: text channel
+      optional: true
+countmodclear:
+  desc: Clears wrong counts for a specific user in a counting channel.
+  args:
+    - "user channel"
+  params:
+    - name: user
+      desc: The user to clear wrong counts for.
+      type: user
+      optional: false
+    - name: channel
+      desc: The counting channel. Defaults to current channel.
+      type: text channel
+      optional: true
+countmodclearall:
+  desc: Clears wrong counts for all users in a counting channel.
+  args:
+    - "channel"
+  params:
+    - name: channel
+      desc: The counting channel. Defaults to current channel.
+      type: text channel
+      optional: true
+countmodnonnumbers:
+  desc: Configures non-number message handling for a counting channel.
+  args:
+    - "punish delete channel"
+  params:
+    - name: punish
+      desc: Whether to punish non-number messages as violations.
+      type: bool
+      optional: false
+    - name: delete
+      desc: Whether to delete non-number messages.
+      type: bool
+      optional: true
+    - name: channel
+      desc: The counting channel. Defaults to current channel.
+      type: text channel
+      optional: true
+countmodedits:
+  desc: Configures message edit protection for a counting channel.
+  args:
+    - "punish delete channel"
+  params:
+    - name: punish
+      desc: Whether to punish message edits as violations.
+      type: bool
+      optional: false
+    - name: delete
+      desc: Whether to delete edited messages.
+      type: bool
+      optional: true
+    - name: channel
+      desc: The counting channel. Defaults to current channel.
+      type: text channel
+      optional: true
 birthdaytimezone:
   desc: Sets your personal timezone for birthday calculations.
   args:
@@ -3281,7 +3534,7 @@ reptake:
       desc: The user to remove reputation from.
       type: IGuildUser
       optional: false
-    - &o807
+    -
       name: amount
       desc: The amount of reputation to remove.
       type: int
@@ -3292,7 +3545,7 @@ repset:
     - '@user number'
   params:
     - *o806
-    - &o808
+    -
       name: amount
       desc: The amount to set reputation to.
       type: int
@@ -3302,7 +3555,7 @@ represet:
   args:
     - text
   params:
-    - &o809
+    -
       name: target
       desc: The user to reset, or "all" to reset everyone.
       type: string
@@ -3329,17 +3582,17 @@ repchannel:
   args:
     - '#channel state number'
   params:
-    - &o810
+    -
       name: channel
       desc: The channel to configure.
       type: ITextChannel
       optional: false
-    - &o811
+    -
       name: state
       desc: The state to set (enabled/disabled/readonly).
       type: string
       optional: true
-    - &o812
+    -
       name: multiplier
       desc: The reputation multiplier for this channel.
       type: decimal
@@ -3349,17 +3602,17 @@ repreaction:
   args:
     - emoji number reptype
   params:
-    - &o813
+    -
       name: emoji
       desc: The emoji to use for reputation.
       type: string
       optional: false
-    - &o814
+    -
       name: amount
       desc: The amount of reputation to give.
       type: int
       optional: true
-    - &o815
+    -
       name: repType
       desc: The type of reputation (standard, helper, artist, memer).
       type: string
@@ -3369,7 +3622,7 @@ repreactionremove:
   args:
     - emoji
   params:
-    - &o816
+    -
       name: emoji
       desc: The emoji to remove.
       type: string
@@ -3393,7 +3646,7 @@ reprole:
       desc: The role to reward (optional for listing).
       type: IRole
       optional: true
-    - &o818
+    -
       name: reputation
       desc: The reputation required to earn this role (optional for listing).
       type: int
@@ -3436,12 +3689,12 @@ repcommandreq:
       desc: The command name.
       type: string
       optional: false
-    - &o820
+    -
       name: minReputation
       desc: The minimum reputation required.
       type: int
       optional: false
-    - &o821
+    -
       name: repType
       desc: The specific reputation type required (optional, defaults to total).
       type: string
@@ -3457,7 +3710,7 @@ repcommandbypass:
     - commandname '@role'
   params:
     - *o819
-    - &o823
+    -
       name: roles
       desc: The roles that can bypass the requirement.
       type: IRole[]
@@ -15814,7 +16067,7 @@ streamtemplate:
   args:
     - text
   params:
-    - &o367
+    -
       name: template
       desc: The custom message template with placeholders. Leave empty to show current template, use "reset" to disable custom messages.
       type: string
@@ -15825,12 +16078,12 @@ streamofflinemessage:
     - number
     - text
   params:
-    - &o368
+    -
       name: index
       desc: The 1-based index of the stream.
       type: int
       optional: false
-    - &o369
+    -
       name: message
       desc: The offline message template with placeholders.
       type: string
@@ -18800,7 +19053,7 @@ setrepostthreshold:
     - number number
   params:
     - *o457
-    - &o468
+    -
       name: threshold
       desc: The repost threshold to set.
       type: int
@@ -18833,7 +19086,7 @@ removestarboardemote:
     - number emote
   params:
     - *o457
-    - &o469
+    -
       name: emote
       desc: The emote to remove.
       type: IEmote
@@ -18849,7 +19102,7 @@ starboarduserstats:
     - '@user'
     - ''
   params:
-    - &o470
+    -
       name: user
       desc: The user to show stats for. Defaults to command invoker.
       type: IUser
@@ -26536,7 +26789,7 @@ setxpexclusive:
   args:
     - true|false
   params:
-    - &o641a
+    -
       name: exclusive
       desc: Whether role rewards should be exclusive.
       type: bool
@@ -28551,12 +28804,12 @@ ticketautoarchive:
   args:
     - number boolean
   params:
-    - &t1
+    -
       name: buttonId
       desc: The button ID to configure auto-archive for
       type: int
       optional: false
-    - &t2
+    -
       name: enabled
       desc: Whether to enable auto-archive on close
       type: bool
@@ -28566,32 +28819,32 @@ ticketclosebehavior:
   args:
     - number bool bool bool bool number
   params:
-    - &t3
+    -
       name: buttonId
       desc: The button ID to configure close behavior for
       type: int
       optional: false
-    - &t4
+    -
       name: autoArchive
       desc: Whether to auto-archive on close
       type: bool?
       optional: true
-    - &t5
+    -
       name: deleteOnClose
       desc: Whether to delete ticket on close
       type: bool?
       optional: true
-    - &t6
+    -
       name: lockOnClose
       desc: Whether to lock ticket on close
       type: bool?
       optional: true
-    - &t7
+    -
       name: renameOnClose
       desc: Whether to rename ticket on close
       type: bool?
       optional: true
-    - &t8
+    -
       name: deleteDelayMinutes
       desc: Delay in minutes before deletion
       type: int?
@@ -28601,7 +28854,7 @@ recreatepanel:
   args:
     - number
   params:
-    - &t9
+    -
       name: panelId
       desc: The message ID of the panel to recreate
       type: ulong
@@ -28621,7 +28874,7 @@ patreonch:
   args:
     - '#channel'
   params:
-    - &p1
+    -
       name: channel
       desc: The channel to set for Patreon announcements. If null, shows current channel.
       type: ITextChannel?
@@ -28636,7 +28889,7 @@ patreonmsg:
   args:
     - text
   params:
-    - &p2
+    -
       name: message
       desc: The custom message. Use placeholders like %server.name%, %month%, etc. Use "-" to reset to default.
       type: string?
@@ -28646,7 +28899,7 @@ patreonday:
   args:
     - number
   params:
-    - &p3
+    -
       name: day
       desc: The day of the month (1-28) for announcements. If null, shows current day.
       type: int?
@@ -28686,12 +28939,12 @@ patreonlink:
   args:
     - '@user text'
   params:
-    - &p10
+    -
       name: user
       desc: The Discord user to link.
       type: IGuildUser
       optional: false
-    - &p11
+    -
       name: patreonUserId
       desc: The Patreon user ID to link to.
       type: string
@@ -28706,12 +28959,12 @@ patreontiermap:
   args:
     - text @role
   params:
-    - &p12
+    -
       name: tierId
       desc: The Patreon tier ID.
       type: string
       optional: false
-    - &p13
+    -
       name: role
       desc: The Discord role to map to the tier.
       type: IRole
@@ -28731,7 +28984,7 @@ patreontop:
   args:
     - number
   params:
-    - &p14
+    -
       name: count
       desc: Number of top supporters to show (1-20).
       type: int
@@ -28751,7 +29004,7 @@ patreonrecognize:
   args:
     - '#channel'
   params:
-    - &p15
+    -
       name: channel
       desc: The channel to send recognition messages to.
       type: ITextChannel?
@@ -28761,7 +29014,7 @@ transactions:
   args:
     - '@user'
   params:
-    - &c1
+    -
       name: user
       desc: The user whose transactions are to be displayed. Defaults to the current user.
       type: IUser?
@@ -28771,7 +29024,7 @@ war:
   args:
     - number
   params:
-    - &c2
+    -
       name: betAmount
       desc: The amount to bet.
       type: long
@@ -28781,12 +29034,12 @@ craps:
   args:
     - number text
   params:
-    - &c3
+    -
       name: betAmount
       desc: The amount to bet.
       type: long
       optional: false
-    - &c4
+    -
       name: betType
       desc: The type of bet (pass, dontpass, field, any).
       type: string
@@ -28796,7 +29049,7 @@ scratchcard:
   args:
     - text
   params:
-    - &c5
+    -
       name: cardType
       desc: The type of card to buy (bronze, silver, gold, diamond).
       type: string
@@ -28806,12 +29059,12 @@ russianroulette:
   args:
     - number number
   params:
-    - &c6
+    -
       name: betAmount
       desc: The amount to bet.
       type: long
       optional: false
-    - &c7
+    -
       name: bullets
       desc: Number of bullets (1-5).
       type: int
@@ -28821,12 +29074,12 @@ baccarat:
   args:
     - number text
   params:
-    - &c8
+    -
       name: betAmount
       desc: The amount to bet.
       type: long
       optional: false
-    - &c9
+    -
       name: betType
       desc: The type of bet (player, banker, tie).
       type: string
@@ -28836,12 +29089,12 @@ minesweeper:
   args:
     - number text
   params:
-    - &c10
+    -
       name: betAmount
       desc: The amount to bet.
       type: long
       optional: false
-    - &c11
+    -
       name: size
       desc: Grid size (small, medium, large).
       type: string
@@ -28851,7 +29104,7 @@ lottery:
   args:
     - number
   params:
-    - &c12
+    -
       name: ticketCount
       desc: Number of tickets to buy (1-10).
       type: int
@@ -28861,12 +29114,12 @@ crash:
   args:
     - number number
   params:
-    - &c13
+    -
       name: betAmount
       desc: The amount to bet.
       type: long
       optional: false
-    - &c14
+    -
       name: targetMultiplier
       desc: The multiplier to cash out at (1.1x - 10.0x).
       type: double
@@ -28876,12 +29129,12 @@ keno:
   args:
     - number text
   params:
-    - &c15
+    -
       name: betAmount
       desc: The amount to bet.
       type: long
       optional: false
-    - &c16
+    -
       name: numbers
       desc: Up to 10 numbers between 1-80, separated by spaces.
       type: string
@@ -28891,12 +29144,12 @@ plinko:
   args:
     - number number
   params:
-    - &c17
+    -
       name: betAmount
       desc: The amount to bet.
       type: long
       optional: false
-    - &c18
+    -
       name: rows
       desc: Number of peg rows (5-10).
       type: int
@@ -28906,12 +29159,12 @@ wheelfortune:
   args:
     - number text
   params:
-    - &c19
+    -
       name: betAmount
       desc: The amount to bet.
       type: long
       optional: false
-    - &c20
+    -
       name: wheelType
       desc: The type of wheel (classic, risky, balanced).
       type: string
@@ -28921,7 +29174,7 @@ duckrace:
   args:
     - number
   params:
-    - &c21
+    -
       name: betAmount
       desc: The amount to bet on the duck race.
       type: long
@@ -28931,12 +29184,12 @@ bingo:
   args:
     - number text
   params:
-    - &c22
+    -
       name: betAmount
       desc: The amount to bet.
       type: long
       optional: false
-    - &c23
+    -
       name: cardType
       desc: The type of bingo card (small, large).
       type: string
@@ -28946,12 +29199,12 @@ diceduel:
   args:
     - '@user number'
   params:
-    - &c24
+    -
       name: opponent
       desc: The user to challenge.
       type: IUser
       optional: false
-    - &c25
+    -
       name: betAmount
       desc: The amount each player bets.
       type: long
@@ -28961,12 +29214,12 @@ memory:
   args:
     - number text
   params:
-    - &c26
+    -
       name: betAmount
       desc: The amount to bet.
       type: long
       optional: false
-    - &c27
+    -
       name: difficulty
       desc: The difficulty level (easy, medium, hard).
       type: string
@@ -28991,12 +29244,12 @@ triviachain:
   args:
     - number text
   params:
-    - &t10
+    -
       name: betAmount
       desc: The amount to bet.
       type: long
       optional: false
-    - &t11
+    -
       name: category
       desc: The trivia category.
       type: string
@@ -29006,12 +29259,12 @@ addreactiontrigger:
   args:
     - text text
   params:
-    - &r1
+    -
       name: reaction
       desc: The reaction emoji to trigger on.
       type: string
       optional: false
-    - &r2
+    -
       name: message
       desc: The message to send when triggered.
       type: string?
@@ -29021,7 +29274,7 @@ deleteselectmenu:
   args:
     - number
   params:
-    - &sm1
+    -
       name: menuId
       desc: The ID of the select menu to delete.
       type: int
@@ -29031,7 +29284,7 @@ deleteselectoption:
   args:
     - number
   params:
-    - &sm2
+    -
       name: optionId
       desc: The ID of the select menu option to delete.
       type: int
