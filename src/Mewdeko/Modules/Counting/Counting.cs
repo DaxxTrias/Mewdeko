@@ -108,7 +108,7 @@ public partial class Counting(
 
             if (configText.Any())
             {
-                embed.AddField(Strings.CountingConfiguration(ctx.Guild.Id), string.Join("\n", configText), false);
+                embed.AddField(Strings.CountingConfiguration(ctx.Guild.Id), string.Join("\n", configText));
             }
         }
 

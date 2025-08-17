@@ -287,15 +287,17 @@ public partial class Searches
                 }
                 else
                 {
-                    embed.AddField(Strings.StreamTemplateCurrent(ctx.Guild.Id), Format.Code(currentTemplate.TrimTo(1000)), false);
+                    embed.AddField(Strings.StreamTemplateCurrent(ctx.Guild.Id),
+                        Format.Code(currentTemplate.TrimTo(1000)));
                 }
 
                 // Add placeholder information
                 var placeholders = StreamNotificationService.GetStreamPlaceholders();
                 foreach (var category in placeholders)
                 {
-                    var placeholderText = string.Join("\n", category.Value.Select(p => $"`{p.Placeholder}` - {p.Description}"));
-                    embed.AddField(category.Key, placeholderText.TrimTo(1000), false);
+                    var placeholderText = string.Join("\n",
+                        category.Value.Select(p => $"`{p.Placeholder}` - {p.Description}"));
+                    embed.AddField(category.Key, placeholderText.TrimTo(1000));
                 }
 
                 embed.WithFooter(Strings.StreamTemplateFooter(ctx.Guild.Id));

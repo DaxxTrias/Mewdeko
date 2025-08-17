@@ -5,6 +5,7 @@ using LinqToDB.Async;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.Counting.Common;
+using Mewdeko.Services.Strings;
 using Microsoft.Extensions.Caching.Memory;
 
 namespace Mewdeko.Modules.Counting.Services;
@@ -37,6 +38,7 @@ public class CountingService : INService, IReadyExecutor
     private readonly ILogger<CountingService> logger;
     private readonly CountingModerationService moderationService;
     private readonly CountingStatsService statsService;
+    private readonly GeneratedBotStrings strings;
 
     /// <summary>
     /// Initializes a new instance of the CountingService.
@@ -48,7 +50,7 @@ public class CountingService : INService, IReadyExecutor
         DiscordShardedClient client,
         CountingStatsService statsService,
         CountingModerationService moderationService,
-        EventHandler eventHandler)
+        EventHandler eventHandler, GeneratedBotStrings strings)
     {
         this.dbFactory = dbFactory;
         this.cache = cache;
@@ -57,9 +59,12 @@ public class CountingService : INService, IReadyExecutor
         this.statsService = statsService;
         this.moderationService = moderationService;
         this.eventHandler = eventHandler;
+        this.strings = strings;
 
         // Subscribe to message events
         this.eventHandler.Subscribe("MessageReceived", "CountingService", MessageReceived);
+        this.eventHandler.Subscribe("MessageUpdated", "CountingService", MessageUpdated);
+        this.eventHandler.Subscribe("MessageDeleted", "CountingService", MessageDeleted);
     }
 
     /// <summary>
@@ -800,8 +805,34 @@ public class CountingService : INService, IReadyExecutor
             if (await moderationService.IsUserBannedAsync(msg.Channel.Id, msg.Author.Id))
                 return;
 
+            // Check if user should be ignored based on roles
+            if (await moderationService.ShouldIgnoreUserAsync(msg.Channel.Id, user))
+            {
+                // Check if we should delete ignored messages
+                if (await moderationService.ShouldDeleteIgnoredMessagesAsync(msg.Channel.Id, user))
+                {
+                    try
+                    {
+                        await userMsg.DeleteAsync();
+                    }
+                    catch
+                    {
+                        // Ignore deletion errors (missing permissions, message already deleted, etc.)
+                    }
+                }
+
+                return;
+            }
+
             // Process the counting attempt
             var result = await ProcessCountingAttemptAsync(msg.Channel.Id, msg.Author.Id, msg.Id, msg.Content);
+
+            // If it's not a valid number, handle as non-number message
+            if (!result.Success && result.ErrorType == CountingError.InvalidNumber)
+            {
+                await moderationService.HandleNonNumberMessageAsync(msg.Channel.Id, msg.Author.Id, userMsg);
+                return;
+            }
 
             // Handle result (reactions, deletions, etc.)
             await HandleCountingResultAsync(userMsg, result);
@@ -864,6 +895,96 @@ public class CountingService : INService, IReadyExecutor
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Error handling counting result for message {MessageId}", message.Id);
+        }
+    }
+
+    /// <summary>
+    /// Handles message updated events for counting edit protection.
+    /// </summary>
+    private async Task MessageUpdated(Cacheable<IMessage, ulong> before, SocketMessage after,
+        ISocketMessageChannel channel)
+    {
+        if (after.Author.IsBot || after.Author is not IGuildUser user)
+            return;
+
+        if (after is not IUserMessage userMsg)
+            return;
+
+        try
+        {
+            // Only process in counting channels
+            var countingChannel = await GetCountingChannelAsync(channel.Id);
+            if (countingChannel == null) return;
+
+            // Check if user is banned from counting
+            if (await moderationService.IsUserBannedAsync(channel.Id, after.Author.Id))
+                return;
+
+            // Check if user should be ignored based on roles
+            if (await moderationService.ShouldIgnoreUserAsync(channel.Id, user))
+                return;
+
+            // Handle message edit - even if original message is not cached
+            if (before.HasValue && before.Value is IUserMessage originalUserMsg)
+            {
+                await moderationService.HandleMessageEditAsync(channel.Id, after.Author.Id, originalUserMsg, userMsg);
+            }
+            else
+            {
+                // Original message not in cache, still handle edit protection
+                await moderationService.HandleMessageEditAsync(channel.Id, after.Author.Id, null, userMsg);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error processing counting message edit from {UserId} in channel {ChannelId}",
+                after.Author.Id, channel.Id);
+        }
+    }
+
+    /// <summary>
+    ///     Handles message deleted events for counting channels.
+    /// </summary>
+    private async Task MessageDeleted(Cacheable<IMessage, ulong> cachedMsg, Cacheable<IMessageChannel, ulong> channel)
+    {
+        try
+        {
+            var channelId = channel.Id;
+
+            // Only process in counting channels
+            var countingChannel = await GetCountingChannelAsync(channelId);
+            if (countingChannel == null) return;
+
+            // Check if this was the last counting message
+            if (cachedMsg.HasValue && cachedMsg.Value.Id == countingChannel.LastMessageId)
+            {
+                // Use same cache key as moderation service to prevent duplicates
+                var hintCacheKey = $"counting_last_hint_{channelId}";
+                if (!cache.TryGetValue(hintCacheKey, out _))
+                {
+                    try
+                    {
+                        if (client.GetChannel(channelId) is ITextChannel textChannel)
+                        {
+                            var nextNumber = countingChannel.CurrentNumber + countingChannel.Increment;
+                            var embed = new EmbedBuilder()
+                                .WithErrorColor()
+                                .WithDescription(strings.CountingLastNumberWas(textChannel.GuildId,
+                                    countingChannel.CurrentNumber, nextNumber))
+                                .Build();
+                            await textChannel.SendMessageAsync(embed: embed);
+
+                            // Cache to prevent duplicates for 5 seconds
+                            cache.Set(hintCacheKey, true, TimeSpan.FromSeconds(5));
+                        }
+                    }
+                    catch { }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error processing counting message deletion in channel {ChannelId}", channel.Id);
         }
     }
 

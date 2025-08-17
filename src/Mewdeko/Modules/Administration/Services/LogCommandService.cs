@@ -2516,7 +2516,7 @@ public class LogCommandService(
 
             var components = new ComponentBuilderV2()
                 .WithContainer([
-                    new TextDisplayBuilder($"# {strings.InviteDeleted(channel.Guild.Id)}")
+                    new TextDisplayBuilder($"# {strings.InviteDeletedTitle(channel.Guild.Id)}")
                 ], Mewdeko.ErrorColor);
 
             components.WithSeparator();
