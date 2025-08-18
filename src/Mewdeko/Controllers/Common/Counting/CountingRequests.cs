@@ -141,3 +141,78 @@ public class RestoreSavePointRequest
     /// </summary>
     public ulong UserId { get; set; }
 }
+
+/// <summary>
+///     Request to ban a user from counting.
+/// </summary>
+public class BanUserRequest
+{
+    /// <summary>
+    ///     The ID of the user performing the ban.
+    /// </summary>
+    public ulong BannedBy { get; set; }
+
+    /// <summary>
+    ///     Duration of the ban in minutes (null for permanent).
+    /// </summary>
+    public int? DurationMinutes { get; set; }
+
+    /// <summary>
+    ///     Reason for the ban.
+    /// </summary>
+    public string? Reason { get; set; }
+}
+
+/// <summary>
+///     Request to unban a user from counting.
+/// </summary>
+public class UnbanUserRequest
+{
+    /// <summary>
+    ///     The ID of the user performing the unban.
+    /// </summary>
+    public ulong UnbannedBy { get; set; }
+
+    /// <summary>
+    ///     Reason for the unban.
+    /// </summary>
+    public string? Reason { get; set; }
+}
+
+/// <summary>
+///     Request to set a custom message.
+/// </summary>
+public class SetCustomMessageRequest
+{
+    /// <summary>
+    ///     The custom message to set.
+    /// </summary>
+    public string Message { get; set; } = null!;
+}
+
+/// <summary>
+///     Request to set custom milestones.
+/// </summary>
+public class SetMilestonesRequest
+{
+    /// <summary>
+    ///     List of milestone numbers.
+    /// </summary>
+    public List<long> Milestones { get; set; } = new();
+}
+
+/// <summary>
+///     Request to purge a counting channel.
+/// </summary>
+public class PurgeChannelRequest
+{
+    /// <summary>
+    ///     The ID of the user performing the purge.
+    /// </summary>
+    public ulong UserId { get; set; }
+
+    /// <summary>
+    ///     Reason for the purge.
+    /// </summary>
+    public string? Reason { get; set; }
+}
