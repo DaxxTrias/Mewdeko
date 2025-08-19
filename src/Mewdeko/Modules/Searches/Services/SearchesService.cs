@@ -1177,20 +1177,76 @@ public class SearchesService : INService, IUnloadableService
 
         using var doc = await GoogleParser.ParseDocumentAsync(html).ConfigureAwait(false);
 
-        // Look for the first image inside the infobox
-        var img = doc.QuerySelector("table.infobox img") as IHtmlImageElement;
+        // Look for the first image inside the infobox (prefer explicit infobox-image cell)
+        var img = doc.QuerySelector("table.infobox .infobox-image img, table.infobox img") as IHtmlImageElement;
         if (img == null)
             return null;
 
-        var src = img.GetAttribute("src") ?? img.Source;
-        if (string.IsNullOrWhiteSpace(src))
+        // Prefer highest-resolution candidate from srcset when available
+        var srcset = img.GetAttribute("srcset");
+        string? chosen = null;
+        if (!string.IsNullOrWhiteSpace(srcset))
+        {
+            // srcset entries are comma-separated; take the last (usually the highest density)
+            var last = srcset.Split(',').LastOrDefault()?.Trim();
+            if (!string.IsNullOrWhiteSpace(last))
+                chosen = last.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+        }
+
+        // If no srcset, try resolving via the surrounding file link (more robust, returns a thumb from API)
+        if (string.IsNullOrWhiteSpace(chosen))
+        {
+            var parentAnchor = img.ParentElement as IHtmlAnchorElement;
+            var fileHref = parentAnchor?.GetAttribute("href");
+            if (!string.IsNullOrWhiteSpace(fileHref) && fileHref.StartsWith("/wiki/File:", StringComparison.Ordinal))
+            {
+                var fileTitle = fileHref["/wiki/File:".Length..];
+                try
+                {
+                    var infoUrl =
+                        $"https://commons.wikimedia.org/w/api.php?action=query&titles=File:{fileTitle}&prop=imageinfo&iiprop=url&iiurlwidth=500&format=json";
+                    var infoStr = await http.GetStringAsync(infoUrl).ConfigureAwait(false);
+                    using var infoDoc = JsonDocument.Parse(infoStr);
+                    if (infoDoc.RootElement.TryGetProperty("query", out var q)
+                        && q.TryGetProperty("pages", out var pages))
+                    {
+                        foreach (var p in pages.EnumerateObject())
+                        {
+                            var pv = p.Value;
+                            if (pv.TryGetProperty("imageinfo", out var arr)
+                                && arr.ValueKind == JsonValueKind.Array
+                                && arr.GetArrayLength() > 0)
+                            {
+                                var ii = arr[0];
+                                if (ii.TryGetProperty("thumburl", out var turl))
+                                    chosen = turl.GetString();
+                                else if (ii.TryGetProperty("url", out var url))
+                                    chosen = url.GetString();
+                                break;
+                            }
+                        }
+                    }
+                }
+                catch
+                {
+                    // ignore and continue to basic src
+                }
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(chosen))
+            chosen = img.GetAttribute("src") ?? img.Source;
+
+        if (string.IsNullOrWhiteSpace(chosen))
             return null;
 
-        // Handle protocol-relative URLs (e.g., //upload.wikimedia.org/...)
-        if (src.StartsWith("//", StringComparison.Ordinal))
-            src = "https:" + src;
+        // Normalize to absolute https URL
+        if (chosen.StartsWith("//", StringComparison.Ordinal))
+            chosen = "https:" + chosen;
+        else if (chosen.StartsWith("/", StringComparison.Ordinal))
+            chosen = "https://en.wikipedia.org" + chosen;
 
-        return src;
+        return chosen;
     }
 
     private sealed class WikidataClaimsResponse
