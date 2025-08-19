@@ -1036,6 +1036,9 @@ public class SearchesService : INService, IUnloadableService
     private async Task<WikiMovie?> GetMovieDataFactory(string name)
     {
         using var http = httpFactory.CreateClient();
+        // Wikipedia requires a descriptive User-Agent per their robot policy
+        if (!http.DefaultRequestHeaders.UserAgent.Any())
+            http.DefaultRequestHeaders.UserAgent.ParseAdd("MewdekoBot/1.0 (+https://github.com/)");
 
         // First search for the movie
         var searchUrl =
@@ -1073,13 +1076,27 @@ public class SearchesService : INService, IUnloadableService
             // ignore logo failures
         }
 
+        // Resolve poster/main image: prefer API thumbnail, fall back to scraping the first infobox image
+        var imageUrl = page.Thumbnail?.Source;
+        if (string.IsNullOrWhiteSpace(imageUrl) && !string.IsNullOrWhiteSpace(page.FullUrl))
+        {
+            try
+            {
+                imageUrl = await TryScrapeFirstInfoboxImageAsync(page.FullUrl, http).ConfigureAwait(false);
+            }
+            catch
+            {
+                // ignore scraping failures
+            }
+        }
+
         return new WikiMovie
         {
             Title = page.Title.Replace("(film)", "").Trim(),
             Year = year,
             Plot = GetFirstParagraph(page.Extract),
             Url = page.FullUrl,
-            ImageUrl = page.Thumbnail?.Source,
+            ImageUrl = imageUrl,
             LogoUrl = logoUrl
         };
     }
@@ -1110,9 +1127,70 @@ public class SearchesService : INService, IUnloadableService
         if (string.IsNullOrWhiteSpace(fileName))
             return null;
 
-        // Strip leading "File:" and resolve via Special:FilePath with a reasonable width
+        // Strip leading "File:" if present
         var clean = fileName.Replace("File:", string.Empty, StringComparison.InvariantCulture);
+
+        // Prefer a direct image URL via Wikimedia ImageInfo API so Discord can embed without following redirects
+        try
+        {
+            var infoUrl =
+                $"https://commons.wikimedia.org/w/api.php?action=query&titles=File:{Uri.EscapeDataString(clean)}&prop=imageinfo&iiprop=url&iiurlwidth=300&format=json";
+            var infoStr = await http.GetStringAsync(infoUrl).ConfigureAwait(false);
+            using var doc = JsonDocument.Parse(infoStr);
+            if (doc.RootElement.TryGetProperty("query", out var queryElem)
+                && queryElem.TryGetProperty("pages", out var pagesElem))
+            {
+                foreach (var pageProp in pagesElem.EnumerateObject())
+                {
+                    var pageVal = pageProp.Value;
+                    if (pageVal.TryGetProperty("imageinfo", out var imageInfoArr)
+                        && imageInfoArr.ValueKind == JsonValueKind.Array
+                        && imageInfoArr.GetArrayLength() > 0)
+                    {
+                        var ii = imageInfoArr[0];
+                        if (ii.TryGetProperty("thumburl", out var thumbUrlElem))
+                            return thumbUrlElem.GetString();
+                        if (ii.TryGetProperty("url", out var urlElem))
+                            return urlElem.GetString();
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // ignore and fall back below
+        }
+
+        // Fallback: Special:FilePath (may redirect; some clients might not embed it)
         return $"https://commons.wikimedia.org/wiki/Special:FilePath/{Uri.EscapeDataString(clean)}?width=300";
+    }
+
+    private static async Task<string?> TryScrapeFirstInfoboxImageAsync(string pageUrl, HttpClient http)
+    {
+        using var req = new HttpRequestMessage(HttpMethod.Get, pageUrl);
+        if (!req.Headers.UserAgent.Any())
+            req.Headers.UserAgent.ParseAdd("MewdekoBot/1.0 (+https://github.com/)");
+
+        using var res = await http.SendAsync(req).ConfigureAwait(false);
+        res.EnsureSuccessStatusCode();
+        var html = await res.Content.ReadAsStringAsync().ConfigureAwait(false);
+
+        using var doc = await GoogleParser.ParseDocumentAsync(html).ConfigureAwait(false);
+
+        // Look for the first image inside the infobox
+        var img = doc.QuerySelector("table.infobox img") as IHtmlImageElement;
+        if (img == null)
+            return null;
+
+        var src = img.GetAttribute("src") ?? img.Source;
+        if (string.IsNullOrWhiteSpace(src))
+            return null;
+
+        // Handle protocol-relative URLs (e.g., //upload.wikimedia.org/...)
+        if (src.StartsWith("//", StringComparison.Ordinal))
+            src = "https:" + src;
+
+        return src;
     }
 
     private sealed class WikidataClaimsResponse
