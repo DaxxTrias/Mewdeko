@@ -1049,7 +1049,7 @@ public class SearchesService : INService, IUnloadableService
         // Get the full page data
         var pageId = searchResult.Query.Search[0].PageId;
         var contentUrl =
-            $"https://en.wikipedia.org/w/api.php?action=query&prop=extracts|pageimages|info&pithumbsize=500&inprop=url&explaintext=1&pageids={pageId}&format=json";
+            $"https://en.wikipedia.org/w/api.php?action=query&prop=extracts|pageimages|info|pageprops&pithumbsize=500&inprop=url&ppprop=wikibase_item&explaintext=1&pageids={pageId}&format=json";
         var contentResponse = await http.GetStringAsync(contentUrl).ConfigureAwait(false);
         var contentResult = JsonSerializer.Deserialize<WikiContentResponse>(contentResponse);
 
@@ -1062,13 +1062,25 @@ public class SearchesService : INService, IUnloadableService
         var yearMatch = Regex.Match(page.Extract, @"(?:released|premiered)[^\d]*(\d{4})");
         var year = yearMatch.Success ? yearMatch.Groups[1].Value : "N/A";
 
+        // Try to resolve a logo via Wikidata (P154)
+        string? logoUrl = null;
+        try
+        {
+            logoUrl = await TryGetWikidataLogoAsync(page.PageProps?.WikibaseItem, http).ConfigureAwait(false);
+        }
+        catch
+        {
+            // ignore logo failures
+        }
+
         return new WikiMovie
         {
             Title = page.Title.Replace("(film)", "").Trim(),
             Year = year,
             Plot = GetFirstParagraph(page.Extract),
             Url = page.FullUrl,
-            ImageUrl = page.Thumbnail?.Source
+            ImageUrl = page.Thumbnail?.Source,
+            LogoUrl = logoUrl
         };
     }
 
@@ -1076,6 +1088,56 @@ public class SearchesService : INService, IUnloadableService
     {
         var firstParagraph = extract.Split("\n\n").FirstOrDefault() ?? "";
         return firstParagraph.Length > 1000 ? firstParagraph[..1000] + "..." : firstParagraph;
+    }
+
+    private static async Task<string?> TryGetWikidataLogoAsync(string? wikidataId, HttpClient http)
+    {
+        if (string.IsNullOrWhiteSpace(wikidataId))
+            return null;
+
+        var claimsUrl =
+            $"https://www.wikidata.org/w/api.php?action=wbgetclaims&format=json&entity={Uri.EscapeDataString(wikidataId)}&property=P154";
+        var claimsStr = await http.GetStringAsync(claimsUrl).ConfigureAwait(false);
+        var claims = JsonSerializer.Deserialize<WikidataClaimsResponse>(claimsStr, CachedJsonOptions);
+
+        if (claims?.Claims == null)
+            return null;
+
+        if (!claims.Claims.TryGetValue("P154", out var logoClaims) || logoClaims == null || logoClaims.Count == 0)
+            return null;
+
+        var fileName = logoClaims.FirstOrDefault()?.Mainsnak?.Datavalue?.Value;
+        if (string.IsNullOrWhiteSpace(fileName))
+            return null;
+
+        // Strip leading "File:" and resolve via Special:FilePath with a reasonable width
+        var clean = fileName.Replace("File:", string.Empty, StringComparison.InvariantCulture);
+        return $"https://commons.wikimedia.org/wiki/Special:FilePath/{Uri.EscapeDataString(clean)}?width=300";
+    }
+
+    private sealed class WikidataClaimsResponse
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("claims")]
+        public Dictionary<string, List<WikidataClaim>> Claims { get; set; }
+    }
+
+    private sealed class WikidataClaim
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("mainsnak")]
+        public WikidataSnak Mainsnak { get; set; }
+    }
+
+    private sealed class WikidataSnak
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("datavalue")]
+        public WikidataDataValue Datavalue { get; set; }
+    }
+
+    private sealed class WikidataDataValue
+    {
+        // For P154, value is a string file name like "File:Example.svg"
+        [System.Text.Json.Serialization.JsonPropertyName("value")]
+        public string Value { get; set; }
     }
 
     /// <summary>

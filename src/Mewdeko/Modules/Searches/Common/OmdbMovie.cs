@@ -31,6 +31,11 @@ public class WikiMovie
     ///     Gets or sets the URL of the movie's poster or main image.
     /// </summary>
     public string ImageUrl { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the URL of the movie's logo image if available.
+    /// </summary>
+    public string LogoUrl { get; set; }
 }
 
 /// <summary>
@@ -121,6 +126,24 @@ public class WikiPage
     /// </summary>
     [JsonPropertyName("thumbnail")]
     public WikiThumbnail Thumbnail { get; set; }
+
+    /// <summary>
+    ///     Gets or sets page properties, including Wikidata entity ID.
+    /// </summary>
+    [JsonPropertyName("pageprops")]
+    public WikiPageProps PageProps { get; set; }
+}
+
+/// <summary>
+///     Represents page properties from Wikipedia, such as linked Wikidata entity.
+/// </summary>
+public class WikiPageProps
+{
+    /// <summary>
+    ///     Gets or sets the linked Wikidata entity ID.
+    /// </summary>
+    [JsonPropertyName("wikibase_item")]
+    public string WikibaseItem { get; set; }
 }
 
 /// <summary>

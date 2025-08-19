@@ -586,10 +586,17 @@ public partial class Searches(
             .AddField(efb => efb.WithName("Year").WithValue(movie.Year).WithIsInline(true));
 
         if (!string.IsNullOrWhiteSpace(movie.ImageUrl)
-            && Uri.TryCreate(movie.ImageUrl, UriKind.Absolute, out var imgUri)
-            && (imgUri.Scheme == Uri.UriSchemeHttp || imgUri.Scheme == Uri.UriSchemeHttps))
+            && Uri.TryCreate(movie.ImageUrl, UriKind.Absolute, out var posterUri)
+            && (posterUri.Scheme == Uri.UriSchemeHttp || posterUri.Scheme == Uri.UriSchemeHttps))
         {
-            eb.WithThumbnailUrl(movie.ImageUrl);
+            eb.WithImageUrl(movie.ImageUrl);
+        }
+
+        if (!string.IsNullOrWhiteSpace(movie.LogoUrl)
+            && Uri.TryCreate(movie.LogoUrl, UriKind.Absolute, out var logoUri)
+            && (logoUri.Scheme == Uri.UriSchemeHttp || logoUri.Scheme == Uri.UriSchemeHttps))
+        {
+            eb.WithThumbnailUrl(movie.LogoUrl);
         }
 
         await ctx.Channel.EmbedAsync(eb).ConfigureAwait(false);
