@@ -824,6 +824,29 @@ public class CountingService : INService, IReadyExecutor
                 return;
             }
 
+            // First check if bot can react and if user has bot blocked (for valid counts only)
+            var parseResult = await ParseCountingMessageAsync(msg.Content, msg.Channel.Id);
+            if (parseResult.IsValidCount)
+            {
+                // Check bot blocking before processing the count
+                var botBlockResult = await CheckBotBlockingAsync(userMsg);
+                if (botBlockResult.IsBlocked)
+                {
+                    // User has bot blocked, delete message and show warning
+                    try
+                    {
+                        await userMsg.DeleteAsync();
+                    }
+                    catch
+                    {
+                        // Ignore deletion errors
+                    }
+
+                    await botBlockResult.SendWarningMessage();
+                    return; // Don't process the count at all
+                }
+            }
+
             // Process the counting attempt
             var result = await ProcessCountingAttemptAsync(msg.Channel.Id, msg.Author.Id, msg.Id, msg.Content);
 
@@ -834,13 +857,171 @@ public class CountingService : INService, IReadyExecutor
                 return;
             }
 
-            // Handle result (reactions, deletions, etc.)
+            // Handle result (reactions, deletions, etc.) - bot blocking already checked for valid counts
             await HandleCountingResultAsync(userMsg, result);
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Error processing counting message from {UserId} in channel {ChannelId}",
                 msg.Author.Id, msg.Channel.Id);
+        }
+    }
+
+    /// <summary>
+    ///     Checks if the bot has permission to add reactions in the channel.
+    /// </summary>
+    private async Task<bool> CanBotReactInChannel(ITextChannel channel)
+    {
+        try
+        {
+            var botUser = await channel.Guild.GetUserAsync(client.CurrentUser.Id);
+            var permissions = botUser?.GetPermissions(channel);
+            return permissions?.AddReactions == true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    ///     Quickly parses a message to check if it contains a valid counting number.
+    /// </summary>
+    private async Task<CountingParseResult> ParseCountingMessageAsync(string content, ulong channelId)
+    {
+        try
+        {
+            var config = await GetCountingConfigAsync(channelId);
+            if (config == null)
+                return new CountingParseResult
+                {
+                    IsValidCount = false
+                };
+
+            var parseResult = await ParseNumberAsync(content, (CountingPattern)config.Pattern, config.NumberBase);
+            return new CountingParseResult
+            {
+                IsValidCount = parseResult.Success, Number = parseResult.Number
+            };
+        }
+        catch
+        {
+            return new CountingParseResult
+            {
+                IsValidCount = false
+            };
+        }
+    }
+
+    /// <summary>
+    ///     Checks if user has bot blocked by attempting to react.
+    /// </summary>
+    private async Task<BotBlockResult> CheckBotBlockingAsync(IUserMessage message)
+    {
+        try
+        {
+            if (message.Channel is not ITextChannel textChannel)
+                return new BotBlockResult
+                {
+                    IsBlocked = false
+                };
+
+            // Check if bot has permission to react
+            if (!await CanBotReactInChannel(textChannel))
+                return new BotBlockResult
+                {
+                    IsBlocked = false
+                };
+
+            var config = await GetCountingConfigAsync(message.Channel.Id);
+            if (config == null)
+                return new BotBlockResult
+                {
+                    IsBlocked = false
+                };
+
+            // Determine which emote to use for testing
+            IEmote testEmote;
+            if (!string.IsNullOrEmpty(config.SuccessEmote))
+            {
+                if (Emote.TryParse(config.SuccessEmote, out var customEmote))
+                    testEmote = customEmote;
+                else if (Emoji.TryParse(config.SuccessEmote, out var customEmoji))
+                    testEmote = customEmoji;
+                else
+                    testEmote = new Emoji("✅");
+            }
+            else
+            {
+                testEmote = new Emoji("✅");
+            }
+
+            // Try to react to check if user has bot blocked
+            var isBlocked = await IsUserBlockingBotAsync(message, testEmote);
+
+            return new BotBlockResult
+            {
+                IsBlocked = isBlocked,
+                SendWarningMessage = async () =>
+                {
+                    try
+                    {
+                        var embed = new EmbedBuilder()
+                            .WithErrorColor()
+                            .WithDescription(
+                                "Unfortunately you have the bot blocked so you may not participate in this game.")
+                            .Build();
+
+                        var warningMessage = await textChannel.SendMessageAsync(embed: embed);
+
+                        // Delete warning message after 5 seconds
+                        _ = Task.Run(async () =>
+                        {
+                            await Task.Delay(5000);
+                            try
+                            {
+                                await warningMessage.DeleteAsync();
+                            }
+                            catch
+                            {
+                                // Ignore deletion errors
+                            }
+                        });
+                    }
+                    catch
+                    {
+                        // Ignore errors sending warning
+                    }
+                }
+            };
+        }
+        catch
+        {
+            return new BotBlockResult
+            {
+                IsBlocked = false
+            };
+        }
+    }
+
+    /// <summary>
+    ///     Checks if a user has the bot blocked by attempting to react to their message.
+    ///     Only call this after confirming bot has reaction permissions.
+    /// </summary>
+    private async Task<bool> IsUserBlockingBotAsync(IUserMessage message, IEmote reactionEmote)
+    {
+        try
+        {
+            await message.AddReactionAsync(reactionEmote);
+            return false; // Reaction succeeded, user hasn't blocked the bot
+        }
+        catch (Exception ex)
+        {
+            // If adding reaction fails, the user likely has the bot blocked
+            logger.LogDebug(ex,
+                "Failed to add reaction to message {MessageId} from user {UserId}, user likely has bot blocked",
+                message.Id, message.Author.Id);
+            return true;
         }
     }
 
@@ -854,15 +1035,24 @@ public class CountingService : INService, IReadyExecutor
             var config = await GetCountingConfigAsync(message.Channel.Id);
             if (config == null) return;
 
+            // Check if bot has permission to react
+            if (message.Channel is not ITextChannel textChannel || !await CanBotReactInChannel(textChannel))
+            {
+                logger.LogWarning("Bot lacks permission to add reactions in channel {ChannelId}", message.Channel.Id);
+                return;
+            }
+
+            // Determine which emote to use and add reaction
             if (result.Success)
             {
-                // Add success reaction
                 if (!string.IsNullOrEmpty(config.SuccessEmote))
                 {
                     if (Emote.TryParse(config.SuccessEmote, out var emote))
                         await message.AddReactionAsync(emote);
                     else if (Emoji.TryParse(config.SuccessEmote, out var emoji))
                         await message.AddReactionAsync(emoji);
+                    else
+                        await message.AddReactionAsync(new Emoji("✅"));
                 }
                 else
                 {
@@ -871,13 +1061,14 @@ public class CountingService : INService, IReadyExecutor
             }
             else
             {
-                // Add error reaction
                 if (!string.IsNullOrEmpty(config.ErrorEmote))
                 {
                     if (Emote.TryParse(config.ErrorEmote, out var emote))
                         await message.AddReactionAsync(emote);
                     else if (Emoji.TryParse(config.ErrorEmote, out var emoji))
                         await message.AddReactionAsync(emoji);
+                    else
+                        await message.AddReactionAsync(new Emoji("❌"));
                 }
                 else
                 {
@@ -1158,6 +1349,24 @@ public class CountingService : INService, IReadyExecutor
             "Configuration updated via API");
 
         return true;
+    }
+
+    /// <summary>
+    ///     Result of parsing a counting message to check if it's a valid count.
+    /// </summary>
+    private class CountingParseResult
+    {
+        public bool IsValidCount { get; set; }
+        public long Number { get; set; }
+    }
+
+    /// <summary>
+    ///     Result of checking if user has bot blocked.
+    /// </summary>
+    private class BotBlockResult
+    {
+        public bool IsBlocked { get; set; }
+        public Func<Task>? SendWarningMessage { get; set; }
     }
 
     #region Customization Methods
