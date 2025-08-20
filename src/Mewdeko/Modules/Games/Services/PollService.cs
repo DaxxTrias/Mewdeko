@@ -132,10 +132,7 @@ public class PollService : INService, IReadyExecutor
 
             // Add to active polls cache
             ActivePolls.AddOrUpdate(guildId,
-                new List<Poll>
-                {
-                    poll
-                },
+                [poll],
                 (_, existing) =>
                 {
                     existing.Add(poll);
@@ -180,7 +177,7 @@ public class PollService : INService, IReadyExecutor
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to get active polls for guild {GuildId}", guildId);
-            return new List<Poll>();
+            return [];
         }
     }
 
@@ -206,7 +203,7 @@ public class PollService : INService, IReadyExecutor
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to get all polls for guild {GuildId}", guildId);
-            return new List<Poll>();
+            return [];
         }
     }
 
@@ -302,13 +299,13 @@ public class PollService : INService, IReadyExecutor
                 try
                 {
                     existingIndices = JsonSerializer.Deserialize<int[]>(existingVote.OptionIndices) ??
-                                      Array.Empty<int>();
+                                      [];
                 }
                 catch (JsonException ex)
                 {
                     logger.LogWarning(ex,
                         "Failed to deserialize existing vote indices for poll {PollId}, treating as empty", pollId);
-                    existingIndices = Array.Empty<int>();
+                    existingIndices = [];
                 }
 
                 if (existingIndices.SequenceEqual(validIndices))
@@ -419,7 +416,7 @@ public class PollService : INService, IReadyExecutor
 
             foreach (var vote in votes)
             {
-                var indices = JsonSerializer.Deserialize<int[]>(vote.OptionIndices) ?? Array.Empty<int>();
+                var indices = JsonSerializer.Deserialize<int[]>(vote.OptionIndices) ?? [];
 
                 foreach (var index in indices)
                 {

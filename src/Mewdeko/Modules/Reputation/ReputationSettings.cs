@@ -155,7 +155,7 @@ public partial class Reputation
         [UserPerm(GuildPermission.Administrator)]
         public async Task RepCooldown(int minutes)
         {
-            if (minutes < 1 || minutes > 1440)
+            if (minutes is < 1 or > 1440)
             {
                 await ReplyErrorAsync(Strings.InvalidInput(ctx.Guild.Id)).ConfigureAwait(false);
                 return;
@@ -176,7 +176,7 @@ public partial class Reputation
         [UserPerm(GuildPermission.Administrator)]
         public async Task RepDailyLimit(int limit)
         {
-            if (limit < 1 || limit > 100)
+            if (limit is < 1 or > 100)
             {
                 await ReplyErrorAsync(Strings.InvalidInput(ctx.Guild.Id)).ConfigureAwait(false);
                 return;
@@ -197,7 +197,7 @@ public partial class Reputation
         [UserPerm(GuildPermission.Administrator)]
         public async Task RepWeeklyLimit(int? limit = null)
         {
-            if (limit.HasValue && (limit < 1 || limit > 500))
+            if (limit.HasValue && limit is < 1 or > 500)
             {
                 await ReplyErrorAsync(Strings.InvalidInput(ctx.Guild.Id)).ConfigureAwait(false);
                 return;
@@ -219,7 +219,7 @@ public partial class Reputation
         [UserPerm(GuildPermission.Administrator)]
         public async Task RepMinAge(int days)
         {
-            if (days < 0 || days > 365)
+            if (days is < 0 or > 365)
             {
                 await ReplyErrorAsync(Strings.InvalidInput(ctx.Guild.Id)).ConfigureAwait(false);
                 return;
@@ -240,7 +240,7 @@ public partial class Reputation
         [UserPerm(GuildPermission.Administrator)]
         public async Task RepMinMembership(int hours)
         {
-            if (hours < 0 || hours > 720)
+            if (hours is < 0 or > 720)
             {
                 await ReplyErrorAsync(Strings.InvalidInput(ctx.Guild.Id)).ConfigureAwait(false);
                 return;
@@ -261,7 +261,7 @@ public partial class Reputation
         [UserPerm(GuildPermission.Administrator)]
         public async Task RepMinMessages(int count)
         {
-            if (count < 0 || count > 1000)
+            if (count is < 0 or > 1000)
             {
                 await ReplyErrorAsync(Strings.InvalidInput(ctx.Guild.Id)).ConfigureAwait(false);
                 return;
@@ -378,7 +378,7 @@ public partial class Reputation
         [UserPerm(GuildPermission.Administrator)]
         public async Task RepDecayAmount(int amount)
         {
-            if (amount < 1 || amount > 100)
+            if (amount is < 1 or > 100)
             {
                 await ReplyErrorAsync(Strings.InvalidInput(ctx.Guild.Id)).ConfigureAwait(false);
                 return;
@@ -399,7 +399,7 @@ public partial class Reputation
         [UserPerm(GuildPermission.Administrator)]
         public async Task RepDecayInactive(int days)
         {
-            if (days < 1 || days > 365)
+            if (days is < 1 or > 365)
             {
                 await ReplyErrorAsync(Strings.InvalidInput(ctx.Guild.Id)).ConfigureAwait(false);
                 return;

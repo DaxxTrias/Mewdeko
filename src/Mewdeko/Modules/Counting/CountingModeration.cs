@@ -148,7 +148,7 @@ public class CountingModeration : MewdekoModuleBase<CountingModerationService>
     [UserPerm(GuildPermission.ManageChannels)]
     public async Task CountmodThreshold(int threshold, ITextChannel? channel = null)
     {
-        if (threshold < 1 || threshold > 100)
+        if (threshold is < 1 or > 100)
         {
             await ErrorAsync(Strings.CountingModerationThresholdInvalid(ctx.Guild.Id)).ConfigureAwait(false);
             return;
@@ -183,7 +183,7 @@ public class CountingModeration : MewdekoModuleBase<CountingModerationService>
     [UserPerm(GuildPermission.ManageChannels)]
     public async Task CountmodWindow(int hours, ITextChannel? channel = null)
     {
-        if (hours < 1 || hours > 168) // Max 1 week
+        if (hours is < 1 or > 168) // Max 1 week
         {
             await ErrorAsync(Strings.CountingModerationWindowInvalid(ctx.Guild.Id)).ConfigureAwait(false);
             return;

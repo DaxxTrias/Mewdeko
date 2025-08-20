@@ -485,8 +485,15 @@ public partial class Music
             if (player.Filters.Timescale != null)
             {
                 var speed = player.Filters.Timescale.Speed;
-                if (speed > 1.0f) activeFilters.Add("Nightcore");
-                else if (speed < 1.0f) activeFilters.Add("Vaporwave");
+                switch (speed)
+                {
+                    case > 1.0f:
+                        activeFilters.Add("Nightcore");
+                        break;
+                    case < 1.0f:
+                        activeFilters.Add("Vaporwave");
+                        break;
+                }
             }
 
             if (player.Filters.Karaoke != null) activeFilters.Add("Karaoke");

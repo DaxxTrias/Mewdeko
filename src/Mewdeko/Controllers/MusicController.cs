@@ -111,7 +111,7 @@ public class MusicController : Controller
         if (string.IsNullOrWhiteSpace(query))
             return BadRequest("Search query is required");
 
-        if (limit < 1 || limit > 25)
+        if (limit is < 1 or > 25)
             limit = 10;
 
         try

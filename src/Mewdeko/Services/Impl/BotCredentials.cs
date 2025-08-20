@@ -574,7 +574,7 @@ public class BotCredentials : IBotCredentials
                 }
             }
 
-            if (ApiPort <= 0 || ApiPort > 65535)
+            if (ApiPort is <= 0 or > 65535)
             {
                 Log.Error("Invalid API Port specified. Please change it to a value between 1 and 65535 and restart.");
                 Helpers.ReadErrorAndExit(5);

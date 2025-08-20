@@ -75,7 +75,7 @@ public sealed class MewdekoPlayer : LavalinkPlayer
     protected override async ValueTask NotifyTrackEndedAsync(ITrackQueueItem item, TrackEndReason reason,
         CancellationToken token = default)
     {
-        if (stateTracker != null && (State == PlayerState.Playing || State == PlayerState.Paused))
+        if (stateTracker != null && State is PlayerState.Playing or PlayerState.Paused)
             await stateTracker.ForceUpdate();
         var musicChannel = await GetMusicChannel();
         var queue = await cache.GetMusicQueue(GuildId);

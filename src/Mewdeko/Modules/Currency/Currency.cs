@@ -1050,51 +1050,58 @@ public partial class Currency(
         switch (betType.ToLower())
         {
             case "pass":
-                if (total == 7 || total == 11)
+                switch (total)
                 {
-                    won = true;
-                    eb.AddField("Result", Strings.CrapsNatural(ctx.Guild.Id, total));
-                }
-                else if (total == 2 || total == 3 || total == 12)
-                {
-                    won = false;
-                    eb.AddField("Result", Strings.CrapsCraps(ctx.Guild.Id, total));
-                }
-                else
-                {
-                    eb.AddField("Point", Strings.CrapsPointEstablished(ctx.Guild.Id, total));
-                    var pointRoll = RollForPoint(rand, total);
-                    won = pointRoll.won;
-                    eb.AddField("Point Roll", pointRoll.description);
+                    case 7:
+                    case 11:
+                        won = true;
+                        eb.AddField("Result", Strings.CrapsNatural(ctx.Guild.Id, total));
+                        break;
+                    case 2:
+                    case 3:
+                    case 12:
+                        won = false;
+                        eb.AddField("Result", Strings.CrapsCraps(ctx.Guild.Id, total));
+                        break;
+                    default:
+                    {
+                        eb.AddField("Point", Strings.CrapsPointEstablished(ctx.Guild.Id, total));
+                        var pointRoll = RollForPoint(rand, total);
+                        won = pointRoll.won;
+                        eb.AddField("Point Roll", pointRoll.description);
+                        break;
+                    }
                 }
 
                 break;
 
             case "dontpass":
-                if (total == 2 || total == 3)
+                switch (total)
                 {
-                    won = true;
-                }
-                else if (total == 7 || total == 11)
-                {
-                    won = false;
-                }
-                else if (total == 12)
-                {
-                    won = false; // Push
-                }
-                else
-                {
-                    var pointRoll = RollForPoint(rand, total);
-                    won = !pointRoll.won;
-                    eb.AddField("Point Roll", pointRoll.description);
+                    case 2:
+                    case 3:
+                        won = true;
+                        break;
+                    case 7:
+                    case 11:
+                    // Push
+                    case 12:
+                        won = false;
+                        break;
+                    default:
+                    {
+                        var pointRoll = RollForPoint(rand, total);
+                        won = !pointRoll.won;
+                        eb.AddField("Point Roll", pointRoll.description);
+                        break;
+                    }
                 }
 
                 break;
 
             case "field":
-                won = total == 2 || total == 3 || total == 4 || total == 9 || total == 10 || total == 11 || total == 12;
-                if (total == 2 || total == 12) multiplier = 2.0;
+                won = total is 2 or 3 or 4 or 9 or 10 or 11 or 12;
+                if (total is 2 or 12) multiplier = 2.0;
                 break;
 
             case "any":
@@ -1242,7 +1249,7 @@ public partial class Currency(
             return;
         }
 
-        if (bullets < 1 || bullets > 5)
+        if (bullets is < 1 or > 5)
             bullets = 1;
 
         var rand = new Random();
@@ -1359,16 +1366,17 @@ public partial class Currency(
                 playerTotal = CalculateBaccaratTotal(playerHand);
             }
 
-            // Banker third card rules are complex, simplified here
-            if (bankerTotal <= 5 && playerHand.Count == 2)
+            switch (bankerTotal)
             {
-                bankerHand.Add(GenerateCard(rand));
-                bankerTotal = CalculateBaccaratTotal(bankerHand);
-            }
-            else if (bankerTotal <= 2)
-            {
-                bankerHand.Add(GenerateCard(rand));
-                bankerTotal = CalculateBaccaratTotal(bankerHand);
+                // Banker third card rules are complex, simplified here
+                case <= 5 when playerHand.Count == 2:
+                    bankerHand.Add(GenerateCard(rand));
+                    bankerTotal = CalculateBaccaratTotal(bankerHand);
+                    break;
+                case <= 2:
+                    bankerHand.Add(GenerateCard(rand));
+                    bankerTotal = CalculateBaccaratTotal(bankerHand);
+                    break;
             }
         }
 
@@ -1537,7 +1545,7 @@ public partial class Currency(
     [Aliases]
     public async Task Lottery(int ticketCount = 1)
     {
-        if (ticketCount < 1 || ticketCount > 10)
+        if (ticketCount is < 1 or > 10)
         {
             await ReplyAsync(Strings.LotteryTicketInvalid(ctx.Guild.Id));
             return;
@@ -1707,7 +1715,7 @@ public partial class Currency(
             return;
         }
 
-        if (targetMultiplier < 1.1 || targetMultiplier > 10.0)
+        if (targetMultiplier is < 1.1 or > 10.0)
         {
             await ReplyAsync(Strings.CrashInvalidMultiplier(ctx.Guild.Id));
             return;
@@ -1764,13 +1772,13 @@ public partial class Currency(
         }
 
         var selectedNumbers = ParseKenoNumbers(numbers);
-        if (selectedNumbers.Count == 0 || selectedNumbers.Count > 10)
+        if (selectedNumbers.Count is 0 or > 10)
         {
             await ReplyAsync(Strings.KenoInvalidNumbers(ctx.Guild.Id));
             return;
         }
 
-        if (selectedNumbers.Any(n => n < 1 || n > 80))
+        if (selectedNumbers.Any(n => n is < 1 or > 80))
         {
             await ReplyAsync(Strings.KenoNumbersOutOfRange(ctx.Guild.Id));
             return;
@@ -1828,7 +1836,7 @@ public partial class Currency(
             return;
         }
 
-        if (rows < 5 || rows > 10)
+        if (rows is < 5 or > 10)
         {
             await ReplyAsync(Strings.PlinkoInvalidRows(ctx.Guild.Id));
             return;
@@ -2251,10 +2259,9 @@ public partial class Currency(
     private static List<int> ParseKenoNumbers(string input)
     {
         var numbers = new HashSet<int>();
-        var parts = input.Split(new[]
-        {
+        var parts = input.Split([
             ' ', ',', ';'
-        }, StringSplitOptions.RemoveEmptyEntries);
+        ], StringSplitOptions.RemoveEmptyEntries);
 
         foreach (var part in parts)
         {
@@ -2374,31 +2381,25 @@ public partial class Currency(
         return new Dictionary<string, (string[] segments, int[] weights)>
         {
             {
-                "classic", (new[]
-                {
+                "classic", ([
                     "x0.5", "x1.2", "x2.0", "x0.8", "x1.5", "x0.1"
-                }, new[]
-                {
+                ], [
                     3, 2, 1, 2, 1, 1
-                })
+                ])
             },
             {
-                "risky", (new[]
-                {
+                "risky", ([
                     "x0.1", "x10.0", "x0.2", "x5.0", "x0.1", "x20.0"
-                }, new[]
-                {
+                ], [
                     4, 1, 3, 1, 4, 1
-                })
+                ])
             },
             {
-                "balanced", (new[]
-                {
+                "balanced", ([
                     "x0.8", "x1.5", "x1.0", "x2.0", "x1.2", "x0.9"
-                }, new[]
-                {
+                ], [
                     2, 2, 2, 1, 2, 1
-                })
+                ])
             }
         };
     }
@@ -2465,14 +2466,14 @@ public partial class Currency(
 
     private static List<string> GenerateDucks()
     {
-        return new List<string>
-        {
+        return
+        [
             "🦆",
             "🦆",
             "🦆",
             "🦆",
             "🦆"
-        };
+        ];
     }
 
     private static List<string> GenerateDucks(int count)

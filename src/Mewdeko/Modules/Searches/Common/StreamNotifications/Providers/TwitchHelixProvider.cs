@@ -61,7 +61,7 @@ public class TwitchHelixProvider : Provider
 
             if (token is null)
             {
-                Logger.Error("Failed to get access token - returned null");
+                //Logger.Error("Failed to get access token - returned null");
             }
 
             return token;

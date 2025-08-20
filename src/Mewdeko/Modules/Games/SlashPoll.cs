@@ -477,16 +477,14 @@ public class SlashPoll : MewdekoSlashModuleBase<PollService>
                 .Where(opt => !string.IsNullOrWhiteSpace(opt))
                 .ToList();
 
-            if (optionParts.Count < 2)
+            switch (optionParts.Count)
             {
-                await ctx.Interaction.SendEphemeralErrorAsync(Strings.PollTemplateMinOptions(ctx.Guild.Id), Config);
-                return;
-            }
-
-            if (optionParts.Count > 25)
-            {
-                await ctx.Interaction.SendEphemeralErrorAsync(Strings.PollTemplateMaxOptions(ctx.Guild.Id), Config);
-                return;
+                case < 2:
+                    await ctx.Interaction.SendEphemeralErrorAsync(Strings.PollTemplateMinOptions(ctx.Guild.Id), Config);
+                    return;
+                case > 25:
+                    await ctx.Interaction.SendEphemeralErrorAsync(Strings.PollTemplateMaxOptions(ctx.Guild.Id), Config);
+                    return;
             }
 
             var pollOptions = optionParts.Select(opt => new PollOptionData

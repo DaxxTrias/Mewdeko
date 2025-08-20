@@ -262,15 +262,20 @@ public class LogCommandService(
     /// <returns>A task that represents the asynchronous operation.</returns>
     private async Task OnAuditLogCreated(SocketAuditLogEntry args, SocketGuild arsg2)
     {
-        if (args.Action == ActionType.Ban)
+        switch (args.Action)
         {
-            if (args.Data is BanAuditLogData data)
-                await OnUserBanned(data.Target, arsg2, args.User);
-        }
-        else if (args.Action == ActionType.Unban)
-        {
-            if (args.Data is UnbanAuditLogData data)
-                await OnUserUnbanned(data.Target, arsg2, args.User);
+            case ActionType.Ban:
+            {
+                if (args.Data is BanAuditLogData data)
+                    await OnUserBanned(data.Target, arsg2, args.User);
+                break;
+            }
+            case ActionType.Unban:
+            {
+                if (args.Data is UnbanAuditLogData data)
+                    await OnUserUnbanned(data.Target, arsg2, args.User);
+                break;
+            }
         }
     }
 
@@ -1809,74 +1814,81 @@ public class LogCommandService(
                 // changed = true;
             }
 
-            // Text Channel specific changes
-            if (channel is SocketTextChannel textChannel && channel2 is SocketTextChannel textChannel2)
+            switch (channel)
             {
-                if (textChannel.Topic != textChannel2.Topic)
+                // Text Channel specific changes
+                case SocketTextChannel textChannel when channel2 is SocketTextChannel textChannel2:
                 {
-                    title = strings.ChannelTopicUpdated(channel.Guild.Id);
-                    description = strings.ChannelTopicChange(channel.Guild.Id, channelIdStr,
-                        textChannel.Topic?.TrimTo(100) ?? strings.None(channel.Guild.Id),
-                        textChannel2.Topic?.TrimTo(100) ?? strings.None(channel.Guild.Id), updatedByStr);
-                    changed = true;
+                    if (textChannel.Topic != textChannel2.Topic)
+                    {
+                        title = strings.ChannelTopicUpdated(channel.Guild.Id);
+                        description = strings.ChannelTopicChange(channel.Guild.Id, channelIdStr,
+                            textChannel.Topic?.TrimTo(100) ?? strings.None(channel.Guild.Id),
+                            textChannel2.Topic?.TrimTo(100) ?? strings.None(channel.Guild.Id), updatedByStr);
+                        changed = true;
+                    }
+                    else if (textChannel.IsNsfw != textChannel2.IsNsfw)
+                    {
+                        title = strings.ChannelNsfwUpdated(channel.Guild.Id);
+                        description = strings.ChannelNsfwChange(channel.Guild.Id, channelIdStr, textChannel.IsNsfw,
+                            textChannel2.IsNsfw, updatedByStr);
+                        changed = true;
+                    }
+                    else if (textChannel.SlowModeInterval != textChannel2.SlowModeInterval)
+                    {
+                        title = strings.ChannelSlowmodeUpdated(channel.Guild.Id);
+                        description = strings.ChannelSlowmodeChange(channel.Guild.Id, channelIdStr,
+                            textChannel.SlowModeInterval,
+                            textChannel2.SlowModeInterval, updatedByStr);
+                        changed = true;
+                    }
+                    else if (textChannel.CategoryId != textChannel2.CategoryId)
+                    {
+                        title = strings.ChannelCategoryUpdated(channel.Guild.Id);
+                        description = strings.ChannelCategoryChange(channel.Guild.Id, channelIdStr,
+                            textChannel.Category?.Name ?? strings.None(channel.Guild.Id),
+                            textChannel2.Category?.Name ?? strings.None(channel.Guild.Id), updatedByStr);
+                        changed = true;
+                    }
+
+                    break;
                 }
-                else if (textChannel.IsNsfw != textChannel2.IsNsfw)
+                // Voice Channel specific changes
+                case IVoiceChannel voiceChannel when channel2 is IVoiceChannel voiceChannel2:
                 {
-                    title = strings.ChannelNsfwUpdated(channel.Guild.Id);
-                    description = strings.ChannelNsfwChange(channel.Guild.Id, channelIdStr, textChannel.IsNsfw,
-                        textChannel2.IsNsfw, updatedByStr);
-                    changed = true;
-                }
-                else if (textChannel.SlowModeInterval != textChannel2.SlowModeInterval)
-                {
-                    title = strings.ChannelSlowmodeUpdated(channel.Guild.Id);
-                    description = strings.ChannelSlowmodeChange(channel.Guild.Id, channelIdStr,
-                        textChannel.SlowModeInterval,
-                        textChannel2.SlowModeInterval, updatedByStr);
-                    changed = true;
-                }
-                else if (textChannel.CategoryId != textChannel2.CategoryId)
-                {
-                    title = strings.ChannelCategoryUpdated(channel.Guild.Id);
-                    description = strings.ChannelCategoryChange(channel.Guild.Id, channelIdStr,
-                        textChannel.Category?.Name ?? strings.None(channel.Guild.Id),
-                        textChannel2.Category?.Name ?? strings.None(channel.Guild.Id), updatedByStr);
-                    changed = true;
-                }
-            }
-            // Voice Channel specific changes
-            else if (channel is IVoiceChannel voiceChannel && channel2 is IVoiceChannel voiceChannel2)
-            {
-                if (voiceChannel.Bitrate != voiceChannel2.Bitrate)
-                {
-                    title = strings.ChannelBitrateUpdated(channel.Guild.Id);
-                    description = strings.ChannelBitrateChange(channel.Guild.Id, channelIdStr,
-                        voiceChannel.Bitrate / 1000,
-                        voiceChannel2.Bitrate / 1000, updatedByStr);
-                    changed = true;
-                }
-                else if (voiceChannel.UserLimit != voiceChannel2.UserLimit)
-                {
-                    title = strings.ChannelUserLimitUpdated(channel.Guild.Id);
-                    description = strings.ChannelUserLimitChange(channel.Guild.Id, channelIdStr,
-                        voiceChannel.UserLimit?.ToString() ?? strings.Unlimited(channel.Guild.Id),
-                        voiceChannel2.UserLimit?.ToString() ?? strings.Unlimited(channel.Guild.Id), updatedByStr);
-                    changed = true;
-                }
-                else if (voiceChannel.CategoryId != voiceChannel2.CategoryId)
-                {
-                    title = strings.ChannelCategoryUpdated(channel.Guild.Id);
-                    description =
-                        $"{channelIdStr}\n`Old Category:` {(await voiceChannel.GetCategoryAsync())?.Name ?? strings.None(channel.Guild.Id)}\n`New Category:` {(await voiceChannel2.GetCategoryAsync())?.Name ?? strings.None(channel.Guild.Id)}\n{updatedByStr}";
-                    changed = true;
-                }
-                else if (voiceChannel.VideoQualityMode != voiceChannel2.VideoQualityMode)
-                {
-                    title = strings.ChannelVideoQualityUpdated(channel.Guild.Id);
-                    description = strings.ChannelVideoQualityChange(channel.Guild.Id, channelIdStr,
-                        voiceChannel.VideoQualityMode,
-                        voiceChannel2.VideoQualityMode, updatedByStr);
-                    changed = true;
+                    if (voiceChannel.Bitrate != voiceChannel2.Bitrate)
+                    {
+                        title = strings.ChannelBitrateUpdated(channel.Guild.Id);
+                        description = strings.ChannelBitrateChange(channel.Guild.Id, channelIdStr,
+                            voiceChannel.Bitrate / 1000,
+                            voiceChannel2.Bitrate / 1000, updatedByStr);
+                        changed = true;
+                    }
+                    else if (voiceChannel.UserLimit != voiceChannel2.UserLimit)
+                    {
+                        title = strings.ChannelUserLimitUpdated(channel.Guild.Id);
+                        description = strings.ChannelUserLimitChange(channel.Guild.Id, channelIdStr,
+                            voiceChannel.UserLimit?.ToString() ?? strings.Unlimited(channel.Guild.Id),
+                            voiceChannel2.UserLimit?.ToString() ?? strings.Unlimited(channel.Guild.Id), updatedByStr);
+                        changed = true;
+                    }
+                    else if (voiceChannel.CategoryId != voiceChannel2.CategoryId)
+                    {
+                        title = strings.ChannelCategoryUpdated(channel.Guild.Id);
+                        description =
+                            $"{channelIdStr}\n`Old Category:` {(await voiceChannel.GetCategoryAsync())?.Name ?? strings.None(channel.Guild.Id)}\n`New Category:` {(await voiceChannel2.GetCategoryAsync())?.Name ?? strings.None(channel.Guild.Id)}\n{updatedByStr}";
+                        changed = true;
+                    }
+                    else if (voiceChannel.VideoQualityMode != voiceChannel2.VideoQualityMode)
+                    {
+                        title = strings.ChannelVideoQualityUpdated(channel.Guild.Id);
+                        description = strings.ChannelVideoQualityChange(channel.Guild.Id, channelIdStr,
+                            voiceChannel.VideoQualityMode,
+                            voiceChannel2.VideoQualityMode, updatedByStr);
+                        changed = true;
+                    }
+
+                    break;
                 }
             }
 

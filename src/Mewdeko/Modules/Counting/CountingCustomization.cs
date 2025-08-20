@@ -275,21 +275,23 @@ public partial class Counting
                 return;
             }
 
-            if (threshold == 0)
+            switch (threshold)
             {
-                var current = await Service.GetFailureThresholdAsync(channel.Id);
-                await ConfirmAsync(Strings.CountingCurrentFailureThreshold(ctx.Guild.Id, channel.Mention, current));
-                return;
+                case 0:
+                {
+                    var current = await Service.GetFailureThresholdAsync(channel.Id);
+                    await ConfirmAsync(Strings.CountingCurrentFailureThreshold(ctx.Guild.Id, channel.Mention, current));
+                    return;
+                }
+                case < 1:
+                case > 10:
+                    await ErrorAsync(Strings.CountingInvalidFailureThreshold(ctx.Guild.Id));
+                    return;
+                default:
+                    await Service.SetFailureThresholdAsync(channel.Id, threshold);
+                    await ConfirmAsync(Strings.CountingFailureThresholdSet(ctx.Guild.Id, channel.Mention, threshold));
+                    break;
             }
-
-            if (threshold < 1 || threshold > 10)
-            {
-                await ErrorAsync(Strings.CountingInvalidFailureThreshold(ctx.Guild.Id));
-                return;
-            }
-
-            await Service.SetFailureThresholdAsync(channel.Id, threshold);
-            await ConfirmAsync(Strings.CountingFailureThresholdSet(ctx.Guild.Id, channel.Mention, threshold));
         }
 
         /// <summary>
@@ -313,21 +315,23 @@ public partial class Counting
                 return;
             }
 
-            if (seconds == -1)
+            switch (seconds)
             {
-                var current = await Service.GetCooldownAsync(channel.Id);
-                await ConfirmAsync(Strings.CountingCurrentCooldown(ctx.Guild.Id, channel.Mention, current));
-                return;
+                case -1:
+                {
+                    var current = await Service.GetCooldownAsync(channel.Id);
+                    await ConfirmAsync(Strings.CountingCurrentCooldown(ctx.Guild.Id, channel.Mention, current));
+                    return;
+                }
+                case < 0:
+                case > 300:
+                    await ErrorAsync(Strings.CountingInvalidCooldown(ctx.Guild.Id));
+                    return;
+                default:
+                    await Service.SetCooldownAsync(channel.Id, seconds);
+                    await ConfirmAsync(Strings.CountingCooldownSet(ctx.Guild.Id, channel.Mention, seconds));
+                    break;
             }
-
-            if (seconds < 0 || seconds > 300)
-            {
-                await ErrorAsync(Strings.CountingInvalidCooldown(ctx.Guild.Id));
-                return;
-            }
-
-            await Service.SetCooldownAsync(channel.Id, seconds);
-            await ConfirmAsync(Strings.CountingCooldownSet(ctx.Guild.Id, channel.Mention, seconds));
         }
     }
 }

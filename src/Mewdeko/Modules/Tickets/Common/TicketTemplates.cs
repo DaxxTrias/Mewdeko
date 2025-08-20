@@ -11,14 +11,14 @@ public static class TicketTemplates
     /// <returns>List of available templates</returns>
     public static List<TicketTemplate> GetAllTemplates()
     {
-        return new List<TicketTemplate>
-        {
+        return
+        [
             GetBasicSupportTemplate(),
             GetDepartmentTemplate(),
             GetGamingServerTemplate(),
             GetBusinessTemplate(),
             GetModApplicationTemplate()
-        };
+        ];
     }
 
     /// <summary>
@@ -34,8 +34,8 @@ public static class TicketTemplates
             Description = "Simple support system with general help and bug reports",
             EmbedConfig =
                 "title: 🎫 Support Tickets\ndescription: Need help? Click a button below to create a support ticket!\ncolor: blue",
-            Buttons = new List<ButtonTemplate>
-            {
+            Buttons =
+            [
                 new()
                 {
                     Label = "General Support",
@@ -45,6 +45,7 @@ public static class TicketTemplates
                         "title: General Support Request\nfields:\n- What do you need help with?|long|required",
                     Settings = "auto_close_hours: 48\nresponse_time_minutes: 60\nsave_transcripts: true"
                 },
+
                 new()
                 {
                     Label = "Bug Report",
@@ -54,7 +55,7 @@ public static class TicketTemplates
                         "title: Bug Report\nfields:\n- What bug did you encounter?|long|required\n- Steps to reproduce|long|required\n- Expected behavior|short|optional",
                     Settings = "auto_close_hours: 72\nresponse_time_minutes: 30\nsave_transcripts: true"
                 }
-            }
+            ]
         };
     }
 
@@ -71,8 +72,8 @@ public static class TicketTemplates
             Description = "Organized by different support departments",
             EmbedConfig =
                 "title: 🏢 Support Departments\ndescription: Select the department that best matches your needs:\ncolor: green",
-            SelectMenus = new List<SelectMenuTemplate>
-            {
+            SelectMenus =
+            [
                 new()
                 {
                     Placeholder = "Choose a department...",
@@ -80,7 +81,7 @@ public static class TicketTemplates
                         "Technical Support|💻|Issues with the service\nBilling|💳|Payment and subscription questions\nGeneral Inquiry|❓|Other questions",
                     SharedSettings = "auto_close_hours: 24\nresponse_time_minutes: 45\nsave_transcripts: true"
                 }
-            }
+            ]
         };
     }
 
@@ -96,8 +97,8 @@ public static class TicketTemplates
             Name = "Gaming Server",
             Description = "Common gaming server support categories",
             EmbedConfig = "title: 🎮 Server Support\ndescription: Get help with server-related issues:\ncolor: purple",
-            Buttons = new List<ButtonTemplate>
-            {
+            Buttons =
+            [
                 new()
                 {
                     Label = "Player Report",
@@ -107,6 +108,7 @@ public static class TicketTemplates
                         "title: Player Report\nfields:\n- Player Name/ID|short|required\n- What happened?|long|required\n- Evidence (describe)|long|optional",
                     Settings = "auto_close_hours: 24\nresponse_time_minutes: 30\nsave_transcripts: true"
                 },
+
                 new()
                 {
                     Label = "Ban Appeal",
@@ -116,6 +118,7 @@ public static class TicketTemplates
                         "title: Ban Appeal\nfields:\n- Your Username|short|required\n- Reason for appeal|long|required\n- When were you banned?|short|optional",
                     Settings = "auto_close_hours: 168\nresponse_time_minutes: 120\nsave_transcripts: true"
                 },
+
                 new()
                 {
                     Label = "Technical Issue",
@@ -125,7 +128,7 @@ public static class TicketTemplates
                         "title: Technical Issue\nfields:\n- Describe the issue|long|required\n- What were you doing when it happened?|long|optional",
                     Settings = "auto_close_hours: 48\nresponse_time_minutes: 60\nsave_transcripts: true"
                 }
-            }
+            ]
         };
     }
 
@@ -142,8 +145,8 @@ public static class TicketTemplates
             Description = "Professional business support setup",
             EmbedConfig =
                 "title: 💼 Business Support\ndescription: Professional support for all your business needs:\ncolor: #2F3136",
-            SelectMenus = new List<SelectMenuTemplate>
-            {
+            SelectMenus =
+            [
                 new()
                 {
                     Placeholder = "Select support category...",
@@ -151,7 +154,7 @@ public static class TicketTemplates
                         "Sales Inquiry|💰|Questions about our products and services\nTechnical Support|🔧|Technical issues and troubleshooting\nBilling & Payments|💳|Billing questions and payment issues\nAccount Management|👤|Account-related requests\nPartnership|🤝|Business partnership inquiries",
                     SharedSettings = "auto_close_hours: 72\nresponse_time_minutes: 15\nsave_transcripts: true"
                 }
-            }
+            ]
         };
     }
 
@@ -167,8 +170,8 @@ public static class TicketTemplates
             Name = "Mod Applications",
             Description = "Template for moderator applications",
             EmbedConfig = "title: 🛡️ Staff Applications\ndescription: Apply to become a staff member:\ncolor: gold",
-            Buttons = new List<ButtonTemplate>
-            {
+            Buttons =
+            [
                 new()
                 {
                     Label = "Apply for Moderator",
@@ -178,7 +181,7 @@ public static class TicketTemplates
                         "title: Moderator Application\nfields:\n- Your age|short|required\n- Why do you want to be a moderator?|long|required\n- Previous moderation experience|long|optional\n- Timezone|short|required\n- Availability (hours per day)|short|required",
                     Settings = "auto_close_hours: 168\nresponse_time_minutes: 1440\nsave_transcripts: true"
                 }
-            }
+            ]
         };
     }
 }
@@ -211,12 +214,12 @@ public class TicketTemplate
     /// <summary>
     ///     Gets or sets the button templates
     /// </summary>
-    public List<ButtonTemplate> Buttons { get; set; } = new();
+    public List<ButtonTemplate> Buttons { get; set; } = [];
 
     /// <summary>
     ///     Gets or sets the select menu templates
     /// </summary>
-    public List<SelectMenuTemplate> SelectMenus { get; set; } = new();
+    public List<SelectMenuTemplate> SelectMenus { get; set; } = [];
 }
 
 /// <summary>

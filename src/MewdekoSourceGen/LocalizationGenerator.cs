@@ -516,31 +516,31 @@ public class LocalizationGenerator : IIncrementalGenerator
                 continue;
             }
 
-            if (c == '\\' && inString)
+            switch (c)
             {
-                escaped = true;
-                continue;
-            }
-
-            if (c == '"')
-            {
-                if (inString)
+                case '\\' when inString:
+                    escaped = true;
+                    continue;
+                case '"':
                 {
-                    // End of string
-                    if (parsingKey)
+                    if (inString)
                     {
-                        currentKey = currentStr.ToString();
-                    }
-                    else
-                    {
-                        currentValue = currentStr.ToString();
+                        // End of string
+                        if (parsingKey)
+                        {
+                            currentKey = currentStr.ToString();
+                        }
+                        else
+                        {
+                            currentValue = currentStr.ToString();
+                        }
+
+                        currentStr.Clear();
                     }
 
-                    currentStr.Clear();
+                    inString = !inString;
+                    continue;
                 }
-
-                inString = !inString;
-                continue;
             }
 
             if (inString)
@@ -553,22 +553,23 @@ public class LocalizationGenerator : IIncrementalGenerator
             if (char.IsWhiteSpace(c))
                 continue;
 
-            if (c == ':' && parsingKey)
+            switch (c)
             {
-                parsingKey = false;
-                continue;
-            }
-
-            if (c == ',')
-            {
-                if (!string.IsNullOrEmpty(currentKey))
+                case ':' when parsingKey:
+                    parsingKey = false;
+                    continue;
+                case ',':
                 {
-                    result[currentKey] = currentValue ?? "";
-                }
+                    if (!string.IsNullOrEmpty(currentKey))
+                    {
+                        result[currentKey] = currentValue ?? "";
+                    }
 
-                currentKey = "";
-                currentValue = "";
-                parsingKey = true;
+                    currentKey = "";
+                    currentValue = "";
+                    parsingKey = true;
+                    break;
+                }
             }
         }
 

@@ -627,32 +627,34 @@ public class AfkService : INService, IReadyExecutor, IDisposable
                 var afkEntry = await GetAfk(user.GuildId, user.Id); // Check cache/DB
                 if (afkEntry != null) // User is AFK
                 {
-                    // Don't auto-remove if timed AFK is still active
-                    if (afkEntry.WasTimed && afkEntry.When.HasValue && afkEntry.When.Value > DateTime.UtcNow)
+                    switch (afkEntry.WasTimed)
                     {
-                        // It's a timed AFK that hasn't expired yet, don't remove it just because they talked
-                    }
-                    // Check timeout for non-timed AFKs
-                    else if (!afkEntry.WasTimed && afkEntry.DateAdded.HasValue && afkEntry.DateAdded.Value <
-                             DateTime.UtcNow.AddSeconds(-(guildConfig.AfkTimeout == 0 ? guildConfig.AfkTimeout : 10)))
-                    {
-                        await AfkSet(user.GuildId, user.Id, ""); // Clear AFK
-                        var notifyMsg = await msg.Channel
-                            .SendMessageAsync(strings.WelcomeBackAfk(user.Guild.Id, user.Mention))
-                            .ConfigureAwait(false);
-                        notifyMsg.DeleteAfter(5);
-                        try
+                        // Don't auto-remove if timed AFK is still active
+                        case true when afkEntry.When.HasValue && afkEntry.When.Value > DateTime.UtcNow:
+                            // It's a timed AFK that hasn't expired yet, don't remove it just because they talked
+                            break;
+                        // Check timeout for non-timed AFKs
+                        case false when afkEntry.DateAdded.HasValue && afkEntry.DateAdded.Value <
+                            DateTime.UtcNow.AddSeconds(-(guildConfig.AfkTimeout == 0 ? guildConfig.AfkTimeout : 10)):
                         {
-                            if (user.Nickname?.Contains("[AFK]") == true)
-                                await user.ModifyAsync(x => x.Nickname = user.Nickname.Replace("[AFK]", ""))
-                                    .ConfigureAwait(false);
-                        }
-                        catch
-                        {
-                            /* Ignore nickname errors */
-                        }
+                            await AfkSet(user.GuildId, user.Id, ""); // Clear AFK
+                            var notifyMsg = await msg.Channel
+                                .SendMessageAsync(strings.WelcomeBackAfk(user.Guild.Id, user.Mention))
+                                .ConfigureAwait(false);
+                            notifyMsg.DeleteAfter(5);
+                            try
+                            {
+                                if (user.Nickname?.Contains("[AFK]") == true)
+                                    await user.ModifyAsync(x => x.Nickname = user.Nickname.Replace("[AFK]", ""))
+                                        .ConfigureAwait(false);
+                            }
+                            catch
+                            {
+                                /* Ignore nickname errors */
+                            }
 
-                        return; // Return after clearing AFK
+                            return; // Return after clearing AFK
+                        }
                     }
                 }
             }

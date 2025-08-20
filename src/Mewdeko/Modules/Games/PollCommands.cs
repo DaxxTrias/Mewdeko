@@ -106,75 +106,76 @@ public class PollCommands : MewdekoModuleBase<PollService>
         }
 
         var parts = input.Split(';');
-        if (parts.Length < 3)
+        switch (parts.Length)
         {
-            await ReplyErrorAsync("poll_minimum_options");
-            return;
-        }
-
-        if (parts.Length > 26) // Question + 25 options max
-        {
-            await ReplyErrorAsync("poll_maximum_options");
-            return;
-        }
-
-        try
-        {
-            var question = parts[0].Trim();
-            var options = new List<PollOptionData>();
-
-            for (var i = 1; i < parts.Length; i++)
-            {
-                var optionText = parts[i].Trim();
-                if (!string.IsNullOrWhiteSpace(optionText))
-                {
-                    options.Add(new PollOptionData
-                    {
-                        Text = optionText
-                    });
-                }
-            }
-
-            if (options.Count < 2)
-            {
+            case < 3:
                 await ReplyErrorAsync("poll_minimum_options");
                 return;
-            }
+            // Question + 25 options max
+            case > 26:
+                await ReplyErrorAsync("poll_maximum_options");
+                return;
+            default:
+                try
+                {
+                    var question = parts[0].Trim();
+                    var options = new List<PollOptionData>();
 
-            var settings = new PollSettings
-            {
-                AllowVoteChanges = true, ShowResults = true, ShowProgressBars = true
-            };
+                    for (var i = 1; i < parts.Length; i++)
+                    {
+                        var optionText = parts[i].Trim();
+                        if (!string.IsNullOrWhiteSpace(optionText))
+                        {
+                            options.Add(new PollOptionData
+                            {
+                                Text = optionText
+                            });
+                        }
+                    }
 
-            var pollType = PollType.SingleChoice;
+                    if (options.Count < 2)
+                    {
+                        await ReplyErrorAsync("poll_minimum_options");
+                        return;
+                    }
 
-            // Send the poll message first
-            var embed = await BuildPollEmbed(question, options, pollType);
-            var components = BuildPollComponents(0, options, pollType); // Temporary ID
+                    var settings = new PollSettings
+                    {
+                        AllowVoteChanges = true, ShowResults = true, ShowProgressBars = true
+                    };
 
-            var message = await ctx.Channel.SendMessageAsync(embed: embed, components: components);
+                    var pollType = PollType.SingleChoice;
 
-            // Create the poll in the database
-            var poll = await Service.CreatePollAsync(ctx.Guild.Id, ctx.Channel.Id, message.Id,
-                ctx.User.Id, question, options, pollType, settings);
+                    // Send the poll message first
+                    var embed = await BuildPollEmbed(question, options, pollType);
+                    var components = BuildPollComponents(0, options, pollType); // Temporary ID
 
-            // Update the message with the correct poll ID
-            var updatedEmbed = await BuildPollEmbed(question, options, pollType, poll.Id);
-            var updatedComponents = BuildPollComponents(poll.Id, options, pollType);
+                    var message = await ctx.Channel.SendMessageAsync(embed: embed, components: components);
 
-            await message.ModifyAsync(msg =>
-            {
-                msg.Embed = updatedEmbed;
-                msg.Components = updatedComponents;
-            });
+                    // Create the poll in the database
+                    var poll = await Service.CreatePollAsync(ctx.Guild.Id, ctx.Channel.Id, message.Id,
+                        ctx.User.Id, question, options, pollType, settings);
 
-            // Delete the command message
-            await ctx.Message.DeleteAsync();
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Failed to create custom poll in guild {GuildId}", ctx.Guild.Id);
-            await ReplyErrorAsync("poll_creation_failed");
+                    // Update the message with the correct poll ID
+                    var updatedEmbed = await BuildPollEmbed(question, options, pollType, poll.Id);
+                    var updatedComponents = BuildPollComponents(poll.Id, options, pollType);
+
+                    await message.ModifyAsync(msg =>
+                    {
+                        msg.Embed = updatedEmbed;
+                        msg.Components = updatedComponents;
+                    });
+
+                    // Delete the command message
+                    await ctx.Message.DeleteAsync();
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Failed to create custom poll in guild {GuildId}", ctx.Guild.Id);
+                    await ReplyErrorAsync("poll_creation_failed");
+                }
+
+                break;
         }
     }
 

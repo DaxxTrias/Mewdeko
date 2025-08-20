@@ -1304,8 +1304,8 @@ public class CountingService : INService, IReadyExecutor
     {
         var config = await GetCountingConfigAsync(channelId);
         if (config?.Milestones == null)
-            return new List<long>
-            {
+            return
+            [
                 100,
                 250,
                 500,
@@ -1313,7 +1313,7 @@ public class CountingService : INService, IReadyExecutor
                 2500,
                 5000,
                 10000
-            };
+            ];
 
         return config.Milestones.Split(',', StringSplitOptions.RemoveEmptyEntries)
             .Select(long.Parse)

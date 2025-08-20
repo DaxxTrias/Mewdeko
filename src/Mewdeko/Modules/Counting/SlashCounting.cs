@@ -221,7 +221,7 @@ public partial class SlashCounting(
 
         var response = await GetButtonInputAsync(ctx.Channel.Id, msg.Id, ctx.User.Id);
 
-        if (response == null || response == "counting_reset_no")
+        if (response is null or "counting_reset_no")
         {
             await msg.ModifyAsync(x =>
             {
@@ -469,7 +469,7 @@ public partial class SlashCounting(
 
         var response = await GetButtonInputAsync(ctx.Channel.Id, msg.Id, ctx.User.Id);
 
-        if (response == null || response == "counting_restore_no")
+        if (response is null or "counting_restore_no")
         {
             await msg.ModifyAsync(x =>
             {

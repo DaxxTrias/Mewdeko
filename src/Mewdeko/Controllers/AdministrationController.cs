@@ -168,13 +168,13 @@ public class AdministrationController(
         if (request.Enabled)
         {
             // Validate parameters based on bot requirements
-            if (request.UserThreshold < 2 || request.UserThreshold > 30)
+            if (request.UserThreshold is < 2 or > 30)
                 return BadRequest("User threshold must be between 2 and 30");
 
-            if (request.Seconds < 2 || request.Seconds > 300)
+            if (request.Seconds is < 2 or > 300)
                 return BadRequest("Time window must be between 2 and 300 seconds");
 
-            if (request.PunishDuration < 0 || request.PunishDuration > 1440)
+            if (request.PunishDuration is < 0 or > 1440)
                 return BadRequest("Punishment duration must be between 0 and 1440 minutes");
 
             if (request.Action == PunishmentAction.AddRole)
@@ -217,10 +217,10 @@ public class AdministrationController(
         if (request.Enabled)
         {
             // Validate parameters based on bot requirements
-            if (request.MessageThreshold < 2 || request.MessageThreshold > 10)
+            if (request.MessageThreshold is < 2 or > 10)
                 return BadRequest("Message threshold must be between 2 and 10");
 
-            if (request.MuteTime < 0 || request.MuteTime > 1440)
+            if (request.MuteTime is < 0 or > 1440)
                 return BadRequest("Mute time must be between 0 and 1440 minutes");
 
             await protectionService.StartAntiSpamAsync(
@@ -273,7 +273,7 @@ public class AdministrationController(
             if (request.MinAgeMinutes < 1)
                 return BadRequest("Minimum age must be at least 1 minute");
 
-            if (request.ActionDurationMinutes < 0 || request.ActionDurationMinutes > 1440)
+            if (request.ActionDurationMinutes is < 0 or > 1440)
                 return BadRequest("Action duration must be between 0 and 1440 minutes");
 
             await protectionService.StartAntiAltAsync(
@@ -320,7 +320,7 @@ public class AdministrationController(
             if (request.MaxMentionsInTimeWindow < 1)
                 return BadRequest("Max mentions in time window must be at least 1");
 
-            if (request.MuteTime < 0 || request.MuteTime > 1440)
+            if (request.MuteTime is < 0 or > 1440)
                 return BadRequest("Mute time must be between 0 and 1440 minutes");
 
             await protectionService.StartAntiMassMentionAsync(
@@ -1217,7 +1217,7 @@ public class AdministrationController(
     [HttpPut("command-cooldowns/{commandName}")]
     public async Task<IActionResult> SetCommandCooldown(ulong guildId, string commandName, [FromBody] int seconds)
     {
-        if (seconds < 0 || seconds > 90000)
+        if (seconds is < 0 or > 90000)
             return BadRequest("Cooldown must be between 0 and 90000 seconds");
 
         await using var db = await dbFactory.CreateConnectionAsync();
