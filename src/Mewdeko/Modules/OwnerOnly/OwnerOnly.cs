@@ -1516,173 +1516,174 @@ public class OwnerOnly(
         }
     }
 
-    /// <summary>
-    /// Analyzes recent guild members for suspicious bot patterns and exports to CSV
-    /// </summary>
-    [Cmd]
-    [Aliases]
-    [RequireContext(ContextType.Guild)]
-    [OwnerOnly]
-    public async Task SuspiciousAccounts()
+/// <summary>
+/// Analyzes guild members for specific bot patterns discovered from previous analysis
+/// </summary>
+[Cmd]
+[Aliases]
+[RequireContext(ContextType.Guild)]
+[OwnerOnly]
+public async Task BotHunter()
+{
+    var users = await ctx.Guild.GetUsersAsync();
+
+    var csv = new System.Text.StringBuilder();
+    csv.AppendLine("ID,Username,DisplayName,Created,Joined,HoursBetween,Score,BotType,Reasons");
+
+    var suspiciousUsers = new List<object>();
+    var now = DateTimeOffset.UtcNow;
+    var sixMonthsAgo = now.AddMonths(-6);
+
+    foreach (var user in users)
     {
-        await ctx.Guild.DownloadUsersAsync();
+        if (user.IsBot || !user.JoinedAt.HasValue) continue;
 
-        var csv = new System.Text.StringBuilder();
-        csv.AppendLine("ID,Username,DisplayName,Created,Joined,HoursBetween,Score,Reasons");
+        // Only check accounts created in past 6 months
+        if (user.CreatedAt < sixMonthsAgo) continue;
 
-        var suspiciousUsers = new List<object>();
-        var now = DateTimeOffset.UtcNow;
-        var sixMonthsAgo = now.AddMonths(-6);
+        var hoursBetween = (user.JoinedAt.Value - user.CreatedAt).TotalHours;
 
-        var commonFirst = new[]
+        // Only check accounts that joined within 48 hours of creation (expanded slightly)
+        if (hoursBetween > 48 || hoursBetween < 0) continue;
+
+        var score = 0;
+        var reasons = new List<string>();
+        var botType = "UNKNOWN";
+        var name = user.Username.ToLower();
+        var displayName = user.DisplayName.ToLower();
+
+        // CRITICAL BOT PATTERNS (Auto-flag as HIGH)
+
+        // Pattern 1: "rete" family - DEAD GIVEAWAY
+        if (name.Contains("rete") || name.Contains("srete") || name.Contains("doeret") ||
+            name.Contains("sderet") || name.Contains("aseret"))
         {
-            "bo", "raymond", "francis", "paul", "stephen", "tyler", "blake", "robert", "faith", "caesar", "violet",
-            "michael", "emily", "wayne", "elvis", "abdul", "flynn", "asher", "raya", "channing", "elmo", "kevin",
-            "kadeem", "christine"
-        };
-        var commonLast = new[]
-        {
-            "wilkins", "franks", "jenkins", "rodgers", "bright", "hogan", "kane", "wall", "hinton", "petersen",
-            "christian", "robbins", "rowland", "west", "moreno", "gray", "mckinney", "drake", "holt", "yang", "chang",
-            "wooten", "reed", "kline"
-        };
-
-        var users = await ctx.Guild.GetUsersAsync();
-        foreach (var user in users)
-        {
-            if (user.IsBot || !user.JoinedAt.HasValue) continue;
-
-            // Only check accounts created in past 6 months
-            if (user.CreatedAt < sixMonthsAgo) continue;
-
-            var hoursBetween = (user.JoinedAt.Value - user.CreatedAt).TotalHours;
-
-            // Only check accounts that joined within 24 hours of creation
-            if (hoursBetween > 24 || hoursBetween < 0) continue;
-
-            var score = 0;
-            var reasons = new List<string>();
-            var daysOld = (now - user.CreatedAt).TotalDays;
-
-            // Very quick join (within 1 hour = most suspicious)
-            if (hoursBetween < 1)
-            {
-                score += 4;
-                reasons.Add($"InstantJoin({hoursBetween:F1}h)");
-            }
-            else if (hoursBetween < 6)
-            {
-                score += 3;
-                reasons.Add($"QuickJoin({hoursBetween:F1}h)");
-            }
-            else
-            {
-                score += 2;
-                reasons.Add($"SameDayJoin({hoursBetween:F1}h)");
-            }
-
-            // Very new account
-            if (daysOld < 7)
-            {
-                score += 2;
-                reasons.Add($"New({daysOld:F1}d)");
-            }
-
-            // Suspicious name patterns
-            var name = user.Username.ToLower();
-            if (name.Contains("_") && name.Length > 5)
-            {
-                score += 3;
-                reasons.Add("Underscore");
-            }
-
-            if (name.Contains("rete"))
-            {
-                score += 4;
-                reasons.Add("RetePattern");
-            }
-
-            if (name.Length >= 8 && name.Length <= 12 && name.All(char.IsLetter))
-            {
-                score += 2;
-                reasons.Add("RandomString");
-            }
-
-            // Generic name pattern
-            var parts = user.DisplayName.ToLower().Split(' ');
-            if (parts.Length == 2 && commonFirst.Contains(parts[0]) && commonLast.Contains(parts[1]))
-            {
-                score += 2;
-                reasons.Add("GenericName");
-            }
-
-            // Currently offline
-            if (user.Status == Discord.UserStatus.Offline)
-            {
-                score += 1;
-                reasons.Add("Offline");
-            }
-
-            // Batch creation detection (same hour)
-            var creationHour = user.CreatedAt.ToString("yyyy-MM-dd HH");
-            var batchCount = users.Count(u => !u.IsBot &&
-                                              u.CreatedAt >= sixMonthsAgo &&
-                                              u.CreatedAt.ToString("yyyy-MM-dd HH") == creationHour);
-            if (batchCount > 1)
-            {
-                score += 2;
-                reasons.Add($"Batch({batchCount})");
-            }
-
-            // Since we're only looking at 24h joins, lower the threshold
-            if (score >= 2)
-            {
-                suspiciousUsers.Add(new
-                {
-                    user.Id,
-                    user.Username,
-                    user.DisplayName,
-                    Created = user.CreatedAt.ToString("yyyy-MM-dd HH:mm"),
-                    Joined = user.JoinedAt.Value.ToString("yyyy-MM-dd HH:mm"),
-                    HoursBetween = hoursBetween.ToString("F1"),
-                    Score = score,
-                    Flag = score >= 5 ? "HIGH" : score >= 3 ? "MED" : "LOW",
-                    Reasons = string.Join("|", reasons)
-                });
-            }
+            score += 20;
+            botType = "RETE_FAMILY";
+            reasons.Add("ReteFamily");
         }
 
-        // Sort by score and add to CSV
-        foreach (var item in suspiciousUsers.OrderByDescending(x => ((dynamic)x).Score))
+        // Pattern 2: Specific generated patterns from CSV
+        if (name.Contains("aporet") || name.Contains("aerote") || name.Contains("bereasdet") ||
+            name.Contains("azasderet") || name.Contains("zasderete") || name.Contains("poretey") ||
+            name.Contains("asdvert") || name.Contains("asdmero") || name.Contains("caseree") ||
+            name.Contains("masdoer") || name.Contains("fasdert"))
         {
-            var d = (dynamic)item;
-            csv.AppendLine(
-                $"{d.Id},\"{d.Username}\",\"{d.DisplayName}\",\"{d.Created}\",\"{d.Joined}\",{d.HoursBetween},{d.Score},\"{d.Flag}\",\"{d.Reasons}\"");
+            score += 20;
+            botType = "GENERATED_PATTERN";
+            reasons.Add("GeneratedPattern");
         }
 
-        var highCount = suspiciousUsers.Count(x => ((dynamic)x).Flag == "HIGH");
-        var medCount = suspiciousUsers.Count(x => ((dynamic)x).Flag == "MED");
-        var lowCount = suspiciousUsers.Count(x => ((dynamic)x).Flag == "LOW");
-        var totalRecentUsers = users.Count(x => !x.IsBot && x.CreatedAt >= sixMonthsAgo);
-        var totalQuickJoiners = users.Count(x => !x.IsBot && x.JoinedAt.HasValue &&
-                                                 x.CreatedAt >= sixMonthsAgo &&
-                                                 (x.JoinedAt.Value - x.CreatedAt).TotalHours <= 24);
+        // Pattern 3: Underscore + numbers (main bot signature)
+        if (System.Text.RegularExpressions.Regex.IsMatch(name, @"_\d{4,6}$"))
+        {
+            score += 15;
+            if (botType == "UNKNOWN") botType = "UNDERSCORE_BOT";
+            reasons.Add("UnderscoreNumbers");
+        }
 
-        csv.AppendLine();
-        csv.AppendLine($"Analysis Period: Past 6 months ({sixMonthsAgo:yyyy-MM-dd} to {now:yyyy-MM-dd})");
-        csv.AppendLine($"Quick Joiners (≤24h): {totalQuickJoiners} of {totalRecentUsers} recent accounts");
-        csv.AppendLine($"Suspicious: {highCount} HIGH, {medCount} MED, {lowCount} LOW");
+        // Pattern 4: Generic name + underscore + numbers
+        var underscoreNamePattern = System.Text.RegularExpressions.Regex.IsMatch(displayName, @"^[a-z]+ [a-z]+$") &&
+                                   name.Contains("_") && System.Text.RegularExpressions.Regex.IsMatch(name, @"\d{4,6}");
+        if (underscoreNamePattern)
+        {
+            score += 12;
+            if (botType == "UNKNOWN") botType = "GENERIC_NAME_BOT";
+            reasons.Add("GenericNameUnderscore");
+        }
 
-        var fileName = $"recent_suspicious_{ctx.Guild.Name.Replace(" ", "_")}_{DateTime.UtcNow:MMdd_HHmm}.csv";
-        var fileBytes = System.Text.Encoding.UTF8.GetBytes(csv.ToString());
+        // Pattern 5: Specific random string patterns
+        if (System.Text.RegularExpressions.Regex.IsMatch(name, @"^[a-z]{6,12}_[a-z0-9]{2,4}$"))
+        {
+            score += 10;
+            if (botType == "UNKNOWN") botType = "RANDOM_STRING";
+            reasons.Add("RandomStringPattern");
+        }
 
-        using var stream = new MemoryStream(fileBytes);
-        await ctx.Channel.SendFileAsync(stream, fileName,
-            $"🔍 **Recent Suspicious Account Analysis** (Past 6 months)\n" +
-            $"⚡ **{totalQuickJoiners}** accounts joined within 24h of creation\n" +
-            $"🚨 **{highCount}** highly suspicious | ⚠️ **{medCount}** medium | 📝 **{lowCount}** low\n" +
-            $"📊 Analyzed **{totalRecentUsers}** recent accounts");
+        // Additional factors
+        if (hoursBetween < 1) { score += 5; reasons.Add($"InstantJoin({hoursBetween:F1}h)"); }
+        else if (hoursBetween < 6) { score += 3; reasons.Add($"QuickJoin({hoursBetween:F1}h)"); }
+        else { score += 1; reasons.Add($"SameDayJoin({hoursBetween:F1}h)"); }
+
+        if (user.Status == Discord.UserStatus.Offline) { score += 2; reasons.Add("Offline"); }
+
+        // Batch detection (same creation hour)
+        var creationHour = user.CreatedAt.ToString("yyyy-MM-dd HH");
+        var batchCount = users.Count(u => !u.IsBot &&
+            u.CreatedAt >= sixMonthsAgo &&
+            u.CreatedAt.ToString("yyyy-MM-dd HH") == creationHour);
+        if (batchCount > 1) { score += 3; reasons.Add($"Batch({batchCount})"); }
+
+        // Very new account
+        var daysOld = (now - user.CreatedAt).TotalDays;
+        if (daysOld < 7) { score += 2; reasons.Add($"New({daysOld:F1}d)"); }
+
+        // Only flag if score is significant (lower threshold since we're more targeted)
+        if (score >= 8)
+        {
+            var flag = score >= 15 ? "HIGH" : score >= 12 ? "MED" : "LOW";
+
+            suspiciousUsers.Add(new {
+                user.Id,
+                user.Username,
+                user.DisplayName,
+                Created = user.CreatedAt.ToString("yyyy-MM-dd HH:mm"),
+                Joined = user.JoinedAt.Value.ToString("yyyy-MM-dd HH:mm"),
+                HoursBetween = hoursBetween.ToString("F1"),
+                Score = score,
+                BotType = botType,
+                Flag = flag,
+                Reasons = string.Join("|", reasons)
+            });
+        }
     }
+
+    // Sort by bot type, then score
+    var sortedUsers = suspiciousUsers
+        .OrderBy(x => ((dynamic)x).BotType)
+        .ThenByDescending(x => ((dynamic)x).Score)
+        .ToList();
+
+    // Group by bot type for summary
+    var botTypes = sortedUsers.GroupBy(x => ((dynamic)x).BotType)
+        .Select(g => new { Type = g.Key, Count = g.Count() })
+        .OrderByDescending(x => x.Count);
+
+    foreach (var item in sortedUsers)
+    {
+        var d = (dynamic)item;
+        csv.AppendLine($"{d.Id},\"{d.Username}\",\"{d.DisplayName}\",\"{d.Created}\",\"{d.Joined}\",{d.HoursBetween},{d.Score},\"{d.BotType}\",\"{d.Flag}\",\"{d.Reasons}\"");
+    }
+
+    var highCount = suspiciousUsers.Count(x => ((dynamic)x).Flag == "HIGH");
+    var medCount = suspiciousUsers.Count(x => ((dynamic)x).Flag == "MED");
+    var lowCount = suspiciousUsers.Count(x => ((dynamic)x).Flag == "LOW");
+    var totalQuickJoiners = users.Count(x => !x.IsBot && x.JoinedAt.HasValue &&
+        x.CreatedAt >= sixMonthsAgo &&
+        (x.JoinedAt.Value - x.CreatedAt).TotalHours <= 48);
+
+    csv.AppendLine();
+    csv.AppendLine("BOT TYPE BREAKDOWN:");
+    foreach (var botType in botTypes)
+    {
+        csv.AppendLine($"{botType.Type},{botType.Count}");
+    }
+    csv.AppendLine();
+    csv.AppendLine($"Analysis Period: Past 6 months ({sixMonthsAgo:yyyy-MM-dd} to {now:yyyy-MM-dd})");
+    csv.AppendLine($"Quick Joiners (≤48h): {totalQuickJoiners}");
+    csv.AppendLine($"Flagged: {highCount} HIGH, {medCount} MED, {lowCount} LOW");
+
+    var fileName = $"bot_analysis_{ctx.Guild.Name.Replace(" ", "_")}_{DateTime.UtcNow:MMdd_HHmm}.csv";
+    var fileBytes = System.Text.Encoding.UTF8.GetBytes(csv.ToString());
+
+    using var stream = new MemoryStream(fileBytes);
+    await ctx.Channel.SendFileAsync(stream, fileName,
+        $"🤖 **Targeted Bot Analysis** (Past 6 months)\n" +
+        $"🎯 **{highCount}** HIGH confidence bots | ⚠️ **{medCount}** MED | 📝 **{lowCount}** LOW\n" +
+        $"🔍 **Bot Types Found:**\n" +
+        string.Join("\n", botTypes.Take(5).Select(bt => $"   • **{bt.Type}**: {bt.Count}")) +
+        $"\n📊 Total analyzed: **{totalQuickJoiners}** quick joiners");
+}
 
     /// <summary>
     ///     Evaluates a C# code snippet.
