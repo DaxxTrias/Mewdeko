@@ -1668,15 +1668,13 @@ public class OwnerOnly(
             .WithAllowUnsafe(true);
 
         // Add a preprocessor to the code to include commonly used extension methods
-        var preprocessedCode = $"""
+        var preprocessedCode = $@"
+// Auto-imported extension methods and helpers
+using static System.Math;
+using static System.Console;
+using static Newtonsoft.Json.JsonConvert;
 
-                                // Auto-imported extension methods and helpers
-                                using static System.Math;
-                                using static System.Console;
-                                using static Newtonsoft.Json.JsonConvert;
-
-                                {codeToEvaluate}
-                                """;
+{codeToEvaluate}";
 
         // Start measuring compilation time
         var compilationStopwatch = Stopwatch.StartNew();
