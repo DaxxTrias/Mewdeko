@@ -1676,6 +1676,8 @@ using static Newtonsoft.Json.JsonConvert;
 
 {codeToEvaluate}";
 
+        logger.LogInformation(preprocessedCode);
+
         // Start measuring compilation time
         var compilationStopwatch = Stopwatch.StartNew();
         var script = CSharpScript.Create(preprocessedCode, scriptOptions, typeof(EvaluationEnvironment));
