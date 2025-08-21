@@ -1517,7 +1517,7 @@ public class OwnerOnly(
     }
 
     /// <summary>
-    ///     Analyzes guild members for suspicious bot patterns and exports to CSV
+    /// Analyzes recent guild members for suspicious bot patterns and exports to CSV
     /// </summary>
     [Cmd]
     [Aliases]
@@ -1527,11 +1527,12 @@ public class OwnerOnly(
     {
         await ctx.Guild.DownloadUsersAsync();
 
-        var csv = new StringBuilder();
-        csv.AppendLine("ID,Username,DisplayName,Created,Joined,Score,Reasons");
+        var csv = new System.Text.StringBuilder();
+        csv.AppendLine("ID,Username,DisplayName,Created,Joined,HoursBetween,Score,Reasons");
 
         var suspiciousUsers = new List<object>();
         var now = DateTimeOffset.UtcNow;
+        var sixMonthsAgo = now.AddMonths(-6);
 
         var commonFirst = new[]
         {
@@ -1551,16 +1552,33 @@ public class OwnerOnly(
         {
             if (user.IsBot || !user.JoinedAt.HasValue) continue;
 
+            // Only check accounts created in past 6 months
+            if (user.CreatedAt < sixMonthsAgo) continue;
+
+            var hoursBetween = (user.JoinedAt.Value - user.CreatedAt).TotalHours;
+
+            // Only check accounts that joined within 24 hours of creation
+            if (hoursBetween > 24 || hoursBetween < 0) continue;
+
             var score = 0;
             var reasons = new List<string>();
-            var daysBetween = Math.Abs((user.JoinedAt.Value - user.CreatedAt).TotalDays);
             var daysOld = (now - user.CreatedAt).TotalDays;
 
-            // Same day creation/join
-            if (daysBetween < 0.25)
+            // Very quick join (within 1 hour = most suspicious)
+            if (hoursBetween < 1)
+            {
+                score += 4;
+                reasons.Add($"InstantJoin({hoursBetween:F1}h)");
+            }
+            else if (hoursBetween < 6)
             {
                 score += 3;
-                reasons.Add("SameDay");
+                reasons.Add($"QuickJoin({hoursBetween:F1}h)");
+            }
+            else
+            {
+                score += 2;
+                reasons.Add($"SameDayJoin({hoursBetween:F1}h)");
             }
 
             // Very new account
@@ -1599,22 +1617,25 @@ public class OwnerOnly(
             }
 
             // Currently offline
-            if (user.Status == UserStatus.Offline)
+            if (user.Status == Discord.UserStatus.Offline)
             {
                 score += 1;
                 reasons.Add("Offline");
             }
 
-            // Batch creation detection
-            var creationTime = user.CreatedAt.ToString("yyyy-MM-dd HH:mm");
-            var batchCount = users.Count(u => !u.IsBot && u.CreatedAt.ToString("yyyy-MM-dd HH:mm") == creationTime);
+            // Batch creation detection (same hour)
+            var creationHour = user.CreatedAt.ToString("yyyy-MM-dd HH");
+            var batchCount = users.Count(u => !u.IsBot &&
+                                              u.CreatedAt >= sixMonthsAgo &&
+                                              u.CreatedAt.ToString("yyyy-MM-dd HH") == creationHour);
             if (batchCount > 1)
             {
                 score += 2;
                 reasons.Add($"Batch({batchCount})");
             }
 
-            if (score >= 3)
+            // Since we're only looking at 24h joins, lower the threshold
+            if (score >= 2)
             {
                 suspiciousUsers.Add(new
                 {
@@ -1623,8 +1644,9 @@ public class OwnerOnly(
                     user.DisplayName,
                     Created = user.CreatedAt.ToString("yyyy-MM-dd HH:mm"),
                     Joined = user.JoinedAt.Value.ToString("yyyy-MM-dd HH:mm"),
+                    HoursBetween = hoursBetween.ToString("F1"),
                     Score = score,
-                    Flag = score >= 4 ? "HIGH" : "MED",
+                    Flag = score >= 5 ? "HIGH" : score >= 3 ? "MED" : "LOW",
                     Reasons = string.Join("|", reasons)
                 });
             }
@@ -1635,25 +1657,31 @@ public class OwnerOnly(
         {
             var d = (dynamic)item;
             csv.AppendLine(
-                $"{d.Id},\"{d.Username}\",\"{d.DisplayName}\",\"{d.Created}\",\"{d.Joined}\",{d.Score},\"{d.Flag}\",\"{d.Reasons}\"");
+                $"{d.Id},\"{d.Username}\",\"{d.DisplayName}\",\"{d.Created}\",\"{d.Joined}\",{d.HoursBetween},{d.Score},\"{d.Flag}\",\"{d.Reasons}\"");
         }
 
         var highCount = suspiciousUsers.Count(x => ((dynamic)x).Flag == "HIGH");
         var medCount = suspiciousUsers.Count(x => ((dynamic)x).Flag == "MED");
-        var totalUsers = users.Count(x => !x.IsBot);
+        var lowCount = suspiciousUsers.Count(x => ((dynamic)x).Flag == "LOW");
+        var totalRecentUsers = users.Count(x => !x.IsBot && x.CreatedAt >= sixMonthsAgo);
+        var totalQuickJoiners = users.Count(x => !x.IsBot && x.JoinedAt.HasValue &&
+                                                 x.CreatedAt >= sixMonthsAgo &&
+                                                 (x.JoinedAt.Value - x.CreatedAt).TotalHours <= 24);
 
         csv.AppendLine();
-        csv.AppendLine($"Summary: {highCount} HIGH, {medCount} MED of {totalUsers} total members");
+        csv.AppendLine($"Analysis Period: Past 6 months ({sixMonthsAgo:yyyy-MM-dd} to {now:yyyy-MM-dd})");
+        csv.AppendLine($"Quick Joiners (≤24h): {totalQuickJoiners} of {totalRecentUsers} recent accounts");
+        csv.AppendLine($"Suspicious: {highCount} HIGH, {medCount} MED, {lowCount} LOW");
 
-        var fileName = $"suspicious_{ctx.Guild.Name.Replace(" ", "_")}_{DateTime.UtcNow:MMdd_HHmm}.csv";
-        var fileBytes = Encoding.UTF8.GetBytes(csv.ToString());
+        var fileName = $"recent_suspicious_{ctx.Guild.Name.Replace(" ", "_")}_{DateTime.UtcNow:MMdd_HHmm}.csv";
+        var fileBytes = System.Text.Encoding.UTF8.GetBytes(csv.ToString());
 
         using var stream = new MemoryStream(fileBytes);
         await ctx.Channel.SendFileAsync(stream, fileName,
-            $"🔍 **Suspicious Account Analysis**\n" +
-            $"📊 **{highCount}** highly suspicious accounts\n" +
-            $"⚠️ **{medCount}** borderline cases\n" +
-            $"👥 **{totalUsers}** total members analyzed");
+            $"🔍 **Recent Suspicious Account Analysis** (Past 6 months)\n" +
+            $"⚡ **{totalQuickJoiners}** accounts joined within 24h of creation\n" +
+            $"🚨 **{highCount}** highly suspicious | ⚠️ **{medCount}** medium | 📝 **{lowCount}** low\n" +
+            $"📊 Analyzed **{totalRecentUsers}** recent accounts");
     }
 
     /// <summary>
