@@ -211,6 +211,9 @@ antimassmention:
   - amm
   - massmention
   - stopmassmention
+antipattern:
+  - antipattern
+  - apattern
 antiraid:
   - antiraid
 antispam:
@@ -1520,6 +1523,19 @@ patreonhelp:
 patreonlink:
   - patreonlink
   - ptlink
+patternadd:
+  - patternadd
+  - padd
+patternlist:
+  - patternlist
+  - plist
+patternremove:
+  - patternremove
+  - premove
+  - prem
+patternconfig:
+  - patternconfig
+  - pconfig
 patreonmessage:
   - patreonmsg
   - ptmsg

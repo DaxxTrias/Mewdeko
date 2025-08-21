@@ -27,7 +27,12 @@ public enum ProtectionType
     /// <summary>
     ///     Protection against mass mention.
     /// </summary>
-    MassMention
+    MassMention,
+
+    /// <summary>
+    ///     Protection against username/display name patterns.
+    /// </summary>
+    PatternMatching
 }
 
 /// <summary>
@@ -211,5 +216,79 @@ public class UserMentionStats : IDisposable
 
         // Check if the number of mentions exceeds the threshold
         return mentionTimestamps.Count >= threshold;
+    }
+}
+
+/// <summary>
+///     Represents statistics related to anti-pattern measures.
+/// </summary>
+public class AntiPatternStats
+{
+    private int counter;
+
+    /// <summary>
+    ///     Initializes a new instance of the <see cref="AntiPatternStats" /> class with the specified anti-pattern setting.
+    /// </summary>
+    /// <param name="setting">The anti-pattern setting.</param>
+    public AntiPatternStats(AntiPatternSetting setting)
+    {
+        AntiPatternSettings = setting;
+    }
+
+    /// <summary>
+    ///     Gets or sets the anti-pattern settings.
+    /// </summary>
+    public AntiPatternSetting AntiPatternSettings { get; set; }
+
+    /// <summary>
+    ///     Gets the action to be taken against pattern matches.
+    /// </summary>
+    public int Action
+    {
+        get
+        {
+            return AntiPatternSettings.Action;
+        }
+    }
+
+    /// <summary>
+    ///     Gets the duration of the action against pattern matches in minutes.
+    /// </summary>
+    public int PunishDuration
+    {
+        get
+        {
+            return AntiPatternSettings.PunishDuration;
+        }
+    }
+
+    /// <summary>
+    ///     Gets the ID of the role associated with pattern matching punishment.
+    /// </summary>
+    public ulong? RoleId
+    {
+        get
+        {
+            return AntiPatternSettings.RoleId;
+        }
+    }
+
+    /// <summary>
+    ///     Gets the counter for pattern matching occurrences.
+    /// </summary>
+    public int Counter
+    {
+        get
+        {
+            return counter;
+        }
+    }
+
+    /// <summary>
+    ///     Increments the counter for pattern matching occurrences.
+    /// </summary>
+    public void Increment()
+    {
+        Interlocked.Increment(ref counter);
     }
 }

@@ -2118,6 +2118,92 @@ antialt:
     - ''
   desc: Disables the Anti-Alt protection for the guild.
   params: [ ]
+antipattern:
+  args:
+    - ''
+  desc: Disables the Anti-Pattern protection for the guild.
+  params: [ ]
+antipattern_PunishmentAction_=:
+  args:
+    - action null
+    - action
+  desc: Configures the Anti-Pattern protection for the guild, setting the punishment action and optional duration.
+  params:
+    - desc: The punishment action to be taken against detected pattern matches.
+      name: action
+      optional: false
+      type: PunishmentAction
+    - desc: 'The duration of the punishment, if applicable.'
+      name: punishTime
+      optional: true
+      type: StoopidTime
+antipattern_PunishmentAction_IRole:
+  args:
+    - action @role
+  desc: Configures the Anti-Pattern protection for the guild, setting the punishment action with a role-based punishment.
+  params:
+    - desc: The punishment action to be taken against detected pattern matches.
+      name: action
+      optional: false
+      type: PunishmentAction
+    - desc: The role to be assigned to users who match patterns.
+      name: role
+      optional: false
+      type: IRole
+patternadd:
+  args:
+    - pattern null null null
+    - pattern
+  desc: Adds a regex pattern to the Anti-Pattern protection.
+  params:
+    - desc: The regex pattern to match against usernames/display names.
+      name: pattern
+      optional: false
+      type: string
+    - desc: Optional name for the pattern.
+      name: name
+      optional: true
+      type: string
+    - desc: Whether to check usernames against this pattern (default true).
+      name: checkUsername
+      optional: true
+      type: bool
+    - desc: Whether to check display names against this pattern (default true).
+      name: checkDisplayName
+      optional: true
+      type: bool
+patternremove:
+  args:
+    - number
+  desc: Removes a pattern from the Anti-Pattern protection.
+  params:
+    - desc: The ID of the pattern to remove.
+      name: patternId
+      optional: false
+      type: int
+patternlist:
+  args:
+    - ''
+  desc: Lists all patterns configured for the Anti-Pattern protection.
+  params: [ ]
+patternconfig:
+  args:
+    - ''
+  desc: Shows the current anti-pattern configuration.
+  params: [ ]
+patternconfig_string_string:
+  args:
+    - setting value
+  desc: Configures advanced anti-pattern settings.
+  params:
+    - desc: The setting to configure.
+      name: setting
+      optional: false
+      type: string
+    - desc: The value to set.
+      name: value
+      optional: false
+      type: string
 antialt_StoopidTime_PunishmentAction_=:
   args:
     - minage action null

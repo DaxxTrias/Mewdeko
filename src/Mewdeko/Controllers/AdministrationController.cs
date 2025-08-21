@@ -109,7 +109,7 @@ public class AdministrationController(
         await Task.CompletedTask;
 
         // Get protection stats using the GetAntiStats method
-        var (antiSpamStats, antiRaidStats, antiAltStats, antiMassMentionStats) =
+        var (antiSpamStats, antiRaidStats, antiAltStats, antiMassMentionStats, antiPatternStats) =
             protectionService.GetAntiStats(guildId);
 
         return Ok(new
@@ -152,6 +152,24 @@ public class AdministrationController(
                 roleId = antiMassMentionStats?.AntiMassMentionSettings.RoleId ?? 0,
                 ignoreBots = antiMassMentionStats?.AntiMassMentionSettings.IgnoreBots ?? false,
                 userCount = antiMassMentionStats?.UserStats.Count ?? 0
+            },
+            antiPattern = new
+            {
+                enabled = antiPatternStats != null,
+                action = antiPatternStats?.AntiPatternSettings.Action ?? 0,
+                punishDuration = antiPatternStats?.AntiPatternSettings.PunishDuration ?? 0,
+                roleId = antiPatternStats?.AntiPatternSettings.RoleId ?? 0,
+                checkAccountAge = antiPatternStats?.AntiPatternSettings.CheckAccountAge ?? false,
+                maxAccountAgeMonths = antiPatternStats?.AntiPatternSettings.MaxAccountAgeMonths ?? 6,
+                checkJoinTiming = antiPatternStats?.AntiPatternSettings.CheckJoinTiming ?? false,
+                maxJoinHours = antiPatternStats?.AntiPatternSettings.MaxJoinHours ?? 48.0,
+                checkBatchCreation = antiPatternStats?.AntiPatternSettings.CheckBatchCreation ?? false,
+                checkOfflineStatus = antiPatternStats?.AntiPatternSettings.CheckOfflineStatus ?? false,
+                checkNewAccounts = antiPatternStats?.AntiPatternSettings.CheckNewAccounts ?? false,
+                newAccountDays = antiPatternStats?.AntiPatternSettings.NewAccountDays ?? 7,
+                minimumScore = antiPatternStats?.AntiPatternSettings.MinimumScore ?? 15,
+                patternCount = antiPatternStats?.AntiPatternSettings.AntiPatternPatterns?.Count() ?? 0,
+                counter = antiPatternStats?.Counter ?? 0
             }
         });
     }
@@ -355,7 +373,7 @@ public class AdministrationController(
     public async Task<IActionResult> GetProtectionStatistics(ulong guildId)
     {
         await Task.CompletedTask;
-        var (antiSpamStats, antiRaidStats, antiAltStats, antiMassMentionStats) =
+        var (antiSpamStats, antiRaidStats, antiAltStats, antiMassMentionStats, _) =
             protectionService.GetAntiStats(guildId);
 
         return Ok(new
