@@ -3,6 +3,7 @@ using System.Globalization;
 using System.IO;
 using System.Net.Http;
 using System.Runtime.InteropServices;
+using System.Text;
 using DataModel;
 using Discord.Commands;
 using Discord.Net;
@@ -1514,6 +1515,146 @@ public class OwnerOnly(
     }
 
     /// <summary>
+    ///     Analyzes guild members for suspicious bot patterns and exports to CSV
+    /// </summary>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    [OwnerOnly]
+    public async Task SuspiciousAccounts()
+    {
+        await ctx.Guild.DownloadUsersAsync();
+
+        var csv = new StringBuilder();
+        csv.AppendLine("ID,Username,DisplayName,Created,Joined,Score,Reasons");
+
+        var suspiciousUsers = new List<object>();
+        var now = DateTimeOffset.UtcNow;
+
+        var commonFirst = new[]
+        {
+            "bo", "raymond", "francis", "paul", "stephen", "tyler", "blake", "robert", "faith", "caesar", "violet",
+            "michael", "emily", "wayne", "elvis", "abdul", "flynn", "asher", "raya", "channing", "elmo", "kevin",
+            "kadeem", "christine"
+        };
+        var commonLast = new[]
+        {
+            "wilkins", "franks", "jenkins", "rodgers", "bright", "hogan", "kane", "wall", "hinton", "petersen",
+            "christian", "robbins", "rowland", "west", "moreno", "gray", "mckinney", "drake", "holt", "yang", "chang",
+            "wooten", "reed", "kline"
+        };
+
+        var users = await ctx.Guild.GetUsersAsync();
+        foreach (var user in users)
+        {
+            if (user.IsBot || !user.JoinedAt.HasValue) continue;
+
+            var score = 0;
+            var reasons = new List<string>();
+            var daysBetween = Math.Abs((user.JoinedAt.Value - user.CreatedAt).TotalDays);
+            var daysOld = (now - user.CreatedAt).TotalDays;
+
+            // Same day creation/join
+            if (daysBetween < 0.25)
+            {
+                score += 3;
+                reasons.Add("SameDay");
+            }
+
+            // Very new account
+            if (daysOld < 7)
+            {
+                score += 2;
+                reasons.Add($"New({daysOld:F1}d)");
+            }
+
+            // Suspicious name patterns
+            var name = user.Username.ToLower();
+            if (name.Contains("_") && name.Length > 5)
+            {
+                score += 3;
+                reasons.Add("Underscore");
+            }
+
+            if (name.Contains("rete"))
+            {
+                score += 4;
+                reasons.Add("RetePattern");
+            }
+
+            if (name.Length >= 8 && name.Length <= 12 && name.All(char.IsLetter))
+            {
+                score += 2;
+                reasons.Add("RandomString");
+            }
+
+            // Generic name pattern
+            var parts = user.DisplayName.ToLower().Split(' ');
+            if (parts.Length == 2 && commonFirst.Contains(parts[0]) && commonLast.Contains(parts[1]))
+            {
+                score += 2;
+                reasons.Add("GenericName");
+            }
+
+            // Currently offline
+            if (user.Status == UserStatus.Offline)
+            {
+                score += 1;
+                reasons.Add("Offline");
+            }
+
+            // Batch creation detection
+            var creationTime = user.CreatedAt.ToString("yyyy-MM-dd HH:mm");
+            var batchCount = users.Count(u => !u.IsBot && u.CreatedAt.ToString("yyyy-MM-dd HH:mm") == creationTime);
+            if (batchCount > 1)
+            {
+                score += 2;
+                reasons.Add($"Batch({batchCount})");
+            }
+
+            if (score >= 3)
+            {
+                suspiciousUsers.Add(new
+                {
+                    user.Id,
+                    user.Username,
+                    user.DisplayName,
+                    Created = user.CreatedAt.ToString("yyyy-MM-dd HH:mm"),
+                    Joined = user.JoinedAt.Value.ToString("yyyy-MM-dd HH:mm"),
+                    Score = score,
+                    Flag = score >= 4 ? "HIGH" : "MED",
+                    Reasons = string.Join("|", reasons)
+                });
+            }
+        }
+
+        // Sort by score and add to CSV
+        foreach (var item in suspiciousUsers.OrderByDescending(x => ((dynamic)x).Score))
+        {
+            var d = (dynamic)item;
+            csv.AppendLine(
+                $"{d.Id},\"{d.Username}\",\"{d.DisplayName}\",\"{d.Created}\",\"{d.Joined}\",{d.Score},\"{d.Flag}\",\"{d.Reasons}\"");
+        }
+
+        var highCount = suspiciousUsers.Count(x => ((dynamic)x).Flag == "HIGH");
+        var medCount = suspiciousUsers.Count(x => ((dynamic)x).Flag == "MED");
+        var totalUsers = users.Count(x => !x.IsBot);
+
+        csv.AppendLine();
+        csv.AppendLine($"Summary: {highCount} HIGH, {medCount} MED of {totalUsers} total members");
+
+        var fileName = $"suspicious_{ctx.Guild.Name.Replace(" ", "_")}_{DateTime.UtcNow:MMdd_HHmm}.csv";
+        var fileBytes = Encoding.UTF8.GetBytes(csv.ToString());
+
+        using var stream = new MemoryStream(fileBytes);
+        await ctx.Channel.SendFileAsync(stream, fileName,
+            $"🔍 **Suspicious Account Analysis**\n" +
+            $"📊 **{highCount}** highly suspicious accounts\n" +
+            $"⚠️ **{medCount}** borderline cases\n" +
+            $"👥 **{totalUsers}** total members analyzed");
+    }
+
+    /// <summary>
     ///     Evaluates a C# code snippet.
     /// </summary>
     /// <param name="code">The C# code to evaluate.</param>
@@ -1772,7 +1913,7 @@ using static Newtonsoft.Json.JsonConvert;
 public sealed class EvaluationEnvironment
 {
     /// <summary>
-    ///     Initializes a new instance of the <see cref="EvaluationEnvironment"/> class with the specified command context
+    ///     Initializes a new instance of the <see cref="EvaluationEnvironment" /> class with the specified command context
     /// </summary>
     /// <param name="ctx">The command context associated with the current eval command execution</param>
     public EvaluationEnvironment(CommandContext ctx)
@@ -1788,27 +1929,58 @@ public sealed class EvaluationEnvironment
     /// <summary>
     ///     Gets the message that triggered the current eval command
     /// </summary>
-    public IUserMessage Message => Ctx.Message;
+    public IUserMessage Message
+    {
+        get
+        {
+            return Ctx.Message;
+        }
+    }
 
     /// <summary>
     ///     Gets the channel in which the eval command was executed
     /// </summary>
-    public IMessageChannel Channel => Ctx.Channel;
+    public IMessageChannel Channel
+    {
+        get
+        {
+            return Ctx.Channel;
+        }
+    }
 
     /// <summary>
     ///     Gets the guild in which the eval command was executed. May be null for commands executed in DMs
     /// </summary>
-    public IGuild Guild => Ctx.Guild;
+    public IGuild Guild
+    {
+        get
+        {
+            return Ctx.Guild;
+        }
+    }
 
     /// <summary>
     ///     Gets the user who executed the eval command
     /// </summary>
-    public IUser User => Ctx.User;
+    public IUser User
+    {
+        get
+        {
+            return Ctx.User;
+        }
+    }
 
     /// <summary>
-    ///     Gets the guild member who executed the eval command. This is a convenience property for accessing the user as an IGuildUser
+    ///     Gets the guild member who executed the eval command. This is a convenience property for accessing the user as an
+    ///     IGuildUser
     /// </summary>
-    public IGuildUser Member => (IGuildUser)Ctx.User;
+    public IGuildUser Member
+    {
+        get
+        {
+            return (IGuildUser)Ctx.User;
+        }
+    }
 
     /// <summary>
     ///     Gets or sets the Discord sharded client instance for interacting with the Discord API
@@ -1880,5 +2052,8 @@ public sealed class EvaluationEnvironment
     /// </summary>
     /// <typeparam name="T">The type of service to retrieve</typeparam>
     /// <returns>The requested service instance, or null if the service is not registered</returns>
-    public T GetService<T>() => Services.GetService<T>();
+    public T GetService<T>()
+    {
+        return Services.GetService<T>();
+    }
 }
