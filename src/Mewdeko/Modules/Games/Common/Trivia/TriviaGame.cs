@@ -274,7 +274,7 @@ public class TriviaGame
             }
 
             if (!guess) return;
-            triviaCancelSource.Cancel();
+            await triviaCancelSource.CancelAsync();
 
             if (options.WinRequirement != 0 && Users[guildUser] == options.WinRequirement)
             {
