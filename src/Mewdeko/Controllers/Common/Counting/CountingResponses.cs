@@ -1,4 +1,3 @@
-using DataModel;
 using Mewdeko.Modules.Counting.Common;
 
 namespace Mewdeko.Controllers.Common.Counting;

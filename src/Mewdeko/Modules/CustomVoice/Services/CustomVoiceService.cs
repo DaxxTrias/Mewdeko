@@ -741,7 +741,7 @@ public class CustomVoiceService : INService, IUnloadableService
             emptyChannels.TryRemove(channelId, out _);
             if (emptyChannelTimers.TryRemove(channelId, out var timer))
             {
-                timer.Dispose();
+                await timer.DisposeAsync();
             }
 
             return true;
@@ -1393,7 +1393,7 @@ public class CustomVoiceService : INService, IUnloadableService
                 emptyChannels.TryRemove(newState.VoiceChannel.Id, out _);
                 if (emptyChannelTimers.TryRemove(newState.VoiceChannel.Id, out var timer))
                 {
-                    timer.Dispose();
+                    await timer.DisposeAsync();
                 }
             }
 
@@ -1497,7 +1497,7 @@ public class CustomVoiceService : INService, IUnloadableService
                 emptyChannels.TryRemove(voiceChannel.Id, out _);
                 if (emptyChannelTimers.TryRemove(voiceChannel.Id, out var timer))
                 {
-                    timer.Dispose();
+                    await timer.DisposeAsync();
                 }
             }
         }
@@ -1572,7 +1572,7 @@ public class CustomVoiceService : INService, IUnloadableService
             emptyChannels.TryRemove(channelId, out _);
             if (emptyChannelTimers.TryRemove(channelId, out var timer))
             {
-                timer.Dispose();
+                await timer.DisposeAsync();
             }
         }
     }
