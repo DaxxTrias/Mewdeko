@@ -208,15 +208,17 @@ public class ClientOperations(DiscordShardedClient client) : Controller
     /// <summary>
     ///     Gets a list of guilds the bot and user have mutual
     /// </summary>
-    /// <param name="userId"></param>
+    /// <param name="userId">The user ID to check mutual guilds for</param>
+    /// <param name="adminOnly">Whether to only return guilds where user has admin permissions (default: true)</param>
     /// <returns></returns>
     [HttpGet("mutualguilds/{userId}")]
-    public async Task<IActionResult> GetMutualAdminGuilds(ulong userId)
+    public async Task<IActionResult> GetMutualGuilds(ulong userId, [FromQuery] bool adminOnly = true)
     {
         await Task.CompletedTask;
         var guilds = client.Guilds;
         var mutuals = guilds
-            .Where(x => x.Users.Any(y => y.Id == userId && y.GuildPermissions.Has(GuildPermission.Administrator)))
+            .Where(x => x.Users.Any(y => y.Id == userId &&
+                                         (adminOnly ? y.GuildPermissions.Has(GuildPermission.Administrator) : true)))
             .Select(g => new
             {
                 id = g.Id,
@@ -226,13 +228,38 @@ public class ClientOperations(DiscordShardedClient client) : Controller
                 permissions = (int)g.GetUser(userId).GuildPermissions.RawValue,
                 features = Enum.GetValues(typeof(GuildFeature)).Cast<GuildFeature>()
                     .Where(x => g.Features.Value.HasFlag(x)),
-                banner = g.BannerUrl + "?size=4096"
+                banner = g.BannerUrl + "?size=4096",
+                hasAdminAccess = g.GetUser(userId).GuildPermissions.Has(GuildPermission.Administrator)
             })
             .ToList();
 
         if (mutuals.Count != 0)
             return Ok(mutuals);
         return NotFound();
+    }
+
+    /// <summary>
+    ///     Checks if this bot instance has the specified guild
+    /// </summary>
+    /// <param name="guildId">The guild ID to check</param>
+    /// <returns>Whether this instance has the guild with basic info</returns>
+    [HttpGet("hasguild/{guildId}")]
+    public async Task<IActionResult> HasGuild(ulong guildId)
+    {
+        await Task.CompletedTask;
+        var guild = client.GetGuild(guildId);
+
+        return Ok(new
+        {
+            hasGuild = guild != null,
+            guildName = guild?.Name,
+            memberCount = guild?.MemberCount,
+            iconUrl = guild?.IconUrl,
+            // Add more public info that might be useful for leaderboards
+            createdAt = guild?.CreatedAt,
+            description = guild?.Description,
+            features = guild?.Features
+        });
     }
 
     /// <summary>
