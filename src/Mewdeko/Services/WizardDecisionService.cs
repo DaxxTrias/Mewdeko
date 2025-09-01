@@ -249,12 +249,37 @@ public class WizardDecisionService : INService
         {
             await using var db = await dbFactory.CreateConnectionAsync();
 
+            // Update guild config to mark as skipped
             await db.GetTable<GuildConfig>()
                 .Where(g => g.GuildId == guildId)
                 .UpdateAsync(g => new GuildConfig
                 {
                     WizardSkipped = true, WizardCompletedAt = DateTime.UtcNow, WizardCompletedByUserId = userId
                 });
+
+            // Update user to mark as having completed any wizard (even though skipped)
+            var user = await db.GetTable<DiscordUser>().FirstOrDefaultAsync(u => u.UserId == userId);
+            if (user != null)
+            {
+                // Add this guild to completed list
+                var completedGuilds = JsonSerializer.Deserialize<List<ulong>>(user.WizardCompletedGuilds ?? "[]");
+                if (!completedGuilds.Contains(guildId))
+                {
+                    completedGuilds.Add(guildId);
+                }
+
+                var newExperienceLevel = user.DashboardExperienceLevel < 1 ? 1 : user.DashboardExperienceLevel;
+                var serializedGuilds = JsonSerializer.Serialize(completedGuilds);
+
+                await db.GetTable<DiscordUser>()
+                    .Where(u => u.UserId == userId)
+                    .UpdateAsync(u => new DiscordUser
+                    {
+                        HasCompletedAnyWizard = true,
+                        WizardCompletedGuilds = serializedGuilds,
+                        DashboardExperienceLevel = newExperienceLevel
+                    });
+            }
 
             logger.LogInformation("Wizard skipped for guild {GuildId} by user {UserId}", guildId, userId);
         }
