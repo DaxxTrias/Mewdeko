@@ -17,38 +17,6 @@ namespace Mewdeko.Modules.Xp.Services;
 /// </summary>
 public partial class XpService
 {
-    #region Static Access
-
-    /// <summary>
-    ///     Gets the singleton instance of the XP service.
-    /// </summary>
-    public static XpService Instance { get; private set; }
-
-
-    /// <summary>
-    ///     Gets the background processor.
-    /// </summary>
-    /// <returns>The background processor.</returns>
-    public XpBackgroundProcessor GetBackgroundProcessor()
-    {
-        return backgroundProcessor;
-    }
-
-    /// <summary>
-    ///     Queues an XP gain for a user.
-    /// </summary>
-    /// <param name="guildId">The guild ID.</param>
-    /// <param name="userId">The user ID.</param>
-    /// <param name="amount">The amount of XP to add.</param>
-    /// <param name="channelId">The channel ID.</param>
-    /// <param name="source">The source of the XP gain.</param>
-    public void QueueXpGain(ulong guildId, ulong userId, int amount, ulong channelId, XpSource source)
-    {
-        backgroundProcessor.QueueXpGain(guildId, userId, amount, channelId, source);
-    }
-
-    #endregion
-
     #region User XP Management
 
     /// <summary>
