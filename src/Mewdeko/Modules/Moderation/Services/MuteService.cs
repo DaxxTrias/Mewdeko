@@ -69,7 +69,7 @@ public class MuteService : INService, IReadyExecutor, IDisposable
     private readonly GuildSettingsService guildSettings;
     private readonly ILogger<MuteService> logger;
 
-    private readonly Timer? processingTimer = null;
+    private readonly Timer processingTimer;
 
     private readonly ConcurrentDictionary<TimerKey, TimerQueueItem> scheduledItems = new();
     private readonly GeneratedBotStrings strings;
@@ -104,6 +104,10 @@ public class MuteService : INService, IReadyExecutor, IDisposable
         eventHandler.Subscribe("UserJoined", "MuteService", Client_UserJoined);
         UserMuted += OnUserMuted;
         UserUnmuted += OnUserUnmuted;
+
+        // Initialize timer to process expired items every 30 seconds
+        processingTimer = new Timer(ProcessExpiredItemsCallback, null, TimeSpan.FromSeconds(30),
+            TimeSpan.FromSeconds(30));
     }
 
     /// <summary>
@@ -114,7 +118,7 @@ public class MuteService : INService, IReadyExecutor, IDisposable
     /// <summary>
     ///     Muted users cache.
     /// </summary>
-    public ConcurrentDictionary<ulong, ConcurrentHashSet<ulong>> MutedUsers { get; set; }
+    public ConcurrentDictionary<ulong, ConcurrentHashSet<ulong>> MutedUsers { get; set; } = new();
 
     /// <summary>
     ///     Unmute timers cache.
@@ -211,6 +215,9 @@ public class MuteService : INService, IReadyExecutor, IDisposable
             logger.LogInformation(
                 "Loaded {UnmuteCount} unmute timers, {UnbanCount} unban timers, and {UnroleCount} unrole timers",
                 unmuteTimers.Count, unbanTimers.Count, unroleTimers.Count);
+
+            // Process any expired items immediately on startup
+            await ProcessExpiredItems();
         }
         catch (Exception e)
         {
@@ -500,14 +507,14 @@ public class MuteService : INService, IReadyExecutor, IDisposable
                 // Find the matching database entries by ID
                 var dbEntries = await dbContext.UnroleTimers
                     .Where(x => idsToRemove.Any(id =>
-                        id.GuildId == x.GuildId && id.UserId == x.UserId && id.RoleId == id.RoleId))
+                        id.GuildId == x.GuildId && id.UserId == x.UserId && id.RoleId == x.RoleId))
                     .Select(x => x.Id)
                     .ToListAsync();
 
                 // Remove them
                 foreach (var id in dbEntries)
                 {
-                    await dbContext.UnroleTimers.Select(x => x.Id == id).DeleteAsync();
+                    await dbContext.UnroleTimers.Where(x => x.Id == id).DeleteAsync();
                 }
 
                 // Remove from local queue
@@ -763,19 +770,16 @@ public class MuteService : INService, IReadyExecutor, IDisposable
                         Uroles = mutedUser.Roles.Split(' ');
 
                         // Restore roles
-                        if (Uroles != null)
-                        {
-                            foreach (var i in Uroles)
-                                if (ulong.TryParse(i, out var roleId))
-                                    try
-                                    {
-                                        await usr.AddRoleAsync(usr.Guild.GetRole(roleId)).ConfigureAwait(false);
-                                    }
-                                    catch
-                                    {
-                                        // ignored
-                                    }
-                        }
+                        foreach (var i in Uroles)
+                            if (ulong.TryParse(i, out var roleId))
+                                try
+                                {
+                                    await usr.AddRoleAsync(usr.Guild.GetRole(roleId)).ConfigureAwait(false);
+                                }
+                                catch
+                                {
+                                    // ignored
+                                }
                     }
                     catch (Exception)
                     {
@@ -969,7 +973,10 @@ public class MuteService : INService, IReadyExecutor, IDisposable
     /// <param name="role">The role to add</param>
     public async Task TimedRole(IGuildUser? user, TimeSpan after, string reason, IRole role)
     {
-        await user.AddRoleAsync(role).ConfigureAwait(false);
+        await user.AddRoleAsync(role, new RequestOptions
+        {
+            AuditLogReason = reason
+        }).ConfigureAwait(false);
 
         await using var dbContext = await dbFactory.CreateConnectionAsync();
 
@@ -1025,7 +1032,7 @@ public class MuteService : INService, IReadyExecutor, IDisposable
         if (disposing)
         {
             eventHandler.Unsubscribe("UserJoined", "MuteService", Client_UserJoined);
-            processingTimer?.Dispose();
+            processingTimer.Dispose();
         }
     }
 
