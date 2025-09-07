@@ -653,7 +653,7 @@ public class MuteService : INService, IReadyExecutor, IDisposable
                     .FirstOrDefaultAsync(x => x.GuildId == usr.Guild.Id && x.UserId == usr.Id);
 
                 if (existingMute != null)
-                    await dbContext.MutedUserIds.Select(x => existingMute).DeleteAsync();
+                    await dbContext.MutedUserIds.Where(x => x.Id == existingMute.Id).DeleteAsync();
 
                 // Create new entry based on settings
                 var removeOnMute = await GetRemoveOnMute(usr.Guild.Id);
@@ -789,7 +789,7 @@ public class MuteService : INService, IReadyExecutor, IDisposable
 
                 // Remove muted user entry
                 if (mutedUser != null)
-                    await dbContext.MutedUserIds.Select(x => mutedUser).DeleteAsync();
+                    await dbContext.MutedUserIds.Where(x => x.Id == mutedUser.Id).DeleteAsync();
 
                 if (MutedUsers.TryGetValue(guildId, out var muted))
                     muted.TryRemove(usrId);
@@ -802,7 +802,7 @@ public class MuteService : INService, IReadyExecutor, IDisposable
 
                 foreach (var id in timersToRemove)
                 {
-                    await dbContext.UnmuteTimers.Select(x => x.Id == id).DeleteAsync();
+                    await dbContext.UnmuteTimers.Where(x => x.Id == id).DeleteAsync();
                 }
 
                 if (usr != null)
