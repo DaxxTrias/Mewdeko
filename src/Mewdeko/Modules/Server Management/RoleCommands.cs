@@ -6,6 +6,7 @@ using Discord.Net;
 using Humanizer;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Common.TypeReaders.Models;
+using Mewdeko.Modules.Moderation.Services;
 using Mewdeko.Modules.Server_Management.Services;
 using Mewdeko.Services.Settings;
 using Swan;
@@ -19,7 +20,7 @@ public partial class ServerManagement
     ///     assignment.
     /// </summary>
     [Group]
-    public class RoleCommands(GuildSettingsService guildSettings, BotConfigService config)
+    public class RoleCommands(GuildSettingsService guildSettings, BotConfigService config, MuteService muteService)
         : MewdekoSubmodule<RoleCommandsService>
     {
         /// <summary>
@@ -292,6 +293,7 @@ public partial class ServerManagement
         [RequireContext(ContextType.Guild)]
         [UserPerm(GuildPermission.ManageRoles)]
         [BotPerm(GuildPermission.ManageRoles)]
+        [Priority(0)]
         public async Task SetRoles(IGuildUser user, params IRole[] roles)
         {
             foreach (var i in roles)
@@ -313,6 +315,49 @@ public partial class ServerManagement
             await user.AddRolesAsync(roles).ConfigureAwait(false);
             await ctx.Channel.SendConfirmAsync(
                     Strings.UserGivenRoles(ctx.Guild.Id, user, string.Join<string>("|", roles.Select(x => x.Mention))))
+                .ConfigureAwait(false);
+        }
+
+        /// <summary>
+        ///     Modifies the roles of a user by adding new roles with an optional time limit.
+        /// </summary>
+        /// <param name="user">The user whose roles will be modified.</param>
+        /// <param name="time">The duration for which the roles will be active.</param>
+        /// <param name="roles">The roles to be added to the user.</param>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.ManageRoles)]
+        [BotPerm(GuildPermission.ManageRoles)]
+        [Priority(1)]
+        public async Task SetRoles(IGuildUser user, StoopidTime time, params IRole[] roles)
+        {
+            foreach (var i in roles)
+            {
+                if (ctx.User.Id != ctx.Guild.OwnerId &&
+                    ((IGuildUser)ctx.User).GetRoles().Max(x => x.Position) <= i.Position)
+                {
+                    await ctx.Channel.SendErrorAsync(Strings.CannotManageUser(ctx.Guild.Id, i.Mention), Config)
+                        .ConfigureAwait(false);
+                    return;
+                }
+
+                if (((IGuildUser)ctx.User).GetRoles().Max(x => x.Position) > i.Position) continue;
+                await ctx.Channel.SendErrorAsync(Strings.CannotManageRoleMention(ctx.Guild.Id, i.Mention), Config)
+                    .ConfigureAwait(false);
+                return;
+            }
+
+            // Add roles with timer
+            foreach (var role in roles)
+            {
+                await muteService.TimedRole(user, time.Time, $"Timed role assignment by {ctx.User}", role)
+                    .ConfigureAwait(false);
+            }
+
+            await ctx.Channel.SendConfirmAsync(
+                    Strings.UserGivenTimedRoles(ctx.Guild.Id, user,
+                        string.Join<string>("|", roles.Select(x => x.Mention)), time.Time.Humanize()))
                 .ConfigureAwait(false);
         }
 

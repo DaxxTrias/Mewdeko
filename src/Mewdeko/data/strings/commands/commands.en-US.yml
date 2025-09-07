@@ -22627,6 +22627,26 @@ setrole_IRole_IGuildUser_2:
   params:
     - *ref_520
     - *ref_519
+setrole_IRole_IGuildUser_StoopidTime:
+  args:
+    - '@role @user time'
+  desc: Sets a role to a user for a specified time duration.
+  params:
+    - *ref_520
+    - *ref_519
+    - &ref_525
+      desc: The duration for which the role will be active.
+      name: time
+      optional: false
+      type: StoopidTime
+setrole_IGuildUser_IRole_StoopidTime:
+  args:
+    - '@user @role time'
+  desc: Adds a role to a user for a specified time duration.
+  params:
+    - *ref_519
+    - *ref_520
+    - *ref_525
 setroles:
   args:
     - '@user @role'
@@ -22670,6 +22690,19 @@ setroles_IGuildUser_IRole[]_2:
     ones.
   params:
     - *ref_521
+    - *ref_522
+setroles_IGuildUser_StoopidTime_IRole[]:
+  args:
+    - '@user time @role'
+  desc: >-
+    Modifies the roles of a user by adding new roles with an optional time limit.
+  params:
+    - *ref_521
+    - &ref_524
+      desc: The duration for which the roles will be active.
+      name: time
+      optional: false
+      type: StoopidTime
     - *ref_522
 setrolexp:
   args:
