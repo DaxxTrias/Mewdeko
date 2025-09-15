@@ -389,3 +389,6 @@ src/Mewdeko/gcreds.json
 src/Mewdeko/application.yml
 src/Mewdeko.Api/
 src/Mewdeko.Database/
+
+.cursorrules
+.cursor/rules
