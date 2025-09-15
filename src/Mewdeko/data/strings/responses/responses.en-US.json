@@ -1742,6 +1742,8 @@
   "music_auto_play_disabled": "Auto-play disabled.",
   "music_auto_play_invalid": "Invalid auto-play value specified. The maximum value is 5.",
   "music_autoplay_set": "AutoPlay set to {0}",
+  "music_autoplay_disabled": "Auto-play disabled.",
+  "music_auto_play_set": "AutoPlay set to {0}",
   "music_bass_boost_set": "Bass boost set to {0}.",
   "music_bot_not_connect": "The bot is not in a voice channel (Run `{0}join` to make it join your channel even if its already in there).",
   "music_cannot_remove_current": "Cannot remove the currently playing track. Use skip instead.",
