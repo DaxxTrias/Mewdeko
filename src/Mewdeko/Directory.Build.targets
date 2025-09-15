@@ -1,0 +1,18 @@
+<Project>
+  <!-- Shadow copy analyzers only during design-time/IDE builds to avoid locking original DLLs -->
+  <Target Name="ShadowCopyAnalyzers" BeforeTargets="CoreCompile" Condition="'$(DesignTimeBuild)' == 'true'">
+    <MakeDir Directories="$(IntermediateOutputPath)analyzers_shadow" />
+
+    <Copy
+      SourceFiles="@(Analyzer)"
+      DestinationFiles="@(Analyzer->'$(IntermediateOutputPath)analyzers_shadow\%(Filename)%(Extension)')"
+      SkipUnchangedFiles="true"
+      Retries="2"
+      RetryDelayMilliseconds="100" />
+
+    <ItemGroup>
+      <Analyzer Remove="@(Analyzer)" />
+      <Analyzer Include="@(Analyzer->'$(IntermediateOutputPath)analyzers_shadow\%(Filename)%(Extension)')" />
+    </ItemGroup>
+  </Target>
+</Project>
