@@ -244,10 +244,9 @@ public class JoinLeaveLoggerService : INService, IDisposable
         var shader = SKShader.CreateLinearGradient(
             new SKPoint(0, 0),
             new SKPoint(width, 0),
-            new[]
-            {
+            [
                 SKColors.Blue, SKColors.Cyan
-            },
+            ],
             null,
             SKShaderTileMode.Clamp);
 

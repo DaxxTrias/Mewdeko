@@ -46,16 +46,15 @@ public class HorseRacingService : INService
 
             race.Participants.Add(new Racer(user.Id, betAmount, Animals[race.Participants.Count], user.ToString()));
 
-            if (race.Participants.Count == 10)
+            switch (race.Participants.Count)
             {
-                race.IsActive = true;
-                return (true, "", true);
-            }
-
-            if (race.Participants.Count == 1)
-            {
-                // Start a timer to add AI players if no one else joins
-                Task.Delay(10000).ContinueWith(_ => AddAiPlayersIfNeeded(guildId));
+                case 10:
+                    race.IsActive = true;
+                    return (true, "", true);
+                case 1:
+                    // Start a timer to add AI players if no one else joins
+                    Task.Delay(10000).ContinueWith(_ => AddAiPlayersIfNeeded(guildId));
+                    break;
             }
 
             return (true, "", false);

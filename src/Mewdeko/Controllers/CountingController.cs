@@ -518,7 +518,7 @@ public class CountingController : Controller
                 return BadRequest(
                     $"Invalid leaderboard type. Valid types: {string.Join(", ", Enum.GetNames<LeaderboardType>())}");
 
-            if (limit < 1 || limit > 100)
+            if (limit is < 1 or > 100)
                 limit = 20;
 
             var leaderboard = await statsService.GetLeaderboardAsync(channelId, leaderboardType, limit);

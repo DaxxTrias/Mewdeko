@@ -224,12 +224,18 @@ public static class Extensions
             if (ct.ContainsAnywhere)
             {
                 var pos = ctx.Content.AsSpan().GetWordPosition(trigger);
-                if (pos == WordPosition.Start)
-                    substringIndex++;
-                else if (pos == WordPosition.End)
-                    substringIndex = ctx.Content.Length;
-                else if (pos == WordPosition.Middle)
-                    substringIndex += ctx.Content.IndexOf(trigger, StringComparison.InvariantCulture);
+                switch (pos)
+                {
+                    case WordPosition.Start:
+                        substringIndex++;
+                        break;
+                    case WordPosition.End:
+                        substringIndex = ctx.Content.Length;
+                        break;
+                    case WordPosition.Middle:
+                        substringIndex += ctx.Content.IndexOf(trigger, StringComparison.InvariantCulture);
+                        break;
+                }
             }
 
             var canMentionEveryone = (ctx.Author as IGuildUser)?.GuildPermissions.MentionEveryone ?? true;

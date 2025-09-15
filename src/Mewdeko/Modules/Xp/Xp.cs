@@ -48,22 +48,24 @@ public class Xp(
         {
             var stats = await Service.GetUserXpStatsAsync(ctx.Guild.Id, user.Id);
 
-            // Check if user has any XP
-            if (stats.TotalXp == 0 && user.Id == ctx.User.Id)
+            switch (stats.TotalXp)
             {
-                await ReplyErrorAsync(Strings.XpYouNoXp(ctx.Guild.Id)).ConfigureAwait(false);
-                return;
+                // Check if user has any XP
+                case 0 when user.Id == ctx.User.Id:
+                    await ReplyErrorAsync(Strings.XpYouNoXp(ctx.Guild.Id)).ConfigureAwait(false);
+                    return;
+                case 0:
+                    await ReplyErrorAsync(Strings.XpUserNoXp(ctx.Guild.Id, user.ToString())).ConfigureAwait(false);
+                    return;
+                default:
+                {
+                    // Generate XP card
+                    var cardPath = await Service.GenerateXpCardAsync(ctx.Guild.Id, user.Id);
+                    await ctx.Channel.SendFileAsync(cardPath, "xp.png",
+                        Strings.XpCardFor(ctx.Guild.Id, user.ToString()));
+                    break;
+                }
             }
-
-            if (stats.TotalXp == 0)
-            {
-                await ReplyErrorAsync(Strings.XpUserNoXp(ctx.Guild.Id, user.ToString())).ConfigureAwait(false);
-                return;
-            }
-
-            // Generate XP card
-            var cardPath = await Service.GenerateXpCardAsync(ctx.Guild.Id, user.Id);
-            await ctx.Channel.SendFileAsync(cardPath, "xp.png", Strings.XpCardFor(ctx.Guild.Id, user.ToString()));
         }
         catch (Exception ex)
         {
@@ -95,17 +97,15 @@ public class Xp(
         {
             var stats = await Service.GetUserXpStatsAsync(ctx.Guild.Id, user.Id);
 
-            // Check if user has any XP
-            if (stats.TotalXp == 0 && user.Id == ctx.User.Id)
+            switch (stats.TotalXp)
             {
-                await ReplyErrorAsync(Strings.XpYouNoXp(ctx.Guild.Id)).ConfigureAwait(false);
-                return;
-            }
-
-            if (stats.TotalXp == 0)
-            {
-                await ReplyErrorAsync(Strings.XpUserNoXp(ctx.Guild.Id, user.ToString())).ConfigureAwait(false);
-                return;
+                // Check if user has any XP
+                case 0 when user.Id == ctx.User.Id:
+                    await ReplyErrorAsync(Strings.XpYouNoXp(ctx.Guild.Id)).ConfigureAwait(false);
+                    return;
+                case 0:
+                    await ReplyErrorAsync(Strings.XpUserNoXp(ctx.Guild.Id, user.ToString())).ConfigureAwait(false);
+                    return;
             }
 
             // Calculate progress percentage
@@ -386,21 +386,20 @@ public class Xp(
     [UserPerm(GuildPermission.ManageGuild)]
     public async Task SetMessageXp(int amount)
     {
-        if (amount <= 0)
+        switch (amount)
         {
-            await ReplyErrorAsync(Strings.XpAmountPositive(ctx.Guild.Id)).ConfigureAwait(false);
-            return;
+            case <= 0:
+                await ReplyErrorAsync(Strings.XpAmountPositive(ctx.Guild.Id)).ConfigureAwait(false);
+                return;
+            case > XpService.MaxXpPerMessage:
+                await ReplyErrorAsync(Strings.XpMessageTooHigh(ctx.Guild.Id, XpService.MaxXpPerMessage))
+                    .ConfigureAwait(false);
+                return;
+            default:
+                await Service.UpdateGuildXpSettingsAsync(ctx.Guild.Id, settings => settings.XpPerMessage = amount);
+                await ReplyConfirmAsync(Strings.XpMessageSet(ctx.Guild.Id, amount)).ConfigureAwait(false);
+                break;
         }
-
-        if (amount > XpService.MaxXpPerMessage)
-        {
-            await ReplyErrorAsync(Strings.XpMessageTooHigh(ctx.Guild.Id, XpService.MaxXpPerMessage))
-                .ConfigureAwait(false);
-            return;
-        }
-
-        await Service.UpdateGuildXpSettingsAsync(ctx.Guild.Id, settings => settings.XpPerMessage = amount);
-        await ReplyConfirmAsync(Strings.XpMessageSet(ctx.Guild.Id, amount)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -437,17 +436,15 @@ public class Xp(
     [UserPerm(GuildPermission.ManageGuild)]
     public async Task SetVoiceXp(int amount)
     {
-        if (amount < 0)
+        switch (amount)
         {
-            await ReplyErrorAsync(Strings.XpAmountNotNegative(ctx.Guild.Id)).ConfigureAwait(false);
-            return;
-        }
-
-        if (amount > XpService.MaxVoiceXpPerMinute)
-        {
-            await ReplyErrorAsync(Strings.XpVoiceTooHigh(ctx.Guild.Id, XpService.MaxVoiceXpPerMinute))
-                .ConfigureAwait(false);
-            return;
+            case < 0:
+                await ReplyErrorAsync(Strings.XpAmountNotNegative(ctx.Guild.Id)).ConfigureAwait(false);
+                return;
+            case > XpService.MaxVoiceXpPerMinute:
+                await ReplyErrorAsync(Strings.XpVoiceTooHigh(ctx.Guild.Id, XpService.MaxVoiceXpPerMinute))
+                    .ConfigureAwait(false);
+                return;
         }
 
         await Service.UpdateGuildXpSettingsAsync(ctx.Guild.Id, settings => settings.VoiceXpPerMinute = amount);

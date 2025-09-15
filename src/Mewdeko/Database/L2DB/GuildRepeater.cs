@@ -25,5 +25,23 @@ namespace DataModel
 		[Column("StartTimeOfDay"                                                                                  )] public string?   StartTimeOfDay { get; set; } // text
 		[Column("NoRedundant"                                                                                     )] public bool      NoRedundant    { get; set; } // boolean
 		[Column("DateAdded"                                                                                       )] public DateTime? DateAdded      { get; set; } // timestamp (6) without time zone
+		[Column("TriggerMode"                                                                                     )] public int       TriggerMode    { get; set; } = 0; // integer - StickyTriggerMode enum
+		[Column("ActivityThreshold"                                                                               )] public int       ActivityThreshold { get; set; } = 5; // integer
+		[Column("ActivityTimeWindow"                                                                              )] public string?   ActivityTimeWindow { get; set; } = "00:05:00"; // text
+		[Column("ConversationDetection"                                                                           )] public bool      ConversationDetection { get; set; } = false; // boolean
+		[Column("ConversationThreshold"                                                                           )] public int       ConversationThreshold { get; set; } = 3; // integer
+		[Column("Priority"                                                                                        )] public int       Priority       { get; set; } = 50; // integer
+		[Column("QueuePosition"                                                                                   )] public int       QueuePosition  { get; set; } = 0; // integer
+		[Column("TimeConditions"                                                                                  )] public string?   TimeConditions { get; set; } // text - JSON
+		[Column("MaxAge"                                                                                          )] public string?   MaxAge         { get; set; } // text - TimeSpan
+		[Column("MaxTriggers"                                                                                     )] public int?      MaxTriggers    { get; set; } // integer
+		[Column("ThreadAutoSticky"                                                                                )] public bool      ThreadAutoSticky { get; set; } = false; // boolean
+		[Column("ForumTagConditions"                                                                              )] public string?   ForumTagConditions { get; set; } // text - JSON
+		[Column("IsEnabled"                                                                                       )] public bool      IsEnabled      { get; set; } = true; // boolean
+		[Column("DisplayCount"                                                                                    )] public int       DisplayCount   { get; set; } = 0; // integer
+		[Column("LastDisplayed"                                                                                   )] public DateTime? LastDisplayed  { get; set; } // timestamp (6) without time zone
+		[Column("ActivityBasedLastCheck"                                                                          )] public DateTime? ActivityBasedLastCheck { get; set; } // timestamp (6) without time zone
+		[Column("ThreadOnlyMode"                                                                                  )] public bool      ThreadOnlyMode { get; set; } = false; // boolean
+		[Column("ThreadStickyMessages"                                                                            )] public string?   ThreadStickyMessages { get; set; } // text - JSON tracking thread sticky message IDs
 	}
 }

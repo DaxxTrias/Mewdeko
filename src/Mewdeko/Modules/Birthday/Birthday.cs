@@ -86,7 +86,7 @@ public class Birthday : MewdekoModuleBase<BirthdayService>
     [Aliases]
     public async Task BirthdayList(int days = 7)
     {
-        if (days < 1 || days > 30)
+        if (days is < 1 or > 30)
         {
             await ctx.Channel.SendErrorAsync(Strings.BirthdayDaysRangeError(ctx.Guild.Id), Config);
             return;
@@ -323,7 +323,9 @@ public class Birthday : MewdekoModuleBase<BirthdayService>
                 ? ctx.Guild.GetRole(config.BirthdayPingRoleId.Value)?.Mention ?? "Not found"
                 : "Not set";
 
-            var message = !config.BirthdayMessage.IsNullOrWhiteSpace() ? "Custom Message Set" : "🎉 Happy Birthday %user%! 🎂";
+            var message = !config.BirthdayMessage.IsNullOrWhiteSpace()
+                ? "Custom Message Set"
+                : "🎉 Happy Birthday %user%! 🎂";
 
             var features = Enum.GetValues<BirthdayFeature>()
                 .Where(f => f != BirthdayFeature.None && (config.EnabledFeatures & (int)f) != 0)

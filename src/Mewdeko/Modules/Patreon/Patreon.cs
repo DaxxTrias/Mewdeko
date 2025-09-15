@@ -557,7 +557,7 @@ public class Patreon(IBotCredentials creds, PatreonApiClient patreonApiClient, I
     [RequireContext(ContextType.Guild)]
     public async Task PatreonTop(int count = 10)
     {
-        if (count < 1 || count > 20) count = 10;
+        if (count is < 1 or > 20) count = 10;
 
         var supporters = await Service.GetActiveSupportersAsync(ctx.Guild.Id);
 

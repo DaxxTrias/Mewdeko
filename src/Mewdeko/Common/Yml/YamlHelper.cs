@@ -52,8 +52,14 @@ public class YamlHelper
     /// <returns>The hexadecimal value of the character.</returns>
     public static int AsHex(char c)
     {
-        if (c <= '9') return c - '0';
-        if (c <= 'F') return c - 'A' + 10;
-        return c - 'a' + 10;
+        switch (c)
+        {
+            case <= '9':
+                return c - '0';
+            case <= 'F':
+                return c - 'A' + 10;
+            default:
+                return c - 'a' + 10;
+        }
     }
 }

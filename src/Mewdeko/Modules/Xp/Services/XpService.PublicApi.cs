@@ -184,7 +184,7 @@ public partial class XpService
         if (page < 1)
             page = 1;
 
-        if (pageSize < 1 || pageSize > 100)
+        if (pageSize is < 1 or > 100)
             pageSize = 10;
 
         // Check cache for leaderboard and count

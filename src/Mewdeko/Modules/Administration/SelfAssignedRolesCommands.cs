@@ -338,23 +338,22 @@ public partial class Administration
             var (result, autoDelete) = await Service.Remove(guildUser, role).ConfigureAwait(false);
 
             IUserMessage msg;
-            if (result == SelfAssignedRolesService.RemoveResult.ErrNotAssignable)
+            switch (result)
             {
-                msg = await ReplyErrorAsync(Strings.SelfAssignNot(ctx.Guild.Id)).ConfigureAwait(false);
-            }
-            else if (result == SelfAssignedRolesService.RemoveResult.ErrNotHave)
-            {
-                msg = await ReplyErrorAsync(Strings.SelfAssignNotHave(ctx.Guild.Id, Format.Bold(role.Name)))
-                    .ConfigureAwait(false);
-            }
-            else if (result == SelfAssignedRolesService.RemoveResult.ErrNotPerms)
-            {
-                msg = await ReplyErrorAsync(Strings.SelfAssignPerms(ctx.Guild.Id)).ConfigureAwait(false);
-            }
-            else
-            {
-                msg = await ReplyConfirmAsync(Strings.SelfAssignRemove(ctx.Guild.Id, Format.Bold(role.Name)))
-                    .ConfigureAwait(false);
+                case SelfAssignedRolesService.RemoveResult.ErrNotAssignable:
+                    msg = await ReplyErrorAsync(Strings.SelfAssignNot(ctx.Guild.Id)).ConfigureAwait(false);
+                    break;
+                case SelfAssignedRolesService.RemoveResult.ErrNotHave:
+                    msg = await ReplyErrorAsync(Strings.SelfAssignNotHave(ctx.Guild.Id, Format.Bold(role.Name)))
+                        .ConfigureAwait(false);
+                    break;
+                case SelfAssignedRolesService.RemoveResult.ErrNotPerms:
+                    msg = await ReplyErrorAsync(Strings.SelfAssignPerms(ctx.Guild.Id)).ConfigureAwait(false);
+                    break;
+                default:
+                    msg = await ReplyConfirmAsync(Strings.SelfAssignRemove(ctx.Guild.Id, Format.Bold(role.Name)))
+                        .ConfigureAwait(false);
+                    break;
             }
 
             if (autoDelete)

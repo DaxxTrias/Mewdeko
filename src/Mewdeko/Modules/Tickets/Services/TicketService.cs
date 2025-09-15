@@ -2946,37 +2946,42 @@ public class TicketService : INService
                 }
             }
 
-            // 4. Move to archive category (if not deleting and not auto-archiving)
-            if (!deleteOnClose)
+            switch (deleteOnClose)
             {
-                var archiveCategoryId = ticket.Button?.ArchiveCategoryId ?? ticket.SelectOption?.ArchiveCategoryId;
-                if (archiveCategoryId.HasValue)
+                // 4. Move to archive category (if not deleting and not auto-archiving)
+                case false:
                 {
-                    try
+                    var archiveCategoryId = ticket.Button?.ArchiveCategoryId ?? ticket.SelectOption?.ArchiveCategoryId;
+                    if (archiveCategoryId.HasValue)
                     {
-                        await channel.ModifyAsync(c => c.CategoryId = archiveCategoryId.Value);
+                        try
+                        {
+                            await channel.ModifyAsync(c => c.CategoryId = archiveCategoryId.Value);
+                        }
+                        catch (Exception ex)
+                        {
+                            logger.LogWarning(ex, "Failed to move ticket to archive category");
+                        }
                     }
-                    catch (Exception ex)
-                    {
-                        logger.LogWarning(ex, "Failed to move ticket to archive category");
-                    }
+
+                    break;
                 }
-            }
+                // 5. Schedule deletion if enabled
+                case true:
+                {
+                    var deleteEmbed = new EmbedBuilder()
+                        .WithTitle(strings.TicketScheduledDeletion(guild.Id))
+                        .WithDescription(
+                            strings.TicketDeletionWarning(guild.Id, deleteDelay.TotalMinutes))
+                        .WithColor(Color.Red)
+                        .Build();
 
-            // 5. Schedule deletion if enabled
-            if (deleteOnClose)
-            {
-                var deleteEmbed = new EmbedBuilder()
-                    .WithTitle(strings.TicketScheduledDeletion(guild.Id))
-                    .WithDescription(
-                        strings.TicketDeletionWarning(guild.Id, deleteDelay.TotalMinutes))
-                    .WithColor(Color.Red)
-                    .Build();
+                    await channel.SendMessageAsync(embed: deleteEmbed);
 
-                await channel.SendMessageAsync(embed: deleteEmbed);
-
-                // Schedule deletion using the new ScheduledTicketDeletions table
-                await ScheduleTicketDeletionAsync(ticket, deleteDelay);
+                    // Schedule deletion using the new ScheduledTicketDeletions table
+                    await ScheduleTicketDeletionAsync(ticket, deleteDelay);
+                    break;
+                }
             }
         }
         catch (Exception ex)
@@ -3792,7 +3797,7 @@ public class TicketService : INService
     public async Task<bool> CreatePriority(ulong guildId, string id, string name, string emoji, int level,
         bool pingStaff, TimeSpan responseTime, Color color)
     {
-        if (level < 1 || level > 5)
+        if (level is < 1 or > 5)
             throw new ArgumentException("Priority level must be between 1 and 5", nameof(level));
 
         await using var ctx = await dbFactory.CreateConnectionAsync();

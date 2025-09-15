@@ -18,30 +18,30 @@ public class DiscordColorConverter : JsonConverter<Color?>
 
         try
         {
-            if (reader.TokenType == JsonTokenType.String)
+            switch (reader.TokenType)
             {
-                var colorString = reader.GetString();
-                if (string.IsNullOrWhiteSpace(colorString))
+                case JsonTokenType.String:
+                {
+                    var colorString = reader.GetString();
+                    if (string.IsNullOrWhiteSpace(colorString))
+                        return null;
+
+                    if (colorString.StartsWith("#"))
+                        return new Color(Convert.ToUInt32(colorString.Replace("#", ""), 16));
+
+                    if (colorString.StartsWith("0x") && colorString.Length == 8)
+                        return new Color(Convert.ToUInt32(colorString.Replace("0x", ""), 16));
+
+                    if (uint.TryParse(colorString, out var numFromString))
+                        return new Color(numFromString);
+
                     return null;
-
-                if (colorString.StartsWith("#"))
-                    return new Color(Convert.ToUInt32(colorString.Replace("#", ""), 16));
-
-                if (colorString.StartsWith("0x") && colorString.Length == 8)
-                    return new Color(Convert.ToUInt32(colorString.Replace("0x", ""), 16));
-
-                if (uint.TryParse(colorString, out var numFromString))
-                    return new Color(numFromString);
-
-                return null;
+                }
+                case JsonTokenType.Number:
+                    return new Color(reader.GetUInt32());
+                default:
+                    return null;
             }
-
-            if (reader.TokenType == JsonTokenType.Number)
-            {
-                return new Color(reader.GetUInt32());
-            }
-
-            return null;
         }
         catch
         {

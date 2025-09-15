@@ -259,7 +259,7 @@ public class SlashCountingCustomization : MewdekoSlashModuleBase<CountingService
             return;
         }
 
-        if (threshold < 1 || threshold > 10)
+        if (threshold is < 1 or > 10)
         {
             await ErrorAsync(Strings.CountingInvalidFailureThreshold(ctx.Guild.Id));
             return;
@@ -288,7 +288,7 @@ public class SlashCountingCustomization : MewdekoSlashModuleBase<CountingService
             return;
         }
 
-        if (seconds < 0 || seconds > 300)
+        if (seconds is < 0 or > 300)
         {
             await ErrorAsync(Strings.CountingInvalidCooldown(ctx.Guild.Id));
             return;

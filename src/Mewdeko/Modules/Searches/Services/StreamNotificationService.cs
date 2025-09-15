@@ -21,14 +21,16 @@ public class StreamNotificationService : IReadyExecutor, INService
     private readonly DiscordShardedClient client;
     private readonly IDataConnectionFactory dbFactory;
     private readonly GuildSettingsService guildSettings;
+    private readonly object hashSetLock = new();
     private readonly ILogger<StreamNotificationService> logger;
     private readonly Random rng = new MewdekoRandom();
     private readonly NotifChecker streamTracker;
     private readonly GeneratedBotStrings strings;
 
-    private ConcurrentDictionary<StreamDataKey, ConcurrentDictionary<ulong, HashSet<FollowedStream>>> shardTrackedStreams = new();
+    private readonly ConcurrentDictionary<StreamDataKey, ConcurrentDictionary<ulong, HashSet<FollowedStream>>>
+        shardTrackedStreams = new();
+
     private ConcurrentDictionary<StreamDataKey, HashSet<ulong>> trackCounter = new();
-    private readonly object hashSetLock = new();
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="StreamNotificationService" /> class.
@@ -50,7 +52,8 @@ public class StreamNotificationService : IReadyExecutor, INService
         IBotCredentials creds,
         IHttpClientFactory httpFactory,
         Mewdeko bot,
-        EventHandler eventHandler, ILogger<StreamNotificationService> logger, ILogger<NotifChecker> logger2, GuildSettingsService guildSettings)
+        EventHandler eventHandler, ILogger<StreamNotificationService> logger, ILogger<NotifChecker> logger2,
+        GuildSettingsService guildSettings)
     {
         this.dbFactory = dbFactory;
         this.client = client;
@@ -140,9 +143,9 @@ public class StreamNotificationService : IReadyExecutor, INService
 
             // Create counter dictionary for tracking using efficient string comparison
             var counterGroups = followedStreams.GroupBy(x => new
-                {
-                    x.Type, Name = x.Username?.ToLowerInvariant()
-                });
+            {
+                x.Type, Name = x.Username?.ToLowerInvariant()
+            });
 
             foreach (var group in counterGroups)
             {
@@ -170,7 +173,7 @@ public class StreamNotificationService : IReadyExecutor, INService
         eventHandler.Subscribe("LeftGuild", "StreamNotificationService", ClientOnLeftGuild);
     }
 
-    private List<ulong> OfflineNotificationServers { get; set; } = new();
+    private List<ulong> OfflineNotificationServers { get; set; } = [];
 
     /// <inheritdoc />
     public Task OnReadyAsync()
@@ -333,6 +336,7 @@ public class StreamNotificationService : IReadyExecutor, INService
             {
                 streams.Add(followedStream);
             }
+
             TrackStream(followedStream);
         }
     }
@@ -357,6 +361,7 @@ public class StreamNotificationService : IReadyExecutor, INService
             {
                 streams.Remove(followedStream);
             }
+
             await UntrackStream(followedStream);
         }
     }
@@ -609,7 +614,8 @@ public class StreamNotificationService : IReadyExecutor, INService
     /// <param name="followedStream">The followed stream configuration.</param>
     /// <param name="guildTemplate">The guild-wide custom template (optional).</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    private async Task SendStreamNotificationAsync(ITextChannel textChannel, StreamData stream, FollowedStream followedStream, string? guildTemplate = null)
+    private async Task SendStreamNotificationAsync(ITextChannel textChannel, StreamData stream,
+        FollowedStream followedStream, string? guildTemplate = null)
     {
         try
         {
@@ -622,7 +628,8 @@ public class StreamNotificationService : IReadyExecutor, INService
                 var processedMessage = replacer.Replace(streamerMessage);
 
                 // Try to parse as SmartEmbed (JSON)
-                if (SmartEmbed.TryParse(processedMessage, followedStream.GuildId, out var embed, out var plainText, out var components))
+                if (SmartEmbed.TryParse(processedMessage, followedStream.GuildId, out var embed, out var plainText,
+                        out var components))
                 {
                     // Valid JSON - use SmartEmbed
                     await textChannel.SendMessageAsync(plainText, embeds: embed, components: components?.Build());
@@ -641,7 +648,8 @@ public class StreamNotificationService : IReadyExecutor, INService
             {
                 var processedTemplate = replacer.Replace(guildTemplate);
 
-                if (SmartEmbed.TryParse(processedTemplate, followedStream.GuildId, out var embed, out var plainText, out var components))
+                if (SmartEmbed.TryParse(processedTemplate, followedStream.GuildId, out var embed, out var plainText,
+                        out var components))
                 {
                     await textChannel.SendMessageAsync(plainText, embeds: embed, components: components?.Build());
                     return;
@@ -672,19 +680,17 @@ public class StreamNotificationService : IReadyExecutor, INService
     /// <returns>The custom message or null if not set.</returns>
     private string? GetStreamerCustomMessage(FollowedStream followedStream, bool isOnline)
     {
-        // Check for status-specific messages first
-        if (isOnline && !string.IsNullOrWhiteSpace(followedStream.OnlineMessage))
+        switch (isOnline)
         {
-            return followedStream.OnlineMessage;
+            // Check for status-specific messages first
+            case true when !string.IsNullOrWhiteSpace(followedStream.OnlineMessage):
+                return followedStream.OnlineMessage;
+            case false when !string.IsNullOrWhiteSpace(followedStream.OfflineMessage):
+                return followedStream.OfflineMessage;
+            default:
+                // If no status-specific message, return null (use guild template or default embed)
+                return null;
         }
-
-        if (!isOnline && !string.IsNullOrWhiteSpace(followedStream.OfflineMessage))
-        {
-            return followedStream.OfflineMessage;
-        }
-
-        // If no status-specific message, return null (use guild template or default embed)
-        return null;
     }
 
     /// <summary>
@@ -730,8 +736,9 @@ public class StreamNotificationService : IReadyExecutor, INService
 
     private HashSet<FollowedStream> GetLocalGuildStreams(in StreamDataKey key, ulong guildId)
     {
-        var guildMap = shardTrackedStreams.GetOrAdd(key, _ => new ConcurrentDictionary<ulong, HashSet<FollowedStream>>());
-        return guildMap.GetOrAdd(guildId, _ => new HashSet<FollowedStream>());
+        var guildMap =
+            shardTrackedStreams.GetOrAdd(key, _ => new ConcurrentDictionary<ulong, HashSet<FollowedStream>>());
+        return guildMap.GetOrAdd(guildId, _ => []);
     }
 
     /// <summary>
@@ -842,8 +849,8 @@ public class StreamNotificationService : IReadyExecutor, INService
     {
         return new Dictionary<string, List<(string, string)>>
         {
-            ["Stream Information"] = new List<(string, string)>
-            {
+            ["Stream Information"] =
+            [
                 ("%stream.name%", "Display name of the streamer"),
                 ("%stream.username%", "Login name/username of the streamer"),
                 ("%stream.url%", "Direct URL to the stream"),
@@ -855,7 +862,7 @@ public class StreamNotificationService : IReadyExecutor, INService
                 ("%stream.preview%", "URL to stream preview/thumbnail"),
                 ("%stream.status%", "🟢 Online or 🔴 Offline"),
                 ("%stream.channelid%", "Platform-specific channel ID")
-            }
+            ]
         };
     }
 }

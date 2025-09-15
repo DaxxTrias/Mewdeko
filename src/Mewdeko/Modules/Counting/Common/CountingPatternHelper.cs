@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace Mewdeko.Modules.Counting.Common;
@@ -10,36 +11,180 @@ public static class CountingPatternHelper
     // Roman numeral mappings
     private static readonly Dictionary<char, int> RomanNumeralMap = new()
     {
-        {'I', 1}, {'V', 5}, {'X', 10}, {'L', 50},
-        {'C', 100}, {'D', 500}, {'M', 1000}
+        {
+            'I', 1
+        },
+        {
+            'V', 5
+        },
+        {
+            'X', 10
+        },
+        {
+            'L', 50
+        },
+        {
+            'C', 100
+        },
+        {
+            'D', 500
+        },
+        {
+            'M', 1000
+        }
     };
 
     private static readonly Dictionary<int, string> DecimalToRomanMap = new()
     {
-        {1000, "M"}, {900, "CM"}, {500, "D"}, {400, "CD"},
-        {100, "C"}, {90, "XC"}, {50, "L"}, {40, "XL"},
-        {10, "X"}, {9, "IX"}, {5, "V"}, {4, "IV"}, {1, "I"}
+        {
+            1000, "M"
+        },
+        {
+            900, "CM"
+        },
+        {
+            500, "D"
+        },
+        {
+            400, "CD"
+        },
+        {
+            100, "C"
+        },
+        {
+            90, "XC"
+        },
+        {
+            50, "L"
+        },
+        {
+            40, "XL"
+        },
+        {
+            10, "X"
+        },
+        {
+            9, "IX"
+        },
+        {
+            5, "V"
+        },
+        {
+            4, "IV"
+        },
+        {
+            1, "I"
+        }
     };
 
     // Word mappings for numbers
     private static readonly Dictionary<string, long> WordToNumberMap = new(StringComparer.OrdinalIgnoreCase)
     {
-        {"zero", 0}, {"one", 1}, {"two", 2}, {"three", 3}, {"four", 4}, {"five", 5},
-        {"six", 6}, {"seven", 7}, {"eight", 8}, {"nine", 9}, {"ten", 10},
-        {"eleven", 11}, {"twelve", 12}, {"thirteen", 13}, {"fourteen", 14}, {"fifteen", 15},
-        {"sixteen", 16}, {"seventeen", 17}, {"eighteen", 18}, {"nineteen", 19}, {"twenty", 20},
-        {"thirty", 30}, {"forty", 40}, {"fifty", 50}, {"sixty", 60}, {"seventy", 70},
-        {"eighty", 80}, {"ninety", 90}, {"hundred", 100}, {"thousand", 1000}, {"million", 1000000}
+        {
+            "zero", 0
+        },
+        {
+            "one", 1
+        },
+        {
+            "two", 2
+        },
+        {
+            "three", 3
+        },
+        {
+            "four", 4
+        },
+        {
+            "five", 5
+        },
+        {
+            "six", 6
+        },
+        {
+            "seven", 7
+        },
+        {
+            "eight", 8
+        },
+        {
+            "nine", 9
+        },
+        {
+            "ten", 10
+        },
+        {
+            "eleven", 11
+        },
+        {
+            "twelve", 12
+        },
+        {
+            "thirteen", 13
+        },
+        {
+            "fourteen", 14
+        },
+        {
+            "fifteen", 15
+        },
+        {
+            "sixteen", 16
+        },
+        {
+            "seventeen", 17
+        },
+        {
+            "eighteen", 18
+        },
+        {
+            "nineteen", 19
+        },
+        {
+            "twenty", 20
+        },
+        {
+            "thirty", 30
+        },
+        {
+            "forty", 40
+        },
+        {
+            "fifty", 50
+        },
+        {
+            "sixty", 60
+        },
+        {
+            "seventy", 70
+        },
+        {
+            "eighty", 80
+        },
+        {
+            "ninety", 90
+        },
+        {
+            "hundred", 100
+        },
+        {
+            "thousand", 1000
+        },
+        {
+            "million", 1000000
+        }
     };
 
-    private static readonly string[] NumberWords = {
+    private static readonly string[] NumberWords =
+    [
         "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
         "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen"
-    };
+    ];
 
-    private static readonly string[] TensWords = {
+    private static readonly string[] TensWords =
+    [
         "", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"
-    };
+    ];
 
     /// <summary>
     /// Converts a Roman numeral to decimal.
@@ -73,11 +218,11 @@ public static class CountingPatternHelper
     /// </summary>
     public static string DecimalToRoman(long number)
     {
-        if (number <= 0 || number > 3999)
+        if (number is <= 0 or > 3999)
             throw new ArgumentException("Number must be between 1 and 3999 for Roman numerals");
 
-        var result = new System.Text.StringBuilder();
-        
+        var result = new StringBuilder();
+
         foreach (var kvp in DecimalToRomanMap)
         {
             while (number >= kvp.Key)
@@ -100,12 +245,12 @@ public static class CountingPatternHelper
 
         // Simple implementation for basic numbers
         words = words.ToLower().Trim();
-        
+
         if (WordToNumberMap.TryGetValue(words, out long simpleNumber))
             return simpleNumber;
 
         // Handle compound numbers like "twenty-one", "thirty-five", etc.
-        var parts = words.Split(new[] {' ', '-'}, StringSplitOptions.RemoveEmptyEntries);
+        var parts = words.Split([' ', '-'], StringSplitOptions.RemoveEmptyEntries);
         long total = 0;
         long current = 0;
 
@@ -113,23 +258,22 @@ public static class CountingPatternHelper
         {
             if (WordToNumberMap.TryGetValue(part, out long value))
             {
-                if (value == 100)
+                switch (value)
                 {
-                    current = current == 0 ? 100 : current * 100;
-                }
-                else if (value == 1000)
-                {
-                    total += (current == 0 ? 1 : current) * 1000;
-                    current = 0;
-                }
-                else if (value == 1000000)
-                {
-                    total += (current == 0 ? 1 : current) * 1000000;
-                    current = 0;
-                }
-                else
-                {
-                    current += value;
+                    case 100:
+                        current = current == 0 ? 100 : current * 100;
+                        break;
+                    case 1000:
+                        total += (current == 0 ? 1 : current) * 1000;
+                        current = 0;
+                        break;
+                    case 1000000:
+                        total += (current == 0 ? 1 : current) * 1000000;
+                        current = 0;
+                        break;
+                    default:
+                        current += value;
+                        break;
                 }
             }
         }
@@ -142,11 +286,13 @@ public static class CountingPatternHelper
     /// </summary>
     public static string NumberToWords(long number)
     {
-        if (number == 0)
-            return "zero";
-
-        if (number < 0)
-            return "negative " + NumberToWords(Math.Abs(number));
+        switch (number)
+        {
+            case 0:
+                return "zero";
+            case < 0:
+                return "negative " + NumberToWords(Math.Abs(number));
+        }
 
         string words = "";
 
@@ -220,8 +366,14 @@ public static class CountingPatternHelper
     /// </summary>
     public static bool IsFibonacci(long number)
     {
-        if (number < 0) return false;
-        if (number == 0 || number == 1) return true;
+        switch (number)
+        {
+            case < 0:
+                return false;
+            case 0:
+            case 1:
+                return true;
+        }
 
         long a = 0, b = 1;
         while (b < number)
@@ -239,8 +391,13 @@ public static class CountingPatternHelper
     /// </summary>
     public static long GetNextFibonacci(long number)
     {
-        if (number < 0) return 0;
-        if (number == 0) return 1;
+        switch (number)
+        {
+            case < 0:
+                return 0;
+            case 0:
+                return 1;
+        }
 
         long a = 0, b = 1;
         while (b <= number)
@@ -258,8 +415,14 @@ public static class CountingPatternHelper
     /// </summary>
     public static bool IsPrime(long number)
     {
-        if (number <= 1) return false;
-        if (number == 2) return true;
+        switch (number)
+        {
+            case <= 1:
+                return false;
+            case 2:
+                return true;
+        }
+
         if (number % 2 == 0) return false;
 
         long sqrt = (long)Math.Sqrt(number);
@@ -278,11 +441,11 @@ public static class CountingPatternHelper
     public static long GetNextPrime(long number)
     {
         if (number < 2) return 2;
-        
+
         long candidate = number + 1;
         while (!IsPrime(candidate))
             candidate++;
-            
+
         return candidate;
     }
 
@@ -300,7 +463,9 @@ public static class CountingPatternHelper
             CountingPattern.Hexadecimal => Convert.ToString(number, 16).ToUpper(),
             CountingPattern.Words => NumberToWords(number),
             CountingPattern.Ordinal => NumberToOrdinal(number),
-            CountingPattern.Fibonacci => IsFibonacci(number) ? number.ToString() : GetNextFibonacci(number - 1).ToString(),
+            CountingPattern.Fibonacci => IsFibonacci(number)
+                ? number.ToString()
+                : GetNextFibonacci(number - 1).ToString(),
             CountingPattern.Primes => IsPrime(number) ? number.ToString() : GetNextPrime(number - 1).ToString(),
             _ => number.ToString()
         };

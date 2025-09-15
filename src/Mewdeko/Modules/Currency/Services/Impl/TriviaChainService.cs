@@ -289,14 +289,12 @@ public class TriviaChainService(GeneratedBotStrings strings) : ITriviaChainServi
         {
             "science" => new[]
             {
-                ("What is the chemical symbol for gold?", new[]
-                {
+                ("What is the chemical symbol for gold?", [
                     "Au", "Ag", "Fe", "Cu"
-                }, "Au"),
-                ("How many bones are in the human body?", new[]
-                {
+                ], "Au"),
+                ("How many bones are in the human body?", [
                     "206", "204", "208", "210"
-                }, "206"),
+                ], "206"),
                 ("What is the speed of light?", new[]
                 {
                     "299,792,458 m/s", "300,000,000 m/s", "299,000,000 m/s", "298,000,000 m/s"
@@ -304,14 +302,12 @@ public class TriviaChainService(GeneratedBotStrings strings) : ITriviaChainServi
             },
             "history" => new[]
             {
-                ("In which year did World War II end?", new[]
-                {
+                ("In which year did World War II end?", [
                     "1945", "1944", "1946", "1943"
-                }, "1945"),
-                ("Who was the first president of the United States?", new[]
-                {
+                ], "1945"),
+                ("Who was the first president of the United States?", [
                     "George Washington", "John Adams", "Thomas Jefferson", "Benjamin Franklin"
-                }, "George Washington"),
+                ], "George Washington"),
                 ("Which empire was ruled by Julius Caesar?", new[]
                 {
                     "Roman Empire", "Greek Empire", "Byzantine Empire", "Ottoman Empire"
@@ -319,14 +315,12 @@ public class TriviaChainService(GeneratedBotStrings strings) : ITriviaChainServi
             },
             "sports" => new[]
             {
-                ("How many players are on a basketball team on the court?", new[]
-                {
+                ("How many players are on a basketball team on the court?", [
                     "5", "6", "7", "4"
-                }, "5"),
-                ("In which sport would you perform a slam dunk?", new[]
-                {
+                ], "5"),
+                ("In which sport would you perform a slam dunk?", [
                     "Basketball", "Tennis", "Football", "Baseball"
-                }, "Basketball"),
+                ], "Basketball"),
                 ("How often are the Summer Olympics held?", new[]
                 {
                     "Every 4 years", "Every 2 years", "Every 6 years", "Every 3 years"
@@ -334,14 +328,12 @@ public class TriviaChainService(GeneratedBotStrings strings) : ITriviaChainServi
             },
             "entertainment" => new[]
             {
-                ("Who directed the movie 'Jaws'?", new[]
-                {
+                ("Who directed the movie 'Jaws'?", [
                     "Steven Spielberg", "George Lucas", "Martin Scorsese", "Francis Ford Coppola"
-                }, "Steven Spielberg"),
-                ("Which movie features the song 'My Heart Will Go On'?", new[]
-                {
+                ], "Steven Spielberg"),
+                ("Which movie features the song 'My Heart Will Go On'?", [
                     "Titanic", "The Bodyguard", "Ghost", "Pretty Woman"
-                }, "Titanic"),
+                ], "Titanic"),
                 ("What is the highest-grossing film of all time?", new[]
                 {
                     "Avatar", "Avengers: Endgame", "Titanic", "Star Wars"
@@ -349,14 +341,12 @@ public class TriviaChainService(GeneratedBotStrings strings) : ITriviaChainServi
             },
             _ => new[]
             {
-                ("What is the capital of France?", new[]
-                {
+                ("What is the capital of France?", [
                     "Paris", "London", "Berlin", "Madrid"
-                }, "Paris"),
-                ("Which planet is known as the Red Planet?", new[]
-                {
+                ], "Paris"),
+                ("Which planet is known as the Red Planet?", [
                     "Mars", "Venus", "Jupiter", "Saturn"
-                }, "Mars"),
+                ], "Mars"),
                 ("What is 2 + 2?", new[]
                 {
                     "4", "3", "5", "6"

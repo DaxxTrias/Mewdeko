@@ -1,6 +1,7 @@
 using System.IO;
 using System.Net;
 using System.Net.Http;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -542,11 +543,10 @@ public class SearchesService : INService, IUnloadableService
 
             var address = string.Join(", ", addressParts);
 
-            return (new List<(string, DateTime, string, string)>
-            {
+            return ([
                 (address, currentTime, weatherData.Timezone ?? weatherData.TimezoneAbbreviation ?? "Unknown",
                     weatherData.Timezone ?? "Unknown")
-            }, null);
+            ], null);
         }
         catch (Exception ex)
         {
@@ -564,10 +564,7 @@ public class SearchesService : INService, IUnloadableService
         var exactMatch = TryGetTimezoneInfo(query);
         if (exactMatch != null)
         {
-            return new List<TimeZoneInfo>
-            {
-                exactMatch
-            };
+            return [exactMatch];
         }
 
         // If no exact match, use the intelligent search to get multiple candidates
@@ -721,7 +718,7 @@ public class SearchesService : INService, IUnloadableService
         if (candidates.Count == 0)
         {
             logger.LogWarning("No timezone found for query: {Query}", query);
-            return new List<TimeZoneInfo>();
+            return [];
         }
 
         // Return multiple candidates ordered by priority and distance
@@ -769,33 +766,37 @@ public class SearchesService : INService, IUnloadableService
         // Handle common timezone name patterns
         var words = timezoneName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
 
-        // For "Eastern Standard Time" -> "EST", "Pacific Daylight Time" -> "PDT", etc.
-        if (words.Length >= 3 &&
-            (words[1].Equals("Standard", StringComparison.OrdinalIgnoreCase) ||
-             words[1].Equals("Daylight", StringComparison.OrdinalIgnoreCase)) &&
-            words[2].Equals("Time", StringComparison.OrdinalIgnoreCase))
+        switch (words.Length)
         {
-            var first = words[0][0];
-            var second = words[1][0];
-            var third = words[2][0];
-            return $"{first}{second}{third}".ToUpperInvariant();
-        }
-
-        // For shorter names, take first letter of each word
-        if (words.Length >= 2)
-        {
-            var result = "";
-            foreach (var word in words.Take(3)) // Max 3 letters
+            // For "Eastern Standard Time" -> "EST", "Pacific Daylight Time" -> "PDT", etc.
+            case >= 3 when
+                (words[1].Equals("Standard", StringComparison.OrdinalIgnoreCase) ||
+                 words[1].Equals("Daylight", StringComparison.OrdinalIgnoreCase)) &&
+                words[2].Equals("Time", StringComparison.OrdinalIgnoreCase):
             {
-                if (word.Length > 0)
-                    result += char.ToUpperInvariant(word[0]);
+                var first = words[0][0];
+                var second = words[1][0];
+                var third = words[2][0];
+                return $"{first}{second}{third}".ToUpperInvariant();
             }
+            // For shorter names, take first letter of each word
+            case >= 2:
+            {
+                var result = "";
+                foreach (var word in words.Take(3)) // Max 3 letters
+                {
+                    if (word.Length > 0)
+                        result += char.ToUpperInvariant(word[0]);
+                }
 
-            return result;
+                return result;
+            }
+            default:
+                // Single word - return as is if short, or first 3 letters if long
+                return timezoneName.Length <= 4
+                    ? timezoneName.ToUpperInvariant()
+                    : timezoneName[..3].ToUpperInvariant();
         }
-
-        // Single word - return as is if short, or first 3 letters if long
-        return timezoneName.Length <= 4 ? timezoneName.ToUpperInvariant() : timezoneName[..3].ToUpperInvariant();
     }
 
 
@@ -1370,7 +1371,7 @@ public class SearchesService : INService, IUnloadableService
             using var response = await http.SendAsync(msg).ConfigureAwait(false);
 
             var htmlContent = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-            var content = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(htmlContent));
+            var content = new MemoryStream(Encoding.UTF8.GetBytes(htmlContent));
             using var document = await GoogleParser.ParseDocumentAsync(content).ConfigureAwait(false);
 
             if (document.Title?.Contains("robot") == true ||
@@ -1405,9 +1406,10 @@ public class SearchesService : INService, IUnloadableService
             }
 
             var resultsElem = document.QuerySelector("#resultStats")
-                             ?? document.QuerySelector("#result-stats")
-                             ?? document.QuerySelector(".LHJvCe")
-                             ?? document.QuerySelectorAll("div").FirstOrDefault(x => x.TextContent?.Contains("results") == true);
+                              ?? document.QuerySelector("#result-stats")
+                              ?? document.QuerySelector(".LHJvCe")
+                              ?? document.QuerySelectorAll("div")
+                                  .FirstOrDefault(x => x.TextContent?.Contains("results") == true);
             var totalResults = resultsElem?.TextContent;
 
             if (!elems.Any())
@@ -1421,18 +1423,18 @@ public class SearchesService : INService, IUnloadableService
 
                     // Try different selectors for title
                     var name = elem.QuerySelector("h3")?.TextContent
-                              ?? elem.QuerySelector(".LC20lb")?.TextContent
-                              ?? elem.QuerySelector("[role='heading']")?.TextContent
-                              ?? linkElem?.TextContent;
+                               ?? elem.QuerySelector(".LC20lb")?.TextContent
+                               ?? elem.QuerySelector("[role='heading']")?.TextContent
+                               ?? linkElem?.TextContent;
 
                     if (href == null || string.IsNullOrWhiteSpace(name))
                         return null;
 
                     // Try to find description text - look for common description selectors
-                    var txt = elem.QuerySelector(".VwiC3b")?.TextContent  // Current description class
-                             ?? elem.QuerySelector(".s")?.TextContent      // Older description class
-                             ?? elem.QuerySelector(".st")?.TextContent     // Alternative description class
-                             ?? elem.QuerySelectorAll("div").Skip(1).FirstOrDefault()?.TextContent; // Fallback
+                    var txt = elem.QuerySelector(".VwiC3b")?.TextContent // Current description class
+                              ?? elem.QuerySelector(".s")?.TextContent // Older description class
+                              ?? elem.QuerySelector(".st")?.TextContent // Alternative description class
+                              ?? elem.QuerySelectorAll("div").Skip(1).FirstOrDefault()?.TextContent; // Fallback
 
                     if (string.IsNullOrWhiteSpace(txt))
                         txt = "No description available";

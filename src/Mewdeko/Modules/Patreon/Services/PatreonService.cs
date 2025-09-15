@@ -130,7 +130,7 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
     /// </summary>
     public async Task<bool> SetAnnouncementDay(ulong guildId, int day)
     {
-        if (day < 1 || day > 28) // Max 28 to avoid issues with February
+        if (day is < 1 or > 28) // Max 28 to avoid issues with February
             return false;
 
         var config = await guildSettings.GetGuildConfig(guildId);

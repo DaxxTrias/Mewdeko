@@ -2366,7 +2366,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
                 case CtRoleGrantType.Mentioned:
                     // For reaction triggers, we can't get mentioned users from the reaction itself
                     // So we'll get mentions from the original message that was reacted to
-                    var mentionedUserIds = message.Content?.GetUserMentions() ?? Enumerable.Empty<ulong>();
+                    var mentionedUserIds = message.Content?.GetUserMentions() ?? [];
                     foreach (var userId in mentionedUserIds)
                     {
                         var mentionedGuildUser = await guild.GetUserAsync(userId).ConfigureAwait(false);
@@ -2377,7 +2377,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
                     break;
                 case CtRoleGrantType.Both:
                     targetUsers.Add(guildUser);
-                    var mentionedUserIds2 = message.Content?.GetUserMentions() ?? Enumerable.Empty<ulong>();
+                    var mentionedUserIds2 = message.Content?.GetUserMentions() ?? [];
                     foreach (var userId in mentionedUserIds2)
                     {
                         var mentionedGuildUser = await guild.GetUserAsync(userId).ConfigureAwait(false);

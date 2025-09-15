@@ -33,5 +33,5 @@ public class OpenTDBQuestion
     /// <summary>
     ///     Gets or sets the incorrect answers.
     /// </summary>
-    public string[] incorrect_answers { get; set; } = Array.Empty<string>();
+    public string[] incorrect_answers { get; set; } = [];
 }
