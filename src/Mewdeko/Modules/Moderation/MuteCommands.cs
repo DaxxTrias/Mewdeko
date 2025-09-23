@@ -113,7 +113,7 @@ public partial class Moderation
         public async Task UnmuteAll([Remainder] string? reason = null)
         {
             var users = (await ctx.Guild.GetUsersAsync().ConfigureAwait(false))
-                .Where(x => x.RoleIds.ToList().Contains(Service.GetMuteRole(ctx.Guild).Result.Id));
+                .Where(x => x.RoleIds.Contains(Service.GetMuteRole(ctx.Guild).Result.Id));
             if (!users.Any())
             {
                 await ctx.Channel.SendErrorAsync(Strings.NoMutedUsers(ctx.Guild.Id), Config).ConfigureAwait(false);

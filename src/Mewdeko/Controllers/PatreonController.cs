@@ -181,7 +181,7 @@ public class PatreonController : ControllerBase
                 });
             }
 
-            _ = Task.Run(() => patreonService.SyncAllAsync(guildId));
+            _ = patreonService.SyncAllAsync(guildId);
 
             logger.LogInformation("Successfully completed Patreon OAuth for guild {GuildId} with campaign {CampaignId}",
                 guildId, campaignId);

@@ -2700,7 +2700,7 @@ public class LogCommandService(
         // Process each batch
         foreach (var batch in batchesToProcess)
         {
-            _ = Task.Run(async () => await ProcessReactionBatch(batch));
+            _ = ProcessReactionBatch(batch);
         }
     }
 

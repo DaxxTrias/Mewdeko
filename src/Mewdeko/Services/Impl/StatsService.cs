@@ -50,7 +50,7 @@ public class StatsService : IStatsService, IDisposable
 
         started = DateTime.UtcNow;
 
-            _ = Task.Run(async () => await PostToTopGg());
+            _ = PostToTopGg();
             _ = OnReadyAsync();
         }
 

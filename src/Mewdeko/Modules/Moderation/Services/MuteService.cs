@@ -232,7 +232,7 @@ public class MuteService : INService, IReadyExecutor, IDisposable
         // If already expired, process immediately
         if (delay <= TimeSpan.Zero)
         {
-            _ = Task.Run(() => ProcessIndividualItem(key));
+            _ = ProcessIndividualItem(key);
             return;
         }
 

@@ -57,14 +57,60 @@ public class MusicController : Controller
     [Authorize("ApiKeyPolicy")]
     public async Task<IActionResult> GetPlayerStatus(ulong guildId, [FromQuery] ulong userId)
     {
-        var player = await audioService.Players.GetPlayerAsync<MewdekoPlayer>(guildId);
-        if (player == null)
-            return NotFound("No active player found");
-
         var guild = client.GetGuild(guildId);
         var user = guild?.GetUser(userId);
-        var botVoiceChannel = player.VoiceChannelId;
-        var isInVoiceChannel = user?.VoiceChannel?.Id == botVoiceChannel;
+        var botUser = guild?.GetUser(client.CurrentUser.Id);
+        var botVoiceChannel = botUser?.VoiceChannel;
+
+        var player = await audioService.Players.GetPlayerAsync<MewdekoPlayer>(guildId);
+
+        // Check if bot is in a voice channel but player doesn't exist or is idle
+        if (player == null)
+        {
+            // Bot is in a voice channel but not playing
+            if (botVoiceChannel != null)
+            {
+                var isInVoiceChannel = user?.VoiceChannel?.Id == botVoiceChannel.Id;
+                var idleSettings = await cache.GetMusicPlayerSettings(guildId);
+
+                var idleStatus = new
+                {
+                    CurrentTrack = (object)null,
+                    Queue = await cache.GetMusicQueue(guildId),
+                    State = PlayerState.NotPlaying,
+                    Volume = idleSettings?.Volume ?? 100,
+                    Position = TimeSpan.Zero,
+                    RepeatMode = idleSettings?.PlayerRepeat ?? 0,
+                    Filters = new
+                    {
+                        BassBoost = false,
+                        Nightcore = false,
+                        Vaporwave = false,
+                        Karaoke = false,
+                        Tremolo = false,
+                        Vibrato = false,
+                        Rotation = false,
+                        Distortion = false,
+                        ChannelMix = false
+                    },
+                    IsInVoiceChannel = isInVoiceChannel,
+                    BotInChannel = true,
+                    ChannelId = botVoiceChannel.Id,
+                    ChannelName = botVoiceChannel.Name
+                };
+
+                return Ok(idleStatus);
+            }
+
+            // Bot is not in any voice channel
+            return NotFound(new
+            {
+                Error = "No active player found", BotInChannel = false
+            });
+        }
+
+        var voiceChannelId = player.VoiceChannelId;
+        var isUserInVoiceChannel = user?.VoiceChannel?.Id == voiceChannelId;
 
         var currentTrack = await cache.GetCurrentTrack(guildId);
         var queue = await cache.GetMusicQueue(guildId);
@@ -90,7 +136,10 @@ public class MusicController : Controller
                 Distortion = player.Filters.Distortion != null,
                 ChannelMix = player.Filters.ChannelMix != null
             },
-            IsInVoiceChannel = isInVoiceChannel
+            IsInVoiceChannel = isUserInVoiceChannel,
+            BotInChannel = true,
+            ChannelId = voiceChannelId,
+            ChannelName = botVoiceChannel?.Name ?? guild?.GetChannel(voiceChannelId)?.Name
         };
 
         return Ok(status);
@@ -366,17 +415,58 @@ public class MusicController : Controller
     /// <returns>An object containing the current player status</returns>
     private async Task<object> GetInitialStatus(ulong guildId, ulong userId)
     {
-        var player = await audioService.Players.GetPlayerAsync<MewdekoPlayer>(guildId);
-        if (player == null)
-            return new
-            {
-                error = "No active player"
-            };
-
         var guild = client.GetGuild(guildId);
         var user = guild?.GetUser(userId);
-        var botVoiceChannel = player.VoiceChannelId;
-        var isInVoiceChannel = user?.VoiceChannel?.Id == botVoiceChannel;
+        var botUser = guild?.GetUser(client.CurrentUser.Id);
+        var botVoiceChannel = botUser?.VoiceChannel;
+
+        var player = await audioService.Players.GetPlayerAsync<MewdekoPlayer>(guildId);
+
+        // Check if bot is in a voice channel but player doesn't exist
+        if (player == null)
+        {
+            // Bot is in a voice channel but not playing
+            if (botVoiceChannel != null)
+            {
+                var isInVoiceChannel = user?.VoiceChannel?.Id == botVoiceChannel.Id;
+                var idleSettings = await cache.GetMusicPlayerSettings(guildId);
+
+                return new
+                {
+                    CurrentTrack = (object)null,
+                    Queue = await cache.GetMusicQueue(guildId),
+                    State = PlayerState.NotPlaying,
+                    Volume = idleSettings?.Volume ?? 100,
+                    Position = TimeSpan.Zero,
+                    RepeatMode = idleSettings?.PlayerRepeat ?? 0,
+                    Filters = new
+                    {
+                        BassBoost = false,
+                        Nightcore = false,
+                        Vaporwave = false,
+                        Karaoke = false,
+                        Tremolo = false,
+                        Vibrato = false,
+                        Rotation = false,
+                        Distortion = false,
+                        ChannelMix = false
+                    },
+                    IsInVoiceChannel = isInVoiceChannel,
+                    BotInChannel = true,
+                    ChannelId = botVoiceChannel.Id,
+                    ChannelName = botVoiceChannel.Name
+                };
+            }
+
+            // Bot is not in any voice channel
+            return new
+            {
+                error = "No active player", BotInChannel = false
+            };
+        }
+
+        var voiceChannelId = player.VoiceChannelId;
+        var isUserInVoiceChannel = user?.VoiceChannel?.Id == voiceChannelId;
 
         var currentTrack = await cache.GetCurrentTrack(guildId);
         var queue = await cache.GetMusicQueue(guildId);
@@ -402,7 +492,10 @@ public class MusicController : Controller
                 Distortion = player.Filters.Distortion != null,
                 ChannelMix = player.Filters.ChannelMix != null
             },
-            IsInVoiceChannel = isInVoiceChannel
+            IsInVoiceChannel = isUserInVoiceChannel,
+            BotInChannel = true,
+            ChannelId = voiceChannelId,
+            ChannelName = botVoiceChannel?.Name ?? guild?.GetChannel(voiceChannelId)?.Name
         };
     }
 

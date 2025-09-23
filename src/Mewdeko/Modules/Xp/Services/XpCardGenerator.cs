@@ -517,7 +517,7 @@ public class XpCardGenerator : INService
     /// </summary>
     /// <param name="guildId">The guild ID.</param>
     /// <returns>The image URL or null.</returns>
-    private async Task<string> GetXpImageAsync(ulong guildId)
+    private async Task<string?> GetXpImageAsync(ulong guildId)
     {
         await using var db = await dbFactory.CreateConnectionAsync();
 

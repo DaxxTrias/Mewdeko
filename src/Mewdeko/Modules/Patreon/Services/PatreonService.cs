@@ -796,7 +796,7 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
             var config = await uow.GuildConfigs.FirstOrDefaultAsync(x => x.GuildId == guildId);
             if (config?.PatreonRoleSync == true)
             {
-                _ = Task.Run(async () => await SyncUserRolesAsync(guildId, discordUserId));
+                _ = SyncUserRolesAsync(guildId, discordUserId);
             }
 
             return true;

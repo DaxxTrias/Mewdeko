@@ -186,7 +186,10 @@ public class RoleMonitorService : INService, IReadyExecutor
 
         var beforePermissions = roleUpdate.Before.Permissions;
         var afterPermissions = roleUpdate.After.Permissions;
-        var addedPermissions = afterPermissions.Value.ToList().Except(beforePermissions.Value.ToList());
+
+        // Get individual permissions that were added
+        var addedPermissions = Enum.GetValues<GuildPermission>()
+            .Where(p => afterPermissions.Value.Has(p) && !beforePermissions.Value.Has(p));
 
         await CheckRolePermissionsAsync(guild, role, addedPermissions, entry.User.Id, beforePermissions.Value);
     }

@@ -24,11 +24,12 @@ public class StreamNotificationService : IReadyExecutor, INService
     private readonly object hashSetLock = new();
     private readonly ILogger<StreamNotificationService> logger;
     private readonly Random rng = new MewdekoRandom();
-    private readonly NotifChecker streamTracker;
-    private readonly GeneratedBotStrings strings;
 
     private readonly ConcurrentDictionary<StreamDataKey, ConcurrentDictionary<ulong, HashSet<FollowedStream>>>
         shardTrackedStreams = new();
+
+    private readonly NotifChecker streamTracker;
+    private readonly GeneratedBotStrings strings;
 
     private ConcurrentDictionary<StreamDataKey, HashSet<ulong>> trackCounter = new();
 
@@ -598,14 +599,6 @@ public class StreamNotificationService : IReadyExecutor, INService
             .WithOverride("%stream.channelid%", () => stream.ChannelId ?? "");
     }
 
-    /// <summary>
-    ///     Sends a stream notification using custom message format or fallback to embed.
-    /// </summary>
-    /// <param name="textChannel">The channel to send to.</param>
-    /// <param name="stream">The stream data.</param>
-    /// <param name="followedStream">The followed stream configuration.</param>
-    /// <param name="customMessage">The custom message template (optional).</param>
-    /// <returns>A task representing the asynchronous operation.</returns>
     /// <summary>
     ///     Sends a stream notification using hierarchical message priority.
     /// </summary>

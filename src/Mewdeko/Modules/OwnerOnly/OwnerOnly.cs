@@ -203,8 +203,7 @@ public class OwnerOnly(
         var content = $"{await guildSettings.GetPrefix(ctx.Guild)}{args}";
         var msg = MewdekoUserMessage.CreateWithMentions(content, user, ctx.Channel);
         commandHandler.AddCommandToParseQueue(msg);
-        _ = Task.Run(() => commandHandler.ExecuteCommandsInChannelAsync(ctx.Channel.Id))
-            .ConfigureAwait(false);
+        _ = commandHandler.ExecuteCommandsInChannelAsync(ctx.Channel.Id);
     }
 
     /// <summary>
@@ -222,8 +221,7 @@ public class OwnerOnly(
         var content = $"{await guildSettings.GetPrefix(ctx.Guild)}{args}";
         var msg = MewdekoUserMessage.CreateWithMentions(content, await Context.Guild.GetOwnerAsync(), ctx.Channel);
         commandHandler.AddCommandToParseQueue(msg);
-        _ = Task.Run(() => commandHandler.ExecuteCommandsInChannelAsync(ctx.Channel.Id))
-            .ConfigureAwait(false);
+        _ = commandHandler.ExecuteCommandsInChannelAsync(ctx.Channel.Id);
     }
 
     /// <summary>

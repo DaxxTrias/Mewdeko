@@ -1,5 +1,6 @@
 ﻿using System.IO;
 using System.Net.Http;
+using System.Text.RegularExpressions;
 using DataModel;
 using LinqToDB;
 using LinqToDB.Async;
@@ -220,7 +221,7 @@ public class StarboardService : INService, IReadyExecutor, IUnloadableService
                 var authorAvatarUrl = "";
                 var imageUrl = "";
 
-                // Extract content from starboard message embed or content
+                // First try to extract from embeds (older format)
                 if (starboardMessage.Embeds.Any())
                 {
                     var embed = starboardMessage.Embeds.First();
@@ -233,6 +234,74 @@ public class StarboardService : INService, IReadyExecutor, IUnloadableService
                         imageUrl = embed.Image.Value.Url;
                     else if (embed.Thumbnail.HasValue)
                         imageUrl = embed.Thumbnail.Value.Url;
+                }
+                // If no embeds, try to parse from components (newer format)
+                else if (starboardMessage.Components.Any())
+                {
+                    try
+                    {
+                        // Parse the message content from components
+                        // ComponentsV2 format has text displays in container components
+                        var componentText = starboardMessage.Content ?? "";
+
+                        // Extract author from the first link (format: [**AuthorName**](https://discord.com/users/UserId))
+                        var authorMatch = Regex.Match(componentText,
+                            @"\[\*\*(.+?)\*\*\]\(https://discord\.com/users/(\d+)\)");
+                        if (authorMatch.Success)
+                        {
+                            authorName = authorMatch.Groups[1].Value;
+                            var userId = authorMatch.Groups[2].Value;
+
+                            // Try to get the user's avatar
+                            try
+                            {
+                                var user = await client.GetUserAsync(ulong.Parse(userId), CacheMode.AllowDownload,
+                                    RequestOptions.Default);
+                                if (user != null)
+                                {
+                                    authorAvatarUrl = user.GetAvatarUrl() ?? user.GetDefaultAvatarUrl();
+                                    authorName = user.Username; // Use actual username if we can get it
+                                }
+                            }
+                            catch
+                            {
+                                // If we can't get the user, use default avatar
+                                authorAvatarUrl =
+                                    $"https://cdn.discordapp.com/embed/avatars/{ulong.Parse(userId) % 5}.png";
+                            }
+
+                            // Remove the author link from content to get the actual message
+                            originalContent = componentText.Replace(authorMatch.Value, "").Trim();
+                        }
+
+                        // Clean up the content - remove reaction counts at the start
+                        var contentLines = originalContent.Split('\n');
+                        if (contentLines.Length > 0 && contentLines[0].Contains("**") &&
+                            Regex.IsMatch(contentLines[0], @"[⭐✨🌟💫⚡️🔥💖] \*\*\d+\*\*"))
+                        {
+                            // Skip the first line if it's reaction counts
+                            originalContent = string.Join('\n', contentLines.Skip(1)).Trim();
+                        }
+
+                        // If content is still empty or just whitespace, check for media URLs
+                        if (string.IsNullOrWhiteSpace(originalContent))
+                        {
+                            // Look for media gallery items in the components
+                            if (componentText.Contains("http"))
+                            {
+                                var urlMatch = Regex.Match(componentText, @"https?://[^\s\)]+");
+                                if (urlMatch.Success)
+                                {
+                                    imageUrl = urlMatch.Value;
+                                    originalContent = "[Media]";
+                                }
+                            }
+                        }
+                    }
+                    catch
+                    {
+                        // If parsing fails, keep the defaults
+                    }
                 }
 
                 highlights.Add(new StarboardHighlight

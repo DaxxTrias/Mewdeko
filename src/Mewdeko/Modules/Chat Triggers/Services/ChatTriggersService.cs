@@ -2028,9 +2028,11 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
         // Associate chat trigger IDs with their corresponding application command IDs
         await using var dbContext = await dbFactory.CreateConnectionAsync();
         var cts = dbContext.ChatTriggers.Where(x => x.GuildId == guild.Id).ToList();
-        cmd.SelectMany(applicationCommand =>
-            applicationCommand.GetCtNames().Select(name => (cmd: applicationCommand, name))).ToList().ForEach(x =>
-            cts.First(y => y.RealName() == x.name).ApplicationCommandId = x.cmd.Id);
+        foreach (var x in cmd.SelectMany(applicationCommand =>
+                     applicationCommand.GetCtNames().Select(name => (cmd: applicationCommand, name))))
+        {
+            cts.First(y => y.RealName() == x.name).ApplicationCommandId = x.cmd.Id;
+        }
     }
 
     /// <summary>

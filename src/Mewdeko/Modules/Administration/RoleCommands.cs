@@ -21,6 +21,7 @@ public partial class Administration
     /// <param name="services">Main services provider for the bot.</param>
     /// <param name="intserv">Interactive service used for paginated embeds.</param>
     /// <param name="logger">The logger instance for structured logging.</param>
+    /// <param name="muteService">Service for managing timed roles and mutes.</param>
     public class RoleCommands(
         IServiceProvider services,
         InteractiveService intserv,
