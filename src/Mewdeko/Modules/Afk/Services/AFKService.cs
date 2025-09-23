@@ -1,5 +1,7 @@
-﻿using System.Threading;
+﻿using System.Net;
+using System.Threading;
 using DataModel;
+using Discord.Net;
 using Humanizer;
 using LinqToDB;
 using LinqToDB.Async;
@@ -27,6 +29,8 @@ public class AfkService : INService, IReadyExecutor, IDisposable
     private readonly ConcurrentDictionary<ulong, bool> guildDataLoaded = new();
     private readonly GuildSettingsService guildSettings;
     private readonly ILogger<AfkService> logger;
+    private readonly SemaphoreSlim messageUpdateSemaphore = new(5, 5); // Rate limit protection
+    private readonly ConcurrentDictionary<ulong, DateTime> recentlyProcessedMessages = new();
     private readonly GeneratedBotStrings strings;
     private bool isDisposed;
     private bool isInitialized;
@@ -616,6 +620,26 @@ public class AfkService : INService, IReadyExecutor, IDisposable
         if (msg.Author.IsBot || msg.Author is not IGuildUser user)
             return;
 
+        // Deduplicate rapid message events for the same message
+        var messageKey = msg.Id;
+        var now = DateTime.UtcNow;
+        if (recentlyProcessedMessages.TryGetValue(messageKey, out var lastProcessed))
+        {
+            if (now - lastProcessed < TimeSpan.FromSeconds(2))
+                return; // Skip if we just processed this message
+        }
+
+        recentlyProcessedMessages[messageKey] = now;
+
+        // Clean up old entries periodically
+        if (recentlyProcessedMessages.Count > 1000)
+        {
+            var cutoff = now.AddMinutes(-1);
+            var toRemove = recentlyProcessedMessages.Where(x => x.Value < cutoff).Select(x => x.Key).ToList();
+            foreach (var key in toRemove)
+                recentlyProcessedMessages.TryRemove(key, out _);
+        }
+
         try
         {
             var guildConfig = await GetGuildConfigCached(user.GuildId);
@@ -747,14 +771,49 @@ public class AfkService : INService, IReadyExecutor, IDisposable
     {
         try
         {
-            var message = await msg.GetOrDownloadAsync();
-            if (message == null || updatedMsg == null || message.Author.IsBot || message.EditedTimestamp == null)
-                return; // Ignore bot edits or unedited
+            // Skip processing if we already have the updated message
+            if (updatedMsg == null || updatedMsg.Author.IsBot || updatedMsg.EditedTimestamp == null)
+                return;
 
             // Skip if message is too old or not edited recently enough
-            if (DateTimeOffset.UtcNow - message.EditedTimestamp.Value > TimeSpan.FromMinutes(5)) return;
+            if (DateTimeOffset.UtcNow - updatedMsg.EditedTimestamp.Value > TimeSpan.FromMinutes(5)) return;
 
-            await MessageReceived(updatedMsg); // Process the updated message as if it were new
+            // Check if we have the message cached first
+            IMessage? message = null;
+            if (msg.HasValue)
+            {
+                message = msg.Value;
+            }
+            else
+            {
+                // Try to download with timeout and rate limit protection
+                try
+                {
+                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+                    var options = new RequestOptions
+                    {
+                        CancelToken = cts.Token, RetryMode = RetryMode.AlwaysRetry, Timeout = 3000
+                    };
+
+                    // Use updatedMsg directly if download fails or times out
+                    message = await msg.GetOrDownloadAsync();
+                }
+                catch (TimeoutException)
+                {
+                    // Log at debug level since this is expected under rate limits
+                    logger.LogDebug("Timeout downloading message {MessageId} in MessageUpdated, using cached data",
+                        msg.Id);
+                    // Continue processing with updatedMsg which we already have
+                }
+                catch (HttpException httpEx) when (httpEx.HttpCode == HttpStatusCode.TooManyRequests)
+                {
+                    logger.LogDebug("Rate limited when downloading message {MessageId} in MessageUpdated", msg.Id);
+                    // Continue processing with updatedMsg
+                }
+            }
+
+            // Process the updated message - we already have updatedMsg so we can proceed
+            await MessageReceived(updatedMsg);
         }
         catch (Exception ex)
         {
@@ -827,6 +886,7 @@ public class AfkService : INService, IReadyExecutor, IDisposable
             // Unsubscribe from Bot Joined/Left Guild events if needed
 
             cleanupTimer?.Dispose();
+            messageUpdateSemaphore?.Dispose();
 
             var timers = afkTimers.Values.ToList(); // Snapshot before clearing
             afkTimers.Clear();

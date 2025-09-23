@@ -882,6 +882,7 @@ public class MeController(
     /// </summary>
     /// <param name="guildId">The guild ID to reset wizard for</param>
     /// <param name="userId">The user ID</param>
+    /// <param name="resetGuildId">The guildid to reset the wizard for.</param>
     /// <returns>Success response</returns>
     [HttpPost("wizard/reset/{resetGuildId}")]
     public async Task<IActionResult> ResetGuildWizard(ulong guildId, ulong userId, ulong resetGuildId)

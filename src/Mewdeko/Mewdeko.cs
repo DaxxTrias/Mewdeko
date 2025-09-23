@@ -25,7 +25,7 @@ namespace Mewdeko;
 ///     The main class for the Mewdeko bot, responsible for initializing services, handling events, and managing the bot's
 ///     lifecycle.
 /// </summary>
-public class Mewdeko
+public class Mewdeko : IDisposable
 {
     // Cached JsonSerializerOptions for performance
     private static readonly JsonSerializerOptions CachedJsonOptions = new()
@@ -36,6 +36,7 @@ public class Mewdeko
     private readonly BotConfigService bss;
 
     private readonly ILogger<Mewdeko> logger;
+    private bool disposed;
 
     /// <summary>
     ///     Initializes a new instance of the Mewdeko class.
@@ -86,6 +87,15 @@ public class Mewdeko
     public TaskCompletionSource<bool> Ready { get; } = new();
 
     private IServiceProvider Services { get; }
+
+    /// <summary>
+    ///     Disposes the Mewdeko instance and unsubscribes from events.
+    /// </summary>
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
 
     /// <summary>
     ///     Event that occurs when the bot joins a guild.
@@ -415,5 +425,33 @@ public class Mewdeko
         await sub.PublishAsync(RedisChannel.Literal($"{Client.CurrentUser.Id}_status.game_set"),
                 JsonSerializer.Serialize(obj))
             .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Protected implementation of Dispose pattern.
+    /// </summary>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (disposed)
+            return;
+
+        if (disposing)
+        {
+            // Unsubscribe from events to prevent memory leaks
+            if (Client != null)
+            {
+                Client.Log -= Client_Log;
+                Client.JoinedGuild -= Client_JoinedGuild;
+                Client.LeftGuild -= Client_LeftGuild;
+            }
+
+            var commandService = Services.GetService<CommandService>();
+            if (commandService != null)
+            {
+                commandService.Log -= LogCommandsService;
+            }
+        }
+
+        disposed = true;
     }
 }

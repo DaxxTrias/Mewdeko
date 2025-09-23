@@ -56,7 +56,7 @@ public class Localization(BotConfigService bss, GuildSettingsService service)
         if (!guildId.HasValue)
             return DefaultCultureInfo;
 
-        var guildConfig = service.GetGuildConfig(guildId.Value).Result;
+        var guildConfig = service.GetGuildConfig(guildId.Value).ConfigureAwait(false).GetAwaiter().GetResult();
 
         return guildConfig.Locale == null ? DefaultCultureInfo : new CultureInfo(guildConfig.Locale);
     }

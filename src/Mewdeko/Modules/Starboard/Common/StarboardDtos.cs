@@ -186,6 +186,11 @@ public class StarboardHighlight
     public string StarEmote { get; set; } = "⭐";
 
     /// <summary>
+    ///     The number of stars this message has
+    /// </summary>
+    public int StarCount { get; set; }
+
+    /// <summary>
     ///     When the message was created
     /// </summary>
     public DateTime CreatedAt { get; set; }

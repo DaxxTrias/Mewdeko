@@ -189,7 +189,7 @@ public class SlashGiveaways(
         await using var dbContext = await dbFactory.CreateConnectionAsync();
 
         var gway = dbContext.Giveaways
-            .Where(x => x.ServerId == ctx.Guild.Id).ToList().Find(x => x.MessageId == messageid);
+            .FirstOrDefault(x => x.ServerId == ctx.Guild.Id && x.MessageId == messageid);
         if (gway is null)
         {
             await ctx.Interaction.SendErrorAsync(Strings.GiveawayNotFound(ctx.Guild.Id), Config).ConfigureAwait(false);
@@ -388,7 +388,7 @@ public class SlashGiveaways(
         await using var dbContext = await dbFactory.CreateConnectionAsync();
 
         var gway = dbContext.Giveaways
-            .Where(x => x.ServerId == ctx.Guild.Id).ToList().Find(x => x.MessageId == messageid);
+            .FirstOrDefault(x => x.ServerId == ctx.Guild.Id && x.MessageId == messageid);
         if (gway is null)
         {
             await ctx.Interaction.SendErrorAsync(Strings.GiveawayNotFound(ctx.Guild.Id), Config).ConfigureAwait(false);

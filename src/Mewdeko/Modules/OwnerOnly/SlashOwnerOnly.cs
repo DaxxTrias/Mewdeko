@@ -94,8 +94,7 @@ public class SlashOwnerOnly(
             Content = $"{await guildSettings.GetPrefix(ctx.Guild)}{args}", Author = user, Channel = ctx.Channel
         };
         commandHandler.AddCommandToParseQueue(msg);
-        _ = Task.Run(() => commandHandler.ExecuteCommandsInChannelAsync(ctx.Interaction.Id))
-            .ConfigureAwait(false);
+        _ = commandHandler.ExecuteCommandsInChannelAsync(ctx.Interaction.Id);
     }
 
     /// <summary>

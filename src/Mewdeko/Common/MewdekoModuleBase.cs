@@ -137,7 +137,7 @@ public abstract class MewdekoModule : ModuleBase
         }
         finally
         {
-            _ = Task.Run(() => msg.DeleteAsync());
+            _ = msg.DeleteAsync();
         }
     }
 

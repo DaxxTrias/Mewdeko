@@ -26,7 +26,8 @@ public class SlashMusic(
     IDataCache cache,
     InteractiveService interactiveService,
     GuildSettingsService guildSettingsService,
-    ILogger<SlashMusic> logger) : MewdekoSlashCommandModule
+    ILogger<SlashMusic> logger,
+    MusicEventManager eventManager) : MewdekoSlashCommandModule
 {
     /// <summary>
     ///     Joins the voice channel.
@@ -36,6 +37,13 @@ public class SlashMusic(
     [CheckPermissions]
     public async Task Join()
     {
+        var user = ctx.User as IGuildUser;
+        if (user.VoiceChannel is null)
+        {
+            await ReplyErrorAsync(Strings.MusicNotInChannel(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
         var (player, result) = await GetPlayerAsync();
         if (string.IsNullOrWhiteSpace(result))
             await ReplyConfirmAsync(Strings.MusicJoinSuccess(ctx.Guild.Id, player.VoiceChannelId))
@@ -62,6 +70,13 @@ public class SlashMusic(
     [CheckPermissions]
     public async Task Leave()
     {
+        var user = ctx.User as IGuildUser;
+        if (user.VoiceChannel is null)
+        {
+            await ReplyErrorAsync(Strings.MusicNotInChannel(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
         var (player, result) = await GetPlayerAsync(false);
         if (result is not null)
         {
@@ -81,6 +96,10 @@ public class SlashMusic(
         await cache.SetCurrentTrack(Context.Guild.Id, null);
 
         await player.DisconnectAsync().ConfigureAwait(false);
+
+        // Notify connected clients that bot has disconnected
+        await eventManager.BroadcastDisconnection(Context.Guild.Id).ConfigureAwait(false);
+
         await ReplyConfirmAsync(Strings.MusicDisconnect(ctx.Guild.Id)).ConfigureAwait(false);
     }
 
@@ -92,6 +111,13 @@ public class SlashMusic(
     [CheckPermissions]
     public async Task ClearQueue()
     {
+        var user = ctx.User as IGuildUser;
+        if (user.VoiceChannel is null)
+        {
+            await ReplyErrorAsync(Strings.MusicNotInChannel(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
         var (player, result) = await GetPlayerAsync(false);
 
         if (result is not null)
@@ -123,6 +149,13 @@ public class SlashMusic(
     [CheckPermissions]
     public async Task PlayNumber(int queueNumber)
     {
+        var user = ctx.User as IGuildUser;
+        if (user.VoiceChannel is null)
+        {
+            await ReplyErrorAsync(Strings.MusicNotInChannel(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
         var (player, result) = await GetPlayerAsync(false);
 
         if (result is not null)
@@ -168,6 +201,13 @@ public class SlashMusic(
     [CheckPermissions]
     public async Task Play(string query)
     {
+        var user = ctx.User as IGuildUser;
+        if (user.VoiceChannel is null)
+        {
+            await ReplyErrorAsync(Strings.MusicNotInChannel(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
         await DeferAsync();
 
         try
@@ -222,6 +262,13 @@ public class SlashMusic(
     [CheckPermissions]
     public async Task Pause()
     {
+        var user = ctx.User as IGuildUser;
+        if (user.VoiceChannel is null)
+        {
+            await ReplyErrorAsync(Strings.MusicNotInChannel(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
         var (player, result) = await GetPlayerAsync();
 
         if (result is not null)
@@ -258,6 +305,13 @@ public class SlashMusic(
     [CheckPermissions]
     public async Task NowPlaying()
     {
+        var user = ctx.User as IGuildUser;
+        if (user.VoiceChannel is null)
+        {
+            await ReplyErrorAsync(Strings.MusicNotInChannel(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
         try
         {
             var (player, result) = await GetPlayerAsync(false);
@@ -300,6 +354,13 @@ public class SlashMusic(
     [CheckPermissions]
     public async Task SongRemove(int queueNumber)
     {
+        var user = ctx.User as IGuildUser;
+        if (user.VoiceChannel is null)
+        {
+            await ReplyErrorAsync(Strings.MusicNotInChannel(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
         var (player, result) = await GetPlayerAsync(false);
         if (result is not null)
         {
@@ -376,6 +437,13 @@ public class SlashMusic(
     [CheckPermissions]
     public async Task MoveSong(int from, int to)
     {
+        var user = ctx.User as IGuildUser;
+        if (user.VoiceChannel is null)
+        {
+            await ReplyErrorAsync(Strings.MusicNotInChannel(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
         var (_, result) = await GetPlayerAsync(false);
         if (result is not null)
         {
@@ -432,6 +500,13 @@ public class SlashMusic(
     [CheckPermissions]
     public async Task Volume(int volume)
     {
+        var user = ctx.User as IGuildUser;
+        if (user.VoiceChannel is null)
+        {
+            await ReplyErrorAsync(Strings.MusicNotInChannel(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
         var (player, result) = await GetPlayerAsync(false);
         if (result is not null)
         {
@@ -466,6 +541,13 @@ public class SlashMusic(
     [CheckPermissions]
     public async Task Skip()
     {
+        var user = ctx.User as IGuildUser;
+        if (user.VoiceChannel is null)
+        {
+            await ReplyErrorAsync(Strings.MusicNotInChannel(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
         var (player, result) = await GetPlayerAsync(false);
         if (result is not null)
         {
@@ -500,6 +582,13 @@ public class SlashMusic(
     [CheckPermissions]
     public async Task Queue()
     {
+        var user = ctx.User as IGuildUser;
+        if (user.VoiceChannel is null)
+        {
+            await ReplyErrorAsync(Strings.MusicNotInChannel(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
         var (_, result) = await GetPlayerAsync(false);
         if (result is not null)
         {
@@ -772,6 +861,13 @@ public class SlashMusic(
     [CheckPermissions]
     public async Task Loop(PlayerRepeatType repeatType)
     {
+        var user = ctx.User as IGuildUser;
+        if (user.VoiceChannel is null)
+        {
+            await ReplyErrorAsync(Strings.MusicNotInChannel(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
         var (player, result) = await GetPlayerAsync(false);
         if (result is not null)
         {
@@ -1286,42 +1382,6 @@ public class SlashMusic(
             x.Flags = MessageFlags.ComponentsV2;
             x.AllowedMentions = AllowedMentions.None;
         });
-    }
-
-    /// <summary>
-    ///     Creates a formatted description of added tracks
-    /// </summary>
-    private static string CreateAddedTracksDescription(List<MewdekoTrack> tracks)
-    {
-        var sb = new StringBuilder();
-
-        if (tracks.Count == 1)
-        {
-            var track = tracks[0];
-            sb.AppendLine($"🎵 [{track.Track.Title}]({track.Track.Uri})");
-            sb.AppendLine($"Duration: `{track.Track.Duration}`");
-            sb.AppendLine($"Position in queue: `#{track.Index}`");
-        }
-        else
-        {
-            sb.AppendLine($"Added {tracks.Count} tracks to the queue");
-            var totalDuration = TimeSpan.FromMilliseconds(tracks.Sum(t => t.Track.Duration.TotalMilliseconds));
-            sb.AppendLine($"Total Duration: `{totalDuration}`");
-
-            // Show first few tracks as preview
-            const int previewCount = 3;
-            foreach (var track in tracks.Take(previewCount))
-            {
-                sb.AppendLine($"• [{track.Track.Title}]({track.Track.Uri})");
-            }
-
-            if (tracks.Count > previewCount)
-            {
-                sb.AppendLine($"...and {tracks.Count - previewCount} more");
-            }
-        }
-
-        return sb.ToString();
     }
 
     /// <summary>

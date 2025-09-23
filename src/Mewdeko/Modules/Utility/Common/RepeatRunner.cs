@@ -105,7 +105,7 @@ public class RepeatRunner : IDisposable
         {
             case StickyTriggerMode.Immediate:
                 // Trigger immediately, then only respond to message events (no timer)
-                _ = Task.Run(async () => await TriggerInternal());
+                _ = TriggerInternal();
                 // Don't set up timer - immediate mode only responds to MessageReceived events
                 break;
             case StickyTriggerMode.OnActivity:

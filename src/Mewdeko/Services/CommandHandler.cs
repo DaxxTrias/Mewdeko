@@ -122,109 +122,63 @@ public class CommandHandler : INService
 
     private Task HandleContextCommands(ContextCommandInfo info, IInteractionContext ctx, IResult result)
     {
-        _ = Task.Run(async () =>
+        _ = HandleContextCommandsInternal(info, ctx, result);
+        return Task.CompletedTask;
+    }
+
+    private async Task HandleContextCommandsInternal(ContextCommandInfo info, IInteractionContext ctx, IResult result)
+    {
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
+
+        if (ctx.Guild is not null)
         {
-            await using var dbContext = await dbFactory.CreateConnectionAsync();
-
-            if (ctx.Guild is not null)
+            var gconf = await gss.GetGuildConfig(ctx.Guild.Id);
+            if (!gconf.StatsOptOut)
             {
-                var gconf = await gss.GetGuildConfig(ctx.Guild.Id);
-                if (!gconf.StatsOptOut)
+                var user = await dbContext.GetOrCreateUser(ctx.User);
+                if (!user.StatsOptOut)
                 {
-                    var user = await dbContext.GetOrCreateUser(ctx.User);
-                    if (!user.StatsOptOut)
+                    var comStats = new CommandStat
                     {
-                        var comStats = new CommandStat
-                        {
-                            ChannelId = ctx.Channel.Id,
-                            GuildId = ctx.Guild.Id,
-                            IsSlash = true,
-                            NameOrId = info.Name,
-                            UserId = ctx.User.Id,
-                            Module = info.Module.Name
-                        };
-                        await dbContext.InsertAsync(comStats);
-                    }
+                        ChannelId = ctx.Channel.Id,
+                        GuildId = ctx.Guild.Id,
+                        IsSlash = true,
+                        NameOrId = info.Name,
+                        UserId = ctx.User.Id,
+                        Module = info.Module.Name
+                    };
+                    await dbContext.InsertAsync(comStats);
                 }
             }
+        }
 
-            if (!result.IsSuccess)
-            {
-                await ctx.Interaction
-                    .SendEphemeralErrorAsync($"Command failed for the following reason:\n{result.ErrorReason}",
-                        bss.Data)
-                    .ConfigureAwait(false);
-                logger.LogWarning(
-                    "Slash Command Errored\n\t" + "User: {0}\n\t" + "Server: {1}\n\t" + "Channel: {2}\n\t" +
-                    "Message: {3}\n\t" + "Error: {4}",
-                    $"{ctx.User} [{ctx.User.Id}]", // {0}
-                    ctx.Guild == null ? "PRIVATE" : $"{ctx.Guild.Name} [{ctx.Guild.Id}]", // {1}
-                    ctx.Channel == null ? "PRIVATE" : $"{ctx.Channel.Name} [{ctx.Channel.Id}]", // {2}
-                    info.MethodName, result.ErrorReason);
-                var tofetch = await client.Rest.GetChannelAsync(bss.Data.CommandLogChannel).ConfigureAwait(false);
-                if (tofetch is RestTextChannel restChannel)
-                {
-                    var eb = new EmbedBuilder()
-                        .WithErrorColor()
-                        .WithTitle("Slash Command Errored")
-                        .AddField("Reason", result.ErrorReason)
-                        .AddField("Module", info.Module.Name ?? "None")
-                        .AddField("Command", info.Name)
-                        .AddField("User", $"{ctx.User.Mention} `{ctx.User.Id}`")
-                        .AddField("Channel", ctx.Channel == null ? "PRIVATE" : $"{ctx.Channel.Name} `{ctx.Channel.Id}`")
-                        .AddField("Guild", ctx.Guild == null ? "PRIVATE" : $"{ctx.Guild.Name} `{ctx.Guild.Id}`");
-
-                    await restChannel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
-                }
-
-                if (ctx.Guild is null)
-                    return;
-                {
-                    if (info.MethodName.ToLower() is "confess" or "confessreport")
-                        return;
-
-                    var gc = await gss.GetGuildConfig(ctx.Guild.Id);
-                    if (gc.CommandLogChannel is 0)
-                        return;
-                    var channel = await ctx.Guild.GetTextChannelAsync(gc.CommandLogChannel).ConfigureAwait(false);
-                    if (channel is null)
-                        return;
-                    var eb = new EmbedBuilder()
-                        .WithErrorColor()
-                        .WithTitle("Slash Command Errored")
-                        .AddField("Reason", result.ErrorReason)
-                        .AddField("Module", info.Module.Name ?? "None")
-                        .AddField("Command", info.Name)
-                        .AddField("User", $"{ctx.User} `{ctx.User.Id}`")
-                        .AddField("Channel", $"{ctx.Channel.Name} `{ctx.Channel.Id}`");
-
-                    await channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
-                }
-                return;
-            }
-
-            var chan = ctx.Channel as ITextChannel;
-            logger.LogInformation(
-                "Slash Command Executed" + "\n\t" + "User: {0}\n\t" + "Server: {1}\n\t" + "Channel: {2}\n\t" +
-                "Module: {3}\n\t" + "Command: {4}",
+        if (!result.IsSuccess)
+        {
+            await ctx.Interaction
+                .SendEphemeralErrorAsync($"Command failed for the following reason:\n{result.ErrorReason}",
+                    bss.Data)
+                .ConfigureAwait(false);
+            logger.LogWarning(
+                "Slash Command Errored\n\t" + "User: {0}\n\t" + "Server: {1}\n\t" + "Channel: {2}\n\t" +
+                "Message: {3}\n\t" + "Error: {4}",
                 $"{ctx.User} [{ctx.User.Id}]", // {0}
-                chan == null ? "PRIVATE" : $"{chan.Guild.Name} [{chan.Guild.Id}]", // {1}
-                chan == null ? "PRIVATE" : $"{chan.Name} [{chan.Id}]", // {2}
-                info.Module.SlashGroupName, info.MethodName); // {3}
-
-            var tofetch1 = await client.Rest.GetChannelAsync(bss.Data.CommandLogChannel).ConfigureAwait(false);
-            if (tofetch1 is RestTextChannel restChannel1)
+                ctx.Guild == null ? "PRIVATE" : $"{ctx.Guild.Name} [{ctx.Guild.Id}]", // {1}
+                ctx.Channel == null ? "PRIVATE" : $"{ctx.Channel.Name} [{ctx.Channel.Id}]", // {2}
+                info.MethodName, result.ErrorReason);
+            var tofetch = await client.Rest.GetChannelAsync(bss.Data.CommandLogChannel).ConfigureAwait(false);
+            if (tofetch is RestTextChannel restChannel)
             {
                 var eb = new EmbedBuilder()
-                    .WithOkColor()
-                    .WithTitle("Slash Command Executed")
+                    .WithErrorColor()
+                    .WithTitle("Slash Command Errored")
+                    .AddField("Reason", result.ErrorReason)
                     .AddField("Module", info.Module.Name ?? "None")
                     .AddField("Command", info.Name)
-                    .AddField("User", $"{ctx.User} `{ctx.User.Id}`")
+                    .AddField("User", $"{ctx.User.Mention} `{ctx.User.Id}`")
                     .AddField("Channel", ctx.Channel == null ? "PRIVATE" : $"{ctx.Channel.Name} `{ctx.Channel.Id}`")
                     .AddField("Guild", ctx.Guild == null ? "PRIVATE" : $"{ctx.Guild.Name} `{ctx.Guild.Id}`");
 
-                await restChannel1.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
+                await restChannel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
             }
 
             if (ctx.Guild is null)
@@ -240,17 +194,65 @@ public class CommandHandler : INService
                 if (channel is null)
                     return;
                 var eb = new EmbedBuilder()
-                    .WithOkColor()
-                    .WithTitle("Slash Command Executed.")
+                    .WithErrorColor()
+                    .WithTitle("Slash Command Errored")
+                    .AddField("Reason", result.ErrorReason)
                     .AddField("Module", info.Module.Name ?? "None")
                     .AddField("Command", info.Name)
-                    .AddField("User", $"{ctx.User.Mention} `{ctx.User.Id}`")
+                    .AddField("User", $"{ctx.User} `{ctx.User.Id}`")
                     .AddField("Channel", $"{ctx.Channel.Name} `{ctx.Channel.Id}`");
 
                 await channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
             }
-        });
-        return Task.CompletedTask;
+            return;
+        }
+
+        var chan = ctx.Channel as ITextChannel;
+        logger.LogInformation(
+            "Slash Command Executed" + "\n\t" + "User: {0}\n\t" + "Server: {1}\n\t" + "Channel: {2}\n\t" +
+            "Module: {3}\n\t" + "Command: {4}",
+            $"{ctx.User} [{ctx.User.Id}]", // {0}
+            chan == null ? "PRIVATE" : $"{chan.Guild.Name} [{chan.Guild.Id}]", // {1}
+            chan == null ? "PRIVATE" : $"{chan.Name} [{chan.Id}]", // {2}
+            info.Module.SlashGroupName, info.MethodName); // {3}
+
+        var tofetch1 = await client.Rest.GetChannelAsync(bss.Data.CommandLogChannel).ConfigureAwait(false);
+        if (tofetch1 is RestTextChannel restChannel1)
+        {
+            var eb = new EmbedBuilder()
+                .WithOkColor()
+                .WithTitle("Slash Command Executed")
+                .AddField("Module", info.Module.Name ?? "None")
+                .AddField("Command", info.Name)
+                .AddField("User", $"{ctx.User} `{ctx.User.Id}`")
+                .AddField("Channel", ctx.Channel == null ? "PRIVATE" : $"{ctx.Channel.Name} `{ctx.Channel.Id}`")
+                .AddField("Guild", ctx.Guild == null ? "PRIVATE" : $"{ctx.Guild.Name} `{ctx.Guild.Id}`");
+
+            await restChannel1.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
+        }
+
+        if (ctx.Guild is null)
+            return;
+        {
+            if (info.MethodName.ToLower() is "confess" or "confessreport")
+                return;
+
+            var gc = await gss.GetGuildConfig(ctx.Guild.Id);
+            if (gc.CommandLogChannel is 0)
+                return;
+            var channel = await ctx.Guild.GetTextChannelAsync(gc.CommandLogChannel).ConfigureAwait(false);
+            if (channel is null)
+                return;
+            var eb = new EmbedBuilder()
+                .WithOkColor()
+                .WithTitle("Slash Command Executed.")
+                .AddField("Module", info.Module.Name ?? "None")
+                .AddField("Command", info.Name)
+                .AddField("User", $"{ctx.User.Mention} `{ctx.User.Id}`")
+                .AddField("Channel", $"{ctx.Channel.Name} `{ctx.Channel.Id}`");
+
+            await channel.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
+        }
     }
 
     private Task HandleCommands(SlashCommandInfo slashInfo, IInteractionContext ctx, IResult result)

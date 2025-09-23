@@ -359,6 +359,9 @@ public class MessageRepeaterService : INService, IReadyExecutor, IDisposable
     /// <param name="message">The message to repeat.</param>
     /// <param name="startTimeOfDay">Optional specific time of day to start the repeater.</param>
     /// <param name="allowMentions">Whether to allow mentions in the message.</param>
+    /// <param name="triggerMode">How the sticky would trigger.</param>
+    /// <param name="threadAutoSticky">Whether threads automatically get sticky messages in the channel.</param>
+    /// <param name="threadOnlyMode">Whether the repeater only runs in threads.</param>
     /// <returns>The created repeater runner.</returns>
     public async Task<RepeatRunner?> CreateRepeaterAsync(
         ulong guildId,
@@ -983,7 +986,7 @@ public class MessageRepeaterService : INService, IReadyExecutor, IDisposable
                         if (lastMessage?.Id != repeater.Repeater.LastMessageId.Value)
                         {
                             // Our sticky is no longer at the bottom, repost it
-                            _ = Task.Run(async () => await repeater.TriggerInternal(true));
+                            _ = repeater.TriggerInternal(true);
                         }
                     }
                 }

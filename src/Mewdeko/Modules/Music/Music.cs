@@ -10,6 +10,7 @@ using Lavalink4NET.Players;
 using Lavalink4NET.Rest.Entities.Tracks;
 using Lavalink4NET.Tracks;
 using Mewdeko.Common.Attributes.TextCommands;
+using Mewdeko.Common.PubSub;
 using Mewdeko.Modules.Music.Common;
 using Mewdeko.Modules.Music.CustomPlayer;
 using SpotifyAPI.Web;
@@ -25,7 +26,9 @@ public partial class Music(
     IDataCache cache,
     InteractiveService interactiveService,
     GuildSettingsService guildSettingsService,
-    ILogger<Music> logger) : MewdekoModule
+    ILogger<Music> logger,
+    MusicEventManager eventManager,
+    IPubSub pubSub) : MewdekoModule
 {
     /// <summary>
     ///     Retrieves the music player an attempts to join the voice channel.
@@ -35,6 +38,13 @@ public partial class Music(
     [RequireContext(ContextType.Guild)]
     public async Task Join()
     {
+        var user = ctx.User as IGuildUser;
+        if (user.VoiceChannel is null)
+        {
+            await ReplyErrorAsync(Strings.MusicNotInChannel(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
         var (player, result) = await GetPlayerAsync();
         if (string.IsNullOrWhiteSpace(result))
             await ReplyConfirmAsync(Strings.MusicJoinSuccess(ctx.Guild.Id, player.VoiceChannelId))
@@ -61,6 +71,13 @@ public partial class Music(
     [RequireContext(ContextType.Guild)]
     public async Task Leave()
     {
+        var user = ctx.User as IGuildUser;
+        if (user.VoiceChannel is null)
+        {
+            await ReplyErrorAsync(Strings.MusicNotInChannel(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
         var (player, result) = await GetPlayerAsync(false);
         if (result is not null)
         {
@@ -80,6 +97,15 @@ public partial class Music(
         await cache.SetCurrentTrack(ctx.Guild.Id, null);
 
         await player.DisconnectAsync().ConfigureAwait(false);
+
+        // Notify connected clients that bot has disconnected
+        await eventManager.BroadcastDisconnection(ctx.Guild.Id).ConfigureAwait(false);
+
+        // Publish Redis event when player is destroyed (bot leaves voice)
+        var key = new TypedKey<string>($"music:player:destroyed:{ctx.Guild.Id}");
+        await pubSub.Pub(key, "destroyed");
+        logger.LogInformation("Published player destroyed event for guild {GuildId}", ctx.Guild.Id);
+
         await ReplyConfirmAsync(Strings.MusicDisconnect(ctx.Guild.Id)).ConfigureAwait(false);
     }
 
@@ -91,6 +117,13 @@ public partial class Music(
     [RequireContext(ContextType.Guild)]
     public async Task ClearQueue()
     {
+        var user = ctx.User as IGuildUser;
+        if (user.VoiceChannel is null)
+        {
+            await ReplyErrorAsync(Strings.MusicNotInChannel(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
         var (player, result) = await GetPlayerAsync(false);
 
         if (result is not null)
@@ -122,6 +155,13 @@ public partial class Music(
     [RequireContext(ContextType.Guild)]
     public async Task Play([Remainder] int queueNumber)
     {
+        var user = ctx.User as IGuildUser;
+        if (user.VoiceChannel is null)
+        {
+            await ReplyErrorAsync(Strings.MusicNotInChannel(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
         var (player, result) = await GetPlayerAsync(false);
 
         if (result is not null)
@@ -167,6 +207,13 @@ public partial class Music(
     [RequireContext(ContextType.Guild)]
     public async Task Play([Remainder] string query)
     {
+        var user = ctx.User as IGuildUser;
+        if (user.VoiceChannel is null)
+        {
+            await ReplyErrorAsync(Strings.MusicNotInChannel(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
         try
         {
             // Get or create player
@@ -206,6 +253,13 @@ public partial class Music(
     [RequireContext(ContextType.Guild)]
     public async Task Pause()
     {
+        var user = ctx.User as IGuildUser;
+        if (user.VoiceChannel is null)
+        {
+            await ReplyErrorAsync(Strings.MusicNotInChannel(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
         var (player, result) = await GetPlayerAsync();
 
         if (result is not null)
@@ -243,6 +297,13 @@ public partial class Music(
     [RequireContext(ContextType.Guild)]
     public async Task NowPlaying()
     {
+        var user = ctx.User as IGuildUser;
+        if (user.VoiceChannel is null)
+        {
+            await ReplyErrorAsync(Strings.MusicNotInChannel(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
         try
         {
             var (player, result) = await GetPlayerAsync(false);
@@ -290,6 +351,13 @@ public partial class Music(
     [RequireContext(ContextType.Guild)]
     public async Task SongRemove(int queueNumber)
     {
+        var user = ctx.User as IGuildUser;
+        if (user.VoiceChannel is null)
+        {
+            await ReplyErrorAsync(Strings.MusicNotInChannel(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
         var (player, result) = await GetPlayerAsync(false);
         if (result is not null)
         {
@@ -355,6 +423,13 @@ public partial class Music(
     [RequireContext(ContextType.Guild)]
     public async Task MoveSong(int from, int to)
     {
+        var user = ctx.User as IGuildUser;
+        if (user.VoiceChannel is null)
+        {
+            await ReplyErrorAsync(Strings.MusicNotInChannel(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
         var (_, result) = await GetPlayerAsync(false);
         if (result is not null)
         {
@@ -420,6 +495,13 @@ public partial class Music(
     [RequireContext(ContextType.Guild)]
     public async Task Volume(int volume)
     {
+        var user = ctx.User as IGuildUser;
+        if (user.VoiceChannel is null)
+        {
+            await ReplyErrorAsync(Strings.MusicNotInChannel(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
         var (player, result) = await GetPlayerAsync(false);
         if (result is not null)
         {
@@ -455,6 +537,13 @@ public partial class Music(
     [RequireContext(ContextType.Guild)]
     public async Task Seek([Remainder] string timeSpan)
     {
+        var user = ctx.User as IGuildUser;
+        if (user.VoiceChannel is null)
+        {
+            await ReplyErrorAsync(Strings.MusicNotInChannel(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
         var (player, result) = await GetPlayerAsync(false);
         if (result is not null)
         {
@@ -505,6 +594,13 @@ public partial class Music(
     [RequireContext(ContextType.Guild)]
     public async Task VoteSkip()
     {
+        var user = ctx.User as IGuildUser;
+        if (user.VoiceChannel is null)
+        {
+            await ReplyErrorAsync(Strings.MusicNotInChannel(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
         var (player, result) = await GetPlayerAsync(false);
         if (result is not null)
         {
@@ -610,6 +706,13 @@ public partial class Music(
     [RequireContext(ContextType.Guild)]
     public async Task SavePlaylist([Remainder] string name)
     {
+        var user = ctx.User as IGuildUser;
+        if (user.VoiceChannel is null)
+        {
+            await ReplyErrorAsync(Strings.MusicNotInChannel(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
         var (_, result) = await GetPlayerAsync(false);
         if (result is not null)
         {
@@ -660,6 +763,13 @@ public partial class Music(
     [RequireContext(ContextType.Guild)]
     public async Task LoadPlaylist(string name, bool clear = false)
     {
+        var user = ctx.User as IGuildUser;
+        if (user.VoiceChannel is null)
+        {
+            await ReplyErrorAsync(Strings.MusicNotInChannel(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
         var (player, result) = await GetPlayerAsync();
         if (result is not null)
         {
@@ -770,6 +880,13 @@ public partial class Music(
     [RequireContext(ContextType.Guild)]
     public async Task Search([Remainder] string query)
     {
+        var user = ctx.User as IGuildUser;
+        if (user.VoiceChannel is null)
+        {
+            await ReplyErrorAsync(Strings.MusicNotInChannel(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
         var tracks = await service.Tracks.LoadTracksAsync(query, TrackSearchMode.YouTube);
 
         if (!tracks.IsSuccess)
@@ -809,6 +926,13 @@ public partial class Music(
     [RequireContext(ContextType.Guild)]
     public async Task Shuffle()
     {
+        var user = ctx.User as IGuildUser;
+        if (user.VoiceChannel is null)
+        {
+            await ReplyErrorAsync(Strings.MusicNotInChannel(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
         var (_, result) = await GetPlayerAsync(false);
         if (result is not null)
         {
@@ -868,6 +992,13 @@ public partial class Music(
     [RequireContext(ContextType.Guild)]
     public async Task Skip()
     {
+        var user = ctx.User as IGuildUser;
+        if (user.VoiceChannel is null)
+        {
+            await ReplyErrorAsync(Strings.MusicNotInChannel(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
         var (player, result) = await GetPlayerAsync(false);
         if (result is not null)
         {
@@ -900,6 +1031,13 @@ public partial class Music(
     [RequireContext(ContextType.Guild)]
     public async Task Queue()
     {
+        var user = ctx.User as IGuildUser;
+        if (user.VoiceChannel is null)
+        {
+            await ReplyErrorAsync(Strings.MusicNotInChannel(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
         var (_, result) = await GetPlayerAsync(false);
         if (result is not null)
         {
@@ -1178,6 +1316,13 @@ public partial class Music(
     [RequireContext(ContextType.Guild)]
     public async Task Loop(PlayerRepeatType repeatType)
     {
+        var user = ctx.User as IGuildUser;
+        if (user.VoiceChannel is null)
+        {
+            await ReplyErrorAsync(Strings.MusicNotInChannel(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
         var (player, result) = await GetPlayerAsync(false);
         if (result is not null)
         {
@@ -1620,7 +1765,19 @@ public partial class Music(
 
             await result.Player.SetVolumeAsync(await result.Player.GetVolume() / 100f).ConfigureAwait(false);
 
-            if (result.IsSuccess) return (result.Player, null);
+            if (result.IsSuccess)
+            {
+                // Publish Redis event when player is created (bot joins voice)
+                if (connectToVoiceChannel && result.Status == PlayerRetrieveStatus.Success)
+                {
+                    var key = new TypedKey<string>($"music:player:created:{ctx.Guild.Id}");
+                    await pubSub.Pub(key, "created");
+                    logger.LogInformation("Published player created event for guild {GuildId}", ctx.Guild.Id);
+                }
+
+                return (result.Player, null);
+            }
+
             var errorMessage = result.Status switch
             {
                 PlayerRetrieveStatus.UserNotInVoiceChannel => Strings.MusicNotInChannel(ctx.Guild.Id),
