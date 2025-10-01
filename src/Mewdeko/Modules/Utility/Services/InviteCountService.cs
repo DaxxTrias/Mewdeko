@@ -1,8 +1,8 @@
 ﻿using System.Threading;
 using DataModel;
+using Discord.Net;
 using LinqToDB;
 using LinqToDB.Async;
-using LinqToDB.Data;
 using Mewdeko.Common.ModuleBehaviors;
 
 namespace Mewdeko.Modules.Utility.Services;
@@ -37,55 +37,139 @@ public class InviteCountService : INService, IReadyExecutor
         handler.Subscribe("UserLeft", "InviteCountService", OnUserLeft);
         handler.Subscribe("InviteCreated", "InviteCountService", OnInviteCreated);
         handler.Subscribe("InviteDeleted", "InviteCountService", OnInviteDeleted);
+
+        // Clean up when leaving guilds
+        this.client.LeftGuild += OnLeftGuild;
     }
 
     /// <inheritdoc />
     public async Task OnReadyAsync()
     {
-        var guilds = client.Guilds.ToHashSet();
-        var guildIds = client.Guilds.Select(g => g.Id).ToHashSet();
+        logger.LogInformation("Starting InviteCountService - Lazy loading enabled");
 
+        // Load settings into memory cache (relatively small)
+        var guildIds = client.Guilds.Select(g => g.Id).ToHashSet();
         await using var uow = await dbFactory.CreateConnectionAsync();
+
         var allSettings = await uow.InviteCountSettings
             .Where(s => guildIds.Contains(s.GuildId))
             .ToDictionaryAsync(s => s.GuildId);
 
-        var mergedSettings = guildIds.ToDictionary(
-            guildId => guildId,
-            guildId => allSettings.TryGetValue(guildId, out var settings)
-                ? settings
-                : new InviteCountSetting
+        // Initialize settings for all guilds (small data, needed for quick lookups)
+        foreach (var guildId in guildIds)
+        {
+            if (allSettings.TryGetValue(guildId, out var settings))
+            {
+                inviteCountSettings[guildId] = settings;
+            }
+            else
+            {
+                // Create default settings but don't save yet - will be saved when first accessed
+                inviteCountSettings[guildId] = new InviteCountSetting
                 {
                     GuildId = guildId, RemoveInviteOnLeave = true, IsEnabled = true
+                };
+            }
+        }
+
+        logger.LogInformation("Loaded invite settings for {Count} guilds", inviteCountSettings.Count);
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var enabledGuilds = client.Guilds
+                    .Where(g => inviteCountSettings.TryGetValue(g.Id, out var s) && s.IsEnabled)
+                    .Where(g => g.CurrentUser?.GuildPermissions.Has(GuildPermission.ManageGuild) == true)
+                    .ToList();
+
+                logger.LogInformation("Starting background invite initialization for {Count} enabled guilds",
+                    enabledGuilds.Count);
+
+                // Process guilds in batches with rate limiting
+                var semaphore = new SemaphoreSlim(5); // More conservative than 10
+                var batchSize = 10;
+
+                for (var i = 0; i < enabledGuilds.Count; i += batchSize)
+                {
+                    var batch = enabledGuilds.Skip(i).Take(batchSize).ToList();
+                    var tasks = batch.Select(guild => ProcessGuildWithRateLimiting(guild, semaphore)).ToList();
+                    await Task.WhenAll(tasks);
+
+                    // Add delay between batches to avoid rate limits
+                    if (i + batchSize < enabledGuilds.Count)
+                    {
+                        await Task.Delay(5000); // 5 second delay between batches
+                    }
                 }
-        );
 
-        foreach (var kvp in mergedSettings)
+                logger.LogInformation("Completed background invite initialization");
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error during background invite initialization");
+            }
+        });
+
+        // Background cleanup of orphaned data
+        _ = Task.Run(async () =>
         {
-            inviteCountSettings[kvp.Key] = kvp.Value;
-        }
+            try
+            {
+                await Task.Delay(TimeSpan.FromMinutes(5)); // Wait 5 minutes after startup
 
-        var newSettingsList = mergedSettings.Values
-            .Where(s => !allSettings.ContainsKey(s.GuildId))
-            .ToList();
+                var currentGuildIds = client.Guilds.Select(g => g.Id).ToHashSet();
+                await using var db = await dbFactory.CreateConnectionAsync();
 
-        if (newSettingsList.Count != 0)
-        {
-            var table = uow.GetTable<InviteCountSetting>();
-            await table.BulkCopyAsync(newSettingsList);
-            logger.LogInformation("Bulk inserted {Count} new invite settings", newSettingsList.Count);
-        }
+                // Clean up settings for guilds we're no longer in
+                var orphanedSettings = await db.InviteCountSettings
+                    .Where(s => !currentGuildIds.Contains(s.GuildId))
+                    .CountAsync();
 
+                if (orphanedSettings > 0)
+                {
+                    await db.InviteCountSettings
+                        .Where(s => !currentGuildIds.Contains(s.GuildId))
+                        .DeleteAsync();
 
-        var guildsToUpdate = guilds
-            .Where(i => i.Users.FirstOrDefault(x => x.Id == client.CurrentUser.Id)?.GuildPermissions
-                .Has(GuildPermission.ManageGuild) == true)
-            .ToList();
+                    logger.LogInformation("Cleaned up {Count} orphaned invite settings", orphanedSettings);
+                }
 
-        var semaphore = new SemaphoreSlim(10);
-        var tasks = guildsToUpdate.Select(guild => ProcessGuildWithRateLimiting(guild, semaphore)).ToList();
+                // Clean up invite counts for guilds we're no longer in
+                var orphanedCounts = await db.InviteCounts
+                    .Where(c => !currentGuildIds.Contains(c.GuildId))
+                    .CountAsync();
 
-        await Task.WhenAll(tasks);
+                if (orphanedCounts > 0)
+                {
+                    await db.InviteCounts
+                        .Where(c => !currentGuildIds.Contains(c.GuildId))
+                        .DeleteAsync();
+
+                    logger.LogInformation("Cleaned up {Count} orphaned invite counts", orphanedCounts);
+                }
+
+                // Clean up invited-by records for guilds we're no longer in
+                var orphanedInvitedBy = await db.InvitedBies
+                    .Where(i => !currentGuildIds.Contains(i.GuildId))
+                    .CountAsync();
+
+                if (orphanedInvitedBy > 0)
+                {
+                    await db.InvitedBies
+                        .Where(i => !currentGuildIds.Contains(i.GuildId))
+                        .DeleteAsync();
+
+                    logger.LogInformation("Cleaned up {Count} orphaned invited-by records", orphanedInvitedBy);
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error during invite data cleanup");
+            }
+        });
+
+        logger.LogInformation("InviteCountService ready - invites load in background");
     }
 
     private async Task OnUserLeft(IGuild guild, IUser user)
@@ -111,6 +195,24 @@ public class InviteCountService : INService, IReadyExecutor
             // Remove the InvitedBy record
             await uow.DeleteAsync(invitedBy);
         }
+    }
+
+    private async Task OnLeftGuild(SocketGuild guild)
+    {
+        try
+        {
+            // Remove from in-memory caches
+            inviteCountSettings.TryRemove(guild.Id, out _);
+            guildInvites.TryRemove(guild.Id, out _);
+
+            logger.LogInformation("Cleaned up invite tracking for left guild {GuildId}", guild.Id);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error cleaning up invite tracking for left guild {GuildId}", guild.Id);
+        }
+
+        await Task.CompletedTask;
     }
 
     /// <summary>
@@ -208,6 +310,13 @@ public class InviteCountService : INService, IReadyExecutor
         var curUser = await guild.GetCurrentUserAsync();
         if (!curUser.GuildPermissions.Has(GuildPermission.ManageGuild))
             return;
+
+        // Ensure invites are loaded for this guild
+        if (!guildInvites.ContainsKey(guild.Id))
+        {
+            await UpdateGuildInvites(guild);
+        }
+
         var newInvites = await guild.GetInvitesAsync();
         var usedInvite = FindUsedInvite(guild.Id, newInvites);
 
@@ -250,10 +359,16 @@ public class InviteCountService : INService, IReadyExecutor
             var invites = await guild.GetInvitesAsync();
             guildInvites[guild.Id] = new ConcurrentDictionary<string, IInviteMetadata>(
                 invites.ToDictionary(x => x.Code, x => x));
+
+            logger.LogDebug("Updated {Count} invites for guild {GuildId}", invites.Count(), guild.Id);
+        }
+        catch (HttpException ex) when (ex.DiscordCode == DiscordErrorCode.MissingPermissions)
+        {
+            logger.LogWarning("Missing permissions to fetch invites for guild {GuildId}", guild.Id);
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Failed to update invites for guild {guild.Id}: {ex.Message}");
+            logger.LogError(ex, "Failed to update invites for guild {GuildId}", guild.Id);
         }
     }
 
@@ -397,19 +512,15 @@ public class InviteCountService : INService, IReadyExecutor
 
     private async Task ProcessGuildWithRateLimiting(IGuild guild, SemaphoreSlim semaphore)
     {
+        await semaphore.WaitAsync();
         try
         {
-            await semaphore.WaitAsync();
             await UpdateGuildInvites(guild);
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error updating invites for guild {guild.Id}: {ex.Message}");
+            await Task.Delay(1000); // 1 second delay between guilds
         }
         finally
         {
             semaphore.Release();
-            await Task.Delay(100);
         }
     }
 }
