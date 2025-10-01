@@ -119,6 +119,7 @@ public class Program
             {
                 builder.WebHost.UseSentry(o =>
                 {
+                    o.Debug = true;
                     o.Dsn = credentials.SentryDsn;
                     o.TracesSampleRate = 1.0;
                     o.AttachStacktrace = true;
