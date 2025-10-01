@@ -79,7 +79,7 @@ public class StatsService : IStatsService, IDisposable
     {
         get
         {
-            return ByteSize.FromBytes(Process.GetCurrentProcess().PrivateMemorySize64).Megabytes
+            return ByteSize.FromBytes(Process.GetCurrentProcess().WorkingSet64).Megabytes
                 .ToString(CultureInfo.InvariantCulture);
         }
     }
