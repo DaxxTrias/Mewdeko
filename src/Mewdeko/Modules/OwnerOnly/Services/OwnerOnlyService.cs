@@ -480,7 +480,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         if (toRemove is null)
             return null;
 
-        await dbContext.RotatingStatuses.Select(x => toRemove).DeleteAsync();
+        await dbContext.RotatingStatuses.Where(x => x.Id == toRemove.Id).DeleteAsync();
         return toRemove.Status;
     }
 
