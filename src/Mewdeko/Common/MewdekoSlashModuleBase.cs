@@ -147,7 +147,7 @@ public abstract class MewdekoSlashCommandModule : InteractionModuleBase
             .ConfigureAwait(false);
         try
         {
-            var input = await GetButtonInputAsync(msg.Channel.Id, msg.Id, userid).ConfigureAwait(false);
+            var input = await GetButtonInputAsync(msg.Channel.Id, msg.Id, userid, true).ConfigureAwait(false);
             return input == "Yes";
         }
         finally
@@ -211,20 +211,35 @@ public abstract class MewdekoSlashCommandModule : InteractionModuleBase
         async Task Interaction(SocketInteraction arg)
         {
             if (arg is not SocketMessageComponent c) return;
+
+            //  Only handle the interaction if it's the specific button we are waiting for.
+            //  Otherwise, just ignore it and let the correct module handle it.
             if (c.Channel.Id != channelId || c.Message.Id != msgId || c.User.Id != userId)
             {
-                if (!alreadyDeferred) await c.DeferAsync();
                 return;
+            }
+
+            // By this point, we know this is the interaction we're waiting for.
+            // Acknowledge it if it hasn't been already.
+            if (!alreadyDeferred)
+            {
+                try
+                {
+                    await c.DeferAsync();
+                }
+                catch (Exception)
+                {
+                    // Ignore if it's already been deferred, which can happen in rare race conditions.
+                    // The main goal is to capture the input.
+                }
             }
 
             if (c.Data.CustomId == "yes")
             {
-                if (!alreadyDeferred) await c.DeferAsync();
                 userInputTask.TrySetResult("Yes");
                 return;
             }
 
-            if (!alreadyDeferred) await c.DeferAsync();
             userInputTask.TrySetResult(c.Data.CustomId);
         }
     }
