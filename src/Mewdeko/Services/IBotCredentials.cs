@@ -127,6 +127,11 @@ public interface IBotCredentials
     public bool PostgresSetupCompleted { get; set; }
 
     /// <summary>
+    ///     Gets the Sentry DSN for error tracking.
+    /// </summary>
+    public string SentryDsn { get; }
+
+    /// <summary>
     ///     Checks if the given user is an owner of the bot.
     /// </summary>
     /// <param name="u">The user to check.</param>

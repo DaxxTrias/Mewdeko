@@ -113,6 +113,20 @@ public class Program
         if (credentials.IsApiEnabled)
         {
             var builder = WebApplication.CreateBuilder(args);
+
+            // Configure Sentry for ASP.NET Core
+            if (!string.IsNullOrWhiteSpace(credentials.SentryDsn))
+            {
+                builder.WebHost.UseSentry(o =>
+                {
+                    o.Dsn = credentials.SentryDsn;
+                    o.TracesSampleRate = 1.0;
+                    o.AttachStacktrace = true;
+                    o.SendDefaultPii = false;
+                    o.MaxBreadcrumbs = 100;
+                });
+            }
+
             builder.Logging.ClearProviders();
             builder.Services.AddTransient(typeof(ILogger<>), typeof(Logger<>));
             ConfigureServices(builder.Services, credentials, Cache, serverCount.GetValueOrDefault());
@@ -293,7 +307,7 @@ public class Program
 
         services.AddSerilog((serviceProvider, loggerConfiguration) =>
         {
-            LogSetup.ConfigureLogger(loggerConfiguration);
+            LogSetup.ConfigureLogger(loggerConfiguration, credentials.SentryDsn);
         });
         services.AddSingleton(client);
         services.AddSingleton(credentials);
