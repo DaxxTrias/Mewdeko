@@ -84,7 +84,8 @@ public static class LogSetup
     ///     Configures a LoggerConfiguration with all the standard settings for use with Microsoft.Extensions.Logging.
     /// </summary>
     /// <param name="loggerConfiguration">The logger configuration to set up.</param>
-    public static void ConfigureLogger(LoggerConfiguration loggerConfiguration)
+    /// <param name="sentryDsn">Optional Sentry DSN for error tracking.</param>
+    public static void ConfigureLogger(LoggerConfiguration loggerConfiguration, string sentryDsn = null)
     {
         loggerConfiguration
             // Default Microsoft logging
@@ -113,6 +114,20 @@ public static class LogSetup
                 theme: AnsiConsoleTheme.Code,
                 outputTemplate:
                 "{Timestamp:HH:mm:ss} [{Level:u3}] {SourceContext:l}: {Message:lj}{NewLine}{Exception}");
+
+        // Add Sentry if DSN is provided
+        if (!string.IsNullOrWhiteSpace(sentryDsn))
+        {
+            loggerConfiguration.WriteTo.Sentry(o =>
+            {
+                o.Dsn = sentryDsn;
+                o.MinimumBreadcrumbLevel = LogEventLevel.Debug;
+                o.MinimumEventLevel = LogEventLevel.Error;
+                o.AttachStacktrace = true;
+                o.SendDefaultPii = false;
+                o.MaxBreadcrumbs = 100;
+            });
+        }
 
         Console.OutputEncoding = Encoding.UTF8;
     }
