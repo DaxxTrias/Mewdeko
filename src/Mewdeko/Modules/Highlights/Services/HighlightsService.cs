@@ -1,6 +1,7 @@
 ﻿using System.Text.RegularExpressions;
 using DataModel;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Common.ModuleBehaviors;
 using ZiggyCreatures.Caching.Fusion;
 
@@ -43,6 +44,10 @@ public class HighlightsService : INService, IReadyExecutor, IUnloadableService
         this.logger = logger;
         eventHandler.Subscribe("MessageReceived", "HighlightsService", StaggerHighlights);
         eventHandler.Subscribe("UserIsTyping", "HighlightsService", AddHighlightTimer);
+
+        // Clean up cache when leaving guilds
+        this.client.LeftGuild += OnLeftGuild;
+
         _ = HighlightLoop();
     }
 
@@ -52,33 +57,53 @@ public class HighlightsService : INService, IReadyExecutor, IUnloadableService
     /// <returns></returns>
     public async Task OnReadyAsync()
     {
-        logger.LogInformation($"Starting {GetType()} Cache");
-        await using var dbContext = await dbFactory.CreateConnectionAsync();
+        await Task.CompletedTask; // Keep async signature
+        logger.LogInformation("Starting {Type} Cache - Lazy loading enabled", GetType());
 
-        var allHighlights = dbContext.Highlights.ToHashSet();
-        var allHighlightSettings = dbContext.HighlightSettings.ToHashSet();
-        foreach (var i in client.Guilds)
+        // Optional: Background cleanup of old/unused data
+        _ = Task.Run(async () =>
         {
-            var highlights = allHighlights.Where(x => x.GuildId == i.Id).ToList();
-            var hlSettings = allHighlightSettings.Where(x => x.GuildId == i.Id).ToList();
-            if (highlights.Any())
+            try
             {
-                await cache.SetAsync($"highlights_{i.Id}", highlights,
-                    options => options
-                        .SetDuration(TimeSpan.FromMinutes(30))
-                );
-            }
+                await using var dbContext = await dbFactory.CreateConnectionAsync();
 
-            if (hlSettings.Any())
+                // lean up highlights for guilds the bot is no longer in
+                var currentGuildIds = client.Guilds.Select(g => g.Id).ToHashSet();
+                var orphanedHighlights = await dbContext.Highlights
+                    .Where(h => !currentGuildIds.Contains(h.GuildId))
+                    .CountAsync();
+
+                if (orphanedHighlights > 0)
+                {
+                    await dbContext.Highlights
+                        .Where(h => !currentGuildIds.Contains(h.GuildId))
+                        .DeleteAsync();
+
+                    logger.LogInformation("Cleaned up {Count} orphaned highlights during startup", orphanedHighlights);
+                }
+
+                // Clean up settings too
+                var orphanedSettings = await dbContext.HighlightSettings
+                    .Where(h => !currentGuildIds.Contains(h.GuildId))
+                    .CountAsync();
+
+                if (orphanedSettings > 0)
+                {
+                    await dbContext.HighlightSettings
+                        .Where(h => !currentGuildIds.Contains(h.GuildId))
+                        .DeleteAsync();
+
+                    logger.LogInformation("Cleaned up {Count} orphaned highlight settings during startup",
+                        orphanedSettings);
+                }
+            }
+            catch (Exception ex)
             {
-                await cache.SetAsync($"highlightSettings_{i.Id}", hlSettings,
-                    options => options
-                        .SetDuration(TimeSpan.FromMinutes(30))
-                );
+                logger.LogError(ex, "Error during startup highlights cleanup");
             }
-        }
+        });
 
-        logger.LogInformation("Highlights Cached");
+        logger.LogInformation("Highlights Service Ready - data loads on-demand per guild");
     }
 
     /// <summary>
@@ -88,7 +113,24 @@ public class HighlightsService : INService, IReadyExecutor, IUnloadableService
     {
         eventHandler.Unsubscribe("MessageReceived", "HighlightsService", StaggerHighlights);
         eventHandler.Unsubscribe("UserIsTyping", "HighlightsService", AddHighlightTimer);
+        client.LeftGuild -= OnLeftGuild;
         return Task.CompletedTask;
+    }
+
+    private async Task OnLeftGuild(SocketGuild guild)
+    {
+        try
+        {
+            // Remove cached data for this guild
+            await cache.RemoveAsync($"highlights_{guild.Id}");
+            await cache.RemoveAsync($"highlightSettings_{guild.Id}");
+
+            logger.LogInformation("Cleaned up highlight cache for left guild {GuildId}", guild.Id);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error cleaning up highlight cache for left guild {GuildId}", guild.Id);
+        }
     }
 
     private async Task HighlightLoop()
@@ -223,13 +265,9 @@ public class HighlightsService : INService, IReadyExecutor, IUnloadableService
         await using var dbContext = await dbFactory.CreateConnectionAsync();
 
         await dbContext.InsertAsync(toadd);
-        var current =
-            await cache.GetOrSetAsync($"highlights_{guildId}", _ => Task.FromResult(new List<Highlight>()));
-        current.Add(toadd);
-        await cache.SetAsync($"highlights_{guildId}", current,
-            options => options
-                .SetDuration(TimeSpan.FromMinutes(30))
-        ).ConfigureAwait(false);
+
+        // Invalidate cache so next access reloads from DB
+        await cache.RemoveAsync($"highlights_{guildId}");
     }
 
     /// <summary>
@@ -423,24 +461,24 @@ public class HighlightsService : INService, IReadyExecutor, IUnloadableService
 
     private async Task<List<Highlight?>> GetForGuild(ulong guildId)
     {
-        await using var dbContext = await dbFactory.CreateConnectionAsync();
-
-        var highlightsForGuild = await cache.GetOrSetAsync($"highlights_{guildId}", _ =>
+        return await cache.GetOrSetAsync($"highlights_{guildId}", async _ =>
         {
-            return Task.FromResult(dbContext.Highlights.Where(x => x.GuildId == guildId).ToList());
-        });
-        return highlightsForGuild;
+            await using var dbContext = await dbFactory.CreateConnectionAsync();
+            return await dbContext.Highlights
+                .Where(x => x.GuildId == guildId)
+                .ToListAsync();
+        }, options => options.SetDuration(TimeSpan.FromMinutes(30)));
     }
 
     private async Task<IEnumerable<HighlightSetting?>> GetSettingsForGuild(ulong guildId)
     {
-        await using var dbContext = await dbFactory.CreateConnectionAsync();
-
-        var highlightSettingsForGuild = await cache.GetOrSetAsync($"highlightSettings_{guildId}", _ =>
+        return await cache.GetOrSetAsync($"highlightSettings_{guildId}", async _ =>
         {
-            return Task.FromResult(dbContext.HighlightSettings.Where(x => x.GuildId == guildId).ToList());
-        });
-        return highlightSettingsForGuild;
+            await using var dbContext = await dbFactory.CreateConnectionAsync();
+            return await dbContext.HighlightSettings
+                .Where(x => x.GuildId == guildId)
+                .ToListAsync();
+        }, options => options.SetDuration(TimeSpan.FromMinutes(30)));
     }
 
     private async Task<bool> TryAddHighlightStaggerUser(ulong guildId, ulong userId)
