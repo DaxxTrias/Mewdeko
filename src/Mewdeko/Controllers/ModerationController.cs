@@ -11,8 +11,7 @@ namespace Mewdeko.Controllers;
 [Route("botapi/[controller]/{guildId}")]
 [Authorize("ApiKeyPolicy")]
 public class ModerationController(
-    UserPunishService userPunishService,
-    DiscordShardedClient client) : Controller
+    UserPunishService userPunishService) : Controller
 {
     /// <summary>
     ///     Gets all warnings for a guild

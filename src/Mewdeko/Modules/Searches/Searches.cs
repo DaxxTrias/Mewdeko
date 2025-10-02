@@ -12,7 +12,6 @@ using MartineApiNet;
 using MartineApiNet.Enums;
 using MartineApiNet.Models.Images;
 using Mewdeko.Common.Attributes.TextCommands;
-using Mewdeko.Modules.Administration.Services;
 using Mewdeko.Modules.Searches.Common;
 using Mewdeko.Modules.Searches.Services;
 using Mewdeko.Services.Settings;
@@ -30,16 +29,15 @@ namespace Mewdeko.Modules.Searches;
 /// <param name="google">The Google API service.</param>
 /// <param name="factory">The HTTP client factory.</param>
 /// <param name="cache">The memory cache service.</param>
-/// <param name="tzSvc">The guild timezone service.</param>
 /// <param name="serv">The interactive service.</param>
 /// <param name="martineApi">The Martine API service.</param>
 /// <param name="toneTagService">The ToneTag service.</param>
 /// <param name="config">The bot configuration service.</param>
+/// <param name="logger">The logger instance for structured logging.</param>
 public partial class Searches(
     IGoogleApiService google,
     IHttpClientFactory factory,
     IMemoryCache cache,
-    GuildTimezoneService tzSvc,
     InteractiveService serv,
     MartineApi martineApi,
     ToneTagService toneTagService,
@@ -322,13 +320,13 @@ public partial class Searches(
         // Precipitation and weather phenomena
         var precipComponents = new List<TextDisplayBuilder>();
 
-        if (current.Precipitation.HasValue && current.Precipitation > 0)
+        if (current.Precipitation is > 0)
             precipComponents.Add(new TextDisplayBuilder($"🌧️ Precipitation: {current.Precipitation:F1} mm"));
 
-        if (current.Rain.HasValue && current.Rain > 0)
+        if (current.Rain is > 0)
             precipComponents.Add(new TextDisplayBuilder($"☔ Rain: {current.Rain:F1} mm"));
 
-        if (current.Snowfall.HasValue && current.Snowfall > 0)
+        if (current.Snowfall is > 0)
             precipComponents.Add(
                 new TextDisplayBuilder($"❄️ {Strings.Snowfall(ctx.Guild.Id)}: {current.Snowfall:F1} cm"));
 
@@ -479,9 +477,11 @@ public partial class Searches(
 
             options.Add(new SelectMenuOptionBuilder()
                 .WithLabel(candidate.TimeZoneName.Length > 100
-                    ? candidate.TimeZoneName[..97] + "..."
+                    ? candidate.TimeZoneName[..97] + Strings.Ellipsis(ctx.Guild.Id)
                     : candidate.TimeZoneName)
-                .WithDescription(description.Length > 100 ? description[..97] + "..." : description)
+                .WithDescription(description.Length > 100
+                    ? description[..97] + Strings.Ellipsis(ctx.Guild.Id)
+                    : description)
                 .WithValue($"timezone_select:{candidate.TimezoneId}"));
         }
 

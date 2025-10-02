@@ -1,5 +1,6 @@
 ﻿using DataModel;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Common.ModuleBehaviors;
 
 namespace Mewdeko.Modules.Utility.Services;
@@ -7,6 +8,7 @@ namespace Mewdeko.Modules.Utility.Services;
 /// <summary>
 ///     Manages the transformation of input commands based on alias mappings, allowing customization of command triggers.
 /// </summary>
+/// <param name="dbFactory">The database connection factory.</param>
 public class CommandMapService(IDataConnectionFactory dbFactory) : IInputTransformer, INService
 {
     /// <summary>

@@ -21,6 +21,7 @@ public class ImageLoader
     /// <param name="http">The HTTP client.</param>
     /// <param name="con">The Redis connection multiplexer.</param>
     /// <param name="getKey">The function to get the Redis key.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public ImageLoader(HttpClient http, ConnectionMultiplexer con, Func<string, RedisKey> getKey,
         ILogger<ImageLoader> logger)
     {

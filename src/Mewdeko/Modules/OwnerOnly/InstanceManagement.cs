@@ -1,5 +1,5 @@
 ﻿using Discord.Commands;
-using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Controllers.Common.Bot;
 using Mewdeko.Modules.OwnerOnly.Services;

@@ -2,6 +2,7 @@
 using DataModel;
 using Discord.Net;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Common.TypeReaders;
 using Mewdeko.Modules.Utility.Common;
@@ -26,6 +27,7 @@ public class StreamRoleService : INService, IUnloadableService, IReadyExecutor
     /// <param name="client">The Discord client used to access guild and user information.</param>
     /// <param name="dbFactory">The database service for storing and retrieving stream role settings.</param>
     /// <param name="eventHandler">Event handler for capturing and responding to guild member updates.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public StreamRoleService(DiscordShardedClient client, IDataConnectionFactory dbFactory, EventHandler eventHandler,
         ILogger<StreamRoleService> logger)
     {

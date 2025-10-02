@@ -4,8 +4,11 @@ using Discord.Commands;
 using Discord.Net;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
+using Humanizer;
 using Mewdeko.Common.Attributes.TextCommands;
+using Mewdeko.Common.TypeReaders.Models;
 using Mewdeko.Modules.Administration.Services;
+using Mewdeko.Modules.Moderation.Services;
 using SkiaSharp;
 
 namespace Mewdeko.Modules.Administration;
@@ -17,7 +20,13 @@ public partial class Administration
     /// </summary>
     /// <param name="services">Main services provider for the bot.</param>
     /// <param name="intserv">Interactive service used for paginated embeds.</param>
-    public class RoleCommands(IServiceProvider services, InteractiveService intserv, ILogger<RoleCommands> logger)
+    /// <param name="logger">The logger instance for structured logging.</param>
+    /// <param name="muteService">Service for managing timed roles and mutes.</param>
+    public class RoleCommands(
+        IServiceProvider services,
+        InteractiveService intserv,
+        ILogger<RoleCommands> logger,
+        MuteService muteService)
         : MewdekoSubmodule<RoleCommandsService>
     {
         /// <summary>
@@ -33,87 +42,94 @@ public partial class Administration
 
         private async Task InternalReactionRoles(bool exclusive, ulong? messageId, params string[] input)
         {
-            var target = messageId is { } msgId
-                ? await ctx.Channel.GetMessageAsync(msgId).ConfigureAwait(false)
-                : (await ctx.Channel.GetMessagesAsync(2).FlattenAsync().ConfigureAwait(false))
-                .Skip(1)
-                .FirstOrDefault();
-
-            if (input.Length % 2 != 0)
-                return;
-
-            var grp = 0;
-            var results = input
-                .GroupBy(_ => grp++ / 2)
-                .Select(async x =>
-                {
-                    var inputRoleStr = x.First();
-                    var roleReader = new RoleTypeReader<SocketRole>();
-                    var roleResult = await roleReader.ReadAsync(ctx, inputRoleStr, services).ConfigureAwait(false);
-                    if (!roleResult.IsSuccess)
-                    {
-                        logger.LogWarning("Role {0} not found", inputRoleStr);
-                        return null;
-                    }
-
-                    var role = (IRole)roleResult.BestMatch;
-                    if (role.Position > ((IGuildUser)ctx.User).GetRoles().Select(r => r.Position).Max()
-                        && ctx.User.Id != ctx.Guild.OwnerId)
-                    {
-                        return null;
-                    }
-
-                    var emote = x.Last().ToIEmote();
-                    return new
-                    {
-                        role, emote
-                    };
-                })
-                .Where(x => x != null);
-
-            var all = await Task.WhenAll(results).ConfigureAwait(false);
-
-            if (all.Length == 0)
-                return;
-
-            foreach (var x in all)
+            try
             {
-                try
-                {
-                    if (target != null)
-                    {
-                        await target.AddReactionAsync(x.emote, new RequestOptions
-                        {
-                            RetryMode = RetryMode.Retry502 | RetryMode.RetryRatelimit
-                        }).ConfigureAwait(false);
-                    }
-                }
-                catch (HttpException ex) when (ex.HttpCode == HttpStatusCode.BadRequest)
-                {
-                    await ReplyErrorAsync(Strings.ReactionCantAccess(ctx.Guild.Id, Format.Code(x.emote.ToString())))
-                        .ConfigureAwait(false);
+                var target = messageId is { } msgId
+                    ? await ctx.Channel.GetMessageAsync(msgId).ConfigureAwait(false)
+                    : (await ctx.Channel.GetMessagesAsync(2).FlattenAsync().ConfigureAwait(false))
+                    .Skip(1)
+                    .FirstOrDefault();
+
+                if (input.Length % 2 != 0)
                     return;
+
+                var grp = 0;
+                var results = input
+                    .GroupBy(_ => grp++ / 2)
+                    .Select(async x =>
+                    {
+                        var inputRoleStr = x.First();
+                        var roleReader = new RoleTypeReader<SocketRole>();
+                        var roleResult = await roleReader.ReadAsync(ctx, inputRoleStr, services).ConfigureAwait(false);
+                        if (!roleResult.IsSuccess)
+                        {
+                            logger.LogWarning("Role {0} not found", inputRoleStr);
+                            return null;
+                        }
+
+                        var role = (IRole)roleResult.BestMatch;
+                        if (role.Position > ((IGuildUser)ctx.User).GetRoles().Select(r => r.Position).Max()
+                            && ctx.User.Id != ctx.Guild.OwnerId)
+                        {
+                            return null;
+                        }
+
+                        var emote = x.Last().ToIEmote();
+                        return new
+                        {
+                            role, emote
+                        };
+                    })
+                    .Where(x => x != null);
+
+                var all = await Task.WhenAll(results).ConfigureAwait(false);
+
+                if (all.Length == 0)
+                    return;
+
+                foreach (var x in all)
+                {
+                    try
+                    {
+                        if (target != null)
+                        {
+                            await target.AddReactionAsync(x.emote, new RequestOptions
+                            {
+                                RetryMode = RetryMode.Retry502 | RetryMode.RetryRatelimit
+                            }).ConfigureAwait(false);
+                        }
+                    }
+                    catch (HttpException ex) when (ex.HttpCode == HttpStatusCode.BadRequest)
+                    {
+                        await ReplyErrorAsync(Strings.ReactionCantAccess(ctx.Guild.Id, Format.Code(x.emote.ToString())))
+                            .ConfigureAwait(false);
+                        return;
+                    }
+
+                    await Task.Delay(500).ConfigureAwait(false);
                 }
 
-                await Task.Delay(500).ConfigureAwait(false);
-            }
-
-            if (target != null && await Service.Add(ctx.Guild.Id, new ReactionRoleMessage
-                {
-                    Exclusive = exclusive,
-                    MessageId = target.Id,
-                    ChannelId = target.Channel.Id,
-                    ReactionRoles = all.Select(x => new ReactionRole
+                if (target != null && await Service.Add(ctx.Guild.Id, new ReactionRoleMessage
                     {
-                        EmoteName = x.emote.ToString(), RoleId = x.role.Id
-                    }).ToList()
-                }))
-            {
-                await ctx.OkAsync().ConfigureAwait(false);
+                        Exclusive = exclusive,
+                        MessageId = target.Id,
+                        ChannelId = target.Channel.Id,
+                        ReactionRoles = all.Select(x => new ReactionRole
+                        {
+                            EmoteName = x.emote.ToString(), RoleId = x.role.Id
+                        }).ToList()
+                    }))
+                {
+                    await ctx.OkAsync().ConfigureAwait(false);
+                }
+                else
+                {
+                    await ReplyErrorAsync(Strings.ReactionRolesError(ctx.Guild.Id)).ConfigureAwait(false);
+                }
             }
-            else
+            catch (Exception e)
             {
-                await ReplyErrorAsync(Strings.ReactionRolesFull(ctx.Guild.Id)).ConfigureAwait(false);
+                logger.LogError("There was an error adding a reaction role, see below exception: {Exception}", e);
             }
         }
 
@@ -324,7 +340,8 @@ public partial class Administration
         [RequireContext(ContextType.Guild)]
         [UserPerm(GuildPermission.ManageRoles)]
         [BotPerm(GuildPermission.ManageRoles)]
-        public async Task SetRole(IRole roleToAdd, [Remainder] IGuildUser targetUser)
+        [Priority(0)]
+        public async Task SetRole(IRole roleToAdd, IGuildUser targetUser)
         {
             var runnerUser = (IGuildUser)ctx.User;
             var runnerMaxRolePosition = runnerUser.GetRoles().Max(x => x.Position);
@@ -346,6 +363,45 @@ public partial class Administration
         }
 
         /// <summary>
+        ///     Sets a role to a user for a specified time duration.
+        /// </summary>
+        /// <remarks>
+        ///     This command allows administrators to set a role to a specified user with a time limit.
+        ///     It requires the Manage Roles permission for the user.
+        /// </remarks>
+        /// <param name="roleToAdd">The role to add to the user.</param>
+        /// <param name="targetUser">The user to add the role to.</param>
+        /// <param name="time">The duration for which the role will be active.</param>
+        /// <returns>A task representing the asynchronous operation.</returns>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.ManageRoles)]
+        [BotPerm(GuildPermission.ManageRoles)]
+        [Priority(1)]
+        public async Task SetRole(IRole roleToAdd, IGuildUser targetUser, StoopidTime time)
+        {
+            var runnerUser = (IGuildUser)ctx.User;
+            var runnerMaxRolePosition = runnerUser.GetRoles().Max(x => x.Position);
+            if (ctx.User.Id != ctx.Guild.OwnerId && runnerMaxRolePosition <= roleToAdd.Position)
+                return;
+            try
+            {
+                await muteService.TimedRole(targetUser, time.Time, $"Timed role assignment by {ctx.User}", roleToAdd)
+                    .ConfigureAwait(false);
+
+                await ReplyConfirmAsync(Strings.SetroleTime(ctx.Guild.Id, Format.Bold(roleToAdd.Name),
+                        Format.Bold(targetUser.ToString()), time.Time.Humanize()))
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Error in timed setrole command");
+                await ReplyErrorAsync(Strings.SetroleErr(ctx.Guild.Id)).ConfigureAwait(false);
+            }
+        }
+
+        /// <summary>
         ///     Adds a role to a user.
         /// </summary>
         /// <remarks>
@@ -360,7 +416,8 @@ public partial class Administration
         [RequireContext(ContextType.Guild)]
         [UserPerm(GuildPermission.ManageRoles)]
         [BotPerm(GuildPermission.ManageRoles)]
-        public async Task SetRole(IGuildUser targetUser, [Remainder] IRole roleToAdd)
+        [Priority(0)]
+        public async Task SetRole(IGuildUser targetUser, IRole roleToAdd)
         {
             var runnerUser = (IGuildUser)ctx.User;
             var runnerMaxRolePosition = runnerUser.GetRoles().Max(x => x.Position);
@@ -377,6 +434,45 @@ public partial class Administration
             catch (Exception ex)
             {
                 logger.LogWarning(ex, "Error in setrole command");
+                await ReplyErrorAsync(Strings.SetroleErr(ctx.Guild.Id)).ConfigureAwait(false);
+            }
+        }
+
+        /// <summary>
+        ///     Adds a role to a user for a specified time duration.
+        /// </summary>
+        /// <remarks>
+        ///     This command allows administrators to set a role to a specified user with a time limit.
+        ///     It requires the Manage Roles permission for the user.
+        /// </remarks>
+        /// <param name="targetUser">The user to add the role to.</param>
+        /// <param name="roleToAdd">The role to add to the user.</param>
+        /// <param name="time">The duration for which the role will be active.</param>
+        /// <returns>A task representing the asynchronous operation.</returns>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.ManageRoles)]
+        [BotPerm(GuildPermission.ManageRoles)]
+        [Priority(1)]
+        public async Task SetRole(IGuildUser targetUser, IRole roleToAdd, StoopidTime time)
+        {
+            var runnerUser = (IGuildUser)ctx.User;
+            var runnerMaxRolePosition = runnerUser.GetRoles().Max(x => x.Position);
+            if (ctx.User.Id != ctx.Guild.OwnerId && runnerMaxRolePosition <= roleToAdd.Position)
+                return;
+            try
+            {
+                await muteService.TimedRole(targetUser, time.Time, $"Timed role assignment by {ctx.User}", roleToAdd)
+                    .ConfigureAwait(false);
+
+                await ReplyConfirmAsync(Strings.SetroleTime(ctx.Guild.Id, Format.Bold(roleToAdd.Name),
+                        Format.Bold(targetUser.ToString()), time.Time.Humanize()))
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Error in timed setrole command");
                 await ReplyErrorAsync(Strings.SetroleErr(ctx.Guild.Id)).ConfigureAwait(false);
             }
         }

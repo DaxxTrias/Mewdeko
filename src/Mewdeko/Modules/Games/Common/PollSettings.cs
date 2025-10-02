@@ -103,7 +103,7 @@ public class PollStats
     /// <summary>
     /// Gets or sets the chronological list of vote events.
     /// </summary>
-    public List<VoteHistoryEntry> VoteHistory { get; set; } = new();
+    public List<VoteHistoryEntry> VoteHistory { get; set; } = [];
 
     /// <summary>
     /// Gets or sets the vote distribution by Discord role.
@@ -139,7 +139,7 @@ public class VoteHistoryEntry
     /// <summary>
     /// Gets or sets the selected option indices.
     /// </summary>
-    public int[] OptionIndices { get; set; } = Array.Empty<int>();
+    public int[] OptionIndices { get; set; } = [];
 
     /// <summary>
     /// Gets or sets when the vote was cast.

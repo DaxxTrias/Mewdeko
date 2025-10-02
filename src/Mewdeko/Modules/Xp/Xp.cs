@@ -7,6 +7,7 @@ using Humanizer;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Common.TypeReaders.Models;
 using Mewdeko.Modules.Currency.Services;
+using Mewdeko.Modules.Xp.Extensions;
 using Mewdeko.Modules.Xp.Models;
 using Mewdeko.Modules.Xp.Services;
 
@@ -19,7 +20,9 @@ public class Xp(
     InteractiveService serv,
     ICurrencyService currencyService,
     XpRoleSyncService roleSyncService,
-    ILogger<Xp> logger)
+    ILogger<Xp> logger,
+    DiscordShardedClient client,
+    XpRewardManager xpRewardManager)
     : MewdekoModuleBase<XpService>
 {
     /// <summary>
@@ -45,22 +48,24 @@ public class Xp(
         {
             var stats = await Service.GetUserXpStatsAsync(ctx.Guild.Id, user.Id);
 
-            // Check if user has any XP
-            if (stats.TotalXp == 0 && user.Id == ctx.User.Id)
+            switch (stats.TotalXp)
             {
-                await ReplyErrorAsync(Strings.XpYouNoXp(ctx.Guild.Id)).ConfigureAwait(false);
-                return;
+                // Check if user has any XP
+                case 0 when user.Id == ctx.User.Id:
+                    await ReplyErrorAsync(Strings.XpYouNoXp(ctx.Guild.Id)).ConfigureAwait(false);
+                    return;
+                case 0:
+                    await ReplyErrorAsync(Strings.XpUserNoXp(ctx.Guild.Id, user.ToString())).ConfigureAwait(false);
+                    return;
+                default:
+                {
+                    // Generate XP card
+                    var cardPath = await Service.GenerateXpCardAsync(ctx.Guild.Id, user.Id);
+                    await ctx.Channel.SendFileAsync(cardPath, "xp.png",
+                        Strings.XpCardFor(ctx.Guild.Id, user.ToString()));
+                    break;
+                }
             }
-
-            if (stats.TotalXp == 0)
-            {
-                await ReplyErrorAsync(Strings.XpUserNoXp(ctx.Guild.Id, user.ToString())).ConfigureAwait(false);
-                return;
-            }
-
-            // Generate XP card
-            var cardPath = await Service.GenerateXpCardAsync(ctx.Guild.Id, user.Id);
-            await ctx.Channel.SendFileAsync(cardPath, "xp.png", Strings.XpCardFor(ctx.Guild.Id, user.ToString()));
         }
         catch (Exception ex)
         {
@@ -92,17 +97,15 @@ public class Xp(
         {
             var stats = await Service.GetUserXpStatsAsync(ctx.Guild.Id, user.Id);
 
-            // Check if user has any XP
-            if (stats.TotalXp == 0 && user.Id == ctx.User.Id)
+            switch (stats.TotalXp)
             {
-                await ReplyErrorAsync(Strings.XpYouNoXp(ctx.Guild.Id)).ConfigureAwait(false);
-                return;
-            }
-
-            if (stats.TotalXp == 0)
-            {
-                await ReplyErrorAsync(Strings.XpUserNoXp(ctx.Guild.Id, user.ToString())).ConfigureAwait(false);
-                return;
+                // Check if user has any XP
+                case 0 when user.Id == ctx.User.Id:
+                    await ReplyErrorAsync(Strings.XpYouNoXp(ctx.Guild.Id)).ConfigureAwait(false);
+                    return;
+                case 0:
+                    await ReplyErrorAsync(Strings.XpUserNoXp(ctx.Guild.Id, user.ToString())).ConfigureAwait(false);
+                    return;
             }
 
             // Calculate progress percentage
@@ -355,7 +358,6 @@ public class Xp(
             .AddField(Strings.XpDisplaySettings(ctx.Guild.Id),
                 Strings.XpSettingsDisplayInfo(
                     ctx.Guild.Id,
-                    settings.LevelUpMessage,
                     string.IsNullOrWhiteSpace(settings.CustomXpImageUrl)
                         ? Strings.No(ctx.Guild.Id)
                         : Strings.Yes(ctx.Guild.Id)
@@ -384,21 +386,20 @@ public class Xp(
     [UserPerm(GuildPermission.ManageGuild)]
     public async Task SetMessageXp(int amount)
     {
-        if (amount <= 0)
+        switch (amount)
         {
-            await ReplyErrorAsync(Strings.XpAmountPositive(ctx.Guild.Id)).ConfigureAwait(false);
-            return;
+            case <= 0:
+                await ReplyErrorAsync(Strings.XpAmountPositive(ctx.Guild.Id)).ConfigureAwait(false);
+                return;
+            case > XpService.MaxXpPerMessage:
+                await ReplyErrorAsync(Strings.XpMessageTooHigh(ctx.Guild.Id, XpService.MaxXpPerMessage))
+                    .ConfigureAwait(false);
+                return;
+            default:
+                await Service.UpdateGuildXpSettingsAsync(ctx.Guild.Id, settings => settings.XpPerMessage = amount);
+                await ReplyConfirmAsync(Strings.XpMessageSet(ctx.Guild.Id, amount)).ConfigureAwait(false);
+                break;
         }
-
-        if (amount > XpService.MaxXpPerMessage)
-        {
-            await ReplyErrorAsync(Strings.XpMessageTooHigh(ctx.Guild.Id, XpService.MaxXpPerMessage))
-                .ConfigureAwait(false);
-            return;
-        }
-
-        await Service.UpdateGuildXpSettingsAsync(ctx.Guild.Id, settings => settings.XpPerMessage = amount);
-        await ReplyConfirmAsync(Strings.XpMessageSet(ctx.Guild.Id, amount)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -435,17 +436,15 @@ public class Xp(
     [UserPerm(GuildPermission.ManageGuild)]
     public async Task SetVoiceXp(int amount)
     {
-        if (amount < 0)
+        switch (amount)
         {
-            await ReplyErrorAsync(Strings.XpAmountNotNegative(ctx.Guild.Id)).ConfigureAwait(false);
-            return;
-        }
-
-        if (amount > XpService.MaxVoiceXpPerMinute)
-        {
-            await ReplyErrorAsync(Strings.XpVoiceTooHigh(ctx.Guild.Id, XpService.MaxVoiceXpPerMinute))
-                .ConfigureAwait(false);
-            return;
+            case < 0:
+                await ReplyErrorAsync(Strings.XpAmountNotNegative(ctx.Guild.Id)).ConfigureAwait(false);
+                return;
+            case > XpService.MaxVoiceXpPerMinute:
+                await ReplyErrorAsync(Strings.XpVoiceTooHigh(ctx.Guild.Id, XpService.MaxVoiceXpPerMinute))
+                    .ConfigureAwait(false);
+                return;
         }
 
         await Service.UpdateGuildXpSettingsAsync(ctx.Guild.Id, settings => settings.VoiceXpPerMinute = amount);
@@ -544,6 +543,25 @@ public class Xp(
                 }
             }
         });
+    }
+
+    /// <summary>
+    ///     Sets whether role rewards are exclusive (only highest level role) or additive (all earned roles).
+    /// </summary>
+    /// <param name="exclusive">Whether role rewards should be exclusive.</param>
+    /// <example>.setxpexclusive true</example>
+    /// <example>.setxpexclusive false</example>
+    [Cmd]
+    [Aliases]
+    [UserPerm(GuildPermission.ManageGuild)]
+    public async Task SetXpExclusive(bool exclusive)
+    {
+        await Service.UpdateGuildXpSettingsAsync(ctx.Guild.Id, settings => settings.ExclusiveRoleRewards = exclusive);
+
+        if (exclusive)
+            await ReplyConfirmAsync(Strings.XpExclusiveEnabled(ctx.Guild.Id)).ConfigureAwait(false);
+        else
+            await ReplyConfirmAsync(Strings.XpExclusiveDisabled(ctx.Guild.Id)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -894,7 +912,7 @@ public class Xp(
             return;
         }
 
-        await Service.SetRoleRewardAsync(ctx.Guild.Id, level, role.Id);
+        await xpRewardManager.SetRoleRewardAsync(ctx.Guild.Id, level, role.Id);
         await ReplyConfirmAsync(Strings.XpRoleRewardSet(ctx.Guild.Id, level, role.Mention)).ConfigureAwait(false);
     }
 
@@ -914,7 +932,7 @@ public class Xp(
             return;
         }
 
-        await Service.SetRoleRewardAsync(ctx.Guild.Id, level, null);
+        await xpRewardManager.SetRoleRewardAsync(ctx.Guild.Id, level, null);
         await ReplyConfirmAsync(Strings.XpRoleRewardRemoved(ctx.Guild.Id, level)).ConfigureAwait(false);
     }
 
@@ -974,7 +992,7 @@ public class Xp(
             return;
         }
 
-        await Service.SetCurrencyRewardAsync(ctx.Guild.Id, level, amount);
+        await xpRewardManager.SetCurrencyRewardAsync(ctx.Guild.Id, level, amount);
 
         await ReplyConfirmAsync(Strings.XpCurrencyRewardSet(
             ctx.Guild.Id,
@@ -1000,7 +1018,7 @@ public class Xp(
             return;
         }
 
-        await Service.SetCurrencyRewardAsync(ctx.Guild.Id, level, 0);
+        await xpRewardManager.SetCurrencyRewardAsync(ctx.Guild.Id, level, 0);
         await ReplyConfirmAsync(Strings.XpCurrencyRewardRemoved(ctx.Guild.Id, level)).ConfigureAwait(false);
     }
 
@@ -1524,5 +1542,297 @@ public class Xp(
             logger.LogError(ex, "Error syncing roles for user {UserId} in guild {GuildId}", user.Id, ctx.Guild.Id);
             await ReplyErrorAsync(Strings.XpRoleSyncUserError(ctx.Guild.Id)).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>
+    ///     Sets the channel where level-up notifications will be sent.
+    /// </summary>
+    /// <param name="channel">The channel to send level-up notifications to, or null to use the current channel.</param>
+    /// <example>.levelupchannel #level-ups</example>
+    /// <example>.levelupchannel</example>
+    [Cmd]
+    [Aliases]
+    [UserPerm(GuildPermission.ManageGuild)]
+    public async Task LevelUpChannel(ITextChannel? channel = null)
+    {
+        await Service.SetLevelUpChannelAsync(ctx.Guild.Id, channel?.Id ?? 0);
+
+        if (channel != null)
+        {
+            await ReplyConfirmAsync(Strings.LevelUpChannelSet(ctx.Guild.Id, channel.Mention)).ConfigureAwait(false);
+        }
+        else
+        {
+            await ReplyConfirmAsync(Strings.LevelUpChannelCleared(ctx.Guild.Id)).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    ///     Adds a custom level-up message template with placeholder support.
+    /// </summary>
+    /// <param name="message">The message template with placeholders like %xp.user.mention%, %xp.level.new%, etc.</param>
+    /// <example>.addlevelupmessage Congratulations %xp.user.mention%! You've reached level %xp.level.new%!</example>
+    /// <example>
+    ///     .addlevelupmessage {"title": "Level Up!", "description": "%xp.user% reached level %xp.level.new%!", "color":
+    ///     "Green"}
+    /// </example>
+    [Cmd]
+    [Aliases]
+    [UserPerm(GuildPermission.ManageGuild)]
+    public async Task AddLevelUpMessage([Remainder] string message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            await ReplyErrorAsync(Strings.LevelUpMessageEmpty(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
+        await Service.AddLevelUpMessageAsync(ctx.Guild.Id, message);
+        await ReplyConfirmAsync(Strings.LevelUpMessageAdded(ctx.Guild.Id)).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Lists all custom level-up messages for this server.
+    /// </summary>
+    /// <example>.levelupmessages</example>
+    [Cmd]
+    [Aliases]
+    [UserPerm(GuildPermission.ManageGuild)]
+    public async Task LevelUpMessages()
+    {
+        var messages = await Service.GetLevelUpMessagesAsync(ctx.Guild.Id);
+
+        if (messages.Count == 0)
+        {
+            await ReplyErrorAsync(Strings.LevelUpNoCustomMessages(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
+        var paginator = new LazyPaginatorBuilder()
+            .AddUser(ctx.User)
+            .WithPageFactory(PageFactory)
+            .WithFooter(PaginatorFooter.PageNumber | PaginatorFooter.Users)
+            .WithMaxPageIndex(messages.Count / 5)
+            .WithDefaultEmotes()
+            .WithActionOnCancellation(ActionOnStop.DeleteMessage)
+            .Build();
+
+        await serv.SendPaginatorAsync(paginator, ctx.Channel, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
+
+        async Task<PageBuilder> PageFactory(int page)
+        {
+            await Task.CompletedTask;
+            var embed = new PageBuilder()
+                .WithTitle(Strings.LevelUpMessagesTitle(ctx.Guild.Id))
+                .WithOkColor();
+
+            var startIndex = page * 5;
+            var messagesToShow = messages.Skip(startIndex).Take(5);
+
+            foreach (var msg in messagesToShow)
+            {
+                var truncated = msg.MessageContent.Length > 200
+                    ? msg.MessageContent[..200] + "..."
+                    : msg.MessageContent;
+
+                embed.AddField(
+                    $"#{msg.Id} {(msg.IsEnabled ? "✅" : "❌")}",
+                    $"```{truncated}```");
+            }
+
+            return embed;
+        }
+    }
+
+    /// <summary>
+    ///     Removes a custom level-up message by ID.
+    /// </summary>
+    /// <param name="messageId">The ID of the message to remove (shown in .levelupmessages).</param>
+    /// <example>.removelevelupmessage 3</example>
+    [Cmd]
+    [Aliases]
+    [UserPerm(GuildPermission.ManageGuild)]
+    public async Task RemoveLevelUpMessage(int messageId)
+    {
+        var success = await Service.RemoveLevelUpMessageAsync(ctx.Guild.Id, messageId);
+
+        if (success)
+        {
+            await ReplyConfirmAsync(Strings.LevelUpMessageRemoved(ctx.Guild.Id, messageId)).ConfigureAwait(false);
+        }
+        else
+        {
+            await ReplyErrorAsync(Strings.LevelUpMessageNotFound(ctx.Guild.Id, messageId)).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    ///     Enables or disables a custom level-up message.
+    /// </summary>
+    /// <param name="messageId">The ID of the message to toggle.</param>
+    /// <param name="enabled">Whether to enable (true) or disable (false) the message.</param>
+    /// <example>.togglelevelupmessage 3 true</example>
+    /// <example>.togglelevelupmessage 3 false</example>
+    [Cmd]
+    [Aliases]
+    [UserPerm(GuildPermission.ManageGuild)]
+    public async Task ToggleLevelUpMessage(int messageId, bool enabled)
+    {
+        var success = await Service.ToggleLevelUpMessageAsync(ctx.Guild.Id, messageId, enabled);
+
+        if (success)
+        {
+            var status = enabled ? Strings.Enabled(ctx.Guild.Id) : Strings.Disabled(ctx.Guild.Id);
+            await ReplyConfirmAsync(Strings.LevelUpMessageToggled(ctx.Guild.Id, messageId, status))
+                .ConfigureAwait(false);
+        }
+        else
+        {
+            await ReplyErrorAsync(Strings.LevelUpMessageNotFound(ctx.Guild.Id, messageId)).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    ///     Tests a level-up message template by sending it to the current channel.
+    /// </summary>
+    /// <param name="message">The message template to test, or leave empty to test a random custom message.</param>
+    /// <example>.testlevelupmessage Congratulations %xp.user.mention%! You've reached level %xp.level.new%!</example>
+    /// <example>.testlevelupmessage</example>
+    [Cmd]
+    [Aliases]
+    [UserPerm(GuildPermission.ManageGuild)]
+    public async Task TestLevelUpMessage([Remainder] string? message = null)
+    {
+        var testUser = (IGuildUser)ctx.User;
+
+        // If no message provided, use a random custom message or fall back to default
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            var customMessages = await Service.GetLevelUpMessagesAsync(ctx.Guild.Id);
+            if (customMessages.Count > 0)
+            {
+                var random = new Random();
+                message = customMessages[random.Next(customMessages.Count)].MessageContent;
+            }
+            else
+            {
+                var settings = await Service.GetGuildXpSettingsAsync(ctx.Guild.Id);
+                message = settings.LevelUpMessage;
+            }
+        }
+
+        // Get user preferences for ping testing
+        var userPrefs = await Service.GetUserPreferencesAsync(ctx.User.Id);
+        var pingsDisabled = userPrefs?.LevelUpPingsDisabled ?? false;
+
+        // Build test replacer
+        var replacer = new ReplacementBuilder()
+            .WithDefault(testUser, ctx.Channel, ctx.Guild as SocketGuild, client)
+            .WithXpPlaceholders(
+                testUser,
+                ctx.Guild,
+                ctx.Channel as ITextChannel,
+                9,
+                10,
+                5000,
+                200,
+                1000,
+                25,
+                5,
+                ctx.User,
+                pingsDisabled)
+            .Build();
+
+        // Process the message
+        var processedMessage = ReplacementBuilderExtensions.ProcessLevelUpMessage(
+            message, replacer, testUser, pingsDisabled);
+
+        // Send the test message
+        try
+        {
+            if (SmartEmbed.TryParse(processedMessage, ctx.Guild.Id, out var embed, out var plainText,
+                    out var components))
+            {
+                await ctx.Channel.SendMessageAsync(plainText, embeds: embed, components: components?.Build());
+            }
+            else
+            {
+                await ctx.Channel.SendMessageAsync(
+                    embed: new EmbedBuilder()
+                        .WithColor(Color.Green)
+                        .WithDescription(processedMessage)
+                        .WithTitle(Strings.LevelUpTestTitle(ctx.Guild.Id))
+                        .Build()
+                );
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error testing level-up message in guild {GuildId}", ctx.Guild.Id);
+            await ReplyErrorAsync(Strings.LevelUpTestError(ctx.Guild.Id)).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    ///     Toggles level-up ping notifications for yourself.
+    /// </summary>
+    /// <param name="enabled">Whether to enable (true) or disable (false) level-up pings.</param>
+    /// <example>.leveluppings true</example>
+    /// <example>.leveluppings false</example>
+    [Cmd]
+    [Aliases]
+    public async Task LevelUpPings(bool enabled)
+    {
+        await Service.SetUserLevelUpPingsAsync(ctx.User.Id, !enabled); // Note: LevelUpPingsDisabled is the inverse
+
+        var status = enabled ? Strings.Enabled(ctx.Guild?.Id ?? 0) : Strings.Disabled(ctx.Guild?.Id ?? 0);
+        await ReplyConfirmAsync(Strings.LevelUpPingsToggled(ctx.Guild?.Id ?? 0, status)).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Shows available level-up placeholders that can be used in custom messages.
+    /// </summary>
+    /// <example>.levelupplaceholders</example>
+    [Cmd]
+    [Aliases]
+    [UserPerm(GuildPermission.ManageGuild)]
+    public async Task LevelUpPlaceholders()
+    {
+        var embed = new EmbedBuilder()
+            .WithTitle(Strings.LevelUpPlaceholdersTitle(ctx.Guild.Id))
+            .WithDescription(Strings.LevelUpPlaceholdersDesc(ctx.Guild.Id))
+            .WithOkColor()
+            .AddField(Strings.LevelUpPlaceholdersUser(ctx.Guild.Id),
+                "`%xp.user%` - User (respects ping settings)\n" +
+                "`%xp.user.mention%` - User mention (respects ping settings)\n" +
+                "`%xp.user.name%` - Username\n" +
+                "`%xp.user.displayname%` - Display name\n" +
+                "`%xp.user.nickname%` - Nickname (or username)\n" +
+                "`%xp.user.avatar%` - Avatar URL\n" +
+                "`%xp.user.id%` - User ID")
+            .AddField(Strings.LevelUpPlaceholdersLevel(ctx.Guild.Id),
+                "`%xp.level.old%` - Previous level\n" +
+                "`%xp.level.new%` - New level\n" +
+                "`%xp.level.current%` - Current level (same as new)\n" +
+                "`%xp.level.next%` - Next level\n" +
+                "`%xp.level.difference%` - Level increase")
+            .AddField(Strings.LevelUpPlaceholdersXp(ctx.Guild.Id),
+                "`%xp.total%` - Total XP\n" +
+                "`%xp.current%` - XP in current level\n" +
+                "`%xp.needed%` - XP needed for next level\n" +
+                "`%xp.remaining%` - XP remaining to next level\n" +
+                "`%xp.gained%` - XP gained this session\n" +
+                "`%xp.progress%` - Progress percentage")
+            .AddField(Strings.LevelUpPlaceholdersOther(ctx.Guild.Id),
+                "`%xp.rank%` - Current rank\n" +
+                "`%xp.rank.ordinal%` - Rank in words (first, second)\n" +
+                "`%xp.rank.suffix%` - Rank suffix (st, nd, rd, th)\n" +
+                "`%xp.guild.name%` - Server name\n" +
+                "`%xp.time%` - Current time\n" +
+                "`%xp.timestamp%` - Discord timestamp")
+            .AddField(Strings.LevelUpPlaceholdersLegacy(ctx.Guild.Id),
+                "`%user%`, `%user.mention%`, `%level%`, `%xp%`, `%rank%`, `%server%`, `%guild%`");
+
+        await ctx.Channel.EmbedAsync(embed);
     }
 }

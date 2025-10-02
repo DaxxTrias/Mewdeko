@@ -6,6 +6,8 @@ namespace Mewdeko.Services.Impl;
 /// <summary>
 ///     Provides functionality for managing localization settings and retrieving localized data.
 /// </summary>
+/// <param name="bss">The bss service.</param>
+/// <param name="service">The service service.</param>
 public class Localization(BotConfigService bss, GuildSettingsService service)
     : ILocalization
 {
@@ -54,7 +56,7 @@ public class Localization(BotConfigService bss, GuildSettingsService service)
         if (!guildId.HasValue)
             return DefaultCultureInfo;
 
-        var guildConfig = service.GetGuildConfig(guildId.Value).Result;
+        var guildConfig = service.GetGuildConfig(guildId.Value).ConfigureAwait(false).GetAwaiter().GetResult();
 
         return guildConfig.Locale == null ? DefaultCultureInfo : new CultureInfo(guildConfig.Locale);
     }

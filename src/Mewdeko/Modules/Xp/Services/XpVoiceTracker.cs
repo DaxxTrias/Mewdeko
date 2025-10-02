@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Threading;
 using DataModel;
-using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Modules.Xp.Models;
 using Microsoft.Extensions.Caching.Memory;
 
@@ -16,6 +16,7 @@ public class XpVoiceTracker : INService, IDisposable
     private const int MinUsersForXp = 2;
     private const int MaxConcurrentSessions = 100000;
     private readonly Timer aggressiveCleanupTimer;
+    private readonly XpBackgroundProcessor backgroundProcessor;
     private readonly XpCacheManager cacheManager;
 
     private readonly MemoryCacheOptions cacheOptions = new()
@@ -51,14 +52,18 @@ public class XpVoiceTracker : INService, IDisposable
     /// <param name="client">The Discord client.</param>
     /// <param name="dbFactory">The database context provider.</param>
     /// <param name="cacheManager">The cache manager.</param>
+    /// <param name="backgroundProcessor">The background processor.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public XpVoiceTracker(
         DiscordShardedClient client,
         IDataConnectionFactory dbFactory,
-        XpCacheManager cacheManager, ILogger<XpVoiceTracker> logger)
+        XpCacheManager cacheManager,
+        XpBackgroundProcessor backgroundProcessor, ILogger<XpVoiceTracker> logger)
     {
         this.client = client;
         this.dbFactory = dbFactory;
         this.cacheManager = cacheManager;
+        this.backgroundProcessor = backgroundProcessor;
         this.logger = logger;
 
         // Initialize memory cache for channel eligibility only
@@ -402,15 +407,7 @@ public class XpVoiceTracker : INService, IDisposable
             if (xpAmount <= 0)
                 return;
 
-            // Get background processor from XpService
-            var backgroundProcessor = XpService.Instance?.GetBackgroundProcessor();
-            if (backgroundProcessor == null)
-            {
-                logger.LogWarning("XpService background processor not available for user {UserId} in guild {GuildId}",
-                    userId,
-                    guildId);
-                return;
-            }
+            // Use the injected background processor
 
             // Queue XP gain
             backgroundProcessor.QueueXpGain(

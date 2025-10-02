@@ -2,6 +2,7 @@
 using Discord.Commands;
 using Discord.Interactions;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Common.Configs;
 using Mewdeko.Common.ModuleBehaviors;
 using CommandInfo = Discord.Commands.CommandInfo;

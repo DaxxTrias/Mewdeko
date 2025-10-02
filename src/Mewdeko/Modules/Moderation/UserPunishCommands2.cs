@@ -3,7 +3,7 @@ using Discord.Commands;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
 using Humanizer;
-using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Common.TypeReaders.Models;
 using Mewdeko.Modules.Administration.Common;
@@ -20,6 +20,7 @@ public partial class Moderation
     /// </summary>
     /// <param name="dbFactory">The db provider</param>
     /// <param name="serv">Fergun.Interactive paginator builder</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     [Group]
     public class UserPunishCommands2(
         IDataConnectionFactory dbFactory,

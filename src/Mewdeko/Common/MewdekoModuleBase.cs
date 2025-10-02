@@ -39,6 +39,11 @@ public abstract class MewdekoModule : ModuleBase
     /// </summary>
     public BotConfig Config { get; set; }
 
+    /// <summary>
+    ///     Gets or sets the event handler for the current module.
+    /// </summary>
+    public EventHandler EventHandler { get; set; }
+
 
     /// <summary>
     ///     Sends an error message to the channel with localized text.
@@ -132,7 +137,7 @@ public abstract class MewdekoModule : ModuleBase
         }
         finally
         {
-            _ = Task.Run(() => msg.DeleteAsync());
+            _ = msg.DeleteAsync();
         }
     }
 
@@ -197,10 +202,10 @@ public abstract class MewdekoModule : ModuleBase
         bool alreadyDeferred = false)
     {
         var userInputTask = new TaskCompletionSource<string>();
-        var dsc = (DiscordShardedClient)ctx.Client;
+        var handler = EventHandler;
         try
         {
-            dsc.InteractionCreated += Interaction;
+            handler.Subscribe("InteractionCreated", "MewdekoModuleBase", Interaction);
             if (await Task.WhenAny(userInputTask.Task, Task.Delay(30000)).ConfigureAwait(false) !=
                 userInputTask.Task)
             {
@@ -211,33 +216,26 @@ public abstract class MewdekoModule : ModuleBase
         }
         finally
         {
-            dsc.InteractionCreated -= Interaction;
+            handler.Unsubscribe("InteractionCreated", "MewdekoModuleBase", Interaction);
         }
 
         async Task Interaction(SocketInteraction arg)
         {
-            if (arg is SocketMessageComponent c)
+            if (arg is not SocketMessageComponent c) return;
+            if (c.Channel.Id != channelId || c.Message.Id != msgId || c.User.Id != userId)
             {
-                await Task.Run(async () =>
-                {
-                    if (c.Channel.Id != channelId || c.Message.Id != msgId || c.User.Id != userId)
-                    {
-                        if (!alreadyDeferred) await c.DeferAsync().ConfigureAwait(false);
-                        return Task.CompletedTask;
-                    }
-
-                    if (c.Data.CustomId == "yes")
-                    {
-                        if (!alreadyDeferred) await c.DeferAsync().ConfigureAwait(false);
-                        userInputTask.TrySetResult("Yes");
-                        return Task.CompletedTask;
-                    }
-
-                    if (!alreadyDeferred) await c.DeferAsync().ConfigureAwait(false);
-                    userInputTask.TrySetResult(c.Data.CustomId);
-                    return Task.CompletedTask;
-                }).ConfigureAwait(false);
+                return;
             }
+
+            if (c.Data.CustomId == "yes")
+            {
+                if (!alreadyDeferred) await c.DeferAsync().ConfigureAwait(false);
+                userInputTask.TrySetResult("Yes");
+                return;
+            }
+
+            if (!alreadyDeferred) await c.DeferAsync().ConfigureAwait(false);
+            userInputTask.TrySetResult(c.Data.CustomId);
         }
     }
 
@@ -250,10 +248,10 @@ public abstract class MewdekoModule : ModuleBase
     public async Task<string?>? NextMessageAsync(ulong channelId, ulong userId)
     {
         var userInputTask = new TaskCompletionSource<string>();
-        var dsc = (DiscordShardedClient)ctx.Client;
+        var handler = EventHandler;
         try
         {
-            dsc.MessageReceived += Interaction;
+            handler.Subscribe("MessageReceived", "MewdekoModuleBase", Interaction);
             if (await Task.WhenAny(userInputTask.Task, Task.Delay(60000)).ConfigureAwait(false) !=
                 userInputTask.Task)
             {
@@ -264,24 +262,21 @@ public abstract class MewdekoModule : ModuleBase
         }
         finally
         {
-            dsc.MessageReceived -= Interaction;
+            handler.Unsubscribe("MessageReceived", "MewdekoModuleBase", Interaction);
         }
 
-        Task Interaction(SocketMessage arg)
+        async Task Interaction(SocketMessage arg)
         {
-            return Task.Run(async () =>
+            if (arg.Author.Id != userId || arg.Channel.Id != channelId) return;
+            userInputTask.TrySetResult(arg.Content);
+            try
             {
-                if (arg.Author.Id != userId || arg.Channel.Id != channelId) return;
-                userInputTask.TrySetResult(arg.Content);
-                try
-                {
-                    await arg.DeleteAsync().ConfigureAwait(false);
-                }
-                catch
-                {
-                    //Exclude
-                }
-            });
+                await arg.DeleteAsync().ConfigureAwait(false);
+            }
+            catch
+            {
+                //Exclude
+            }
         }
     }
 
@@ -294,10 +289,10 @@ public abstract class MewdekoModule : ModuleBase
     public async Task<SocketMessage?>? NextFullMessageAsync(ulong channelId, ulong userId)
     {
         var userInputTask = new TaskCompletionSource<SocketMessage>();
-        var dsc = (DiscordShardedClient)ctx.Client;
+        var handler = EventHandler;
         try
         {
-            dsc.MessageReceived += Interaction;
+            handler.Subscribe("MessageReceived", "MewdekoModuleBase", Interaction);
             if (await Task.WhenAny(userInputTask.Task, Task.Delay(60000)).ConfigureAwait(false) !=
                 userInputTask.Task)
             {
@@ -308,24 +303,21 @@ public abstract class MewdekoModule : ModuleBase
         }
         finally
         {
-            dsc.MessageReceived -= Interaction;
+            handler.Unsubscribe("MessageReceived", "MewdekoModuleBase", Interaction);
         }
 
-        Task Interaction(SocketMessage arg)
+        async Task Interaction(SocketMessage arg)
         {
-            return Task.Run(async () =>
+            if (arg.Author.Id != userId || arg.Channel.Id != channelId) return;
+            userInputTask.TrySetResult(arg);
+            try
             {
-                if (arg.Author.Id != userId || arg.Channel.Id != channelId) return;
-                userInputTask.TrySetResult(arg);
-                try
-                {
-                    await arg.DeleteAsync().ConfigureAwait(false);
-                }
-                catch
-                {
-                    //Exclude
-                }
-            });
+                await arg.DeleteAsync().ConfigureAwait(false);
+            }
+            catch
+            {
+                //Exclude
+            }
         }
     }
 }

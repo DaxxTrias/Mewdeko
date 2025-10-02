@@ -8,6 +8,7 @@ namespace Mewdeko.Controllers;
 ///     Controller for managing guild configs via the api
 /// </summary>
 /// <param name="service"></param>
+/// <param name="logger">The logger instance for structured logging.</param>
 [ApiController]
 [Route("botapi/[controller]/{guildId}")]
 [Authorize("ApiKeyPolicy")]

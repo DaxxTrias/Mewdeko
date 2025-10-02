@@ -10,6 +10,7 @@ using Lavalink4NET.Players;
 using Lavalink4NET.Protocol.Payloads.Events;
 using Lavalink4NET.Rest.Entities.Tracks;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Common.Configs;
 using Mewdeko.Modules.Music.Common;
 using Mewdeko.Services.Strings;
@@ -74,7 +75,7 @@ public sealed class MewdekoPlayer : LavalinkPlayer
     protected override async ValueTask NotifyTrackEndedAsync(ITrackQueueItem item, TrackEndReason reason,
         CancellationToken token = default)
     {
-        if (stateTracker != null && (State == PlayerState.Playing || State == PlayerState.Paused))
+        if (stateTracker != null && State is PlayerState.Playing or PlayerState.Paused)
             await stateTracker.ForceUpdate();
         var musicChannel = await GetMusicChannel();
         var queue = await cache.GetMusicQueue(GuildId);
@@ -277,6 +278,7 @@ public sealed class MewdekoPlayer : LavalinkPlayer
     /// <summary>
     ///     Sets the DJ role for the guild.
     /// </summary>
+    /// <param name="roleId">The roleid identifier.</param>
     public async Task SetDjRole(ulong? roleId)
     {
         var settings = await GetMusicSettings();

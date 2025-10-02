@@ -23,7 +23,7 @@ public class PollStatsResponse
     /// <summary>
     /// Gets or sets the chronological list of vote events.
     /// </summary>
-    public List<VoteHistoryResponse> VoteHistory { get; set; } = new();
+    public List<VoteHistoryResponse> VoteHistory { get; set; } = [];
 
     /// <summary>
     /// Gets or sets the vote distribution by Discord role.
@@ -69,7 +69,7 @@ public class VoteHistoryResponse
     /// <summary>
     /// Gets or sets the selected option indices.
     /// </summary>
-    public int[] OptionIndices { get; set; } = Array.Empty<int>();
+    public int[] OptionIndices { get; set; } = [];
 
     /// <summary>
     /// Gets or sets when the vote was cast.
@@ -84,5 +84,5 @@ public class VoteHistoryResponse
     /// <summary>
     /// Gets or sets the roles the user had at the time of voting.
     /// </summary>
-    public List<string> UserRoles { get; set; } = new();
+    public List<string> UserRoles { get; set; } = [];
 }

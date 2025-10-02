@@ -1,5 +1,6 @@
 ﻿using System.Text.RegularExpressions;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Modules.Utility.Common;
 using VirusTotalNet;
 using VirusTotalNet.Results;

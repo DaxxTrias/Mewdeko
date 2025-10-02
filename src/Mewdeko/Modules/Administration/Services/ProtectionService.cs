@@ -1,6 +1,8 @@
-﻿using System.Threading;
+﻿using System.Text.RegularExpressions;
+using System.Threading;
 using DataModel;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Modules.Administration.Common;
 using Mewdeko.Modules.Moderation.Services;
@@ -14,14 +16,13 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
 {
     private readonly ConcurrentDictionary<ulong, AntiAltStats> antiAltGuilds = new();
     private readonly ConcurrentDictionary<ulong, AntiMassMentionStats> antiMassMentionGuilds = new();
+    private readonly ConcurrentDictionary<ulong, AntiPatternStats> antiPatternGuilds = new();
     private readonly ConcurrentDictionary<ulong, AntiRaidStats> antiRaidGuilds = new();
     private readonly ConcurrentDictionary<ulong, AntiSpamStats> antiSpamGuilds = new();
-    private readonly Mewdeko bot;
 
     private readonly DiscordShardedClient client;
     private readonly IDataConnectionFactory dbFactory;
     private readonly EventHandler eventHandler;
-    private readonly GuildSettingsService gss;
     private readonly ILogger<ProtectionService> logger;
     private readonly MuteService mute;
     private readonly UserPunishService punishService;
@@ -39,24 +40,21 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
     ///     Constructs a new instance of the ProtectionService.
     /// </summary>
     /// <param name="client">The Discord client.</param>
-    /// <param name="bot">The Mewdeko bot.</param>
     /// <param name="mute">The mute service.</param>
     /// <param name="dbFactory">The database service.</param>
     /// <param name="punishService">The user punish service.</param>
     /// <param name="eventHandler">The event handler.</param>
-    /// <param name="gss">The guild settings service.</param>
-    public ProtectionService(DiscordShardedClient client, Mewdeko bot,
+    /// <param name="logger">The logger instance for structured logging.</param>
+    public ProtectionService(DiscordShardedClient client,
         MuteService mute, IDataConnectionFactory dbFactory, UserPunishService punishService, EventHandler eventHandler,
-        GuildSettingsService gss, ILogger<ProtectionService> logger)
+        ILogger<ProtectionService> logger)
     {
         this.client = client;
         this.mute = mute;
         this.dbFactory = dbFactory;
         this.punishService = punishService;
-        this.gss = gss;
         this.logger = logger;
         this.eventHandler = eventHandler;
-        this.bot = bot;
 
         eventHandler.Subscribe("MessageReceived", "ProtectionService", HandleAntiSpam);
         eventHandler.Subscribe("UserJoined", "ProtectionService", HandleUserJoined);
@@ -117,7 +115,6 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
                 var item = await punishUserQueue.Reader.ReadAsync().ConfigureAwait(false);
                 var muteTime = item.MuteTime;
                 var gu = item.User;
-                if (gu == null) continue;
 
                 var currentUser = client.CurrentUser;
                 if (currentUser == null)
@@ -151,13 +148,13 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
         antiSpamGuilds.TryRemove(guild.Id, out _);
         antiAltGuilds.TryRemove(guild.Id, out _);
         antiMassMentionGuilds.TryRemove(guild.Id, out _);
+        antiPatternGuilds.TryRemove(guild.Id, out _);
         return Task.CompletedTask;
     }
 
     /// <summary>
     ///     Handles the event when the bot joins a guild.
     /// </summary>
-    /// <param name="gc">The configuration of the guild that the bot has joined.</param>
     /// <returns>A task that represents the asynchronous operation.</returns>
     private async Task _bot_JoinedGuild(SocketGuild guild)
     {
@@ -188,6 +185,8 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
             .ConfigureAwait(false);
         var mention = await db.GetTable<AntiMassMentionSetting>().FirstOrDefaultAsync(x => x.GuildId == guildId)
             .ConfigureAwait(false);
+        var pattern = await db.GetTable<AntiPatternSetting>().FirstOrDefaultAsync(x => x.GuildId == guildId)
+            .ConfigureAwait(false);
 
         if (raid != null)
             antiRaidGuilds[guildId] = new AntiRaidStats
@@ -212,6 +211,15 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
                 AntiMassMentionSettings = mention
             };
         else antiMassMentionGuilds.TryRemove(guildId, out _);
+
+        if (pattern != null)
+        {
+            pattern.AntiPatternPatterns = (await db.GetTable<AntiPatternPattern>()
+                .Where(p => p.AntiPatternSettingId == pattern.Id)
+                .ToListAsync().ConfigureAwait(false)).ToHashSet();
+            antiPatternGuilds[guildId] = new AntiPatternStats(pattern);
+        }
+        else antiPatternGuilds.TryRemove(guildId, out _);
     }
 
     /// <summary>
@@ -225,8 +233,9 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
 
         antiRaidGuilds.TryGetValue(user.Guild.Id, out var raidStats);
         antiAltGuilds.TryGetValue(user.Guild.Id, out var altStats);
+        antiPatternGuilds.TryGetValue(user.Guild.Id, out var patternStats);
 
-        if (raidStats is null && altStats is null) return;
+        if (raidStats is null && altStats is null && patternStats is null) return;
 
         if (altStats is { } alts && altStats.Action != (int)PunishmentAction.Warn)
         {
@@ -243,6 +252,122 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
                         return;
                     }
                 }
+            }
+        }
+
+        if (patternStats is { } patterns && patterns.Action != (int)PunishmentAction.Warn)
+        {
+            try
+            {
+                var username = user.Username?.ToLower() ?? "";
+                var displayName = user.DisplayName?.ToLower() ?? "";
+                var settings = patterns.AntiPatternSettings;
+                var score = 0;
+                var reasons = new List<string>();
+                var now = DateTimeOffset.UtcNow;
+
+                // Account age check
+                if (settings.CheckAccountAge)
+                {
+                    var accountAge = now - user.CreatedAt;
+                    if (accountAge.TotalDays <= settings.MaxAccountAgeMonths * 30)
+                    {
+                        score += 5;
+                        reasons.Add($"AccountAge({accountAge.TotalDays:F1}d)");
+                    }
+                }
+
+                // Join timing check
+                if (settings.CheckJoinTiming && user.JoinedAt.HasValue)
+                {
+                    var timeBetween = (user.JoinedAt.Value - user.CreatedAt).TotalHours;
+                    if (timeBetween <= settings.MaxJoinHours)
+                    {
+                        score += timeBetween < 1 ? 10 : timeBetween < 6 ? 7 : 3;
+                        reasons.Add($"QuickJoin({timeBetween:F1}h)");
+                    }
+                }
+
+                // Batch creation check
+                if (settings.CheckBatchCreation)
+                {
+                    var guild = user.Guild;
+                    var creationHour = user.CreatedAt.ToString("yyyy-MM-dd HH");
+                    var recentUsers = await guild.GetUsersAsync();
+                    var batchCount = recentUsers.Count(u => !u.IsBot &&
+                                                            u.CreatedAt.ToString("yyyy-MM-dd HH") == creationHour);
+                    if (batchCount > 1)
+                    {
+                        score += Math.Min(batchCount, 10);
+                        reasons.Add($"Batch({batchCount})");
+                    }
+                }
+
+                // Offline status check
+                if (settings.CheckOfflineStatus && user.Status == UserStatus.Offline)
+                {
+                    score += 2;
+                    reasons.Add("Offline");
+                }
+
+                // New account check
+                if (settings.CheckNewAccounts)
+                {
+                    var accountAge = (now - user.CreatedAt).TotalDays;
+                    if (accountAge < settings.NewAccountDays)
+                    {
+                        score += 3;
+                        reasons.Add($"NewAccount({accountAge:F1}d)");
+                    }
+                }
+
+                // Pattern matching
+                foreach (var pattern in patterns.AntiPatternSettings.AntiPatternPatterns)
+                {
+                    var regex = new Regex(pattern.Pattern, RegexOptions.IgnoreCase);
+
+                    var isMatch = false;
+                    if (pattern.CheckUsername && regex.IsMatch(username))
+                    {
+                        isMatch = true;
+                        score += 15;
+                        reasons.Add($"UsernamePattern({pattern.Name ?? "Unnamed"})");
+                    }
+
+                    if (pattern.CheckDisplayName && regex.IsMatch(displayName))
+                    {
+                        isMatch = true;
+                        score += 12;
+                        reasons.Add($"DisplayNamePattern({pattern.Name ?? "Unnamed"})");
+                    }
+
+                    if (isMatch && score >= settings.MinimumScore)
+                    {
+                        patterns.Increment();
+                        await PunishUsers(patterns.Action, ProtectionType.PatternMatching, patterns.PunishDuration,
+                            patterns.RoleId, user).ConfigureAwait(false);
+                        logger.LogInformation(
+                            "Anti-pattern triggered for user {UserId} ({Username}) - Score: {Score}, Reasons: {Reasons}",
+                            user.Id, user.Username, score, string.Join("|", reasons));
+                        return;
+                    }
+                }
+
+                // Check if overall score meets threshold without pattern match
+                if (score >= settings.MinimumScore && reasons.Any())
+                {
+                    patterns.Increment();
+                    await PunishUsers(patterns.Action, ProtectionType.PatternMatching, patterns.PunishDuration,
+                        patterns.RoleId, user).ConfigureAwait(false);
+                    logger.LogInformation(
+                        "Anti-pattern triggered for user {UserId} ({Username}) - Score: {Score}, Reasons: {Reasons}",
+                        user.Id, user.Username, score, string.Join("|", reasons));
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Error processing anti-pattern for user {UserId}", user.Id);
             }
         }
 
@@ -271,7 +396,7 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
                 else
                 {
                     // Schedule count decrement after delay
-                    _ = Task.Delay(TimeSpan.FromSeconds(stats.AntiRaidSettings.Seconds)).ContinueWith(t =>
+                    _ = Task.Delay(TimeSpan.FromSeconds(stats.AntiRaidSettings.Seconds)).ContinueWith(_ =>
                     {
                         // Just decrement the count after the delay
                         Interlocked.Decrement(ref statsUsersCount);
@@ -345,9 +470,9 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
     /// <param name="roleId">The ID of the role to be added, if applicable.</param>
     /// <param name="gus">The users to be punished.</param>
     /// <returns>A task that represents the asynchronous operation.</returns>
-    private async Task PunishUsers(int action, ProtectionType pt, int muteTime, ulong? roleId, params IGuildUser[] gus)
+    private async Task PunishUsers(int action, ProtectionType pt, int muteTime, ulong? roleId, params IGuildUser[]? gus)
     {
-        if (gus == null || gus.Length == 0 || gus[0] == null) return;
+        if (gus == null || gus.Length == 0) return;
 
         logger.LogInformation("[{PunishType}] - Punishing [{Count}] users with [{PunishAction}] in {GuildName} guild",
             pt,
@@ -355,7 +480,6 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
 
         foreach (var gu in gus)
         {
-            if (gu == null) continue;
             await punishUserQueue.Writer.WriteAsync(new PunishQueueItem
             {
                 Action = action,
@@ -715,17 +839,19 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
     }
 
     /// <summary>
-    ///     Retrieves the anti-spam, anti-raid, and anti-alt statistics for a guild.
+    ///     Retrieves the anti-spam, anti-raid, anti-alt, anti-mass-mention, and anti-pattern statistics for a guild.
     /// </summary>
     /// <param name="guildId">The ID of the guild to retrieve the statistics for.</param>
-    /// <returns>A tuple containing the anti-spam, anti-raid, anti-alt, and anti-mass-mention statistics for the guild.</returns>
-    public (AntiSpamStats?, AntiRaidStats?, AntiAltStats?, AntiMassMentionStats?) GetAntiStats(ulong guildId)
+    /// <returns>A tuple containing the anti-spam, anti-raid, anti-alt, anti-mass-mention, and anti-pattern statistics for the guild.</returns>
+    public (AntiSpamStats?, AntiRaidStats?, AntiAltStats?, AntiMassMentionStats?, AntiPatternStats?)
+        GetAntiStats(ulong guildId)
     {
         antiSpamGuilds.TryGetValue(guildId, out var antiSpamStats);
         antiRaidGuilds.TryGetValue(guildId, out var antiRaidStats);
         antiAltGuilds.TryGetValue(guildId, out var antiAltStats);
         antiMassMentionGuilds.TryGetValue(guildId, out var antiMassMentionStats);
-        return (antiSpamStats, antiRaidStats, antiAltStats, antiMassMentionStats);
+        antiPatternGuilds.TryGetValue(guildId, out var antiPatternStats);
+        return (antiSpamStats, antiRaidStats, antiAltStats, antiMassMentionStats, antiPatternStats);
     }
 
     /// <summary>
@@ -795,5 +921,240 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
             .Where(x => x.GuildId == guildId)
             .DeleteAsync().ConfigureAwait(false);
         return removed || deletedCount > 0;
+    }
+
+    /// <summary>
+    ///     Starts the anti-pattern protection for a guild.
+    /// </summary>
+    /// <param name="guildId">The ID of the guild to start the protection for.</param>
+    /// <param name="action">The punishment action to be applied when the protection is triggered.</param>
+    /// <param name="actionDurationMinutes">The duration of the punishment, if applicable.</param>
+    /// <param name="roleId">The ID of the role to be added, if applicable.</param>
+    /// <param name="checkAccountAge">Whether to check account age.</param>
+    /// <param name="maxAccountAgeMonths">Maximum account age in months to flag.</param>
+    /// <param name="checkJoinTiming">Whether to check join timing.</param>
+    /// <param name="maxJoinHours">Maximum hours between account creation and join.</param>
+    /// <param name="checkBatchCreation">Whether to check for batch account creation.</param>
+    /// <param name="checkOfflineStatus">Whether to check if user is offline.</param>
+    /// <param name="checkNewAccounts">Whether to flag very new accounts.</param>
+    /// <param name="newAccountDays">Days to consider an account as new.</param>
+    /// <param name="minimumScore">Minimum score to trigger punishment.</param>
+    /// <returns>A task that represents the asynchronous operation.</returns>
+    public async Task<AntiPatternStats?> StartAntiPatternAsync(ulong guildId, PunishmentAction action,
+        int actionDurationMinutes = 0, ulong? roleId = null, bool checkAccountAge = false, int maxAccountAgeMonths = 6,
+        bool checkJoinTiming = false, double maxJoinHours = 48.0, bool checkBatchCreation = false,
+        bool checkOfflineStatus = false, bool checkNewAccounts = false, int newAccountDays = 7, int minimumScore = 15)
+    {
+        if (!IsDurationAllowed(action)) actionDurationMinutes = 0;
+
+        await using var db = await dbFactory.CreateConnectionAsync();
+        var settings = await db.GetTable<AntiPatternSetting>().FirstOrDefaultAsync(x => x.GuildId == guildId)
+            .ConfigureAwait(false);
+        var isNew = settings == null;
+        settings ??= new AntiPatternSetting
+        {
+            GuildId = guildId,
+            CheckAccountAge = checkAccountAge,
+            MaxAccountAgeMonths = maxAccountAgeMonths,
+            CheckJoinTiming = checkJoinTiming,
+            MaxJoinHours = maxJoinHours,
+            CheckBatchCreation = checkBatchCreation,
+            CheckOfflineStatus = checkOfflineStatus,
+            CheckNewAccounts = checkNewAccounts,
+            NewAccountDays = newAccountDays,
+            MinimumScore = minimumScore,
+            DateAdded = DateTime.UtcNow
+        };
+
+        settings.Action = (int)action;
+        settings.PunishDuration = actionDurationMinutes;
+        settings.RoleId = roleId;
+
+        if (isNew)
+            await db.InsertAsync(settings).ConfigureAwait(false);
+        else
+            await db.UpdateAsync(settings).ConfigureAwait(false);
+
+        // Load existing patterns
+        settings.AntiPatternPatterns = (await db.GetTable<AntiPatternPattern>()
+            .Where(p => p.AntiPatternSettingId == settings.Id)
+            .ToListAsync().ConfigureAwait(false)).ToHashSet();
+
+        var stats = new AntiPatternStats(settings);
+        antiPatternGuilds[guildId] = stats;
+
+        return stats;
+    }
+
+    /// <summary>
+    ///     Updates the anti-pattern configuration settings for a guild.
+    /// </summary>
+    /// <param name="guildId">The ID of the guild to update settings for.</param>
+    /// <param name="checkAccountAge">Whether to check account age.</param>
+    /// <param name="maxAccountAgeMonths">Maximum account age in months to flag.</param>
+    /// <param name="checkJoinTiming">Whether to check join timing.</param>
+    /// <param name="maxJoinHours">Maximum hours between account creation and join.</param>
+    /// <param name="checkBatchCreation">Whether to check for batch account creation.</param>
+    /// <param name="checkOfflineStatus">Whether to check if user is offline.</param>
+    /// <param name="checkNewAccounts">Whether to flag very new accounts.</param>
+    /// <param name="newAccountDays">Days to consider an account as new.</param>
+    /// <param name="minimumScore">Minimum score to trigger punishment.</param>
+    /// <returns>A task that represents the asynchronous operation and contains a boolean indicating success.</returns>
+    public async Task<bool> UpdateAntiPatternConfigAsync(ulong guildId, bool? checkAccountAge = null,
+        int? maxAccountAgeMonths = null, bool? checkJoinTiming = null, double? maxJoinHours = null,
+        bool? checkBatchCreation = null, bool? checkOfflineStatus = null, bool? checkNewAccounts = null,
+        int? newAccountDays = null, int? minimumScore = null)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+        var settings = await db.GetTable<AntiPatternSetting>().FirstOrDefaultAsync(x => x.GuildId == guildId)
+            .ConfigureAwait(false);
+
+        if (settings == null) return false;
+
+        if (checkAccountAge.HasValue) settings.CheckAccountAge = checkAccountAge.Value;
+        if (maxAccountAgeMonths.HasValue) settings.MaxAccountAgeMonths = maxAccountAgeMonths.Value;
+        if (checkJoinTiming.HasValue) settings.CheckJoinTiming = checkJoinTiming.Value;
+        if (maxJoinHours.HasValue) settings.MaxJoinHours = maxJoinHours.Value;
+        if (checkBatchCreation.HasValue) settings.CheckBatchCreation = checkBatchCreation.Value;
+        if (checkOfflineStatus.HasValue) settings.CheckOfflineStatus = checkOfflineStatus.Value;
+        if (checkNewAccounts.HasValue) settings.CheckNewAccounts = checkNewAccounts.Value;
+        if (newAccountDays.HasValue) settings.NewAccountDays = newAccountDays.Value;
+        if (minimumScore.HasValue) settings.MinimumScore = minimumScore.Value;
+
+        await db.UpdateAsync(settings).ConfigureAwait(false);
+
+        // Refresh the cache
+        await Initialize(guildId);
+
+        return true;
+    }
+
+    /// <summary>
+    ///     Attempts to stop the anti-pattern protection for a guild.
+    /// </summary>
+    /// <param name="guildId">The ID of the guild to stop the protection for.</param>
+    /// <returns>
+    ///     A task that represents the asynchronous operation and contains a boolean indicating whether the operation was
+    ///     successful.
+    /// </returns>
+    public async Task<bool> TryStopAntiPattern(ulong guildId)
+    {
+        var removed = antiPatternGuilds.TryRemove(guildId, out _);
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        var setting = await db.GetTable<AntiPatternSetting>().FirstOrDefaultAsync(x => x.GuildId == guildId)
+            .ConfigureAwait(false);
+        var deletedCount = 0;
+        if (setting != null)
+        {
+            // Delete all patterns first
+            await db.GetTable<AntiPatternPattern>().Where(p => p.AntiPatternSettingId == setting.Id).DeleteAsync()
+                .ConfigureAwait(false);
+            // Then delete the setting
+            deletedCount = await db.DeleteAsync(setting).ConfigureAwait(false);
+        }
+
+        return removed || deletedCount > 0;
+    }
+
+    /// <summary>
+    ///     Adds a regex pattern to the anti-pattern protection for a guild.
+    /// </summary>
+    /// <param name="guildId">The ID of the guild to add the pattern for.</param>
+    /// <param name="pattern">The regex pattern to match against usernames/display names.</param>
+    /// <param name="name">Optional name for the pattern.</param>
+    /// <param name="checkUsername">Whether to check usernames against this pattern.</param>
+    /// <param name="checkDisplayName">Whether to check display names against this pattern.</param>
+    /// <returns>A task that represents the asynchronous operation and contains a boolean indicating success.</returns>
+    public async Task<bool> AddPatternAsync(ulong guildId, string pattern, string? name = null,
+        bool checkUsername = true, bool checkDisplayName = true)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        var setting = await db.GetTable<AntiPatternSetting>().FirstOrDefaultAsync(x => x.GuildId == guildId)
+            .ConfigureAwait(false);
+
+        if (setting == null)
+        {
+            logger.LogWarning("Attempted to add pattern to non-existent AntiPatternSetting for GuildId: {GuildId}",
+                guildId);
+            return false;
+        }
+
+        try
+        {
+            // Test if the pattern is valid regex
+            _ = new Regex(pattern);
+        }
+        catch (ArgumentException)
+        {
+            logger.LogWarning("Invalid regex pattern attempted: {Pattern}", pattern);
+            return false;
+        }
+
+        var newPattern = new AntiPatternPattern
+        {
+            AntiPatternSettingId = setting.Id,
+            Pattern = pattern,
+            Name = name,
+            CheckUsername = checkUsername,
+            CheckDisplayName = checkDisplayName,
+            DateAdded = DateTime.UtcNow
+        };
+
+        await db.InsertAsync(newPattern).ConfigureAwait(false);
+
+        // Refresh the cache
+        await Initialize(guildId);
+
+        return true;
+    }
+
+    /// <summary>
+    ///     Removes a regex pattern from the anti-pattern protection for a guild.
+    /// </summary>
+    /// <param name="guildId">The ID of the guild to remove the pattern from.</param>
+    /// <param name="patternId">The ID of the pattern to remove.</param>
+    /// <returns>A task that represents the asynchronous operation and contains a boolean indicating success.</returns>
+    public async Task<bool> RemovePatternAsync(ulong guildId, int patternId)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        var setting = await db.GetTable<AntiPatternSetting>().FirstOrDefaultAsync(x => x.GuildId == guildId)
+            .ConfigureAwait(false);
+
+        if (setting == null) return false;
+
+        var deletedCount = await db.GetTable<AntiPatternPattern>()
+            .Where(p => p.Id == patternId && p.AntiPatternSettingId == setting.Id)
+            .DeleteAsync().ConfigureAwait(false);
+
+        if (deletedCount > 0)
+        {
+            // Refresh the cache
+            await Initialize(guildId);
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    ///     Gets all anti-pattern patterns for a guild.
+    /// </summary>
+    /// <param name="guildId">The ID of the guild to get patterns for.</param>
+    /// <returns>A list of anti-pattern patterns.</returns>
+    public async Task<List<AntiPatternPattern>> GetAntiPatternPatternsAsync(ulong guildId)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+
+        var setting = await db.GetTable<AntiPatternSetting>().FirstOrDefaultAsync(x => x.GuildId == guildId)
+            .ConfigureAwait(false);
+
+        if (setting == null) return new List<AntiPatternPattern>();
+
+        return await db.GetTable<AntiPatternPattern>()
+            .Where(p => p.AntiPatternSettingId == setting.Id)
+            .ToListAsync().ConfigureAwait(false);
     }
 }

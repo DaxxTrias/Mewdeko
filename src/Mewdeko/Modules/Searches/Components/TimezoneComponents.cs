@@ -12,6 +12,7 @@ public class TimezoneComponents : MewdekoSlashModuleBase<SearchesService>
     ///     Handles the select menu for timezone selection.
     /// </summary>
     /// <param name="values">The selected values from the select menu.</param>
+    /// <param name="originalQuery">The original query string.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
     [ComponentInteraction("timezone_select_menu:*")]
     public async Task HandleTimezoneSelect(string originalQuery, string[] values)

@@ -1,5 +1,6 @@
 using DataModel;
 using LinqToDB;
+using LinqToDB.Async;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 

@@ -63,7 +63,7 @@ public class MediaConversionService : INService
     {
         while (conversionQueue.TryDequeue(out var request) && conversionSemaphore.CurrentCount > 0)
         {
-            _ = Task.Run(async () => await ProcessConversionAsync(request));
+            _ = ProcessConversionAsync(request);
         }
     }
 

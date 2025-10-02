@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Threading;
 using DataModel;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Modules.Patreon.Common;
 using Mewdeko.Modules.Patreon.Extensions;
@@ -110,6 +111,8 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
     /// <summary>
     ///     Sets a custom announcement message for a guild
     /// </summary>
+    /// <param name="guildId">The guild identifier.</param>
+    /// <param name="message">The message string.</param>
     public async Task SetPatreonMessage(ulong guildId, string? message)
     {
         var config = await guildSettings.GetGuildConfig(guildId);
@@ -127,7 +130,7 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
     /// </summary>
     public async Task<bool> SetAnnouncementDay(ulong guildId, int day)
     {
-        if (day < 1 || day > 28) // Max 28 to avoid issues with February
+        if (day is < 1 or > 28) // Max 28 to avoid issues with February
             return false;
 
         var config = await guildSettings.GetGuildConfig(guildId);
@@ -793,7 +796,7 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
             var config = await uow.GuildConfigs.FirstOrDefaultAsync(x => x.GuildId == guildId);
             if (config?.PatreonRoleSync == true)
             {
-                _ = Task.Run(async () => await SyncUserRolesAsync(guildId, discordUserId));
+                _ = SyncUserRolesAsync(guildId, discordUserId);
             }
 
             return true;
@@ -915,7 +918,7 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
 
             // Determine target role based on supporter status and amount
             IRole? targetRole = null;
-            if (supporter != null && supporter.AmountCents > 0 && (
+            if (supporter is { AmountCents: > 0 } && (
                     supporter.PatronStatus == "active_patron" ||
                     supporter.PatronStatus == "declined_patron" ||
                     (supporter.PatronStatus == null && supporter.CurrentlyEntitledAmountCents > 0)))

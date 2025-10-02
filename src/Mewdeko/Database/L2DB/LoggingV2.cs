@@ -46,6 +46,10 @@ namespace DataModel
 		[Column("ChannelCreatedId"                                                                                       )] public ulong?  ChannelCreatedId      { get; set; } // numeric(20,0)
 		[Column("ChannelDestroyedId"                                                                                     )] public ulong?  ChannelDestroyedId    { get; set; } // numeric(20,0)
 		[Column("ChannelUpdatedId"                                                                                       )] public ulong?  ChannelUpdatedId      { get; set; } // numeric(20,0)
+		[Column("InviteCreatedId"                                                                                        )] public ulong?  InviteCreatedId       { get; set; } // numeric(20,0)
+		[Column("InviteDeletedId"                                                                                        )] public ulong?  InviteDeletedId       { get; set; } // numeric(20,0)
+		[Column("MessagesBulkDeletedId"                                                                                  )] public ulong?  MessagesBulkDeletedId { get; set; } // numeric(20,0)
+		[Column("ReactionEventsId"                                                                                       )] public ulong?  ReactionEventsId      { get; set; } // numeric(20,0)
 		[Column("DateAdded"                                                                                              )] public DateTime? DateAdded             { get; set; } // timestamp (6) without time zone
 	}
 }

@@ -3,7 +3,7 @@ using Discord.Interactions;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
 using Humanizer;
-using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Common.Attributes.InteractionCommands;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Common.TypeReaders.Models;
@@ -34,6 +34,7 @@ public class SlashPunishCommands : MewdekoSlashSubmodule<UserPunishService>
     /// <param name="dbFactory">The database provider</param>
     /// <param name="serv">The service used for embed pagination</param>
     /// <param name="nekos">The service used to get anime gifs from the nekos.best api</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public SlashPunishCommands(IDataConnectionFactory dbFactory,
         InteractiveService serv,
         NekosBestApi nekos, ILogger<SlashPunishCommands> logger)

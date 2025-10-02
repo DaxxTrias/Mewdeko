@@ -1,5 +1,5 @@
 using System.Text.Json;
-using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Modules.Xp.Services;
 
 namespace Mewdeko.Modules.Utility.Services;

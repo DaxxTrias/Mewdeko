@@ -536,6 +536,28 @@ public class MewdekoDb : DataConnection
     public ITable<Starboard> Starboards => this.GetTable<Starboard>();
 
     /// <summary>
+    ///     Gets the starboard statistics table.
+    /// </summary>
+    public ITable<StarboardStats> StarboardStats
+    {
+        get
+        {
+            return this.GetTable<StarboardStats>();
+        }
+    }
+
+    /// <summary>
+    ///     Gets the starboard reactions table.
+    /// </summary>
+    public ITable<StarboardReaction> StarboardReactions
+    {
+        get
+        {
+            return this.GetTable<StarboardReaction>();
+        }
+    }
+
+    /// <summary>
     ///     Gets the status roles table.
     /// </summary>
     public ITable<StatusRole> StatusRoles => this.GetTable<StatusRole>();
@@ -711,6 +733,17 @@ public class MewdekoDb : DataConnection
     public ITable<XpRoleReward> XpRoleRewards => this.GetTable<XpRoleReward>();
 
     /// <summary>
+    ///     Gets the XP level-up messages table.
+    /// </summary>
+    public ITable<XpLevelUpMessage> XpLevelUpMessages
+    {
+        get
+        {
+            return this.GetTable<XpLevelUpMessage>();
+        }
+    }
+
+    /// <summary>
     ///     Gets the XP role trackings table.
     /// </summary>
     public ITable<XpRoleTracking> XpRoleTrackings => this.GetTable<XpRoleTracking>();
@@ -754,4 +787,325 @@ public class MewdekoDb : DataConnection
     ///     Gets the todo list permissions table.
     /// </summary>
     public ITable<TodoListPermission> TodoListPermissions => this.GetTable<TodoListPermission>();
+
+    /// <summary>
+    ///     Gets the user reputation table.
+    /// </summary>
+    public ITable<UserReputation> UserReputations
+    {
+        get
+        {
+            return this.GetTable<UserReputation>();
+        }
+    }
+
+    /// <summary>
+    ///     Gets the reputation history table.
+    /// </summary>
+    public ITable<RepHistory> RepHistories
+    {
+        get
+        {
+            return this.GetTable<RepHistory>();
+        }
+    }
+
+    /// <summary>
+    ///     Gets the reputation configuration table.
+    /// </summary>
+    public ITable<RepConfig> RepConfigs
+    {
+        get
+        {
+            return this.GetTable<RepConfig>();
+        }
+    }
+
+    /// <summary>
+    ///     Gets the reputation channel configuration table.
+    /// </summary>
+    public ITable<RepChannelConfig> RepChannelConfigs
+    {
+        get
+        {
+            return this.GetTable<RepChannelConfig>();
+        }
+    }
+
+    /// <summary>
+    ///     Gets the reputation role rewards table.
+    /// </summary>
+    public ITable<RepRoleRewards> RepRoleRewards
+    {
+        get
+        {
+            return this.GetTable<RepRoleRewards>();
+        }
+    }
+
+    /// <summary>
+    ///     Gets the reputation user settings table.
+    /// </summary>
+    public ITable<RepUserSettings> RepUserSettings
+    {
+        get
+        {
+            return this.GetTable<RepUserSettings>();
+        }
+    }
+
+    /// <summary>
+    ///     Gets the reputation cooldowns table.
+    /// </summary>
+    public ITable<RepCooldowns> RepCooldowns
+    {
+        get
+        {
+            return this.GetTable<RepCooldowns>();
+        }
+    }
+
+    /// <summary>
+    ///     Gets the reputation badges table.
+    /// </summary>
+    public ITable<RepBadges> RepBadges
+    {
+        get
+        {
+            return this.GetTable<RepBadges>();
+        }
+    }
+
+    /// <summary>
+    ///     Gets the reputation reaction configurations table.
+    /// </summary>
+    public ITable<RepReactionConfig> RepReactionConfigs
+    {
+        get
+        {
+            return this.GetTable<RepReactionConfig>();
+        }
+    }
+
+    /// <summary>
+    ///     Gets the custom reputation types table.
+    /// </summary>
+    public ITable<RepCustomType> RepCustomTypes
+    {
+        get
+        {
+            return this.GetTable<RepCustomType>();
+        }
+    }
+
+    /// <summary>
+    ///     Gets the user custom reputation table.
+    /// </summary>
+    public ITable<UserCustomReputation> UserCustomReputations
+    {
+        get
+        {
+            return this.GetTable<UserCustomReputation>();
+        }
+    }
+
+    /// <summary>
+    ///     Gets the reputation command requirements table.
+    /// </summary>
+    public ITable<RepCommandRequirement> RepCommandRequirements
+    {
+        get
+        {
+            return this.GetTable<RepCommandRequirement>();
+        }
+    }
+
+    /// <summary>
+    ///     Gets the reputation events table.
+    /// </summary>
+    public ITable<RepEvent> RepEvents
+    {
+        get
+        {
+            return this.GetTable<RepEvent>();
+        }
+    }
+
+    /// <summary>
+    ///     Gets the reputation challenges table.
+    /// </summary>
+    public ITable<RepChallenge> RepChallenges
+    {
+        get
+        {
+            return this.GetTable<RepChallenge>();
+        }
+    }
+
+    /// <summary>
+    ///     Gets the reputation challenge progress table.
+    /// </summary>
+    public ITable<RepChallengeProgress> RepChallengeProgresses
+    {
+        get
+        {
+            return this.GetTable<RepChallengeProgress>();
+        }
+    }
+
+    /// <summary>
+    ///     Gets the reputation weighted votes table.
+    /// </summary>
+    public ITable<RepWeightedVote> RepWeightedVotes
+    {
+        get
+        {
+            return this.GetTable<RepWeightedVote>();
+        }
+    }
+
+    /// <summary>
+    ///     Gets the reputation weighted vote records table.
+    /// </summary>
+    public ITable<RepWeightedVoteRecord> RepWeightedVoteRecords
+    {
+        get
+        {
+            return this.GetTable<RepWeightedVoteRecord>();
+        }
+    }
+
+    /// <summary>
+    ///     Gets the reputation metrics table.
+    /// </summary>
+    public ITable<RepMetrics> RepMetrics
+    {
+        get
+        {
+            return this.GetTable<RepMetrics>();
+        }
+    }
+
+    /// <summary>
+    ///     Gets the reputation hourly activity table.
+    /// </summary>
+    public ITable<RepHourlyActivity> RepHourlyActivities
+    {
+        get
+        {
+            return this.GetTable<RepHourlyActivity>();
+        }
+    }
+
+    /// <summary>
+    ///     Gets the reputation channel metrics table.
+    /// </summary>
+    public ITable<RepChannelMetrics> RepChannelMetrics
+    {
+        get
+        {
+            return this.GetTable<RepChannelMetrics>();
+        }
+    }
+
+    /// <summary>
+    ///     Gets the counting channels table.
+    /// </summary>
+    public ITable<CountingChannel> CountingChannels => this.GetTable<CountingChannel>();
+
+    /// <summary>
+    ///     Gets the counting channel configurations table.
+    /// </summary>
+    public ITable<CountingChannelConfig> CountingChannelConfigs => this.GetTable<CountingChannelConfig>();
+
+    /// <summary>
+    ///     Gets the counting statistics table.
+    /// </summary>
+    public ITable<CountingStats> CountingStats => this.GetTable<CountingStats>();
+
+    /// <summary>
+    ///     Gets the counting milestones table.
+    /// </summary>
+    public ITable<CountingMilestones> CountingMilestones => this.GetTable<CountingMilestones>();
+
+    /// <summary>
+    ///     Gets the counting events table.
+    /// </summary>
+    public ITable<CountingEvents> CountingEvents => this.GetTable<CountingEvents>();
+
+    /// <summary>
+    ///     Gets the counting user bans table.
+    /// </summary>
+    public ITable<CountingUserBans> CountingUserBans
+    {
+        get
+        {
+            return this.GetTable<CountingUserBans>();
+        }
+    }
+
+    /// <summary>
+    ///     Gets the counting saves table.
+    /// </summary>
+    public ITable<CountingSaves> CountingSaves => this.GetTable<CountingSaves>();
+
+    /// <summary>
+    ///     Gets the counting leaderboard table.
+    /// </summary>
+    public ITable<CountingLeaderboard> CountingLeaderboard => this.GetTable<CountingLeaderboard>();
+
+    /// <summary>
+    ///     Gets the counting moderation defaults table.
+    /// </summary>
+    public ITable<CountingModerationDefaults> CountingModerationDefaults
+    {
+        get
+        {
+            return this.GetTable<CountingModerationDefaults>();
+        }
+    }
+
+    /// <summary>
+    ///     Gets the counting moderation config table.
+    /// </summary>
+    public ITable<CountingModerationConfig> CountingModerationConfig
+    {
+        get
+        {
+            return this.GetTable<CountingModerationConfig>();
+        }
+    }
+
+    /// <summary>
+    ///     Gets the counting user wrong counts table.
+    /// </summary>
+    public ITable<CountingUserWrongCounts> CountingUserWrongCounts
+    {
+        get
+        {
+            return this.GetTable<CountingUserWrongCounts>();
+        }
+    }
+
+    /// <summary>
+    ///     Gets the counting applied punishments table.
+    /// </summary>
+    public ITable<CountingAppliedPunishments> CountingAppliedPunishments
+    {
+        get
+        {
+            return this.GetTable<CountingAppliedPunishments>();
+        }
+    }
+
+    /// <summary>
+    ///     Gets the counting moderation punishments table.
+    /// </summary>
+    public ITable<CountingModerationPunishments> CountingModerationPunishments
+    {
+        get
+        {
+            return this.GetTable<CountingModerationPunishments>();
+        }
+    }
 }

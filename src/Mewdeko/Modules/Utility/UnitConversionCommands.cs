@@ -66,31 +66,33 @@ public partial class Utility
             {
                 res = value;
             }
-            else if (originUnit.UnitType == "temperature")
-            {
-                //from Kelvin to target
-                res = targetUnit.Triggers.First().ToUpperInvariant() switch
-                {
-                    "C" => res - 273.15m //celcius!
-                    ,
-                    "F" => res * (9m / 5m) - 459.67m,
-                    //don't really care too much about efficiency, so just convert to Kelvin, then to target
-                    _ => originUnit.Triggers.First().ToUpperInvariant() switch
-                    {
-                        "C" => value + 273.15m //celcius!
-                        ,
-                        "F" => (value + 459.67m) * (5m / 9m),
-                        _ => value
-                    }
-                };
-            }
             else
-            {
-                if (originUnit.UnitType == "currency")
-                    res = value * targetUnit.Modifier / originUnit.Modifier;
-                else
-                    res = value * originUnit.Modifier / targetUnit.Modifier;
-            }
+                switch (originUnit.UnitType)
+                {
+                    case "temperature":
+                        //from Kelvin to target
+                        res = targetUnit.Triggers.First().ToUpperInvariant() switch
+                        {
+                            "C" => res - 273.15m //celcius!
+                            ,
+                            "F" => res * (9m / 5m) - 459.67m,
+                            //don't really care too much about efficiency, so just convert to Kelvin, then to target
+                            _ => originUnit.Triggers.First().ToUpperInvariant() switch
+                            {
+                                "C" => value + 273.15m //celcius!
+                                ,
+                                "F" => (value + 459.67m) * (5m / 9m),
+                                _ => value
+                            }
+                        };
+                        break;
+                    case "currency":
+                        res = value * targetUnit.Modifier / originUnit.Modifier;
+                        break;
+                    default:
+                        res = value * originUnit.Modifier / targetUnit.Modifier;
+                        break;
+                }
 
             res = Math.Round(res, 4);
 

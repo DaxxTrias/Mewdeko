@@ -2,6 +2,7 @@ using System.Text.Json;
 using DataModel;
 using Discord.Commands;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Controllers.Common.Administration;
 using Mewdeko.Controllers.Common.Permissions;
@@ -10,6 +11,7 @@ using Mewdeko.Modules.Administration;
 using Mewdeko.Modules.Administration.Common;
 using Mewdeko.Modules.Administration.Services;
 using Mewdeko.Modules.Help;
+using Mewdeko.Modules.Moderation.Services;
 using Mewdeko.Modules.Permissions.Services;
 using Mewdeko.Services.Impl;
 using Microsoft.AspNetCore.Authorization;
@@ -40,6 +42,7 @@ public class AdministrationController(
     CmdCdService cmdCdService,
     CommandService commandService,
     IDataConnectionFactory dbFactory,
+    UserPunishService userPunishService,
     DiscordShardedClient client) : Controller
 {
     /// <summary>
@@ -106,7 +109,7 @@ public class AdministrationController(
         await Task.CompletedTask;
 
         // Get protection stats using the GetAntiStats method
-        var (antiSpamStats, antiRaidStats, antiAltStats, antiMassMentionStats) =
+        var (antiSpamStats, antiRaidStats, antiAltStats, antiMassMentionStats, antiPatternStats) =
             protectionService.GetAntiStats(guildId);
 
         return Ok(new
@@ -149,6 +152,24 @@ public class AdministrationController(
                 roleId = antiMassMentionStats?.AntiMassMentionSettings.RoleId ?? 0,
                 ignoreBots = antiMassMentionStats?.AntiMassMentionSettings.IgnoreBots ?? false,
                 userCount = antiMassMentionStats?.UserStats.Count ?? 0
+            },
+            antiPattern = new
+            {
+                enabled = antiPatternStats != null,
+                action = antiPatternStats?.AntiPatternSettings.Action ?? 0,
+                punishDuration = antiPatternStats?.AntiPatternSettings.PunishDuration ?? 0,
+                roleId = antiPatternStats?.AntiPatternSettings.RoleId ?? 0,
+                checkAccountAge = antiPatternStats?.AntiPatternSettings.CheckAccountAge ?? false,
+                maxAccountAgeMonths = antiPatternStats?.AntiPatternSettings.MaxAccountAgeMonths ?? 6,
+                checkJoinTiming = antiPatternStats?.AntiPatternSettings.CheckJoinTiming ?? false,
+                maxJoinHours = antiPatternStats?.AntiPatternSettings.MaxJoinHours ?? 48.0,
+                checkBatchCreation = antiPatternStats?.AntiPatternSettings.CheckBatchCreation ?? false,
+                checkOfflineStatus = antiPatternStats?.AntiPatternSettings.CheckOfflineStatus ?? false,
+                checkNewAccounts = antiPatternStats?.AntiPatternSettings.CheckNewAccounts ?? false,
+                newAccountDays = antiPatternStats?.AntiPatternSettings.NewAccountDays ?? 7,
+                minimumScore = antiPatternStats?.AntiPatternSettings.MinimumScore ?? 15,
+                patternCount = antiPatternStats?.AntiPatternSettings.AntiPatternPatterns?.Count() ?? 0,
+                counter = antiPatternStats?.Counter ?? 0
             }
         });
     }
@@ -157,7 +178,7 @@ public class AdministrationController(
     ///     Configures anti-raid protection
     /// </summary>
     [HttpPut("protection/anti-raid")]
-    public async Task<IActionResult> ConfigureAntiRaid(ulong guildId, [FromBody] AntiRaidConfigRequest request)
+    public async Task<IActionResult> ConfigureAntiRaid(ulong guildId, [FromBody] AntiRaidConfigRequest? request)
     {
         if (request == null)
             return BadRequest("Invalid request data");
@@ -165,13 +186,13 @@ public class AdministrationController(
         if (request.Enabled)
         {
             // Validate parameters based on bot requirements
-            if (request.UserThreshold < 2 || request.UserThreshold > 30)
+            if (request.UserThreshold is < 2 or > 30)
                 return BadRequest("User threshold must be between 2 and 30");
 
-            if (request.Seconds < 2 || request.Seconds > 300)
+            if (request.Seconds is < 2 or > 300)
                 return BadRequest("Time window must be between 2 and 300 seconds");
 
-            if (request.PunishDuration < 0 || request.PunishDuration > 1440)
+            if (request.PunishDuration is < 0 or > 1440)
                 return BadRequest("Punishment duration must be between 0 and 1440 minutes");
 
             if (request.Action == PunishmentAction.AddRole)
@@ -206,7 +227,7 @@ public class AdministrationController(
     ///     Configures anti-spam protection
     /// </summary>
     [HttpPut("protection/anti-spam")]
-    public async Task<IActionResult> ConfigureAntiSpam(ulong guildId, [FromBody] AntiSpamConfigRequest request)
+    public async Task<IActionResult> ConfigureAntiSpam(ulong guildId, [FromBody] AntiSpamConfigRequest? request)
     {
         if (request == null)
             return BadRequest("Invalid request data");
@@ -214,10 +235,10 @@ public class AdministrationController(
         if (request.Enabled)
         {
             // Validate parameters based on bot requirements
-            if (request.MessageThreshold < 2 || request.MessageThreshold > 10)
+            if (request.MessageThreshold is < 2 or > 10)
                 return BadRequest("Message threshold must be between 2 and 10");
 
-            if (request.MuteTime < 0 || request.MuteTime > 1440)
+            if (request.MuteTime is < 0 or > 1440)
                 return BadRequest("Mute time must be between 0 and 1440 minutes");
 
             await protectionService.StartAntiSpamAsync(
@@ -259,7 +280,7 @@ public class AdministrationController(
     ///     Configures anti-alt protection
     /// </summary>
     [HttpPut("protection/anti-alt")]
-    public async Task<IActionResult> ConfigureAntiAlt(ulong guildId, [FromBody] AntiAltConfigRequest request)
+    public async Task<IActionResult> ConfigureAntiAlt(ulong guildId, [FromBody] AntiAltConfigRequest? request)
     {
         if (request == null)
             return BadRequest("Invalid request data");
@@ -270,7 +291,7 @@ public class AdministrationController(
             if (request.MinAgeMinutes < 1)
                 return BadRequest("Minimum age must be at least 1 minute");
 
-            if (request.ActionDurationMinutes < 0 || request.ActionDurationMinutes > 1440)
+            if (request.ActionDurationMinutes is < 0 or > 1440)
                 return BadRequest("Action duration must be between 0 and 1440 minutes");
 
             await protectionService.StartAntiAltAsync(
@@ -300,7 +321,7 @@ public class AdministrationController(
     /// </summary>
     [HttpPut("protection/anti-mass-mention")]
     public async Task<IActionResult> ConfigureAntiMassMention(ulong guildId,
-        [FromBody] AntiMassMentionConfigRequest request)
+        [FromBody] AntiMassMentionConfigRequest? request)
     {
         if (request == null)
             return BadRequest("Invalid request data");
@@ -317,7 +338,7 @@ public class AdministrationController(
             if (request.MaxMentionsInTimeWindow < 1)
                 return BadRequest("Max mentions in time window must be at least 1");
 
-            if (request.MuteTime < 0 || request.MuteTime > 1440)
+            if (request.MuteTime is < 0 or > 1440)
                 return BadRequest("Mute time must be between 0 and 1440 minutes");
 
             await protectionService.StartAntiMassMentionAsync(
@@ -352,7 +373,7 @@ public class AdministrationController(
     public async Task<IActionResult> GetProtectionStatistics(ulong guildId)
     {
         await Task.CompletedTask;
-        var (antiSpamStats, antiRaidStats, antiAltStats, antiMassMentionStats) =
+        var (antiSpamStats, antiRaidStats, antiAltStats, antiMassMentionStats, _) =
             protectionService.GetAntiStats(guildId);
 
         return Ok(new
@@ -361,14 +382,13 @@ public class AdministrationController(
             {
                 enabled = antiRaidStats != null,
                 usersCount = antiRaidStats?.UsersCount ?? 0,
-                recentUsers = antiRaidStats?.RaidUsers?.Select(u => u.Id).TakeLast(10).ToList() ?? new List<ulong>()
+                recentUsers = antiRaidStats?.RaidUsers.Select(u => u.Id).TakeLast(10).ToList() ?? new List<ulong>()
             },
             antiSpam = new
             {
                 enabled = antiSpamStats != null,
-                userCount = antiSpamStats?.UserStats?.Count ?? 0,
-                topOffenders = antiSpamStats?.UserStats?
-                    .OrderByDescending(x => x.Value.Count)
+                userCount = antiSpamStats?.UserStats.Count ?? 0,
+                topOffenders = antiSpamStats?.UserStats.OrderByDescending(x => x.Value.Count)
                     .Take(10)
                     .ToDictionary(x => x.Key, x => x.Value.Count) ?? new Dictionary<ulong, int>()
             },
@@ -378,7 +398,7 @@ public class AdministrationController(
             },
             antiMassMention = new
             {
-                enabled = antiMassMentionStats != null, userCount = antiMassMentionStats?.UserStats?.Count ?? 0
+                enabled = antiMassMentionStats != null, userCount = antiMassMentionStats?.UserStats.Count ?? 0
             }
         });
     }
@@ -519,7 +539,6 @@ public class AdministrationController(
         {
             "enable" => Administration.State.Enable,
             "disable" => Administration.State.Disable,
-            "inherit" => Administration.State.Inherit,
             _ => Administration.State.Inherit
         };
 
@@ -608,16 +627,15 @@ public class AdministrationController(
     [HttpGet("voice-channel-roles")]
     public async Task<IActionResult> GetVoiceChannelRoles(ulong guildId)
     {
-        var guild = client.GetGuild(guildId);
-        if (guild == null)
+        if (client.GetGuild(guildId) is not IGuild guild)
             return NotFound("Guild not found");
 
         if (!vcRoleService.VcRoles.TryGetValue(guildId, out var vcRoles))
             return Ok(Array.Empty<object>());
 
-        var roleData = vcRoles.Select(kvp =>
+        var roleDataTasks = vcRoles.Select(async kvp =>
         {
-            var channel = guild.GetVoiceChannel(kvp.Key);
+            var channel = await guild.GetVoiceChannelAsync(kvp.Key);
             var role = guild.GetRole(kvp.Value.Id);
             return new
             {
@@ -628,6 +646,7 @@ public class AdministrationController(
             };
         });
 
+        var roleData = await Task.WhenAll(roleDataTasks);
         return Ok(roleData);
     }
 
@@ -661,7 +680,8 @@ public class AdministrationController(
     [HttpPost("self-assignable-roles/groups")]
     public async Task<IActionResult> SetSelfAssignableRoleGroup(ulong guildId, [FromBody] SetGroupRequest request)
     {
-        var success = await selfAssignedRolesService.SetNameAsync(guildId, request.Group, request.Name);
+        var success = request.Name != null &&
+                      await selfAssignedRolesService.SetNameAsync(guildId, request.Group, request.Name);
         return Ok(success);
     }
 
@@ -773,6 +793,7 @@ public class AdministrationController(
     [HttpGet("timezone")]
     public async Task<IActionResult> GetGuildTimezone(ulong guildId)
     {
+        await Task.CompletedTask;
         var timezone = timezoneService.GetTimeZoneOrUtc(guildId);
         return Ok(timezone.Id);
     }
@@ -909,9 +930,8 @@ public class AdministrationController(
     [HttpGet("ban-message")]
     public async Task<IActionResult> GetBanMessage(ulong guildId)
     {
-        // This would need to be implemented in a service that manages ban messages
-        // For now, return empty string
-        return Ok("");
+        var banMsg = await userPunishService.GetBanTemplate(guildId);
+        return Ok(banMsg);
     }
 
     /// <summary>
@@ -920,7 +940,7 @@ public class AdministrationController(
     [HttpPost("ban-message")]
     public async Task<IActionResult> SetBanMessage(ulong guildId, [FromBody] SetBanMessageRequest request)
     {
-        // This would need to be implemented in a service that manages ban messages
+        await userPunishService.SetBanTemplate(guildId, request.Message);
         return Ok();
     }
 
@@ -1215,7 +1235,7 @@ public class AdministrationController(
     [HttpPut("command-cooldowns/{commandName}")]
     public async Task<IActionResult> SetCommandCooldown(ulong guildId, string commandName, [FromBody] int seconds)
     {
-        if (seconds < 0 || seconds > 90000)
+        if (seconds is < 0 or > 90000)
             return BadRequest("Cooldown must be between 0 and 90000 seconds");
 
         await using var db = await dbFactory.CreateConnectionAsync();

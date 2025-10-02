@@ -2,6 +2,7 @@ using System.IO;
 using System.Text.Json;
 using DataModel;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Modules.Xp.Events;
 using Mewdeko.Modules.Xp.Models;
 using Microsoft.Extensions.DependencyInjection;
@@ -16,38 +17,6 @@ namespace Mewdeko.Modules.Xp.Services;
 /// </summary>
 public partial class XpService
 {
-    #region Static Access
-
-    /// <summary>
-    ///     Gets the singleton instance of the XP service.
-    /// </summary>
-    public static XpService Instance { get; private set; }
-
-
-    /// <summary>
-    ///     Gets the background processor.
-    /// </summary>
-    /// <returns>The background processor.</returns>
-    public XpBackgroundProcessor GetBackgroundProcessor()
-    {
-        return backgroundProcessor;
-    }
-
-    /// <summary>
-    ///     Queues an XP gain for a user.
-    /// </summary>
-    /// <param name="guildId">The guild ID.</param>
-    /// <param name="userId">The user ID.</param>
-    /// <param name="amount">The amount of XP to add.</param>
-    /// <param name="channelId">The channel ID.</param>
-    /// <param name="source">The source of the XP gain.</param>
-    public void QueueXpGain(ulong guildId, ulong userId, int amount, ulong channelId, XpSource source)
-    {
-        backgroundProcessor.QueueXpGain(guildId, userId, amount, channelId, source);
-    }
-
-    #endregion
-
     #region User XP Management
 
     /// <summary>
@@ -183,7 +152,7 @@ public partial class XpService
         if (page < 1)
             page = 1;
 
-        if (pageSize < 1 || pageSize > 100)
+        if (pageSize is < 1 or > 100)
             pageSize = 10;
 
         // Check cache for leaderboard and count
@@ -309,8 +278,8 @@ public partial class XpService
         userXp.LastLevelUp = DateTime.UtcNow;
         await db.UpdateAsync(userXp);
 
-        // Update cache
-        _ = cacheManager.UpdateUserXpCacheAsync(userXp);
+        // Update cache synchronously to ensure it's updated before events are fired
+        await cacheManager.UpdateUserXpCacheAsync(userXp);
 
         // Publish level change event if user had a level before reset
         if (oldLevel > 0)
@@ -355,8 +324,8 @@ public partial class XpService
         userXp.LastLevelUp = DateTime.UtcNow;
         await db.UpdateAsync(userXp);
 
-        // Update cache
-        _ = cacheManager.UpdateUserXpCacheAsync(userXp);
+        // Update cache synchronously to ensure it's updated before events are fired
+        await cacheManager.UpdateUserXpCacheAsync(userXp);
 
         // Publish level change event if level changed
         if (newLevel != oldLevel)
@@ -392,8 +361,8 @@ public partial class XpService
         userXp.NotifyType = (int)type;
         await db.UpdateAsync(userXp);
 
-        // Update cache
-        _ = cacheManager.UpdateUserXpCacheAsync(userXp);
+        // Update cache synchronously to ensure consistency
+        await cacheManager.UpdateUserXpCacheAsync(userXp);
     }
 
     /// <summary>
@@ -511,30 +480,6 @@ public partial class XpService
     #endregion
 
     #region Rewards Management
-
-    /// <summary>
-    ///     Sets a role reward for a specific level.
-    /// </summary>
-    /// <param name="guildId">The guild ID.</param>
-    /// <param name="level">The level to set the reward for.</param>
-    /// <param name="roleId">The role ID to award, or null to remove the reward.</param>
-    /// <returns>A task representing the asynchronous operation.</returns>
-    public async Task SetRoleRewardAsync(ulong guildId, int level, ulong? roleId)
-    {
-        await rewardManager.SetRoleRewardAsync(guildId, level, roleId);
-    }
-
-    /// <summary>
-    ///     Sets a currency reward for a specific level.
-    /// </summary>
-    /// <param name="guildId">The guild ID.</param>
-    /// <param name="level">The level to set the reward for.</param>
-    /// <param name="amount">The amount of currency to award, or 0 to remove the reward.</param>
-    /// <returns>A task representing the asynchronous operation.</returns>
-    public async Task SetCurrencyRewardAsync(ulong guildId, int level, long amount)
-    {
-        await rewardManager.SetCurrencyRewardAsync(guildId, level, amount);
-    }
 
     /// <summary>
     ///     Gets all role rewards for a guild.
@@ -970,7 +915,7 @@ public partial class XpService
     public byte[] GetDefaultBackgroundImage()
     {
         // This would be loaded from a resource file or similar
-        // For now, returning a placeholder
+        // Returns a placeholder value
         return File.ReadAllBytes("data/images/default_xp_background.png");
     }
 

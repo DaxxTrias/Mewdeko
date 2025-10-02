@@ -25,6 +25,7 @@ public class SystemInfoController : ControllerBase
     /// </summary>
     /// <param name="credentials">The bot credentials for owner verification.</param>
     /// <param name="performanceService">The performance monitoring service.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public SystemInfoController(
         BotCredentials credentials,
         PerformanceMonitorService performanceService, ILogger<SystemInfoController> logger)

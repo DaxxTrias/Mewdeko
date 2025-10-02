@@ -13,6 +13,7 @@ namespace Mewdeko.Modules.Administration;
 ///     Class for the Administration Module.
 /// </summary>
 /// <param name="serv">The interactivity service by Fergun.Interactive</param>
+/// <param name="logger">The logger instance for structured logging.</param>
 public partial class Administration(InteractiveService serv, ILogger<Administration> logger)
     : MewdekoModuleBase<AdministrationService>
 {

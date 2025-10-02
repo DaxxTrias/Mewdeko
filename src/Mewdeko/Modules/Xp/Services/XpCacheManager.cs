@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using DataModel;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.Xp.Models;
 using Microsoft.Extensions.Caching.Memory;
@@ -58,6 +59,7 @@ public class XpCacheManager : INService
     /// <param name="dataCache">The data cache.</param>
     /// <param name="dbFactory">The database context provider.</param>
     /// <param name="client">The current sharded client</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public XpCacheManager(
         IDataCache dataCache,
         IDataConnectionFactory dbFactory,
@@ -690,7 +692,7 @@ public class XpCacheManager : INService
                 cacheOperations.AddRange(from roleReward in batch
                     let cacheKey = $"{RedisKeyPrefix}rewards:{roleReward.GuildId}:role:{roleReward.Level}"
                     let serializedReward = JsonSerializer.Serialize(roleReward, CachedJsonOptions)
-                    select redis.StringSetAsync(cacheKey, serializedReward, TimeSpan.FromMinutes(30), When.Always));
+                    select redis.StringSetAsync(cacheKey, serializedReward, null, When.Always));
 
                 await Task.WhenAll(cacheOperations).ConfigureAwait(false);
                 cacheOperations.Clear();
@@ -745,7 +747,7 @@ public class XpCacheManager : INService
                 cacheOperations.AddRange(from currencyReward in batch
                     let cacheKey = $"{RedisKeyPrefix}rewards:{currencyReward.GuildId}:currency:{currencyReward.Level}"
                     let serializedReward = JsonSerializer.Serialize(currencyReward, CachedJsonOptions)
-                    select redis.StringSetAsync(cacheKey, serializedReward, TimeSpan.FromMinutes(30), When.Always));
+                    select redis.StringSetAsync(cacheKey, serializedReward, null, When.Always));
 
                 await Task.WhenAll(cacheOperations).ConfigureAwait(false);
                 cacheOperations.Clear();

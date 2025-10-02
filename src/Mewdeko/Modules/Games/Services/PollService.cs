@@ -1,6 +1,7 @@
 using System.Text.Json;
 using DataModel;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Modules.Games.Common;
 using Mewdeko.Services.Strings;
@@ -131,10 +132,7 @@ public class PollService : INService, IReadyExecutor
 
             // Add to active polls cache
             ActivePolls.AddOrUpdate(guildId,
-                new List<Poll>
-                {
-                    poll
-                },
+                [poll],
                 (_, existing) =>
                 {
                     existing.Add(poll);
@@ -179,7 +177,7 @@ public class PollService : INService, IReadyExecutor
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to get active polls for guild {GuildId}", guildId);
-            return new List<Poll>();
+            return [];
         }
     }
 
@@ -205,7 +203,7 @@ public class PollService : INService, IReadyExecutor
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to get all polls for guild {GuildId}", guildId);
-            return new List<Poll>();
+            return [];
         }
     }
 
@@ -301,13 +299,13 @@ public class PollService : INService, IReadyExecutor
                 try
                 {
                     existingIndices = JsonSerializer.Deserialize<int[]>(existingVote.OptionIndices) ??
-                                      Array.Empty<int>();
+                                      [];
                 }
                 catch (JsonException ex)
                 {
                     logger.LogWarning(ex,
                         "Failed to deserialize existing vote indices for poll {PollId}, treating as empty", pollId);
-                    existingIndices = Array.Empty<int>();
+                    existingIndices = [];
                 }
 
                 if (existingIndices.SequenceEqual(validIndices))
@@ -361,7 +359,7 @@ public class PollService : INService, IReadyExecutor
             var poll = await db.Polls
                 .FirstOrDefaultAsync(p => p.Id == pollId);
 
-            if (poll == null || !poll.IsActive)
+            if (poll is not { IsActive: true })
                 return false;
 
             poll.IsActive = false;
@@ -418,7 +416,7 @@ public class PollService : INService, IReadyExecutor
 
             foreach (var vote in votes)
             {
-                var indices = JsonSerializer.Deserialize<int[]>(vote.OptionIndices) ?? Array.Empty<int>();
+                var indices = JsonSerializer.Deserialize<int[]>(vote.OptionIndices) ?? [];
 
                 foreach (var index in indices)
                 {
@@ -470,7 +468,7 @@ public class PollService : INService, IReadyExecutor
             var poll = await db.Polls
                 .FirstOrDefaultAsync(p => p.Id == pollId);
 
-            if (poll == null || !poll.IsActive)
+            if (poll is not { IsActive: true })
                 return false;
 
             // Parse existing settings
@@ -520,7 +518,7 @@ public class PollService : INService, IReadyExecutor
 
             // Update duration if provided
             var durationProperty = requestType.GetProperty("DurationMinutes");
-            if (durationProperty?.GetValue(request) is int durationMinutes && durationMinutes > 0)
+            if (durationProperty?.GetValue(request) is int durationMinutes and > 0)
             {
                 poll.ExpiresAt = DateTime.UtcNow.AddMinutes(durationMinutes);
             }

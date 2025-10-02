@@ -20,6 +20,8 @@ public class TodoSlash : MewdekoSlashModuleBase<TodoService>
     /// <summary>
     ///     Initializes a new instance of the <see cref="TodoSlash" /> class.
     /// </summary>
+    /// <param name="interactivity">The interactivity service.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public TodoSlash(InteractiveService interactivity, ILogger<TodoSlash> logger)
     {
         this.interactivity = interactivity;
@@ -74,7 +76,7 @@ public class TodoSlash : MewdekoSlashModuleBase<TodoService>
         await DeferAsync();
 
         var todoList = await Service.CreateTodoListAsync(ctx.Guild.Id, ctx.User.Id, name, description,
-            true, true);
+            true);
 
         if (todoList is null)
         {

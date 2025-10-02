@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Threading;
 using DataModel;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Controllers.Common.Bot;
 using Mewdeko.Services.Impl;
@@ -32,6 +33,7 @@ public class InstanceManagementService : INService, IReadyExecutor
     /// <param name="dbFactory">The database context provider.</param>
     /// <param name="factory">The HTTP client factory.</param>
     /// <param name="client">The sharded discord client</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public InstanceManagementService(
         IDataConnectionFactory dbFactory,
         IHttpClientFactory factory, DiscordShardedClient client, ILogger<InstanceManagementService> logger)

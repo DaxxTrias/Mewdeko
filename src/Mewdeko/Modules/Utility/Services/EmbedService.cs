@@ -1,4 +1,5 @@
 using LinqToDB;
+using LinqToDB.Async;
 using Embed = DataModel.Embed;
 
 namespace Mewdeko.Modules.Utility.Services;

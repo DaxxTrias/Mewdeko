@@ -25,6 +25,7 @@ public class TicketController : Controller
     /// </summary>
     /// <param name="ticketService">Service for managing ticket operations</param>
     /// <param name="client">Discord client instance</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public TicketController(TicketService ticketService, DiscordShardedClient client, ILogger<TicketController> logger)
     {
         this.ticketService = ticketService;

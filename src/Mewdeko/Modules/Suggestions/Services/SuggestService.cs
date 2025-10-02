@@ -1,6 +1,7 @@
 ﻿using DataModel;
 using Discord.Net;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Common.Configs;
 using Mewdeko.Modules.Administration.Services;
 using Mewdeko.Modules.Permissions.Common;
@@ -70,6 +71,7 @@ public class SuggestionsService : INService
     /// <param name="eventHandler">Event handler for Discord client events.</param>
     /// <param name="config">The bot config service.</param>
     /// <param name="strings">The generated bot strings service for localization.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public SuggestionsService(
         IDataConnectionFactory dbFactory,
         DiscordShardedClient client,

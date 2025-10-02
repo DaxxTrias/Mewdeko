@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Threading;
 using DataModel;
 using LinqToDB;
+using LinqToDB.Async;
 using LinqToDB.Data;
 using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.Xp.Events;
@@ -62,9 +63,10 @@ public class XpBackgroundProcessor : INService, IDisposable
     /// </summary>
     /// <param name="dbFactory">The database context provider.</param>
     /// <param name="cacheManager">The cache manager for XP operations.</param>
-    /// <param name="rewardManager">The reward manager for handling XP rewards.</param>
     /// <param name="competitionManager">The competition manager for handling XP competitions.</param>
     /// <param name="client">The Discord sharded client.</param>
+    /// <param name="eventHandler">The event handler service.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public XpBackgroundProcessor(
         IDataConnectionFactory dbFactory,
         XpCacheManager cacheManager,
@@ -151,17 +153,21 @@ public class XpBackgroundProcessor : INService, IDisposable
                     var key = (item.GuildId, item.UserId);
 
                     // Check for memory pressure and force cleanup
-                    if (batchingBuffer.Count > MaxBatchingBufferSize)
+                    var totalBufferedItems = batchingBuffer.Sum(kvp => kvp.Value.Count);
+                    if (totalBufferedItems > MaxBatchingBufferSize)
                     {
                         logger.LogWarning("Batching buffer exceeded max size ({MaxSize}), forcing processing",
                             MaxBatchingBufferSize);
                         ProcessXpBatches(null);
 
-                        // If still too large after processing, start dropping items
-                        if (batchingBuffer.Count > MaxBatchingBufferSize * 1.5)
+                        // If still too large after processing, apply backpressure instead of dropping
+                        totalBufferedItems = batchingBuffer.Sum(kvp => kvp.Value.Count);
+                        if (totalBufferedItems > MaxBatchingBufferSize * 1.5)
                         {
-                            logger.LogWarning("Dropping XP item due to memory pressure");
-                            continue;
+                            logger.LogWarning("XP buffer at critical capacity ({Items} items), applying backpressure",
+                                totalBufferedItems);
+                            // Wait for processing to catch up
+                            await Task.Delay(1000).ConfigureAwait(false);
                         }
                     }
 
@@ -184,7 +190,8 @@ public class XpBackgroundProcessor : INService, IDisposable
                 }
 
                 // Trigger processing if buffer is getting full, regardless of timer
-                if (batchingBuffer.Count > OptimalBatchSize * 2 && isProcessing != 1)
+                var currentBufferSize = batchingBuffer.Sum(kvp => kvp.Value.Count);
+                if (currentBufferSize > OptimalBatchSize * 2 && isProcessing != 1)
                 {
                     ProcessXpBatches(null);
                 }
@@ -320,16 +327,29 @@ public class XpBackgroundProcessor : INService, IDisposable
             // Take a snapshot of the current batching buffer to process
             var snapshot = new Dictionary<(ulong, ulong), List<XpGainItem>>();
 
-            foreach (var kvp in batchingBuffer)
+            foreach (var kvp in batchingBuffer.ToArray()) // ToArray to avoid modification during enumeration
             {
                 var items = kvp.Value;
                 // Skip empty batches
                 if (items.Count == 0)
+                {
+                    // Remove empty entries to prevent dictionary bloat
+                    batchingBuffer.TryRemove(kvp.Key, out _);
                     continue;
+                }
 
-                // Take the batch and replace with empty list atomically
-                batchingBuffer.TryUpdate(kvp.Key, [], items);
-                snapshot.Add(kvp.Key, items);
+                // Lock and take all items atomically
+                List<XpGainItem> itemsToProcess;
+                lock (items)
+                {
+                    if (items.Count == 0)
+                        continue;
+
+                    itemsToProcess = new List<XpGainItem>(items);
+                    items.Clear(); // Clear the list while locked
+                }
+
+                snapshot.Add(kvp.Key, itemsToProcess);
             }
 
             if (snapshot.Count == 0)

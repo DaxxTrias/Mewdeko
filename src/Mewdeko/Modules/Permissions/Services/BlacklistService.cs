@@ -1,5 +1,6 @@
 ﻿using DataModel;
 using LinqToDB;
+using LinqToDB.Async;
 using LinqToDB.Data;
 using Mewdeko.Common.Configs;
 using Mewdeko.Common.ModuleBehaviors;
@@ -44,6 +45,8 @@ public sealed class BlacklistService : IEarlyBehavior, INService
     ///     The service subscribes to relevant events to automatically enforce blacklist rules upon guild join events or when
     ///     the bot starts.
     /// </remarks>
+    /// <param name="strings">The localized strings service.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public BlacklistService(IDataConnectionFactory dbFactory, IPubSub pubSub, EventHandler handler,
         DiscordShardedClient client,
         BotConfig config,

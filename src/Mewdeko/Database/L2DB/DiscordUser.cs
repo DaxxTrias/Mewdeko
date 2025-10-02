@@ -41,5 +41,12 @@ namespace DataModel
 		[Column("GreetDmsOptOut"                                                                                         )] public bool      GreetDmsOptOut        { get; set; } // boolean
 		[Column("BirthdayAnnouncementsEnabled"                                                                           )] public bool      BirthdayAnnouncementsEnabled { get; set; } // boolean
 		[Column("BirthdayTimezone"                                                                                       )] public string?   BirthdayTimezone      { get; set; } // text
+		[Column("LevelUpPingsDisabled"                                                                                   )] public bool      LevelUpPingsDisabled  { get; set; } // boolean
+		[Column("LevelUpInfoShown"                                                                                       )] public bool      LevelUpInfoShown      { get; set; } // boolean
+		[Column("HasCompletedAnyWizard"                                                                                  )] public bool      HasCompletedAnyWizard { get; set; } // boolean
+		[Column("FirstDashboardAccess"                                                                                   )] public DateTime? FirstDashboardAccess  { get; set; } // timestamp (6) without time zone
+		[Column("DashboardExperienceLevel"                                                                               )] public int       DashboardExperienceLevel { get; set; } // integer
+		[Column("PrefersGuidedSetup"                                                                                     )] public bool      PrefersGuidedSetup    { get; set; } // boolean
+		[Column("WizardCompletedGuilds"                                                                                  )] public string?   WizardCompletedGuilds { get; set; } // text
 	}
 }

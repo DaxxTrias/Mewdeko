@@ -42,10 +42,9 @@ public class PollButtonService : MewdekoSlashModuleBase<PollService>
 
         try
         {
-            var (success, result) = await Service.ProcessVoteAsync(pollIdInt, ctx.User.Id, new[]
-            {
+            var (success, result) = await Service.ProcessVoteAsync(pollIdInt, ctx.User.Id, [
                 optionIndexInt
-            });
+            ]);
 
             var message = result switch
             {

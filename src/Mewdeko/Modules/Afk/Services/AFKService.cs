@@ -1,7 +1,10 @@
-﻿using System.Threading;
+﻿using System.Net;
+using System.Threading;
 using DataModel;
+using Discord.Net;
 using Humanizer;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Services.Settings;
 using Mewdeko.Services.Strings;
@@ -26,6 +29,8 @@ public class AfkService : INService, IReadyExecutor, IDisposable
     private readonly ConcurrentDictionary<ulong, bool> guildDataLoaded = new();
     private readonly GuildSettingsService guildSettings;
     private readonly ILogger<AfkService> logger;
+    private readonly SemaphoreSlim messageUpdateSemaphore = new(5, 5); // Rate limit protection
+    private readonly ConcurrentDictionary<ulong, DateTime> recentlyProcessedMessages = new();
     private readonly GeneratedBotStrings strings;
     private bool isDisposed;
     private bool isInitialized;
@@ -41,6 +46,7 @@ public class AfkService : INService, IReadyExecutor, IDisposable
     /// <param name="eventHandler">Handler for Discord events.</param>
     /// <param name="config">The bot's configuration service.</param>
     /// <param name="strings">The localization service.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public AfkService(
         IDataConnectionFactory dbFactory,
         DiscordShardedClient client,
@@ -75,12 +81,15 @@ public class AfkService : INService, IReadyExecutor, IDisposable
     /// <returns>A task representing the asynchronous operation.</returns>
     public async Task OnReadyAsync()
     {
-        await Task.CompletedTask; // Keep async signature but no initial await needed
+        await Task.CompletedTask;
         if (isInitialized)
             return;
+
         logger.LogInformation("Starting {Type} Cache", GetType());
         Environment.SetEnvironmentVariable("AFK_CACHED", "1");
-        _ = Task.Run(async () => // Run cleanup in background
+
+        // Background cleanup of old entries
+        _ = Task.Run(async () =>
         {
             try
             {
@@ -101,9 +110,12 @@ public class AfkService : INService, IReadyExecutor, IDisposable
                 logger.LogError(ex, "Error during startup AFK cleanup");
             }
         });
-        isInitialized = true;
 
-        logger.LogInformation("AFK Service Ready");
+        // Only initialize timed AFKs (they need active timers)
+        _ = InitializeTimedAfksAsync();
+
+        isInitialized = true;
+        logger.LogInformation("AFK Service Ready - Lazy loading enabled");
     }
 
     #region Public AFK Management Methods
@@ -452,7 +464,7 @@ public class AfkService : INService, IReadyExecutor, IDisposable
                 .FirstOrDefaultAsync(a => a.GuildId == state.GuildId && a.UserId == state.UserId).ConfigureAwait(false);
 
             // Only proceed if AFK exists and was timed and is now due
-            if (afk?.WasTimed == true && afk.When.HasValue && afk.When.Value <= DateTime.UtcNow)
+            if (afk is { WasTimed: true, When: not null } && afk.When.Value <= DateTime.UtcNow)
             {
                 await TimedAfkFinished(afk);
             }
@@ -614,6 +626,26 @@ public class AfkService : INService, IReadyExecutor, IDisposable
         if (msg.Author.IsBot || msg.Author is not IGuildUser user)
             return;
 
+        // Deduplicate rapid message events for the same message
+        var messageKey = msg.Id;
+        var now = DateTime.UtcNow;
+        if (recentlyProcessedMessages.TryGetValue(messageKey, out var lastProcessed))
+        {
+            if (now - lastProcessed < TimeSpan.FromSeconds(2))
+                return; // Skip if we just processed this message
+        }
+
+        recentlyProcessedMessages[messageKey] = now;
+
+        // Clean up old entries periodically
+        if (recentlyProcessedMessages.Count > 1000)
+        {
+            var cutoff = now.AddMinutes(-1);
+            var toRemove = recentlyProcessedMessages.Where(x => x.Value < cutoff).Select(x => x.Key).ToList();
+            foreach (var key in toRemove)
+                recentlyProcessedMessages.TryRemove(key, out _);
+        }
+
         try
         {
             var guildConfig = await GetGuildConfigCached(user.GuildId);
@@ -625,32 +657,34 @@ public class AfkService : INService, IReadyExecutor, IDisposable
                 var afkEntry = await GetAfk(user.GuildId, user.Id); // Check cache/DB
                 if (afkEntry != null) // User is AFK
                 {
-                    // Don't auto-remove if timed AFK is still active
-                    if (afkEntry.WasTimed && afkEntry.When.HasValue && afkEntry.When.Value > DateTime.UtcNow)
+                    switch (afkEntry.WasTimed)
                     {
-                        // It's a timed AFK that hasn't expired yet, don't remove it just because they talked
-                    }
-                    // Check timeout for non-timed AFKs
-                    else if (!afkEntry.WasTimed && afkEntry.DateAdded.HasValue && afkEntry.DateAdded.Value <
-                             DateTime.UtcNow.AddSeconds(-(guildConfig.AfkTimeout == 0 ? guildConfig.AfkTimeout : 10)))
-                    {
-                        await AfkSet(user.GuildId, user.Id, ""); // Clear AFK
-                        var notifyMsg = await msg.Channel
-                            .SendMessageAsync(strings.WelcomeBackAfk(user.Guild.Id, user.Mention))
-                            .ConfigureAwait(false);
-                        notifyMsg.DeleteAfter(5);
-                        try
+                        // Don't auto-remove if timed AFK is still active
+                        case true when afkEntry.When.HasValue && afkEntry.When.Value > DateTime.UtcNow:
+                            // It's a timed AFK that hasn't expired yet, don't remove it just because they talked
+                            break;
+                        // Check timeout for non-timed AFKs
+                        case false when afkEntry.DateAdded.HasValue && afkEntry.DateAdded.Value <
+                            DateTime.UtcNow.AddSeconds(-(guildConfig.AfkTimeout == 0 ? guildConfig.AfkTimeout : 10)):
                         {
-                            if (user.Nickname?.Contains("[AFK]") == true)
-                                await user.ModifyAsync(x => x.Nickname = user.Nickname.Replace("[AFK]", ""))
-                                    .ConfigureAwait(false);
-                        }
-                        catch
-                        {
-                            /* Ignore nickname errors */
-                        }
+                            await AfkSet(user.GuildId, user.Id, ""); // Clear AFK
+                            var notifyMsg = await msg.Channel
+                                .SendMessageAsync(strings.WelcomeBackAfk(user.Guild.Id, user.Mention))
+                                .ConfigureAwait(false);
+                            notifyMsg.DeleteAfter(5);
+                            try
+                            {
+                                if (user.Nickname?.Contains("[AFK]") == true)
+                                    await user.ModifyAsync(x => x.Nickname = user.Nickname.Replace("[AFK]", ""))
+                                        .ConfigureAwait(false);
+                            }
+                            catch
+                            {
+                                /* Ignore nickname errors */
+                            }
 
-                        return; // Return after clearing AFK
+                            return; // Return after clearing AFK
+                        }
                     }
                 }
             }
@@ -743,14 +777,49 @@ public class AfkService : INService, IReadyExecutor, IDisposable
     {
         try
         {
-            var message = await msg.GetOrDownloadAsync();
-            if (message == null || updatedMsg == null || message.Author.IsBot || message.EditedTimestamp == null)
-                return; // Ignore bot edits or unedited
+            // Skip processing if we already have the updated message
+            if (updatedMsg == null || updatedMsg.Author.IsBot || updatedMsg.EditedTimestamp == null)
+                return;
 
             // Skip if message is too old or not edited recently enough
-            if (DateTimeOffset.UtcNow - message.EditedTimestamp.Value > TimeSpan.FromMinutes(5)) return;
+            if (DateTimeOffset.UtcNow - updatedMsg.EditedTimestamp.Value > TimeSpan.FromMinutes(5)) return;
 
-            await MessageReceived(updatedMsg); // Process the updated message as if it were new
+            // Check if we have the message cached first
+            IMessage? message = null;
+            if (msg.HasValue)
+            {
+                message = msg.Value;
+            }
+            else
+            {
+                // Try to download with timeout and rate limit protection
+                try
+                {
+                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+                    var options = new RequestOptions
+                    {
+                        CancelToken = cts.Token, RetryMode = RetryMode.AlwaysRetry, Timeout = 3000
+                    };
+
+                    // Use updatedMsg directly if download fails or times out
+                    message = await msg.GetOrDownloadAsync();
+                }
+                catch (TimeoutException)
+                {
+                    // Log at debug level since this is expected under rate limits
+                    logger.LogDebug("Timeout downloading message {MessageId} in MessageUpdated, using cached data",
+                        msg.Id);
+                    // Continue processing with updatedMsg which we already have
+                }
+                catch (HttpException httpEx) when (httpEx.HttpCode == HttpStatusCode.TooManyRequests)
+                {
+                    logger.LogDebug("Rate limited when downloading message {MessageId} in MessageUpdated", msg.Id);
+                    // Continue processing with updatedMsg
+                }
+            }
+
+            // Process the updated message - we already have updatedMsg so we can proceed
+            await MessageReceived(updatedMsg);
         }
         catch (Exception ex)
         {
@@ -823,6 +892,7 @@ public class AfkService : INService, IReadyExecutor, IDisposable
             // Unsubscribe from Bot Joined/Left Guild events if needed
 
             cleanupTimer?.Dispose();
+            messageUpdateSemaphore?.Dispose();
 
             var timers = afkTimers.Values.ToList(); // Snapshot before clearing
             afkTimers.Clear();

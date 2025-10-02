@@ -1,6 +1,7 @@
 using System.Threading;
 using DataModel;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Common.Configs;
 using Mewdeko.Modules.Birthday.Common;
 using Mewdeko.Modules.UserProfile.Common;
@@ -344,33 +345,50 @@ public class BirthdayService : INService, IDisposable
     /// <param name="date">The date to check for birthdays.</param>
     private async Task ProcessGuildBirthdaysAsync(IGuild guild, DateTime date)
     {
-        var config = await GetBirthdayConfigAsync(guild.Id);
+        var birthdayConfig = await GetBirthdayConfigAsync(guild.Id);
 
         // Check if announcements are enabled
         if (!await IsFeatureEnabledAsync(guild.Id, BirthdayFeature.Announcements))
             return;
 
         // Check if birthday channel is configured
-        if (!config.BirthdayChannelId.HasValue)
+        if (!birthdayConfig.BirthdayChannelId.HasValue)
             return;
 
-        var channel = await guild.GetTextChannelAsync(config.BirthdayChannelId.Value);
+        // Check if we've already announced birthdays for today
+        if (birthdayConfig.LastAnnouncementDate.HasValue &&
+            birthdayConfig.LastAnnouncementDate.Value.Date == date.Date)
+        {
+            return; // Already announced today
+        }
+
+        var channel = await guild.GetTextChannelAsync(birthdayConfig.BirthdayChannelId.Value);
         if (channel == null)
             return;
 
         var birthdayUsers = await GetBirthdayUsersForDateAsync(guild.Id, date);
 
+        if (!birthdayUsers.Any())
+        {
+            // No birthdays today, but still update the last announcement date to prevent unnecessary checks
+            await UpdateLastAnnouncementDateAsync(guild.Id, date);
+            return;
+        }
+
+        var announcementsMade = false;
+
         foreach (var user in birthdayUsers)
         {
             try
             {
-                await AnnounceBirthdayAsync(guild, channel, user, config);
+                await AnnounceBirthdayAsync(guild, channel, user, birthdayConfig);
+                announcementsMade = true;
 
                 // Assign birthday role if configured
-                if (config.BirthdayRoleId.HasValue &&
+                if (birthdayConfig.BirthdayRoleId.HasValue &&
                     await IsFeatureEnabledAsync(guild.Id, BirthdayFeature.BirthdayRole))
                 {
-                    await AssignBirthdayRoleAsync(guild, user.UserId, config.BirthdayRoleId.Value);
+                    await AssignBirthdayRoleAsync(guild, user.UserId, birthdayConfig.BirthdayRoleId.Value);
                 }
             }
             catch (Exception ex)
@@ -378,6 +396,32 @@ public class BirthdayService : INService, IDisposable
                 logger.LogError(ex, "Failed to announce birthday for user {UserId} in guild {GuildId}",
                     user.UserId, guild.Id);
             }
+        }
+
+        // Update the last announcement date only if we successfully made announcements
+        if (announcementsMade)
+        {
+            await UpdateLastAnnouncementDateAsync(guild.Id, date);
+        }
+    }
+
+    /// <summary>
+    ///     Updates the last announcement date for a guild.
+    /// </summary>
+    /// <param name="guildId">The guild ID.</param>
+    /// <param name="date">The date of the last announcement.</param>
+    private async Task UpdateLastAnnouncementDateAsync(ulong guildId, DateTime date)
+    {
+        try
+        {
+            await UpdateBirthdayConfigAsync(guildId, config =>
+            {
+                config.LastAnnouncementDate = date.Date;
+            });
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to update last announcement date for guild {GuildId}", guildId);
         }
     }
 

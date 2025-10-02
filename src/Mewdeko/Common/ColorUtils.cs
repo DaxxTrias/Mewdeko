@@ -78,6 +78,8 @@ public static class ColorUtils
     ///     - RGB format (rgb(255,0,0))
     ///     - Comma separated values (255,0,0)
     /// </summary>
+    /// <param name="input">The input string.</param>
+    /// <param name="color">The color parameter.</param>
     public static bool TryParseColor(string input, out Discord.Color color)
     {
         if (string.IsNullOrWhiteSpace(input))
@@ -158,6 +160,7 @@ public static class ColorUtils
     /// <summary>
     ///     Converts a Discord.Color to its hex string representation.
     /// </summary>
+    /// <param name="color">The color parameter.</param>
     public static string ToHex(this Discord.Color color)
     {
         return $"#{color.R:X2}{color.G:X2}{color.B:X2}";
@@ -166,6 +169,7 @@ public static class ColorUtils
     /// <summary>
     ///     Converts a Discord.Color to an RGB string representation.
     /// </summary>
+    /// <param name="color">The color parameter.</param>
     public static string ToRgb(this Discord.Color color)
     {
         return $"rgb({color.R}, {color.G}, {color.B})";

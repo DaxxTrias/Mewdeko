@@ -3,6 +3,7 @@ using System.Text.Json;
 using DataModel;
 using Discord.Commands;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Modules.CustomVoice.Services;
 
@@ -11,6 +12,8 @@ namespace Mewdeko.Modules.CustomVoice;
 /// <summary>
 ///     Commands for managing custom voice channels.
 /// </summary>
+/// <param name="dbFactory">The database connection factory.</param>
+/// <param name="settingsService">The settingsservice service.</param>
 public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService settingsService)
     : MewdekoModuleBase<CustomVoiceService>
 {
@@ -1421,20 +1424,18 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
             };
         }
 
-        // If no limit is provided, reset to default
-        if (limit == null)
+        switch (limit)
         {
-            prefs.UserLimit = null;
-            await Service.SetUserPreferencesAsync(prefs);
-            await ReplyConfirmAsync(Strings.CustomVoicePrefsLimitReset(Context.Guild.Id));
-            return;
-        }
-
-        // Validate the limit
-        if (limit < 0)
-        {
-            await ReplyErrorAsync(Strings.CustomVoiceLimitNegative(Context.Guild.Id));
-            return;
+            // If no limit is provided, reset to default
+            case null:
+                prefs.UserLimit = null;
+                await Service.SetUserPreferencesAsync(prefs);
+                await ReplyConfirmAsync(Strings.CustomVoicePrefsLimitReset(Context.Guild.Id));
+                return;
+            // Validate the limit
+            case < 0:
+                await ReplyErrorAsync(Strings.CustomVoiceLimitNegative(Context.Guild.Id));
+                return;
         }
 
         // Set the new limit
@@ -1470,20 +1471,18 @@ public class CustomVoice(IDataConnectionFactory dbFactory, GuildSettingsService 
             };
         }
 
-        // If no bitrate is provided, reset to default
-        if (bitrate == null)
+        switch (bitrate)
         {
-            prefs.Bitrate = null;
-            await Service.SetUserPreferencesAsync(prefs);
-            await ReplyConfirmAsync(Strings.CustomVoicePrefsBitrateReset(Context.Guild.Id));
-            return;
-        }
-
-        // Validate the bitrate
-        if (bitrate <= 0)
-        {
-            await ReplyErrorAsync(Strings.CustomVoiceBitrateNegative(Context.Guild.Id));
-            return;
+            // If no bitrate is provided, reset to default
+            case null:
+                prefs.Bitrate = null;
+                await Service.SetUserPreferencesAsync(prefs);
+                await ReplyConfirmAsync(Strings.CustomVoicePrefsBitrateReset(Context.Guild.Id));
+                return;
+            // Validate the bitrate
+            case <= 0:
+                await ReplyErrorAsync(Strings.CustomVoiceBitrateNegative(Context.Guild.Id));
+                return;
         }
 
         // Set the new bitrate

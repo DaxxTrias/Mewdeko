@@ -2,6 +2,7 @@
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Threading;
 using LinqToDB;
 using LinqToDB.Data;
 using Microsoft.Extensions.Configuration;
@@ -67,16 +68,6 @@ public class BotCredentials : IBotCredentials
 
 
     /// <summary>
-    ///     Gets or sets the command used to run a shard.
-    /// </summary>
-    public string ShardRunCommand { get; set; }
-
-    /// <summary>
-    ///     Gets or sets the arguments used with the shard run command.
-    /// </summary>
-    public string ShardRunArguments { get; set; }
-
-    /// <summary>
     ///     Gets or sets the PostgreSQL connection string.
     /// </summary>
     public string PsqlConnectionString { get; set; }
@@ -86,10 +77,6 @@ public class BotCredentials : IBotCredentials
     /// </summary>
     public bool IsMasterInstance { get; set; }
 
-    /// <summary>
-    ///     Gets or sets the url used for libretranslate.
-    /// </summary>
-    public string LibreTranslateUrl { get; set; } = "http://localhost:5000";
 
     /// <summary>
     ///     Gets or sets a value indicating whether to use global currency.
@@ -122,60 +109,30 @@ public class BotCredentials : IBotCredentials
     /// </summary>
     public ulong GuildJoinsChannelId { get; set; }
 
-    /// <summary>
-    ///     Gets or sets the ID of the channel where global ban reports are sent.
-    /// </summary>
-    public ulong GlobalBanReportChannelId { get; set; }
-
-    /// <summary>
-    ///     Gets or sets whether grafana metrics are enabled.
-    /// </summary>
-    public bool EnableMetrics { get; set; } = true;
-
-    /// <summary>
-    ///     Sets the port used for grafana metrics.
-    /// </summary>
-    public int MetricsPort { get; set; } = 9090;
 
     /// <summary>
     ///     Gets or sets the ID of the channel where pronoun abuse reports are sent.
     /// </summary>
     public ulong PronounAbuseReportChannelId { get; set; }
 
-    /// <summary>
-    ///     Gets or sets a value indicating whether to migrate to PostgreSQL.
-    /// </summary>
-    public bool MigrateToPsql { get; set; }
 
     /// <summary>
     ///     Gets or sets the URL of the Lavalink server.
     /// </summary>
     public string LavalinkUrl { get; set; }
 
-    /// <summary>
-    ///     Gets or sets the Cleverbot API key.
-    /// </summary>
-    public string CleverbotApiKey { get; set; }
 
     /// <summary>
     ///     Gets or sets the URL used for giveaway entries.
     /// </summary>
     public string GiveawayEntryUrl { get; set; }
 
-    /// <summary>
-    ///     Gets or sets the Redis options.
-    /// </summary>
-    public string RedisOptions { get; set; }
 
     /// <summary>
     ///     Gets or sets the port used for the API.
     /// </summary>
     public int ApiPort { get; set; } = 5001;
 
-    /// <summary>
-    ///     Gets or sets a value indicating whether to skip API key verification.
-    /// </summary>
-    public bool SkipApiKey { get; set; }
 
     /// <summary>
     ///     Gets or sets the Redis connection strings, separated by semicolons for multiple connections.
@@ -187,10 +144,6 @@ public class BotCredentials : IBotCredentials
     /// </summary>
     public string Token { get; set; }
 
-    /// <summary>
-    ///     Gets or sets the bot's client secret.
-    /// </summary>
-    public string ClientSecret { get; set; }
 
     /// <summary>
     ///     Gets or sets the Google API key.
@@ -207,15 +160,6 @@ public class BotCredentials : IBotCredentials
     /// </summary>
     public string SpotifyClientSecret { get; set; }
 
-    /// <summary>
-    ///     Gets or sets the Mashape (now RapidAPI) key.
-    /// </summary>
-    public string MashapeKey { get; set; }
-
-    /// <summary>
-    ///     Gets or sets the Statcord key used for bot statistics.
-    /// </summary>
-    public string StatcordKey { get; set; }
 
     /// <summary>
     ///     Gets or sets the Cloudflare clearance token.
@@ -237,10 +181,6 @@ public class BotCredentials : IBotCredentials
     /// </summary>
     public string LastFmApiKey { get; set; }
 
-    /// <summary>
-    ///     Gets or sets the Last.fm API secret.
-    /// </summary>
-    public string LastFmApiSecret { get; set; }
 
     /// <summary>
     ///     Gets or sets the Patreon client ID.
@@ -267,10 +207,6 @@ public class BotCredentials : IBotCredentials
     /// </summary>
     public string OsuApiKey { get; set; }
 
-    /// <summary>
-    ///     Gets or sets the configuration for the restart command.
-    /// </summary>
-    public RestartConfig RestartCommand { get; set; }
 
     /// <summary>
     ///     Gets or sets the total number of shards.
@@ -311,6 +247,16 @@ public class BotCredentials : IBotCredentials
     ///     Gets or sets the ID of the channel where confession reports are sent.
     /// </summary>
     public ulong ConfessionReportChannelId { get; set; }
+
+    /// <summary>
+    ///     Gets or sets whether the PostgreSQL setup has been completed.
+    /// </summary>
+    public bool PostgresSetupCompleted { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the Sentry DSN for error tracking.
+    /// </summary>
+    public string SentryDsn { get; set; }
 
     /// <summary>
     ///     Checks if the specified user is an owner.
@@ -511,61 +457,30 @@ public class BotCredentials : IBotCredentials
             GoogleApiKey = data[nameof(GoogleApiKey)];
             PsqlConnectionString = data[nameof(PsqlConnectionString)];
             CsrfToken = data[nameof(CsrfToken)];
-            MigrateToPsql = bool.Parse(data[nameof(MigrateToPsql)] ?? "false");
             ApiKey = data[nameof(ApiKey)];
             UserAgent = data[nameof(UserAgent)];
             CfClearance = data[nameof(CfClearance)];
             ApiPort = int.TryParse(data[nameof(ApiPort)], out var port) ? port : 5001;
             LastFmApiKey = data[nameof(LastFmApiKey)];
-            LastFmApiSecret = data[nameof(LastFmApiSecret)];
             PatreonClientId = data[nameof(PatreonClientId)];
             PatreonClientSecret = data[nameof(PatreonClientSecret)];
             PatreonBaseUrl = data[nameof(PatreonBaseUrl)];
-            MashapeKey = data[nameof(MashapeKey)];
             OsuApiKey = data[nameof(OsuApiKey)];
             TwitchClientId = data[nameof(TwitchClientId)];
             TwitchClientSecret = data[nameof(TwitchClientSecret)];
-            SkipApiKey = bool.Parse(data[nameof(SkipApiKey)] ?? "false");
             LavalinkUrl = data[nameof(LavalinkUrl)];
             TrovoClientId = data[nameof(TrovoClientId)];
-            ShardRunCommand = data[nameof(ShardRunCommand)];
-            ShardRunArguments = data[nameof(ShardRunArguments)];
-            CleverbotApiKey = data[nameof(CleverbotApiKey)];
             IsMasterInstance = Convert.ToBoolean(data[nameof(IsMasterInstance)]);
             SpotifyClientId = data[nameof(SpotifyClientId)];
             SpotifyClientSecret = data[nameof(SpotifyClientSecret)];
-            StatcordKey = data[nameof(StatcordKey)];
             ChatSavePath = data[nameof(ChatSavePath)];
             IsApiEnabled = bool.Parse(data[nameof(IsApiEnabled)] ?? "false");
-            ClientSecret = data[nameof(ClientSecret)];
 
-            RedisOptions = !string.IsNullOrWhiteSpace(data[nameof(RedisOptions)])
-                ? data[nameof(RedisOptions)]
-                : "127.0.0.1,syncTimeout=3000";
 
             VotesToken = data[nameof(VotesToken)];
 
-            var restartSection = data.GetSection(nameof(RestartCommand));
-            var cmd = restartSection["cmd"];
-            var args = restartSection["args"];
-            if (!string.IsNullOrWhiteSpace(cmd))
-                RestartCommand = new RestartConfig(cmd, args);
-
-            if (Environment.OSVersion.Platform == PlatformID.Unix)
-            {
-                ShardRunCommand ??= "dotnet";
-                ShardRunArguments ??= "run -c Release --no-build -- {0} {1}";
-            }
-            else // Windows
-            {
-                ShardRunCommand ??= "Mewdeko.exe";
-                ShardRunArguments ??= "{0} {1}";
-            }
 
             TotalShards = int.TryParse(data[nameof(TotalShards)], out var ts) && ts > 0 ? ts : 1;
-            LibreTranslateUrl = data[nameof(LibreTranslateUrl)] ?? LibreTranslateUrl;
-            EnableMetrics = !bool.TryParse(data[nameof(EnableMetrics)], out var metricsEnabled) || metricsEnabled;
-            MetricsPort = int.TryParse(data[nameof(MetricsPort)], out var metricsPort) ? metricsPort : 0;
             TwitchClientId = data[nameof(TwitchClientId)] ?? "http://localhost:5000";
             RedisConnections = data[nameof(RedisConnections)];
 
@@ -576,14 +491,13 @@ public class BotCredentials : IBotCredentials
             ConfessionReportChannelId = ulong.TryParse(data[nameof(ConfessionReportChannelId)], out var crid)
                 ? crid
                 : 942825117820530709;
-            GlobalBanReportChannelId = ulong.TryParse(data[nameof(GlobalBanReportChannelId)], out var gbrid)
-                ? gbrid
-                : 905109141620682782;
             PronounAbuseReportChannelId = ulong.TryParse(data[nameof(PronounAbuseReportChannelId)], out var pnrepId)
                 ? pnrepId
                 : 970086914826858547;
             UseGlobalCurrency = bool.TryParse(data[nameof(UseGlobalCurrency)], out var ugc) && ugc;
             OpenMeteoApiUrl = data[nameof(OpenMeteoApiUrl)] ?? "https://api.open-meteo.com";
+            PostgresSetupCompleted = bool.TryParse(data[nameof(PostgresSetupCompleted)], out var pgSetup) && pgSetup;
+            SentryDsn = data[nameof(SentryDsn)];
 
             // Check for missing or invalid critical credentials
             var missingCredentials = new List<string>();
@@ -630,7 +544,7 @@ public class BotCredentials : IBotCredentials
                         .UsePostgreSQL(PsqlConnectionString);
 
                     using var conn = new DataConnection(dataOptions);
-                    conn.EnsureConnectionAsync().GetAwaiter().GetResult();
+                    conn.OpenDbConnectionAsync(CancellationToken.None).GetAwaiter().GetResult();
                     conn.Close();
                 }
                 catch (Exception ex)
@@ -666,7 +580,7 @@ public class BotCredentials : IBotCredentials
                 }
             }
 
-            if (ApiPort <= 0 || ApiPort > 65535)
+            if (ApiPort is <= 0 or > 65535)
             {
                 Log.Error("Invalid API Port specified. Please change it to a value between 1 and 65535 and restart.");
                 Helpers.ReadErrorAndExit(5);
@@ -698,34 +612,23 @@ public class BotCredentials : IBotCredentials
         public string ApiKey { get; set; } = StringExtensions.GenerateSecureString(90);
         public ulong DebugGuildId { get; set; } = 843489716674494475;
         public ulong GuildJoinsChannelId { get; set; } = 892789588739891250;
-        public ulong GlobalBanReportChannelId { get; set; } = 905109141620682782;
         public ulong PronounAbuseReportChannelId { get; set; } = 970086914826858547;
-        public bool MigrateToPsql { get; set; } = false;
         public bool IsApiEnabled { get; set; } = false;
         public string LavalinkUrl { get; set; } = "http://localhost:2333";
-        public string CleverbotApiKey { get; set; } = "";
-        public string RedisOptions { get; set; } = "127.0.0.1,syncTimeout=3000";
         public int ApiPort { get; set; } = 5001;
-        public bool SkipApiKey { get; set; } = false;
         public bool IsMasterInstance { get; set; } = false;
-        public string LibreTranslateUrl { get; } = "http://localhost:5000";
-        public RestartConfig RestartCommand { get; } = null;
         public string RedisConnections { get; } = "127.0.0.1:6379";
         public string LastFmApiKey { get; } = "";
-        public string LastFmApiSecret { get; } = "";
         public string PatreonClientId { get; } = "";
         public string PatreonClientSecret { get; } = "";
         public string PatreonBaseUrl { get; } = "https://yourdomain.com";
         public string Token { get; set; } = "";
-        public string ClientSecret { get; } = "";
         public string CfClearance { get; } = "";
         public string UserAgent { get; } = "";
         public string CsrfToken { get; } = "";
         public string SpotifyClientId { get; } = "";
         public string SpotifyClientSecret { get; } = "";
-        public string StatcordKey { get; } = "";
         public string GoogleApiKey { get; } = "";
-        public string MashapeKey { get; } = "";
         public string OsuApiKey { get; } = "";
         public string TrovoClientId { get; } = "";
         public string TwitchClientId { get; } = "";
@@ -735,6 +638,8 @@ public class BotCredentials : IBotCredentials
         public string OpenMeteoApiUrl { get; } = "https://api.open-meteo.com";
         public ulong ConfessionReportChannelId { get; } = 942825117820530709;
         public string ChatSavePath { get; } = "/usr/share/nginx/cdn/chatlogs/";
+        public bool PostgresSetupCompleted { get; set; }
+        public string SentryDsn { get; } = "";
 
         [JsonIgnore]
         ImmutableArray<ulong> IBotCredentials.OwnerIds

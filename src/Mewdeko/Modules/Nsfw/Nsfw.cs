@@ -22,6 +22,7 @@ namespace Mewdeko.Modules.Nsfw;
 /// <param name="guildSettings">The guild settings service</param>
 /// <param name="client">The http client</param>
 /// <param name="credentials">The bot credentials</param>
+/// <param name="logger">The logger instance for structured logging.</param>
 public class Nsfw(
     InteractiveService interactivity,
     MartineApi martineApi,

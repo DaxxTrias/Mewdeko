@@ -1,6 +1,7 @@
 ﻿using DataModel;
 using Discord.Interactions;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Common.Attributes.InteractionCommands;
 using Mewdeko.Common.Modals;
 using Mewdeko.Database.Enums;

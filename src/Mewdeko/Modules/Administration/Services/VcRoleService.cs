@@ -1,6 +1,7 @@
 ﻿using System.Collections.Concurrent;
 using System.Data;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Common.ModuleBehaviors;
 using DiscordShardedClient = Discord.WebSocket.DiscordShardedClient;
 using VcRole = DataModel.VcRole;
@@ -25,6 +26,7 @@ public class VcRoleService : INService, IReadyExecutor
     /// <param name="client">The Discord client.</param>
     /// <param name="dbFactory">The database service.</param>
     /// <param name="eventHandler">The event handler.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public VcRoleService(DiscordShardedClient client, IDataConnectionFactory dbFactory,
         EventHandler eventHandler, ILogger<VcRoleService> logger)
     {

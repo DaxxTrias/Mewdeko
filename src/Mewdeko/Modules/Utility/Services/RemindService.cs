@@ -1,7 +1,9 @@
 ﻿using System.Text.RegularExpressions;
 using System.Threading;
 using DataModel;
+using Discord.Net;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Modules.Administration.Services;
 using Mewdeko.Services.Strings;
 using Swan;
@@ -29,6 +31,7 @@ public partial class RemindService : INService
     /// <param name="dbFactory">The database service for managing reminders.</param>
     /// <param name="tz">The timezone service for guild timezones.</param>
     /// <param name="strings">The bot strings service for localized messages.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public RemindService(DiscordShardedClient client, IDataConnectionFactory dbFactory, GuildTimezoneService tz,
         GeneratedBotStrings strings, ILogger<RemindService> logger)
     {
@@ -121,9 +124,35 @@ public partial class RemindService : INService
             // Remove the executed reminder from the database and timer
             await RemoveReminder(reminder);
         }
+        catch (HttpException ex) when (ex.DiscordCode == DiscordErrorCode.CannotSendMessageToUser)
+        {
+            logger.LogWarning("Cannot send reminder to user {UserId}, removing reminder {ReminderId}",
+                reminder.UserId, reminder.Id);
+            await RemoveReminder(reminder);
+        }
+        catch (HttpException ex) when (ex.DiscordCode == DiscordErrorCode.UnknownChannel)
+        {
+            logger.LogWarning("Channel {ChannelId} no longer exists, removing reminder {ReminderId}",
+                reminder.ChannelId, reminder.Id);
+            await RemoveReminder(reminder);
+        }
+        catch (HttpException ex) when (ex.DiscordCode == DiscordErrorCode.MissingPermissions)
+        {
+            logger.LogWarning(
+                "Missing permissions to send reminder in channel {ChannelId}, removing reminder {ReminderId}",
+                reminder.ChannelId, reminder.Id);
+            await RemoveReminder(reminder);
+        }
+        catch (HttpException ex)
+        {
+            logger.LogWarning(ex, "Discord API error executing reminder {ReminderId}: {ErrorCode} - {ErrorMessage}",
+                reminder.Id, ex.DiscordCode, ex.Message);
+            await RemoveReminder(reminder);
+        }
         catch (Exception ex)
         {
-            logger.LogInformation(ex.Message + $"({reminder.Id})");
+            logger.LogError(ex, "Unexpected error executing reminder {ReminderId}", reminder.Id);
+            await RemoveReminder(reminder);
         }
     }
 

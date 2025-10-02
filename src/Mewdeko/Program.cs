@@ -59,11 +59,12 @@ public class Program
         AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
         var log = LogSetup.SetupLogger("Startup"); // Initial logger name
 
-        // Check and install dependencies FIRST (with null connection string to trigger setup)
-        DependencyInstaller.CheckAndInstallDependencies(null);
-
-        // THEN load credentials (dependencies should be ready now)
+        // Load credentials first to check if setup was already completed
         var credentials = new BotCredentials();
+
+        // Check and install dependencies (pass setup status to avoid prompting if already done)
+        DependencyInstaller.CheckAndInstallDependencies(credentials.PsqlConnectionString,
+            credentials.PostgresSetupCompleted);
         var dbUpgrader = new DatabaseUpgrader(credentials.PsqlConnectionString);
 
         // Test connection first
@@ -112,6 +113,21 @@ public class Program
         if (credentials.IsApiEnabled)
         {
             var builder = WebApplication.CreateBuilder(args);
+
+            // Configure Sentry for ASP.NET Core
+            if (!string.IsNullOrWhiteSpace(credentials.SentryDsn))
+            {
+                builder.WebHost.UseSentry(o =>
+                {
+                    o.Debug = true;
+                    o.Dsn = credentials.SentryDsn;
+                    o.TracesSampleRate = 1.0;
+                    o.AttachStacktrace = true;
+                    o.SendDefaultPii = false;
+                    o.MaxBreadcrumbs = 100;
+                });
+            }
+
             builder.Logging.ClearProviders();
             builder.Services.AddTransient(typeof(ILogger<>), typeof(Logger<>));
             ConfigureServices(builder.Services, credentials, Cache, serverCount.GetValueOrDefault());
@@ -292,7 +308,7 @@ public class Program
 
         services.AddSerilog((serviceProvider, loggerConfiguration) =>
         {
-            LogSetup.ConfigureLogger(loggerConfiguration);
+            LogSetup.ConfigureLogger(loggerConfiguration, credentials.SentryDsn);
         });
         services.AddSingleton(client);
         services.AddSingleton(credentials);

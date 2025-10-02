@@ -21,7 +21,7 @@ public class ProtectionController(ProtectionService protectionService) : Control
     {
         await Task.CompletedTask;
 
-        var (antiSpamStats, antiRaidStats, antiAltStats, antiMassMentionStats) =
+        var (antiSpamStats, antiRaidStats, antiAltStats, antiMassMentionStats, antiPatternStats) =
             protectionService.GetAntiStats(guildId);
 
         return Ok(new
@@ -66,6 +66,24 @@ public class ProtectionController(ProtectionService protectionService) : Control
                 roleId = antiMassMentionStats?.AntiMassMentionSettings?.RoleId ?? 0,
                 ignoreBots = antiMassMentionStats?.AntiMassMentionSettings?.IgnoreBots ?? false,
                 userCount = antiMassMentionStats?.UserStats?.Count ?? 0
+            },
+            antiPattern = new
+            {
+                enabled = antiPatternStats != null,
+                action = antiPatternStats?.AntiPatternSettings?.Action ?? 0,
+                punishDuration = antiPatternStats?.AntiPatternSettings?.PunishDuration ?? 0,
+                roleId = antiPatternStats?.AntiPatternSettings?.RoleId ?? 0,
+                checkAccountAge = antiPatternStats?.AntiPatternSettings?.CheckAccountAge ?? false,
+                maxAccountAgeMonths = antiPatternStats?.AntiPatternSettings?.MaxAccountAgeMonths ?? 6,
+                checkJoinTiming = antiPatternStats?.AntiPatternSettings?.CheckJoinTiming ?? false,
+                maxJoinHours = antiPatternStats?.AntiPatternSettings?.MaxJoinHours ?? 48.0,
+                checkBatchCreation = antiPatternStats?.AntiPatternSettings?.CheckBatchCreation ?? false,
+                checkOfflineStatus = antiPatternStats?.AntiPatternSettings?.CheckOfflineStatus ?? false,
+                checkNewAccounts = antiPatternStats?.AntiPatternSettings?.CheckNewAccounts ?? false,
+                newAccountDays = antiPatternStats?.AntiPatternSettings?.NewAccountDays ?? 7,
+                minimumScore = antiPatternStats?.AntiPatternSettings?.MinimumScore ?? 15,
+                patternCount = antiPatternStats?.AntiPatternSettings?.AntiPatternPatterns?.Count() ?? 0,
+                counter = antiPatternStats?.Counter ?? 0
             }
         });
     }
@@ -220,7 +238,7 @@ public class ProtectionController(ProtectionService protectionService) : Control
     {
         await Task.CompletedTask;
 
-        var (antiSpamStats, antiRaidStats, antiAltStats, antiMassMentionStats) =
+        var (antiSpamStats, antiRaidStats, antiAltStats, antiMassMentionStats, antiPatternStats) =
             protectionService.GetAntiStats(guildId);
 
         return Ok(new
@@ -247,7 +265,117 @@ public class ProtectionController(ProtectionService protectionService) : Control
             antiMassMention = new
             {
                 enabled = antiMassMentionStats != null, userCount = antiMassMentionStats?.UserStats?.Count ?? 0
+            },
+            antiPattern = new
+            {
+                enabled = antiPatternStats != null, counter = antiPatternStats?.Counter ?? 0
             }
         });
+    }
+
+    /// <summary>
+    ///     Configures anti-pattern protection
+    /// </summary>
+    [HttpPut("anti-pattern")]
+    public async Task<IActionResult> ConfigureAntiPattern(ulong guildId, [FromBody] AntiPatternConfigRequest request)
+    {
+        if (request.Enabled)
+        {
+            var result = await protectionService.StartAntiPatternAsync(
+                guildId,
+                request.Action,
+                request.PunishDuration,
+                request.RoleId,
+                request.CheckAccountAge,
+                request.MaxAccountAgeMonths,
+                request.CheckJoinTiming,
+                request.MaxJoinHours,
+                request.CheckBatchCreation,
+                request.CheckOfflineStatus,
+                request.CheckNewAccounts,
+                request.NewAccountDays,
+                request.MinimumScore);
+
+            if (result == null)
+                return BadRequest("Failed to start anti-pattern protection");
+
+            return Ok(new
+            {
+                success = true, settings = result
+            });
+        }
+
+        var success = await protectionService.TryStopAntiPattern(guildId);
+        return Ok(new
+        {
+            success
+        });
+    }
+
+    /// <summary>
+    ///     Adds a pattern to anti-pattern protection
+    /// </summary>
+    [HttpPost("anti-pattern/patterns")]
+    public async Task<IActionResult> AddPattern(ulong guildId, [FromBody] AddPatternRequest request)
+    {
+        var success = await protectionService.AddPatternAsync(
+            guildId,
+            request.Pattern,
+            request.Name,
+            request.CheckUsername,
+            request.CheckDisplayName);
+
+        return Ok(new
+        {
+            success
+        });
+    }
+
+    /// <summary>
+    ///     Removes a pattern from anti-pattern protection
+    /// </summary>
+    [HttpDelete("anti-pattern/patterns/{patternId}")]
+    public async Task<IActionResult> RemovePattern(ulong guildId, int patternId)
+    {
+        var success = await protectionService.RemovePatternAsync(guildId, patternId);
+        return Ok(new
+        {
+            success
+        });
+    }
+
+    /// <summary>
+    ///     Updates anti-pattern configuration
+    /// </summary>
+    [HttpPatch("anti-pattern/config")]
+    public async Task<IActionResult> UpdateAntiPatternConfig(ulong guildId,
+        [FromBody] UpdateAntiPatternConfigRequest request)
+    {
+        var success = await protectionService.UpdateAntiPatternConfigAsync(
+            guildId,
+            request.CheckAccountAge,
+            request.MaxAccountAgeMonths,
+            request.CheckJoinTiming,
+            request.MaxJoinHours,
+            request.CheckBatchCreation,
+            request.CheckOfflineStatus,
+            request.CheckNewAccounts,
+            request.NewAccountDays,
+            request.MinimumScore);
+
+        return Ok(new
+        {
+            success
+        });
+    }
+
+    /// <summary>
+    ///     Gets all anti-pattern patterns for a guild
+    /// </summary>
+    [HttpGet("anti-pattern/patterns")]
+    public async Task<IActionResult> GetAntiPatternPatterns(ulong guildId)
+    {
+        var patterns = await protectionService.GetAntiPatternPatternsAsync(guildId);
+        return Ok(patterns);
     }
 }

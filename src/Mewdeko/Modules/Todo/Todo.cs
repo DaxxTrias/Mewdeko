@@ -9,7 +9,7 @@ namespace Mewdeko.Modules.Todo;
 /// <summary>
 ///     Commands for managing todo lists and items with comprehensive permission system.
 /// </summary>
-public class Todo(ILogger<Todo> logger) : MewdekoModuleBase<TodoService>
+public class Todo : MewdekoModuleBase<TodoService>
 {
     /// <summary>
     ///     Creates a new todo list
@@ -47,7 +47,7 @@ public class Todo(ILogger<Todo> logger) : MewdekoModuleBase<TodoService>
     public async Task TodoCreateServerList(string name, [Remainder] string? description = null)
     {
         var todoList = await Service.CreateTodoListAsync(ctx.Guild.Id, ctx.User.Id, name, description,
-            true, true);
+            true);
 
         if (todoList is null)
         {

@@ -75,7 +75,7 @@ public partial class Moderation
 
             if (parameters is null)
             {
-                await Service.PurgeWhere(ctx.Channel as ITextChannel, count, x => x.Channel.Id == ctx.Channel.Id);
+                await Service.PurgeWhere(ctx.Channel as ITextChannel, count + 1, x => x.Channel.Id == ctx.Channel.Id);
                 return;
             }
 

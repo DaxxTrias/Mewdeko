@@ -9,6 +9,7 @@ public partial class Utility
     /// <summary>
     ///     Commands for managing join and leave statistics.
     /// </summary>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public class JoinLeaveStats(ILogger<JoinLeaveStats> logger) : MewdekoSubmodule<JoinLeaveLoggerService>
     {
         /// <summary>

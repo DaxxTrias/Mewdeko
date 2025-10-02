@@ -29,6 +29,7 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
         ///     Initializes a new instance of the <see cref="TicketConfig" /> class.
         /// </summary>
         /// <param name="interactivity">The service used for interactive commands.</param>
+        /// <param name="logger">The logger instance for structured logging.</param>
         public TicketConfig(InteractiveService interactivity, ILogger<TicketConfig> logger)
         {
             this.interactivity = interactivity;
@@ -782,14 +783,23 @@ public partial class Tickets : MewdekoModuleBase<TicketService>
 
                 foreach (var option in options)
                 {
-                    if (option == "paragraph")
-                        fieldSettings.Style = 2;
-                    else if (option == "optional")
-                        fieldSettings.Required = false;
-                    else if (option.StartsWith("min:") && int.TryParse(option[4..], out var min))
-                        fieldSettings.MinLength = Math.Max(0, Math.Min(min, 4000));
-                    else if (option.StartsWith("max:") && int.TryParse(option[4..], out var max))
-                        fieldSettings.MaxLength = Math.Max(fieldSettings.MinLength ?? 0, Math.Min(max, 4000));
+                    switch (option)
+                    {
+                        case "paragraph":
+                            fieldSettings.Style = 2;
+                            break;
+                        case "optional":
+                            fieldSettings.Required = false;
+                            break;
+                        default:
+                        {
+                            if (option.StartsWith("min:") && int.TryParse(option[4..], out var min))
+                                fieldSettings.MinLength = Math.Max(0, Math.Min(min, 4000));
+                            else if (option.StartsWith("max:") && int.TryParse(option[4..], out var max))
+                                fieldSettings.MaxLength = Math.Max(fieldSettings.MinLength ?? 0, Math.Min(max, 4000));
+                            break;
+                        }
+                    }
                 }
             }
 

@@ -43,6 +43,7 @@ public abstract class MewdekoSlashCommandModule : InteractionModuleBase
     /// <summary>
     ///     Sends an error message based on the specified key with optional arguments.
     /// </summary>
+    /// <param name="text">The text string.</param>
     public Task ErrorAsync(string text)
     {
         return !ctx.Interaction.HasResponded
@@ -53,6 +54,7 @@ public abstract class MewdekoSlashCommandModule : InteractionModuleBase
     /// <summary>
     ///     Sends an error message as a reply to the user with the specified key and optional arguments.
     /// </summary>
+    /// <param name="text">The text string.</param>
     public Task ReplyErrorAsync(string text)
     {
         return !ctx.Interaction.HasResponded
@@ -81,6 +83,7 @@ public abstract class MewdekoSlashCommandModule : InteractionModuleBase
     /// <summary>
     ///     Sends an ephemeral error message as a reply to the user with the specified key and optional arguments.
     /// </summary>
+    /// <param name="text">The text string.</param>
     public Task EphemeralReplyErrorAsync(string? text)
     {
         return !ctx.Interaction.HasResponded
@@ -91,6 +94,7 @@ public abstract class MewdekoSlashCommandModule : InteractionModuleBase
     /// <summary>
     ///     Sends a confirmation message based on the specified key with optional arguments.
     /// </summary>
+    /// <param name="text">The text string.</param>
     public Task ConfirmAsync(string text)
     {
         return !ctx.Interaction.HasResponded
@@ -101,6 +105,7 @@ public abstract class MewdekoSlashCommandModule : InteractionModuleBase
     /// <summary>
     ///     Sends a confirmation message as a reply to the user with the specified key and optional arguments.
     /// </summary>
+    /// <param name="text">The text string.</param>
     public Task ReplyConfirmAsync(string? text)
     {
         return ctx.Interaction.HasResponded
@@ -111,6 +116,7 @@ public abstract class MewdekoSlashCommandModule : InteractionModuleBase
     /// <summary>
     ///     Sends an ephemeral confirmation message as a reply to the user with the specified key and optional arguments.
     /// </summary>
+    /// <param name="text">The text string.</param>
     public Task EphemeralReplyConfirmAsync(string? text)
     {
         return !ctx.Interaction.HasResponded
@@ -141,13 +147,13 @@ public abstract class MewdekoSlashCommandModule : InteractionModuleBase
             .ConfigureAwait(false);
         try
         {
-            var input = await GetButtonInputAsync(msg.Channel.Id, msg.Id, userid).ConfigureAwait(false);
+            var input = await GetButtonInputAsync(msg.Channel.Id, msg.Id, userid, true).ConfigureAwait(false);
             return input == "Yes";
         }
         finally
         {
             if (delete)
-                _ = Task.Run(() => msg.DeleteAsync());
+                _ = msg.DeleteAsync();
         }
     }
 
@@ -205,20 +211,35 @@ public abstract class MewdekoSlashCommandModule : InteractionModuleBase
         async Task Interaction(SocketInteraction arg)
         {
             if (arg is not SocketMessageComponent c) return;
+
+            //  Only handle the interaction if it's the specific button we are waiting for.
+            //  Otherwise, just ignore it and let the correct module handle it.
             if (c.Channel.Id != channelId || c.Message.Id != msgId || c.User.Id != userId)
             {
-                if (!alreadyDeferred) await c.DeferAsync();
                 return;
+            }
+
+            // By this point, we know this is the interaction we're waiting for.
+            // Acknowledge it if it hasn't been already.
+            if (!alreadyDeferred)
+            {
+                try
+                {
+                    await c.DeferAsync();
+                }
+                catch (Exception)
+                {
+                    // Ignore if it's already been deferred, which can happen in rare race conditions.
+                    // The main goal is to capture the input.
+                }
             }
 
             if (c.Data.CustomId == "yes")
             {
-                if (!alreadyDeferred) await c.DeferAsync();
                 userInputTask.TrySetResult("Yes");
                 return;
             }
 
-            if (!alreadyDeferred) await c.DeferAsync();
             userInputTask.TrySetResult(c.Data.CustomId);
         }
     }

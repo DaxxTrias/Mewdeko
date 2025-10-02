@@ -11,10 +11,15 @@ namespace Mewdeko.Services.Impl;
 /// </summary>
 public sealed class EventHandler : IDisposable
 {
+    private const int MaxMetricsEntries = 1000; // Limit metrics collection size
+    private const int MaxCircuitBreakerEntries = 500; // Limit circuit breakers
+    private const int MaxSubscriptionEntries = 500; // Limit subscriptions per event
+
     private readonly ConcurrentDictionary<string, CircuitBreaker> circuitBreakers = new();
+    private readonly Timer cleanupTimer; // New cleanup timer
     private readonly DiscordShardedClient client;
 
-    // Metrics tracking
+    // Metrics tracking with bounded collections
     private readonly ConcurrentDictionary<string, EventMetrics> eventMetrics = new();
     private readonly InteractionService interaction;
     private readonly ILogger<EventHandler> logger;
@@ -47,6 +52,7 @@ public sealed class EventHandler : IDisposable
     /// <param name="logger">The logger instance for structured logging.</param>
     /// <param name="options">Configuration options for the event handler.</param>
     /// <exception cref="ArgumentNullException">Thrown when any parameter is null.</exception>
+    /// <param name="interaction">The interaction service.</param>
     public EventHandler(
         DiscordShardedClient client,
         InteractionService interaction,
@@ -75,6 +81,9 @@ public sealed class EventHandler : IDisposable
 
         // Initialize metrics reset timer
         metricsResetTimer = new Timer(ResetMetrics, null, TimeSpan.FromHours(1), TimeSpan.FromHours(1));
+
+        // Initialize cleanup timer to prevent unbounded growth
+        cleanupTimer = new Timer(CleanupCollections, null, TimeSpan.FromMinutes(30), TimeSpan.FromMinutes(30));
 
         RegisterEvents();
         StartBatchProcessors();
@@ -1253,12 +1262,16 @@ public sealed class EventHandler : IDisposable
 
     private EventMetrics GetOrCreateEventMetrics(string eventType)
     {
-        return eventMetrics.GetOrAdd(eventType, _ => new EventMetrics());
+        var metrics = eventMetrics.GetOrAdd(eventType, _ => new EventMetrics());
+        metrics.LastAccessTime = DateTime.UtcNow;
+        return metrics;
     }
 
     private ModuleMetrics GetOrCreateModuleMetrics(string moduleName)
     {
-        return moduleMetrics.GetOrAdd(moduleName, _ => new ModuleMetrics());
+        var metrics = moduleMetrics.GetOrAdd(moduleName, _ => new ModuleMetrics());
+        metrics.LastAccessTime = DateTime.UtcNow;
+        return metrics;
     }
 
     private void ResetMetrics(object? state)
@@ -1280,6 +1293,83 @@ public sealed class EventHandler : IDisposable
         logger.LogWarning("Event and module metrics reset");
     }
 
+    private void CleanupCollections(object? state)
+    {
+        try
+        {
+            // Cleanup old or inactive event metrics
+            if (eventMetrics.Count > MaxMetricsEntries)
+            {
+                var toRemove = eventMetrics
+                    .OrderBy(x => x.Value.LastAccessTime)
+                    .Take(eventMetrics.Count - MaxMetricsEntries / 2)
+                    .Select(x => x.Key)
+                    .ToList();
+
+                foreach (var key in toRemove)
+                {
+                    eventMetrics.TryRemove(key, out _);
+                }
+
+                if (toRemove.Count > 0)
+                    logger.LogDebug("Cleaned up {Count} event metrics entries", toRemove.Count);
+            }
+
+            // Cleanup old module metrics
+            if (moduleMetrics.Count > MaxMetricsEntries)
+            {
+                var toRemove = moduleMetrics
+                    .OrderBy(x => x.Value.LastAccessTime)
+                    .Take(moduleMetrics.Count - MaxMetricsEntries / 2)
+                    .Select(x => x.Key)
+                    .ToList();
+
+                foreach (var key in toRemove)
+                {
+                    moduleMetrics.TryRemove(key, out _);
+                }
+
+                if (toRemove.Count > 0)
+                    logger.LogDebug("Cleaned up {Count} module metrics entries", toRemove.Count);
+            }
+
+            // Cleanup inactive circuit breakers
+            if (circuitBreakers.Count > MaxCircuitBreakerEntries)
+            {
+                var toRemove = circuitBreakers
+                    .Where(x => x.Value.State == CircuitBreakerState.Closed &&
+                                x.Value.LastFailureTime < DateTime.UtcNow.AddHours(-1))
+                    .Select(x => x.Key)
+                    .Take(circuitBreakers.Count - MaxCircuitBreakerEntries / 2)
+                    .ToList();
+
+                foreach (var key in toRemove)
+                {
+                    circuitBreakers.TryRemove(key, out _);
+                }
+
+                if (toRemove.Count > 0)
+                    logger.LogDebug("Cleaned up {Count} circuit breaker entries", toRemove.Count);
+            }
+
+            // Cleanup excessive subscriptions
+            foreach (var kvp in stringEventSubscriptions)
+            {
+                if (kvp.Value.Count > MaxSubscriptionEntries)
+                {
+                    var oldCount = kvp.Value.Count;
+                    kvp.Value.RemoveRange(MaxSubscriptionEntries, kvp.Value.Count - MaxSubscriptionEntries);
+                    logger.LogWarning("Trimmed {EventName} subscriptions from {OldCount} to {NewCount}",
+                        kvp.Key, oldCount, MaxSubscriptionEntries);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error during collection cleanup");
+        }
+    }
+
     #endregion
 
     #region IDisposable Implementation
@@ -1298,6 +1388,7 @@ public sealed class EventHandler : IDisposable
         {
             // Stop timers
             metricsResetTimer.Dispose();
+            cleanupTimer?.Dispose();
 
             // Dispose processors
             messageProcessor.Dispose();
@@ -1489,6 +1580,27 @@ public class EventSubscription<T> : IEventSubscription
 }
 
 /// <summary>
+///     Represents the state of a circuit breaker.
+/// </summary>
+public enum CircuitBreakerState
+{
+    /// <summary>
+    ///     Circuit is closed and allowing requests.
+    /// </summary>
+    Closed,
+
+    /// <summary>
+    ///     Circuit is open and blocking requests.
+    /// </summary>
+    Open,
+
+    /// <summary>
+    ///     Circuit is half-open for testing.
+    /// </summary>
+    HalfOpen
+}
+
+/// <summary>
 ///     Implements a circuit breaker pattern for event handlers.
 /// </summary>
 public class CircuitBreaker
@@ -1496,7 +1608,6 @@ public class CircuitBreaker
     private readonly int threshold;
     private readonly TimeSpan timeout;
     private int failureCount;
-    private DateTime lastFailureTime;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="CircuitBreaker" /> class.
@@ -1510,13 +1621,36 @@ public class CircuitBreaker
     }
 
     /// <summary>
+    ///     Gets the last failure time for cleanup purposes.
+    /// </summary>
+    public DateTime LastFailureTime { get; private set; }
+
+    /// <summary>
+    ///     Gets the current state of the circuit breaker.
+    /// </summary>
+    public CircuitBreakerState State
+    {
+        get
+        {
+            if (failureCount >= threshold)
+            {
+                if (DateTime.UtcNow - LastFailureTime < timeout)
+                    return CircuitBreakerState.Open;
+                return CircuitBreakerState.HalfOpen;
+            }
+
+            return CircuitBreakerState.Closed;
+        }
+    }
+
+    /// <summary>
     ///     Gets a value indicating whether the circuit breaker is open (blocking requests).
     /// </summary>
     public bool IsOpen
     {
         get
         {
-            return failureCount >= threshold && DateTime.UtcNow - lastFailureTime < timeout;
+            return State == CircuitBreakerState.Open;
         }
     }
 
@@ -1526,7 +1660,7 @@ public class CircuitBreaker
     public void RecordFailure()
     {
         Interlocked.Increment(ref failureCount);
-        lastFailureTime = DateTime.UtcNow;
+        LastFailureTime = DateTime.UtcNow;
     }
 
     /// <summary>
@@ -1770,6 +1904,11 @@ public class EventMetrics
     public long TotalProcessed;
 
     /// <summary>
+    ///     Gets or sets the last access time for cleanup purposes.
+    /// </summary>
+    public DateTime LastAccessTime { get; set; } = DateTime.UtcNow;
+
+    /// <summary>
     ///     Gets the average execution time per event in milliseconds.
     /// </summary>
     public double AverageExecutionTime
@@ -1811,6 +1950,11 @@ public class ModuleMetrics
     ///     Gets the total execution time for this module in milliseconds.
     /// </summary>
     public long TotalExecutionTime;
+
+    /// <summary>
+    ///     Gets or sets the last access time for cleanup purposes.
+    /// </summary>
+    public DateTime LastAccessTime { get; set; } = DateTime.UtcNow;
 
     /// <summary>
     ///     Gets the average execution time per event for this module in milliseconds.

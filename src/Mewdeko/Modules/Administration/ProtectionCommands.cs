@@ -485,9 +485,9 @@ public partial class Administration
         /// </remarks>
         public async Task AntiList()
         {
-            var (spam, raid, alt, massMention) = Service.GetAntiStats(ctx.Guild.Id);
+            var (spam, raid, alt, massMention, pattern) = Service.GetAntiStats(ctx.Guild.Id);
 
-            if (spam is null && raid is null && alt is null && massMention is null)
+            if (spam is null && raid is null && alt is null && massMention is null && pattern is null)
             {
                 await ReplyConfirmAsync(Strings.ProtNone(ctx.Guild.Id)).ConfigureAwait(false);
                 return;
@@ -516,6 +516,11 @@ public partial class Administration
             if (massMention != null)
             {
                 embed.AddField("Anti-Mass-Mention", GetAntiMassMentionString(massMention).TrimTo(1024), true);
+            }
+
+            if (pattern != null)
+            {
+                embed.AddField("Anti-Pattern", GetAntiPatternString(pattern).TrimTo(1024), true);
             }
 
             await ctx.Channel.EmbedAsync(embed).ConfigureAwait(false);
@@ -580,6 +585,371 @@ public partial class Administration
                 Format.Bold(stats.AntiRaidSettings.UserThreshold.ToString()),
                 Format.Bold(stats.AntiRaidSettings.Seconds.ToString()),
                 actionString);
+        }
+
+        private string? GetAntiPatternString(AntiPatternStats stats)
+        {
+            var settings = stats.AntiPatternSettings;
+            var patterns = settings.AntiPatternPatterns?.ToList();
+            var patternCount = patterns?.Count ?? 0;
+
+            var add = "";
+            if (settings.PunishDuration > 0)
+                add = $" ({TimeSpan.FromMinutes(settings.PunishDuration).Humanize()})";
+
+            return Strings.AntiPatternStats(ctx.Guild.Id,
+                Format.Bold(settings.Action + add),
+                Format.Bold(patternCount.ToString()),
+                Format.Bold(stats.Counter.ToString()));
+        }
+
+        /// <summary>
+        ///     Disables the Anti-Pattern protection for the guild.
+        /// </summary>
+        /// <remarks>
+        ///     This command is restricted to users with Administrator permissions.
+        /// </remarks>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.Administrator)]
+        public async Task AntiPattern()
+        {
+            if (await Service.TryStopAntiPattern(ctx.Guild.Id).ConfigureAwait(false))
+            {
+                await ReplyConfirmAsync(Strings.AntiPatternDisabled(ctx.Guild.Id)).ConfigureAwait(false);
+                return;
+            }
+
+            await ReplyErrorAsync(Strings.AntiPatternNotEnabled(ctx.Guild.Id)).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        ///     Configures the Anti-Pattern protection for the guild, setting the punishment action and optional duration.
+        /// </summary>
+        /// <param name="action">The punishment action to be taken against detected pattern matches.</param>
+        /// <param name="punishTime">Optional: The duration of the punishment, if applicable.</param>
+        /// <remarks>
+        ///     This command is restricted to users with Administrator permissions.
+        /// </remarks>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.Administrator)]
+        public async Task AntiPattern(PunishmentAction action, [Remainder] StoopidTime? punishTime = null)
+        {
+            var punishTimeMinutes = (int?)punishTime?.Time.TotalMinutes ?? 0;
+
+            if (punishTimeMinutes < 0)
+                return;
+
+            switch (action)
+            {
+                case PunishmentAction.Timeout when punishTime?.Time.Days > 28:
+                    await ReplyErrorAsync("Timeout length cannot be longer than 28 days.").ConfigureAwait(false);
+                    return;
+                case PunishmentAction.Timeout when punishTime?.Time == TimeSpan.Zero:
+                    await ReplyErrorAsync("Timeout punishment requires a duration.").ConfigureAwait(false);
+                    return;
+            }
+
+            var stats = await Service.StartAntiPatternAsync(ctx.Guild.Id, action, punishTimeMinutes)
+                .ConfigureAwait(false);
+
+            if (stats == null)
+            {
+                await ReplyErrorAsync(Strings.AntiPatternFailedStart(ctx.Guild.Id)).ConfigureAwait(false);
+                return;
+            }
+
+            var durationText = punishTimeMinutes > 0
+                ? $" for **{TimeSpan.FromMinutes(punishTimeMinutes).Humanize()}**"
+                : "";
+            await ReplyConfirmAsync(Strings.AntiPatternEnabled(ctx.Guild.Id, action.ToString(), durationText))
+                .ConfigureAwait(false);
+        }
+
+        /// <summary>
+        ///     Configures the Anti-Pattern protection for the guild, setting the punishment action with a role-based punishment.
+        /// </summary>
+        /// <param name="action">The punishment action to be taken against detected pattern matches.</param>
+        /// <param name="role">The role to be assigned to users who match patterns.</param>
+        /// <remarks>
+        ///     This command is restricted to users with Administrator permissions.
+        /// </remarks>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.Administrator)]
+        public async Task AntiPattern(PunishmentAction action, [Remainder] IRole role)
+        {
+            var stats = await Service.StartAntiPatternAsync(ctx.Guild.Id, action, roleId: role.Id)
+                .ConfigureAwait(false);
+
+            if (stats == null)
+            {
+                await ReplyErrorAsync(Strings.AntiPatternFailedStart(ctx.Guild.Id)).ConfigureAwait(false);
+                return;
+            }
+
+            await ReplyConfirmAsync(Strings.AntiPatternEnabledRole(ctx.Guild.Id, action.ToString(), role.Mention))
+                .ConfigureAwait(false);
+        }
+
+        /// <summary>
+        ///     Adds a regex pattern to the Anti-Pattern protection.
+        /// </summary>
+        /// <param name="pattern">The regex pattern to match against usernames/display names.</param>
+        /// <param name="name">Optional name for the pattern.</param>
+        /// <param name="checkUsername">Whether to check usernames against this pattern (default: true).</param>
+        /// <param name="checkDisplayName">Whether to check display names against this pattern (default: true).</param>
+        /// <remarks>
+        ///     This command is restricted to users with Administrator permissions.
+        /// </remarks>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.Administrator)]
+        public async Task PatternAdd(string pattern, string? name = null, bool checkUsername = true,
+            bool checkDisplayName = true)
+        {
+            if (await Service.AddPatternAsync(ctx.Guild.Id, pattern, name, checkUsername, checkDisplayName)
+                    .ConfigureAwait(false))
+            {
+                await ReplyConfirmAsync(Strings.PatternAdded(ctx.Guild.Id, name ?? "Unnamed", pattern, checkUsername,
+                    checkDisplayName)).ConfigureAwait(false);
+            }
+            else
+            {
+                await ReplyErrorAsync(Strings.PatternAddFailed(ctx.Guild.Id)).ConfigureAwait(false);
+            }
+        }
+
+        /// <summary>
+        ///     Removes a pattern from the Anti-Pattern protection.
+        /// </summary>
+        /// <param name="patternId">The ID of the pattern to remove.</param>
+        /// <remarks>
+        ///     This command is restricted to users with Administrator permissions.
+        /// </remarks>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.Administrator)]
+        public async Task PatternRemove(int patternId)
+        {
+            if (await Service.RemovePatternAsync(ctx.Guild.Id, patternId).ConfigureAwait(false))
+            {
+                await ReplyConfirmAsync(Strings.PatternRemoved(ctx.Guild.Id, patternId)).ConfigureAwait(false);
+            }
+            else
+            {
+                await ReplyErrorAsync(Strings.PatternRemoveFailed(ctx.Guild.Id)).ConfigureAwait(false);
+            }
+        }
+
+        /// <summary>
+        ///     Lists all patterns configured for the Anti-Pattern protection.
+        /// </summary>
+        /// <remarks>
+        ///     This command is restricted to users with Administrator permissions.
+        /// </remarks>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.Administrator)]
+        public async Task PatternList()
+        {
+            var (_, _, _, _, patternStats) = Service.GetAntiStats(ctx.Guild.Id);
+
+            if (patternStats == null)
+            {
+                await ReplyErrorAsync(Strings.AntiPatternNotEnabled(ctx.Guild.Id)).ConfigureAwait(false);
+                return;
+            }
+
+            var patterns = patternStats.AntiPatternSettings.AntiPatternPatterns?.ToList();
+            if (patterns == null || patterns.Count == 0)
+            {
+                await ReplyConfirmAsync(Strings.PatternListEmpty(ctx.Guild.Id)).ConfigureAwait(false);
+                return;
+            }
+
+            var embed = new EmbedBuilder()
+                .WithOkColor()
+                .WithTitle(Strings.PatternListTitle(ctx.Guild.Id))
+                .WithDescription($"**Action:** {patternStats.Action}\n**Triggered:** {patternStats.Counter} times");
+
+            foreach (var pattern in patterns.Take(10)) // Limit to 10 patterns to avoid embed limits
+            {
+                var fieldName = $"ID: {pattern.Id} - {pattern.Name ?? "Unnamed"}";
+                var fieldValue = $"**Pattern:** `{pattern.Pattern}`\n" +
+                                 $"**Username:** {(pattern.CheckUsername ? "✅" : "❌")}\n" +
+                                 $"**Display Name:** {(pattern.CheckDisplayName ? "✅" : "❌")}";
+                embed.AddField(fieldName, fieldValue, true);
+            }
+
+            if (patterns.Count > 10)
+            {
+                embed.WithFooter($"Showing first 10 of {patterns.Count} patterns");
+            }
+
+            await ctx.Channel.EmbedAsync(embed).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        ///     Configures advanced anti-pattern settings.
+        /// </summary>
+        /// <param name="setting">The setting to configure.</param>
+        /// <param name="value">The value to set.</param>
+        /// <remarks>
+        ///     This command is restricted to users with Administrator permissions.
+        /// </remarks>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.Administrator)]
+        public async Task PatternConfig(string setting, string value)
+        {
+            var (_, _, _, _, patternStats) = Service.GetAntiStats(ctx.Guild.Id);
+
+            if (patternStats == null)
+            {
+                await ReplyErrorAsync(Strings.AntiPatternNotEnabled(ctx.Guild.Id)).ConfigureAwait(false);
+                return;
+            }
+
+            var success = false;
+            var settingLower = setting.ToLower();
+
+            switch (settingLower)
+            {
+                case "accountage":
+                    if (bool.TryParse(value, out var checkAccountAge))
+                    {
+                        success = await Service.UpdateAntiPatternConfigAsync(ctx.Guild.Id,
+                            checkAccountAge);
+                    }
+
+                    break;
+                case "maxaccountage":
+                    if (int.TryParse(value, out var maxAccountAgeMonths) && maxAccountAgeMonths > 0)
+                    {
+                        success = await Service.UpdateAntiPatternConfigAsync(ctx.Guild.Id,
+                            maxAccountAgeMonths: maxAccountAgeMonths);
+                    }
+
+                    break;
+                case "jointiming":
+                    if (bool.TryParse(value, out var checkJoinTiming))
+                    {
+                        success = await Service.UpdateAntiPatternConfigAsync(ctx.Guild.Id,
+                            checkJoinTiming: checkJoinTiming);
+                    }
+
+                    break;
+                case "maxjoinhours":
+                    if (double.TryParse(value, out var maxJoinHours) && maxJoinHours > 0)
+                    {
+                        success = await Service.UpdateAntiPatternConfigAsync(ctx.Guild.Id, maxJoinHours: maxJoinHours);
+                    }
+
+                    break;
+                case "batchcreation":
+                    if (bool.TryParse(value, out var checkBatchCreation))
+                    {
+                        success = await Service.UpdateAntiPatternConfigAsync(ctx.Guild.Id,
+                            checkBatchCreation: checkBatchCreation);
+                    }
+
+                    break;
+                case "offlinestatus":
+                    if (bool.TryParse(value, out var checkOfflineStatus))
+                    {
+                        success = await Service.UpdateAntiPatternConfigAsync(ctx.Guild.Id,
+                            checkOfflineStatus: checkOfflineStatus);
+                    }
+
+                    break;
+                case "newaccounts":
+                    if (bool.TryParse(value, out var checkNewAccounts))
+                    {
+                        success = await Service.UpdateAntiPatternConfigAsync(ctx.Guild.Id,
+                            checkNewAccounts: checkNewAccounts);
+                    }
+
+                    break;
+                case "newaccountdays":
+                    if (int.TryParse(value, out var newAccountDays) && newAccountDays > 0)
+                    {
+                        success = await Service.UpdateAntiPatternConfigAsync(ctx.Guild.Id,
+                            newAccountDays: newAccountDays);
+                    }
+
+                    break;
+                case "minimumscore":
+                    if (int.TryParse(value, out var minimumScore) && minimumScore > 0)
+                    {
+                        success = await Service.UpdateAntiPatternConfigAsync(ctx.Guild.Id, minimumScore: minimumScore);
+                    }
+
+                    break;
+                default:
+                    await ReplyErrorAsync(Strings.PatternConfigUnknownSetting(ctx.Guild.Id, setting))
+                        .ConfigureAwait(false);
+                    return;
+            }
+
+            if (success)
+            {
+                await ReplyConfirmAsync(Strings.PatternConfigUpdated(ctx.Guild.Id, setting, value))
+                    .ConfigureAwait(false);
+            }
+            else
+            {
+                await ReplyErrorAsync(Strings.PatternConfigUpdateFailed(ctx.Guild.Id, setting)).ConfigureAwait(false);
+            }
+        }
+
+        /// <summary>
+        ///     Shows the current anti-pattern configuration.
+        /// </summary>
+        /// <remarks>
+        ///     This command is restricted to users with Administrator permissions.
+        /// </remarks>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.Administrator)]
+        public async Task PatternConfig()
+        {
+            var (_, _, _, _, patternStats) = Service.GetAntiStats(ctx.Guild.Id);
+
+            if (patternStats == null)
+            {
+                await ReplyErrorAsync(Strings.AntiPatternNotEnabled(ctx.Guild.Id)).ConfigureAwait(false);
+                return;
+            }
+
+            var settings = patternStats.AntiPatternSettings;
+            var embed = new EmbedBuilder()
+                .WithOkColor()
+                .WithTitle(Strings.PatternConfigTitle(ctx.Guild.Id))
+                .WithDescription($"**Action:** {settings.Action}\n**Minimum Score:** {settings.MinimumScore}")
+                .AddField("Account Age Check",
+                    $"**Enabled:** {settings.CheckAccountAge}\n**Max Age:** {settings.MaxAccountAgeMonths} months",
+                    true)
+                .AddField("Join Timing Check",
+                    $"**Enabled:** {settings.CheckJoinTiming}\n**Max Hours:** {settings.MaxJoinHours}h", true)
+                .AddField("Batch Creation Check", $"**Enabled:** {settings.CheckBatchCreation}", true)
+                .AddField("Offline Status Check", $"**Enabled:** {settings.CheckOfflineStatus}", true)
+                .AddField("New Account Check",
+                    $"**Enabled:** {settings.CheckNewAccounts}\n**Days:** {settings.NewAccountDays}", true)
+                .AddField("Statistics",
+                    $"**Patterns:** {settings.AntiPatternPatterns?.Count() ?? 0}\n**Triggered:** {patternStats.Counter} times",
+                    true);
+
+            await ctx.Channel.EmbedAsync(embed).ConfigureAwait(false);
         }
     }
 }

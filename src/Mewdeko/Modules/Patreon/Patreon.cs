@@ -8,6 +8,9 @@ namespace Mewdeko.Modules.Patreon;
 /// <summary>
 ///     Commands for managing Patreon integration and announcements.
 /// </summary>
+/// <param name="creds">The creds parameter.</param>
+/// <param name="patreonApiClient">The patreonApiClient parameter.</param>
+/// <param name="logger">The logger instance for structured logging.</param>
 public class Patreon(IBotCredentials creds, PatreonApiClient patreonApiClient, ILogger<Patreon> logger)
     : MewdekoModuleBase<PatreonService>
 {
@@ -554,7 +557,7 @@ public class Patreon(IBotCredentials creds, PatreonApiClient patreonApiClient, I
     [RequireContext(ContextType.Guild)]
     public async Task PatreonTop(int count = 10)
     {
-        if (count < 1 || count > 20) count = 10;
+        if (count is < 1 or > 20) count = 10;
 
         var supporters = await Service.GetActiveSupportersAsync(ctx.Guild.Id);
 

@@ -8,7 +8,7 @@ using Discord.Net;
 using Discord.Rest;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
-using LinqToDB;
+using LinqToDB.Async;
 using LinqToDB.Data;
 using Mewdeko.Common.Attributes.InteractionCommands;
 using Mewdeko.Common.Attributes.TextCommands;
@@ -47,8 +47,7 @@ public class SlashOwnerOnly(
     IDataConnectionFactory dbFactory,
     IDataCache cache,
     GuildSettingsService guildSettings,
-    CommandHandler commandHandler,
-    ILogger<SlashOwnerOnly> logger)
+    CommandHandler commandHandler)
     : MewdekoSlashModuleBase<OwnerOnlyService>
 {
     /// <summary>
@@ -95,8 +94,7 @@ public class SlashOwnerOnly(
             Content = $"{await guildSettings.GetPrefix(ctx.Guild)}{args}", Author = user, Channel = ctx.Channel
         };
         commandHandler.AddCommandToParseQueue(msg);
-        _ = Task.Run(() => commandHandler.ExecuteCommandsInChannelAsync(ctx.Interaction.Id))
-            .ConfigureAwait(false);
+        _ = commandHandler.ExecuteCommandsInChannelAsync(ctx.Interaction.Id);
     }
 
     /// <summary>
@@ -741,6 +739,7 @@ public class SlashOwnerOnly(
     /// <param name="client">The Discord client used to interact with the Discord API.</param>
     /// <param name="settingServices">Collection of services for managing bot settings.</param>
     /// <param name="localization">Service for handling localization and translations.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     [Discord.Interactions.Group("config", "Commands to manage various bot things")]
     public class ConfigCommands(
         GuildSettingsService guildSettings,

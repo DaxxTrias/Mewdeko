@@ -15,6 +15,8 @@ public class AiModelAutoCompleter : AutocompleteHandler
     /// <summary>
     ///     Initializes a new instance of the AiModelAutoCompleter class.
     /// </summary>
+    /// <param name="aiService">The aiservice service.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public AiModelAutoCompleter(AiService aiService, ILogger<AiModelAutoCompleter> logger)
     {
         this.aiService = aiService;

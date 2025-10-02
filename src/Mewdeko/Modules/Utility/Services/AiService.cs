@@ -7,6 +7,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using DataModel;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Common.Configs;
 using Mewdeko.Modules.Utility.Services.Impl;
 using Mewdeko.Services.Strings;
@@ -62,6 +63,14 @@ public class AiService : INService
     /// <summary>
     ///     Initializes a new instance of the <see cref="AiService" /> class.
     /// </summary>
+    /// <param name="dbFactory">The database connection factory.</param>
+    /// <param name="httpFactory">The httpfactory factory.</param>
+    /// <param name="strings">The localized strings service.</param>
+    /// <param name="config">The bot configuration settings.</param>
+    /// <param name="handler">The handler parameter.</param>
+    /// <param name="client">The Discord client instance.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
+    /// <param name="serviceProvider">The service provider for dependency injection.</param>
     public AiService(IDataConnectionFactory dbFactory, IHttpClientFactory httpFactory,
         GeneratedBotStrings strings, BotConfig config, EventHandler handler, DiscordShardedClient client,
         ILogger<AiService> logger, IServiceProvider serviceProvider)
@@ -1159,63 +1168,65 @@ public class AiService : INService
 
             var eventType = typeProperty.GetString();
 
-            // Handle content_block_start with tool_use
-            if (eventType == "content_block_start")
+            switch (eventType)
             {
-                if (root.TryGetProperty("content_block", out var contentBlock) &&
-                    contentBlock.TryGetProperty("type", out var blockType) &&
-                    blockType.GetString() == "tool_use")
+                // Handle content_block_start with tool_use
+                case "content_block_start":
                 {
-                    // Start of a tool use - extract name and ID
-                    if (contentBlock.TryGetProperty("name", out var nameProperty) &&
-                        contentBlock.TryGetProperty("id", out var idProperty))
+                    if (root.TryGetProperty("content_block", out var contentBlock) &&
+                        contentBlock.TryGetProperty("type", out var blockType) &&
+                        blockType.GetString() == "tool_use")
                     {
-                        currentToolName = nameProperty.GetString();
-                        currentToolId = idProperty.GetString();
-                        currentToolInput = "";
-                        isCollectingToolInput = true;
+                        // Start of a tool use - extract name and ID
+                        if (contentBlock.TryGetProperty("name", out var nameProperty) &&
+                            contentBlock.TryGetProperty("id", out var idProperty))
+                        {
+                            currentToolName = nameProperty.GetString();
+                            currentToolId = idProperty.GetString();
+                            currentToolInput = "";
+                            isCollectingToolInput = true;
 
-                        logger.LogInformation($"Started tool use: {currentToolName} with ID: {currentToolId}");
+                            logger.LogInformation($"Started tool use: {currentToolName} with ID: {currentToolId}");
+                        }
                     }
+
+                    return;
                 }
-
-                return;
-            }
-
-            // Handle content_block_delta with input_json_delta
-            if (eventType == "content_block_delta" && isCollectingToolInput)
-            {
-                if (root.TryGetProperty("delta", out var delta) &&
-                    delta.TryGetProperty("type", out var deltaType) &&
-                    deltaType.GetString() == "input_json_delta" &&
-                    delta.TryGetProperty("partial_json", out var partialJson))
+                // Handle content_block_delta with input_json_delta
+                case "content_block_delta" when isCollectingToolInput:
                 {
-                    var jsonPart = partialJson.GetString();
-                    currentToolInput += jsonPart;
-                    logger.LogInformation($"Accumulated tool input: {currentToolInput}");
-                }
-
-                return;
-            }
-
-            // Handle content_block_stop - complete the tool request
-            if (eventType == "content_block_stop" && isCollectingToolInput)
-            {
-                logger.LogInformation($"Tool input complete: {currentToolInput}");
-
-                if (!string.IsNullOrEmpty(currentToolName) && !string.IsNullOrEmpty(currentToolId))
-                {
-                    toolUseRequests.Add(new ToolUseRequest
+                    if (root.TryGetProperty("delta", out var delta) &&
+                        delta.TryGetProperty("type", out var deltaType) &&
+                        deltaType.GetString() == "input_json_delta" &&
+                        delta.TryGetProperty("partial_json", out var partialJson))
                     {
-                        Id = currentToolId, Name = currentToolName, InputJson = currentToolInput
-                    });
-                }
+                        var jsonPart = partialJson.GetString();
+                        currentToolInput += jsonPart;
+                        logger.LogInformation($"Accumulated tool input: {currentToolInput}");
+                    }
 
-                // Reset tool state
-                currentToolName = null;
-                currentToolId = null;
-                currentToolInput = "";
-                isCollectingToolInput = false;
+                    return;
+                }
+                // Handle content_block_stop - complete the tool request
+                case "content_block_stop" when isCollectingToolInput:
+                {
+                    logger.LogInformation($"Tool input complete: {currentToolInput}");
+
+                    if (!string.IsNullOrEmpty(currentToolName) && !string.IsNullOrEmpty(currentToolId))
+                    {
+                        toolUseRequests.Add(new ToolUseRequest
+                        {
+                            Id = currentToolId, Name = currentToolName, InputJson = currentToolInput
+                        });
+                    }
+
+                    // Reset tool state
+                    currentToolName = null;
+                    currentToolId = null;
+                    currentToolInput = "";
+                    isCollectingToolInput = false;
+                    break;
+                }
             }
         }
         catch (Exception ex)

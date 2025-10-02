@@ -95,11 +95,15 @@ public static class ConfigurationValidator
         var issues = new List<string>();
         var lines = options.Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
-        if (lines.Length == 0)
-            issues.Add("❌ Select menu must have at least one option");
-
-        if (lines.Length > 25)
-            issues.Add("❌ Select menu can have maximum 25 options");
+        switch (lines.Length)
+        {
+            case 0:
+                issues.Add("❌ Select menu must have at least one option");
+                break;
+            case > 25:
+                issues.Add("❌ Select menu can have maximum 25 options");
+                break;
+        }
 
         foreach (var line in lines)
         {

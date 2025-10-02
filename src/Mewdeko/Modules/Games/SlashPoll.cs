@@ -378,7 +378,7 @@ public class SlashPoll : MewdekoSlashModuleBase<PollService>
             }
 
             if (optionResults.Length > 0)
-                embed.AddField(Strings.PollStatsResults(ctx.Guild.Id), optionResults.ToString(), false);
+                embed.AddField(Strings.PollStatsResults(ctx.Guild.Id), optionResults.ToString());
 
             embed.AddField(Strings.PollStatsCreated(ctx.Guild.Id),
                 $"<t:{((DateTimeOffset)poll.CreatedAt).ToUnixTimeSeconds()}:R>", true);
@@ -477,16 +477,14 @@ public class SlashPoll : MewdekoSlashModuleBase<PollService>
                 .Where(opt => !string.IsNullOrWhiteSpace(opt))
                 .ToList();
 
-            if (optionParts.Count < 2)
+            switch (optionParts.Count)
             {
-                await ctx.Interaction.SendEphemeralErrorAsync(Strings.PollTemplateMinOptions(ctx.Guild.Id), Config);
-                return;
-            }
-
-            if (optionParts.Count > 25)
-            {
-                await ctx.Interaction.SendEphemeralErrorAsync(Strings.PollTemplateMaxOptions(ctx.Guild.Id), Config);
-                return;
+                case < 2:
+                    await ctx.Interaction.SendEphemeralErrorAsync(Strings.PollTemplateMinOptions(ctx.Guild.Id), Config);
+                    return;
+                case > 25:
+                    await ctx.Interaction.SendEphemeralErrorAsync(Strings.PollTemplateMaxOptions(ctx.Guild.Id), Config);
+                    return;
             }
 
             var pollOptions = optionParts.Select(opt => new PollOptionData
@@ -507,8 +505,8 @@ public class SlashPoll : MewdekoSlashModuleBase<PollService>
                 .WithTitle(Strings.PollTemplateCreatedTitle(ctx.Guild.Id))
                 .WithColor(Color.Green)
                 .WithDescription(Strings.PollTemplateCreatedDesc(ctx.Guild.Id, template.Name))
-                .AddField(Strings.PollFieldQuestion(ctx.Guild.Id), template.Question, false)
-                .AddField(Strings.PollFieldOptions(ctx.Guild.Id), string.Join(", ", optionParts), false)
+                .AddField(Strings.PollFieldQuestion(ctx.Guild.Id), template.Question)
+                .AddField(Strings.PollFieldOptions(ctx.Guild.Id), string.Join(", ", optionParts))
                 .WithCurrentTimestamp();
 
             await ctx.Interaction.FollowupAsync(embed: embed.Build());
@@ -617,6 +615,8 @@ public class SlashPoll : MewdekoSlashModuleBase<PollService>
     private async Task<Embed> BuildPollEmbed(string question, List<PollOptionData> options, PollType pollType,
         int? pollId = null)
     {
+        await Task.CompletedTask;
+
         var typeIcon = pollType switch
         {
             PollType.YesNo => "✅❌",

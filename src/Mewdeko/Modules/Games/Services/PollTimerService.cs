@@ -1,5 +1,6 @@
 using System.Threading;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Services.Strings;
 using Poll = DataModel.Poll;
@@ -66,7 +67,7 @@ public class PollTimerService : INService, IReadyExecutor
             var poll = await db.GetTable<Poll>()
                 .FirstOrDefaultAsync(p => p.Id == pollId);
 
-            if (poll == null || !poll.IsActive)
+            if (poll is not { IsActive: true })
                 return false;
 
             poll.ExpiresAt = DateTime.UtcNow.Add(duration);
@@ -97,7 +98,7 @@ public class PollTimerService : INService, IReadyExecutor
             var poll = await db.GetTable<Poll>()
                 .FirstOrDefaultAsync(p => p.Id == pollId);
 
-            if (poll == null || !poll.IsActive)
+            if (poll is not { IsActive: true })
                 return false;
 
             var newExpiration = poll.ExpiresAt?.Add(additionalTime) ?? DateTime.UtcNow.Add(additionalTime);
@@ -319,11 +320,11 @@ public class PollTimerService : INService, IReadyExecutor
             if (stats?.TotalVotes > 0)
             {
                 embed.AddField("Final Results",
-                    $"Total Votes: {stats.TotalVotes}\nUnique Voters: {stats.UniqueVoters}", false);
+                    $"Total Votes: {stats.TotalVotes}\nUnique Voters: {stats.UniqueVoters}");
             }
             else
             {
-                embed.AddField("Final Results", "No votes were cast", false);
+                embed.AddField("Final Results", "No votes were cast");
             }
 
             await message.ModifyAsync(msg =>

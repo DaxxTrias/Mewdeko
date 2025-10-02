@@ -2,6 +2,7 @@ using System.Text.Json;
 using DataModel;
 using Discord.Commands;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Controllers.Common.Permissions;
 using Mewdeko.Modules.Administration.Services;
@@ -20,6 +21,7 @@ namespace Mewdeko.Controllers;
 /// <param name="dpoService">Service for managing Discord permission overrides</param>
 /// <param name="cmdServ">Discord command service for command execution and information</param>
 /// <param name="dbFactory">Provider for database contexts</param>
+/// <param name="logger">The logger instance for structured logging.</param>
 [ApiController]
 [Route("botapi/[controller]")]
 [Authorize("ApiKeyPolicy")]

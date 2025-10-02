@@ -1,9 +1,11 @@
 using System.Text.Json;
 using DataModel;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Database.DbContextStuff;
 using Mewdeko.Modules.Currency.Services;
 using Mewdeko.Modules.Xp.Events;
+using Mewdeko.Modules.Xp.Extensions;
 using Mewdeko.Modules.Xp.Models;
 using Mewdeko.Services.Strings;
 using StackExchange.Redis;
@@ -19,9 +21,9 @@ public class XpRewardManager : INService
     private readonly DiscordShardedClient client;
     private readonly ICurrencyService currencyService;
     private readonly IDataConnectionFactory dbFactory;
-    private readonly EventHandler eventHandler;
     private readonly ILogger<XpRewardManager> logger;
     private readonly GeneratedBotStrings Strings;
+    private readonly XpService xpService;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="XpRewardManager" /> class.
@@ -30,12 +32,16 @@ public class XpRewardManager : INService
     /// <param name="dbFactory">The database factory.</param>
     /// <param name="currencyService">The currency service.</param>
     /// <param name="cacheManager">The cache manager.</param>
+    /// <param name="strings">The localized strings service.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
+    /// <param name="eventHandler">The event handler service.</param>
+    /// <param name="xpService">The xp service.</param>
     public XpRewardManager(
         DiscordShardedClient client,
         IDataConnectionFactory dbFactory,
         ICurrencyService currencyService,
         XpCacheManager cacheManager, GeneratedBotStrings strings, ILogger<XpRewardManager> logger,
-        EventHandler eventHandler)
+        EventHandler eventHandler, XpService xpService)
     {
         this.client = client;
         this.dbFactory = dbFactory;
@@ -43,7 +49,7 @@ public class XpRewardManager : INService
         this.cacheManager = cacheManager;
         Strings = strings;
         this.logger = logger;
-        this.eventHandler = eventHandler;
+        this.xpService = xpService;
 
         // Subscribe individual methods to XP level change events for better separation of concerns
         eventHandler.Subscribe("XpLevelChanged", "XpRewardManager-Notifications", HandleLevelUpNotificationAsync);
@@ -89,7 +95,7 @@ public class XpRewardManager : INService
             // Immediately cache the new/updated reward
             var cacheKey = $"xp:rewards:{guildId}:role:{level}";
             var serializedReward = JsonSerializer.Serialize(rewardToCache);
-            await cacheManager.GetRedisDatabase().StringSetAsync(cacheKey, serializedReward, TimeSpan.FromMinutes(30));
+            await cacheManager.GetRedisDatabase().StringSetAsync(cacheKey, serializedReward);
 
             logger.LogInformation("Set and cached role reward for guild {GuildId} level {Level}: Role {RoleId}",
                 guildId, level, roleId.Value);
@@ -154,7 +160,7 @@ public class XpRewardManager : INService
     }
 
     /// <summary>
-    ///     Sends XP level-up notifications.
+    ///     Sends XP level-up notifications using customizable message templates.
     /// </summary>
     /// <param name="notifications">The list of notifications to send.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
@@ -173,52 +179,103 @@ public class XpRewardManager : INService
                 if (guild == null || user == null)
                     continue;
 
-                // Get notification message template
+                // Get XP settings and user preferences
                 var settings = await cacheManager.GetGuildXpSettingsAsync(notification.GuildId);
-                var messageTemplate = settings.LevelUpMessage;
+                var userPrefs = await GetUserPreferencesAsync(notification.UserId);
+                var pingsDisabled = userPrefs?.LevelUpPingsDisabled ?? false;
+                var isFirstLevelUp = !userPrefs.LevelUpInfoShown;
 
-                // Format the message
-                var formattedMessage = messageTemplate
-                    .Replace("{UserMention}", user.Mention)
-                    .Replace("{UserName}", user.Username)
-                    .Replace("{Level}", notification.Level.ToString())
-                    .Replace("{Server}", guild.Name)
-                    .Replace("{Guild}", guild.Name);
+                // Get custom level-up messages for this guild
+                var customMessages = await GetCustomLevelUpMessagesAsync(notification.GuildId);
+                string messageTemplate;
 
-                if (!string.IsNullOrEmpty(notification.Sources))
+                if (customMessages.Count > 0)
                 {
-                    formattedMessage += $" (Source: {notification.Sources})";
+                    // Pick a random message from the enabled ones
+                    var random = new Random();
+                    messageTemplate = customMessages[random.Next(customMessages.Count)];
+                }
+                else
+                {
+                    // Use default embed - created directly in notification methods
+                    messageTemplate = null;
+                }
+
+                // Get user stats for placeholders
+                var userStats = await xpService.GetUserXpStatsAsync(notification.GuildId, notification.UserId);
+                var currentLevelXp = XpCalculator.CalculateLevelXp(userStats.TotalXp, notification.Level,
+                    (XpCurveType)settings.XpCurveType);
+                var nextLevelXp =
+                    XpCalculator.CalculateXpForLevel(notification.Level + 1, (XpCurveType)settings.XpCurveType) -
+                    XpCalculator.CalculateXpForLevel(notification.Level, (XpCurveType)settings.XpCurveType);
+                var rank = await GetUserRankAsync(notification.GuildId, notification.UserId);
+
+                // Build the replacer with all XP placeholders
+                var replacer = new ReplacementBuilder()
+                    .WithDefault(user, null, guild, client)
+                    .WithXpPlaceholders(
+                        user,
+                        guild,
+                        null, // We don't track the specific channel for notifications
+                        notification.Level - 1,
+                        notification.Level,
+                        (int)userStats!.TotalXp,
+                        (int)currentLevelXp,
+                        (int)nextLevelXp,
+                        0, // We don't track this in notifications currently
+                        rank,
+                        null,
+                        pingsDisabled)
+                    .Build();
+
+                // Determine the target channel
+                ITextChannel? targetChannel = null;
+                if (notification.NotificationType == XpNotificationType.Channel)
+                {
+                    // Use custom level-up channel if set, otherwise use the notification channel
+                    var channelId = settings.LevelUpChannel != 0 ? settings.LevelUpChannel : notification.ChannelId;
+                    targetChannel = guild.GetTextChannel(channelId);
                 }
 
                 // Send the notification
                 if (notification.NotificationType == XpNotificationType.Dm)
                 {
-                    var dmChannel = await user.CreateDMChannelAsync();
-                    if (dmChannel != null)
+                    // Skip DM notifications if user has level-up pings disabled
+                    if (!pingsDisabled)
                     {
-                        await dmChannel.SendMessageAsync(
-                            embed: new EmbedBuilder()
-                                .WithColor(Color.Green)
-                                .WithDescription(formattedMessage)
-                                .WithTitle(Strings.LevelUpTitle(guild.Id))
-                                .Build()
-                        );
+                        if (messageTemplate != null)
+                        {
+                            var processedMessage = ReplacementBuilderExtensions.ProcessLevelUpMessage(
+                                messageTemplate, replacer, user, pingsDisabled);
+                            await SendDmNotificationAsync(user, processedMessage, guild.Id);
+                        }
+                        else
+                        {
+                            await SendDefaultDmNotificationAsync(user, replacer, guild.Id, notification.Level,
+                                userStats!.TotalXp, rank, pingsDisabled);
+                        }
                     }
                 }
-                else // Channel
+                else if (targetChannel != null)
                 {
-                    var channel = guild.GetTextChannel(notification.ChannelId);
-                    var curUser = guild.GetUser(client.CurrentUser.Id);
-                    var perms = curUser.GetPermissions(channel);
-                    if (channel != null && perms.Has(ChannelPermission.SendMessages))
+                    if (messageTemplate != null)
                     {
-                        await channel.SendMessageAsync(
-                            embed: new EmbedBuilder()
-                                .WithColor(Color.Green)
-                                .WithDescription(formattedMessage)
-                                .Build()
-                        );
+                        var processedMessage = ReplacementBuilderExtensions.ProcessLevelUpMessage(
+                            messageTemplate, replacer, user, pingsDisabled);
+                        await SendChannelNotificationAsync(targetChannel, processedMessage, guild);
                     }
+                    else
+                    {
+                        await SendDefaultChannelNotificationAsync(targetChannel, replacer, guild, user,
+                            notification.Level, userStats!.TotalXp, rank, pingsDisabled);
+                    }
+                }
+
+                // Send first-time info message if this is the user's first level-up notification
+                if (isFirstLevelUp)
+                {
+                    await SendFirstTimeInfoMessageAsync(user, guild, notification.NotificationType, targetChannel);
+                    await MarkUserAsSeenLevelUpInfoAsync(notification.UserId);
                 }
             }
             catch (Exception ex)
@@ -227,6 +284,290 @@ public class XpRewardManager : INService
                     notification.UserId, notification.GuildId);
             }
         }
+    }
+
+    /// <summary>
+    ///     Sends a DM notification to a user.
+    /// </summary>
+    /// <param name="user">The user to send the notification to.</param>
+    /// <param name="message">The processed message content.</param>
+    /// <param name="guildId">The guild ID for localization.</param>
+    private async Task SendDmNotificationAsync(IGuildUser user, string message, ulong guildId)
+    {
+        try
+        {
+            var dmChannel = await user.CreateDMChannelAsync();
+            if (dmChannel != null)
+            {
+                // Try to parse as embed first, fall back to plain text
+                if (SmartEmbed.TryParse(message, guildId, out var embed, out var plainText, out var components))
+                {
+                    await dmChannel.SendMessageAsync(plainText, embeds: embed, components: components?.Build());
+                }
+                else
+                {
+                    // Create a default embed with the message
+                    await dmChannel.SendMessageAsync(
+                        embed: new EmbedBuilder()
+                            .WithColor(Color.Green)
+                            .WithDescription(message)
+                            .WithTitle(Strings.LevelUpTitle(guildId))
+                            .Build()
+                    );
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to send DM notification to user {UserId}", user.Id);
+        }
+    }
+
+    /// <summary>
+    ///     Sends a channel notification.
+    /// </summary>
+    /// <param name="channel">The channel to send the notification to.</param>
+    /// <param name="message">The processed message content.</param>
+    /// <param name="guild">The guild for permission checking.</param>
+    private async Task SendChannelNotificationAsync(ITextChannel channel, string message, IGuild guild)
+    {
+        try
+        {
+            var botUser = await guild.GetUserAsync(client.CurrentUser.Id);
+            var perms = botUser.GetPermissions(channel);
+
+            if (!perms.Has(ChannelPermission.SendMessages))
+                return;
+
+            // Try to parse as embed first, fall back to plain text
+            if (SmartEmbed.TryParse(message, guild.Id, out var embed, out var plainText, out var components))
+            {
+                await channel.SendMessageAsync(plainText, embeds: embed, components: components?.Build());
+            }
+            else
+            {
+                // Create a default embed with the message
+                await channel.SendMessageAsync(
+                    embed: new EmbedBuilder()
+                        .WithColor(Color.Green)
+                        .WithDescription(message)
+                        .Build()
+                );
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to send channel notification to {ChannelId}", channel.Id);
+        }
+    }
+
+    /// <summary>
+    ///     Sends a default DM notification with a beautiful embed.
+    /// </summary>
+    /// <param name="user">The user to send the notification to.</param>
+    /// <param name="replacer">The replacer with placeholders.</param>
+    /// <param name="guildId">The guild ID for localization.</param>
+    /// <param name="level">The new level.</param>
+    /// <param name="totalXp">The user's total XP.</param>
+    /// <param name="rank">The user's rank.</param>
+    /// <param name="pingsDisabled">Whether pings are disabled.</param>
+    private async Task SendDefaultDmNotificationAsync(IGuildUser user, Replacer replacer, ulong guildId, int level,
+        long totalXp, int rank, bool pingsDisabled)
+    {
+        try
+        {
+            var dmChannel = await user.CreateDMChannelAsync();
+            if (dmChannel != null)
+            {
+                var userMention = pingsDisabled ? user.Username.EscapeWeirdStuff() : user.Mention;
+
+                var embed = new EmbedBuilder()
+                    .WithTitle("Level Up!")
+                    .WithDescription($"Congratulations {userMention}!\nYou've reached **Level {level}**")
+                    .WithColor(new Color(0x5865F2))
+                    .WithThumbnailUrl(user.GetAvatarUrl(size: 128) ?? user.GetDefaultAvatarUrl())
+                    .AddField("Total XP", totalXp.ToString("N0"), true)
+                    .AddField("Server Rank", $"#{rank}", true)
+                    .AddField("New Level", level.ToString(), true)
+                    .WithFooter($"{user.Guild.Name}", user.Guild.IconUrl)
+                    .WithCurrentTimestamp()
+                    .Build();
+
+                await dmChannel.SendMessageAsync(embed: embed);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to send default DM notification to user {UserId}", user.Id);
+        }
+    }
+
+    /// <summary>
+    ///     Sends a default channel notification with a beautiful embed.
+    /// </summary>
+    /// <param name="channel">The channel to send the notification to.</param>
+    /// <param name="replacer">The replacer with placeholders.</param>
+    /// <param name="guild">The guild.</param>
+    /// <param name="user">The user who leveled up.</param>
+    /// <param name="level">The new level.</param>
+    /// <param name="totalXp">The user's total XP.</param>
+    /// <param name="rank">The user's rank.</param>
+    /// <param name="pingsDisabled">Whether pings are disabled.</param>
+    private async Task SendDefaultChannelNotificationAsync(ITextChannel channel, Replacer replacer, IGuild guild,
+        IGuildUser user, int level, long totalXp, int rank, bool pingsDisabled)
+    {
+        try
+        {
+            var botUser = await guild.GetUserAsync(client.CurrentUser.Id);
+            var perms = botUser.GetPermissions(channel);
+
+            if (!perms.Has(ChannelPermission.SendMessages))
+                return;
+
+            var userMention = pingsDisabled ? user.Username.EscapeWeirdStuff() : user.Mention;
+
+            var embed = new EmbedBuilder()
+                .WithTitle("Level Up!")
+                .WithDescription($"Congratulations {userMention}!\nYou've reached **Level {level}**")
+                .WithColor(new Color(0x5865F2))
+                .WithThumbnailUrl(user.GetAvatarUrl(size: 128) ?? user.GetDefaultAvatarUrl())
+                .AddField("Total XP", totalXp.ToString("N0"), true)
+                .AddField("Server Rank", $"#{rank}", true)
+                .AddField("New Level", level.ToString(), true)
+                .WithFooter($"{guild.Name}", guild.IconUrl)
+                .WithCurrentTimestamp()
+                .Build();
+
+            await channel.SendMessageAsync(embed: embed);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to send default channel notification to {ChannelId}", channel.Id);
+        }
+    }
+
+    /// <summary>
+    ///     Sends an informational message to first-time level-up users explaining how to disable notifications.
+    /// </summary>
+    /// <param name="user">The user who leveled up.</param>
+    /// <param name="guild">The guild.</param>
+    /// <param name="notificationType">The notification type preference.</param>
+    /// <param name="targetChannel">The target channel (if channel notification).</param>
+    private async Task SendFirstTimeInfoMessageAsync(IGuildUser user, IGuild guild, XpNotificationType notificationType,
+        ITextChannel? targetChannel)
+    {
+        try
+        {
+            var embed = new EmbedBuilder()
+                .WithTitle("💡 Level-Up Notifications")
+                .WithDescription(
+                    "You can disable level-up pings or DMs at any time using the command: ```.leveluppings false```")
+                .WithColor(new Color(0x3498DB))
+                .WithFooter("This message only appears once")
+                .Build();
+
+            if (notificationType == XpNotificationType.Dm)
+            {
+                var dmChannel = await user.CreateDMChannelAsync();
+                if (dmChannel != null)
+                {
+                    await dmChannel.SendMessageAsync(embed: embed);
+                }
+            }
+            else if (targetChannel != null)
+            {
+                var botUser = await guild.GetUserAsync(client.CurrentUser.Id);
+                var perms = botUser.GetPermissions(targetChannel);
+
+                if (perms.Has(ChannelPermission.SendMessages))
+                {
+                    await targetChannel.SendMessageAsync(embed: embed);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to send first-time info message to user {UserId}", user.Id);
+        }
+    }
+
+    /// <summary>
+    ///     Marks a user as having seen the level-up info message.
+    /// </summary>
+    /// <param name="userId">The user ID.</param>
+    private async Task MarkUserAsSeenLevelUpInfoAsync(ulong userId)
+    {
+        try
+        {
+            await using var db = await dbFactory.CreateConnectionAsync();
+
+            var user = await db.DiscordUsers.FirstOrDefaultAsync(x => x.UserId == userId);
+            if (user != null)
+            {
+                user.LevelUpInfoShown = true;
+                await db.UpdateAsync(user);
+            }
+            else
+            {
+                // Create user record if it doesn't exist
+                var newUser = new DiscordUser
+                {
+                    UserId = userId, LevelUpInfoShown = true, DateAdded = DateTime.UtcNow
+                };
+                await db.InsertAsync(newUser);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to mark user {UserId} as having seen level-up info", userId);
+        }
+    }
+
+    /// <summary>
+    ///     Gets user preferences from the database.
+    /// </summary>
+    /// <param name="userId">The user ID.</param>
+    /// <returns>The user's preferences or null if not found.</returns>
+    private async Task<DiscordUser?> GetUserPreferencesAsync(ulong userId)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+        return await db.DiscordUsers.FirstOrDefaultAsync(x => x.UserId == userId);
+    }
+
+    /// <summary>
+    ///     Gets custom level-up messages for a guild.
+    /// </summary>
+    /// <param name="guildId">The guild ID.</param>
+    /// <returns>List of enabled custom messages.</returns>
+    private async Task<List<string>> GetCustomLevelUpMessagesAsync(ulong guildId)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+        var messages = await db.XpLevelUpMessages
+            .Where(x => x.GuildId == guildId && x.IsEnabled)
+            .Select(x => x.MessageContent)
+            .ToListAsync();
+
+        return messages;
+    }
+
+    /// <summary>
+    ///     Gets a user's rank in the guild.
+    /// </summary>
+    /// <param name="guildId">The guild ID.</param>
+    /// <param name="userId">The user ID.</param>
+    /// <returns>The user's rank (1-based).</returns>
+    private async Task<int> GetUserRankAsync(ulong guildId, ulong userId)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+        var rank = await db.GuildUserXps
+            .Where(x => x.GuildId == guildId)
+            .CountAsync(x => x.TotalXp >
+                             db.GuildUserXps
+                                 .Where(y => y.GuildId == guildId && y.UserId == userId)
+                                 .Select(y => y.TotalXp)
+                                 .FirstOrDefault());
+
+        return rank + 1; // Convert to 1-based ranking
     }
 
     /// <summary>
@@ -307,8 +648,8 @@ public class XpRewardManager : INService
     {
         try
         {
-            // Only process notifications
-            if (eventArgs.NotificationType != XpNotificationType.None)
+            // Only process notifications for actual level UPS (not downs)
+            if (eventArgs.NotificationType != XpNotificationType.None && eventArgs.NewLevel > eventArgs.OldLevel)
             {
                 var notification = new XpNotification
                 {

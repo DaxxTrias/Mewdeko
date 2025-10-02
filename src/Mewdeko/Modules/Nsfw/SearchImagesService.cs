@@ -2,6 +2,7 @@ using System.Net.Http;
 using System.Threading;
 using DataModel;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Modules.Nsfw.Common;
 
 namespace Mewdeko.Modules.Nsfw;
@@ -52,7 +53,7 @@ public class SearchImagesService : ISearchImagesService, INService
     /// <param name="http">The HTTP client factory for creating HttpClient instances.</param>
     /// <param name="cacher">The search image cacher.</param>
     /// <param name="dbFactory">The database service.</param>
-    /// <param name="service">The guild settings service.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public SearchImagesService(
         IHttpClientFactory http,
         SearchImageCacher cacher,
@@ -229,7 +230,7 @@ public class SearchImagesService : ISearchImagesService, INService
             if (string.IsNullOrEmpty(result.Error))
             {
                 // if we have a non-error result, cancel other searches and return the result
-                cancelSource.Cancel();
+                await cancelSource.CancelAsync();
                 return result;
             }
 

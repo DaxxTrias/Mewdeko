@@ -2,6 +2,7 @@
 using System.Threading;
 using DataModel;
 using LinqToDB;
+using LinqToDB.Async;
 using Mewdeko.Services.Strings;
 
 namespace Mewdeko.Modules.CustomVoice.Services;
@@ -25,6 +26,11 @@ public class CustomVoiceService : INService, IUnloadableService
     /// <summary>
     ///     Initializes a new instance of the <see cref="CustomVoiceService" /> class.
     /// </summary>
+    /// <param name="dbFactory">The database connection factory.</param>
+    /// <param name="client">The Discord client instance.</param>
+    /// <param name="eventHandler">The event handler service.</param>
+    /// <param name="strings">The localized strings service.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public CustomVoiceService(
         IDataConnectionFactory dbFactory,
         DiscordShardedClient client,
@@ -735,7 +741,7 @@ public class CustomVoiceService : INService, IUnloadableService
             emptyChannels.TryRemove(channelId, out _);
             if (emptyChannelTimers.TryRemove(channelId, out var timer))
             {
-                timer.Dispose();
+                await timer.DisposeAsync();
             }
 
             return true;
@@ -1387,7 +1393,7 @@ public class CustomVoiceService : INService, IUnloadableService
                 emptyChannels.TryRemove(newState.VoiceChannel.Id, out _);
                 if (emptyChannelTimers.TryRemove(newState.VoiceChannel.Id, out var timer))
                 {
-                    timer.Dispose();
+                    await timer.DisposeAsync();
                 }
             }
 
@@ -1491,7 +1497,7 @@ public class CustomVoiceService : INService, IUnloadableService
                 emptyChannels.TryRemove(voiceChannel.Id, out _);
                 if (emptyChannelTimers.TryRemove(voiceChannel.Id, out var timer))
                 {
-                    timer.Dispose();
+                    await timer.DisposeAsync();
                 }
             }
         }
@@ -1566,7 +1572,7 @@ public class CustomVoiceService : INService, IUnloadableService
             emptyChannels.TryRemove(channelId, out _);
             if (emptyChannelTimers.TryRemove(channelId, out var timer))
             {
-                timer.Dispose();
+                await timer.DisposeAsync();
             }
         }
     }

@@ -1,5 +1,6 @@
 ﻿using DataModel;
 using LinqToDB;
+using LinqToDB.Async;
 
 namespace Mewdeko.Modules.Administration.Services;
 
@@ -19,6 +20,7 @@ public class RoleCommandsService : INService
     /// <param name="dbFactory">Provider for database context access.</param>
     /// <param name="eventHandler">Event handler for Discord events.</param>
     /// <param name="guildSettings">Service for accessing guild configurations.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public RoleCommandsService(
         IDataConnectionFactory dbFactory,
         EventHandler eventHandler,
@@ -183,7 +185,7 @@ public class RoleCommandsService : INService
     public async Task<(bool Success, HashSet<ReactionRoleMessage>? Messages)> Get(ulong guildId)
     {
         var reactRoles = await guildSettings.GetReactionRoles(guildId);
-        return (reactRoles != null && reactRoles.Count > 0, reactRoles);
+        return (reactRoles is { Count: > 0 }, reactRoles);
     }
 
     /// <summary>
@@ -200,7 +202,8 @@ public class RoleCommandsService : INService
         try
         {
             // Insert main message
-            await db.InsertAsync(reactionRoleMessage).ConfigureAwait(false);
+            var id = await db.InsertWithInt32IdentityAsync(reactionRoleMessage).ConfigureAwait(false);
+            reactionRoleMessage.Id = id;
             if (reactionRoleMessage.ReactionRoles != null && reactionRoleMessage.ReactionRoles.Any())
             {
                 foreach (var rr in reactionRoleMessage.ReactionRoles)

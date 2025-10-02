@@ -32,7 +32,7 @@ public partial class SlashAdministration
                 select role != null ? $"• {role.Mention} (`{role.Id}`)" : $"• Deleted Role (`{roleId}`)").ToList();
 
             var embed = new EmbedBuilder()
-                .WithTitle("Auto-Ban Roles")
+                .WithTitle(Strings.AutoBanRolesTitle(Context.Guild.Id))
                 .WithDescription(string.Join("\n", roleList))
                 .WithColor(Mewdeko.ErrorColor)
                 .WithFooter($"Total: {roleList.Count} role(s)")
