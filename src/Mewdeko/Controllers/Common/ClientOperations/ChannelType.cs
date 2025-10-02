@@ -29,6 +29,11 @@ public enum ChannelType
     Announcement,
 
     /// <summary>
+    ///     For forum channels
+    /// </summary>
+    Forum,
+
+    /// <summary>
     ///     None
     /// </summary>
     None

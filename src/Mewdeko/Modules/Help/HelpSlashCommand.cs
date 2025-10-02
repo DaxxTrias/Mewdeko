@@ -248,7 +248,7 @@ public class HelpSlashCommand(
             {
                 Content = await guildSettings.GetPrefix(ctx.Guild) + command, Author = ctx.User, Channel = ctx.Channel
             });
-            _ = Task.Run(() => ch.ExecuteCommandsInChannelAsync(ctx.Channel.Id)).ConfigureAwait(false);
+            _ = ch.ExecuteCommandsInChannelAsync(ctx.Channel.Id);
             return;
         }
 
@@ -271,7 +271,7 @@ public class HelpSlashCommand(
             Channel = ctx.Channel
         };
         ch.AddCommandToParseQueue(msg);
-        _ = Task.Run(() => ch.ExecuteCommandsInChannelAsync(ctx.Channel.Id)).ConfigureAwait(false);
+        _ = ch.ExecuteCommandsInChannelAsync(ctx.Channel.Id);
     }
 
     /// <summary>

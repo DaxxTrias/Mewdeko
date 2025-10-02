@@ -21,7 +21,8 @@ namespace DataModel
 		[Column("ChannelId"                                                                                  )] public ulong   ChannelId { get; set; } // numeric(20,0)
 		[Column("Username"                                                                                   )] public string?   Username  { get; set; } // text
 		[Column("Type"                                                                                       )] public int       Type      { get; set; } // integer
-		[Column("Message"                                                                                    )] public string?   Message   { get; set; } // text
+		[Column("OnlineMessage"                                                                              )] public string?   OnlineMessage  { get; set; } // text
+		[Column("OfflineMessage"                                                                             )] public string?   OfflineMessage { get; set; } // text
 		[Column("DateAdded"                                                                                  )] public DateTime? DateAdded { get; set; } // timestamp (6) without time zone
 	}
 }

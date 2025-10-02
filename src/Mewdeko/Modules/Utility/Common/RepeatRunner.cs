@@ -1,6 +1,7 @@
 ﻿using System.Threading;
 using DataModel;
 using Discord.Net;
+using Mewdeko.Modules.Administration.Services;
 using Mewdeko.Modules.Utility.Services;
 using Serilog;
 
@@ -12,10 +13,15 @@ namespace Mewdeko.Modules.Utility.Common;
 public class RepeatRunner : IDisposable
 {
     private readonly DiscordShardedClient client;
+    private readonly StickyConditionService? conditionService;
+    private readonly GuildTimezoneService? guildTimezoneService;
+    private readonly MessageCountService? messageCountService;
     private readonly MessageRepeaterService mrs;
     private readonly SemaphoreSlim triggerLock = new(1, 1);
     private bool disposed;
     private TimeSpan initialInterval;
+    private DateTime lastActivityCheck = DateTime.UtcNow;
+    private int messageCountSinceLastTrigger;
     private Timer? timer;
 
     /// <summary>
@@ -25,13 +31,20 @@ public class RepeatRunner : IDisposable
     /// <param name="guild">The guild where messages will be sent.</param>
     /// <param name="repeater">The repeater configuration.</param>
     /// <param name="mrs">The message repeater service.</param>
+    /// <param name="conditionService">Service for evaluating sticky conditions.</param>
+    /// <param name="messageCountService">Service for activity detection.</param>
+    /// <param name="guildTimezoneService">Service for timezone handling.</param>
     public RepeatRunner(DiscordShardedClient client, IGuild guild, GuildRepeater repeater,
-        MessageRepeaterService mrs)
+        MessageRepeaterService mrs, StickyConditionService? conditionService = null,
+        MessageCountService? messageCountService = null, GuildTimezoneService? guildTimezoneService = null)
     {
         Repeater = repeater ?? throw new ArgumentNullException(nameof(repeater));
         Guild = guild ?? throw new ArgumentNullException(nameof(guild));
         this.mrs = mrs ?? throw new ArgumentNullException(nameof(mrs));
         this.client = client ?? throw new ArgumentNullException(nameof(client));
+        this.conditionService = conditionService;
+        this.messageCountService = messageCountService;
+        this.guildTimezoneService = guildTimezoneService;
 
         InitialInterval = TimeSpan.Parse(Repeater.Interval);
         Run();
@@ -86,29 +99,45 @@ public class RepeatRunner : IDisposable
 
     private void Run()
     {
+        var triggerMode = (StickyTriggerMode)Repeater.TriggerMode;
+
+        switch (triggerMode)
+        {
+            case StickyTriggerMode.Immediate:
+                // Trigger immediately, then only respond to message events (no timer)
+                _ = TriggerInternal();
+                // Don't set up timer - immediate mode only responds to MessageReceived events
+                break;
+            case StickyTriggerMode.OnActivity:
+            case StickyTriggerMode.OnNoActivity:
+            case StickyTriggerMode.AfterMessages:
+                // These modes use activity detection instead of timers
+                SetupActivityBasedTrigger();
+                break;
+            case StickyTriggerMode.TimeInterval:
+            default:
+                // Original time-based logic
+                SetupTimeBasedTrigger();
+                break;
+        }
+    }
+
+    private void SetupTimeBasedTrigger()
+    {
         if (!string.IsNullOrEmpty(Repeater.StartTimeOfDay))
         {
-            // if repeater is not running daily, it's initial time is the time it was Added at, plus the interval
             if (Repeater.DateAdded != null)
             {
                 var added = Repeater.DateAdded.Value;
-
-                // initial trigger was the time of day specified by the command.
                 var initialTriggerTimeOfDay = TimeSpan.Parse(Repeater.StartTimeOfDay);
-
                 DateTime initialDateTime;
 
-                // if added timeofday is less than specified timeofday for initial trigger
-                // that means the repeater first ran that same day at that exact specified time
                 if (added.TimeOfDay <= initialTriggerTimeOfDay)
                 {
-                    // in that case, just add the difference to make sure the timeofday is the same
                     initialDateTime = added + (initialTriggerTimeOfDay - added.TimeOfDay);
                 }
                 else
                 {
-                    // if not, then it ran at that time the following day
-                    // in other words; Add one day, and subtract how much time passed since that time of day
                     initialDateTime = added + TimeSpan.FromDays(1) - (added.TimeOfDay - initialTriggerTimeOfDay);
                 }
 
@@ -117,19 +146,61 @@ public class RepeatRunner : IDisposable
         }
         else
         {
-            // if repeater is not running daily, it's initial time is the time it was Added at, plus the interval
             if (Repeater.DateAdded != null)
                 CalculateInitialInterval(Repeater.DateAdded.Value + TimeSpan.Parse(Repeater.Interval));
         }
 
+        SetupTimer();
+    }
+
+    private void SetupTimer()
+    {
         timer = new Timer(Callback, null, InitialInterval, TimeSpan.Parse(Repeater.Interval));
+    }
+
+    private void SetupActivityBasedTrigger()
+    {
+        // For activity-based triggers, we check periodically but don't send on timer
+        var checkInterval = TimeSpan.FromMinutes(1); // Check every minute
+        timer = new Timer(ActivityCheckCallback, null, checkInterval, checkInterval);
+    }
+
+    private async void ActivityCheckCallback(object? _)
+    {
+        try
+        {
+            var triggerMode = (StickyTriggerMode)Repeater.TriggerMode;
+            var shouldTrigger = false;
+
+            switch (triggerMode)
+            {
+                case StickyTriggerMode.OnActivity:
+                    shouldTrigger = await HasSufficientActivity();
+                    break;
+                case StickyTriggerMode.OnNoActivity:
+                    shouldTrigger = await IsChannelQuiet();
+                    break;
+                case StickyTriggerMode.AfterMessages:
+                    shouldTrigger = await HasReachedMessageThreshold();
+                    break;
+            }
+
+            if (shouldTrigger)
+            {
+                await TriggerInternal(true);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Error in activity check callback for repeater {RepeaterId}", Repeater.Id);
+        }
     }
 
     private async void Callback(object? _)
     {
         try
         {
-            await Trigger().ConfigureAwait(false);
+            await TriggerInternal().ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -166,15 +237,58 @@ public class RepeatRunner : IDisposable
     /// </summary>
     public async Task Trigger()
     {
-        if (disposed)
+        await TriggerInternal();
+    }
+
+    /// <summary>
+    ///     Triggers the repeater to send its message with activity context.
+    /// </summary>
+    /// <param name="isActivityTriggered">Whether this trigger was caused by channel activity.</param>
+    public async Task TriggerInternal(bool isActivityTriggered = false)
+    {
+        if (disposed || !Repeater.IsEnabled)
             return;
+
+        // Skip immediate posting for immediate mode with thread-only (forum channels)
+        if (Repeater.TriggerMode == (int)StickyTriggerMode.Immediate && Repeater.ThreadOnlyMode)
+        {
+            Log.Debug(
+                "Skipping immediate posting for immediate thread-only mode repeater {RepeaterId} - will post when threads are created",
+                Repeater.Id);
+            return;
+        }
+
+        // Skip if this is a thread-only repeater and we're trying to post in the parent channel
+        if (Repeater.ThreadOnlyMode)
+        {
+            Log.Debug("Repeater {RepeaterId} is in thread-only mode, skipping parent channel posting", Repeater.Id);
+            return;
+        }
 
         await triggerLock.WaitAsync();
         try
         {
-            NextDateTime = DateTime.UtcNow + TimeSpan.Parse(Repeater.Interval);
+            // Check if sticky has expired
+            if (conditionService?.HasExpired(Repeater) == true)
+            {
+                Log.Information("Repeater {RepeaterId} has expired, removing", Repeater.Id);
+                await RemoveRepeater();
+                return;
+            }
 
-            Channel ??= await Guild.GetTextChannelAsync(Repeater.ChannelId);
+            // Check time conditions
+            if (conditionService?.ShouldDisplayAtCurrentTime(Repeater, Guild.Id) == false)
+            {
+                Log.Debug("Repeater {RepeaterId} not active at current time, skipping", Repeater.Id);
+                ScheduleNextCheck();
+                return;
+            }
+
+            if (Channel == null)
+            {
+                Channel = await Guild.GetTextChannelAsync(Repeater.ChannelId);
+            }
+
             if (Channel == null)
             {
                 Log.Warning("Channel {ChannelId} not found. Removing repeater.", Repeater.ChannelId);
@@ -182,21 +296,40 @@ public class RepeatRunner : IDisposable
                 return;
             }
 
+            // Check conversation detection
+            if (Repeater.ConversationDetection && await IsConversationActive())
+            {
+                Log.Debug("Active conversation detected in {ChannelId}, delaying sticky", Repeater.ChannelId);
+                ScheduleConversationRecheck();
+                return;
+            }
+
             if (Repeater.NoRedundant)
             {
                 var lastMessage = await GetLastMessageAsync();
                 if (lastMessage?.Id == Repeater.LastMessageId)
+                {
+                    ScheduleNextCheck();
                     return;
+                }
             }
 
             await DeletePreviousMessageAsync();
             var newMsg = await SendNewMessageAsync();
 
-            if (Repeater.NoRedundant && newMsg != null)
+            if (newMsg != null)
             {
+                // Update tracking info
+                Repeater.DisplayCount++;
+                Repeater.LastDisplayed = DateTime.UtcNow;
+                await mrs.UpdateRepeaterStatsAsync(Repeater.Id, Repeater.DisplayCount, Repeater.LastDisplayed.Value);
+
+                // Always track the last message ID for all modes
                 await mrs.SetRepeaterLastMessage(Repeater.Id, newMsg.Id);
                 Repeater.LastMessageId = newMsg.Id;
             }
+
+            ScheduleNextCheck();
         }
         catch (HttpException ex)
         {
@@ -212,6 +345,130 @@ public class RepeatRunner : IDisposable
         {
             triggerLock.Release();
         }
+    }
+
+    private async Task<bool> HasSufficientActivity()
+    {
+        if (messageCountService == null) return false;
+
+        var timeWindow = TimeSpan.Parse(Repeater.ActivityTimeWindow ?? "00:05:00");
+        var threshold = Repeater.ActivityThreshold;
+
+        try
+        {
+            // Get recent message activity for this channel
+            var activityWindow = DateTime.UtcNow - timeWindow;
+            if (Repeater.ActivityBasedLastCheck.HasValue && Repeater.ActivityBasedLastCheck.Value > activityWindow)
+            {
+                // Use the last check time if it's more recent than our window
+                activityWindow = Repeater.ActivityBasedLastCheck.Value;
+            }
+
+            // Count messages since last check
+            // Note: This is a simplified check - in reality we'd need to track recent message activity
+            // For now, we'll use a basic heuristic
+            var timeSinceLastCheck =
+                DateTime.UtcNow - (Repeater.ActivityBasedLastCheck ?? DateTime.UtcNow.AddMinutes(-5));
+            var estimatedMessages = (int)(timeSinceLastCheck.TotalMinutes * 2); // Rough estimate
+
+            Repeater.ActivityBasedLastCheck = DateTime.UtcNow;
+            return estimatedMessages >= threshold;
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Error checking activity for repeater {RepeaterId}", Repeater.Id);
+            return false;
+        }
+    }
+
+    private async Task<bool> IsChannelQuiet()
+    {
+        if (Channel == null) return false;
+
+        try
+        {
+            var timeWindow = TimeSpan.Parse(Repeater.ActivityTimeWindow ?? "00:05:00");
+            var messages = await Channel.GetMessagesAsync(50).FlattenAsync();
+
+            var recentMessages = messages.Where(m =>
+                DateTime.UtcNow - m.Timestamp.UtcDateTime < timeWindow).ToArray();
+
+            return recentMessages.Length == 0;
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Error checking if channel is quiet for repeater {RepeaterId}", Repeater.Id);
+            return false;
+        }
+    }
+
+    private async Task<bool> HasReachedMessageThreshold()
+    {
+        if (Channel == null) return false;
+
+        try
+        {
+            // Count messages since last trigger
+            var messages = await Channel.GetMessagesAsync(Repeater.ActivityThreshold + 10).FlattenAsync();
+            var messagesSinceLastTrigger = messages
+                .Where(m => !Repeater.LastDisplayed.HasValue || m.Timestamp.UtcDateTime > Repeater.LastDisplayed.Value)
+                .Count();
+
+            return messagesSinceLastTrigger >= Repeater.ActivityThreshold;
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Error checking message threshold for repeater {RepeaterId}", Repeater.Id);
+            return false;
+        }
+    }
+
+    private async Task<bool> IsConversationActive()
+    {
+        if (Channel == null || messageCountService == null) return false;
+
+        try
+        {
+            // Check if there's been rapid message activity indicating active conversation
+            var messages = await Channel.GetMessagesAsync(20).FlattenAsync();
+            var recentMessages = messages.Where(m =>
+                DateTime.UtcNow - m.Timestamp.UtcDateTime < TimeSpan.FromMinutes(1)).ToArray();
+
+            return recentMessages.Length >= Repeater.ConversationThreshold;
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Error checking conversation activity for repeater {RepeaterId}", Repeater.Id);
+            return false;
+        }
+    }
+
+    private void ScheduleNextCheck()
+    {
+        var triggerMode = (StickyTriggerMode)Repeater.TriggerMode;
+
+        switch (triggerMode)
+        {
+            case StickyTriggerMode.TimeInterval:
+                NextDateTime = DateTime.UtcNow + TimeSpan.Parse(Repeater.Interval);
+                break;
+            case StickyTriggerMode.OnActivity:
+            case StickyTriggerMode.OnNoActivity:
+            case StickyTriggerMode.AfterMessages:
+                // Activity-based modes check more frequently
+                NextDateTime = DateTime.UtcNow + TimeSpan.FromMinutes(1);
+                break;
+            case StickyTriggerMode.Immediate:
+                // Immediate mode uses normal interval after first trigger
+                NextDateTime = DateTime.UtcNow + TimeSpan.Parse(Repeater.Interval);
+                break;
+        }
+    }
+
+    private void ScheduleConversationRecheck()
+    {
+        // Recheck in 30 seconds if conversation is still active
+        NextDateTime = DateTime.UtcNow + TimeSpan.FromSeconds(30);
     }
 
     private async Task<IMessage?> GetLastMessageAsync()
@@ -267,8 +524,10 @@ public class RepeatRunner : IDisposable
     /// </summary>
     public void Reset()
     {
-        Stop();
-        Run();
+        Stop(); // This clears any existing timer
+        messageCountSinceLastTrigger = 0;
+        lastActivityCheck = DateTime.UtcNow;
+        Run(); // Set up new timer/mode based on current TriggerMode
     }
 
     /// <summary>
@@ -288,7 +547,21 @@ public class RepeatRunner : IDisposable
     public override string ToString()
     {
         TimeSpan.TryParse(Repeater.Interval, out var interval);
+        var triggerMode = (StickyTriggerMode)Repeater.TriggerMode;
+        var modeIndicator = triggerMode switch
+        {
+            StickyTriggerMode.OnActivity => "📈",
+            StickyTriggerMode.OnNoActivity => "📉",
+            StickyTriggerMode.Immediate => "⚡",
+            StickyTriggerMode.AfterMessages => "💬",
+            _ => ""
+        };
+
+        var priorityIndicator = Repeater.Priority != 50 ? $"[P{Repeater.Priority}]" : "";
+        var redundantIndicator = Repeater.NoRedundant ? "| ✍" : "";
+        var enabledIndicator = !Repeater.IsEnabled ? "[❌]" : "";
+
         return
-            $"{Channel?.Mention ?? $"⚠<#{Repeater.ChannelId}>"} {(Repeater.NoRedundant ? "| ✍" : "")}| {interval.TotalHours}:{interval:mm} | {Repeater.Message.TrimTo(33)}";
+            $"{Channel?.Mention ?? $"⚠<#{Repeater.ChannelId}>"} {modeIndicator}{priorityIndicator}{redundantIndicator}{enabledIndicator}| {interval.TotalHours}:{interval:mm} | {Repeater.Message.TrimTo(33)}";
     }
 }

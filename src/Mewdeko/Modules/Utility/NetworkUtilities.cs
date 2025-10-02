@@ -75,7 +75,7 @@ public partial class Utility
             var reply = pinger.Send(hostname, timeout, buffer, options);
 
             // we've found a route at this ttl
-            if (reply.Status == IPStatus.Success || reply.Status == IPStatus.TtlExpired)
+            if (reply.Status is IPStatus.Success or IPStatus.TtlExpired)
                 yield return reply.Address;
 
             // if we reach a status other than expired or timed out, we're done searching or there has been an error

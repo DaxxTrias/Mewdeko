@@ -451,45 +451,96 @@ public class MusicEventManager : INService, IDisposable
     {
         try
         {
-            var player = await audioService.Players.GetPlayerAsync<MewdekoPlayer>(guildId);
-            if (player == null) return;
-
             var guild = client.GetGuild(guildId);
             var user = guild?.GetUser(userId);
-            var botVoiceChannel = player.VoiceChannelId;
-            var isInVoiceChannel = user?.VoiceChannel?.Id == botVoiceChannel;
+            var botUser = guild?.GetUser(client.CurrentUser.Id);
+            var botVoiceChannel = botUser?.VoiceChannel;
 
-            var currentTrack = await cache.GetCurrentTrack(guildId);
-            var queue = await cache.GetMusicQueue(guildId);
-            var settings = await cache.GetMusicPlayerSettings(guildId);
+            var player = await audioService.Players.GetPlayerAsync<MewdekoPlayer>(guildId);
 
-            logger.LogInformation("Current track from cache: {Track}",
-                JsonSerializer.Serialize(currentTrack));
-            logger.LogInformation("User in voice channel: {InVoiceChannel}, User: {UserId}, Bot channel: {BotChannel}",
-                isInVoiceChannel, userId, botVoiceChannel);
+            object status;
 
-            var status = new
+            if (player == null)
             {
-                CurrentTrack = currentTrack,
-                Queue = queue,
-                player.State,
-                player.Volume,
-                player.Position,
-                RepeatMode = settings.PlayerRepeat,
-                Filters = new
+                // Bot is in a voice channel but not playing
+                if (botVoiceChannel != null)
                 {
-                    BassBoost = player.Filters.Equalizer != null,
-                    Nightcore = player.Filters.Timescale?.Speed > 1.0f,
-                    Vaporwave = player.Filters.Timescale?.Speed < 1.0f,
-                    Karaoke = player.Filters.Karaoke != null,
-                    Tremolo = player.Filters.Tremolo != null,
-                    Vibrato = player.Filters.Vibrato != null,
-                    Rotation = player.Filters.Rotation != null,
-                    Distortion = player.Filters.Distortion != null,
-                    ChannelMix = player.Filters.ChannelMix != null
-                },
-                IsInVoiceChannel = isInVoiceChannel
-            };
+                    var isInVoiceChannel = user?.VoiceChannel?.Id == botVoiceChannel.Id;
+                    var idleSettings = await cache.GetMusicPlayerSettings(guildId);
+
+                    status = new
+                    {
+                        CurrentTrack = (object)null,
+                        Queue = await cache.GetMusicQueue(guildId),
+                        State = PlayerState.NotPlaying,
+                        Volume = idleSettings?.Volume ?? 100,
+                        Position = TimeSpan.Zero,
+                        RepeatMode = idleSettings?.PlayerRepeat ?? 0,
+                        Filters = new
+                        {
+                            BassBoost = false,
+                            Nightcore = false,
+                            Vaporwave = false,
+                            Karaoke = false,
+                            Tremolo = false,
+                            Vibrato = false,
+                            Rotation = false,
+                            Distortion = false,
+                            ChannelMix = false
+                        },
+                        IsInVoiceChannel = isInVoiceChannel,
+                        BotInChannel = true,
+                        ChannelId = botVoiceChannel.Id,
+                        ChannelName = botVoiceChannel.Name
+                    };
+                }
+                else
+                {
+                    // Bot is not in any voice channel - don't send status
+                    return;
+                }
+            }
+            else
+            {
+                var voiceChannelId = player.VoiceChannelId;
+                var isInVoiceChannel = user?.VoiceChannel?.Id == voiceChannelId;
+
+                var currentTrack = await cache.GetCurrentTrack(guildId);
+                var queue = await cache.GetMusicQueue(guildId);
+                var settings = await cache.GetMusicPlayerSettings(guildId);
+
+                logger.LogInformation("Current track from cache: {Track}",
+                    JsonSerializer.Serialize(currentTrack));
+                logger.LogInformation(
+                    "User in voice channel: {InVoiceChannel}, User: {UserId}, Bot channel: {BotChannel}",
+                    isInVoiceChannel, userId, voiceChannelId);
+
+                status = new
+                {
+                    CurrentTrack = currentTrack,
+                    Queue = queue,
+                    player.State,
+                    player.Volume,
+                    player.Position,
+                    RepeatMode = settings.PlayerRepeat,
+                    Filters = new
+                    {
+                        BassBoost = player.Filters.Equalizer != null,
+                        Nightcore = player.Filters.Timescale?.Speed > 1.0f,
+                        Vaporwave = player.Filters.Timescale?.Speed < 1.0f,
+                        Karaoke = player.Filters.Karaoke != null,
+                        Tremolo = player.Filters.Tremolo != null,
+                        Vibrato = player.Filters.Vibrato != null,
+                        Rotation = player.Filters.Rotation != null,
+                        Distortion = player.Filters.Distortion != null,
+                        ChannelMix = player.Filters.ChannelMix != null
+                    },
+                    IsInVoiceChannel = isInVoiceChannel,
+                    BotInChannel = true,
+                    ChannelId = voiceChannelId,
+                    ChannelName = botVoiceChannel?.Name ?? guild?.GetChannel(voiceChannelId)?.Name
+                };
+            }
 
             var jsonString = JsonSerializer.Serialize(status);
             var buffer = Encoding.UTF8.GetBytes(jsonString);
@@ -677,6 +728,121 @@ public class MusicEventManager : INService, IDisposable
         if (eventArgs.Player is MewdekoPlayer player)
         {
             await BroadcastPlayerUpdate(player.GuildId);
+        }
+    }
+
+    /// <summary>
+    ///     Broadcast disconnection to all connected clients for a guild
+    /// </summary>
+    public async Task BroadcastDisconnection(ulong guildId)
+    {
+        await broadcastSemaphore.WaitAsync();
+
+        try
+        {
+            var hasWebSocketClients =
+                webSocketConnections.TryGetValue(guildId, out var connections) && connections.Count > 0;
+            var hasSseClients = sseCallbacks.TryGetValue(guildId, out var callbacks) && callbacks.Count > 0;
+
+            if (!hasWebSocketClients && !hasSseClients) return;
+
+            // Create disconnection status
+            var disconnectionStatus = new
+            {
+                CurrentTrack = (object)null,
+                Queue = new List<object>(),
+                State = 0, // Stopped
+                Volume = 0,
+                Position = TimeSpan.Zero,
+                RepeatMode = 0,
+                Filters = new
+                {
+                    BassBoost = false,
+                    Nightcore = false,
+                    Vaporwave = false,
+                    Karaoke = false,
+                    Tremolo = false,
+                    Vibrato = false,
+                    Rotation = false,
+                    Distortion = false,
+                    ChannelMix = false
+                },
+                IsInVoiceChannel = false,
+                BotInChannel = false,
+                Disconnected = true // Special flag to indicate explicit disconnection
+            };
+
+            // Send to WebSocket clients
+            if (hasWebSocketClients)
+            {
+                var deadConnections = new List<string>();
+
+                foreach (var (id, (socket, userId)) in connections)
+                {
+                    if (socket.State == WebSocketState.Open)
+                    {
+                        try
+                        {
+                            var jsonString = JsonSerializer.Serialize(disconnectionStatus);
+                            var buffer = Encoding.UTF8.GetBytes(jsonString);
+
+                            await socket.SendAsync(
+                                new ArraySegment<byte>(buffer),
+                                WebSocketMessageType.Text,
+                                true,
+                                CancellationToken.None);
+                        }
+                        catch (Exception ex)
+                        {
+                            logger.LogError(ex, "Error sending disconnection to WebSocket client {ConnectionId}", id);
+                            deadConnections.Add(id);
+                        }
+                    }
+                    else
+                    {
+                        deadConnections.Add(id);
+                    }
+                }
+
+                // Clean up dead connections
+                foreach (var id in deadConnections)
+                {
+                    connections.TryRemove(id, out _);
+                }
+            }
+
+            // Send to SSE clients
+            if (hasSseClients)
+            {
+                var deadCallbacks = new List<string>();
+
+                foreach (var (id, (callback, userId)) in callbacks)
+                {
+                    try
+                    {
+                        await callback(disconnectionStatus);
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogError(ex, "Error sending disconnection to SSE client {ConnectionId}", id);
+                        deadCallbacks.Add(id);
+                    }
+                }
+
+                // Clean up dead callbacks
+                foreach (var id in deadCallbacks)
+                {
+                    callbacks.TryRemove(id, out _);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error broadcasting disconnection for guild {GuildId}", guildId);
+        }
+        finally
+        {
+            broadcastSemaphore.Release();
         }
     }
 }

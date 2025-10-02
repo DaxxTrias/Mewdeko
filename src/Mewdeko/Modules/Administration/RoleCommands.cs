@@ -4,8 +4,11 @@ using Discord.Commands;
 using Discord.Net;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
+using Humanizer;
 using Mewdeko.Common.Attributes.TextCommands;
+using Mewdeko.Common.TypeReaders.Models;
 using Mewdeko.Modules.Administration.Services;
+using Mewdeko.Modules.Moderation.Services;
 using SkiaSharp;
 
 namespace Mewdeko.Modules.Administration;
@@ -18,7 +21,12 @@ public partial class Administration
     /// <param name="services">Main services provider for the bot.</param>
     /// <param name="intserv">Interactive service used for paginated embeds.</param>
     /// <param name="logger">The logger instance for structured logging.</param>
-    public class RoleCommands(IServiceProvider services, InteractiveService intserv, ILogger<RoleCommands> logger)
+    /// <param name="muteService">Service for managing timed roles and mutes.</param>
+    public class RoleCommands(
+        IServiceProvider services,
+        InteractiveService intserv,
+        ILogger<RoleCommands> logger,
+        MuteService muteService)
         : MewdekoSubmodule<RoleCommandsService>
     {
         /// <summary>
@@ -332,7 +340,8 @@ public partial class Administration
         [RequireContext(ContextType.Guild)]
         [UserPerm(GuildPermission.ManageRoles)]
         [BotPerm(GuildPermission.ManageRoles)]
-        public async Task SetRole(IRole roleToAdd, [Remainder] IGuildUser targetUser)
+        [Priority(0)]
+        public async Task SetRole(IRole roleToAdd, IGuildUser targetUser)
         {
             var runnerUser = (IGuildUser)ctx.User;
             var runnerMaxRolePosition = runnerUser.GetRoles().Max(x => x.Position);
@@ -354,6 +363,45 @@ public partial class Administration
         }
 
         /// <summary>
+        ///     Sets a role to a user for a specified time duration.
+        /// </summary>
+        /// <remarks>
+        ///     This command allows administrators to set a role to a specified user with a time limit.
+        ///     It requires the Manage Roles permission for the user.
+        /// </remarks>
+        /// <param name="roleToAdd">The role to add to the user.</param>
+        /// <param name="targetUser">The user to add the role to.</param>
+        /// <param name="time">The duration for which the role will be active.</param>
+        /// <returns>A task representing the asynchronous operation.</returns>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.ManageRoles)]
+        [BotPerm(GuildPermission.ManageRoles)]
+        [Priority(1)]
+        public async Task SetRole(IRole roleToAdd, IGuildUser targetUser, StoopidTime time)
+        {
+            var runnerUser = (IGuildUser)ctx.User;
+            var runnerMaxRolePosition = runnerUser.GetRoles().Max(x => x.Position);
+            if (ctx.User.Id != ctx.Guild.OwnerId && runnerMaxRolePosition <= roleToAdd.Position)
+                return;
+            try
+            {
+                await muteService.TimedRole(targetUser, time.Time, $"Timed role assignment by {ctx.User}", roleToAdd)
+                    .ConfigureAwait(false);
+
+                await ReplyConfirmAsync(Strings.SetroleTime(ctx.Guild.Id, Format.Bold(roleToAdd.Name),
+                        Format.Bold(targetUser.ToString()), time.Time.Humanize()))
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Error in timed setrole command");
+                await ReplyErrorAsync(Strings.SetroleErr(ctx.Guild.Id)).ConfigureAwait(false);
+            }
+        }
+
+        /// <summary>
         ///     Adds a role to a user.
         /// </summary>
         /// <remarks>
@@ -368,7 +416,8 @@ public partial class Administration
         [RequireContext(ContextType.Guild)]
         [UserPerm(GuildPermission.ManageRoles)]
         [BotPerm(GuildPermission.ManageRoles)]
-        public async Task SetRole(IGuildUser targetUser, [Remainder] IRole roleToAdd)
+        [Priority(0)]
+        public async Task SetRole(IGuildUser targetUser, IRole roleToAdd)
         {
             var runnerUser = (IGuildUser)ctx.User;
             var runnerMaxRolePosition = runnerUser.GetRoles().Max(x => x.Position);
@@ -385,6 +434,45 @@ public partial class Administration
             catch (Exception ex)
             {
                 logger.LogWarning(ex, "Error in setrole command");
+                await ReplyErrorAsync(Strings.SetroleErr(ctx.Guild.Id)).ConfigureAwait(false);
+            }
+        }
+
+        /// <summary>
+        ///     Adds a role to a user for a specified time duration.
+        /// </summary>
+        /// <remarks>
+        ///     This command allows administrators to set a role to a specified user with a time limit.
+        ///     It requires the Manage Roles permission for the user.
+        /// </remarks>
+        /// <param name="targetUser">The user to add the role to.</param>
+        /// <param name="roleToAdd">The role to add to the user.</param>
+        /// <param name="time">The duration for which the role will be active.</param>
+        /// <returns>A task representing the asynchronous operation.</returns>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.ManageRoles)]
+        [BotPerm(GuildPermission.ManageRoles)]
+        [Priority(1)]
+        public async Task SetRole(IGuildUser targetUser, IRole roleToAdd, StoopidTime time)
+        {
+            var runnerUser = (IGuildUser)ctx.User;
+            var runnerMaxRolePosition = runnerUser.GetRoles().Max(x => x.Position);
+            if (ctx.User.Id != ctx.Guild.OwnerId && runnerMaxRolePosition <= roleToAdd.Position)
+                return;
+            try
+            {
+                await muteService.TimedRole(targetUser, time.Time, $"Timed role assignment by {ctx.User}", roleToAdd)
+                    .ConfigureAwait(false);
+
+                await ReplyConfirmAsync(Strings.SetroleTime(ctx.Guild.Id, Format.Bold(roleToAdd.Name),
+                        Format.Bold(targetUser.ToString()), time.Time.Humanize()))
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Error in timed setrole command");
                 await ReplyErrorAsync(Strings.SetroleErr(ctx.Guild.Id)).ConfigureAwait(false);
             }
         }

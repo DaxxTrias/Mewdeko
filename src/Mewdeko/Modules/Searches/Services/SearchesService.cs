@@ -1,10 +1,11 @@
-using System.Diagnostics;
 using System.IO;
 using System.Net;
 using System.Net.Http;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
+using AngleSharp.Dom;
 using AngleSharp.Html.Dom;
 using AngleSharp.Html.Parser;
 using GTranslate.Translators;
@@ -542,11 +543,10 @@ public class SearchesService : INService, IUnloadableService
 
             var address = string.Join(", ", addressParts);
 
-            return (new List<(string, DateTime, string, string)>
-            {
+            return ([
                 (address, currentTime, weatherData.Timezone ?? weatherData.TimezoneAbbreviation ?? "Unknown",
                     weatherData.Timezone ?? "Unknown")
-            }, null);
+            ], null);
         }
         catch (Exception ex)
         {
@@ -564,10 +564,7 @@ public class SearchesService : INService, IUnloadableService
         var exactMatch = TryGetTimezoneInfo(query);
         if (exactMatch != null)
         {
-            return new List<TimeZoneInfo>
-            {
-                exactMatch
-            };
+            return [exactMatch];
         }
 
         // If no exact match, use the intelligent search to get multiple candidates
@@ -721,7 +718,7 @@ public class SearchesService : INService, IUnloadableService
         if (candidates.Count == 0)
         {
             logger.LogWarning("No timezone found for query: {Query}", query);
-            return new List<TimeZoneInfo>();
+            return [];
         }
 
         // Return multiple candidates ordered by priority and distance
@@ -769,33 +766,37 @@ public class SearchesService : INService, IUnloadableService
         // Handle common timezone name patterns
         var words = timezoneName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
 
-        // For "Eastern Standard Time" -> "EST", "Pacific Daylight Time" -> "PDT", etc.
-        if (words.Length >= 3 &&
-            (words[1].Equals("Standard", StringComparison.OrdinalIgnoreCase) ||
-             words[1].Equals("Daylight", StringComparison.OrdinalIgnoreCase)) &&
-            words[2].Equals("Time", StringComparison.OrdinalIgnoreCase))
+        switch (words.Length)
         {
-            var first = words[0][0];
-            var second = words[1][0];
-            var third = words[2][0];
-            return $"{first}{second}{third}".ToUpperInvariant();
-        }
-
-        // For shorter names, take first letter of each word
-        if (words.Length >= 2)
-        {
-            var result = "";
-            foreach (var word in words.Take(3)) // Max 3 letters
+            // For "Eastern Standard Time" -> "EST", "Pacific Daylight Time" -> "PDT", etc.
+            case >= 3 when
+                (words[1].Equals("Standard", StringComparison.OrdinalIgnoreCase) ||
+                 words[1].Equals("Daylight", StringComparison.OrdinalIgnoreCase)) &&
+                words[2].Equals("Time", StringComparison.OrdinalIgnoreCase):
             {
-                if (word.Length > 0)
-                    result += char.ToUpperInvariant(word[0]);
+                var first = words[0][0];
+                var second = words[1][0];
+                var third = words[2][0];
+                return $"{first}{second}{third}".ToUpperInvariant();
             }
+            // For shorter names, take first letter of each word
+            case >= 2:
+            {
+                var result = "";
+                foreach (var word in words.Take(3)) // Max 3 letters
+                {
+                    if (word.Length > 0)
+                        result += char.ToUpperInvariant(word[0]);
+                }
 
-            return result;
+                return result;
+            }
+            default:
+                // Single word - return as is if short, or first 3 letters if long
+                return timezoneName.Length <= 4
+                    ? timezoneName.ToUpperInvariant()
+                    : timezoneName[..3].ToUpperInvariant();
         }
-
-        // Single word - return as is if short, or first 3 letters if long
-        return timezoneName.Length <= 4 ? timezoneName.ToUpperInvariant() : timezoneName[..3].ToUpperInvariant();
     }
 
 
@@ -1036,6 +1037,9 @@ public class SearchesService : INService, IUnloadableService
     private async Task<WikiMovie?> GetMovieDataFactory(string name)
     {
         using var http = httpFactory.CreateClient();
+        // Wikipedia requires a descriptive User-Agent per their robot policy
+        if (!http.DefaultRequestHeaders.UserAgent.Any())
+            http.DefaultRequestHeaders.UserAgent.ParseAdd("MewdekoBot/1.0 (+https://github.com/)");
 
         // First search for the movie
         var searchUrl =
@@ -1049,7 +1053,7 @@ public class SearchesService : INService, IUnloadableService
         // Get the full page data
         var pageId = searchResult.Query.Search[0].PageId;
         var contentUrl =
-            $"https://en.wikipedia.org/w/api.php?action=query&prop=extracts|pageimages|info&pithumbsize=500&inprop=url&explaintext=1&pageids={pageId}&format=json";
+            $"https://en.wikipedia.org/w/api.php?action=query&prop=extracts|pageimages|info|pageprops&pithumbsize=500&inprop=url&ppprop=wikibase_item&explaintext=1&pageids={pageId}&format=json";
         var contentResponse = await http.GetStringAsync(contentUrl).ConfigureAwait(false);
         var contentResult = JsonSerializer.Deserialize<WikiContentResponse>(contentResponse);
 
@@ -1062,13 +1066,39 @@ public class SearchesService : INService, IUnloadableService
         var yearMatch = Regex.Match(page.Extract, @"(?:released|premiered)[^\d]*(\d{4})");
         var year = yearMatch.Success ? yearMatch.Groups[1].Value : "N/A";
 
+        // Try to resolve a logo via Wikidata (P154)
+        string? logoUrl = null;
+        try
+        {
+            logoUrl = await TryGetWikidataLogoAsync(page.PageProps?.WikibaseItem, http).ConfigureAwait(false);
+        }
+        catch
+        {
+            // ignore logo failures
+        }
+
+        // Resolve poster/main image: prefer API thumbnail, fall back to scraping the first infobox image
+        var imageUrl = page.Thumbnail?.Source;
+        if (string.IsNullOrWhiteSpace(imageUrl) && !string.IsNullOrWhiteSpace(page.FullUrl))
+        {
+            try
+            {
+                imageUrl = await TryScrapeFirstInfoboxImageAsync(page.FullUrl, http).ConfigureAwait(false);
+            }
+            catch
+            {
+                // ignore scraping failures
+            }
+        }
+
         return new WikiMovie
         {
             Title = page.Title.Replace("(film)", "").Trim(),
             Year = year,
             Plot = GetFirstParagraph(page.Extract),
             Url = page.FullUrl,
-            ImageUrl = page.Thumbnail?.Source
+            ImageUrl = imageUrl,
+            LogoUrl = logoUrl
         };
     }
 
@@ -1076,6 +1106,173 @@ public class SearchesService : INService, IUnloadableService
     {
         var firstParagraph = extract.Split("\n\n").FirstOrDefault() ?? "";
         return firstParagraph.Length > 1000 ? firstParagraph[..1000] + "..." : firstParagraph;
+    }
+
+    private static async Task<string?> TryGetWikidataLogoAsync(string? wikidataId, HttpClient http)
+    {
+        if (string.IsNullOrWhiteSpace(wikidataId))
+            return null;
+
+        var claimsUrl =
+            $"https://www.wikidata.org/w/api.php?action=wbgetclaims&format=json&entity={Uri.EscapeDataString(wikidataId)}&property=P154";
+        var claimsStr = await http.GetStringAsync(claimsUrl).ConfigureAwait(false);
+        var claims = JsonSerializer.Deserialize<WikidataClaimsResponse>(claimsStr, CachedJsonOptions);
+
+        if (claims?.Claims == null)
+            return null;
+
+        if (!claims.Claims.TryGetValue("P154", out var logoClaims) || logoClaims == null || logoClaims.Count == 0)
+            return null;
+
+        var fileName = logoClaims.FirstOrDefault()?.Mainsnak?.Datavalue?.Value;
+        if (string.IsNullOrWhiteSpace(fileName))
+            return null;
+
+        // Strip leading "File:" if present
+        var clean = fileName.Replace("File:", string.Empty, StringComparison.InvariantCulture);
+
+        // Prefer a direct image URL via Wikimedia ImageInfo API so Discord can embed without following redirects
+        try
+        {
+            var infoUrl =
+                $"https://commons.wikimedia.org/w/api.php?action=query&titles=File:{Uri.EscapeDataString(clean)}&prop=imageinfo&iiprop=url&iiurlwidth=300&format=json";
+            var infoStr = await http.GetStringAsync(infoUrl).ConfigureAwait(false);
+            using var doc = JsonDocument.Parse(infoStr);
+            if (doc.RootElement.TryGetProperty("query", out var queryElem)
+                && queryElem.TryGetProperty("pages", out var pagesElem))
+            {
+                foreach (var pageProp in pagesElem.EnumerateObject())
+                {
+                    var pageVal = pageProp.Value;
+                    if (pageVal.TryGetProperty("imageinfo", out var imageInfoArr)
+                        && imageInfoArr.ValueKind == JsonValueKind.Array
+                        && imageInfoArr.GetArrayLength() > 0)
+                    {
+                        var ii = imageInfoArr[0];
+                        if (ii.TryGetProperty("thumburl", out var thumbUrlElem))
+                            return thumbUrlElem.GetString();
+                        if (ii.TryGetProperty("url", out var urlElem))
+                            return urlElem.GetString();
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // ignore and fall back below
+        }
+
+        // Fallback: Special:FilePath (may redirect; some clients might not embed it)
+        return $"https://commons.wikimedia.org/wiki/Special:FilePath/{Uri.EscapeDataString(clean)}?width=300";
+    }
+
+    private static async Task<string?> TryScrapeFirstInfoboxImageAsync(string pageUrl, HttpClient http)
+    {
+        using var req = new HttpRequestMessage(HttpMethod.Get, pageUrl);
+        if (!req.Headers.UserAgent.Any())
+            req.Headers.UserAgent.ParseAdd("MewdekoBot/1.0 (+https://github.com/)");
+
+        using var res = await http.SendAsync(req).ConfigureAwait(false);
+        res.EnsureSuccessStatusCode();
+        var html = await res.Content.ReadAsStringAsync().ConfigureAwait(false);
+
+        using var doc = await GoogleParser.ParseDocumentAsync(html).ConfigureAwait(false);
+
+        // Look for the first image inside the infobox (prefer explicit infobox-image cell)
+        var img = doc.QuerySelector("table.infobox .infobox-image img, table.infobox img") as IHtmlImageElement;
+        if (img == null)
+            return null;
+
+        // Prefer highest-resolution candidate from srcset when available
+        var srcset = img.GetAttribute("srcset");
+        string? chosen = null;
+        if (!string.IsNullOrWhiteSpace(srcset))
+        {
+            // srcset entries are comma-separated; take the last (usually the highest density)
+            var last = srcset.Split(',').LastOrDefault()?.Trim();
+            if (!string.IsNullOrWhiteSpace(last))
+                chosen = last.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+        }
+
+        // If no srcset, try resolving via the surrounding file link (more robust, returns a thumb from API)
+        if (string.IsNullOrWhiteSpace(chosen))
+        {
+            var parentAnchor = img.ParentElement as IHtmlAnchorElement;
+            var fileHref = parentAnchor?.GetAttribute("href");
+            if (!string.IsNullOrWhiteSpace(fileHref) && fileHref.StartsWith("/wiki/File:", StringComparison.Ordinal))
+            {
+                var fileTitle = fileHref["/wiki/File:".Length..];
+                try
+                {
+                    var infoUrl =
+                        $"https://commons.wikimedia.org/w/api.php?action=query&titles=File:{fileTitle}&prop=imageinfo&iiprop=url&iiurlwidth=500&format=json";
+                    var infoStr = await http.GetStringAsync(infoUrl).ConfigureAwait(false);
+                    using var infoDoc = JsonDocument.Parse(infoStr);
+                    if (infoDoc.RootElement.TryGetProperty("query", out var q)
+                        && q.TryGetProperty("pages", out var pages))
+                    {
+                        foreach (var p in pages.EnumerateObject())
+                        {
+                            var pv = p.Value;
+                            if (pv.TryGetProperty("imageinfo", out var arr)
+                                && arr.ValueKind == JsonValueKind.Array
+                                && arr.GetArrayLength() > 0)
+                            {
+                                var ii = arr[0];
+                                if (ii.TryGetProperty("thumburl", out var turl))
+                                    chosen = turl.GetString();
+                                else if (ii.TryGetProperty("url", out var url))
+                                    chosen = url.GetString();
+                                break;
+                            }
+                        }
+                    }
+                }
+                catch
+                {
+                    // ignore and continue to basic src
+                }
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(chosen))
+            chosen = img.GetAttribute("src") ?? img.Source;
+
+        if (string.IsNullOrWhiteSpace(chosen))
+            return null;
+
+        // Normalize to absolute https URL
+        if (chosen.StartsWith("//", StringComparison.Ordinal))
+            chosen = "https:" + chosen;
+        else if (chosen.StartsWith("/", StringComparison.Ordinal))
+            chosen = "https://en.wikipedia.org" + chosen;
+
+        return chosen;
+    }
+
+    private sealed class WikidataClaimsResponse
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("claims")]
+        public Dictionary<string, List<WikidataClaim>> Claims { get; set; }
+    }
+
+    private sealed class WikidataClaim
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("mainsnak")]
+        public WikidataSnak Mainsnak { get; set; }
+    }
+
+    private sealed class WikidataSnak
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("datavalue")]
+        public WikidataDataValue Datavalue { get; set; }
+    }
+
+    private sealed class WikidataDataValue
+    {
+        // For P154, value is a string file name like "File:Example.svg"
+        [System.Text.Json.Serialization.JsonPropertyName("value")]
+        public string Value { get; set; }
     }
 
     /// <summary>
@@ -1157,59 +1354,107 @@ public class SearchesService : INService, IUnloadableService
     /// <returns>A task representing the asynchronous operation, returning the Google search results.</returns>
     public async Task<GoogleSearchResultData?> GoogleSearchAsync(string query)
     {
-        query = WebUtility.UrlEncode(query)?.Replace(' ', '+');
+        try
+        {
+            var encodedQuery = WebUtility.UrlEncode(query ?? "");
+            query = encodedQuery?.Replace(' ', '+') ?? "";
 
-        var fullQueryLink = $"https://www.google.ca/search?q={query}&safe=on&lr=lang_eng&hl=en&ie=utf-8&oe=utf-8";
+            var fullQueryLink = $"https://www.google.com/search?q={query}&ie=utf-8&oe=utf-8&num=10&gbv=1";
 
-        using var msg = new HttpRequestMessage(HttpMethod.Get, fullQueryLink);
-        msg.Headers.Add("User-Agent",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.77 Safari/537.36");
-        msg.Headers.Add("Cookie", "CONSENT=YES+shp.gws-20210601-0-RC2.en+FX+423;");
+            using var msg = new HttpRequestMessage(HttpMethod.Get, fullQueryLink);
+            msg.Headers.Add("User-Agent", "Mozilla/5.0 (compatible; bot)");
+            msg.Headers.Add("Accept", "text/html");
+            msg.Headers.Add("Accept-Language", "en");
 
-        using var http = httpFactory.CreateClient();
-        http.DefaultRequestHeaders.Clear();
-        var sw = Stopwatch.StartNew();
-        using var response = await http.SendAsync(msg).ConfigureAwait(false);
-        var content = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
-        sw.Stop();
-        logger.LogInformation("Took {Miliseconds}ms to parse results", sw.ElapsedMilliseconds);
+            using var http = httpFactory.CreateClient();
+            http.DefaultRequestHeaders.Clear();
+            using var response = await http.SendAsync(msg).ConfigureAwait(false);
 
-        using var document = await GoogleParser.ParseDocumentAsync(content).ConfigureAwait(false);
-        var elems = document.QuerySelectorAll("div.g > div > div");
+            var htmlContent = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            var content = new MemoryStream(Encoding.UTF8.GetBytes(htmlContent));
+            using var document = await GoogleParser.ParseDocumentAsync(content).ConfigureAwait(false);
 
-        var resultsElem = document.QuerySelectorAll("#resultStats").FirstOrDefault();
-        var totalResults = resultsElem?.TextContent;
-        //var time = resultsElem.Children.FirstOrDefault()?.TextContent
-        //^ this doesn't work for some reason, <nobr> is completely missing in parsed collection
-        if (!elems.Any())
-            return default;
-
-        var results = elems.Select(elem =>
+            if (document.Title?.Contains("robot") == true ||
+                document.Body?.TextContent?.Contains("captcha") == true ||
+                document.Body?.TextContent?.Contains("unusual traffic") == true ||
+                document.Body?.TextContent?.Contains("enablejs") == true ||
+                htmlContent.Contains("enablejs") ||
+                htmlContent.Contains("noscript") ||
+                (document.Title == "Google Search" && htmlContent.Length < 10000))
             {
-                var children = elem.Children.ToList();
-                if (children.Count < 2)
-                    return null;
+                return await DuckDuckGoSearchAsync(query).ConfigureAwait(false);
+            }
 
-                var href = (children[0].QuerySelector("a") as IHtmlAnchorElement)?.Href;
-                var name = children[0].QuerySelector("h3")?.TextContent;
+            var elemsList = document.QuerySelectorAll("div.g").ToList();
+            IEnumerable<IElement> elems = elemsList;
 
-                if (href == null || name == null)
-                    return null;
+            if (!elems.Any())
+                elems = document.QuerySelectorAll(".g");
 
-                var txt = children[1].TextContent;
+            if (!elems.Any())
+                elems = document.QuerySelectorAll("[data-hveid]");
 
-                if (string.IsNullOrWhiteSpace(txt))
-                    return null;
+            if (!elems.Any())
+                elems = document.QuerySelectorAll(".tF2Cxc");
 
-                return new GoogleSearchResult(name, href, txt);
-            })
-            .Where(x => x != null)
-            .ToList();
+            if (!elems.Any())
+            {
+                var allDivs = document.QuerySelectorAll("div");
+                elems = allDivs.Where(d =>
+                    d.QuerySelector("a") != null &&
+                    d.QuerySelector("h3") != null);
+            }
 
-        return new GoogleSearchResultData(
-            results.AsReadOnly(),
-            fullQueryLink,
-            totalResults);
+            var resultsElem = document.QuerySelector("#resultStats")
+                              ?? document.QuerySelector("#result-stats")
+                              ?? document.QuerySelector(".LHJvCe")
+                              ?? document.QuerySelectorAll("div")
+                                  .FirstOrDefault(x => x.TextContent?.Contains("results") == true);
+            var totalResults = resultsElem?.TextContent;
+
+            if (!elems.Any())
+                return default;
+
+            var results = elems.Select(elem =>
+                {
+                    // Try multiple approaches to find the link and title
+                    var linkElem = elem.QuerySelector("a") as IHtmlAnchorElement;
+                    var href = linkElem?.Href;
+
+                    // Try different selectors for title
+                    var name = elem.QuerySelector("h3")?.TextContent
+                               ?? elem.QuerySelector(".LC20lb")?.TextContent
+                               ?? elem.QuerySelector("[role='heading']")?.TextContent
+                               ?? linkElem?.TextContent;
+
+                    if (href == null || string.IsNullOrWhiteSpace(name))
+                        return null;
+
+                    // Try to find description text - look for common description selectors
+                    var txt = elem.QuerySelector(".VwiC3b")?.TextContent // Current description class
+                              ?? elem.QuerySelector(".s")?.TextContent // Older description class
+                              ?? elem.QuerySelector(".st")?.TextContent // Alternative description class
+                              ?? elem.QuerySelectorAll("div").Skip(1).FirstOrDefault()?.TextContent; // Fallback
+
+                    if (string.IsNullOrWhiteSpace(txt))
+                        txt = "No description available";
+
+                    return new GoogleSearchResult(name, href, txt);
+                })
+                .Where(x => x != null)
+                .Take(10) // Limit results to prevent too many
+                .ToList();
+
+            return new GoogleSearchResultData(
+                results.AsReadOnly(),
+                fullQueryLink,
+                totalResults);
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine(e);
+            throw;
+        }
     }
 
     /// <summary>

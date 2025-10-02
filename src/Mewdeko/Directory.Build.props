@@ -1,5 +1,10 @@
 ﻿<Project>
   <PropertyGroup>
     <RegenerateGeneratedFiles>true</RegenerateGeneratedFiles>
+    <!-- Enable analyzers both in IDE and during build; rely on shadow-copy to avoid locks -->
+    <RunAnalyzers>true</RunAnalyzers>
+    <RunAnalyzersDuringLiveAnalysis>true</RunAnalyzersDuringLiveAnalysis>
+    <RunAnalyzersDuringBuild>true</RunAnalyzersDuringBuild>
+    <UseSharedCompilation>false</UseSharedCompilation>
   </PropertyGroup>
 </Project>

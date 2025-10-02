@@ -154,7 +154,7 @@ public class TodoService : INService
             DueDate = dueDate,
             CreatedAt = DateTime.UtcNow,
             CreatedBy = userId,
-            Tags = tags ?? Array.Empty<string>(),
+            Tags = tags ?? [],
             ReminderTime = reminderTime,
             Position = maxPosition + 1
         };
@@ -180,7 +180,7 @@ public class TodoService : INService
     public async Task<List<TodoItem>> GetTodoItemsAsync(int listId, ulong userId, bool includeCompleted = true)
     {
         if (!await CanUserViewListAsync(listId, userId))
-            return new List<TodoItem>();
+            return [];
 
         await using var ctx = await dbFactory.CreateConnectionAsync();
 
@@ -538,7 +538,7 @@ public class TodoService : INService
             return false;
 
         // Add tag if not already present
-        var currentTags = item.Tags?.ToList() ?? new List<string>();
+        var currentTags = item.Tags?.ToList() ?? [];
         if (!currentTags.Contains(tag, StringComparer.OrdinalIgnoreCase))
         {
             currentTags.Add(tag);
@@ -580,7 +580,7 @@ public class TodoService : INService
             return false;
 
         // Remove tag if present
-        var currentTags = item.Tags?.ToList() ?? new List<string>();
+        var currentTags = item.Tags?.ToList() ?? [];
         var originalCount = currentTags.Count;
         currentTags.RemoveAll(t => string.Equals(t, tag, StringComparison.OrdinalIgnoreCase));
 

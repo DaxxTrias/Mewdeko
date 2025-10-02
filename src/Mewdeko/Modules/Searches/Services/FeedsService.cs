@@ -34,7 +34,7 @@ public class FeedsService : INService
 
         this.client = client;
 
-        _ = Task.Run(async () => await TrackFeeds(client.Guilds.Select(x => x.Id)));
+        _ = TrackFeeds(client.Guilds.Select(x => x.Id));
     }
 
     /// <summary>

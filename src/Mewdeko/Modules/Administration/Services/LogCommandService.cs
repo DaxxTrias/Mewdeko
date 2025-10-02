@@ -1,5 +1,6 @@
 ﻿using System.IO;
 using System.Net.Http;
+using System.Threading;
 using DataModel;
 using Discord.Rest;
 using LinqToDB;
@@ -159,13 +160,32 @@ public class LogCommandService(
         VoicePresenceTts,
 
         /// <summary> A user was muted (voice or text). </summary>
-        UserMuted
+        UserMuted,
+
+        /// <summary> An invite was created. </summary>
+        InviteCreated,
+
+        /// <summary> An invite was deleted. </summary>
+        InviteDeleted,
+
+        /// <summary> Multiple messages were bulk deleted. </summary>
+        MessagesBulkDeleted,
+
+        /// <summary> Reactions were added or removed from messages. </summary>
+        ReactionEvents
     }
 
     /// <summary>
     ///     Cache of ignored channels per guild
     /// </summary>
     private readonly ConcurrentDictionary<ulong, HashSet<ulong>> ignoredChannelsCache = new();
+
+    /// <summary>
+    ///     Reaction events batching system to prevent spam in high-activity servers
+    /// </summary>
+    private readonly ConcurrentDictionary<ulong, MessageReactionBatch> reactionBatches = new();
+
+    private Timer reactionBatchTimer;
 
     /// <summary>
     ///     Dictionary of log settings for each guild.
@@ -222,8 +242,16 @@ public class LogCommandService(
         handler.Subscribe("UserVoiceStateUpdated", "LogCommandService", OnVoicePresence);
         handler.Subscribe("UserVoiceStateUpdated", "LogCommandService", OnVoicePresenceTts);
         handler.Subscribe("AuditLogCreated", "LogCommandService", OnAuditLogCreated);
+        handler.Subscribe("InviteCreated", "LogCommandService", OnInviteCreated);
+        handler.Subscribe("InviteDeleted", "LogCommandService", OnInviteDeleted);
+        handler.Subscribe("MessagesBulkDeleted", "LogCommandService", OnMessagesBulkDeleted);
+        handler.Subscribe("ReactionAdded", "LogCommandService", OnReactionAdded);
+        handler.Subscribe("ReactionRemoved", "LogCommandService", OnReactionRemoved);
         muteService.UserMuted += OnUserMuted;
         muteService.UserUnmuted += OnUserUnmuted;
+
+        // Initialize reaction batching timer
+        reactionBatchTimer = new Timer(ProcessReactionBatches, null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
     }
 
     /// <summary>
@@ -234,15 +262,20 @@ public class LogCommandService(
     /// <returns>A task that represents the asynchronous operation.</returns>
     private async Task OnAuditLogCreated(SocketAuditLogEntry args, SocketGuild arsg2)
     {
-        if (args.Action == ActionType.Ban)
+        switch (args.Action)
         {
-            if (args.Data is BanAuditLogData data)
-                await OnUserBanned(data.Target, arsg2, args.User);
-        }
-        else if (args.Action == ActionType.Unban)
-        {
-            if (args.Data is UnbanAuditLogData data)
-                await OnUserUnbanned(data.Target, arsg2, args.User);
+            case ActionType.Ban:
+            {
+                if (args.Data is BanAuditLogData data)
+                    await OnUserBanned(data.Target, arsg2, args.User);
+                break;
+            }
+            case ActionType.Unban:
+            {
+                if (args.Data is UnbanAuditLogData data)
+                    await OnUserUnbanned(data.Target, arsg2, args.User);
+                break;
+            }
         }
     }
 
@@ -928,13 +961,13 @@ public class LogCommandService(
                 ], Mewdeko.OkColor);
 
             components.WithSeparator();
-            components.WithTextDisplay("**Thread Information**");
+            components.WithTextDisplay("\n**Thread Information**");
             components.WithTextDisplay(
                 strings.ThreadNameField(deletedThread.Guild.Id, deletedThread.Name) +
                 strings.ThreadIdField(deletedThread.Guild.Id, deletedThread.Id));
 
             components.WithSeparator();
-            components.WithTextDisplay("**Deletion Details**");
+            components.WithTextDisplay("\n**Deletion Details**");
             components.WithTextDisplay(
                 strings.DeletedByField(deletedThread.Guild.Id, entry.User.Mention, entry.User.Id));
 
@@ -982,7 +1015,7 @@ public class LogCommandService(
                     new TextDisplayBuilder($"# {strings.ThreadNameUpdated(arsg2.Guild.Id)}")
                 ], Mewdeko.OkColor);
                 components.WithSeparator();
-                components.WithTextDisplay("**Change Details**");
+                components.WithTextDisplay("\n**Change Details**");
                 components.WithTextDisplay(strings.ThreadNameChange(arsg2.Guild.Id, threadIdStr, oldThread.Name,
                     arsg2.Name, updatedByStr));
             }
@@ -992,7 +1025,7 @@ public class LogCommandService(
                     new TextDisplayBuilder($"# {strings.ThreadArchiveStatusUpdated(arsg2.Guild.Id)}")
                 ], Mewdeko.OkColor);
                 components.WithSeparator();
-                components.WithTextDisplay("**Archive Status Change**");
+                components.WithTextDisplay("\n**Archive Status Change**");
                 components.WithTextDisplay(strings.ThreadArchiveStatusChange(arsg2.Guild.Id, threadIdStr,
                     oldThread.IsArchived,
                     arsg2.IsArchived, updatedByStr));
@@ -1003,7 +1036,7 @@ public class LogCommandService(
                     new TextDisplayBuilder($"# {strings.ThreadLockStatusUpdated(arsg2.Guild.Id)}")
                 ], Mewdeko.OkColor);
                 components.WithSeparator();
-                components.WithTextDisplay("**Lock Status Change**");
+                components.WithTextDisplay("\n**Lock Status Change**");
                 components.WithTextDisplay(strings.ThreadLockStatusChange(arsg2.Guild.Id, threadIdStr,
                     oldThread.IsLocked, arsg2.IsLocked,
                     updatedByStr));
@@ -1014,7 +1047,7 @@ public class LogCommandService(
                     new TextDisplayBuilder($"# {strings.ThreadSlowModeUpdated(arsg2.Guild.Id)}")
                 ], Mewdeko.OkColor);
                 components.WithSeparator();
-                components.WithTextDisplay("**Slow Mode Change**");
+                components.WithTextDisplay("\n**Slow Mode Change**");
                 components.WithTextDisplay(strings.ThreadSlowModeChange(arsg2.Guild.Id, threadIdStr,
                     oldThread.SlowModeInterval,
                     arsg2.SlowModeInterval, updatedByStr));
@@ -1025,7 +1058,7 @@ public class LogCommandService(
                     new TextDisplayBuilder($"# {strings.ThreadAutoArchiveUpdated(arsg2.Guild.Id)}")
                 ], Mewdeko.OkColor);
                 components.WithSeparator();
-                components.WithTextDisplay("**Auto Archive Duration Change**");
+                components.WithTextDisplay("\n**Auto Archive Duration Change**");
                 components.WithTextDisplay(strings.ThreadAutoArchiveChange(arsg2.Guild.Id, threadIdStr,
                     oldThread.AutoArchiveDuration,
                     arsg2.AutoArchiveDuration, updatedByStr));
@@ -1088,13 +1121,13 @@ public class LogCommandService(
             else
             {
                 components.WithSeparator();
-                components.WithTextDisplay("**Message Details**");
+                components.WithTextDisplay("\n**Message Details**");
                 components.WithTextDisplay(messageDetails);
             }
 
             // Before/After content comparison
             components.WithSeparator();
-            components.WithTextDisplay("**Content Changes**");
+            components.WithTextDisplay("\n**Content Changes**");
 
             if (!string.IsNullOrWhiteSpace(oldMessage.Content))
             {
@@ -1357,7 +1390,7 @@ public class LogCommandService(
 
             // Account details
             components.WithSeparator();
-            components.WithTextDisplay("**Account Details**");
+            components.WithTextDisplay("\n**Account Details**");
             components.WithTextDisplay(
                 strings.AccountCreatedField(guildUser.Guild.Id, guildUser.CreatedAt.ToString("dd/MM/yyyy HH:mm:ss")) +
                 strings.JoinedServerField(guildUser.Guild.Id,
@@ -1417,25 +1450,47 @@ public class LogCommandService(
             }
 
             var avatarUrl = user.RealAvatarUrl().ToString();
-            var description = strings.UserField(guild.Id, user.Mention, user.Id) +
-                              strings.UserGlobalNameField(guild.Id, user.GlobalName ?? user.Username) +
-                              strings.AccountCreatedField(guild.Id, user.CreatedAt.ToString("dd/MM/yyyy HH:mm:ss"));
+            var userInfo = strings.UserField(guild.Id, user.Mention, user.Id) +
+                           strings.UserGlobalNameField(guild.Id, user.GlobalName ?? user.Username);
 
-            if (footer != null)
-                description += $"\n\n*{footer}*";
+            var accountInfo = strings.AccountCreatedField(guild.Id, user.CreatedAt.ToString("dd/MM/yyyy HH:mm:ss"));
 
             var components = new ComponentBuilderV2()
-                .WithSection([
-                        new TextDisplayBuilder($"# {title}"),
-                        new TextDisplayBuilder(description)
-                    ],
-                    !string.IsNullOrEmpty(avatarUrl)
-                        ? new ThumbnailBuilder(new UnfurledMediaItemProperties(avatarUrl))
-                        : null)
-                .WithActionRow([
-                    new ButtonBuilder(strings.ViewUserMayNotWork(guild.Id), style: ButtonStyle.Link,
-                        url: $"discord://-/users/{user.Id}")
-                ]);
+                .WithContainer([
+                    new TextDisplayBuilder($"# {title}")
+                ], Mewdeko.ErrorColor);
+
+            // User info section with avatar
+            if (!string.IsNullOrEmpty(avatarUrl))
+            {
+                components.WithSection([
+                    new TextDisplayBuilder("**User Information**"),
+                    new TextDisplayBuilder(userInfo)
+                ], new ThumbnailBuilder(new UnfurledMediaItemProperties(avatarUrl)));
+            }
+            else
+            {
+                components.WithSeparator();
+                components.WithTextDisplay("\n**User Information**");
+                components.WithTextDisplay(userInfo);
+            }
+
+            // Account details
+            components.WithSeparator();
+            components.WithTextDisplay("\n**Account Details**");
+            components.WithTextDisplay(accountInfo);
+
+            // Footer with kick/ban info if available
+            if (footer != null)
+            {
+                components.WithSeparator();
+                components.WithTextDisplay($"\n*{footer}*");
+            }
+
+            components.WithActionRow([
+                new ButtonBuilder(strings.ViewUserMayNotWork(guild.Id), style: ButtonStyle.Link,
+                    url: $"discord://-/users/{user.Id}")
+            ]);
 
             await channel.SendMessageAsync(components: components.Build(), flags: MessageFlags.ComponentsV2,
                 allowedMentions: AllowedMentions.None);
@@ -1759,74 +1814,81 @@ public class LogCommandService(
                 // changed = true;
             }
 
-            // Text Channel specific changes
-            if (channel is SocketTextChannel textChannel && channel2 is SocketTextChannel textChannel2)
+            switch (channel)
             {
-                if (textChannel.Topic != textChannel2.Topic)
+                // Text Channel specific changes
+                case SocketTextChannel textChannel when channel2 is SocketTextChannel textChannel2:
                 {
-                    title = strings.ChannelTopicUpdated(channel.Guild.Id);
-                    description = strings.ChannelTopicChange(channel.Guild.Id, channelIdStr,
-                        textChannel.Topic?.TrimTo(100) ?? strings.None(channel.Guild.Id),
-                        textChannel2.Topic?.TrimTo(100) ?? strings.None(channel.Guild.Id), updatedByStr);
-                    changed = true;
+                    if (textChannel.Topic != textChannel2.Topic)
+                    {
+                        title = strings.ChannelTopicUpdated(channel.Guild.Id);
+                        description = strings.ChannelTopicChange(channel.Guild.Id, channelIdStr,
+                            textChannel.Topic?.TrimTo(100) ?? strings.None(channel.Guild.Id),
+                            textChannel2.Topic?.TrimTo(100) ?? strings.None(channel.Guild.Id), updatedByStr);
+                        changed = true;
+                    }
+                    else if (textChannel.IsNsfw != textChannel2.IsNsfw)
+                    {
+                        title = strings.ChannelNsfwUpdated(channel.Guild.Id);
+                        description = strings.ChannelNsfwChange(channel.Guild.Id, channelIdStr, textChannel.IsNsfw,
+                            textChannel2.IsNsfw, updatedByStr);
+                        changed = true;
+                    }
+                    else if (textChannel.SlowModeInterval != textChannel2.SlowModeInterval)
+                    {
+                        title = strings.ChannelSlowmodeUpdated(channel.Guild.Id);
+                        description = strings.ChannelSlowmodeChange(channel.Guild.Id, channelIdStr,
+                            textChannel.SlowModeInterval,
+                            textChannel2.SlowModeInterval, updatedByStr);
+                        changed = true;
+                    }
+                    else if (textChannel.CategoryId != textChannel2.CategoryId)
+                    {
+                        title = strings.ChannelCategoryUpdated(channel.Guild.Id);
+                        description = strings.ChannelCategoryChange(channel.Guild.Id, channelIdStr,
+                            textChannel.Category?.Name ?? strings.None(channel.Guild.Id),
+                            textChannel2.Category?.Name ?? strings.None(channel.Guild.Id), updatedByStr);
+                        changed = true;
+                    }
+
+                    break;
                 }
-                else if (textChannel.IsNsfw != textChannel2.IsNsfw)
+                // Voice Channel specific changes
+                case IVoiceChannel voiceChannel when channel2 is IVoiceChannel voiceChannel2:
                 {
-                    title = strings.ChannelNsfwUpdated(channel.Guild.Id);
-                    description = strings.ChannelNsfwChange(channel.Guild.Id, channelIdStr, textChannel.IsNsfw,
-                        textChannel2.IsNsfw, updatedByStr);
-                    changed = true;
-                }
-                else if (textChannel.SlowModeInterval != textChannel2.SlowModeInterval)
-                {
-                    title = strings.ChannelSlowmodeUpdated(channel.Guild.Id);
-                    description = strings.ChannelSlowmodeChange(channel.Guild.Id, channelIdStr,
-                        textChannel.SlowModeInterval,
-                        textChannel2.SlowModeInterval, updatedByStr);
-                    changed = true;
-                }
-                else if (textChannel.CategoryId != textChannel2.CategoryId)
-                {
-                    title = strings.ChannelCategoryUpdated(channel.Guild.Id);
-                    description = strings.ChannelCategoryChange(channel.Guild.Id, channelIdStr,
-                        textChannel.Category?.Name ?? strings.None(channel.Guild.Id),
-                        textChannel2.Category?.Name ?? strings.None(channel.Guild.Id), updatedByStr);
-                    changed = true;
-                }
-            }
-            // Voice Channel specific changes
-            else if (channel is IVoiceChannel voiceChannel && channel2 is IVoiceChannel voiceChannel2)
-            {
-                if (voiceChannel.Bitrate != voiceChannel2.Bitrate)
-                {
-                    title = strings.ChannelBitrateUpdated(channel.Guild.Id);
-                    description = strings.ChannelBitrateChange(channel.Guild.Id, channelIdStr,
-                        voiceChannel.Bitrate / 1000,
-                        voiceChannel2.Bitrate / 1000, updatedByStr);
-                    changed = true;
-                }
-                else if (voiceChannel.UserLimit != voiceChannel2.UserLimit)
-                {
-                    title = strings.ChannelUserLimitUpdated(channel.Guild.Id);
-                    description = strings.ChannelUserLimitChange(channel.Guild.Id, channelIdStr,
-                        voiceChannel.UserLimit?.ToString() ?? strings.Unlimited(channel.Guild.Id),
-                        voiceChannel2.UserLimit?.ToString() ?? strings.Unlimited(channel.Guild.Id), updatedByStr);
-                    changed = true;
-                }
-                else if (voiceChannel.CategoryId != voiceChannel2.CategoryId)
-                {
-                    title = strings.ChannelCategoryUpdated(channel.Guild.Id);
-                    description =
-                        $"{channelIdStr}\n`Old Category:` {(await voiceChannel.GetCategoryAsync())?.Name ?? strings.None(channel.Guild.Id)}\n`New Category:` {(await voiceChannel2.GetCategoryAsync())?.Name ?? strings.None(channel.Guild.Id)}\n{updatedByStr}";
-                    changed = true;
-                }
-                else if (voiceChannel.VideoQualityMode != voiceChannel2.VideoQualityMode)
-                {
-                    title = strings.ChannelVideoQualityUpdated(channel.Guild.Id);
-                    description = strings.ChannelVideoQualityChange(channel.Guild.Id, channelIdStr,
-                        voiceChannel.VideoQualityMode,
-                        voiceChannel2.VideoQualityMode, updatedByStr);
-                    changed = true;
+                    if (voiceChannel.Bitrate != voiceChannel2.Bitrate)
+                    {
+                        title = strings.ChannelBitrateUpdated(channel.Guild.Id);
+                        description = strings.ChannelBitrateChange(channel.Guild.Id, channelIdStr,
+                            voiceChannel.Bitrate / 1000,
+                            voiceChannel2.Bitrate / 1000, updatedByStr);
+                        changed = true;
+                    }
+                    else if (voiceChannel.UserLimit != voiceChannel2.UserLimit)
+                    {
+                        title = strings.ChannelUserLimitUpdated(channel.Guild.Id);
+                        description = strings.ChannelUserLimitChange(channel.Guild.Id, channelIdStr,
+                            voiceChannel.UserLimit?.ToString() ?? strings.Unlimited(channel.Guild.Id),
+                            voiceChannel2.UserLimit?.ToString() ?? strings.Unlimited(channel.Guild.Id), updatedByStr);
+                        changed = true;
+                    }
+                    else if (voiceChannel.CategoryId != voiceChannel2.CategoryId)
+                    {
+                        title = strings.ChannelCategoryUpdated(channel.Guild.Id);
+                        description =
+                            $"{channelIdStr}\n`Old Category:` {(await voiceChannel.GetCategoryAsync())?.Name ?? strings.None(channel.Guild.Id)}\n`New Category:` {(await voiceChannel2.GetCategoryAsync())?.Name ?? strings.None(channel.Guild.Id)}\n{updatedByStr}";
+                        changed = true;
+                    }
+                    else if (voiceChannel.VideoQualityMode != voiceChannel2.VideoQualityMode)
+                    {
+                        title = strings.ChannelVideoQualityUpdated(channel.Guild.Id);
+                        description = strings.ChannelVideoQualityChange(channel.Guild.Id, channelIdStr,
+                            voiceChannel.VideoQualityMode,
+                            voiceChannel2.VideoQualityMode, updatedByStr);
+                        changed = true;
+                    }
+
+                    break;
                 }
             }
 
@@ -2115,6 +2177,10 @@ public class LogCommandService(
             case LogType.VoicePresenceTts: logSetting.LogVoicePresenceTtsId = channelId; break;
             case LogType.UserMuted: logSetting.UserMutedId = channelId; break;
             case LogType.RoleDeleted: logSetting.RoleDeletedId = channelId; break;
+            case LogType.InviteCreated: logSetting.InviteCreatedId = channelId; break;
+            case LogType.InviteDeleted: logSetting.InviteDeletedId = channelId; break;
+            case LogType.MessagesBulkDeleted: logSetting.MessagesBulkDeletedId = channelId; break;
+            case LogType.ReactionEvents: logSetting.ReactionEventsId = channelId; break;
         }
 
         try
@@ -2186,6 +2252,10 @@ public class LogCommandService(
                 logSetting.UserRoleAddedId = channelId;
                 logSetting.UserRoleRemovedId = channelId;
                 logSetting.LogVoicePresenceTtsId = channelId;
+                logSetting.InviteCreatedId = channelId;
+                logSetting.InviteDeletedId = channelId;
+                logSetting.MessagesBulkDeletedId = channelId;
+                logSetting.ReactionEventsId = channelId;
                 break;
             case LogCategoryTypes.Users:
                 logSetting.NicknameUpdatedId = channelId;
@@ -2211,6 +2281,8 @@ public class LogCommandService(
             case LogCategoryTypes.Server:
                 logSetting.ServerUpdatedId = channelId;
                 logSetting.EventCreatedId = channelId;
+                logSetting.InviteCreatedId = channelId;
+                logSetting.InviteDeletedId = channelId;
                 break;
             case LogCategoryTypes.Channel:
                 logSetting.ChannelUpdatedId = channelId;
@@ -2220,6 +2292,8 @@ public class LogCommandService(
             case LogCategoryTypes.Messages:
                 logSetting.MessageDeletedId = channelId;
                 logSetting.MessageUpdatedId = channelId;
+                logSetting.MessagesBulkDeletedId = channelId;
+                logSetting.ReactionEventsId = channelId;
                 break;
             case LogCategoryTypes.Moderation:
                 logSetting.UserMutedId = channelId;
@@ -2390,6 +2464,378 @@ public class LogCommandService(
         catch (Exception ex)
         {
             logger.LogError(ex, "Error updating ignored channels for guild {GuildId}", guildId);
+        }
+    }
+
+    /// <summary>
+    ///     Handles the event when an invite is created.
+    /// </summary>
+    /// <param name="invite">The invite that was created.</param>
+    private async Task OnInviteCreated(SocketInvite invite)
+    {
+        if (invite.Guild == null) return;
+
+        if (GuildLogSettings.TryGetValue(invite.Guild.Id, out var logSetting))
+        {
+            if (logSetting.InviteCreatedId is null or 0)
+                return;
+
+            var channel = invite.Guild.GetTextChannel(logSetting.InviteCreatedId.Value);
+            if (channel is null)
+                return;
+
+            var components = new ComponentBuilderV2()
+                .WithContainer([
+                    new TextDisplayBuilder($"# {strings.InviteCreated(invite.Guild.Id)}")
+                ], Mewdeko.OkColor);
+
+            components.WithSeparator();
+            components.WithTextDisplay("\n**Invite Details**");
+            components.WithTextDisplay(
+                $"`Invite Code:` {invite.Code}\n" +
+                $"`Channel:` <#{invite.Channel.Id}> ({invite.Channel.Name}) | {invite.Channel.Id}\n" +
+                $"`Created By:` {invite.Inviter?.Mention ?? "Unknown"} | {invite.Inviter?.Id.ToString() ?? "N/A"}\n" +
+                $"`Max Uses:` {(invite.MaxUses == 0 ? "Unlimited" : invite.MaxUses.ToString())}\n" +
+                $"`Max Age:` {(invite.MaxAge == 0 ? "Never" : TimeSpan.FromSeconds(invite.MaxAge).ToString(@"dd\.hh\:mm\:ss"))}\n" +
+                $"`Temporary:` {invite.IsTemporary}\n" +
+                $"`Created At:` {invite.CreatedAt:dd/MM/yyyy HH:mm:ss}");
+
+            components.WithActionRow([
+                new ButtonBuilder("Copy Invite URL", style: ButtonStyle.Link,
+                    url: invite.Url)
+            ]);
+
+            await channel.SendMessageAsync(components: components.Build(), flags: MessageFlags.ComponentsV2,
+                allowedMentions: AllowedMentions.None);
+        }
+    }
+
+    /// <summary>
+    ///     Handles the event when an invite is deleted.
+    /// </summary>
+    /// <param name="channel">The channel where the invite was deleted.</param>
+    /// <param name="inviteCode">The code of the deleted invite.</param>
+    private async Task OnInviteDeleted(SocketGuildChannel channel, string inviteCode)
+    {
+        if (GuildLogSettings.TryGetValue(channel.Guild.Id, out var logSetting))
+        {
+            if (logSetting.InviteDeletedId is null or 0)
+                return;
+
+            var logChannel = channel.Guild.GetTextChannel(logSetting.InviteDeletedId.Value);
+            if (logChannel is null)
+                return;
+
+            var components = new ComponentBuilderV2()
+                .WithContainer([
+                    new TextDisplayBuilder($"# {strings.InviteDeletedTitle(channel.Guild.Id)}")
+                ], Mewdeko.ErrorColor);
+
+            components.WithSeparator();
+            components.WithTextDisplay("\n**Invite Details**");
+            components.WithTextDisplay(
+                $"`Invite Code:` {inviteCode}\n" +
+                $"`Channel:` <#{channel.Id}> ({channel.Name}) | {channel.Id}\n" +
+                $"`Deleted At:` {DateTime.UtcNow:dd/MM/yyyy HH:mm:ss}");
+
+            await logChannel.SendMessageAsync(components: components.Build(), flags: MessageFlags.ComponentsV2,
+                allowedMentions: AllowedMentions.None);
+        }
+    }
+
+    /// <summary>
+    ///     Handles the event when messages are bulk deleted.
+    /// </summary>
+    /// <param name="messages">The collection of deleted messages.</param>
+    /// <param name="channel">The channel where messages were deleted.</param>
+    private async Task OnMessagesBulkDeleted(IReadOnlyCollection<Cacheable<IMessage, ulong>> messages,
+        Cacheable<IMessageChannel, ulong> channel)
+    {
+        if (!channel.HasValue || channel.Value is not SocketTextChannel guildChannel) return;
+
+        // Check if channel is ignored
+        if (IsChannelIgnored(guildChannel.Guild.Id, guildChannel.Id))
+            return;
+
+        if (GuildLogSettings.TryGetValue(guildChannel.Guild.Id, out var logSetting))
+        {
+            if (logSetting.MessagesBulkDeletedId is null or 0)
+                return;
+
+            var logChannel = guildChannel.Guild.GetTextChannel(logSetting.MessagesBulkDeletedId.Value);
+            if (logChannel is null)
+                return;
+
+            var components = new ComponentBuilderV2()
+                .WithContainer([
+                    new TextDisplayBuilder($"# {strings.MessagesBulkDeleted(guildChannel.Guild.Id)}")
+                ], Mewdeko.ErrorColor);
+
+            components.WithSeparator();
+            components.WithTextDisplay("\n**Bulk Deletion Details**");
+            components.WithTextDisplay(
+                $"`Messages Deleted:` {messages.Count}\n" +
+                $"`Channel:` <#{guildChannel.Id}> ({guildChannel.Name}) | {guildChannel.Id}\n" +
+                $"`Deleted At:` {DateTime.UtcNow:dd/MM/yyyy HH:mm:ss}");
+
+            // Count how many messages had content vs were cached
+            var cachedMessages = messages.Where(m => m.HasValue).ToList();
+            var uncachedCount = messages.Count - cachedMessages.Count;
+
+            components.WithSeparator();
+            components.WithTextDisplay("\n**Message Information**");
+            components.WithTextDisplay(
+                $"`Cached Messages:` {cachedMessages.Count}\n" +
+                $"`Uncached Messages:` {uncachedCount}\n" +
+                $"`Oldest Cached Message:` {(cachedMessages.Any() ? cachedMessages.Min(m => m.Value.Timestamp).ToString("dd/MM/yyyy HH:mm:ss") : "N/A")}\n" +
+                $"`Newest Cached Message:` {(cachedMessages.Any() ? cachedMessages.Max(m => m.Value.Timestamp).ToString("dd/MM/yyyy HH:mm:ss") : "N/A")}");
+
+            await logChannel.SendMessageAsync(components: components.Build(), flags: MessageFlags.ComponentsV2,
+                allowedMentions: AllowedMentions.None);
+        }
+    }
+
+    /// <summary>
+    ///     Handles the event when a reaction is added to a message.
+    /// </summary>
+    /// <param name="message">The cached message.</param>
+    /// <param name="channel">The channel containing the message.</param>
+    /// <param name="reaction">The reaction that was added.</param>
+    private Task OnReactionAdded(Cacheable<IUserMessage, ulong> message, Cacheable<IMessageChannel, ulong> channel,
+        SocketReaction reaction)
+    {
+        if (!channel.HasValue || channel.Value is not SocketTextChannel guildChannel) return Task.CompletedTask;
+        if (reaction.User.Value?.IsBot == true) return Task.CompletedTask;
+
+        // Check if channel is ignored
+        if (IsChannelIgnored(guildChannel.Guild.Id, guildChannel.Id))
+            return Task.CompletedTask;
+
+        AddReactionToBatch(message.Id, guildChannel.Id, guildChannel.Guild.Id, guildChannel.Name,
+            reaction.User.Value?.Id ?? 0, reaction.Emote, true);
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    ///     Handles the event when a reaction is removed from a message.
+    /// </summary>
+    /// <param name="message">The cached message.</param>
+    /// <param name="channel">The channel containing the message.</param>
+    /// <param name="reaction">The reaction that was removed.</param>
+    private Task OnReactionRemoved(Cacheable<IUserMessage, ulong> message, Cacheable<IMessageChannel, ulong> channel,
+        SocketReaction reaction)
+    {
+        if (!channel.HasValue || channel.Value is not SocketTextChannel guildChannel) return Task.CompletedTask;
+        if (reaction.User.Value?.IsBot == true) return Task.CompletedTask;
+
+        // Check if channel is ignored
+        if (IsChannelIgnored(guildChannel.Guild.Id, guildChannel.Id))
+            return Task.CompletedTask;
+
+        AddReactionToBatch(message.Id, guildChannel.Id, guildChannel.Guild.Id, guildChannel.Name,
+            reaction.User.Value?.Id ?? 0, reaction.Emote, false);
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    ///     Adds a reaction event to the batching system.
+    /// </summary>
+    private void AddReactionToBatch(ulong messageId, ulong channelId, ulong guildId, string channelName, ulong userId,
+        IEmote emote, bool isAdded)
+    {
+        if (userId == 0) return; // Invalid user
+
+        var batch = reactionBatches.GetOrAdd(messageId, _ => new MessageReactionBatch
+        {
+            MessageId = messageId, ChannelId = channelId, GuildId = guildId, ChannelName = channelName
+        });
+
+        var emoteKey = emote.ToString() ?? "Unknown";
+
+        lock (batch)
+        {
+            if (isAdded)
+            {
+                if (!batch.ReactionsAdded.ContainsKey(emoteKey))
+                    batch.ReactionsAdded[emoteKey] = new List<ulong>();
+                if (!batch.ReactionsAdded[emoteKey].Contains(userId))
+                    batch.ReactionsAdded[emoteKey].Add(userId);
+            }
+            else
+            {
+                if (!batch.ReactionsRemoved.ContainsKey(emoteKey))
+                    batch.ReactionsRemoved[emoteKey] = new List<ulong>();
+                if (!batch.ReactionsRemoved[emoteKey].Contains(userId))
+                    batch.ReactionsRemoved[emoteKey].Add(userId);
+            }
+        }
+    }
+
+    /// <summary>
+    ///     Timer callback to process batched reaction events.
+    /// </summary>
+    private void ProcessReactionBatches(object? state)
+    {
+        var batchesToProcess = new List<MessageReactionBatch>();
+
+        // Extract batches older than 5 seconds
+        var cutoffTime = DateTime.UtcNow.AddSeconds(-5);
+        var keysToRemove = new List<ulong>();
+
+        foreach (var kvp in reactionBatches)
+        {
+            if (kvp.Value.FirstEventTime <= cutoffTime && kvp.Value.HasChanges)
+            {
+                batchesToProcess.Add(kvp.Value);
+                keysToRemove.Add(kvp.Key);
+            }
+        }
+
+        // Remove processed batches
+        foreach (var key in keysToRemove)
+        {
+            reactionBatches.TryRemove(key, out _);
+        }
+
+        // Process each batch
+        foreach (var batch in batchesToProcess)
+        {
+            _ = ProcessReactionBatch(batch);
+        }
+    }
+
+    /// <summary>
+    ///     Processes a single reaction batch and sends the log message.
+    /// </summary>
+    private async Task ProcessReactionBatch(MessageReactionBatch batch)
+    {
+        if (!GuildLogSettings.TryGetValue(batch.GuildId, out var logSetting))
+            return;
+
+        if (logSetting.ReactionEventsId is null or 0)
+            return;
+
+        var logChannel = client.GetGuild(batch.GuildId)?.GetTextChannel(logSetting.ReactionEventsId.Value);
+        if (logChannel is null)
+            return;
+
+        var components = new ComponentBuilderV2()
+            .WithContainer([
+                new TextDisplayBuilder("# Reaction Events")
+            ], Mewdeko.OkColor);
+
+        components.WithSeparator();
+        components.WithTextDisplay("\n**Reaction Summary**");
+
+        var summary =
+            $"`Message:` <#{batch.ChannelId}>: [Jump to Message](https://discord.com/channels/{batch.GuildId}/{batch.ChannelId}/{batch.MessageId})\n" +
+            $"`Channel:` <#{batch.ChannelId}> ({batch.ChannelName}) | {batch.ChannelId}\n" +
+            $"`Total Added:` {batch.TotalAdded}\n" +
+            $"`Total Removed:` {batch.TotalRemoved}";
+        components.WithTextDisplay(summary);
+
+        // Show detailed breakdown if there are changes
+        if (batch.ReactionsAdded.Any())
+        {
+            components.WithSeparator();
+            components.WithTextDisplay("\n**Reactions Added**");
+            var addedDetails = string.Join("\n", batch.ReactionsAdded.Select(kvp =>
+                $"`{kvp.Key}`: {kvp.Value.Count} users ({string.Join(", ", kvp.Value.Select(u => $"<@{u}>"))})"));
+            components.WithTextDisplay(addedDetails.TrimTo(1000));
+        }
+
+        if (batch.ReactionsRemoved.Any())
+        {
+            components.WithSeparator();
+            components.WithTextDisplay("\n**Reactions Removed**");
+            var removedDetails = string.Join("\n", batch.ReactionsRemoved.Select(kvp =>
+                $"`{kvp.Key}`: {kvp.Value.Count} users ({string.Join(", ", kvp.Value.Select(u => $"<@{u}>"))})"));
+            components.WithTextDisplay(removedDetails.TrimTo(1000));
+        }
+
+        try
+        {
+            await logChannel.SendMessageAsync(components: components.Build(), flags: MessageFlags.ComponentsV2,
+                allowedMentions: AllowedMentions.None);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error sending reaction batch log for message {MessageId} in guild {GuildId}",
+                batch.MessageId, batch.GuildId);
+        }
+    }
+
+    /// <summary>
+    ///     Represents a batched collection of reaction events for a specific message
+    /// </summary>
+    public class MessageReactionBatch
+    {
+        /// <summary>
+        ///     The ID of the message that had reaction changes
+        /// </summary>
+        public ulong MessageId { get; set; }
+
+        /// <summary>
+        ///     The ID of the channel containing the message
+        /// </summary>
+        public ulong ChannelId { get; set; }
+
+        /// <summary>
+        ///     The ID of the guild containing the message
+        /// </summary>
+        public ulong GuildId { get; set; }
+
+        /// <summary>
+        ///     The name of the channel containing the message
+        /// </summary>
+        public string ChannelName { get; set; } = "";
+
+        /// <summary>
+        ///     When the first reaction event in this batch occurred
+        /// </summary>
+        public DateTime FirstEventTime { get; set; } = DateTime.UtcNow;
+
+        /// <summary>
+        ///     Track reactions added by emote -> list of users who added them
+        /// </summary>
+        public Dictionary<string, List<ulong>> ReactionsAdded { get; set; } = new();
+
+        /// <summary>
+        ///     Track reactions removed by emote -> list of users who removed them
+        /// </summary>
+        public Dictionary<string, List<ulong>> ReactionsRemoved { get; set; } = new();
+
+        /// <summary>
+        ///     Gets total count of reaction additions in this batch
+        /// </summary>
+        public int TotalAdded
+        {
+            get
+            {
+                return ReactionsAdded.Values.Sum(users => users.Count);
+            }
+        }
+
+        /// <summary>
+        ///     Gets total count of reaction removals in this batch
+        /// </summary>
+        public int TotalRemoved
+        {
+            get
+            {
+                return ReactionsRemoved.Values.Sum(users => users.Count);
+            }
+        }
+
+        /// <summary>
+        ///     Gets whether this batch has any reaction changes
+        /// </summary>
+        public bool HasChanges
+        {
+            get
+            {
+                return TotalAdded > 0 || TotalRemoved > 0;
+            }
         }
     }
 }

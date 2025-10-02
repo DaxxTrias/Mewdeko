@@ -3,8 +3,8 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using LinqToDB;
 using LinqToDB.Async;
+using Mewdeko.Modules.Birthday;
 using Mewdeko.Modules.UserProfile.Common;
-using Mewdeko.Modules.Utility.Common;
 using Mewdeko.Services.Strings;
 using Embed = Discord.Embed;
 
@@ -76,7 +76,7 @@ public partial class UserProfileService : INService
     /// <returns>A <see cref="PronounSearchResult" /> object containing the pronouns or a default value if unspecified.</returns>
     /// <remarks>
     ///     This method first attempts to find the user's pronouns in the local database. If not found or unspecified, it then
-    ///     queries PronounDB's API.
+    ///     queries PronounDB's API v2.
     /// </remarks>
     public async Task<PronounSearchResult> GetPronounsOrUnspecifiedAsync(ulong discordId)
     {
@@ -84,63 +84,47 @@ public partial class UserProfileService : INService
 
         var user = await dbContext.DiscordUsers.FirstOrDefaultAsync(x => x.UserId == discordId).ConfigureAwait(false);
         if (!string.IsNullOrWhiteSpace(user?.Pronouns)) return new PronounSearchResult(user.Pronouns, false);
-        var result = await http.GetStringAsync($"https://pronoundb.org/api/v1/lookup?platform=discord&id={user.UserId}")
-            .ConfigureAwait(false);
-        var pronouns = JsonSerializer.Deserialize<PronounDbResult>(result);
-        // if (pronouns.Pronouns != "unspecified")
-        // {
-        //     user.PndbCache = pronouns.Pronouns;
-        //
-        // }
 
-        return new PronounSearchResult((pronouns?.Pronouns ?? "unspecified") switch
+        try
         {
-            "unspecified" => "Unspecified",
-            "hh" => "he/him",
-            "hi" => "he/it",
-            "hs" => "he/she",
-            "ht" => "he/they",
-            "ih" => "it/him",
-            "ii" => "it/its",
-            "is" => "it/she",
-            "it" => "it/they",
-            "shh" => "she/he",
-            "sh" => "she/her",
-            "si" => "she/it",
-            "st" => "she/they",
-            "th" => "they/he",
-            "ti" => "they/it",
-            "ts" => "they/she",
-            "tt" => "they/them",
-            "any" => "Any pronouns",
-            "other" => "Pronouns not on PronounDB",
-            "ask" => "Pronouns you should ask them about",
-            "avoid" => "A name instead of pronouns",
-            _ => "Failed to resolve pronouns."
-        }, true);
-    }
+            // Set up the HTTP request with proper User-Agent header as required by PronounDB v2
+            var request = new HttpRequestMessage(HttpMethod.Get,
+                $"https://pronoundb.org/api/v2/lookup?platform=discord&ids={user.UserId}");
+            request.Headers.Add("User-Agent", "Mewdeko/1.0 (Discord Bot)");
 
+            var response = await http.SendAsync(request).ConfigureAwait(false);
+            var result = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
 
-    /// <summary>
-    ///     Asynchronously fetches zodiac information for a given Discord user ID.
-    /// </summary>
-    /// <param name="discordId">The Discord user ID to retrieve zodiac information for.</param>
-    /// <returns>A tuple containing a boolean indicating success, and a <see cref="ZodiacResult" /> object if successful.</returns>
-    /// <remarks>
-    ///     The zodiac information is retrieved from an external API and requires the user's zodiac sign to be previously set.
-    /// </remarks>
-    public async Task<(bool, ZodiacResult)> GetZodiacInfo(ulong discordId)
-    {
-        await using var dbContext = await dbFactory.CreateConnectionAsync();
+            var pronounData = JsonSerializer.Deserialize<Dictionary<string, PronounDbV2User>>(result);
 
-        var user = await dbContext.DiscordUsers.FirstOrDefaultAsync(x => x.UserId == discordId).ConfigureAwait(false);
-        if (string.IsNullOrWhiteSpace(user.ZodiacSign))
-            return (false, null);
-        var client = new HttpClient();
-        var response =
-            await client.PostAsync($"https://aztro.sameerkumar.website/?sign={user.ZodiacSign.ToLower()}&day=today",
-                null);
-        return (true, JsonSerializer.Deserialize<ZodiacResult>(await response.Content.ReadAsStringAsync()));
+            // Check if the user exists in the response
+            if (pronounData != null && pronounData.TryGetValue(user.UserId.ToString(), out var userData))
+            {
+                // Get English pronouns (default locale)
+                if (userData.Sets.TryGetValue("en", out var pronouns) && pronouns.Length > 0)
+                {
+                    var pronounString = string.Join("/", pronouns);
+                    return new PronounSearchResult(pronounString switch
+                    {
+                        "he" => "he/him",
+                        "she" => "she/her",
+                        "they" => "they/them",
+                        "it" => "it/its",
+                        "any" => "Any pronouns",
+                        "ask" => "Ask me my pronouns",
+                        "avoid" => "Avoid pronouns, use my name",
+                        "other" => "Other pronouns",
+                        _ => pronounString // Use the actual pronoun combination if it's custom
+                    }, true);
+                }
+            }
+        }
+        catch (Exception)
+        {
+            // If API call fails, fall back to unspecified
+        }
+
+        return new PronounSearchResult("Unspecified", true);
     }
 
     /// <summary>
@@ -374,8 +358,6 @@ public partial class UserProfileService : INService
             eb.WithDescription(dbUser.Bio);
         eb.AddField("Pronouns", (await GetPronounsOrUnspecifiedAsync(user.Id)).Pronouns);
         eb.AddField("Zodiac Sign", string.IsNullOrEmpty(dbUser.ZodiacSign) ? "Unspecified" : dbUser.ZodiacSign);
-        if (!string.IsNullOrEmpty(dbUser.ZodiacSign))
-            eb.AddField("Horoscope", (await GetZodiacInfo(user.Id)).Item2.Description);
         if (dbUser.Birthday.HasValue)
             switch ((BirthdayDisplayModeEnum)dbUser.BirthdayDisplayMode)
             {

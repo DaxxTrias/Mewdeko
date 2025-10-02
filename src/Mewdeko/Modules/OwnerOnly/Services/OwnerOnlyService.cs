@@ -480,7 +480,7 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         if (toRemove is null)
             return null;
 
-        await dbContext.RotatingStatuses.Select(x => toRemove).DeleteAsync();
+        await dbContext.RotatingStatuses.Where(x => x.Id == toRemove.Id).DeleteAsync();
         return toRemove.Status;
     }
 
@@ -1227,17 +1227,21 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
 
         for (var i = classStart; i < content.Length; i++)
         {
-            if (content[i] == '{')
+            switch (content[i])
             {
-                foundFirstBrace = true;
-                braceLevel++;
-            }
-            else if (content[i] == '}')
-            {
-                braceLevel--;
-                if (foundFirstBrace && braceLevel == 0)
+                case '{':
+                    foundFirstBrace = true;
+                    braceLevel++;
+                    break;
+                case '}':
                 {
-                    return i + 1;
+                    braceLevel--;
+                    if (foundFirstBrace && braceLevel == 0)
+                    {
+                        return i + 1;
+                    }
+
+                    break;
                 }
             }
         }
@@ -1530,10 +1534,19 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
         {
             var c = parameters[i];
 
-            if (c == '<' || c == '[' || c == '(')
-                bracketLevel++;
-            else if (c == '>' || c == ']' || c == ')')
-                bracketLevel--;
+            switch (c)
+            {
+                case '<':
+                case '[':
+                case '(':
+                    bracketLevel++;
+                    break;
+                case '>':
+                case ']':
+                case ')':
+                    bracketLevel--;
+                    break;
+            }
 
             if (c == ',' && bracketLevel == 0)
             {

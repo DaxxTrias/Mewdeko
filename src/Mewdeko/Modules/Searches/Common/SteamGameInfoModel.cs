@@ -140,26 +140,31 @@ public class SteamGameInfo
     /// <summary>
     ///     Gets or sets the Steam Application ID.
     /// </summary>
+    [JsonPropertyName("steam_appid")]
     public int SteamAppid { get; set; }
 
     /// <summary>
     ///     Gets or sets the detailed HTML description of the game.
     /// </summary>
+    [JsonPropertyName("detailed_description")]
     public string DetailedDescription { get; set; }
 
     /// <summary>
     ///     Gets or sets the HTML formatted "About the Game" section.
     /// </summary>
+    [JsonPropertyName("about_the_game")]
     public string AboutTheGame { get; set; }
 
     /// <summary>
     ///     Gets or sets a brief description of the game.
     /// </summary>
+    [JsonPropertyName("short_description")]
     public string ShortDescription { get; set; }
 
     /// <summary>
     ///     Gets or sets the URL of the game's header image.
     /// </summary>
+    [JsonPropertyName("header_image")]
     public string HeaderImage { get; set; }
 
     /// <summary>
@@ -175,6 +180,7 @@ public class SteamGameInfo
     /// <summary>
     ///     Gets or sets the pricing information.
     /// </summary>
+    [JsonPropertyName("price_overview")]
     public PriceOverview Price { get; set; }
 
     /// <summary>
@@ -210,6 +216,7 @@ public class SteamGameInfo
     /// <summary>
     ///     Gets or sets the release date information.
     /// </summary>
+    [JsonPropertyName("release_date")]
     public ReleaseDate ReleaseDate { get; set; }
 
     /// <summary>
@@ -220,16 +227,19 @@ public class SteamGameInfo
     /// <summary>
     ///     Gets or sets the PC system requirements.
     /// </summary>
+    [JsonPropertyName("pc_requirements")]
     public PCRequirements PcRequirements { get; set; }
 
     /// <summary>
-    ///     Gets or sets the support information URL.
+    ///     Gets or sets support information (URL/email). Shape varies per app.
     /// </summary>
-    public string SupportInfo { get; set; }
+    [JsonPropertyName("support_info")]
+    public SupportInfo SupportInfo { get; set; }
 
     /// <summary>
     ///     Gets or sets the background image URL.
     /// </summary>
+    [JsonPropertyName("background")]
     public string Background { get; set; }
 
     /// <summary>
@@ -307,6 +317,24 @@ public class MetacriticInfo
     ///     Gets or sets the URL to the Metacritic review.
     /// </summary>
     public string Url { get; set; }
+}
+
+/// <summary>
+///     Represents support information returned by Steam (may include URL and email).
+/// </summary>
+public class SupportInfo
+{
+    /// <summary>
+    ///     Gets or sets the support website URL.
+    /// </summary>
+    [JsonPropertyName("url")]
+    public string Url { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the support email address.
+    /// </summary>
+    [JsonPropertyName("email")]
+    public string Email { get; set; }
 }
 
 /// <summary>

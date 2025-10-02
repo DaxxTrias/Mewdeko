@@ -2028,9 +2028,11 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
         // Associate chat trigger IDs with their corresponding application command IDs
         await using var dbContext = await dbFactory.CreateConnectionAsync();
         var cts = dbContext.ChatTriggers.Where(x => x.GuildId == guild.Id).ToList();
-        cmd.SelectMany(applicationCommand =>
-            applicationCommand.GetCtNames().Select(name => (cmd: applicationCommand, name))).ToList().ForEach(x =>
-            cts.First(y => y.RealName() == x.name).ApplicationCommandId = x.cmd.Id);
+        foreach (var x in cmd.SelectMany(applicationCommand =>
+                     applicationCommand.GetCtNames().Select(name => (cmd: applicationCommand, name))))
+        {
+            cts.First(y => y.RealName() == x.name).ApplicationCommandId = x.cmd.Id;
+        }
     }
 
     /// <summary>
@@ -2366,7 +2368,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
                 case CtRoleGrantType.Mentioned:
                     // For reaction triggers, we can't get mentioned users from the reaction itself
                     // So we'll get mentions from the original message that was reacted to
-                    var mentionedUserIds = message.Content?.GetUserMentions() ?? Enumerable.Empty<ulong>();
+                    var mentionedUserIds = message.Content?.GetUserMentions() ?? [];
                     foreach (var userId in mentionedUserIds)
                     {
                         var mentionedGuildUser = await guild.GetUserAsync(userId).ConfigureAwait(false);
@@ -2377,7 +2379,7 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
                     break;
                 case CtRoleGrantType.Both:
                     targetUsers.Add(guildUser);
-                    var mentionedUserIds2 = message.Content?.GetUserMentions() ?? Enumerable.Empty<ulong>();
+                    var mentionedUserIds2 = message.Content?.GetUserMentions() ?? [];
                     foreach (var userId in mentionedUserIds2)
                     {
                         var mentionedGuildUser = await guild.GetUserAsync(userId).ConfigureAwait(false);

@@ -89,7 +89,24 @@ public class ClientOperations(DiscordShardedClient client) : Controller
                 {
                     Id = c.Id, Name = c.Name
                 }),
-            // ... similar for other types
+            ChannelType.Forum => guild.Channels
+                .Where(x => x is IForumChannel)
+                .Select(c => new NeededRoleInfo
+                {
+                    Id = c.Id, Name = c.Name
+                }),
+            ChannelType.Category => guild.Channels
+                .Where(x => x is ICategoryChannel)
+                .Select(c => new NeededRoleInfo
+                {
+                    Id = c.Id, Name = c.Name
+                }),
+            ChannelType.Announcement => guild.Channels
+                .Where(x => x is INewsChannel)
+                .Select(c => new NeededRoleInfo
+                {
+                    Id = c.Id, Name = c.Name
+                }),
             _ => guild.Channels
                 .Select(c => new NeededRoleInfo
                 {
@@ -191,15 +208,17 @@ public class ClientOperations(DiscordShardedClient client) : Controller
     /// <summary>
     ///     Gets a list of guilds the bot and user have mutual
     /// </summary>
-    /// <param name="userId"></param>
+    /// <param name="userId">The user ID to check mutual guilds for</param>
+    /// <param name="adminOnly">Whether to only return guilds where user has admin permissions (default: true)</param>
     /// <returns></returns>
     [HttpGet("mutualguilds/{userId}")]
-    public async Task<IActionResult> GetMutualAdminGuilds(ulong userId)
+    public async Task<IActionResult> GetMutualGuilds(ulong userId, [FromQuery] bool adminOnly = true)
     {
         await Task.CompletedTask;
         var guilds = client.Guilds;
         var mutuals = guilds
-            .Where(x => x.Users.Any(y => y.Id == userId && y.GuildPermissions.Has(GuildPermission.Administrator)))
+            .Where(x => x.Users.Any(y => y.Id == userId &&
+                                         (adminOnly ? y.GuildPermissions.Has(GuildPermission.Administrator) : true)))
             .Select(g => new
             {
                 id = g.Id,
@@ -209,13 +228,38 @@ public class ClientOperations(DiscordShardedClient client) : Controller
                 permissions = (int)g.GetUser(userId).GuildPermissions.RawValue,
                 features = Enum.GetValues(typeof(GuildFeature)).Cast<GuildFeature>()
                     .Where(x => g.Features.Value.HasFlag(x)),
-                banner = g.BannerUrl + "?size=4096"
+                banner = g.BannerUrl + "?size=4096",
+                hasAdminAccess = g.GetUser(userId).GuildPermissions.Has(GuildPermission.Administrator)
             })
             .ToList();
 
         if (mutuals.Count != 0)
             return Ok(mutuals);
         return NotFound();
+    }
+
+    /// <summary>
+    ///     Checks if this bot instance has the specified guild
+    /// </summary>
+    /// <param name="guildId">The guild ID to check</param>
+    /// <returns>Whether this instance has the guild with basic info</returns>
+    [HttpGet("hasguild/{guildId}")]
+    public async Task<IActionResult> HasGuild(ulong guildId)
+    {
+        await Task.CompletedTask;
+        var guild = client.GetGuild(guildId);
+
+        return Ok(new
+        {
+            hasGuild = guild != null,
+            guildName = guild?.Name,
+            memberCount = guild?.MemberCount,
+            iconUrl = guild?.IconUrl,
+            // Add more public info that might be useful for leaderboards
+            createdAt = guild?.CreatedAt,
+            description = guild?.Description,
+            features = guild?.Features
+        });
     }
 
     /// <summary>
@@ -227,5 +271,200 @@ public class ClientOperations(DiscordShardedClient client) : Controller
     {
         await Task.CompletedTask;
         return Ok(JsonSerializer.Serialize(client.Guilds.Select(x => x.Id), Options));
+    }
+
+    /// <summary>
+    ///     Gets forum channels with detailed information including tags and threads
+    /// </summary>
+    /// <param name="guildId">The guild ID to get forum channels from</param>
+    /// <returns>Detailed forum channel information or 404 if guild not found</returns>
+    [HttpGet("forumchannels/{guildId}")]
+    public async Task<IActionResult> GetForumChannels(ulong guildId)
+    {
+        await Task.CompletedTask;
+        var guild = client.GetGuild(guildId);
+        if (guild == null)
+            return NotFound();
+
+        var forumChannels = new List<ForumChannelInfo>();
+
+        foreach (var forum in guild.Channels.OfType<IForumChannel>())
+        {
+            try
+            {
+                var activeThreads = await forum.GetActiveThreadsAsync();
+
+                var forumInfo = new ForumChannelInfo
+                {
+                    Id = forum.Id,
+                    Name = forum.Name,
+                    Topic = forum.Topic,
+                    RequiresTags = forum.Tags.Any(t => t.IsModerated),
+                    MaxActiveThreads = null,
+                    DefaultAutoArchiveDuration = (int)forum.DefaultAutoArchiveDuration,
+                    Tags = forum.Tags.Select(tag => new ForumTagInfo
+                    {
+                        Id = tag.Id, Name = tag.Name, Emoji = tag.Emoji?.ToString(), IsModerated = tag.IsModerated
+                    }).ToList(),
+                    ActiveThreads = activeThreads.Select(thread => new ThreadInfo
+                    {
+                        Id = thread.Id,
+                        Name = thread.Name,
+                        AppliedTags = thread.AppliedTags?.ToList() ?? new List<ulong>(),
+                        CreatorId = thread.OwnerId,
+                        CreatedAt = thread.CreatedAt.UtcDateTime,
+                        MessageCount = thread.MessageCount,
+                        IsArchived = thread.IsArchived,
+                        IsLocked = thread.IsLocked
+                    }).ToList(),
+                    TotalThreadCount = activeThreads.Count
+                };
+
+                forumChannels.Add(forumInfo);
+            }
+            catch (Exception)
+            {
+                // Continue with basic info if thread fetching fails
+                forumChannels.Add(new ForumChannelInfo
+                {
+                    Id = forum.Id,
+                    Name = forum.Name,
+                    Topic = forum.Topic,
+                    Tags = forum.Tags.Select(tag => new ForumTagInfo
+                    {
+                        Id = tag.Id, Name = tag.Name, Emoji = tag.Emoji?.ToString(), IsModerated = tag.IsModerated
+                    }).ToList()
+                });
+            }
+        }
+
+        return Ok(forumChannels);
+    }
+
+    /// <summary>
+    ///     Gets detailed information about a specific forum channel
+    /// </summary>
+    /// <param name="guildId">The guild ID</param>
+    /// <param name="forumId">The forum channel ID</param>
+    /// <returns>Detailed forum information or 404 if not found</returns>
+    [HttpGet("forumchannel/{guildId}/{forumId}")]
+    public async Task<IActionResult> GetForumChannel(ulong guildId, ulong forumId)
+    {
+        var guild = client.GetGuild(guildId);
+        if (guild == null)
+            return NotFound("Guild not found");
+
+        var forum = guild.GetChannel(forumId) as IForumChannel;
+        if (forum == null)
+            return NotFound("Forum channel not found");
+
+        try
+        {
+            var activeThreads = await forum.GetActiveThreadsAsync();
+
+            var forumInfo = new ForumChannelInfo
+            {
+                Id = forum.Id,
+                Name = forum.Name,
+                Topic = forum.Topic,
+                RequiresTags = forum.Tags.Any(t => t.IsModerated),
+                MaxActiveThreads = null,
+                DefaultAutoArchiveDuration = (int)forum.DefaultAutoArchiveDuration,
+                Tags = forum.Tags.Select(tag => new ForumTagInfo
+                {
+                    Id = tag.Id, Name = tag.Name, Emoji = tag.Emoji?.ToString(), IsModerated = tag.IsModerated
+                }).ToList(),
+                ActiveThreads = activeThreads.Select(thread => new ThreadInfo
+                {
+                    Id = thread.Id,
+                    Name = thread.Name,
+                    AppliedTags = thread.AppliedTags?.ToList() ?? new List<ulong>(),
+                    CreatorId = thread.OwnerId,
+                    CreatedAt = thread.CreatedAt.UtcDateTime,
+                    MessageCount = thread.MessageCount,
+                    IsArchived = thread.IsArchived,
+                    IsLocked = thread.IsLocked
+                }).ToList(),
+                TotalThreadCount = activeThreads.Count
+            };
+
+            return Ok(forumInfo);
+        }
+        catch (Exception ex)
+        {
+            // Return basic forum info if thread fetching fails
+            var basicInfo = new ForumChannelInfo
+            {
+                Id = forum.Id,
+                Name = forum.Name,
+                Topic = forum.Topic,
+                Tags = forum.Tags.Select(tag => new ForumTagInfo
+                {
+                    Id = tag.Id, Name = tag.Name, Emoji = tag.Emoji?.ToString(), IsModerated = tag.IsModerated
+                }).ToList()
+            };
+
+            return Ok(basicInfo);
+        }
+    }
+
+    /// <summary>
+    ///     Gets threads for a specific forum channel
+    /// </summary>
+    /// <param name="guildId">The guild ID</param>
+    /// <param name="forumId">The forum channel ID</param>
+    /// <param name="includeArchived">Whether to include archived threads</param>
+    /// <returns>List of threads or 404 if not found</returns>
+    [HttpGet("forumthreads/{guildId}/{forumId}")]
+    public async Task<IActionResult> GetForumThreads(ulong guildId, ulong forumId,
+        [FromQuery] bool includeArchived = false)
+    {
+        var guild = client.GetGuild(guildId);
+        if (guild == null)
+            return NotFound("Guild not found");
+
+        var forum = guild.GetChannel(forumId) as IForumChannel;
+        if (forum == null)
+            return NotFound("Forum channel not found");
+
+        try
+        {
+            var activeThreads = await forum.GetActiveThreadsAsync();
+            var threads = activeThreads.Select(thread => new ThreadInfo
+            {
+                Id = thread.Id,
+                Name = thread.Name,
+                AppliedTags = thread.AppliedTags?.ToList() ?? new List<ulong>(),
+                CreatorId = thread.OwnerId,
+                CreatedAt = thread.CreatedAt.UtcDateTime,
+                MessageCount = thread.MessageCount,
+                IsArchived = thread.IsArchived,
+                IsLocked = thread.IsLocked
+            });
+
+            if (includeArchived)
+            {
+                var archivedThreads = await forum.GetPublicArchivedThreadsAsync();
+                var allThreads = threads.Concat(archivedThreads.Select(thread => new ThreadInfo
+                {
+                    Id = thread.Id,
+                    Name = thread.Name,
+                    AppliedTags = thread.AppliedTags?.ToList() ?? new List<ulong>(),
+                    CreatorId = thread.OwnerId,
+                    CreatedAt = thread.CreatedAt.UtcDateTime,
+                    MessageCount = thread.MessageCount,
+                    IsArchived = thread.IsArchived,
+                    IsLocked = thread.IsLocked
+                }));
+
+                return Ok(allThreads);
+            }
+
+            return Ok(threads);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"Failed to retrieve forum threads: {ex.Message}");
+        }
     }
 }

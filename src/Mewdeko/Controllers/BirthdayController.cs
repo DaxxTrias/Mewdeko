@@ -197,7 +197,7 @@ public class BirthdayController : Controller
             if (guild is null)
                 return NotFound("Guild not found.");
 
-            if (days < 1 || days > 30)
+            if (days is < 1 or > 30)
                 return BadRequest("Days must be between 1 and 30.");
 
             var upcomingBirthdays = new List<BirthdayUserResponse>();

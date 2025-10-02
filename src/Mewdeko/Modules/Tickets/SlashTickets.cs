@@ -1131,10 +1131,15 @@ public partial class TicketsSlash : MewdekoSlashModuleBase<TicketService>
                 var parts = selection.Split(':');
                 if (parts.Length == 2 && ulong.TryParse(parts[1], out var id))
                 {
-                    if (parts[0] == "create")
-                        createCategory = id;
-                    else if (parts[0] == "archive")
-                        archiveCategory = id;
+                    switch (parts[0])
+                    {
+                        case "create":
+                            createCategory = id;
+                            break;
+                        case "archive":
+                            archiveCategory = id;
+                            break;
+                    }
                 }
             }
 

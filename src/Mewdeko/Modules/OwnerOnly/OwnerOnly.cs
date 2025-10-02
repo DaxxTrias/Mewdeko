@@ -200,13 +200,10 @@ public class OwnerOnly(
     [Aliases]
     public async Task Sudo(IGuildUser user, [Remainder] string args)
     {
-        var msg = new MewdekoUserMessage
-        {
-            Content = $"{await guildSettings.GetPrefix(ctx.Guild)}{args}", Author = user, Channel = ctx.Channel
-        };
+        var content = $"{await guildSettings.GetPrefix(ctx.Guild)}{args}";
+        var msg = MewdekoUserMessage.CreateWithMentions(content, user, ctx.Channel);
         commandHandler.AddCommandToParseQueue(msg);
-        _ = Task.Run(() => commandHandler.ExecuteCommandsInChannelAsync(ctx.Channel.Id))
-            .ConfigureAwait(false);
+        _ = commandHandler.ExecuteCommandsInChannelAsync(ctx.Channel.Id);
     }
 
     /// <summary>
@@ -221,15 +218,10 @@ public class OwnerOnly(
     [Aliases]
     public async Task Sudo([Remainder] string args)
     {
-        var msg = new MewdekoUserMessage
-        {
-            Content = $"{await guildSettings.GetPrefix(ctx.Guild)}{args}",
-            Author = await Context.Guild.GetOwnerAsync(),
-            Channel = ctx.Channel
-        };
+        var content = $"{await guildSettings.GetPrefix(ctx.Guild)}{args}";
+        var msg = MewdekoUserMessage.CreateWithMentions(content, await Context.Guild.GetOwnerAsync(), ctx.Channel);
         commandHandler.AddCommandToParseQueue(msg);
-        _ = Task.Run(() => commandHandler.ExecuteCommandsInChannelAsync(ctx.Channel.Id))
-            .ConfigureAwait(false);
+        _ = commandHandler.ExecuteCommandsInChannelAsync(ctx.Channel.Id);
     }
 
     /// <summary>
@@ -1674,15 +1666,15 @@ public class OwnerOnly(
             .WithAllowUnsafe(true);
 
         // Add a preprocessor to the code to include commonly used extension methods
-        var preprocessedCode = $"""
+        var preprocessedCode = $@"
+// Auto-imported extension methods and helpers
+using static System.Math;
+using static System.Console;
+using static Newtonsoft.Json.JsonConvert;
 
-                                // Auto-imported extension methods and helpers
-                                using static System.Math;
-                                using static System.Console;
-                                using static Newtonsoft.Json.JsonConvert;
+{codeToEvaluate}";
 
-                                {codeToEvaluate}
-                                """;
+        logger.LogInformation(preprocessedCode);
 
         // Start measuring compilation time
         var compilationStopwatch = Stopwatch.StartNew();
@@ -1778,7 +1770,7 @@ public class OwnerOnly(
 public sealed class EvaluationEnvironment
 {
     /// <summary>
-    ///     Initializes a new instance of the <see cref="EvaluationEnvironment"/> class with the specified command context
+    ///     Initializes a new instance of the <see cref="EvaluationEnvironment" /> class with the specified command context
     /// </summary>
     /// <param name="ctx">The command context associated with the current eval command execution</param>
     public EvaluationEnvironment(CommandContext ctx)
@@ -1794,27 +1786,58 @@ public sealed class EvaluationEnvironment
     /// <summary>
     ///     Gets the message that triggered the current eval command
     /// </summary>
-    public IUserMessage Message => Ctx.Message;
+    public IUserMessage Message
+    {
+        get
+        {
+            return Ctx.Message;
+        }
+    }
 
     /// <summary>
     ///     Gets the channel in which the eval command was executed
     /// </summary>
-    public IMessageChannel Channel => Ctx.Channel;
+    public IMessageChannel Channel
+    {
+        get
+        {
+            return Ctx.Channel;
+        }
+    }
 
     /// <summary>
     ///     Gets the guild in which the eval command was executed. May be null for commands executed in DMs
     /// </summary>
-    public IGuild Guild => Ctx.Guild;
+    public IGuild Guild
+    {
+        get
+        {
+            return Ctx.Guild;
+        }
+    }
 
     /// <summary>
     ///     Gets the user who executed the eval command
     /// </summary>
-    public IUser User => Ctx.User;
+    public IUser User
+    {
+        get
+        {
+            return Ctx.User;
+        }
+    }
 
     /// <summary>
-    ///     Gets the guild member who executed the eval command. This is a convenience property for accessing the user as an IGuildUser
+    ///     Gets the guild member who executed the eval command. This is a convenience property for accessing the user as an
+    ///     IGuildUser
     /// </summary>
-    public IGuildUser Member => (IGuildUser)Ctx.User;
+    public IGuildUser Member
+    {
+        get
+        {
+            return (IGuildUser)Ctx.User;
+        }
+    }
 
     /// <summary>
     ///     Gets or sets the Discord sharded client instance for interacting with the Discord API
@@ -1886,5 +1909,8 @@ public sealed class EvaluationEnvironment
     /// </summary>
     /// <typeparam name="T">The type of service to retrieve</typeparam>
     /// <returns>The requested service instance, or null if the service is not registered</returns>
-    public T GetService<T>() => Services.GetService<T>();
+    public T GetService<T>()
+    {
+        return Services.GetService<T>();
+    }
 }

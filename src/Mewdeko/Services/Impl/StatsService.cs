@@ -18,7 +18,7 @@ public class StatsService : IStatsService, IDisposable
     /// <summary>
     ///     The version of the bot. I should make this set from commits somehow idk
     /// </summary>
-    public const string BotVersion = "7.8.5";
+    public const string BotVersion = "7.8.9";
 
     private readonly IDataCache cache;
     private readonly DiscordShardedClient client;
@@ -38,7 +38,6 @@ public class StatsService : IStatsService, IDisposable
     /// <param name="cache">The caching service</param>
     /// <param name="logger"></param>
     /// <exception cref="ArgumentNullException"></exception>
-    /// <param name="logger">The logger instance for structured logging.</param>
     public StatsService(
         DiscordShardedClient client, IBotCredentials creds,
         HttpClient http, IDataCache cache, ILogger<StatsService> logger)
@@ -51,7 +50,7 @@ public class StatsService : IStatsService, IDisposable
 
         started = DateTime.UtcNow;
 
-            _ = Task.Run(async () => await PostToTopGg());
+            _ = PostToTopGg();
             _ = OnReadyAsync();
         }
 

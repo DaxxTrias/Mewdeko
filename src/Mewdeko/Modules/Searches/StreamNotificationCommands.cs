@@ -4,6 +4,7 @@ using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
 using LinqToDB.Async;
 using Mewdeko.Common.Attributes.TextCommands;
+using Mewdeko.Modules.Searches.Common.StreamNotifications.Models;
 using Mewdeko.Modules.Searches.Services;
 
 namespace Mewdeko.Modules.Searches;
@@ -153,8 +154,7 @@ public partial class Searches
                     var elem = elements[index];
                     eb.AddField(
                         $"**#{index + 1 + 12 * page}** {elem.Username.ToLower()}",
-                        $"【{elem.Type}】\n<#{elem.ChannelId}>\n{elem.Message?.TrimTo(50)}",
-                        true);
+                        $"{(FType)elem.Type}\n<#{elem.ChannelId}>");
                 }
 
                 return eb;
@@ -221,6 +221,99 @@ public partial class Searches
                 await ReplyConfirmAsync(Strings.StreamMessageSet(ctx.Guild.Id, Format.Bold(fs.Username)))
                     .ConfigureAwait(false);
             }
+        }
+
+        /// <summary>
+        ///     Sets the offline message for a specific stream.
+        /// </summary>
+        /// <param name="index">The 1-based index of the stream.</param>
+        /// <param name="message">The offline message template with placeholders.</param>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.ManageMessages)]
+        public async Task StreamOfflineMessage(int index, [Remainder] string message)
+        {
+            if (--index < 0)
+                return;
+
+            var (followed, fs) = await Service.SetStreamOfflineMessage(ctx.Guild.Id, index, message);
+
+            if (!followed)
+            {
+                await ReplyConfirmAsync(Strings.StreamNotFollowing(ctx.Guild.Id)).ConfigureAwait(false);
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(message))
+            {
+                await ReplyConfirmAsync(Strings.StreamOfflineMessageReset(ctx.Guild.Id, Format.Bold(fs.Username)))
+                    .ConfigureAwait(false);
+            }
+            else
+            {
+                await ReplyConfirmAsync(Strings.StreamOfflineMessageSet(ctx.Guild.Id, Format.Bold(fs.Username)))
+                    .ConfigureAwait(false);
+            }
+        }
+
+        /// <summary>
+        ///     Sets or shows the custom stream notification message template for all streams in the guild.
+        /// </summary>
+        /// <param name="template">The custom message template with placeholders. Leave empty to show current template, use "reset" to disable custom messages.</param>
+        /// <remarks>
+        ///     This command allows setting a custom notification template for all stream notifications in the guild.
+        ///     Supports rich placeholders like %stream.name%, %stream.title%, %stream.viewers%, etc.
+        ///     Can use JSON embed format for advanced formatting.
+        /// </remarks>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.ManageMessages)]
+        public async Task StreamTemplate([Remainder] string? template = null)
+        {
+            if (string.IsNullOrWhiteSpace(template))
+            {
+                // Show current template and placeholders
+                var currentTemplate = await Service.GetCustomStreamMessageAsync(ctx.Guild.Id);
+
+                var embed = new EmbedBuilder()
+                    .WithTitle(Strings.StreamTemplateTitle(ctx.Guild.Id))
+                    .WithColor(Mewdeko.OkColor);
+
+                if (string.IsNullOrWhiteSpace(currentTemplate))
+                {
+                    embed.WithDescription(Strings.StreamTemplateNotSet(ctx.Guild.Id));
+                }
+                else
+                {
+                    embed.AddField(Strings.StreamTemplateCurrent(ctx.Guild.Id),
+                        Format.Code(currentTemplate.TrimTo(1000)));
+                }
+
+                // Add placeholder information
+                var placeholders = StreamNotificationService.GetStreamPlaceholders();
+                foreach (var category in placeholders)
+                {
+                    var placeholderText = string.Join("\n",
+                        category.Value.Select(p => $"`{p.Placeholder}` - {p.Description}"));
+                    embed.AddField(category.Key, placeholderText.TrimTo(1000));
+                }
+
+                embed.WithFooter(Strings.StreamTemplateFooter(ctx.Guild.Id));
+                await ctx.Channel.EmbedAsync(embed).ConfigureAwait(false);
+                return;
+            }
+
+            if (template.ToLowerInvariant() == "reset")
+            {
+                await Service.SetCustomStreamMessageAsync(ctx.Guild.Id, null);
+                await ReplyConfirmAsync(Strings.StreamTemplateReset(ctx.Guild.Id)).ConfigureAwait(false);
+                return;
+            }
+
+            await Service.SetCustomStreamMessageAsync(ctx.Guild.Id, template);
+            await ReplyConfirmAsync(Strings.StreamTemplateSet(ctx.Guild.Id)).ConfigureAwait(false);
         }
 
         /// <summary>

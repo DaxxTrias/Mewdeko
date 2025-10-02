@@ -230,7 +230,7 @@ public class SearchImagesService : ISearchImagesService, INService
             if (string.IsNullOrEmpty(result.Error))
             {
                 // if we have a non-error result, cancel other searches and return the result
-                cancelSource.Cancel();
+                await cancelSource.CancelAsync();
                 return result;
             }
 

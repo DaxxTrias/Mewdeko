@@ -579,12 +579,27 @@ public partial class Searches(
             return;
         }
 
-        await ctx.Channel.EmbedAsync(new EmbedBuilder().WithOkColor()
+        var eb = new EmbedBuilder().WithOkColor()
             .WithTitle(movie.Title)
             .WithUrl(movie.Url)
             .WithDescription(movie.Plot)
-            .AddField(efb => efb.WithName("Year").WithValue(movie.Year).WithIsInline(true))
-            .WithImageUrl(movie.ImageUrl)).ConfigureAwait(false);
+            .AddField(efb => efb.WithName("Year").WithValue(movie.Year).WithIsInline(true));
+
+        if (!string.IsNullOrWhiteSpace(movie.ImageUrl)
+            && Uri.TryCreate(movie.ImageUrl, UriKind.Absolute, out var posterUri)
+            && (posterUri.Scheme == Uri.UriSchemeHttp || posterUri.Scheme == Uri.UriSchemeHttps))
+        {
+            eb.WithImageUrl(movie.ImageUrl);
+        }
+
+        if (!string.IsNullOrWhiteSpace(movie.LogoUrl)
+            && Uri.TryCreate(movie.LogoUrl, UriKind.Absolute, out var logoUri)
+            && (logoUri.Scheme == Uri.UriSchemeHttp || logoUri.Scheme == Uri.UriSchemeHttps))
+        {
+            eb.WithThumbnailUrl(movie.LogoUrl);
+        }
+
+        await ctx.Channel.EmbedAsync(eb).ConfigureAwait(false);
     }
 
     /// <summary>

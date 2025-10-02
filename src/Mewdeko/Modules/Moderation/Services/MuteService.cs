@@ -1,9 +1,9 @@
 using System.Diagnostics;
 using System.Threading;
 using DataModel;
+using Discord.Net;
 using LinqToDB;
 using LinqToDB.Async;
-using LinqToDB.Data;
 using Mewdeko.Common.Collections;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Services.Strings;
@@ -61,6 +61,8 @@ public class MuteService : INService, IReadyExecutor, IDisposable
         new(addReactions: PermValue.Deny, sendMessages: PermValue.Deny,
             attachFiles: PermValue.Deny, sendMessagesInThreads: PermValue.Deny, createPublicThreads: PermValue.Deny);
 
+    private readonly ConcurrentDictionary<TimerKey, Timer> activeTimers = new();
+
     private readonly DiscordShardedClient client;
 
     private readonly IDataConnectionFactory dbFactory;
@@ -68,13 +70,7 @@ public class MuteService : INService, IReadyExecutor, IDisposable
 
     private readonly GuildSettingsService guildSettings;
     private readonly ILogger<MuteService> logger;
-
-    private readonly Timer? processingTimer = null;
-
-    private readonly ConcurrentDictionary<TimerKey, TimerQueueItem> scheduledItems = new();
     private readonly GeneratedBotStrings strings;
-    private readonly object timerLock = new();
-    private bool isProcessing;
 
 
     /// <summary>
@@ -114,7 +110,7 @@ public class MuteService : INService, IReadyExecutor, IDisposable
     /// <summary>
     ///     Muted users cache.
     /// </summary>
-    public ConcurrentDictionary<ulong, ConcurrentHashSet<ulong>> MutedUsers { get; set; }
+    public ConcurrentDictionary<ulong, ConcurrentHashSet<ulong>> MutedUsers { get; set; } = new();
 
     /// <summary>
     ///     Unmute timers cache.
@@ -173,8 +169,7 @@ public class MuteService : INService, IReadyExecutor, IDisposable
             foreach (var timer in unmuteTimers)
             {
                 var key = new TimerKey(timer.GuildId.Value, timer.UserId, TimerType.Mute);
-                var item = new TimerQueueItem(key, timer.UnmuteAt);
-                scheduledItems[key] = item;
+                CreateIndividualTimer(key, timer.UnmuteAt);
             }
 
             // Load unban timers
@@ -189,8 +184,7 @@ public class MuteService : INService, IReadyExecutor, IDisposable
             foreach (var timer in unbanTimers)
             {
                 var key = new TimerKey(timer.GuildId.Value, timer.UserId, TimerType.Ban);
-                var item = new TimerQueueItem(key, timer.UnbanAt);
-                scheduledItems[key] = item;
+                CreateIndividualTimer(key, timer.UnbanAt);
             }
 
             // Load unrole timers
@@ -204,8 +198,7 @@ public class MuteService : INService, IReadyExecutor, IDisposable
             foreach (var timer in unroleTimers)
             {
                 var key = new TimerKey(timer.GuildId.Value, timer.UserId, TimerType.AddRole, timer.RoleId);
-                var item = new TimerQueueItem(key, timer.UnbanAt);
-                scheduledItems[key] = item;
+                CreateIndividualTimer(key, timer.UnbanAt);
             }
 
             logger.LogInformation(
@@ -229,328 +222,269 @@ public class MuteService : INService, IReadyExecutor, IDisposable
     public event EventHandler.AsyncEventHandler<IGuildUser, IUser, MuteType, string> UserUnmuted;
 
 
-    private async void ProcessExpiredItemsCallback(object state)
+    /// <summary>
+    ///     Creates an individual timer for a specific expiration time
+    /// </summary>
+    private void CreateIndividualTimer(TimerKey key, DateTime expireAt)
     {
-        if (isProcessing)
+        var delay = expireAt - DateTime.UtcNow;
+
+        // If already expired, process immediately
+        if (delay <= TimeSpan.Zero)
+        {
+            _ = ProcessIndividualItem(key);
             return;
+        }
 
-        lock (timerLock)
+        // Create timer that fires once at the exact expiration time
+        var timer = new Timer(async _ =>
         {
-            if (isProcessing)
+            await ProcessIndividualItem(key);
+
+            // Remove the timer after processing
+            if (activeTimers.TryRemove(key, out var timerToDispose))
+            {
+                timerToDispose.Dispose();
+            }
+        }, null, delay, Timeout.InfiniteTimeSpan);
+
+        // Store the timer, disposing any existing one
+        if (activeTimers.TryGetValue(key, out var existingTimer))
+        {
+            existingTimer.Dispose();
+        }
+
+        activeTimers[key] = timer;
+    }
+
+    /// <summary>
+    ///     Processes a single timer item when it expires
+    /// </summary>
+    private async Task ProcessIndividualItem(TimerKey key)
+    {
+        try
+        {
+            switch (key.Type)
+            {
+                case TimerType.Mute:
+                    await ProcessIndividualMuteItem(key);
+                    break;
+                case TimerType.Ban:
+                    await ProcessIndividualBanItem(key);
+                    break;
+                case TimerType.AddRole:
+                    await ProcessIndividualRoleItem(key);
+                    break;
+                default:
+                    logger.LogWarning("Unknown timer type {TimerType} for key {Key}", key.Type, key);
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error processing individual timer item {Key}", key);
+        }
+    }
+
+    private async Task ProcessIndividualMuteItem(TimerKey key)
+    {
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
+
+        try
+        {
+            var guildId = key.GuildId;
+            var userId = key.UserId;
+
+            // Find the user
+            var guild = client.GetGuild(guildId);
+            if (guild != null)
+            {
+                // Unmute the user
+                await UnmuteUser(guildId, userId, client.CurrentUser, reason: "Timed mute expired");
+            }
+            else
+            {
+                logger.LogInformation("Cleaning up mute timer for non-existent guild {GuildId}", guildId);
+            }
+
+            // Remove from database
+            await dbContext.UnmuteTimers
+                .Where(x => x.GuildId == guildId && x.UserId == userId)
+                .DeleteAsync();
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Error processing mute timer for guild {GuildId}, user {UserId}", key.GuildId,
+                key.UserId);
+        }
+    }
+
+    private async Task ProcessIndividualBanItem(TimerKey key)
+    {
+        await using var dbContext = await dbFactory.CreateConnectionAsync();
+
+        try
+        {
+            var guildId = key.GuildId;
+            var userId = key.UserId;
+
+            // Find the guild
+            var guild = client.GetGuild(guildId);
+            if (guild != null)
+            {
+                try
+                {
+                    // Unban the user
+                    await guild.RemoveBanAsync(userId);
+                    logger.LogDebug("Successfully unbanned user {UserId} from guild {GuildId}", userId, guildId);
+                }
+                catch (HttpException httpEx) when (httpEx.DiscordCode == DiscordErrorCode.UnknownBan)
+                {
+                    logger.LogInformation("User {UserId} was already unbanned from guild {GuildId}", userId, guildId);
+                }
+                catch (HttpException httpEx) when (httpEx.DiscordCode == DiscordErrorCode.MissingPermissions)
+                {
+                    logger.LogWarning("Missing permissions to unban user {UserId} from guild {GuildId}", userId,
+                        guildId);
+                }
+            }
+            else
+            {
+                logger.LogInformation("Cleaning up ban timer for non-existent guild {GuildId}", guildId);
+            }
+
+            // Remove from database
+            await dbContext.UnbanTimers
+                .Where(x => x.GuildId == guildId && x.UserId == userId)
+                .DeleteAsync();
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Error processing ban timer for guild {GuildId}, user {UserId}", key.GuildId,
+                key.UserId);
+        }
+    }
+
+    private async Task ProcessIndividualRoleItem(TimerKey key)
+    {
+        try
+        {
+            var guildId = key.GuildId;
+            var userId = key.UserId;
+            var roleId = key.RoleId.Value; // Safe to use .Value since we filtered for role items
+
+            var guild = client.GetGuild(guildId);
+
+            // Guild doesn't exist - safe to clean up
+            if (guild == null)
+            {
+                logger.LogInformation("Cleaning up role timer for non-existent guild {GuildId}", guildId);
+                await CleanupRoleTimer(guildId, userId, roleId);
                 return;
-            isProcessing = true;
-        }
+            }
 
-        try
-        {
-            await ProcessExpiredItems();
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Error processing timer items");
-        }
-        finally
-        {
-            isProcessing = false;
-        }
-    }
+            var user = guild.GetUser(userId);
 
-    private async Task ProcessExpiredItems()
-    {
-        try
-        {
-            var now = DateTime.UtcNow;
-
-            // Find all expired items
-            var expiredItems = scheduledItems.Values
-                .Where(item => !item.IsProcessing && item.ExecuteAt <= now)
-                .ToList();
-
-            if (expiredItems.Count == 0)
+            // User not in guild - safe to clean up
+            if (user == null)
+            {
+                logger.LogInformation("Cleaning up role timer for user {UserId} who left guild {GuildId}", userId,
+                    guildId);
+                await CleanupRoleTimer(guildId, userId, roleId);
                 return;
-
-            logger.LogInformation("Processing {Count} expired timer items", expiredItems.Count);
-
-            // Process items by type in batches
-            var muteItems = expiredItems.Where(x => x.Key.Type == TimerType.Mute).ToList();
-            var banItems = expiredItems.Where(x => x.Key.Type == TimerType.Ban).ToList();
-            var roleItems = expiredItems.Where(x => x.Key.Type == TimerType.AddRole).ToList();
-
-            // Mark all as processing to prevent duplicate processing
-            foreach (var item in expiredItems)
-            {
-                item.IsProcessing = true;
             }
 
-            // Process each batch
-            if (muteItems.Any())
-                await ProcessMuteItems(muteItems);
+            var role = guild.GetRole(roleId);
 
-            if (banItems.Any())
-                await ProcessBanItems(banItems);
+            // Role doesn't exist - safe to clean up
+            if (role == null)
+            {
+                logger.LogInformation("Cleaning up role timer for deleted role {RoleId} in guild {GuildId}", roleId,
+                    guildId);
+                await CleanupRoleTimer(guildId, userId, roleId);
+                return;
+            }
 
-            if (roleItems.Any())
-                await ProcessRoleItems(roleItems);
+            // User doesn't have the role - goal already achieved, safe to clean up
+            if (!user.Roles.Contains(role))
+            {
+                logger.LogDebug("Role {RoleId} already removed from user {UserId} in guild {GuildId}", roleId, userId,
+                    guildId);
+                await CleanupRoleTimer(guildId, userId, roleId);
+                return;
+            }
+
+            // Check bot permissions
+            var botUser = guild.GetUser(client.CurrentUser.Id);
+            if (botUser == null || !botUser.GuildPermissions.ManageRoles)
+            {
+                logger.LogWarning("Bot lacks ManageRoles permission in guild {GuildId}, will retry in 1 hour", guildId);
+                CreateIndividualTimer(key, DateTime.UtcNow.AddHours(1)); // Retry in 1 hour
+                return;
+            }
+
+            // Check role hierarchy
+            var botHighestRole = botUser.Roles.Where(r => r.Id != guild.EveryoneRole.Id).MaxBy(r => r.Position);
+            if (botHighestRole == null || role.Position >= botHighestRole.Position)
+            {
+                logger.LogWarning(
+                    "Bot cannot manage role {RoleName} (position {RolePosition}) in guild {GuildId}, will retry in 1 hour",
+                    role.Name, role.Position, guildId);
+                CreateIndividualTimer(key, DateTime.UtcNow.AddHours(1)); // Retry in 1 hour
+                return;
+            }
+
+            // Actually remove the role
+            try
+            {
+                await user.RemoveRoleAsync(role, new RequestOptions
+                {
+                    AuditLogReason = "Timed role expired"
+                });
+
+                logger.LogDebug("Successfully removed timed role {RoleName} from {UserName} in guild {GuildId}",
+                    role.Name, user.DisplayName, guildId);
+
+                // Success - clean up
+                await CleanupRoleTimer(guildId, userId, roleId);
+            }
+            catch (HttpException httpEx) when (httpEx.DiscordCode == DiscordErrorCode.MissingPermissions)
+            {
+                logger.LogWarning(
+                    "Missing permissions to remove role {RoleName} from user {UserId} in guild {GuildId}, will retry in 1 hour",
+                    role.Name, userId, guildId);
+                CreateIndividualTimer(key, DateTime.UtcNow.AddHours(1)); // Retry in 1 hour
+            }
+            catch (HttpException httpEx) when (httpEx.DiscordCode == DiscordErrorCode.UnknownRole)
+            {
+                logger.LogInformation("Role {RoleId} was deleted while processing timer in guild {GuildId}", roleId,
+                    guildId);
+                await CleanupRoleTimer(guildId, userId, roleId);
+            }
+            catch (HttpException httpEx) when (httpEx.DiscordCode == DiscordErrorCode.UnknownMember)
+            {
+                logger.LogInformation("User {UserId} left guild {GuildId} while processing timer", userId, guildId);
+                await CleanupRoleTimer(guildId, userId, roleId);
+            }
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error processing expired items");
-
-            // Clean up database connections
-            await CleanupDatabaseConnections();
+            logger.LogWarning(ex,
+                "Unexpected error processing role timer for guild {GuildId}, user {UserId}, role {RoleId}",
+                key.GuildId, key.UserId, key.RoleId);
+            // For unexpected errors, retry in 1 hour
+            CreateIndividualTimer(key, DateTime.UtcNow.AddHours(1));
         }
     }
 
-    private async Task ProcessMuteItems(List<TimerQueueItem> items)
+    private async Task CleanupRoleTimer(ulong guildId, ulong userId, ulong roleId)
     {
         await using var dbContext = await dbFactory.CreateConnectionAsync();
-        var successfulItems = new List<TimerQueueItem>();
-
-        try
-        {
-            // Process each item
-            foreach (var item in items)
-            {
-                try
-                {
-                    var guildId = item.Key.GuildId;
-                    var userId = item.Key.UserId;
-
-                    // Find the user
-                    var guild = client.GetGuild(guildId);
-                    if (guild != null)
-                    {
-                        // Unmute the user
-                        await UnmuteUser(guildId, userId, client.CurrentUser, reason: "Timed mute expired");
-                    }
-
-                    // Add to successful items
-                    successfulItems.Add(item);
-                }
-                catch (Exception ex)
-                {
-                    logger.LogWarning(ex, "Error processing mute timer for guild {GuildId}, user {UserId}",
-                        item.Key.GuildId, item.Key.UserId);
-                }
-            }
-
-            // Remove successful items from the database and local queue
-            if (successfulItems.Any())
-            {
-                // Get IDs to remove
-                var idsToRemove = successfulItems.Select(i => new
-                {
-                    i.Key.GuildId, i.Key.UserId
-                }).ToList();
-
-                // Find the matching database entries by ID
-                var dbEntries = await dbContext.UnmuteTimers
-                    .Where(x => idsToRemove.Any(id => id.GuildId == x.GuildId && id.UserId == x.UserId))
-                    .Select(x => x.Id)
-                    .ToListAsync();
-
-                // Remove them
-                foreach (var id in dbEntries)
-                {
-                    await dbContext.UnmuteTimers.Where(x => x.Id == id).DeleteAsync();
-                }
-
-                // Remove from local queue
-                foreach (var item in successfulItems)
-                {
-                    scheduledItems.TryRemove(item.Key, out _);
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Error in batch processing of mute timers");
-
-            // Reset processing flag for failed items
-            foreach (var item in items.Except(successfulItems))
-            {
-                item.IsProcessing = false;
-            }
-        }
+        await dbContext.UnroleTimers
+            .Where(x => x.GuildId == guildId && x.UserId == userId && x.RoleId == roleId)
+            .DeleteAsync();
     }
 
-    private async Task ProcessBanItems(List<TimerQueueItem> items)
-    {
-        await using var dbContext = await dbFactory.CreateConnectionAsync();
-        var successfulItems = new List<TimerQueueItem>();
-
-        try
-        {
-            // Process each item
-            foreach (var item in items)
-            {
-                try
-                {
-                    var guildId = item.Key.GuildId;
-                    var userId = item.Key.UserId;
-
-                    // Find the guild
-                    var guild = client.GetGuild(guildId);
-                    if (guild != null)
-                    {
-                        // Unban the user
-                        await guild.RemoveBanAsync(userId);
-                    }
-
-                    // Add to successful items
-                    successfulItems.Add(item);
-                }
-                catch (Exception ex)
-                {
-                    logger.LogWarning(ex, "Error processing ban timer for guild {GuildId}, user {UserId}",
-                        item.Key.GuildId, item.Key.UserId);
-                }
-            }
-
-            // Remove successful items from the database and local queue
-            if (successfulItems.Any())
-            {
-                // Get IDs to remove
-                var idsToRemove = successfulItems.Select(i => new
-                {
-                    i.Key.GuildId, i.Key.UserId
-                }).ToList();
-
-                // Find the matching database entries by ID
-                var dbEntries = await dbContext.UnbanTimers
-                    .Where(x => idsToRemove.Any(id => id.GuildId == x.GuildId && id.UserId == x.UserId))
-                    .Select(x => x.Id)
-                    .ToListAsync();
-
-                // Remove them
-                foreach (var id in dbEntries)
-                {
-                    await dbContext.UnbanTimers.Where(x => x.Id == id).DeleteAsync();
-                }
-
-                // Remove from local queue
-                foreach (var item in successfulItems)
-                {
-                    scheduledItems.TryRemove(item.Key, out _);
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Error in batch processing of ban timers");
-
-            // Reset processing flag for failed items
-            foreach (var item in items.Except(successfulItems))
-            {
-                item.IsProcessing = false;
-            }
-        }
-    }
-
-    private async Task ProcessRoleItems(List<TimerQueueItem> items)
-    {
-        await using var dbContext = await dbFactory.CreateConnectionAsync();
-        var successfulItems = new List<TimerQueueItem>();
-
-        try
-        {
-            // Process each item
-            foreach (var item in items)
-            {
-                try
-                {
-                    var guildId = item.Key.GuildId;
-                    var userId = item.Key.UserId;
-                    var roleId = item.Key.RoleId.Value; // Safe to use .Value since we filtered for role items
-
-                    // Find the user and role
-                    var guild = client.GetGuild(guildId);
-                    if (guild != null)
-                    {
-                        var user = guild.GetUser(userId);
-                        var role = guild.GetRole(roleId);
-
-                        if (user != null && role != null && user.Roles.Contains(role))
-                        {
-                            // Remove the role
-                            await user.RemoveRoleAsync(role);
-                        }
-                    }
-
-                    // Add to successful items
-                    successfulItems.Add(item);
-                }
-                catch (Exception ex)
-                {
-                    logger.LogWarning(ex,
-                        "Error processing role timer for guild {GuildId}, user {UserId}, role {RoleId}",
-                        item.Key.GuildId, item.Key.UserId, item.Key.RoleId);
-                }
-            }
-
-            // Remove successful items from the database and local queue
-            if (successfulItems.Any())
-            {
-                // Get IDs to remove
-                var idsToRemove = successfulItems.Select(i => new
-                {
-                    i.Key.GuildId, i.Key.UserId, i.Key.RoleId
-                }).ToList();
-
-                // Find the matching database entries by ID
-                var dbEntries = await dbContext.UnroleTimers
-                    .Where(x => idsToRemove.Any(id =>
-                        id.GuildId == x.GuildId && id.UserId == x.UserId && id.RoleId == id.RoleId))
-                    .Select(x => x.Id)
-                    .ToListAsync();
-
-                // Remove them
-                foreach (var id in dbEntries)
-                {
-                    await dbContext.UnroleTimers.Select(x => x.Id == id).DeleteAsync();
-                }
-
-                // Remove from local queue
-                foreach (var item in successfulItems)
-                {
-                    scheduledItems.TryRemove(item.Key, out _);
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Error in batch processing of role timers");
-
-            // Reset processing flag for failed items
-            foreach (var item in items.Except(successfulItems))
-            {
-                item.IsProcessing = false;
-            }
-        }
-    }
-
-// Add cleanup method for database connections
-    private async Task CleanupDatabaseConnections()
-    {
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-
-        try
-        {
-            // Create and immediately dispose a context to help reset the connection pool
-            await using var context = await dbFactory.CreateConnectionAsync();
-
-            // Execute a simple command to verify the connection is working
-            await context.ExecuteAsync("SELECT 1");
-
-            // Explicitly close the connection
-            await context.CloseAsync();
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Error during database connection cleanup");
-        }
-    }
 
     private async Task OnUserMuted(IGuildUser user, IUser mod, MuteType type, string reason)
     {
@@ -646,7 +580,7 @@ public class MuteService : INService, IReadyExecutor, IDisposable
                     .FirstOrDefaultAsync(x => x.GuildId == usr.Guild.Id && x.UserId == usr.Id);
 
                 if (existingMute != null)
-                    await dbContext.MutedUserIds.Select(x => existingMute).DeleteAsync();
+                    await dbContext.MutedUserIds.Where(x => x.Id == existingMute.Id).DeleteAsync();
 
                 // Create new entry based on settings
                 var removeOnMute = await GetRemoveOnMute(usr.Guild.Id);
@@ -763,19 +697,16 @@ public class MuteService : INService, IReadyExecutor, IDisposable
                         Uroles = mutedUser.Roles.Split(' ');
 
                         // Restore roles
-                        if (Uroles != null)
-                        {
-                            foreach (var i in Uroles)
-                                if (ulong.TryParse(i, out var roleId))
-                                    try
-                                    {
-                                        await usr.AddRoleAsync(usr.Guild.GetRole(roleId)).ConfigureAwait(false);
-                                    }
-                                    catch
-                                    {
-                                        // ignored
-                                    }
-                        }
+                        foreach (var i in Uroles)
+                            if (ulong.TryParse(i, out var roleId))
+                                try
+                                {
+                                    await usr.AddRoleAsync(usr.Guild.GetRole(roleId)).ConfigureAwait(false);
+                                }
+                                catch
+                                {
+                                    // ignored
+                                }
                     }
                     catch (Exception)
                     {
@@ -785,7 +716,7 @@ public class MuteService : INService, IReadyExecutor, IDisposable
 
                 // Remove muted user entry
                 if (mutedUser != null)
-                    await dbContext.MutedUserIds.Select(x => mutedUser).DeleteAsync();
+                    await dbContext.MutedUserIds.Where(x => x.Id == mutedUser.Id).DeleteAsync();
 
                 if (MutedUsers.TryGetValue(guildId, out var muted))
                     muted.TryRemove(usrId);
@@ -798,7 +729,7 @@ public class MuteService : INService, IReadyExecutor, IDisposable
 
                 foreach (var id in timersToRemove)
                 {
-                    await dbContext.UnmuteTimers.Select(x => x.Id == id).DeleteAsync();
+                    await dbContext.UnmuteTimers.Where(x => x.Id == id).DeleteAsync();
                 }
 
                 if (usr != null)
@@ -969,7 +900,10 @@ public class MuteService : INService, IReadyExecutor, IDisposable
     /// <param name="role">The role to add</param>
     public async Task TimedRole(IGuildUser? user, TimeSpan after, string reason, IRole role)
     {
-        await user.AddRoleAsync(role).ConfigureAwait(false);
+        await user.AddRoleAsync(role, new RequestOptions
+        {
+            AuditLogReason = reason
+        }).ConfigureAwait(false);
 
         await using var dbContext = await dbFactory.CreateConnectionAsync();
 
@@ -996,12 +930,8 @@ public class MuteService : INService, IReadyExecutor, IDisposable
     {
         var executeAt = DateTime.UtcNow + after;
         var key = new TimerKey(guildId, userId, type, roleId);
-        var item = new TimerQueueItem(key, executeAt);
-
-        // Add to queue
-        scheduledItems[key] = item;
+        CreateIndividualTimer(key, executeAt);
     }
-
 
     /// <summary>
     ///     Stops a timer for a user.
@@ -1013,7 +943,14 @@ public class MuteService : INService, IReadyExecutor, IDisposable
     public void StopTimer(ulong guildId, ulong userId, TimerType type, ulong? roleId = null)
     {
         var key = new TimerKey(guildId, userId, type, roleId);
-        scheduledItems.TryRemove(key, out _);
+
+        // Cancel and dispose the timer
+        if (activeTimers.TryRemove(key, out var timer))
+        {
+            timer.Dispose();
+            logger.LogDebug("Stopped timer for {TimerType} - Guild: {GuildId}, User: {UserId}, Role: {RoleId}",
+                type, guildId, userId, roleId);
+        }
     }
 
     /// <summary>
@@ -1025,24 +962,18 @@ public class MuteService : INService, IReadyExecutor, IDisposable
         if (disposing)
         {
             eventHandler.Unsubscribe("UserJoined", "MuteService", Client_UserJoined);
-            processingTimer?.Dispose();
+
+            // Dispose all active timers
+            foreach (var timer in activeTimers.Values)
+            {
+                timer.Dispose();
+            }
+
+            activeTimers.Clear();
+
+            logger.LogInformation("MuteService disposed and all timers cleaned up");
         }
     }
 
     private record struct TimerKey(ulong GuildId, ulong UserId, TimerType Type, ulong? RoleId = null);
-
-
-    private class TimerQueueItem
-    {
-        public TimerQueueItem(TimerKey key, DateTime executeAt)
-        {
-            Key = key;
-            ExecuteAt = executeAt;
-            IsProcessing = false;
-        }
-
-        public TimerKey Key { get; }
-        public DateTime ExecuteAt { get; }
-        public bool IsProcessing { get; set; }
-    }
 }
