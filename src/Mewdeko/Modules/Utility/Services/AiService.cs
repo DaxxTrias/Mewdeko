@@ -684,7 +684,7 @@ public class AiService : INService
         {
             // Graceful handling for OpenAI 429
             var friendly = "Rate limited by OpenAI. Please try again in a moment.";
-            logger.LogWarning("OpenAI 429 received: {Message}", hre.Message);
+            logger.LogWarning("OpenAI 429 received: {Message}. Tip: verify billing/credits; API tokens/credits may need replenishment.", hre.Message);
 
             if (webhook != null && webhookMessageId.HasValue)
             {
@@ -706,7 +706,7 @@ public class AiService : INService
         {
             // Graceful handling for quota exceeded
             var friendly = "OpenAI API quota exceeded for this key. Please update billing or switch model.";
-            logger.LogWarning("OpenAI quota error: {Message}", hre.Message);
+            logger.LogWarning("OpenAI quota error: {Message}. Tip: credits may be exhausted or tier downgraded; replenish tokens/credits or review billing.", hre.Message);
 
             if (webhook != null && webhookMessageId.HasValue)
             {
