@@ -39,14 +39,13 @@ public class SuggestionsController(
         // Fetch user info from guild cache only (no expensive REST calls)
         var guild = client.GetGuild(guildId);
         var uniqueUserIds = suggestions.Select(s => s.UserId).Distinct().ToList();
-
-        // Bulk fetch all cached guild users at once instead of individual GetUser calls
-        var guildUsersLookup = guild?.Users.ToDictionary(u => u.Id) ?? new Dictionary<ulong, SocketGuildUser>();
         var userInfoMap = new Dictionary<ulong, object>();
 
         foreach (var uid in uniqueUserIds)
         {
-            if (guildUsersLookup.TryGetValue(uid, out var guildUser))
+            // Only check guild cache - if not found, return "Unknown User"
+            var guildUser = guild?.GetUser(uid);
+            if (guildUser != null)
             {
                 userInfoMap[uid] = new
                 {
@@ -67,7 +66,7 @@ public class SuggestionsController(
             }
         }
 
-        // Enrich suggestions with user data and emote counts
+        // Enrich suggestions with user data
         var enrichedSuggestions = suggestions.Select(s => new
         {
             s.Id,
@@ -78,16 +77,6 @@ public class SuggestionsController(
             s.CurrentState,
             s.DateAdded,
             s.StateChangeUser,
-            s.StateChangeCount,
-            s.MessageId,
-            EmoteCounts = new
-            {
-                Emote1 = s.EmoteCount1,
-                Emote2 = s.EmoteCount2,
-                Emote3 = s.EmoteCount3,
-                Emote4 = s.EmoteCount4,
-                Emote5 = s.EmoteCount5
-            },
             User = userInfoMap[s.UserId]
         });
 

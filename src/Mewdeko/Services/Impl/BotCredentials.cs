@@ -658,6 +658,7 @@ public class BotCredentials : IBotCredentials
         public string JwtSecret { get; set; } = StringExtensions.GenerateSecureString(64);
         public string DiscordClientId { get; set; } = "";
         public string DiscordClientSecret { get; set; } = "";
+        public string DashboardUrl { get; set; } = "https://mewdeko.tech";
         public ulong DebugGuildId { get; set; } = 843489716674494475;
         public ulong GuildJoinsChannelId { get; set; } = 892789588739891250;
         public ulong PronounAbuseReportChannelId { get; set; } = 970086914826858547;
@@ -665,7 +666,6 @@ public class BotCredentials : IBotCredentials
         public string LavalinkUrl { get; set; } = "http://localhost:2333";
         public int ApiPort { get; set; } = 5001;
         public bool IsMasterInstance { get; set; } = false;
-        public string DashboardUrl { get; set; } = "https://mewdeko.tech";
         public string RedisConnections { get; } = "127.0.0.1:6379";
         public string LastFmApiKey { get; } = "";
         public string LastFmApiSecret { get; } = "";
