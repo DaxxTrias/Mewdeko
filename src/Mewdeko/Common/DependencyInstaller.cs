@@ -165,11 +165,17 @@ public static class DependencyInstaller
     ///     Throws no exceptions - all errors are logged.
     /// </remarks>
     /// <param name="psqlString">The psqlstring string.</param>
+    /// <param name="isMasterInstance">Whether this is the master instance.</param>
     /// <param name="setupCompleted">Whether PostgreSQL setup has been completed before.</param>
-    /// <param name="redisConnections">Semicolon-separated Redis endpoints to probe.</param>
-    public static void CheckAndInstallDependencies(string psqlString, bool setupCompleted = false,
-        string? redisConnections = null)
+    public static void CheckAndInstallDependencies(string psqlString, bool isMasterInstance,
+        bool setupCompleted = false)
     {
+        if (!isMasterInstance)
+        {
+            Log.Information("This is not the master instance. Skipping dependency installation.");
+            return;
+        }
+
         switch (Environment.OSVersion.Platform)
         {
             case PlatformID.Unix:
@@ -209,7 +215,7 @@ public static class DependencyInstaller
             }
             case PlatformID.Win32NT:
             {
-                var (postgresInstalled, redisInstalled) = CheckWindowsDependencies(redisConnections);
+                var (postgresInstalled, redisInstalled) = CheckWindowsDependencies();
                 if (!postgresInstalled || !redisInstalled)
                 {
                     ShowWindowsInstructions(postgresInstalled, redisInstalled);
@@ -337,7 +343,7 @@ public static class DependencyInstaller
         }
     }
 
-    private static (bool postgresInstalled, bool redisInstalled) CheckWindowsDependencies(string? redisConnections)
+    private static (bool postgresInstalled, bool redisInstalled) CheckWindowsDependencies()
     {
         bool CheckService(string serviceName)
         {
@@ -356,32 +362,8 @@ public static class DependencyInstaller
         }
 
         var postgresInstalled = CheckService("postgresql");
+        var redisInstalled = CheckService("redis");
 
-        // Recognize both official Redis for Windows service and Memurai
-        var redisServiceFound = CheckService("redis") || CheckService("memurai");
-
-        // Fallback: actively probe configured endpoints; if any connect, consider Redis reachable
-        var redisReachable = false;
-        if (!string.IsNullOrWhiteSpace(redisConnections))
-        {
-            try
-            {
-                var options = ConfigurationOptions.Parse(redisConnections);
-                options.AbortOnConnectFail = false;
-                options.ConnectRetry = 1;
-                options.ConnectTimeout = 2000;
-                options.SyncTimeout = 2000;
-
-                using var mux = ConnectionMultiplexer.Connect(options);
-                redisReachable = mux.IsConnected;
-            }
-            catch
-            {
-                redisReachable = false;
-            }
-        }
-
-        var redisInstalled = redisServiceFound || redisReachable;
 
         Log.Information($"PostgreSQL installed and running: {postgresInstalled}");
         Log.Information($"Redis installed and running: {redisInstalled}");

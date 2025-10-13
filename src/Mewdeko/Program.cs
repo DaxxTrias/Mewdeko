@@ -67,8 +67,8 @@ public class Program
         var credentials = new BotCredentials();
 
         // Check and install dependencies (pass setup status to avoid prompting if already done)
-        DependencyInstaller.CheckAndInstallDependencies(credentials.PsqlConnectionString,
-            credentials.PostgresSetupCompleted, credentials.RedisConnections);
+        DependencyInstaller.CheckAndInstallDependencies(credentials.PsqlConnectionString, credentials.IsMasterInstance,
+            credentials.PostgresSetupCompleted);
         var dbUpgrader = new DatabaseUpgrader(credentials.PsqlConnectionString);
 
         // Test connection first
