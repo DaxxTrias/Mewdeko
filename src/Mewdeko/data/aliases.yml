@@ -2060,6 +2060,14 @@ repreactionremove:
 represet:
   - represet
   - resetrep
+restartallinstances:
+  - restartallinstances
+  - restartall
+  - rai
+restartinstance:
+  - restartinstance
+  - restartins
+  - ri
 reprole:
   - reprole
 reprolechannel:
@@ -3050,6 +3058,14 @@ untimeout:
 update:
   - update
   - upd
+updateallinstances:
+  - updateallinstances
+  - updateall
+  - uai
+updateinstance:
+  - updateinstance
+  - updateins
+  - ui
 urbandict:
   - urbandict
   - ud
