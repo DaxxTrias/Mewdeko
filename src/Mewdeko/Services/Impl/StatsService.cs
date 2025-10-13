@@ -5,6 +5,7 @@ using System.Net.Http.Headers;
 using System.Reflection;
 using System.Threading;
 using Humanizer;
+using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Modules.Utility.Services;
 using Swan.Formatters;
 
@@ -13,7 +14,7 @@ namespace Mewdeko.Services.Impl;
 /// <summary>
 ///     Service for collecting and posting statistics about the bot.
 /// </summary>
-public class StatsService : IStatsService, IDisposable
+public class StatsService : IStatsService, IDisposable, IReadyExecutor
 {
     /// <summary>
     ///     The version of the bot. I should make this set from commits somehow idk
@@ -51,8 +52,7 @@ public class StatsService : IStatsService, IDisposable
         started = DateTime.UtcNow;
 
             _ = PostToTopGg();
-            _ = OnReadyAsync();
-        }
+            }
 
     /// <summary>
     /// Gets the version of the Discord.Net library.
