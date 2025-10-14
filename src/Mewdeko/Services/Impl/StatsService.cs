@@ -22,7 +22,7 @@ public class StatsService : IStatsService, IDisposable, IReadyExecutor
     public const string BotVersion = "7.8.15";
 
     private readonly IDataCache cache;
-    private readonly DiscordShardedClient client;
+    private readonly IDiscordClient client;
     private readonly IBotCredentials creds;
     private readonly HttpClient http;
     private readonly ILogger<StatsService> logger;
@@ -40,7 +40,7 @@ public class StatsService : IStatsService, IDisposable, IReadyExecutor
     /// <param name="logger"></param>
     /// <exception cref="ArgumentNullException"></exception>
     public StatsService(
-        DiscordShardedClient client, IBotCredentials creds,
+        IDiscordClient client, IBotCredentials creds,
         HttpClient http, IDataCache cache, ILogger<StatsService> logger)
     {
         this.client = client ?? throw new ArgumentNullException(nameof(client));
@@ -162,21 +162,28 @@ public class StatsService : IStatsService, IDisposable, IReadyExecutor
                 try
                 {
                     logger.LogInformation("Updating top guilds");
-                    var guilds = await client.Rest.GetGuildsAsync(true);
-                    var servers = guilds.OrderByDescending(x => x.ApproximateMemberCount.Value)
-                        .Where(x => !x.Name.Contains("botlist", StringComparison.CurrentCultureIgnoreCase))
-                        .Where(x => !x.Name.Contains("bots", StringComparison.CurrentCultureIgnoreCase))
-                        .Where(x => !x.Name.Contains("xhamster", StringComparison.CurrentCultureIgnoreCase))
-                        .Where(x => !x.Name.Contains("nsfw", StringComparison.CurrentCultureIgnoreCase))
-                        .Where(x => x.Id != 374071874222686211)
+                    var guilds = (await client.GetGuildsAsync().ConfigureAwait(false))
+                        .Cast<SocketGuild>();
+
+                    var excludedTerms = new[]
+                    {
+                        "botlist", "bots", "xhamster", "nsfw", "18+"
+                    };
+                    const ulong excludedId = 374071874222686211;
+
+                    var servers = guilds
+                        .Where(x => x.Id != excludedId &&
+                                    !excludedTerms.Any(term =>
+                                        x.Name.Contains(term, StringComparison.OrdinalIgnoreCase)))
+                        .OrderByDescending(x => x.MemberCount)
                         .Take(11)
-                        .Select(x =>
-                            new MewdekoPartialGuild
-                            {
-                                IconUrl = x.IconId.StartsWith("a_") ? x.IconUrl.Replace(".jpg", ".gif") : x.IconUrl,
-                                MemberCount = x.ApproximateMemberCount.Value,
-                                Name = x.Name
-                            });
+                        .Select(x => new MewdekoPartialGuild
+                        {
+                            IconUrl = x.IconId.StartsWith("a_") ? x.IconUrl.Replace(".jpg", ".gif") : x.IconUrl,
+                            MemberCount = x.MemberCount,
+                            Name = x.Name
+                        })
+                        .ToList();
 
                     var serialied = Json.Serialize(servers);
                     await cache.Redis.GetDatabase().StringSetAsync($"{client.CurrentUser.Id}_topguilds", serialied)
@@ -206,13 +213,14 @@ public class StatsService : IStatsService, IDisposable, IReadyExecutor
 
         while (await topGgTimer.WaitForNextTickAsync().ConfigureAwait(false))
         {
+            var guilds = await client.GetGuildsAsync();
             var content = new FormUrlEncodedContent(new Dictionary<string, string>
             {
                 {
                     "shard_count", creds.TotalShards.ToString()
                 },
                 {
-                    "server_count", client.Guilds.Count.ToString()
+                    "server_count", guilds.Count.ToString()
                 }
             });
 
@@ -223,7 +231,8 @@ public class StatsService : IStatsService, IDisposable, IReadyExecutor
                 .ConfigureAwait(false);
 
             if (response.IsSuccessStatusCode) continue;
-            logger.LogError("Failed to post stats to Top.gg");
+            logger.LogError("Failed to post stats to Top.gg: {0} {1} {2}", response.ReasonPhrase, response.StatusCode,
+                response.Content);
             return;
         }
     }
