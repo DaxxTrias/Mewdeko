@@ -454,7 +454,8 @@ public partial class Permissions
             var channel = (ITextChannel)ctx.Channel;
             var guildId = channel.Guild.Id;
 
-            word = word?.Trim().ToLowerInvariant();
+            // normalize once in memory; avoid provider-specific string ops in LINQ-to-DB queries
+            word = word?.Trim();
 
             if (string.IsNullOrWhiteSpace(word))
                 return;
@@ -463,8 +464,10 @@ public partial class Permissions
 
             // Check if word exists
             var exists = await db.FilteredWords
-                .AnyAsync(fw => fw.GuildId == guildId &&
-                                fw.Word.Trim().ToLowerInvariant() == word);
+                .Where(fw => fw.GuildId == guildId)
+                .ToListAsync()
+                .ContinueWith(t => t.Result
+                    .Any(fw => string.Equals(fw.Word?.Trim(), word, StringComparison.InvariantCultureIgnoreCase)));
 
             if (!exists)
             {
@@ -479,10 +482,20 @@ public partial class Permissions
             else
             {
                 // Remove existing filter word
-                await db.FilteredWords
-                    .Where(fw => fw.GuildId == guildId &&
-                                 fw.Word.Trim().ToLowerInvariant() == word)
-                    .DeleteAsync();
+                // Fetch and remove with case-insensitive comparison in memory to avoid translation issues
+                var toRemove = (await db.FilteredWords
+                        .Where(fw => fw.GuildId == guildId)
+                        .ToListAsync())
+                    .Where(fw => string.Equals(fw.Word?.Trim(), word, StringComparison.InvariantCultureIgnoreCase))
+                    .Select(fw => fw.Id)
+                    .ToArray();
+
+                if (toRemove.Length > 0)
+                {
+                    await db.FilteredWords
+                        .Where(fw => toRemove.Contains(fw.Id))
+                        .DeleteAsync();
+                }
 
                 await ReplyConfirmAsync(Strings.FilterWordRemove(guildId, Format.Code(word))).ConfigureAwait(false);
             }
