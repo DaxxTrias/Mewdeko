@@ -81,12 +81,15 @@ public class AfkService : INService, IReadyExecutor, IDisposable
     /// <returns>A task representing the asynchronous operation.</returns>
     public async Task OnReadyAsync()
     {
-        await Task.CompletedTask; // Keep async signature but no initial await needed
+        await Task.CompletedTask;
         if (isInitialized)
             return;
+
         logger.LogInformation("Starting {Type} Cache", GetType());
         Environment.SetEnvironmentVariable("AFK_CACHED", "1");
-        _ = Task.Run(async () => // Run cleanup in background
+
+        // Background cleanup of old entries
+        _ = Task.Run(async () =>
         {
             try
             {
@@ -107,9 +110,12 @@ public class AfkService : INService, IReadyExecutor, IDisposable
                 logger.LogError(ex, "Error during startup AFK cleanup");
             }
         });
-        isInitialized = true;
 
-        logger.LogInformation("AFK Service Ready");
+        // Only initialize timed AFKs (they need active timers)
+        _ = InitializeTimedAfksAsync();
+
+        isInitialized = true;
+        logger.LogInformation("AFK Service Ready - Lazy loading enabled");
     }
 
     #region Public AFK Management Methods

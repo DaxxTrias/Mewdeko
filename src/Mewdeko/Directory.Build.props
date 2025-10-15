@@ -1,4 +1,4 @@
-﻿<Project>
+<Project>
   <PropertyGroup>
     <RegenerateGeneratedFiles>true</RegenerateGeneratedFiles>
     <!-- Enable analyzers both in IDE and during build; rely on shadow-copy to avoid locks -->

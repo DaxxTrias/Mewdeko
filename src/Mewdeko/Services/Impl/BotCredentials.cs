@@ -254,6 +254,11 @@ public class BotCredentials : IBotCredentials
     public bool PostgresSetupCompleted { get; set; }
 
     /// <summary>
+    ///     Gets or sets the Sentry DSN for error tracking.
+    /// </summary>
+    public string SentryDsn { get; set; }
+
+    /// <summary>
     ///     Checks if the specified user is an owner.
     /// </summary>
     /// <param name="u">The user to check.</param>
@@ -492,6 +497,7 @@ public class BotCredentials : IBotCredentials
             UseGlobalCurrency = bool.TryParse(data[nameof(UseGlobalCurrency)], out var ugc) && ugc;
             OpenMeteoApiUrl = data[nameof(OpenMeteoApiUrl)] ?? "https://api.open-meteo.com";
             PostgresSetupCompleted = bool.TryParse(data[nameof(PostgresSetupCompleted)], out var pgSetup) && pgSetup;
+            SentryDsn = data[nameof(SentryDsn)];
 
             // Check for missing or invalid critical credentials
             var missingCredentials = new List<string>();
@@ -544,7 +550,7 @@ public class BotCredentials : IBotCredentials
                 catch (Exception ex)
                 {
                     Log.Error("Failed to connect to PostgreSQL database with the provided connection string.");
-                    Log.Error(ex.Message);
+                    Log.Error($"{ex}");
                     Helpers.ReadErrorAndExit(6);
                 }
             }
@@ -636,6 +642,7 @@ public class BotCredentials : IBotCredentials
         public ulong ConfessionReportChannelId { get; } = 1051401727787671613;
         public string ChatSavePath { get; } = "/usr/share/nginx/cdn/chatlogs/";
         public bool PostgresSetupCompleted { get; set; }
+        public string SentryDsn { get; } = "";
 
         [JsonIgnore]
         ImmutableArray<ulong> IBotCredentials.OwnerIds

@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Net.Http;
+using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
@@ -621,60 +622,107 @@ public class AiService : INService
         var toolUseRequests = new List<ToolUseRequest>();
 
         string? lastRawJson = null;
-        await foreach (var rawJson in stream)
+        try
         {
-            // Ensure that rawJson is explicitly cast to a string before checking for null or empty
-            if (rawJson is string jsonString && string.IsNullOrEmpty(jsonString)) continue;
-            if (string.IsNullOrEmpty(rawJson)) continue;
-
-            // Log raw response for debugging
-            //logger.LogInformation($"{(AiProvider)config.Provider} raw response: {rawJson}");
-            lastRawJson = rawJson; // Save the last chunk
-
-            // IMPORTANT: Parse the delta to extract just the content
-            var contentDelta = streamParser.ParseDelta(rawJson, (AiProvider)config.Provider);
-            if (!string.IsNullOrEmpty(contentDelta))
+            await foreach (var rawJson in stream)
             {
-                responseBuilder.Append(contentDelta);
-                //logger.LogInformation($"Added content delta: {contentDelta}");
-            }
+                // Ensure that rawJson is explicitly cast to a string before checking for null or empty
+                if (rawJson is string jsonString && string.IsNullOrEmpty(jsonString)) continue;
+                if (string.IsNullOrEmpty(rawJson)) continue;
 
-            // Check for usage information
-            if (config.Provider == (int)AiProvider.Groq || config.Provider == (int)AiProvider.Claude)
-            {
-                var usage = streamParser.ParseUsage(rawJson, (AiProvider)config.Provider);
-                if (usage.HasValue)
+                // Log raw response for debugging
+                //logger.LogInformation($"{(AiProvider)config.Provider} raw response: {rawJson}");
+                lastRawJson = rawJson; // Save the last chunk
+
+                // IMPORTANT: Parse the delta to extract just the content
+                var contentDelta = streamParser.ParseDelta(rawJson, (AiProvider)config.Provider);
+                if (!string.IsNullOrEmpty(contentDelta))
                 {
-                    tokenCount = usage.Value.TotalTokens;
-                    logger.LogInformation($"Updated token count: {tokenCount}");
+                    responseBuilder.Append(contentDelta);
+                    //logger.LogInformation($"Added content delta: {contentDelta}");
+                }
+
+                // Check for usage information
+                if (config.Provider == (int)AiProvider.Groq || config.Provider == (int)AiProvider.Claude)
+                {
+                    var usage = streamParser.ParseUsage(rawJson, (AiProvider)config.Provider);
+                    if (usage.HasValue)
+                    {
+                        tokenCount = usage.Value.TotalTokens;
+                        logger.LogInformation($"Updated token count: {tokenCount}");
+                    }
+                }
+
+                // Update UI more frequently during stream
+                var now = DateTime.UtcNow;
+                if ((now - lastUpdate).TotalSeconds >= 1 && !string.IsNullOrWhiteSpace(contentDelta))
+                {
+                    lastUpdate = now;
+                    await UpdateMessageEmbed(false); // false = not final update
+                }
+
+                // Check for tool use requests
+                HandleToolUseEventIfNeeded(rawJson, toolUseRequests);
+
+                // Check if stream is finished and extract stop reason
+                var streamFinishInfo = streamParser.CheckStreamFinished(rawJson, (AiProvider)config.Provider);
+                if (streamFinishInfo.IsFinished)
+                {
+                    stopReason = streamFinishInfo.StopReason;
+                    logger.LogInformation($"AI stream finished with stop reason: {stopReason}");
+                    break;
+                }
+
+                if (DateTime.UtcNow > timeout)
+                {
+                    logger.LogWarning("AI stream timed out");
+                    break;
                 }
             }
+        }
+        catch (HttpRequestException hre) when (hre.StatusCode == HttpStatusCode.TooManyRequests)
+        {
+            // Graceful handling for OpenAI 429
+            var friendly = "Rate limited by OpenAI. Please try again in a moment.";
+            logger.LogWarning("OpenAI 429 received: {Message}. Tip: verify billing/credits; API tokens/credits may need replenishment.", hre.Message);
 
-            // Update UI more frequently during stream
-            var now = DateTime.UtcNow;
-            if ((now - lastUpdate).TotalSeconds >= 1 && !string.IsNullOrWhiteSpace(contentDelta))
+            if (webhook != null && webhookMessageId.HasValue)
             {
-                lastUpdate = now;
-                await UpdateMessageEmbed(false); // false = not final update
+                await webhook.ModifyMessageAsync(webhookMessageId.Value, x =>
+                {
+                    x.Embeds = new[]
+                    {
+                        new EmbedBuilder().WithErrorColor().WithDescription(friendly).Build()
+                    };
+                });
             }
-
-            // Check for tool use requests
-            HandleToolUseEventIfNeeded(rawJson, toolUseRequests);
-
-            // Check if stream is finished and extract stop reason
-            var streamFinishInfo = streamParser.CheckStreamFinished(rawJson, (AiProvider)config.Provider);
-            if (streamFinishInfo.IsFinished)
+            else
             {
-                stopReason = streamFinishInfo.StopReason;
-                logger.LogInformation($"AI stream finished with stop reason: {stopReason}");
-                break;
+                await userMsg.Channel.SendErrorAsync(friendly, botConfig);
             }
+            return;
+        }
+        catch (HttpRequestException hre) when (hre.StatusCode == HttpStatusCode.Forbidden || (hre.Message?.IndexOf("insufficient_quota", StringComparison.OrdinalIgnoreCase) >= 0))
+        {
+            // Graceful handling for quota exceeded
+            var friendly = "OpenAI API quota exceeded for this key. Please update billing or switch model.";
+            logger.LogWarning("OpenAI quota error: {Message}. Tip: credits may be exhausted or tier downgraded; replenish tokens/credits or review billing.", hre.Message);
 
-            if (DateTime.UtcNow > timeout)
+            if (webhook != null && webhookMessageId.HasValue)
             {
-                logger.LogWarning("AI stream timed out");
-                break;
+                await webhook.ModifyMessageAsync(webhookMessageId.Value, x =>
+                {
+                    x.Embeds = new[]
+                    {
+                        new EmbedBuilder().WithErrorColor().WithDescription(friendly).Build()
+                    };
+                });
             }
+            else
+            {
+                await userMsg.Channel.SendErrorAsync(friendly, botConfig);
+            }
+            return;
         }
 
         // Grok and GPT give their usage stats on the final message, not every message like claude/groq

@@ -2282,6 +2282,18 @@ setbanner:
   - setserverbanner
 setbio:
   - setbio
+setguildavatar:
+  - setguildavatar
+  - sgav
+  - setgav
+setguildbanner:
+  - setguildbanner
+  - sgbanner
+  - setgbanner
+setguildbio:
+  - setguildbio
+  - sgbio
+  - setgbio
 setbirthday:
   - setbirthday
 setbirthdayprivacy:

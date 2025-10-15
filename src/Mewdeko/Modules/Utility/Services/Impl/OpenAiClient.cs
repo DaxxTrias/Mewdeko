@@ -1,4 +1,5 @@
 using System.IO;
+using System.Net;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
@@ -39,6 +40,8 @@ public class OpenAiClient : IAiClient
 
     private readonly HttpClient httpClient = new();
 
+    // No custom public exceptions; map to HttpRequestException with StatusCode to simplify handling upstream
+
     /// <summary>
     ///     Streams a response from the OpenAI model.
     /// </summary>
@@ -47,15 +50,12 @@ public class OpenAiClient : IAiClient
     /// <param name="apiKey">The API key for authentication.</param>
     /// <param name="cancellationToken">Optional token to cancel the operation.</param>
     /// <returns>A stream containing the AI response.</returns>
-    public async Task<IAsyncEnumerable<string>> StreamResponseAsync(
+    public Task<IAsyncEnumerable<string>> StreamResponseAsync(
         IEnumerable<AiMessage> messages,
         string model,
         string apiKey,
         CancellationToken cancellationToken = default)
     {
-        var request = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/chat/completions");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
-
         var openAiMessages = messages
             .Where(m => !string.IsNullOrWhiteSpace(m.Content))
             .Select(m => new { role = m.Role.ToLowerInvariant(), content = m.Content });
@@ -71,16 +71,13 @@ public class OpenAiClient : IAiClient
             }
         };
 
-        request.Content = new StringContent(
-            JsonSerializer.Serialize(payload),
-            Encoding.UTF8,
-            "application/json");
+        var payloadJson = JsonSerializer.Serialize(payload);
 
         async IAsyncEnumerable<string> StreamWithUsage()
         {
             int? promptTokens = null, completionTokens = null, totalTokens = null;
             var usageEmitted = false;
-            await foreach (var json in StreamChatCompletionsAsync(httpClient, request))
+            await foreach (var json in StreamChatCompletionsAsync(httpClient, apiKey, payloadJson, cancellationToken))
             {
                 if (!string.IsNullOrWhiteSpace(json))
                 {
@@ -132,7 +129,7 @@ public class OpenAiClient : IAiClient
             yield return usageJson;
         }
 
-        return StreamWithUsage();
+        return Task.FromResult<IAsyncEnumerable<string>>(StreamWithUsage());
     }
 
     // Helper to fetch usage stats after streaming finishes
@@ -180,35 +177,114 @@ public class OpenAiClient : IAiClient
     /// <param name="httpClient"></param>
     /// <param name="request"></param>
     /// <returns></returns>
-    public static async IAsyncEnumerable<string> StreamChatCompletionsAsync(HttpClient httpClient, HttpRequestMessage request)
+    public static async IAsyncEnumerable<string> StreamChatCompletionsAsync(HttpClient httpClient, string apiKey, string payloadJson, CancellationToken cancellationToken)
     {
-        // Send request with streaming response
-        using var response = await httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
-        response.EnsureSuccessStatusCode();
-        using var stream = await response.Content.ReadAsStreamAsync();
-        using var reader = new StreamReader(stream);
-
-        string? line;
-        while ((line = await reader.ReadLineAsync()) != null)
+        const int maxAttempts = 3;
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
         {
-            if (string.IsNullOrWhiteSpace(line))
-                continue;  // skip empty lines (SSE heartbeat or spacing)
+            using var request = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/chat/completions");
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
+            request.Content = new StringContent(payloadJson, Encoding.UTF8, "application/json");
 
-            if (line.StartsWith("data: [DONE]"))
-                break;    // end of stream detected – stop iteration
+            using var response = await httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
 
-            if (!line.StartsWith("data: "))
-                continue; // skip any line that doesn't begin with the expected prefix
+            if (response.IsSuccessStatusCode)
+            {
+                using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+                using var reader = new StreamReader(stream);
 
-            // Trim the "data: " prefix to isolate the JSON content
-            var json = line.Substring("data: ".Length).Trim();
-            if (string.IsNullOrWhiteSpace(json))
-                continue;  // skip if nothing after prefix (just in case)
+                string? line;
+                while ((line = await reader.ReadLineAsync()) != null)
+                {
+                    if (string.IsNullOrWhiteSpace(line))
+                        continue;  // skip empty lines (SSE heartbeat or spacing)
 
-            // Add debug logging for each chunk received
-            //Serilog.Log.Information("OpenAI Stream Chunk: {Chunk}", json);
+                    if (line.StartsWith("data: [DONE]"))
+                        break;    // end of stream detected – stop iteration
 
-            yield return json;  // yield the clean JSON string for parsing
+                    if (!line.StartsWith("data: "))
+                        continue; // skip any line that doesn't begin with the expected prefix
+
+                    // Trim the "data: " prefix to isolate the JSON content
+                    var json = line.Substring("data: ".Length).Trim();
+                    if (string.IsNullOrWhiteSpace(json))
+                        continue;  // skip if nothing after prefix (just in case)
+
+                    // Add debug logging for each chunk received
+                    //Serilog.Log.Information("OpenAI Stream Chunk: {Chunk}", json);
+
+                    yield return json;  // yield the clean JSON string for parsing
+                }
+                yield break;
+            }
+
+            // Handle non-success
+            var status = response.StatusCode;
+            var content = await response.Content.ReadAsStringAsync(cancellationToken);
+
+            // Try to extract OpenAI error payload
+            string? errorCode = null;
+            string? errorMessage = null;
+            try
+            {
+                using var doc = JsonDocument.Parse(content);
+                if (doc.RootElement.TryGetProperty("error", out var err))
+                {
+                    errorMessage = err.TryGetProperty("message", out var msgEl) ? msgEl.GetString() : null;
+                    errorCode = err.TryGetProperty("code", out var codeEl) ? codeEl.GetString() : null;
+                }
+            }
+            catch { /* ignore parse errors */ }
+
+            if (status == HttpStatusCode.TooManyRequests)
+            {
+                // Respect Retry-After when present
+                int? retryAfterSeconds = null;
+                if (response.Headers.RetryAfter?.Delta is TimeSpan delta)
+                    retryAfterSeconds = (int)Math.Ceiling(delta.TotalSeconds);
+                else if (response.Headers.RetryAfter?.Date is DateTimeOffset when)
+                    retryAfterSeconds = (int)Math.Ceiling((when - DateTimeOffset.UtcNow).TotalSeconds);
+
+                // If last attempt, throw clean exception
+                if (attempt == maxAttempts)
+                {
+                    var message = errorMessage ?? "OpenAI rate limit hit (429).";
+                    if (retryAfterSeconds.HasValue)
+                        message += $" retry_after_seconds={retryAfterSeconds.Value}";
+                    throw new HttpRequestException(message, null, HttpStatusCode.TooManyRequests);
+                }
+
+                // Backoff with jitter
+                var backoff = ComputeBackoffWithJitter(attempt, retryAfterSeconds);
+                Serilog.Log.Warning("OpenAI 429 received. Backing off {DelayMs}ms (attempt {Attempt}/{Max}). Code={Code}", (int)backoff.TotalMilliseconds, attempt, maxAttempts, errorCode);
+                await Task.Delay(backoff, cancellationToken);
+                continue;
+            }
+
+            // Quota exhausted is typically 429 or 403 with code "insufficient_quota"
+            if (string.Equals(errorCode, "insufficient_quota", StringComparison.OrdinalIgnoreCase))
+            {
+                var statusForQuota = status == 0 ? HttpStatusCode.Forbidden : status; // default to 403
+                throw new HttpRequestException(errorMessage ?? "OpenAI insufficient_quota", null, statusForQuota);
+            }
+
+            // Other errors: do not spam stack traces here; throw a concise HttpRequestException with status code
+            throw new HttpRequestException(errorMessage ?? $"OpenAI request failed: {(int)status} {status}", null, status);
         }
+    }
+
+    private static TimeSpan ComputeBackoffWithJitter(int attempt, int? retryAfterSeconds)
+    {
+        if (retryAfterSeconds.HasValue && retryAfterSeconds.Value > 0)
+        {
+            // Apply small jitter on top of server-provided delay
+            var jitterMs = Random.Shared.Next(250, 750);
+            return TimeSpan.FromSeconds(retryAfterSeconds.Value) + TimeSpan.FromMilliseconds(jitterMs);
+        }
+
+        // Exponential backoff with full jitter: base 1s, cap ~20s
+        var maxDelayMs = (int)Math.Min(20000, Math.Pow(2, attempt) * 1000);
+        var delayMs = Random.Shared.Next(500, maxDelayMs);
+        return TimeSpan.FromMilliseconds(delayMs);
     }
 }
