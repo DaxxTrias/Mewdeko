@@ -1,4 +1,6 @@
 ﻿using System.Text.RegularExpressions;
+using System.Text;
+using Mewdeko.Extensions;
 using System.Threading;
 using DataModel;
 using LinqToDB;
@@ -618,7 +620,7 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
         if (!optMsg.HasValue)
             return Task.CompletedTask;
 
-        if (optMsg.Value is not IUserMessage msg)
+        if (optMsg.Value is not SocketUserMessage msg)
             return Task.CompletedTask;
 
         if (msg.Author is not IGuildUser gu || gu.GuildPermissions.Administrator)
