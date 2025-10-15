@@ -59,6 +59,7 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
         eventHandler.Subscribe("MessageReceived", "ProtectionService", HandleAntiSpam);
         eventHandler.Subscribe("UserJoined", "ProtectionService", HandleUserJoined);
         eventHandler.Subscribe("MessageReceived", "ProtectionService", HandleAntiMassMention);
+        eventHandler.Subscribe("MessageDeleted", "ProtectionService", HandleSuspiciousDeletion);
 
         eventHandler.Subscribe("JoinedGuild", "ProtectionService", _bot_JoinedGuild);
         eventHandler.Subscribe("LeftGuild", "ProtectionService", _client_LeftGuild);
@@ -90,6 +91,7 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
         eventHandler.Unsubscribe("MessageReceived", "ProtectionService", HandleAntiSpam);
         eventHandler.Unsubscribe("UserJoined", "ProtectionService", HandleUserJoined);
         eventHandler.Unsubscribe("MessageReceived", "ProtectionService", HandleAntiMassMention);
+        eventHandler.Unsubscribe("MessageDeleted", "ProtectionService", HandleSuspiciousDeletion);
         eventHandler.Unsubscribe("JoinedGuild", "ProtectionService", _bot_JoinedGuild);
         eventHandler.Unsubscribe("LeftGuild", "ProtectionService", _client_LeftGuild);
         return Task.CompletedTask;
@@ -597,6 +599,84 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
                 logger.LogWarning(ex, "Error processing anti-mass-mention for user {UserId}", msg.Author.Id);
             }
         });
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    ///     Detects suspicious behavior where a user posts a message mentioning someone and/or containing an invite/support
+    ///     link and deletes it shortly after (within 2 minutes). Treat as spam using AntiSpam settings and notify warnlog.
+    /// </summary>
+    private Task HandleSuspiciousDeletion((Cacheable<IMessage, ulong> optMsg, Cacheable<IMessageChannel, ulong> ch) arg)
+    {
+        var (optMsg, ch) = arg;
+        if (!ch.HasValue || ch.Value is not ITextChannel channel)
+            return Task.CompletedTask;
+
+        if (!antiSpamGuilds.TryGetValue(channel.Guild.Id, out var spamStats))
+            return Task.CompletedTask;
+
+        if (!optMsg.HasValue)
+            return Task.CompletedTask;
+
+        if (optMsg.Value is not IUserMessage msg)
+            return Task.CompletedTask;
+
+        if (msg.Author is not IGuildUser gu || gu.GuildPermissions.Administrator)
+            return Task.CompletedTask;
+
+        if (spamStats.AntiSpamSettings.AntiSpamIgnores.Any(i => i.ChannelId == channel.Id))
+            return Task.CompletedTask;
+
+        var age = DateTimeOffset.UtcNow - msg.Timestamp;
+        if (age > TimeSpan.FromMinutes(2))
+            return Task.CompletedTask;
+
+        var content = msg.Content ?? string.Empty;
+        var mentioned = msg.MentionedUsers.Count > 0 || msg.MentionedRoles.Count > 0 || msg.ReferencedMessage != null;
+        var hasScamLikeLink = content.IsDiscordInvite() || content.Contains("discord.com/oauth2/authorize", StringComparison.OrdinalIgnoreCase) || content.Contains("discordapp.com/oauth2/authorize", StringComparison.OrdinalIgnoreCase);
+
+        if (!mentioned && !hasScamLikeLink)
+            return Task.CompletedTask;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var settings = spamStats.AntiSpamSettings;
+                await PunishUsers(settings.Action, ProtectionType.Spamming, settings.MuteTime, settings.RoleId, gu)
+                    .ConfigureAwait(false);
+
+                var warnlogChannelId = await punishService.GetWarnlogChannel(channel.Guild.Id).ConfigureAwait(false);
+                if (warnlogChannelId != 0)
+                {
+                    var warnlog = await channel.Guild.GetTextChannelAsync(warnlogChannelId).ConfigureAwait(false);
+                    if (warnlog != null)
+                    {
+                        var desc = new StringBuilder()
+                            .AppendLine($"User: {gu.Mention} ({gu.Id})")
+                            .AppendLine($"Channel: <#{channel.Id}>")
+                            .AppendLine($"Deleted after: {age.TotalSeconds:F0}s")
+                            .AppendLine($"Contained invite/oauth link: {(hasScamLikeLink ? "Yes" : "No")}")
+                            .AppendLine($"Referenced/mentioned: {(mentioned ? "Yes" : "No")}")
+                            .AppendLine("Preview:")
+                            .AppendLine(Format.Sanitize(content.TrimTo(400)));
+
+                        var eb = new EmbedBuilder()
+                            .WithTitle("[Anti-Spam] Suspicious Deletion Detected")
+                            .WithDescription(desc.ToString())
+                            .WithOkColor()
+                            .WithCurrentTimestamp();
+
+                        await warnlog.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Error handling suspicious deletion for user {UserId}", gu.Id);
+            }
+        });
+
         return Task.CompletedTask;
     }
 
