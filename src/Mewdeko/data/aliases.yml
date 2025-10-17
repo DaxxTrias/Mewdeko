@@ -1184,6 +1184,12 @@ joinstats:
 joinstatscolor:
   - joinstatscolor
   - jstatscolor
+kaladont:
+  - kaladont
+  - kal
+kaladontstop:
+  - kaladontstop
+  - kalstop
 karaoke:
   - karaoke
 keno:
