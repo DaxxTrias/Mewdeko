@@ -383,7 +383,7 @@ public class RepeatRunner : IDisposable
 
     private async Task<bool> IsChannelQuiet()
     {
-        if (Channel == null) return false;
+        if (!await EnsureChannelLoadedAsync()) return false;
 
         try
         {
@@ -404,7 +404,7 @@ public class RepeatRunner : IDisposable
 
     private async Task<bool> HasReachedMessageThreshold()
     {
-        if (Channel == null) return false;
+        if (!await EnsureChannelLoadedAsync()) return false;
 
         try
         {
@@ -425,7 +425,8 @@ public class RepeatRunner : IDisposable
 
     private async Task<bool> IsConversationActive()
     {
-        if (Channel == null || messageCountService == null) return false;
+        if (messageCountService == null) return false;
+        if (!await EnsureChannelLoadedAsync()) return false;
 
         try
         {
@@ -441,6 +442,21 @@ public class RepeatRunner : IDisposable
             Log.Warning(ex, "Error checking conversation activity for repeater {RepeaterId}", Repeater.Id);
             return false;
         }
+    }
+
+    private async Task<bool> EnsureChannelLoadedAsync()
+    {
+        if (Channel != null)
+            return true;
+
+        Channel = await Guild.GetTextChannelAsync(Repeater.ChannelId);
+        if (Channel == null)
+        {
+            Log.Warning("Channel {ChannelId} not found for repeater {RepeaterId}", Repeater.ChannelId, Repeater.Id);
+            return false;
+        }
+
+        return true;
     }
 
     private void ScheduleNextCheck()
