@@ -1,5 +1,6 @@
 ﻿using System.Text.RegularExpressions;
 using System.Text;
+#nullable enable
 using Mewdeko.Extensions;
 using System.Threading;
 using DataModel;
@@ -28,6 +29,7 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
     private readonly ILogger<ProtectionService> logger;
     private readonly MuteService mute;
     private readonly UserPunishService punishService;
+    private readonly ConcurrentDictionary<ulong, ConcurrentDictionary<ulong, int>> imageMentionSpamCounters = new();
 
     private readonly Channel<PunishQueueItem> punishUserQueue =
         Channel.CreateBounded<PunishQueueItem>(new BoundedChannelOptions(200)
@@ -62,6 +64,7 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
         eventHandler.Subscribe("UserJoined", "ProtectionService", HandleUserJoined);
         eventHandler.Subscribe("MessageReceived", "ProtectionService", HandleAntiMassMention);
         eventHandler.Subscribe("MessageDeleted", "ProtectionService", HandleSuspiciousDeletion);
+        eventHandler.Subscribe("MessageReceived", "ProtectionService", HandleImageMentionSpam);
 
         eventHandler.Subscribe("JoinedGuild", "ProtectionService", _bot_JoinedGuild);
         eventHandler.Subscribe("LeftGuild", "ProtectionService", _client_LeftGuild);
@@ -94,6 +97,7 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
         eventHandler.Unsubscribe("UserJoined", "ProtectionService", HandleUserJoined);
         eventHandler.Unsubscribe("MessageReceived", "ProtectionService", HandleAntiMassMention);
         eventHandler.Unsubscribe("MessageDeleted", "ProtectionService", HandleSuspiciousDeletion);
+        eventHandler.Unsubscribe("MessageReceived", "ProtectionService", HandleImageMentionSpam);
         eventHandler.Unsubscribe("JoinedGuild", "ProtectionService", _bot_JoinedGuild);
         eventHandler.Unsubscribe("LeftGuild", "ProtectionService", _client_LeftGuild);
         return Task.CompletedTask;
@@ -605,6 +609,96 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
     }
 
     /// <summary>
+    ///     Detects a user posting 4 or more image messages in a row that also include a mention (user/role or reply),
+    ///     and applies AntiSpam punishment, notifying the warnlog channel.
+    /// </summary>
+    private Task HandleImageMentionSpam(IMessage arg)
+    {
+        if (arg is not SocketUserMessage msg || msg.Author is IGuildUser { GuildPermissions.Administrator: true })
+            return Task.CompletedTask;
+
+        if (msg.Channel is not ITextChannel channel)
+            return Task.CompletedTask;
+
+        if (!antiSpamGuilds.TryGetValue(channel.Guild.Id, out var spamStats))
+            return Task.CompletedTask;
+
+        // Qualifying message: has at least one image attachment and includes a mention (user/role) or is a reply
+        var hasImageAttachment = msg.Attachments.Any(a =>
+            (a.ContentType?.StartsWith("image/", StringComparison.OrdinalIgnoreCase) ?? false)
+            || a.Url.EndsWith(".png", StringComparison.OrdinalIgnoreCase)
+            || a.Url.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase)
+            || a.Url.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase)
+            || a.Url.EndsWith(".gif", StringComparison.OrdinalIgnoreCase)
+            || a.ProxyUrl.EndsWith(".png", StringComparison.OrdinalIgnoreCase)
+            || a.ProxyUrl.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase)
+            || a.ProxyUrl.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase)
+            || a.ProxyUrl.EndsWith(".gif", StringComparison.OrdinalIgnoreCase));
+
+        var includesMention = msg.MentionedUsers.Count > 0 || msg.MentionedRoles.Count > 0 || msg.ReferencedMessage != null;
+        var qualifies = hasImageAttachment && includesMention;
+
+        var guildCounters = imageMentionSpamCounters.GetOrAdd(channel.Guild.Id, _ => new ConcurrentDictionary<ulong, int>());
+        if (!qualifies)
+        {
+            // reset streak on any non-qualifying message from the user
+            guildCounters.AddOrUpdate(msg.Author.Id, _ => 0, (_, __) => 0);
+            return Task.CompletedTask;
+        }
+
+        var newCount = guildCounters.AddOrUpdate(msg.Author.Id, _ => 1, (_, old) => old + 1);
+
+        if (newCount >= 4)
+        {
+            // Reset counter after triggering
+            guildCounters[msg.Author.Id] = 0;
+
+            if (msg.Author is IGuildUser gu)
+            {
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        var settings = spamStats.AntiSpamSettings;
+                        await PunishUsers(settings.Action, ProtectionType.Spamming, settings.MuteTime, settings.RoleId, gu)
+                            .ConfigureAwait(false);
+
+                        var warnlogChannelId = await punishService.GetWarnlogChannel(channel.Guild.Id).ConfigureAwait(false);
+                        if (warnlogChannelId != 0)
+                        {
+                            var warnlog = await channel.Guild.GetTextChannelAsync(warnlogChannelId).ConfigureAwait(false);
+                            if (warnlog != null)
+                            {
+                                var desc = new StringBuilder()
+                                    .AppendLine($"User: {gu.Mention} ({gu.Id})")
+                                    .AppendLine($"Channel: <#{channel.Id}>")
+                                    .AppendLine("Triggered: 4+ image messages with mention (consecutive)")
+                                    .AppendLine($"This message attachments: {msg.Attachments.Count}")
+                                    .AppendLine("Preview:")
+                                    .AppendLine(Format.Sanitize((msg.Content ?? string.Empty).TrimTo(300)));
+
+                                var eb = new EmbedBuilder()
+                                    .WithTitle("[Anti-Spam] Image Mention Spam Detected")
+                                    .WithDescription(desc.ToString())
+                                    .WithOkColor()
+                                    .WithCurrentTimestamp();
+
+                                await warnlog.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogWarning(ex, "Error handling image-mention spam for user {UserId}", gu.Id);
+                    }
+                });
+            }
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
     ///     Detects suspicious behavior where a user posts a message mentioning someone and/or containing an invite/support
     ///     link and deletes it shortly after (within 2 minutes). Treat as spam using AntiSpam settings and notify warnlog.
     /// </summary>
@@ -712,7 +806,8 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
     public async Task<bool> TryStopAntiSpam(ulong guildId)
     {
         var removed = antiSpamGuilds.TryRemove(guildId, out var removedStats);
-        if (removed) removedStats.UserStats.ForEach(x => x.Value.Dispose());
+        if (removed && removedStats != null)
+            removedStats.UserStats.ForEach(x => x.Value.Dispose());
 
         await using var db = await dbFactory.CreateConnectionAsync();
         var setting = await db.GetTable<AntiSpamSetting>().FirstOrDefaultAsync(x => x.GuildId == guildId)
@@ -841,7 +936,8 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
     public async Task<bool> TryStopAntiMassMention(ulong guildId)
     {
         var removed = antiMassMentionGuilds.TryRemove(guildId, out var removedStats);
-        if (removed) removedStats.UserStats.ForEach(x => x.Value.Dispose());
+        if (removed && removedStats != null)
+            removedStats.UserStats.ForEach(x => x.Value.Dispose());
 
         await using var db = await dbFactory.CreateConnectionAsync();
         var deletedCount = await db.GetTable<AntiMassMentionSetting>()
