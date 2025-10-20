@@ -234,6 +234,16 @@ public class BotCredentials : IBotCredentials
     public string TrovoClientId { get; set; }
 
     /// <summary>
+    ///     Gets or sets the Kick client ID.
+    /// </summary>
+    public string KickClientId { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the Kick client secret.
+    /// </summary>
+    public string KickClientSecret { get; set; }
+
+    /// <summary>
     ///     Gets or sets the token used for votes.
     /// </summary>
     public string VotesToken { get; set; }
@@ -470,6 +480,8 @@ public class BotCredentials : IBotCredentials
             TwitchClientSecret = data[nameof(TwitchClientSecret)];
             LavalinkUrl = data[nameof(LavalinkUrl)];
             TrovoClientId = data[nameof(TrovoClientId)];
+            KickClientId = data[nameof(KickClientId)];
+            KickClientSecret = data[nameof(KickClientSecret)];
             IsMasterInstance = Convert.ToBoolean(data[nameof(IsMasterInstance)]);
             SpotifyClientId = data[nameof(SpotifyClientId)];
             SpotifyClientSecret = data[nameof(SpotifyClientSecret)];
@@ -634,6 +646,8 @@ public class BotCredentials : IBotCredentials
         public string GoogleApiKey { get; } = "";
         public string OsuApiKey { get; } = "";
         public string TrovoClientId { get; } = "";
+        public string KickClientId { get; } = "";
+        public string KickClientSecret { get; } = "";
         public string TwitchClientId { get; } = "";
         public int TotalShards { get; } = 1;
         public string TwitchClientSecret { get; } = "";
