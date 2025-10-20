@@ -623,6 +623,53 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
         if (!antiSpamGuilds.TryGetValue(channel.Guild.Id, out var spamStats))
             return Task.CompletedTask;
 
+        // Immediate rule: single message with >= 4 attachments and @everyone
+        var mentionsEveryone = (msg.Content ?? string.Empty).IndexOf("@everyone", StringComparison.OrdinalIgnoreCase) >= 0;
+        if (msg.Attachments.Count >= 4 && mentionsEveryone)
+        {
+            if (msg.Author is IGuildUser guNow)
+            {
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        var settings = spamStats.AntiSpamSettings;
+                        await PunishUsers(settings.Action, ProtectionType.Spamming, settings.MuteTime, settings.RoleId, guNow)
+                            .ConfigureAwait(false);
+
+                        var warnlogChannelId = await punishService.GetWarnlogChannel(channel.Guild.Id).ConfigureAwait(false);
+                        if (warnlogChannelId != 0)
+                        {
+                            var warnlog = await channel.Guild.GetTextChannelAsync(warnlogChannelId).ConfigureAwait(false);
+                            if (warnlog != null)
+                            {
+                                var desc = new StringBuilder()
+                                    .AppendLine($"User: {guNow.Mention} ({guNow.Id})")
+                                    .AppendLine($"Channel: <#{channel.Id}>")
+                                    .AppendLine($"Triggered: >=4 attachments in a single message with @everyone")
+                                    .AppendLine($"Attachments: {msg.Attachments.Count}")
+                                    .AppendLine("Preview:")
+                                    .AppendLine(Format.Sanitize((msg.Content ?? string.Empty).TrimTo(300)));
+
+                                var eb = new EmbedBuilder()
+                                    .WithTitle("[Anti-Spam] Attachment Burst with @everyone Detected")
+                                    .WithDescription(desc.ToString())
+                                    .WithOkColor()
+                                    .WithCurrentTimestamp();
+
+                                await warnlog.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogWarning(ex, "Error handling attachment burst for user {UserId}", guNow.Id);
+                    }
+                });
+            }
+            return Task.CompletedTask;
+        }
+
         // Qualifying message: has at least one image attachment and includes a mention (user/role) or is a reply
         var hasImageAttachment = msg.Attachments.Any(a =>
             (a.ContentType?.StartsWith("image/", StringComparison.OrdinalIgnoreCase) ?? false)
