@@ -326,6 +326,41 @@ public partial class Utility
         }
 
         /// <summary>
+        ///     Copies an existing repeater by index, creating a new repeater with identical settings.
+        ///     The new repeater uses the same channel; remember to move it with `repeatchannel` if needed.
+        /// </summary>
+        /// <param name="index">The one-based index of the repeater to copy.</param>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.ManageMessages)]
+        public async Task RepeatCopy(int index)
+        {
+            if (!Service.RepeaterReady)
+                return;
+
+            var repeater = Service.GetRepeaterByIndex(ctx.Guild.Id, index - 1);
+            if (repeater == null)
+            {
+                await ReplyErrorAsync(Strings.IndexOutOfRange(ctx.Guild.Id)).ConfigureAwait(false);
+                return;
+            }
+
+            var copy = await Service.DuplicateRepeaterAsync(ctx.Guild.Id, repeater.Repeater.Id);
+            if (copy == null)
+            {
+                await ReplyErrorAsync(Strings.RepeatActionFailed(ctx.Guild.Id)).ConfigureAwait(false);
+                return;
+            }
+
+            var desc = GetRepeaterInfoString(copy);
+            await ctx.Channel.EmbedAsync(new EmbedBuilder()
+                .WithOkColor()
+                .WithTitle(Strings.RepeaterCreated(ctx.Guild.Id))
+                .WithDescription(desc + "\n\nNote: This copy uses the same channel as the original. Use `repeatchannel <index>` to move it."))
+                .ConfigureAwait(false);
+        }
+        /// <summary>
         ///     Updates the message of an existing repeater.
         /// </summary>
         /// <param name="index">The one-based index of the repeater to update.</param>
@@ -821,8 +856,9 @@ public partial class Utility
                 case "list":
                     var currentConditions =
                         conditionService?.ParseForumTagConditions(repeater.Repeater.ForumTagConditions);
-                    if (currentConditions == null || !currentConditions.RequiredTags?.Any() == true &&
-                        !currentConditions.ExcludedTags?.Any() == true)
+                    var noRequired = currentConditions?.RequiredTags?.Any() != true;
+                    var noExcluded = currentConditions?.ExcludedTags?.Any() != true;
+                    if (currentConditions == null || (noRequired && noExcluded))
                     {
                         await ReplyAsync(Strings.StickyForumTagsNone(ctx.Guild.Id, index)).ConfigureAwait(false);
                     }

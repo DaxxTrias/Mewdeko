@@ -96,7 +96,7 @@ public class CustomVoiceService : INService, IUnloadableService
                 if (voiceChannel == null)
                 {
                     // Channel no longer exists, remove from database
-                    await dbContext.CustomVoiceChannels.Select(x => channel).DeleteAsync();
+                    await dbContext.DeleteAsync(channel);
                     continue;
                 }
 
@@ -109,8 +109,10 @@ public class CustomVoiceService : INService, IUnloadableService
                         return set;
                     });
 
-                // Check if it's empty and should be tracked for deletion
-                if (voiceChannel.Users.Count == 0 && !channel.KeepAlive)
+                // Check if it's empty and should be tracked for deletion - filter for actually connected non-bot users
+                var connectedUsersCount =
+                    voiceChannel.Users.Count(u => u.VoiceChannel?.Id == channel.ChannelId && !u.IsBot);
+                if (connectedUsersCount == 0 && !channel.KeepAlive)
                 {
                     var config = await GetOrCreateConfigAsync(channel.GuildId);
                     if (config.DeleteWhenEmpty)
@@ -173,6 +175,63 @@ public class CustomVoiceService : INService, IUnloadableService
             };
 
             await dbContext.InsertAsync(config);
+        }
+        else
+        {
+            // Auto-migrate bad bitrate values (if stored in bps instead of kbps)
+            var needsUpdate = false;
+
+            if (config.DefaultBitrate > 1000)
+            {
+                logger.LogWarning("Guild {GuildId} has bad DefaultBitrate {OldValue}, converting from bps to kbps",
+                    guildId, config.DefaultBitrate);
+                config.DefaultBitrate = config.DefaultBitrate / 1000;
+                needsUpdate = true;
+            }
+
+            if (config.MaxBitrate > 1000)
+            {
+                logger.LogWarning("Guild {GuildId} has bad MaxBitrate {OldValue}, converting from bps to kbps",
+                    guildId, config.MaxBitrate);
+                config.MaxBitrate = config.MaxBitrate / 1000;
+                needsUpdate = true;
+            }
+
+            // Also validate against Discord limits
+            var guild = client.GetGuild(guildId);
+            if (guild != null)
+            {
+                var maxAllowed = guild.PremiumTier switch
+                {
+                    PremiumTier.Tier3 => 384,
+                    PremiumTier.Tier2 => 256,
+                    PremiumTier.Tier1 => 128,
+                    _ => 96
+                };
+
+                if (config.MaxBitrate > maxAllowed)
+                {
+                    logger.LogWarning(
+                        "Guild {GuildId} MaxBitrate {OldValue} exceeds Discord limit {MaxAllowed} for Tier {PremiumTier}, capping to {MaxAllowed}",
+                        guildId, config.MaxBitrate, maxAllowed, guild.PremiumTier, maxAllowed);
+                    config.MaxBitrate = maxAllowed;
+                    needsUpdate = true;
+                }
+
+                if (config.DefaultBitrate > maxAllowed)
+                {
+                    logger.LogWarning(
+                        "Guild {GuildId} DefaultBitrate {OldValue} exceeds Discord limit {MaxAllowed} for Tier {PremiumTier}, capping to {MaxAllowed}",
+                        guildId, config.DefaultBitrate, maxAllowed, guild.PremiumTier, maxAllowed);
+                    config.DefaultBitrate = maxAllowed;
+                    needsUpdate = true;
+                }
+            }
+
+            if (needsUpdate)
+            {
+                await dbContext.UpdateAsync(config);
+            }
         }
 
         return config;
@@ -400,15 +459,8 @@ public class CustomVoiceService : INService, IUnloadableService
 
             if (existingChannel != null)
             {
-                var channel = await guild.GetVoiceChannelAsync(existingChannel.ChannelId);
-                if (channel != null)
-                {
-                    // If the channel still exists, return it
-                    return channel;
-                }
-
-                // If the channel doesn't exist anymore, remove it from the database
-                await dbContext.CustomVoiceChannels.Select(x => existingChannel).DeleteAsync();
+                // Delete the old channel and create a new one
+                await DeleteVoiceChannelAsync(guild.Id, existingChannel.ChannelId);
             }
         }
 
@@ -443,11 +495,28 @@ public class CustomVoiceService : INService, IUnloadableService
             userLimit = Math.Min(prefs.UserLimit.Value, config.MaxUserLimit);
         }
 
-        // Determine bitrate
+        // Determine bitrate and validate against Discord limits
         var bitrate = config.DefaultBitrate;
         if (prefs?.Bitrate.HasValue == true && config.AllowBitrateCustomization)
         {
             bitrate = Math.Min(prefs.Bitrate.Value, config.MaxBitrate);
+        }
+
+        // Validate bitrate against Discord's actual limits (cap to safe defaults if misconfigured)
+        var maxAllowedBitrate = (guild as SocketGuild)?.PremiumTier switch
+        {
+            PremiumTier.Tier3 => 384,
+            PremiumTier.Tier2 => 256,
+            PremiumTier.Tier1 => 128,
+            _ => 96
+        };
+
+        if (bitrate > maxAllowedBitrate)
+        {
+            logger.LogWarning(
+                "Configured bitrate {ConfiguredBitrate} exceeds Discord limit {MaxAllowed} for guild {GuildId} (Tier: {PremiumTier}). Capping to {MaxAllowed}.",
+                bitrate, maxAllowedBitrate, guild.Id, (guild as SocketGuild)?.PremiumTier, maxAllowedBitrate);
+            bitrate = maxAllowedBitrate;
         }
 
         // Create the channel
@@ -512,6 +581,15 @@ public class CustomVoiceService : INService, IUnloadableService
         }
 
         await dbContext.InsertAsync(customChannel);
+
+        // Keep track of the channel immediately after database insert
+        activeChannels.AddOrUpdate(guild.Id,
+            [voiceChannel.Id],
+            (_, set) =>
+            {
+                set.Add(voiceChannel.Id);
+                return set;
+            });
 
         // Set permissions for the channel
         if (config.AutoPermission)
@@ -667,23 +745,22 @@ public class CustomVoiceService : INService, IUnloadableService
                     }
                 }
 
-                // Send a welcome message to the text channel
-                await textChannel.SendMessageAsync(strings.CustomVoiceDescription(voiceChannel.Guild.Id));
+                // Send a welcome message with control buttons to the text channel
+                var embed = new EmbedBuilder()
+                    .WithOkColor()
+                    .WithTitle("Voice Channel Controls")
+                    .WithDescription(strings.CustomVoiceDescription(voiceChannel.Guild.Id) ??
+                                     "This is your custom voice channel. Use the buttons below to manage it.")
+                    .Build();
+
+                var components = BuildVoiceControlButtons(voiceChannel.Id, customChannel, config);
+                await textChannel.SendMessageAsync(embed: embed, components: components.Build());
             }
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Error setting up text channel for voice channel {ChannelId}", voiceChannel.Id);
         }
-
-        // Keep track of the channel
-        activeChannels.AddOrUpdate(guild.Id,
-            [voiceChannel.Id],
-            (_, set) =>
-            {
-                set.Add(voiceChannel.Id);
-                return set;
-            });
 
         // Move the user to the new channel
         try
@@ -724,11 +801,13 @@ public class CustomVoiceService : INService, IUnloadableService
                 return false;
 
             await using var dbContext = await dbFactory.CreateConnectionAsync();
-            var customChannel = await dbContext.CustomVoiceChannels.FirstOrDefaultAsync(c => c.ChannelId == channelId);
-            if (customChannel != null)
-            {
-                await dbContext.CustomVoiceChannels.Select(x => customChannel).DeleteAsync();
-            }
+
+            // Delete from database
+            var cvc = await dbContext.CustomVoiceChannels
+                .FirstOrDefaultAsync(c => c.ChannelId == channelId);
+
+            if (cvc != null)
+                await dbContext.DeleteAsync(cvc);
 
             await channel.DeleteAsync();
 
@@ -811,6 +890,24 @@ public class CustomVoiceService : INService, IUnloadableService
             if (bitrate.HasValue && config.AllowBitrateCustomization)
             {
                 var rate = Math.Min(bitrate.Value, config.MaxBitrate);
+
+                // Validate against Discord's actual limits
+                var maxAllowedBitrate = (guild as SocketGuild)?.PremiumTier switch
+                {
+                    PremiumTier.Tier3 => 384,
+                    PremiumTier.Tier2 => 256,
+                    PremiumTier.Tier1 => 128,
+                    _ => 96
+                };
+
+                if (rate > maxAllowedBitrate)
+                {
+                    logger.LogWarning(
+                        "Requested bitrate {RequestedBitrate} exceeds Discord limit {MaxAllowed} for guild {GuildId} (Tier: {PremiumTier}). Capping to {MaxAllowed}.",
+                        rate, maxAllowedBitrate, guildId, (guild as SocketGuild)?.PremiumTier, maxAllowedBitrate);
+                    rate = maxAllowedBitrate;
+                }
+
                 await channel.ModifyAsync(props => props.Bitrate = rate * 1000);
             }
 
@@ -1350,6 +1447,91 @@ public class CustomVoiceService : INService, IUnloadableService
     }
 
     /// <summary>
+    ///     Builds the interactive control buttons for a voice channel.
+    /// </summary>
+    private ComponentBuilder BuildVoiceControlButtons(ulong channelId, CustomVoiceChannel customChannel,
+        CustomVoiceConfig config)
+    {
+        var components = new ComponentBuilder();
+
+        // Row 1: Basic controls
+        components.WithButton(
+            customId: $"voice:rename:{channelId}",
+            label: "Rename",
+            style: ButtonStyle.Primary,
+            disabled: !config.AllowNameCustomization,
+            emote: new Emoji("✏️"),
+            row: 0
+        );
+
+        components.WithButton(
+            customId: $"voice:limit:{channelId}",
+            label: "User Limit",
+            style: ButtonStyle.Primary,
+            disabled: !config.AllowUserLimitCustomization,
+            emote: new Emoji("👥"),
+            row: 0
+        );
+
+        components.WithButton(
+            customId: $"voice:bitrate:{channelId}",
+            label: "Bitrate",
+            style: ButtonStyle.Primary,
+            disabled: !config.AllowBitrateCustomization,
+            emote: new Emoji("🔊"),
+            row: 0
+        );
+
+        // Row 2: Lock/Keep Alive/Transfer/Delete toggles
+        components.WithButton(
+            customId: $"voice:{(customChannel.IsLocked ? "unlock" : "lock")}:{channelId}",
+            label: customChannel.IsLocked ? "Unlock" : "Lock",
+            style: customChannel.IsLocked ? ButtonStyle.Success : ButtonStyle.Danger,
+            disabled: !config.AllowLocking,
+            emote: new Emoji(customChannel.IsLocked ? "🔓" : "🔒"),
+            row: 1
+        );
+
+        components.WithButton(
+            customId: $"voice:keepalive:{channelId}:{!customChannel.KeepAlive}",
+            label: customChannel.KeepAlive ? "Disable Keep Alive" : "Enable Keep Alive",
+            style: customChannel.KeepAlive ? ButtonStyle.Danger : ButtonStyle.Success,
+            emote: new Emoji("⏱️"),
+            row: 1
+        );
+
+        components.WithButton(
+            customId: $"voice:transfer:{channelId}",
+            label: "Transfer",
+            style: ButtonStyle.Secondary,
+            emote: new Emoji("👑"),
+            row: 1
+        );
+
+        components.WithButton(
+            customId: $"voice:delete:{channelId}",
+            label: "Delete",
+            style: ButtonStyle.Danger,
+            emote: new Emoji("🗑️"),
+            row: 1
+        );
+
+        // Row 3: User Management button
+        if (config.AllowUserManagement)
+        {
+            components.WithButton(
+                customId: $"voice:manage:{channelId}",
+                label: "Manage Users",
+                style: ButtonStyle.Secondary,
+                emote: new Emoji("⚙️"),
+                row: 2
+            );
+        }
+
+        return components;
+    }
+
+    /// <summary>
     ///     Handles voice state updates to create, manage, or clean up custom voice channels.
     /// </summary>
     private async Task OnUserVoiceStateUpdated(SocketUser user, SocketVoiceState oldState, SocketVoiceState newState)
@@ -1397,9 +1579,10 @@ public class CustomVoiceService : INService, IUnloadableService
                 }
             }
 
+            activeChannels.TryGetValue(guild.Id, out var oldChannels);
             // Check if the user left a custom voice channel
-            if (oldState.VoiceChannel != null && activeChannels.TryGetValue(guild.Id, out var oldChannels) &&
-                oldChannels.Contains(oldState.VoiceChannel.Id))
+            if (oldState.VoiceChannel != null &&
+                oldChannels != null && oldChannels.Contains(oldState.VoiceChannel.Id))
             {
                 var vc = guild.GetVoiceChannel(oldState.VoiceChannel.Id);
 
@@ -1412,45 +1595,50 @@ public class CustomVoiceService : INService, IUnloadableService
                     // Refresh the channel reference to get updated user count
                     vc = guild.GetVoiceChannel(oldState.VoiceChannel.Id);
 
-                    // Check if the channel is now empty (using Users.Count for consistency)
-                    if (vc != null && vc.Users.Count == 0)
+                    // Check if the channel is now empty - filter for actually connected non-bot users
+                    if (vc != null)
                     {
-                        // Get the channel to check if it should be kept
-                        await using var dbContext = await dbFactory.CreateConnectionAsync();
-                        var customChannel =
-                            await dbContext.CustomVoiceChannels.FirstOrDefaultAsync(c =>
-                                c.ChannelId == oldState.VoiceChannel.Id);
-
-                        if (customChannel is { KeepAlive: false } && config.DeleteWhenEmpty)
+                        var connectedUsersCount = vc.Users.Count(u => u.VoiceChannel?.Id == vc.Id && !u.IsBot);
+                        if (connectedUsersCount == 0)
                         {
-                            // Mark the channel as empty
-                            emptyChannels.TryAdd(oldState.VoiceChannel.Id, DateTime.UtcNow);
+                            // Get the channel to check if it should be kept
+                            await using var dbContext = await dbFactory.CreateConnectionAsync();
+                            var customChannel =
+                                await dbContext.CustomVoiceChannels.FirstOrDefaultAsync(c =>
+                                    c.ChannelId == oldState.VoiceChannel.Id);
 
-                            // Schedule deletion after timeout
-                            if (config.EmptyChannelTimeout > 0)
+                            if (customChannel is { KeepAlive: false } && config.DeleteWhenEmpty)
                             {
-                                var timer = new Timer(_ =>
+                                // Mark the channel as empty
+                                emptyChannels.TryAdd(oldState.VoiceChannel.Id, DateTime.UtcNow);
+
+                                // Schedule deletion after timeout
+                                if (config.EmptyChannelTimeout > 0)
                                 {
-                                    Task.Run(async () =>
-                                    {
-                                        try
+                                    var timer = new Timer(_ =>
                                         {
-                                            await DeleteEmptyChannelAsync(guild.Id, oldState.VoiceChannel.Id);
-                                        }
-                                        catch (Exception ex)
-                                        {
-                                            logger.LogError(ex, "Timer callback failed for channel {ChannelId}",
-                                                oldState.VoiceChannel.Id);
-                                        }
-                                    });
-                                }, null, TimeSpan.FromMinutes(config.EmptyChannelTimeout), Timeout.InfiniteTimeSpan);
+                                            Task.Run(async () =>
+                                            {
+                                                try
+                                                {
+                                                    await DeleteEmptyChannelAsync(guild.Id, oldState.VoiceChannel.Id);
+                                                }
+                                                catch (Exception ex)
+                                                {
+                                                    logger.LogError(ex, "Timer callback failed for channel {ChannelId}",
+                                                        oldState.VoiceChannel.Id);
+                                                }
+                                            });
+                                        }, null, TimeSpan.FromSeconds(config.EmptyChannelTimeout),
+                                        Timeout.InfiniteTimeSpan);
 
-                                emptyChannelTimers.TryAdd(oldState.VoiceChannel.Id, timer);
-                            }
-                            else
-                            {
-                                // Delete immediately
-                                await DeleteEmptyChannelAsync(guild.Id, oldState.VoiceChannel.Id);
+                                    emptyChannelTimers.TryAdd(oldState.VoiceChannel.Id, timer);
+                                }
+                                else
+                                {
+                                    // Delete immediately
+                                    await DeleteEmptyChannelAsync(guild.Id, oldState.VoiceChannel.Id);
+                                }
                             }
                         }
                     }
@@ -1480,13 +1668,13 @@ public class CustomVoiceService : INService, IUnloadableService
         {
             // Check if this was a custom voice channel
             await using var dbContext = await dbFactory.CreateConnectionAsync();
-            var customChannel =
-                await dbContext.CustomVoiceChannels.FirstOrDefaultAsync(c => c.ChannelId == voiceChannel.Id);
+            var customChannel = await dbContext.CustomVoiceChannels
+                .FirstOrDefaultAsync(c => c.ChannelId == voiceChannel.Id);
+
             if (customChannel != null)
             {
                 // Delete the channel from the database
-                await dbContext.CustomVoiceChannels.Select(x => customChannel).DeleteAsync();
-
+                await dbContext.DeleteAsync(customChannel);
 
                 // Remove from tracking collections
                 if (activeChannels.TryGetValue(guild.Id, out var channels))
@@ -1561,18 +1749,22 @@ public class CustomVoiceService : INService, IUnloadableService
 
         var channel = guild.GetVoiceChannel(channelId);
 
-        // Double-check that it's still empty before deleting
-        if (channel != null && channel.Users.Count == 0)
+        // Double-check that it's still empty before deleting - check actually connected non-bot users
+        if (channel != null)
         {
-            await DeleteVoiceChannelAsync(guildId, channelId);
-        }
-        else if (channel != null)
-        {
-            // Channel has users again, remove from empty tracking
-            emptyChannels.TryRemove(channelId, out _);
-            if (emptyChannelTimers.TryRemove(channelId, out var timer))
+            var connectedUsersCount = channel.Users.Count(u => u.VoiceChannel?.Id == channelId && !u.IsBot);
+            if (connectedUsersCount == 0)
             {
-                await timer.DisposeAsync();
+                await DeleteVoiceChannelAsync(guildId, channelId);
+            }
+            else
+            {
+                // Channel has users again, remove from empty tracking
+                emptyChannels.TryRemove(channelId, out _);
+                if (emptyChannelTimers.TryRemove(channelId, out var timer))
+                {
+                    await timer.DisposeAsync();
+                }
             }
         }
     }

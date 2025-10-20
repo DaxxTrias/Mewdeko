@@ -424,6 +424,85 @@ public class MessageRepeaterService : INService, IReadyExecutor, IDisposable
     }
 
     /// <summary>
+    ///     Duplicates an existing repeater configuration for the guild and returns the new runner.
+    ///     The copy preserves all settings and the same target channel; counters/timestamps are reset.
+    /// </summary>
+    /// <param name="guildId">Guild of the repeater to copy.</param>
+    /// <param name="repeaterId">Id of the repeater to copy.</param>
+    /// <returns>The new <see cref="RepeatRunner"/> or null if source not found.</returns>
+    public async Task<RepeatRunner?> DuplicateRepeaterAsync(ulong guildId, int repeaterId)
+    {
+        try
+        {
+            await using var dbContext = await dbFactory.CreateConnectionAsync();
+
+            var source = await dbContext.GuildRepeaters
+                .FirstOrDefaultAsync(r => r.Id == repeaterId && r.GuildId == guildId);
+            if (source == null)
+                return null;
+
+            var copy = new GuildRepeater
+            {
+                GuildId = source.GuildId,
+                ChannelId = source.ChannelId,
+                Message = source.Message,
+                Interval = source.Interval,
+                StartTimeOfDay = source.StartTimeOfDay,
+                NoRedundant = source.NoRedundant,
+                DateAdded = DateTime.UtcNow,
+                TriggerMode = source.TriggerMode,
+                ActivityThreshold = source.ActivityThreshold,
+                ActivityTimeWindow = source.ActivityTimeWindow,
+                ConversationDetection = source.ConversationDetection,
+                ConversationThreshold = source.ConversationThreshold,
+                Priority = source.Priority,
+                QueuePosition = source.QueuePosition,
+                TimeConditions = source.TimeConditions,
+                MaxAge = source.MaxAge,
+                MaxTriggers = source.MaxTriggers,
+                ThreadAutoSticky = source.ThreadAutoSticky,
+                ForumTagConditions = source.ForumTagConditions,
+                IsEnabled = source.IsEnabled,
+                ThreadOnlyMode = source.ThreadOnlyMode,
+                // Reset runtime counters
+                LastMessageId = null,
+                DisplayCount = 0,
+                LastDisplayed = null,
+                ActivityBasedLastCheck = null,
+                ThreadStickyMessages = null
+            };
+
+            var newId = await dbContext.InsertWithInt32IdentityAsync(copy);
+            copy.Id = newId;
+
+            var guild = client.GetGuild(guildId);
+            if (guild == null) return null;
+
+            var runner = new RepeatRunner(client, guild, copy, this, conditionService, messageCountService,
+                guildTimezoneService);
+
+            Repeaters.AddOrUpdate(guildId,
+                new ConcurrentDictionary<int, RepeatRunner>([
+                    new KeyValuePair<int, RepeatRunner>(copy.Id, runner)
+                ]), (_, old) =>
+                {
+                    old.TryAdd(copy.Id, runner);
+                    return old;
+                });
+
+            logger.LogInformation("Duplicated repeater {SourceId} -> {NewId} in guild {GuildId}", repeaterId, newId,
+                guildId);
+
+            return runner;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to duplicate repeater {RepeaterId} in guild {GuildId}", repeaterId, guildId);
+            return null;
+        }
+    }
+
+    /// <summary>
     ///     Updates the message of an existing repeater.
     /// </summary>
     public async Task<bool> UpdateRepeaterMessageAsync(ulong guildId, int repeaterId, string newMessage,

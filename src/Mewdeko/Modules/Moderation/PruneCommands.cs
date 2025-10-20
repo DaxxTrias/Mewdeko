@@ -16,15 +16,24 @@ public partial class Moderation
         private static readonly TimeSpan TwoWeeks = TimeSpan.FromDays(14);
 
         /// <summary>
-        ///     Purges messages from the current channel.
+        ///     Purges messages authored by the bot in the current channel. Requires an explicit scope.
         /// </summary>
-        /// <param name="parameter">The parameters to use</param>
+        /// <param name="scope">Scope keyword: mine/self/me/bot</param>
+        /// <param name="parameter">Optional: -s/--safe to skip pinned messages</param>
         [Cmd]
         [Aliases]
         [UserPerm(GuildPermission.ManageMessages)]
         [RequireContext(ContextType.Guild)]
-        public async Task Purge(string? parameter = null)
+        public async Task Purge(string scope, string? parameter = null)
         {
+            var scopeLower = scope?.ToLowerInvariant();
+            if (scopeLower is not ("mine" or "self" or "me" or "bot"))
+            {
+                await ReplyErrorAsync(
+                    "Please specify a scope: mine | self | me | bot. Example: .purge mine --safe").ConfigureAwait(false);
+                return;
+            }
+
             var user = await ctx.Guild.GetCurrentUserAsync().ConfigureAwait(false);
 
             if (parameter is "-s" or "--safe")
