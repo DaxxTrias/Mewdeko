@@ -559,7 +559,7 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
     /// <returns>A task that represents the asynchronous operation.</returns>
     private Task HandleAntiMassMention(IMessage arg)
     {
-        if (arg is not SocketUserMessage msg || msg.Author is IGuildUser { GuildPermissions.Administrator: true })
+        if (arg is not SocketUserMessage msg || msg.Author.IsBot || msg.Author is IGuildUser { GuildPermissions.Administrator: true })
             return Task.CompletedTask;
 
         if (msg.Channel is not ITextChannel channel)
