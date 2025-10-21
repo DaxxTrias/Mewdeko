@@ -856,9 +856,9 @@ public partial class Utility
                 case "list":
                     var currentConditions =
                         conditionService?.ParseForumTagConditions(repeater.Repeater.ForumTagConditions);
-                    var noRequired = currentConditions?.RequiredTags?.Any() != true;
-                    var noExcluded = currentConditions?.ExcludedTags?.Any() != true;
-                    if (currentConditions == null || (noRequired && noExcluded))
+                    var hasRequired = currentConditions?.RequiredTags != null && currentConditions.RequiredTags.Any();
+                    var hasExcluded = currentConditions?.ExcludedTags != null && currentConditions.ExcludedTags.Any();
+                    if (currentConditions == null || (!hasRequired && !hasExcluded))
                     {
                         await ReplyAsync(Strings.StickyForumTagsNone(ctx.Guild.Id, index)).ConfigureAwait(false);
                     }
