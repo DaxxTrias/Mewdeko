@@ -623,9 +623,18 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
         if (!antiSpamGuilds.TryGetValue(channel.Guild.Id, out var spamStats))
             return Task.CompletedTask;
 
-        // Immediate rule: single message with >= 4 attachments and @everyone
-        var mentionsEveryone = (msg.Content ?? string.Empty).IndexOf("@everyone", StringComparison.OrdinalIgnoreCase) >= 0;
-        if (msg.Attachments.Count >= 4 && mentionsEveryone)
+        // Immediate rule: single message with >= 4 image attachments (no mention required)
+        var immediateImageCount = msg.Attachments.Count(a =>
+            (a.ContentType?.StartsWith("image/", StringComparison.OrdinalIgnoreCase) ?? false)
+            || a.Url.EndsWith(".png", StringComparison.OrdinalIgnoreCase)
+            || a.Url.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase)
+            || a.Url.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase)
+            || a.Url.EndsWith(".gif", StringComparison.OrdinalIgnoreCase)
+            || a.ProxyUrl.EndsWith(".png", StringComparison.OrdinalIgnoreCase)
+            || a.ProxyUrl.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase)
+            || a.ProxyUrl.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase)
+            || a.ProxyUrl.EndsWith(".gif", StringComparison.OrdinalIgnoreCase));
+        if (immediateImageCount >= 4)
         {
             if (msg.Author is IGuildUser guNow)
             {
@@ -646,13 +655,13 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
                                 var desc = new StringBuilder()
                                     .AppendLine($"User: {guNow.Mention} ({guNow.Id})")
                                     .AppendLine($"Channel: <#{channel.Id}>")
-                                    .AppendLine($"Triggered: >=4 attachments in a single message with @everyone")
-                                    .AppendLine($"Attachments: {msg.Attachments.Count}")
+                                    .AppendLine($"Triggered: >=4 image attachments in a single message")
+                                    .AppendLine($"Image attachments: {immediateImageCount}")
                                     .AppendLine("Preview:")
                                     .AppendLine(Format.Sanitize((msg.Content ?? string.Empty).TrimTo(300)));
 
                                 var eb = new EmbedBuilder()
-                                    .WithTitle("[Anti-Spam] Attachment Burst with @everyone Detected")
+                                    .WithTitle("[Anti-Spam] Multi-Image Burst Detected")
                                     .WithDescription(desc.ToString())
                                     .WithOkColor()
                                     .WithCurrentTimestamp();
