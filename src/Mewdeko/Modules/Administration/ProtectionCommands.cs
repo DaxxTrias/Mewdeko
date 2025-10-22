@@ -571,9 +571,12 @@ public partial class Administration
             var add = "";
             if (settings.MuteTime > 0) add = $" ({TimeSpan.FromMinutes(settings.MuteTime).Humanize()})";
 
+            var actionEnum = ((PunishmentAction)settings.Action).ToString();
+            var actionDisplay = $"{settings.Action} ({actionEnum}){add}";
+
             return Strings.SpamStats(ctx.Guild.Id,
                 Format.Bold(settings.MessageThreshold.ToString()),
-                Format.Bold(settings.Action + add),
+                Format.Bold(actionDisplay),
                 ignoredString);
         }
 
