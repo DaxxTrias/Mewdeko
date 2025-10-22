@@ -435,7 +435,15 @@ public class RepeatRunner : IDisposable
             var recentMessages = messages.Where(m =>
                 DateTime.UtcNow - m.Timestamp.UtcDateTime < TimeSpan.FromMinutes(1)).ToArray();
 
-            return recentMessages.Length >= Repeater.ConversationThreshold;
+            // Define end of conversation as either: below threshold OR last message older than 2 minutes
+            if (recentMessages.Length < Repeater.ConversationThreshold)
+                return false;
+
+            var newest = recentMessages.Max(m => m.Timestamp.UtcDateTime);
+            if (DateTime.UtcNow - newest > TimeSpan.FromMinutes(2))
+                return false;
+
+            return true;
         }
         catch (Exception ex)
         {
@@ -484,7 +492,25 @@ public class RepeatRunner : IDisposable
     private void ScheduleConversationRecheck()
     {
         // Recheck in 30 seconds if conversation is still active
-        NextDateTime = DateTime.UtcNow + TimeSpan.FromSeconds(30);
+        var recheck = TimeSpan.FromSeconds(30);
+        NextDateTime = DateTime.UtcNow + recheck;
+
+        // Adjust the timer due time so we don't wait the full interval
+        if (timer != null)
+        {
+            var triggerMode = (StickyTriggerMode)Repeater.TriggerMode;
+            var period = triggerMode == StickyTriggerMode.TimeInterval
+                ? TimeSpan.Parse(Repeater.Interval)
+                : TimeSpan.FromMinutes(1);
+            try
+            {
+                timer.Change(recheck, period);
+            }
+            catch (ObjectDisposedException)
+            {
+                // timer already disposed; ignore
+            }
+        }
     }
 
     private async Task<IMessage?> GetLastMessageAsync()
