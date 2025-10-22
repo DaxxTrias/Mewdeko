@@ -3,6 +3,9 @@ using Humanizer;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Common.TypeReaders.Models;
 using Mewdeko.Modules.Administration.Common;
+using LinqToDB;
+using LinqToDB.Async;
+using DataModel;
 using Mewdeko.Modules.Administration.Services;
 
 namespace Mewdeko.Modules.Administration;
@@ -13,7 +16,7 @@ public partial class Administration
     ///     Commands for managing the Anti-Alt, Anti-Raid, and Anti-Spam protection settings.
     /// </summary>
     [Group]
-    public class ProtectionCommands : MewdekoSubmodule<ProtectionService>
+    public class ProtectionCommands(IDataConnectionFactory dbFactory) : MewdekoSubmodule<ProtectionService>
     {
         /// <summary>
         ///     Disables the Anti-Alt protection for the guild.
@@ -601,6 +604,72 @@ public partial class Administration
                 Format.Bold(settings.Action + add),
                 Format.Bold(patternCount.ToString()),
                 Format.Bold(stats.Counter.ToString()));
+        }
+
+        /// <summary>
+        ///     Adds a user to the protection ignore list so anti-spam rules will skip them.
+        /// </summary>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.Administrator)]
+        public async Task ProtIgnoreAdd(IGuildUser user, [Remainder] string? note = null)
+        {
+            await using var db = await dbFactory.CreateConnectionAsync();
+            var exists = await db.GetTable<DataModel.ProtectionIgnoredUser>()
+                .AnyAsync(x => x.GuildId == ctx.Guild.Id && x.UserId == user.Id);
+            if (!exists)
+            {
+                await db.InsertAsync(new DataModel.ProtectionIgnoredUser
+                {
+                    GuildId = ctx.Guild.Id,
+                    UserId = user.Id,
+                    DateAdded = DateTime.UtcNow,
+                    Note = note
+                });
+            }
+
+            await ReplyConfirmAsync($"Added {user.Mention} to protection ignore list.");
+        }
+
+        /// <summary>
+        ///     Removes a user from the protection ignore list.
+        /// </summary>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.Administrator)]
+        public async Task ProtIgnoreRemove(IGuildUser user)
+        {
+            await using var db = await dbFactory.CreateConnectionAsync();
+            await db.GetTable<DataModel.ProtectionIgnoredUser>()
+                .Where(x => x.GuildId == ctx.Guild.Id && x.UserId == user.Id)
+                .DeleteAsync();
+            await ReplyConfirmAsync($"Removed {user.Mention} from protection ignore list.");
+        }
+
+        /// <summary>
+        ///     Lists users on the protection ignore list.
+        /// </summary>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.Administrator)]
+        public async Task ProtIgnoreList()
+        {
+            await using var db = await dbFactory.CreateConnectionAsync();
+            var list = await db.GetTable<DataModel.ProtectionIgnoredUser>()
+                .Where(x => x.GuildId == ctx.Guild.Id)
+                .ToListAsync();
+
+            if (list.Count == 0)
+            {
+                await ReplyConfirmAsync("Protection ignore list is empty.");
+                return;
+            }
+
+            var lines = list.Select(x => $"<@{x.UserId}> {(string.IsNullOrWhiteSpace(x.Note) ? string.Empty : $"- {x.Note}")}");
+            await ReplyConfirmAsync(string.Join("\n", lines));
         }
 
         /// <summary>

@@ -30,6 +30,7 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
     private readonly MuteService mute;
     private readonly UserPunishService punishService;
     private readonly ConcurrentDictionary<ulong, ConcurrentDictionary<ulong, int>> imageMentionSpamCounters = new();
+    private readonly ConcurrentDictionary<ulong, HashSet<ulong>> ignoredUsers = new();
 
     private readonly Channel<PunishQueueItem> punishUserQueue =
         Channel.CreateBounded<PunishQueueItem>(new BoundedChannelOptions(200)
@@ -80,6 +81,7 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
             try
             {
                 await Initialize(guild.Id);
+                await LoadProtectionIgnoredUsers(guild.Id);
             }
             catch (Exception ex)
             {
@@ -228,6 +230,25 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
             antiPatternGuilds[guildId] = new AntiPatternStats(pattern);
         }
         else antiPatternGuilds.TryRemove(guildId, out _);
+
+        await LoadProtectionIgnoredUsers(guildId);
+    }
+
+    private async Task LoadProtectionIgnoredUsers(ulong guildId)
+    {
+        try
+        {
+            await using var db = await dbFactory.CreateConnectionAsync();
+            var ids = await db.GetTable<ProtectionIgnoredUser>()
+                .Where(x => x.GuildId == guildId)
+                .Select(x => x.UserId)
+                .ToListAsync();
+            ignoredUsers.AddOrUpdate(guildId, _ => new HashSet<ulong>(ids), (_, __) => new HashSet<ulong>(ids));
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed loading protection ignored users for {GuildId}", guildId);
+        }
     }
 
     /// <summary>
@@ -568,6 +589,9 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
         if (!antiMassMentionGuilds.TryGetValue(channel.Guild.Id, out var massMentionStats))
             return Task.CompletedTask;
 
+        if (ignoredUsers.TryGetValue(channel.Guild.Id, out var igUsers) && igUsers.Contains(msg.Author.Id))
+            return Task.CompletedTask;
+
         var settings = massMentionStats.AntiMassMentionSettings;
         if (settings.IgnoreBots && msg.Author.IsBot)
             return Task.CompletedTask;
@@ -614,13 +638,16 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
     /// </summary>
     private Task HandleImageMentionSpam(IMessage arg)
     {
-        if (arg is not SocketUserMessage msg || msg.Author is IGuildUser { GuildPermissions.Administrator: true })
+        if (arg is not SocketUserMessage msg || msg.Author.IsBot || msg.Author is IGuildUser { GuildPermissions.Administrator: true })
             return Task.CompletedTask;
 
         if (msg.Channel is not ITextChannel channel)
             return Task.CompletedTask;
 
         if (!antiSpamGuilds.TryGetValue(channel.Guild.Id, out var spamStats))
+            return Task.CompletedTask;
+
+        if (ignoredUsers.TryGetValue(channel.Guild.Id, out var imageIg) && imageIg.Contains(msg.Author.Id))
             return Task.CompletedTask;
 
         // Immediate rule: single message with >= 4 image attachments (no mention required)
@@ -774,6 +801,9 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
             return Task.CompletedTask;
 
         if (msg.Author is not IGuildUser gu || gu.GuildPermissions.Administrator)
+            return Task.CompletedTask;
+
+        if (ignoredUsers.TryGetValue(channel.Guild.Id, out var delIg) && delIg.Contains(msg.Author.Id))
             return Task.CompletedTask;
 
         if (spamStats.AntiSpamSettings.AntiSpamIgnores.Any(i => i.ChannelId == channel.Id))
