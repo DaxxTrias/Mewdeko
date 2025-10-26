@@ -1,6 +1,7 @@
 using System.IO;
 using System.Net;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -189,12 +190,30 @@ public class OpenAiClient : IAiClient
         for (var attempt = 1; attempt <= maxAttempts; attempt++)
         {
             using var request = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/chat/completions");
-            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+            request.Headers.Accept.Clear();
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
             request.Content = new StringContent(payloadJson, Encoding.UTF8, "application/json");
 
-            using var response = await httpClient
-                .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
-                .ConfigureAwait(false);
+            // HTTP/2 with some proxies/CDNs can cause ResponseEnded on SSE; fall back to HTTP/1.1 for stability
+            request.Version = HttpVersion.Version11;
+            request.VersionPolicy = HttpVersionPolicy.RequestVersionOrLower;
+
+            HttpResponseMessage response;
+            try
+            {
+                response = await httpClient
+                    .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (HttpRequestException ex) when (attempt < maxAttempts)
+            {
+                var backoff = ComputeBackoffWithJitter(attempt, null);
+                Serilog.Log.Warning(ex, "OpenAI request transport error. Retrying in {DelayMs}ms (attempt {Attempt}/{Max}).",
+                    (int)backoff.TotalMilliseconds, attempt, maxAttempts);
+                await Task.Delay(backoff, cancellationToken).ConfigureAwait(false);
+                continue;
+            }
 
             if (response.IsSuccessStatusCode)
             {
@@ -222,9 +241,6 @@ public class OpenAiClient : IAiClient
                     var json = line.Substring("data: ".Length).Trim();
                     if (string.IsNullOrWhiteSpace(json))
                         continue;  // skip if nothing after prefix (just in case)
-
-                    // Add debug logging for each chunk received
-                    //Serilog.Log.Information("OpenAI Stream Chunk: {Chunk}", json);
 
                     yield return json;  // yield the clean JSON string for parsing
                 }
@@ -279,6 +295,16 @@ public class OpenAiClient : IAiClient
             {
                 var statusForQuota = status == 0 ? HttpStatusCode.Forbidden : status; // default to 403
                 throw new HttpRequestException(errorMessage ?? "OpenAI insufficient_quota", null, statusForQuota);
+            }
+
+            // 5xx errors – retry with backoff, then fail
+            if ((int)status >= 500 && (int)status <= 599 && attempt < maxAttempts)
+            {
+                var backoff = ComputeBackoffWithJitter(attempt, null);
+                Serilog.Log.Warning("OpenAI {Status} received. Backing off {DelayMs}ms (attempt {Attempt}/{Max}).",
+                    status, (int)backoff.TotalMilliseconds, attempt, maxAttempts);
+                await Task.Delay(backoff, cancellationToken).ConfigureAwait(false);
+                continue;
             }
 
             // Other errors: do not spam stack traces here; throw a concise HttpRequestException with status code
