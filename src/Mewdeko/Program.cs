@@ -24,7 +24,7 @@ using Mewdeko.Modules.Patreon.Services;
 using Mewdeko.Modules.Searches.Services;
 using Mewdeko.Services.Impl;
 using Mewdeko.Services.Settings;
-using Mewdeko.Services.strings;
+using Mewdeko.Services.Strings;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -37,6 +37,7 @@ using NekosBestApiNet;
 using Serilog;
 using ZiggyCreatures.Caching.Fusion;
 using RunMode = Discord.Commands.RunMode;
+using Strings = Mewdeko.Services.strings;
 
 namespace Mewdeko;
 
@@ -359,6 +360,7 @@ public class Program
         services.AddSingleton(new NekosBestApi("Mewdeko"));
         services.AddSingleton(p => new InteractionService(p.GetRequiredService<DiscordShardedClient>()));
         services.AddSingleton<Localization>();
+        services.AddSingleton<GeneratedBotStrings>();
         services.AddSingleton<BotConfigService>();
         services.AddSingleton<BotConfig>();
         services.AddConfigServices();
