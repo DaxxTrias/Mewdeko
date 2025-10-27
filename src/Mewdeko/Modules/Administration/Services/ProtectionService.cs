@@ -1643,13 +1643,9 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
     /// <returns>A task that represents the asynchronous operation.</returns>
     private Task HandleAntiPostChannel(IMessage arg)
     {
-        if (arg is not SocketUserMessage msg || msg.Author.IsBot || msg.Author is not IGuildUser guildUser)
-            return Task.CompletedTask;
-
-        if (msg.Channel is not ITextChannel channel)
-            return Task.CompletedTask;
-
-        if (!antiPostChannelGuilds.TryGetValue(channel.Guild.Id, out var postChannelStats))
+        if (arg is not SocketUserMessage msg || msg.Author.IsBot || msg.Author is not IGuildUser guildUser ||
+            msg.Channel is not ITextChannel channel ||
+            !antiPostChannelGuilds.TryGetValue(channel.Guild.Id, out var postChannelStats))
             return Task.CompletedTask;
 
         _ = Task.Run(async () =>
@@ -1659,7 +1655,7 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
                 var settings = postChannelStats.AntiPostChannelSettings;
 
                 // Check if this channel is a honeypot
-                if (!settings.AntiPostChannelChannels.Any(c => c.ChannelId == channel.Id))
+                if (settings.AntiPostChannelChannels.All(c => c.ChannelId != channel.Id))
                     return;
 
                 // Check if user has administrator permission
