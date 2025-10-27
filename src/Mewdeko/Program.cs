@@ -24,7 +24,7 @@ using Mewdeko.Modules.Patreon.Services;
 using Mewdeko.Modules.Searches.Services;
 using Mewdeko.Services.Impl;
 using Mewdeko.Services.Settings;
-using Mewdeko.Services.Strings;
+using Mewdeko.Services.strings;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -359,7 +359,6 @@ public class Program
         services.AddSingleton(new NekosBestApi("Mewdeko"));
         services.AddSingleton(p => new InteractionService(p.GetRequiredService<DiscordShardedClient>()));
         services.AddSingleton<Localization>();
-        services.AddSingleton<GeneratedBotStrings>();
         services.AddSingleton<BotConfigService>();
         services.AddSingleton<BotConfig>();
         services.AddConfigServices();
@@ -450,6 +449,9 @@ public class Program
                 client.DefaultRequestHeaders.Accept.ParseAdd("application/json");
                 client.Timeout = TimeSpan.FromSeconds(15);
             });
+
+        // Register temporary permit service
+        services.AddSingleton<Modules.Administration.Services.TemporaryPermitService>();
 
         services.Scan(scan => scan.FromAssemblyOf<IReadyExecutor>()
             .AddClasses(classes => classes.AssignableToAny(

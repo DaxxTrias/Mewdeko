@@ -13,12 +13,14 @@ using LibGit2Sharp;
 using LinqToDB.Async;
 using LinqToDB.Data;
 using Mewdeko.Common.Attributes.TextCommands;
+using Mewdeko.Common.TypeReaders.Models;
 using Mewdeko.Common.Configs;
 using Mewdeko.Common.DiscordImplementations;
 using Mewdeko.Modules.OwnerOnly.Services;
 using Mewdeko.Services.Impl;
 using Mewdeko.Services.Settings;
 using Mewdeko.Services.strings;
+using Mewdeko.Modules.Administration.Services;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Scripting;
 using Microsoft.CodeAnalysis.Scripting;
@@ -222,6 +224,55 @@ public class OwnerOnly(
         var msg = MewdekoUserMessage.CreateWithMentions(content, await Context.Guild.GetOwnerAsync(), ctx.Channel);
         commandHandler.AddCommandToParseQueue(msg);
         _ = commandHandler.ExecuteCommandsInChannelAsync(ctx.Channel.Id);
+    }
+
+    /// <summary>
+    ///     Temporarily permits a user to execute a specific command (and its alias) for a limited time.
+    /// </summary>
+    /// <param name="user">User to permit</param>
+    /// <param name="duration">Duration, e.g. 2m, 5m, 30s</param>
+    /// <param name="commandName">Command or alias, e.g. emotestealer</param>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    public async Task Permit(IGuildUser user, StoopidTime duration, [Remainder] string commandName)
+    {
+        var svc = services.GetRequiredService<TemporaryPermitService>();
+        var keys = TemporaryPermitService
+            .NormalizeKeysForGrant(commandName)
+            .ToArray();
+        if (keys.Length == 0)
+        {
+            await ReplyErrorAsync("Invalid command name.").ConfigureAwait(false);
+            return;
+        }
+
+        svc.Grant(ctx.Guild.Id, user.Id, keys, duration.Time);
+        await ReplyConfirmAsync($"Permitting {user.Mention} to use {Format.Bold(keys[0])} for {duration.Time:g}.")
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Revokes a previously granted temporary permit for a user.
+    /// </summary>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    public async Task Unpermit(IGuildUser user, [Remainder] string commandName)
+    {
+        var svc = services.GetRequiredService<TemporaryPermitService>();
+        var keys = TemporaryPermitService
+            .NormalizeKeysForGrant(commandName)
+            .ToArray();
+        if (keys.Length == 0)
+        {
+            await ReplyErrorAsync("Invalid command name.").ConfigureAwait(false);
+            return;
+        }
+
+        svc.Revoke(ctx.Guild.Id, user.Id, keys);
+        await ReplyConfirmAsync($"Revoked temporary permit for {user.Mention} on {Format.Bold(keys[0])}.")
+            .ConfigureAwait(false);
     }
 
     /// <summary>

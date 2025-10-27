@@ -44,6 +44,7 @@ public class UserPermAttribute : PreconditionAttribute
         IServiceProvider services)
     {
         var permService = services.GetService<DiscordPermOverrideService>();
+        var tempPermits = services.GetService<Modules.Administration.Services.TemporaryPermitService>();
         var permResult =
             permService.TryGetOverrides(context.Guild?.Id ?? 0, command.Name.ToUpperInvariant(), out var perm);
         if (command.Module.Name.Equals("chattriggers", StringComparison.CurrentCultureIgnoreCase))
@@ -67,6 +68,10 @@ public class UserPermAttribute : PreconditionAttribute
             // No DPO override -> fall back to the base attribute check
             return await UserPermissionAttribute.CheckPermissionsAsync(context, command, services);
         }
+
+        // Temporary permit bypass
+        if (tempPermits?.IsPermitted(context.Guild?.Id ?? 0, context.User.Id, command.Name) == true)
+            return PreconditionResult.FromSuccess();
 
         if (!permResult) return await UserPermissionAttribute.CheckPermissionsAsync(context, command, services);
         return !((IGuildUser)context.User).GuildPermissions.Has(perm)

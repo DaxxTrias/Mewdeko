@@ -37,9 +37,10 @@ public sealed class CheckPermissions : PreconditionAttribute
             _ => executingCommand.MethodName.ToLower()
         };
 
-        // Get the permission service and guild settings service.
+        // Get the permission services and guild settings service.
         var perms = services.GetService<PermissionService>();
         var guildSettingsService = services.GetService<GuildSettingsService>();
+        var tempPermits = services.GetService<Modules.Administration.Services.TemporaryPermitService>();
 
         // Determine the group name based on the method name and group name.
         var groupname = executingCommand.MethodName switch
@@ -52,6 +53,10 @@ public sealed class CheckPermissions : PreconditionAttribute
         // If the group name is "snipe", set it to "utility".
         if (executingCommand.Module.SlashGroupName?.Equals("snipe", StringComparison.OrdinalIgnoreCase) == true)
             groupname = "utility";
+
+        // Temporary permit bypass: allow if user has a temporary permit for this command
+        if (tempPermits?.IsPermitted(context.Guild.Id, context.User.Id, commandname) == true)
+            return PreconditionResult.FromSuccess();
 
         // Get the permission cache for the guild.
         var pc = await perms.GetCacheFor(context.Guild.Id);
