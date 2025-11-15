@@ -323,15 +323,8 @@ public class Mewdeko : IDisposable
         await interactionService.RegisterCommandsGloballyAsync().ConfigureAwait(false);
 #endif
 #if DEBUG
-        // lock slash commands to debug server (sylv original impl)
-        //if (Client.Guilds.Select(x => x.Id).Contains(Credentials.DebugGuildId))
-        //    await interactionService.RegisterCommandsToGuildAsync(Credentials.DebugGuildId);
-
-        // register slash cmds on all servers (not a problem for my self hosting)
-        foreach (var guild in Client.Guilds)
-        {
-            await interactionService.RegisterCommandsToGuildAsync(guild.Id);
-        }
+        // Register to each guild sequentially with throttling to avoid rate limits/timeouts
+        _ = Task.Run(() => RegisterCommandsToAllGuildsWithThrottlingAsync(interactionService, TimeSpan.FromSeconds(2)));
 #endif
         _ = Task.Run(HandleStatusChanges);
         _ = Task.Run(ExecuteReadySubscriptions);
@@ -339,6 +332,40 @@ public class Mewdeko : IDisposable
         performanceMonitor.Initialize(typeof(Mewdeko).Assembly, "Mewdeko");
         Ready.TrySetResult(true);
         logger.LogInformation("Ready.");
+    }
+
+    private async Task RegisterCommandsToAllGuildsWithThrottlingAsync(InteractionService interactionService, TimeSpan perGuildDelay)
+    {
+        foreach (var guild in Client.Guilds.OrderBy(g => g.Id))
+        {
+            try
+            {
+                logger.LogInformation("Registering interaction commands for guild {GuildId}...", guild.Id);
+                await interactionService.RegisterCommandsToGuildAsync(guild.Id);
+            }
+            catch (TimeoutException ex)
+            {
+                logger.LogWarning(ex, "Timed out registering commands for guild {GuildId}; will continue.", guild.Id);
+            }
+            catch (HttpException ex)
+            {
+                logger.LogWarning(ex, "HTTP error registering commands for guild {GuildId}; will continue.", guild.Id);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Unexpected error registering commands for guild {GuildId}; continuing.", guild.Id);
+            }
+
+            try
+            {
+                if (perGuildDelay > TimeSpan.Zero)
+                    await Task.Delay(perGuildDelay);
+            }
+            catch
+            {
+                // ignore cancellation or delay errors; proceed to next guild
+            }
+        }
     }
 
     private Task LogCommandsService(LogMessage arg)
