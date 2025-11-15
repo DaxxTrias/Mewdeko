@@ -8,6 +8,10 @@ using Discord.Net;
 using Discord.Rest;
 using Figgle.Fonts;
 using Lavalink4NET;
+using System.Net;
+using System.Net.Http;
+using System.Net.Sockets;
+using System.IO;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Common.TypeReaders;
 using Mewdeko.Common.TypeReaders.Interactions;
@@ -341,7 +345,11 @@ public class Mewdeko : IDisposable
             try
             {
                 logger.LogInformation("Registering interaction commands for guild {GuildId}...", guild.Id);
-                await interactionService.RegisterCommandsToGuildAsync(guild.Id);
+                var success = await RegisterCommandsToGuildWithRetryAsync(interactionService, guild.Id, 5);
+                if (success)
+                    logger.LogInformation("Registered interaction commands for guild {GuildId}.", guild.Id);
+                else
+                    logger.LogWarning("Failed to register interaction commands for guild {GuildId} after retries.", guild.Id);
             }
             catch (TimeoutException ex)
             {
@@ -366,6 +374,58 @@ public class Mewdeko : IDisposable
                 // ignore cancellation or delay errors; proceed to next guild
             }
         }
+    }
+
+    private async Task<bool> RegisterCommandsToGuildWithRetryAsync(InteractionService interactionService, ulong guildId, int maxAttempts)
+    {
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            try
+            {
+                await interactionService.RegisterCommandsToGuildAsync(guildId);
+                return true;
+            }
+            catch (HttpException ex) when (ex.HttpCode == HttpStatusCode.BadGateway
+                                           || ex.HttpCode == HttpStatusCode.ServiceUnavailable
+                                           || ex.HttpCode == HttpStatusCode.GatewayTimeout
+                                           || ex.HttpCode == HttpStatusCode.RequestTimeout)
+            {
+                var delay = TimeSpan.FromSeconds(Math.Min(10, Math.Pow(2, attempt))) + TimeSpan.FromMilliseconds(Random.Shared.Next(0, 500));
+                logger.LogWarning(ex, "Transient HTTP {Status} on attempt {Attempt}/{Max} for guild {GuildId}; retrying in {Delay}.",
+                    (int)ex.HttpCode, attempt, maxAttempts, guildId, delay);
+                await Task.Delay(delay);
+            }
+            catch (HttpRequestException ex)
+            {
+                var delay = TimeSpan.FromSeconds(Math.Min(10, Math.Pow(2, attempt))) + TimeSpan.FromMilliseconds(Random.Shared.Next(0, 500));
+                logger.LogWarning(ex, "HTTP request error on attempt {Attempt}/{Max} for guild {GuildId}; retrying in {Delay}.",
+                    attempt, maxAttempts, guildId, delay);
+                await Task.Delay(delay);
+            }
+            catch (IOException ex)
+            {
+                var delay = TimeSpan.FromSeconds(Math.Min(10, Math.Pow(2, attempt))) + TimeSpan.FromMilliseconds(Random.Shared.Next(0, 500));
+                logger.LogWarning(ex, "IO error on attempt {Attempt}/{Max} for guild {GuildId}; retrying in {Delay}.",
+                    attempt, maxAttempts, guildId, delay);
+                await Task.Delay(delay);
+            }
+            catch (SocketException ex)
+            {
+                var delay = TimeSpan.FromSeconds(Math.Min(10, Math.Pow(2, attempt))) + TimeSpan.FromMilliseconds(Random.Shared.Next(0, 500));
+                logger.LogWarning(ex, "Socket error on attempt {Attempt}/{Max} for guild {GuildId}; retrying in {Delay}.",
+                    attempt, maxAttempts, guildId, delay);
+                await Task.Delay(delay);
+            }
+            catch (TimeoutException ex)
+            {
+                var delay = TimeSpan.FromSeconds(Math.Min(10, Math.Pow(2, attempt))) + TimeSpan.FromMilliseconds(Random.Shared.Next(0, 500));
+                logger.LogWarning(ex, "Timeout on attempt {Attempt}/{Max} for guild {GuildId}; retrying in {Delay}.",
+                    attempt, maxAttempts, guildId, delay);
+                await Task.Delay(delay);
+            }
+        }
+
+        return false;
     }
 
     private Task LogCommandsService(LogMessage arg)
