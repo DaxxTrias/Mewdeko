@@ -451,10 +451,10 @@ public class Mewdeko : IDisposable
                 Client.LeftGuild -= Client_LeftGuild;
             }
 
-            var commandService = Services.GetService<CommandService>();
-            if (commandService != null)
+            // Use cached reference; do not resolve services during container disposal
+            if (CommandService != null)
             {
-                commandService.Log -= LogCommandsService;
+                CommandService.Log -= LogCommandsService;
             }
         }
 
