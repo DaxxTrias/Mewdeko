@@ -12,6 +12,9 @@
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
     <!-- <WarningsAsErrors>CS1591</WarningsAsErrors> -->
     <PreferIQueryable>true</PreferIQueryable>
+    <!-- Make source-generator outputs available on disk -->
+    <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+    <CompilerGeneratedFilesOutputPath>$(BaseIntermediateOutputPath)Generated</CompilerGeneratedFilesOutputPath>
 
     <!-- .NET 9 Performance Optimizations -->
     <TieredPGO>true</TieredPGO>
@@ -21,6 +24,11 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Database\Scripts\*.sql" />
+  </ItemGroup>
+
+  <!-- Include generated sources during design-time builds so editors (DotRush/OmniSharp) see them -->
+  <ItemGroup Condition="'$(DesignTimeBuild)' == 'true'">
+    <Compile Include="$(CompilerGeneratedFilesOutputPath)\**\*.cs" Visible="false" />
   </ItemGroup>
 
 
