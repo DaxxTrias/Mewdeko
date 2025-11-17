@@ -1,7 +1,5 @@
 ﻿using System.Text.RegularExpressions;
 using System.Text;
-#nullable enable
-using Mewdeko.Extensions;
 using System.Threading;
 using DataModel;
 using LinqToDB;
@@ -244,25 +242,6 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
         }
         else antiPatternGuilds.TryRemove(guildId, out _);
 
-        await LoadProtectionIgnoredUsers(guildId);
-    }
-
-    private async Task LoadProtectionIgnoredUsers(ulong guildId)
-    {
-        try
-        {
-            await using var db = await dbFactory.CreateConnectionAsync();
-            var ids = await db.GetTable<ProtectionIgnoredUser>()
-                .Where(x => x.GuildId == guildId)
-                .Select(x => x.UserId)
-                .ToListAsync();
-            ignoredUsers.AddOrUpdate(guildId, _ => new HashSet<ulong>(ids), (_, __) => new HashSet<ulong>(ids));
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed loading protection ignored users for {GuildId}", guildId);
-        }
-
         // Load anti-mass-post settings
         var massPost = await db.GetTable<AntiMassPostSetting>().FirstOrDefaultAsync(x => x.GuildId == guildId)
             .ConfigureAwait(false);
@@ -306,6 +285,25 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
             antiPostChannelGuilds[guildId] = new AntiPostChannelStats(postChannel);
         }
         else antiPostChannelGuilds.TryRemove(guildId, out _);
+
+        await LoadProtectionIgnoredUsers(guildId);
+    }
+
+    private async Task LoadProtectionIgnoredUsers(ulong guildId)
+    {
+        try
+        {
+            await using var db = await dbFactory.CreateConnectionAsync();
+            var ids = await db.GetTable<ProtectionIgnoredUser>()
+                .Where(x => x.GuildId == guildId)
+                .Select(x => x.UserId)
+                .ToListAsync();
+            ignoredUsers.AddOrUpdate(guildId, _ => new HashSet<ulong>(ids), (_, __) => new HashSet<ulong>(ids));
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed loading protection ignored users for {GuildId}", guildId);
+        }
     }
 
     /// <summary>
