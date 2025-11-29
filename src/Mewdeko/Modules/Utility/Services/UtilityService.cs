@@ -1,4 +1,6 @@
-﻿using System.Text.RegularExpressions;
+﻿using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using LinqToDB;
 using LinqToDB.Async;
 using Mewdeko.Modules.Utility.Common;
@@ -131,6 +133,73 @@ public partial class UtilityService : INService
         await guildSettings.UpdateGuildConfig(guild.Id, gc);
     }
 
+    private static readonly JsonSerializerOptions SnipeJsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        WriteIndented = true
+    };
+
+    /// <summary>
+    ///     Serializes message data to JSON for snipe storage.
+    /// </summary>
+    private static string? SerializeMessageData(IMessage msg)
+    {
+        try
+        {
+            var data = new SnipeMessageData
+            {
+                Content = msg.Content,
+                MessageId = msg.Id,
+                ChannelId = msg.Channel.Id,
+                AuthorId = msg.Author.Id,
+                AuthorName = msg.Author.ToString(),
+                Timestamp = msg.Timestamp,
+                Embeds = msg.Embeds.Where(e => e.Type == EmbedType.Rich).Select(e => new SnipeEmbedData
+                {
+                    Title = e.Title,
+                    Description = e.Description,
+                    Url = e.Url,
+                    Color = e.Color?.RawValue,
+                    AuthorName = e.Author?.Name,
+                    AuthorUrl = e.Author?.Url,
+                    AuthorIconUrl = e.Author?.IconUrl,
+                    FooterText = e.Footer?.Text,
+                    FooterIconUrl = e.Footer?.IconUrl,
+                    ImageUrl = e.Image?.Url,
+                    ThumbnailUrl = e.Thumbnail?.Url,
+                    Fields = e.Fields.Select(f => new SnipeEmbedFieldData
+                    {
+                        Name = f.Name,
+                        Value = f.Value,
+                        Inline = f.Inline
+                    }).ToList()
+                }).ToList(),
+                Attachments = msg.Attachments.Select(a => new SnipeAttachmentData
+                {
+                    Filename = a.Filename,
+                    Url = a.Url,
+                    ProxyUrl = a.ProxyUrl,
+                    Size = a.Size,
+                    ContentType = a.ContentType
+                }).ToList()
+            };
+
+            if (msg is IUserMessage userMsg && userMsg.ReferencedMessage != null)
+            {
+                data.ReferencedMessageId = userMsg.ReferencedMessage.Id;
+                data.ReferencedMessageContent = userMsg.ReferencedMessage.Content;
+                data.ReferencedMessageAuthor = userMsg.ReferencedMessage.Author?.ToString();
+            }
+
+            return JsonSerializer.Serialize(data, SnipeJsonOptions);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private async Task BulkMsgStore(IReadOnlyCollection<Cacheable<IMessage, ulong>> messages,
         Cacheable<IMessageChannel, ulong> channel)
     {
@@ -151,11 +220,14 @@ public partial class UtilityService : INService
         {
             GuildId = chan.Guild.Id,
             ChannelId = chan.Id,
+            MessageId = x.Value.Id,
+            MessageTimestamp = x.Value.Timestamp,
             ReferenceMessage =
-                (x.Value as IUserMessage).ReferencedMessage == null
+                (x.Value as IUserMessage)?.ReferencedMessage == null
                     ? null
                     : $"{Format.Bold((x.Value as IUserMessage).ReferencedMessage.Author.ToString())}: {(x.Value as IUserMessage).ReferencedMessage.Content.TrimTo(400)}",
             Message = x.Value.Content,
+            JsonData = SerializeMessageData(x.Value),
             UserId = x.Value.Author.Id,
             Edited = false,
             DateAdded = DateTime.UtcNow
@@ -189,11 +261,14 @@ public partial class UtilityService : INService
         {
             GuildId = channel.Guild.Id,
             ChannelId = channel.Id,
+            MessageId = msg.Id,
+            MessageTimestamp = msg.Timestamp,
             Message = msg.Content,
             ReferenceMessage =
                 msg.ReferencedMessage == null
                     ? null
                     : $"{Format.Bold(msg.ReferencedMessage.Author.ToString())}: {msg.ReferencedMessage.Content.TrimTo(400)}",
+            JsonData = SerializeMessageData(msg),
             UserId = msg.Author.Id,
             Edited = false,
             DateAdded = DateTime.UtcNow
@@ -221,11 +296,14 @@ public partial class UtilityService : INService
         {
             GuildId = channel.GuildId,
             ChannelId = channel.Id,
+            MessageId = msg.Id,
+            MessageTimestamp = msg.Timestamp,
             Message = msg.Content,
             ReferenceMessage =
                 msg.ReferencedMessage == null
                     ? null
                     : $"{Format.Bold(msg.ReferencedMessage.Author.ToString())}: {msg.ReferencedMessage.Content.TrimTo(1048)}",
+            JsonData = SerializeMessageData(msg),
             UserId = msg.Author.Id,
             Edited = true,
             DateAdded = DateTime.UtcNow
@@ -324,4 +402,183 @@ public partial class UtilityService : INService
         @"https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)",
         RegexOptions.IgnoreCase | RegexOptions.Compiled, "en-US")]
     private static partial Regex MyRegex();
+}
+
+/// <summary>
+///     Represents serialized message data for snipe storage.
+/// </summary>
+public class SnipeMessageData
+{
+    /// <summary>
+    ///     The message content.
+    /// </summary>
+    public string? Content { get; set; }
+
+    /// <summary>
+    ///     The message ID.
+    /// </summary>
+    public ulong MessageId { get; set; }
+
+    /// <summary>
+    ///     The channel ID.
+    /// </summary>
+    public ulong ChannelId { get; set; }
+
+    /// <summary>
+    ///     The author's user ID.
+    /// </summary>
+    public ulong AuthorId { get; set; }
+
+    /// <summary>
+    ///     The author's display name.
+    /// </summary>
+    public string? AuthorName { get; set; }
+
+    /// <summary>
+    ///     When the message was originally sent.
+    /// </summary>
+    public DateTimeOffset Timestamp { get; set; }
+
+    /// <summary>
+    ///     Referenced message ID if this was a reply.
+    /// </summary>
+    public ulong? ReferencedMessageId { get; set; }
+
+    /// <summary>
+    ///     Referenced message content.
+    /// </summary>
+    public string? ReferencedMessageContent { get; set; }
+
+    /// <summary>
+    ///     Referenced message author.
+    /// </summary>
+    public string? ReferencedMessageAuthor { get; set; }
+
+    /// <summary>
+    ///     Embeds in the message.
+    /// </summary>
+    public List<SnipeEmbedData>? Embeds { get; set; }
+
+    /// <summary>
+    ///     Attachments in the message.
+    /// </summary>
+    public List<SnipeAttachmentData>? Attachments { get; set; }
+}
+
+/// <summary>
+///     Represents embed data for snipe storage.
+/// </summary>
+public class SnipeEmbedData
+{
+    /// <summary>
+    ///     Embed title.
+    /// </summary>
+    public string? Title { get; set; }
+
+    /// <summary>
+    ///     Embed description.
+    /// </summary>
+    public string? Description { get; set; }
+
+    /// <summary>
+    ///     Embed URL.
+    /// </summary>
+    public string? Url { get; set; }
+
+    /// <summary>
+    ///     Embed color as raw value.
+    /// </summary>
+    public uint? Color { get; set; }
+
+    /// <summary>
+    ///     Author name.
+    /// </summary>
+    public string? AuthorName { get; set; }
+
+    /// <summary>
+    ///     Author URL.
+    /// </summary>
+    public string? AuthorUrl { get; set; }
+
+    /// <summary>
+    ///     Author icon URL.
+    /// </summary>
+    public string? AuthorIconUrl { get; set; }
+
+    /// <summary>
+    ///     Footer text.
+    /// </summary>
+    public string? FooterText { get; set; }
+
+    /// <summary>
+    ///     Footer icon URL.
+    /// </summary>
+    public string? FooterIconUrl { get; set; }
+
+    /// <summary>
+    ///     Image URL.
+    /// </summary>
+    public string? ImageUrl { get; set; }
+
+    /// <summary>
+    ///     Thumbnail URL.
+    /// </summary>
+    public string? ThumbnailUrl { get; set; }
+
+    /// <summary>
+    ///     Embed fields.
+    /// </summary>
+    public List<SnipeEmbedFieldData>? Fields { get; set; }
+}
+
+/// <summary>
+///     Represents embed field data for snipe storage.
+/// </summary>
+public class SnipeEmbedFieldData
+{
+    /// <summary>
+    ///     Field name.
+    /// </summary>
+    public string? Name { get; set; }
+
+    /// <summary>
+    ///     Field value.
+    /// </summary>
+    public string? Value { get; set; }
+
+    /// <summary>
+    ///     Whether the field is inline.
+    /// </summary>
+    public bool Inline { get; set; }
+}
+
+/// <summary>
+///     Represents attachment data for snipe storage.
+/// </summary>
+public class SnipeAttachmentData
+{
+    /// <summary>
+    ///     Attachment filename.
+    /// </summary>
+    public string? Filename { get; set; }
+
+    /// <summary>
+    ///     Attachment URL.
+    /// </summary>
+    public string? Url { get; set; }
+
+    /// <summary>
+    ///     Attachment proxy URL.
+    /// </summary>
+    public string? ProxyUrl { get; set; }
+
+    /// <summary>
+    ///     Attachment size in bytes.
+    /// </summary>
+    public int Size { get; set; }
+
+    /// <summary>
+    ///     Content type of the attachment.
+    /// </summary>
+    public string? ContentType { get; set; }
 }

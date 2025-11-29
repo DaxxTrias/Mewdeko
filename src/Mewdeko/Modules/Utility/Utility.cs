@@ -408,8 +408,6 @@ public partial class Utility(
     [RequireContext(ContextType.Guild)]
     public async Task Snipe()
     {
-        //todo: snipe ignores bots (default behavior is ignore bots. do we actually want this?
-        //todo: snipe doesnt capture images if they were the deleted message
         if (!await Service.GetSnipeSet(ctx.Guild.Id))
         {
             await ReplyErrorAsync(Strings.SnipeNotEnabled(ctx.Guild.Id, await guildSettings.GetPrefix(ctx.Guild)))
@@ -443,19 +441,46 @@ public partial class Utility(
                     Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(),
                         (DateTime.UtcNow - msg.DateAdded).Humanize())
             },
-            Color = Mewdeko.OkColor
+            Color = Mewdeko.OkColor,
+            Timestamp = msg.MessageTimestamp
         };
 
         if (msg.ReferenceMessage is not null)
             em.AddField("Replied To", msg.ReferenceMessage);
-        await ctx.Channel.SendMessageAsync(embed: em.Build(),
-            components: config.Data.ShowInviteButton
-                ? new ComponentBuilder()
-                    .WithButton(style: ButtonStyle.Link,
-                        url: "",
-                        label: "Invite!",
-                        emote: "".ToIEmote()).Build()
-                : null).ConfigureAwait(false);
+
+        // Add message ID field for reference
+        em.AddField("Message ID", msg.MessageId.ToString(), true);
+        em.AddField("Sent", TimestampTag.FromDateTimeOffset(msg.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
+
+        // Send with JSON attachment if available
+        if (!string.IsNullOrEmpty(msg.JsonData))
+        {
+            await using var ms = new MemoryStream();
+            await using var writer = new StreamWriter(ms);
+            await writer.WriteAsync(msg.JsonData);
+            await writer.FlushAsync();
+            ms.Position = 0;
+
+            await ctx.Channel.SendFileAsync(ms, $"snipe_{msg.MessageId}.json", embed: em.Build(),
+                components: config.Data.ShowInviteButton
+                    ? new ComponentBuilder()
+                        .WithButton(style: ButtonStyle.Link,
+                            url: "",
+                            label: "Invite!",
+                            emote: "".ToIEmote()).Build()
+                    : null).ConfigureAwait(false);
+        }
+        else
+        {
+            await ctx.Channel.SendMessageAsync(embed: em.Build(),
+                components: config.Data.ShowInviteButton
+                    ? new ComponentBuilder()
+                        .WithButton(style: ButtonStyle.Link,
+                            url: "",
+                            label: "Invite!",
+                            emote: "".ToIEmote()).Build()
+                    : null).ConfigureAwait(false);
+        }
     }
 
     /// <summary>
@@ -510,10 +535,14 @@ public partial class Utility(
                             .WithIconUrl(user.RealAvatarUrl().AbsoluteUri)
                             .WithName($"{user} said:"))
                     .WithDescription($"{msg1.Message}")
-                    .WithFooter($"\n\nMessage deleted {(DateTime.UtcNow - msg1.DateAdded).Humanize()} ago");
+                    .WithFooter($"Message deleted {(DateTime.UtcNow - msg1.DateAdded).Humanize()} ago")
+                    .WithTimestamp(msg1.MessageTimestamp);
 
                 if (msg1.ReferenceMessage is not null)
                     builder.AddField("Replied To", msg1.ReferenceMessage);
+
+                builder.AddField("Message ID", msg1.MessageId.ToString(), true);
+                builder.AddField("Sent", TimestampTag.FromDateTimeOffset(msg1.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
 
                 return builder;
             }
@@ -573,10 +602,14 @@ public partial class Utility(
                             .WithIconUrl(user.RealAvatarUrl().AbsoluteUri)
                             .WithName($"{user} said:"))
                     .WithDescription($"{msg1.Message}")
-                    .WithFooter($"\n\nMessage deleted {(DateTime.UtcNow - msg1.DateAdded).Humanize()} ago");
+                    .WithFooter($"Message deleted {(DateTime.UtcNow - msg1.DateAdded).Humanize()} ago")
+                    .WithTimestamp(msg1.MessageTimestamp);
 
                 if (msg1.ReferenceMessage is not null)
                     builder.AddField("Replied To", msg1.ReferenceMessage);
+
+                builder.AddField("Message ID", msg1.MessageId.ToString(), true);
+                builder.AddField("Sent", TimestampTag.FromDateTimeOffset(msg1.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
 
                 return builder;
             }
@@ -636,10 +669,14 @@ public partial class Utility(
                             .WithIconUrl(user.RealAvatarUrl().AbsoluteUri)
                             .WithName($"{user} said:"))
                     .WithDescription($"{msg1.Message}")
-                    .WithFooter($"\n\nMessage deleted {(DateTime.UtcNow - msg1.DateAdded).Humanize()} ago");
+                    .WithFooter($"Message deleted {(DateTime.UtcNow - msg1.DateAdded).Humanize()} ago")
+                    .WithTimestamp(msg1.MessageTimestamp);
 
                 if (msg1.ReferenceMessage is not null)
                     builder.AddField("Replied To", msg1.ReferenceMessage);
+
+                builder.AddField("Message ID", msg1.MessageId.ToString(), true);
+                builder.AddField("Sent", TimestampTag.FromDateTimeOffset(msg1.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
 
                 return builder;
             }
@@ -700,10 +737,14 @@ public partial class Utility(
                             .WithIconUrl(user.RealAvatarUrl().AbsoluteUri)
                             .WithName($"{user} said:"))
                     .WithDescription($"{msg1.Message}")
-                    .WithFooter($"\n\nMessage deleted {(DateTime.UtcNow - msg1.DateAdded).Humanize()} ago");
+                    .WithFooter($"Message deleted {(DateTime.UtcNow - msg1.DateAdded).Humanize()} ago")
+                    .WithTimestamp(msg1.MessageTimestamp);
 
                 if (msg1.ReferenceMessage is not null)
                     builder.AddField("Replied To", msg1.ReferenceMessage);
+
+                builder.AddField("Message ID", msg1.MessageId.ToString(), true);
+                builder.AddField("Sent", TimestampTag.FromDateTimeOffset(msg1.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
 
                 return builder;
             }
@@ -762,10 +803,14 @@ public partial class Utility(
                             .WithIconUrl(user.RealAvatarUrl().AbsoluteUri)
                             .WithName($"{user} originally said:"))
                     .WithDescription($"{msg1.Message}")
-                    .WithFooter($"\n\nMessage edited {(DateTime.UtcNow - msg1.DateAdded).Humanize()} ago");
+                    .WithFooter($"Message edited {(DateTime.UtcNow - msg1.DateAdded).Humanize()} ago")
+                    .WithTimestamp(msg1.MessageTimestamp);
 
                 if (msg1.ReferenceMessage is not null)
                     builder.AddField("Replied To", msg1.ReferenceMessage);
+
+                builder.AddField("Message ID", msg1.MessageId.ToString(), true);
+                builder.AddField("Sent", TimestampTag.FromDateTimeOffset(msg1.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
 
                 return builder;
             }
@@ -825,10 +870,14 @@ public partial class Utility(
                             .WithIconUrl(user.RealAvatarUrl().AbsoluteUri)
                             .WithName($"{user} originally said:"))
                     .WithDescription($"{msg1.Message}")
-                    .WithFooter($"\n\nMessage edited {(DateTime.UtcNow - msg1.DateAdded).Humanize()} ago");
+                    .WithFooter($"Message edited {(DateTime.UtcNow - msg1.DateAdded).Humanize()} ago")
+                    .WithTimestamp(msg1.MessageTimestamp);
 
                 if (msg1.ReferenceMessage is not null)
                     builder.AddField("Replied To", msg1.ReferenceMessage);
+
+                builder.AddField("Message ID", msg1.MessageId.ToString(), true);
+                builder.AddField("Sent", TimestampTag.FromDateTimeOffset(msg1.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
 
                 return builder;
             }
@@ -888,10 +937,14 @@ public partial class Utility(
                             .WithIconUrl(user.RealAvatarUrl().AbsoluteUri)
                             .WithName($"{user} originally said:"))
                     .WithDescription($"{msg1.Message}")
-                    .WithFooter($"\n\nMessage edited {(DateTime.UtcNow - msg1.DateAdded).Humanize()} ago");
+                    .WithFooter($"Message edited {(DateTime.UtcNow - msg1.DateAdded).Humanize()} ago")
+                    .WithTimestamp(msg1.MessageTimestamp);
 
                 if (msg1.ReferenceMessage is not null)
                     builder.AddField("Replied To", msg1.ReferenceMessage);
+
+                builder.AddField("Message ID", msg1.MessageId.ToString(), true);
+                builder.AddField("Sent", TimestampTag.FromDateTimeOffset(msg1.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
 
                 return builder;
             }
@@ -952,10 +1005,14 @@ public partial class Utility(
                             .WithIconUrl(user.RealAvatarUrl().AbsoluteUri)
                             .WithName($"{user} originally said:"))
                     .WithDescription($"{msg1.Message}")
-                    .WithFooter($"\n\nMessage edited {(DateTime.UtcNow - msg1.DateAdded).Humanize()} ago");
+                    .WithFooter($"Message edited {(DateTime.UtcNow - msg1.DateAdded).Humanize()} ago")
+                    .WithTimestamp(msg1.MessageTimestamp);
 
                 if (msg1.ReferenceMessage is not null)
                     builder.AddField("Replied To", msg1.ReferenceMessage);
+
+                builder.AddField("Message ID", msg1.MessageId.ToString(), true);
+                builder.AddField("Sent", TimestampTag.FromDateTimeOffset(msg1.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
 
                 return builder;
             }
@@ -1004,21 +1061,44 @@ public partial class Utility(
                     Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(),
                         (DateTime.UtcNow - msg.DateAdded).Humanize())
             },
-            Color = Mewdeko.OkColor
+            Color = Mewdeko.OkColor,
+            Timestamp = msg.MessageTimestamp
         };
 
         if (msg.ReferenceMessage is not null)
             em.AddField("Replied To", msg.ReferenceMessage);
 
-        await ctx.Channel.SendMessageAsync(embed: em.Build(),
-            components: config.Data.ShowInviteButton
-                ? new ComponentBuilder()
-                    .WithButton(style: ButtonStyle.Link,
-                        url:
-                        "",
-                        label: "",
-                        emote: "".ToIEmote()).Build()
-                : null).ConfigureAwait(false);
+        em.AddField("Message ID", msg.MessageId.ToString(), true);
+        em.AddField("Sent", TimestampTag.FromDateTimeOffset(msg.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
+
+        if (!string.IsNullOrEmpty(msg.JsonData))
+        {
+            await using var ms = new MemoryStream();
+            await using var writer = new StreamWriter(ms);
+            await writer.WriteAsync(msg.JsonData);
+            await writer.FlushAsync();
+            ms.Position = 0;
+
+            await ctx.Channel.SendFileAsync(ms, $"snipe_{msg.MessageId}.json", embed: em.Build(),
+                components: config.Data.ShowInviteButton
+                    ? new ComponentBuilder()
+                        .WithButton(style: ButtonStyle.Link,
+                            url: "",
+                            label: "",
+                            emote: "".ToIEmote()).Build()
+                    : null).ConfigureAwait(false);
+        }
+        else
+        {
+            await ctx.Channel.SendMessageAsync(embed: em.Build(),
+                components: config.Data.ShowInviteButton
+                    ? new ComponentBuilder()
+                        .WithButton(style: ButtonStyle.Link,
+                            url: "",
+                            label: "",
+                            emote: "".ToIEmote()).Build()
+                    : null).ConfigureAwait(false);
+        }
     }
 
     /// <summary>
@@ -1089,21 +1169,44 @@ public partial class Utility(
                     Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(),
                         (DateTime.UtcNow - msg.DateAdded).Humanize())
             },
-            Color = Mewdeko.OkColor
+            Color = Mewdeko.OkColor,
+            Timestamp = msg.MessageTimestamp
         };
 
         if (msg.ReferenceMessage is not null)
             em.AddField("Replied To", msg.ReferenceMessage);
 
-        await ctx.Channel.SendMessageAsync(embed: em.Build(),
-            components: config.Data.ShowInviteButton
-                ? new ComponentBuilder()
-                    .WithButton(style: ButtonStyle.Link,
-                        url:
-                        "",
-                        label: "",
-                        emote: "".ToIEmote()).Build()
-                : null).ConfigureAwait(false);
+        em.AddField("Message ID", msg.MessageId.ToString(), true);
+        em.AddField("Sent", TimestampTag.FromDateTimeOffset(msg.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
+
+        if (!string.IsNullOrEmpty(msg.JsonData))
+        {
+            await using var ms = new MemoryStream();
+            await using var writer = new StreamWriter(ms);
+            await writer.WriteAsync(msg.JsonData);
+            await writer.FlushAsync();
+            ms.Position = 0;
+
+            await ctx.Channel.SendFileAsync(ms, $"snipe_{msg.MessageId}.json", embed: em.Build(),
+                components: config.Data.ShowInviteButton
+                    ? new ComponentBuilder()
+                        .WithButton(style: ButtonStyle.Link,
+                            url: "",
+                            label: "",
+                            emote: "".ToIEmote()).Build()
+                    : null).ConfigureAwait(false);
+        }
+        else
+        {
+            await ctx.Channel.SendMessageAsync(embed: em.Build(),
+                components: config.Data.ShowInviteButton
+                    ? new ComponentBuilder()
+                        .WithButton(style: ButtonStyle.Link,
+                            url: "",
+                            label: "",
+                            emote: "".ToIEmote()).Build()
+                    : null).ConfigureAwait(false);
+        }
     }
 
     /// <summary>
@@ -1126,42 +1229,63 @@ public partial class Utility(
 
         var msg = (await Service.GetSnipes(ctx.Guild.Id).ConfigureAwait(false)).Where(x => !x.Edited)
             .LastOrDefault(x => x.ChannelId == chan.Id && x.UserId == user1.Id);
+        if (msg == null)
         {
-            if (msg == null)
+            await ctx.Channel.SendErrorAsync(Strings.NothingToSnipeChannelUser(ctx.Guild.Id), Config);
+            return;
+        }
+
+        var user = await ctx.Channel.GetUserAsync(msg.UserId).ConfigureAwait(false) ??
+                   await client.Rest.GetUserAsync(msg.UserId).ConfigureAwait(false);
+
+        var em = new EmbedBuilder
+        {
+            Author = new EmbedAuthorBuilder
             {
-                await ctx.Channel.SendErrorAsync(Strings.NothingToSnipeChannelUser(ctx.Guild.Id), Config);
-                return;
-            }
-
-            var user = await ctx.Channel.GetUserAsync(msg.UserId).ConfigureAwait(false) ??
-                       await client.Rest.GetUserAsync(msg.UserId).ConfigureAwait(false);
-
-            var em = new EmbedBuilder
+                IconUrl = user.GetAvatarUrl(), Name = $"{user} said:"
+            },
+            Description = msg.Message,
+            Footer = new EmbedFooterBuilder
             {
-                Author = new EmbedAuthorBuilder
-                {
-                    IconUrl = user.GetAvatarUrl(), Name = $"{user} said:"
-                },
-                Description = msg.Message,
-                Footer = new EmbedFooterBuilder
-                {
-                    IconUrl = ctx.User.GetAvatarUrl(),
-                    Text =
-                        Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(),
-                            (DateTime.UtcNow - msg.DateAdded).Humanize())
-                },
-                Color = Mewdeko.OkColor
-            };
+                IconUrl = ctx.User.GetAvatarUrl(),
+                Text =
+                    Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(),
+                        (DateTime.UtcNow - msg.DateAdded).Humanize())
+            },
+            Color = Mewdeko.OkColor,
+            Timestamp = msg.MessageTimestamp
+        };
 
-            if (msg.ReferenceMessage is not null)
-                em.AddField("Replied To", msg.ReferenceMessage);
+        if (msg.ReferenceMessage is not null)
+            em.AddField("Replied To", msg.ReferenceMessage);
 
+        em.AddField("Message ID", msg.MessageId.ToString(), true);
+        em.AddField("Sent", TimestampTag.FromDateTimeOffset(msg.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
+
+        if (!string.IsNullOrEmpty(msg.JsonData))
+        {
+            await using var ms = new MemoryStream();
+            await using var writer = new StreamWriter(ms);
+            await writer.WriteAsync(msg.JsonData);
+            await writer.FlushAsync();
+            ms.Position = 0;
+
+            await ctx.Channel.SendFileAsync(ms, $"snipe_{msg.MessageId}.json", embed: em.Build(),
+                components: config.Data.ShowInviteButton
+                    ? new ComponentBuilder()
+                        .WithButton(style: ButtonStyle.Link,
+                            url: "",
+                            label: "",
+                            emote: "".ToIEmote()).Build()
+                    : null).ConfigureAwait(false);
+        }
+        else
+        {
             await ctx.Channel.SendMessageAsync(embed: em.Build(),
                 components: config.Data.ShowInviteButton
                     ? new ComponentBuilder()
                         .WithButton(style: ButtonStyle.Link,
-                            url:
-                            "",
+                            url: "",
                             label: "",
                             emote: "".ToIEmote()).Build()
                     : null).ConfigureAwait(false);
@@ -1210,21 +1334,44 @@ public partial class Utility(
                     Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(),
                         (DateTime.UtcNow - msg.DateAdded).Humanize())
             },
-            Color = Mewdeko.OkColor
+            Color = Mewdeko.OkColor,
+            Timestamp = msg.MessageTimestamp
         };
 
         if (msg.ReferenceMessage is not null)
             em.AddField("Replied To", msg.ReferenceMessage);
 
-        await ctx.Channel.SendMessageAsync(embed: em.Build(),
-            components: config.Data.ShowInviteButton
-                ? new ComponentBuilder()
-                    .WithButton(style: ButtonStyle.Link,
-                        url:
-                        "",
-                        label: "",
-                        emote: "".ToIEmote()).Build()
-                : null).ConfigureAwait(false);
+        em.AddField("Message ID", msg.MessageId.ToString(), true);
+        em.AddField("Sent", TimestampTag.FromDateTimeOffset(msg.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
+
+        if (!string.IsNullOrEmpty(msg.JsonData))
+        {
+            await using var ms = new MemoryStream();
+            await using var writer = new StreamWriter(ms);
+            await writer.WriteAsync(msg.JsonData);
+            await writer.FlushAsync();
+            ms.Position = 0;
+
+            await ctx.Channel.SendFileAsync(ms, $"snipe_{msg.MessageId}.json", embed: em.Build(),
+                components: config.Data.ShowInviteButton
+                    ? new ComponentBuilder()
+                        .WithButton(style: ButtonStyle.Link,
+                            url: "",
+                            label: "",
+                            emote: "".ToIEmote()).Build()
+                    : null).ConfigureAwait(false);
+        }
+        else
+        {
+            await ctx.Channel.SendMessageAsync(embed: em.Build(),
+                components: config.Data.ShowInviteButton
+                    ? new ComponentBuilder()
+                        .WithButton(style: ButtonStyle.Link,
+                            url: "",
+                            label: "",
+                            emote: "".ToIEmote()).Build()
+                    : null).ConfigureAwait(false);
+        }
     }
 
     /// <summary>
@@ -1244,45 +1391,66 @@ public partial class Utility(
             return;
         }
 
+        var msg = (await Service.GetSnipes(ctx.Guild.Id).ConfigureAwait(false))
+            .Where(x => x.Edited)
+            .LastOrDefault(x => x.ChannelId == ctx.Channel.Id && x.UserId == user1.Id);
+        if (msg == null)
         {
-            var msg = (await Service.GetSnipes(ctx.Guild.Id).ConfigureAwait(false))
-                .Where(x => x.Edited)
-                .LastOrDefault(x => x.ChannelId == ctx.Channel.Id && x.UserId == user1.Id);
-            if (msg == null)
+            await ReplyErrorAsync(Strings.NoSnipes(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
+        var user = await ctx.Channel.GetUserAsync(msg.UserId).ConfigureAwait(false) ??
+                   await client.Rest.GetUserAsync(msg.UserId).ConfigureAwait(false);
+
+        var em = new EmbedBuilder
+        {
+            Author = new EmbedAuthorBuilder
             {
-                await ReplyErrorAsync(Strings.NoSnipes(ctx.Guild.Id)).ConfigureAwait(false);
-                return;
-            }
-
-            var user = await ctx.Channel.GetUserAsync(msg.UserId).ConfigureAwait(false) ??
-                       await client.Rest.GetUserAsync(msg.UserId).ConfigureAwait(false);
-
-            var em = new EmbedBuilder
+                IconUrl = user.GetAvatarUrl(), Name = $"{user} originally said:"
+            },
+            Description = msg.Message,
+            Footer = new EmbedFooterBuilder
             {
-                Author = new EmbedAuthorBuilder
-                {
-                    IconUrl = user.GetAvatarUrl(), Name = $"{user} originally said:"
-                },
-                Description = msg.Message,
-                Footer = new EmbedFooterBuilder
-                {
-                    IconUrl = ctx.User.GetAvatarUrl(),
-                    Text =
-                        Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(),
-                            (DateTime.UtcNow - msg.DateAdded).Humanize())
-                },
-                Color = Mewdeko.OkColor
-            };
+                IconUrl = ctx.User.GetAvatarUrl(),
+                Text =
+                    Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(),
+                        (DateTime.UtcNow - msg.DateAdded).Humanize())
+            },
+            Color = Mewdeko.OkColor,
+            Timestamp = msg.MessageTimestamp
+        };
 
-            if (msg.ReferenceMessage is not null)
-                em.AddField("Replied To", msg.ReferenceMessage);
+        if (msg.ReferenceMessage is not null)
+            em.AddField("Replied To", msg.ReferenceMessage);
 
+        em.AddField("Message ID", msg.MessageId.ToString(), true);
+        em.AddField("Sent", TimestampTag.FromDateTimeOffset(msg.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
+
+        if (!string.IsNullOrEmpty(msg.JsonData))
+        {
+            await using var ms = new MemoryStream();
+            await using var writer = new StreamWriter(ms);
+            await writer.WriteAsync(msg.JsonData);
+            await writer.FlushAsync();
+            ms.Position = 0;
+
+            await ctx.Channel.SendFileAsync(ms, $"snipe_{msg.MessageId}.json", embed: em.Build(),
+                components: config.Data.ShowInviteButton
+                    ? new ComponentBuilder()
+                        .WithButton(style: ButtonStyle.Link,
+                            url: "",
+                            label: "",
+                            emote: "".ToIEmote()).Build()
+                    : null).ConfigureAwait(false);
+        }
+        else
+        {
             await ctx.Channel.SendMessageAsync(embed: em.Build(),
                 components: config.Data.ShowInviteButton
                     ? new ComponentBuilder()
                         .WithButton(style: ButtonStyle.Link,
-                            url:
-                            "",
+                            url: "",
                             label: "",
                             emote: "".ToIEmote()).Build()
                     : null).ConfigureAwait(false);
@@ -1306,46 +1474,66 @@ public partial class Utility(
             return;
         }
 
+        var msg = (await Service.GetSnipes(ctx.Guild.Id).ConfigureAwait(false))
+            .Where(x => x.Edited)
+            .LastOrDefault(x => x.ChannelId == chan.Id);
+        if (msg == null)
         {
-            var msg = (await Service.GetSnipes(ctx.Guild.Id).ConfigureAwait(false))
-                .Where(x => x.Edited)
-                .LastOrDefault(x => x.ChannelId == chan.Id);
-            if (msg == null)
+            await ReplyErrorAsync(Strings.NoSnipes(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
+        var user = await ctx.Channel.GetUserAsync(msg.UserId).ConfigureAwait(false) ??
+                   await client.Rest.GetUserAsync(msg.UserId).ConfigureAwait(false);
+
+        var em = new EmbedBuilder
+        {
+            Author = new EmbedAuthorBuilder
             {
-                await ReplyErrorAsync(Strings.NoSnipes(ctx.Guild.Id)).ConfigureAwait(false);
-                return;
-            }
-
-            var user = await ctx.Channel.GetUserAsync(msg.UserId).ConfigureAwait(false) ??
-                       await client.Rest.GetUserAsync(msg.UserId).ConfigureAwait(false);
-
-            var em = new EmbedBuilder
+                IconUrl = user.GetAvatarUrl(), Name = $"{user} originally said:"
+            },
+            Description = msg.Message,
+            Footer = new EmbedFooterBuilder
             {
-                Author = new EmbedAuthorBuilder
-                {
-                    IconUrl = user.GetAvatarUrl(), Name = $"{user} originally said:"
-                },
-                Description = msg.Message,
-                Footer = new EmbedFooterBuilder
-                {
-                    IconUrl = ctx.User.GetAvatarUrl(),
-                    Text =
-                        Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(),
-                            (DateTime.UtcNow - msg.DateAdded).Humanize())
-                },
-                Color = Mewdeko.OkColor
-            };
+                IconUrl = ctx.User.GetAvatarUrl(),
+                Text =
+                    Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(),
+                        (DateTime.UtcNow - msg.DateAdded).Humanize())
+            },
+            Color = Mewdeko.OkColor,
+            Timestamp = msg.MessageTimestamp
+        };
 
-            if (msg.ReferenceMessage is not null)
-                em.AddField("Replied To", msg.ReferenceMessage);
+        if (msg.ReferenceMessage is not null)
+            em.AddField("Replied To", msg.ReferenceMessage);
 
+        em.AddField("Message ID", msg.MessageId.ToString(), true);
+        em.AddField("Sent", TimestampTag.FromDateTimeOffset(msg.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
 
+        if (!string.IsNullOrEmpty(msg.JsonData))
+        {
+            await using var ms = new MemoryStream();
+            await using var writer = new StreamWriter(ms);
+            await writer.WriteAsync(msg.JsonData);
+            await writer.FlushAsync();
+            ms.Position = 0;
+
+            await ctx.Channel.SendFileAsync(ms, $"snipe_{msg.MessageId}.json", embed: em.Build(),
+                components: config.Data.ShowInviteButton
+                    ? new ComponentBuilder()
+                        .WithButton(style: ButtonStyle.Link,
+                            url: "",
+                            label: "",
+                            emote: "".ToIEmote()).Build()
+                    : null).ConfigureAwait(false);
+        }
+        else
+        {
             await ctx.Channel.SendMessageAsync(embed: em.Build(),
                 components: config.Data.ShowInviteButton
                     ? new ComponentBuilder()
                         .WithButton(style: ButtonStyle.Link,
-                            url:
-                            "",
+                            url: "",
                             label: "",
                             emote: "".ToIEmote()).Build()
                     : null).ConfigureAwait(false);
@@ -1370,46 +1558,66 @@ public partial class Utility(
             return;
         }
 
+        var msg = (await Service.GetSnipes(ctx.Guild.Id).ConfigureAwait(false))
+            .Where(x => x.Edited)
+            .LastOrDefault(x => x.ChannelId == chan.Id && x.UserId == user1.Id);
+        if (msg == null)
         {
-            var msg = (await Service.GetSnipes(ctx.Guild.Id).ConfigureAwait(false))
-                .Where(x => x.Edited)
-                .LastOrDefault(x => x.ChannelId == chan.Id && x.UserId == user1.Id);
-            if (msg == null)
+            await ReplyErrorAsync(Strings.NoSnipes(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
+        var user = await ctx.Channel.GetUserAsync(msg.UserId).ConfigureAwait(false) ??
+                   await client.Rest.GetUserAsync(msg.UserId).ConfigureAwait(false);
+
+        var em = new EmbedBuilder
+        {
+            Author = new EmbedAuthorBuilder
             {
-                await ReplyErrorAsync(Strings.NoSnipes(ctx.Guild.Id)).ConfigureAwait(false);
-                return;
-            }
-
-            var user = await ctx.Channel.GetUserAsync(msg.UserId).ConfigureAwait(false) ??
-                       await client.Rest.GetUserAsync(msg.UserId).ConfigureAwait(false);
-
-            var em = new EmbedBuilder
+                IconUrl = user.GetAvatarUrl(), Name = $"{user} originally said:"
+            },
+            Description = msg.Message,
+            Footer = new EmbedFooterBuilder
             {
-                Author = new EmbedAuthorBuilder
-                {
-                    IconUrl = user.GetAvatarUrl(), Name = $"{user} originally said:"
-                },
-                Description = msg.Message,
-                Footer = new EmbedFooterBuilder
-                {
-                    IconUrl = ctx.User.GetAvatarUrl(),
-                    Text =
-                        Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(),
-                            (DateTime.UtcNow - msg.DateAdded).Humanize())
-                },
-                Color = Mewdeko.OkColor
-            };
+                IconUrl = ctx.User.GetAvatarUrl(),
+                Text =
+                    Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(),
+                        (DateTime.UtcNow - msg.DateAdded).Humanize())
+            },
+            Color = Mewdeko.OkColor,
+            Timestamp = msg.MessageTimestamp
+        };
 
-            if (msg.ReferenceMessage is not null)
-                em.AddField("Replied To", msg.ReferenceMessage);
+        if (msg.ReferenceMessage is not null)
+            em.AddField("Replied To", msg.ReferenceMessage);
 
+        em.AddField("Message ID", msg.MessageId.ToString(), true);
+        em.AddField("Sent", TimestampTag.FromDateTimeOffset(msg.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
 
+        if (!string.IsNullOrEmpty(msg.JsonData))
+        {
+            await using var ms = new MemoryStream();
+            await using var writer = new StreamWriter(ms);
+            await writer.WriteAsync(msg.JsonData);
+            await writer.FlushAsync();
+            ms.Position = 0;
+
+            await ctx.Channel.SendFileAsync(ms, $"snipe_{msg.MessageId}.json", embed: em.Build(),
+                components: config.Data.ShowInviteButton
+                    ? new ComponentBuilder()
+                        .WithButton(style: ButtonStyle.Link,
+                            url: "",
+                            label: "",
+                            emote: "".ToIEmote()).Build()
+                    : null).ConfigureAwait(false);
+        }
+        else
+        {
             await ctx.Channel.SendMessageAsync(embed: em.Build(),
                 components: config.Data.ShowInviteButton
                     ? new ComponentBuilder()
                         .WithButton(style: ButtonStyle.Link,
-                            url:
-                            "",
+                            url: "",
                             label: "",
                             emote: "".ToIEmote()).Build()
                     : null).ConfigureAwait(false);

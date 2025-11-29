@@ -21,6 +21,16 @@ public class SnipeStore
     public ulong ChannelId { get; set; }
 
     /// <summary>
+    ///     Gets or sets the ID of the original message.
+    /// </summary>
+    public ulong MessageId { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the original timestamp when the message was sent.
+    /// </summary>
+    public DateTimeOffset MessageTimestamp { get; set; }
+
+    /// <summary>
     ///     Gets or sets the content of the sniped message.
     /// </summary>
     public string Message { get; set; }
@@ -29,6 +39,11 @@ public class SnipeStore
     ///     Gets or sets the content of the reference message, if any.
     /// </summary>
     public string ReferenceMessage { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the serialized JSON data of the message (embeds, attachments, components).
+    /// </summary>
+    public string? JsonData { get; set; }
 
     /// <summary>
     ///     Indicates whether the message was edited.
