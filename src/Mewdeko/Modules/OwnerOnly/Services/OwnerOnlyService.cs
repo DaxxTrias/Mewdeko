@@ -226,15 +226,18 @@ public class OwnerOnlyService : ILateExecutor, IReadyExecutor, INService
                     .ToConcurrent())
             .ToConcurrent();
 
-        foreach (var cmd in dbContext.AutoCommands.Where(x => x.Interval == 0))
+        var startupCommands = await dbContext.AutoCommands.Where(x => x.Interval == 0).ToListAsync();
+        foreach (var cmd in startupCommands)
         {
             try
             {
                 await ExecuteCommand(cmd).ConfigureAwait(false);
+                // Add delay between startup commands to prevent rate limiting/timeouts
+                await Task.Delay(1500).ConfigureAwait(false);
             }
-            catch
+            catch (Exception ex)
             {
-                // ignored
+                logger.LogWarning(ex, "Error executing startup command {CommandId}: {Command}", cmd.Id, cmd.CommandText);
             }
         }
 

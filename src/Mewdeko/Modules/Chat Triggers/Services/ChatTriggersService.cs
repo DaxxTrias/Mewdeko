@@ -1429,8 +1429,11 @@ public sealed class ChatTriggersService : IEarlyBehavior, INService, IReadyExecu
         if (ct.Response.Contains("%target%", StringComparison.OrdinalIgnoreCase))
             ct.AllowTarget = true; // Enable targeting
 
-        // Save changes
-        await UpdateInternalAsync(guildId.Value, ct).ConfigureAwait(false); // Update the trigger internally
+        // Save changes to database
+        await dbContext.UpdateAsync(ct).ConfigureAwait(false);
+
+        // Update the trigger internally (in-memory cache)
+        await UpdateInternalAsync(guildId.Value, ct).ConfigureAwait(false);
 
         return ct; // Return the edited chat trigger
     }
