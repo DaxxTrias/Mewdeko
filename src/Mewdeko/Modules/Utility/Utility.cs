@@ -449,7 +449,6 @@ public partial class Utility(
             em.AddField("Replied To", msg.ReferenceMessage);
 
         // Add message ID field for reference
-        em.AddField("Message ID", msg.MessageId.ToString(), true);
         em.AddField("Sent", TimestampTag.FromDateTimeOffset(msg.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
 
         // Send with JSON attachment if available
@@ -541,7 +540,6 @@ public partial class Utility(
                 if (msg1.ReferenceMessage is not null)
                     builder.AddField("Replied To", msg1.ReferenceMessage);
 
-                builder.AddField("Message ID", msg1.MessageId.ToString(), true);
                 builder.AddField("Sent", TimestampTag.FromDateTimeOffset(msg1.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
 
                 return builder;
@@ -608,7 +606,6 @@ public partial class Utility(
                 if (msg1.ReferenceMessage is not null)
                     builder.AddField("Replied To", msg1.ReferenceMessage);
 
-                builder.AddField("Message ID", msg1.MessageId.ToString(), true);
                 builder.AddField("Sent", TimestampTag.FromDateTimeOffset(msg1.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
 
                 return builder;
@@ -675,7 +672,6 @@ public partial class Utility(
                 if (msg1.ReferenceMessage is not null)
                     builder.AddField("Replied To", msg1.ReferenceMessage);
 
-                builder.AddField("Message ID", msg1.MessageId.ToString(), true);
                 builder.AddField("Sent", TimestampTag.FromDateTimeOffset(msg1.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
 
                 return builder;
@@ -743,7 +739,6 @@ public partial class Utility(
                 if (msg1.ReferenceMessage is not null)
                     builder.AddField("Replied To", msg1.ReferenceMessage);
 
-                builder.AddField("Message ID", msg1.MessageId.ToString(), true);
                 builder.AddField("Sent", TimestampTag.FromDateTimeOffset(msg1.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
 
                 return builder;
@@ -809,7 +804,6 @@ public partial class Utility(
                 if (msg1.ReferenceMessage is not null)
                     builder.AddField("Replied To", msg1.ReferenceMessage);
 
-                builder.AddField("Message ID", msg1.MessageId.ToString(), true);
                 builder.AddField("Sent", TimestampTag.FromDateTimeOffset(msg1.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
 
                 return builder;
@@ -876,7 +870,6 @@ public partial class Utility(
                 if (msg1.ReferenceMessage is not null)
                     builder.AddField("Replied To", msg1.ReferenceMessage);
 
-                builder.AddField("Message ID", msg1.MessageId.ToString(), true);
                 builder.AddField("Sent", TimestampTag.FromDateTimeOffset(msg1.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
 
                 return builder;
@@ -943,7 +936,6 @@ public partial class Utility(
                 if (msg1.ReferenceMessage is not null)
                     builder.AddField("Replied To", msg1.ReferenceMessage);
 
-                builder.AddField("Message ID", msg1.MessageId.ToString(), true);
                 builder.AddField("Sent", TimestampTag.FromDateTimeOffset(msg1.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
 
                 return builder;
@@ -1011,7 +1003,6 @@ public partial class Utility(
                 if (msg1.ReferenceMessage is not null)
                     builder.AddField("Replied To", msg1.ReferenceMessage);
 
-                builder.AddField("Message ID", msg1.MessageId.ToString(), true);
                 builder.AddField("Sent", TimestampTag.FromDateTimeOffset(msg1.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
 
                 return builder;
@@ -1068,7 +1059,6 @@ public partial class Utility(
         if (msg.ReferenceMessage is not null)
             em.AddField("Replied To", msg.ReferenceMessage);
 
-        em.AddField("Message ID", msg.MessageId.ToString(), true);
         em.AddField("Sent", TimestampTag.FromDateTimeOffset(msg.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
 
         if (!string.IsNullOrEmpty(msg.JsonData))
@@ -1176,7 +1166,6 @@ public partial class Utility(
         if (msg.ReferenceMessage is not null)
             em.AddField("Replied To", msg.ReferenceMessage);
 
-        em.AddField("Message ID", msg.MessageId.ToString(), true);
         em.AddField("Sent", TimestampTag.FromDateTimeOffset(msg.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
 
         if (!string.IsNullOrEmpty(msg.JsonData))
@@ -1259,7 +1248,6 @@ public partial class Utility(
         if (msg.ReferenceMessage is not null)
             em.AddField("Replied To", msg.ReferenceMessage);
 
-        em.AddField("Message ID", msg.MessageId.ToString(), true);
         em.AddField("Sent", TimestampTag.FromDateTimeOffset(msg.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
 
         if (!string.IsNullOrEmpty(msg.JsonData))
@@ -1341,7 +1329,6 @@ public partial class Utility(
         if (msg.ReferenceMessage is not null)
             em.AddField("Replied To", msg.ReferenceMessage);
 
-        em.AddField("Message ID", msg.MessageId.ToString(), true);
         em.AddField("Sent", TimestampTag.FromDateTimeOffset(msg.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
 
         if (!string.IsNullOrEmpty(msg.JsonData))
@@ -1424,7 +1411,6 @@ public partial class Utility(
         if (msg.ReferenceMessage is not null)
             em.AddField("Replied To", msg.ReferenceMessage);
 
-        em.AddField("Message ID", msg.MessageId.ToString(), true);
         em.AddField("Sent", TimestampTag.FromDateTimeOffset(msg.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
 
         if (!string.IsNullOrEmpty(msg.JsonData))
@@ -1507,7 +1493,6 @@ public partial class Utility(
         if (msg.ReferenceMessage is not null)
             em.AddField("Replied To", msg.ReferenceMessage);
 
-        em.AddField("Message ID", msg.MessageId.ToString(), true);
         em.AddField("Sent", TimestampTag.FromDateTimeOffset(msg.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
 
         if (!string.IsNullOrEmpty(msg.JsonData))
@@ -1591,7 +1576,6 @@ public partial class Utility(
         if (msg.ReferenceMessage is not null)
             em.AddField("Replied To", msg.ReferenceMessage);
 
-        em.AddField("Message ID", msg.MessageId.ToString(), true);
         em.AddField("Sent", TimestampTag.FromDateTimeOffset(msg.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
 
         if (!string.IsNullOrEmpty(msg.JsonData))
