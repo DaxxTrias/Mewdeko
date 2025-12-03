@@ -4,6 +4,7 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.ClientModel;
 using System.Threading;
 using System.Runtime.CompilerServices;
 using DataModel;
@@ -75,12 +76,13 @@ public class OpenAiClient : IAiClient
 
         var payloadJson = JsonSerializer.Serialize(payload);
 
-        async IAsyncEnumerable<string> StreamWithUsage()
+        var completionUpdates = StreamChatCompletionsAsync(httpClient, apiKey, payloadJson, cancellationToken);
+
+        async IAsyncEnumerable<string> TransformUpdates(IAsyncEnumerable<string> updates)
         {
             int? promptTokens = null, completionTokens = null, totalTokens = null;
             var usageEmitted = false;
-            await foreach (var json in StreamChatCompletionsAsync(httpClient, apiKey, payloadJson, cancellationToken)
-                               .WithCancellation(cancellationToken))
+            await foreach (var json in updates.WithCancellation(cancellationToken))
             {
                 if (!string.IsNullOrWhiteSpace(json))
                 {
@@ -133,7 +135,7 @@ public class OpenAiClient : IAiClient
             yield return usageJson;
         }
 
-        return Task.FromResult<IAsyncEnumerable<string>>(StreamWithUsage());
+        return Task.FromResult<IAsyncEnumerable<string>>(TransformUpdates(completionUpdates));
     }
 
     // Helper to fetch usage stats after streaming finishes
