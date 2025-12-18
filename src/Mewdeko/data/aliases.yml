@@ -248,6 +248,9 @@ autobanrolelist:
 autobanroleremove:
   - autobanroleremove
   - abrr
+autobanrolereason:
+  - autobanrolereason
+  - abreason
 autobanword:
   - autobanword
   - autobanw
@@ -826,6 +829,9 @@ ctsclear:
   - ctsclear
 ctsexport:
   - ctsexport
+ctsmigrate:
+  - ctsmigrate
+  - ctsconvert
 ctsimport:
   - ctsimport
 ctsreload:
