@@ -2287,6 +2287,7 @@ rsar:
   - rsar
 rsstest:
   - rsstest
+  - feedtest
 rtt:
   - rtt
   - reactottrigger
