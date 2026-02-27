@@ -28,7 +28,7 @@ public sealed class BotConfig
         Prefix = ".";
         RotateStatuses = false;
         GroupGreets = false;
-        ShowInviteButton = true;
+        ShowInviteButton = false;
         LoadingEmote = "<:Oldge:1159709449720696912>";
         ErrorEmote = "<a:NoNo:1143320192261296150>";
         SuccessEmote = "<a:YesYes:1158565534258958386>";
@@ -184,7 +184,14 @@ public sealed class BotConfig
     ///     Gets or sets whether the invite and donation button will be shown on some commands.
     /// </summary>
     [Comment("Used to enable or disable showing the invite button on some commands")]
-    public bool ShowInviteButton { get; set; }
+    public bool ShowInviteButton
+    {
+        get => false;
+        set
+        {
+            // Invite button path is disabled in this fork.
+        }
+    }
 
     /// <summary>
     ///     Gets or sets the redirect url for the auth command.
