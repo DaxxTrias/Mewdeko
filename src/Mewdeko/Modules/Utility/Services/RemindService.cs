@@ -1,9 +1,10 @@
-﻿using System.Text.RegularExpressions;
+using System.Text.RegularExpressions;
 using System.Threading;
 using DataModel;
 using Discord.Net;
 using LinqToDB;
 using LinqToDB.Async;
+using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Modules.Administration.Services;
 using Mewdeko.Services.Strings;
 using Swan;
@@ -13,12 +14,14 @@ namespace Mewdeko.Modules.Utility.Services;
 /// <summary>
 ///     Manages and executes reminders for users at specified times.
 /// </summary>
-public partial class RemindService : INService
+public partial class RemindService : INService, IReadyExecutor
 {
     private readonly DiscordShardedClient client;
     private readonly IDataConnectionFactory dbFactory;
+    private readonly SemaphoreSlim initializationLock = new(1, 1);
     private readonly ILogger<RemindService> logger;
 
+    private bool remindersInitialized;
     private readonly Regex regex = MyRegex();
     private readonly ConcurrentDictionary<int, Timer> reminderTimers;
     private readonly GeneratedBotStrings strings;
@@ -41,7 +44,35 @@ public partial class RemindService : INService
         this.strings = strings;
         this.logger = logger;
         reminderTimers = new ConcurrentDictionary<int, Timer>();
-        _ = InitializeRemindersAsync();
+    }
+
+    /// <summary>
+    ///     Initializes reminder timers once the bot is fully ready.
+    /// </summary>
+    public async Task OnReadyAsync()
+    {
+        await EnsureInitializedAsync().ConfigureAwait(false);
+    }
+
+    private async Task EnsureInitializedAsync()
+    {
+        if (remindersInitialized)
+            return;
+
+        await initializationLock.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            if (remindersInitialized)
+                return;
+
+            await InitializeRemindersAsync().ConfigureAwait(false);
+            remindersInitialized = true;
+            logger.LogInformation("Reminder service initialized and existing reminders scheduled.");
+        }
+        finally
+        {
+            initializationLock.Release();
+        }
     }
 
     /// <summary>
@@ -97,28 +128,36 @@ public partial class RemindService : INService
     {
         try
         {
-            IMessageChannel ch;
-            if (reminder.IsPrivate)
-            {
-                var user = client.GetUser(reminder.ChannelId);
-                if (user == null)
-                    return;
-                ch = await user.CreateDMChannelAsync().ConfigureAwait(false);
-            }
-            else
-                ch = client.GetGuild(reminder.ServerId)?.GetTextChannel(reminder.ChannelId);
+            var ch = await ResolveReminderChannelAsync(reminder).ConfigureAwait(false);
 
             if (ch == null)
+            {
+                logger.LogWarning(
+                    "Reminder {ReminderId} target channel/user is unavailable, removing reminder.",
+                    reminder.Id);
+                await RemoveReminder(reminder).ConfigureAwait(false);
                 return;
+            }
+
+            var reminderUser = reminder.UserId.ToString();
+            try
+            {
+                var fetchedUser = await ch.GetUserAsync(reminder.UserId).ConfigureAwait(false);
+                if (fetchedUser != null)
+                    reminderUser = fetchedUser.ToString();
+            }
+            catch (Exception ex)
+            {
+                logger.LogDebug(ex, "Failed to resolve reminder author {UserId} for reminder {ReminderId}",
+                    reminder.UserId, reminder.Id);
+            }
 
             await ch.EmbedAsync(new EmbedBuilder()
                     .WithOkColor()
                     .WithTitle(strings.ReminderTitle(reminder.ServerId))
                     .AddField("Created At",
                         reminder.DateAdded.HasValue ? reminder.DateAdded.Value.ToLongDateString() : "?")
-                    .AddField("By",
-                        (await ch.GetUserAsync(reminder.UserId).ConfigureAwait(false))?.ToString() ??
-                        reminder.UserId.ToString()),
+                    .AddField("By", reminderUser),
                 reminder.Message).ConfigureAwait(false);
 
             // Remove the executed reminder from the database and timer
@@ -154,6 +193,25 @@ public partial class RemindService : INService
             logger.LogError(ex, "Unexpected error executing reminder {ReminderId}", reminder.Id);
             await RemoveReminder(reminder);
         }
+    }
+
+    private async Task<IMessageChannel?> ResolveReminderChannelAsync(Reminder reminder)
+    {
+        if (reminder.IsPrivate)
+        {
+            IUser? user = client.GetUser(reminder.ChannelId);
+            user ??= await client.Rest.GetUserAsync(reminder.ChannelId).ConfigureAwait(false);
+            return user == null
+                ? null
+                : await user.CreateDMChannelAsync().ConfigureAwait(false);
+        }
+
+        var channel = client.GetChannel(reminder.ChannelId) as IMessageChannel;
+        if (channel != null)
+            return channel;
+
+        var restChannel = await client.Rest.GetChannelAsync(reminder.ChannelId).ConfigureAwait(false);
+        return restChannel as IMessageChannel;
     }
 
     /// <summary>
