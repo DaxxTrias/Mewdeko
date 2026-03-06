@@ -19,7 +19,7 @@ public class StatsService : IStatsService, IDisposable, IReadyExecutor
     /// <summary>
     ///     The version of the bot. I should make this set from commits somehow idk
     /// </summary>
-    public const string BotVersion = "7.8.18";
+    public const string BotVersion = "7.8.19";
 
     private static readonly string[] function = new[]
     {
