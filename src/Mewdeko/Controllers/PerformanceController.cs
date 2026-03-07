@@ -36,16 +36,10 @@ public class PerformanceController : ControllerBase
     /// <summary>
     ///     Gets the performance data for methods tracked by the performance monitoring service.
     /// </summary>
-    /// <param name="userId">The Discord user ID to verify for owner permissions.</param>
     /// <returns>An array of performance data for the top CPU-intensive methods.</returns>
     [HttpGet("methods")]
-    public IActionResult GetPerformanceData([FromQuery] ulong userId)
+    public IActionResult GetPerformanceData()
     {
-        if (!credentials.IsOwner(userId))
-        {
-            return Forbid();
-        }
-
         var topMethods = performanceService.GetTopCpuMethods();
 
         var result = topMethods.Select(m => new
@@ -63,16 +57,10 @@ public class PerformanceController : ControllerBase
     /// <summary>
     ///     Gets event metrics from the EventHandler.
     /// </summary>
-    /// <param name="userId">The Discord user ID to verify for owner permissions.</param>
     /// <returns>Event metrics data including processing counts, execution times, and error rates.</returns>
     [HttpGet("events")]
-    public IActionResult GetEventMetrics([FromQuery] ulong userId)
+    public IActionResult GetEventMetrics()
     {
-        if (!credentials.IsOwner(userId))
-        {
-            return Forbid();
-        }
-
         var eventMetrics = eventHandler.GetEventMetrics();
 
         var result = eventMetrics.Select(kvp => new
@@ -91,16 +79,10 @@ public class PerformanceController : ControllerBase
     /// <summary>
     ///     Gets module metrics from the EventHandler.
     /// </summary>
-    /// <param name="userId">The Discord user ID to verify for owner permissions.</param>
     /// <returns>Module metrics data including events processed, execution times, and error rates.</returns>
     [HttpGet("modules")]
-    public IActionResult GetModuleMetrics([FromQuery] ulong userId)
+    public IActionResult GetModuleMetrics()
     {
-        if (!credentials.IsOwner(userId))
-        {
-            return Forbid();
-        }
-
         var moduleMetrics = eventHandler.GetModuleMetrics();
 
         var result = moduleMetrics.Select(kvp => new
@@ -119,16 +101,10 @@ public class PerformanceController : ControllerBase
     /// <summary>
     ///     Gets comprehensive performance overview including methods, events, and modules.
     /// </summary>
-    /// <param name="userId">The Discord user ID to verify for owner permissions.</param>
     /// <returns>A comprehensive performance overview.</returns>
     [HttpGet("overview")]
-    public IActionResult GetPerformanceOverview([FromQuery] ulong userId)
+    public IActionResult GetPerformanceOverview()
     {
-        if (!credentials.IsOwner(userId))
-        {
-            return Forbid();
-        }
-
         var topMethods = performanceService.GetTopCpuMethods();
         var eventMetrics = eventHandler.GetEventMetrics();
         var moduleMetrics = eventHandler.GetModuleMetrics();
@@ -180,16 +156,10 @@ public class PerformanceController : ControllerBase
     ///     Gets metrics for a specific event type.
     /// </summary>
     /// <param name="eventType">The event type to get metrics for.</param>
-    /// <param name="userId">The Discord user ID to verify for owner permissions.</param>
     /// <returns>Detailed metrics for the specified event type.</returns>
     [HttpGet("events/{eventType}")]
-    public IActionResult GetEventMetric(string eventType, [FromQuery] ulong userId)
+    public IActionResult GetEventMetric(string eventType)
     {
-        if (!credentials.IsOwner(userId))
-        {
-            return Forbid();
-        }
-
         var eventMetrics = eventHandler.GetEventMetrics();
 
         if (!eventMetrics.TryGetValue(eventType, out var metrics))
@@ -214,16 +184,10 @@ public class PerformanceController : ControllerBase
     ///     Gets metrics for a specific module.
     /// </summary>
     /// <param name="moduleName">The module name to get metrics for.</param>
-    /// <param name="userId">The Discord user ID to verify for owner permissions.</param>
     /// <returns>Detailed metrics for the specified module.</returns>
     [HttpGet("modules/{moduleName}")]
-    public IActionResult GetModuleMetric(string moduleName, [FromQuery] ulong userId)
+    public IActionResult GetModuleMetric(string moduleName)
     {
-        if (!credentials.IsOwner(userId))
-        {
-            return Forbid();
-        }
-
         var moduleMetrics = eventHandler.GetModuleMetrics();
 
         if (!moduleMetrics.TryGetValue(moduleName, out var metrics))
@@ -247,16 +211,10 @@ public class PerformanceController : ControllerBase
     /// <summary>
     ///     Clears all performance monitoring data.
     /// </summary>
-    /// <param name="userId">The Discord user ID to verify for owner permissions.</param>
     /// <returns>An action result indicating success or failure.</returns>
     [HttpPost("clear")]
-    public IActionResult ClearPerformanceData([FromQuery] ulong userId)
+    public IActionResult ClearPerformanceData()
     {
-        if (!credentials.IsOwner(userId))
-        {
-            return Forbid();
-        }
-
         performanceService.ClearPerformanceData();
 
         return Ok(new

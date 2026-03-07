@@ -13,16 +13,19 @@ using LibGit2Sharp;
 using LinqToDB.Async;
 using LinqToDB.Data;
 using Mewdeko.Common.Attributes.TextCommands;
+using Mewdeko.Common.TypeReaders.Models;
 using Mewdeko.Common.Configs;
 using Mewdeko.Common.DiscordImplementations;
 using Mewdeko.Modules.OwnerOnly.Services;
 using Mewdeko.Services.Impl;
 using Mewdeko.Services.Settings;
 using Mewdeko.Services.strings;
+using Mewdeko.Modules.Administration.Services;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Scripting;
 using Microsoft.CodeAnalysis.Scripting;
 using Microsoft.Extensions.DependencyInjection;
+using Swan.Formatters;
 
 namespace Mewdeko.Modules.OwnerOnly;
 
@@ -61,7 +64,8 @@ public class OwnerOnly(
     BotConfig botConfig,
     HttpClient httpClient,
     Localization localization,
-    ILogger<OwnerOnly> logger)
+    ILogger<OwnerOnly> logger,
+    BotCredentials creds)
     : MewdekoModuleBase<OwnerOnlyService>
 {
     /// <summary>
@@ -225,6 +229,55 @@ public class OwnerOnly(
     }
 
     /// <summary>
+    ///     Temporarily permits a user to execute a specific command (and its alias) for a limited time.
+    /// </summary>
+    /// <param name="user">User to permit</param>
+    /// <param name="duration">Duration, e.g. 2m, 5m, 30s</param>
+    /// <param name="commandName">Command or alias, e.g. emotestealer</param>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    public async Task Permit(IGuildUser user, StoopidTime duration, [Remainder] string commandName)
+    {
+        var svc = services.GetRequiredService<TemporaryPermitService>();
+        var keys = TemporaryPermitService
+            .NormalizeKeysForGrant(commandName)
+            .ToArray();
+        if (keys.Length == 0)
+        {
+            await ReplyErrorAsync("Invalid command name.").ConfigureAwait(false);
+            return;
+        }
+
+        svc.Grant(ctx.Guild.Id, user.Id, keys, duration.Time);
+        await ReplyConfirmAsync($"Permitting {user.Mention} to use {Format.Bold(keys[0])} for {duration.Time:g}.")
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Revokes a previously granted temporary permit for a user.
+    /// </summary>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    public async Task Unpermit(IGuildUser user, [Remainder] string commandName)
+    {
+        var svc = services.GetRequiredService<TemporaryPermitService>();
+        var keys = TemporaryPermitService
+            .NormalizeKeysForGrant(commandName)
+            .ToArray();
+        if (keys.Length == 0)
+        {
+            await ReplyErrorAsync("Invalid command name.").ConfigureAwait(false);
+            return;
+        }
+
+        svc.Revoke(ctx.Guild.Id, user.Id, keys);
+        await ReplyConfirmAsync($"Revoked temporary permit for {user.Mention} on {Format.Bold(keys[0])}.")
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
     ///     Generates command documentation YML files
     /// </summary>
     [Cmd]
@@ -288,6 +341,59 @@ public class OwnerOnly(
     }
 
     /// <summary>
+    ///     Updates the list of top guilds based on member count, excluding certain guilds by name or ID,
+    ///     and stores the updated information in the cache for further use.
+    /// </summary>
+    /// <returns>
+    ///     An asynchronous task that completes upon successful update of the top guilds list in the cache.
+    /// </returns>
+    [Cmd]
+    [Aliases]
+    public async Task TopServersUpdate()
+    {
+        if (!creds.IsMasterInstance)
+        {
+            await ErrorAsync(Strings.NotMasterInstance(ctx.Guild.Id));
+            return;
+        }
+
+        try
+        {
+            var guilds = (await ctx.Client.GetGuildsAsync().ConfigureAwait(false))
+                .Cast<SocketGuild>();
+
+            var excludedTerms = new[]
+            {
+                "botlist", "bots", "xhamster", "nsfw", "18+"
+            };
+            const ulong excludedId = 374071874222686211;
+
+            var servers = guilds
+                .Where(x => x.Id != excludedId &&
+                            !excludedTerms.Any(term => x.Name.Contains(term, StringComparison.OrdinalIgnoreCase)))
+                .OrderByDescending(x => x.MemberCount)
+                .Take(11)
+                .Select(x => new StatsService.MewdekoPartialGuild
+                {
+                    IconUrl = x.IconId.StartsWith("a_") ? x.IconUrl.Replace(".jpg", ".gif") : x.IconUrl,
+                    MemberCount = x.MemberCount,
+                    Name = x.Name
+                })
+                .ToList();
+
+            var serialied = Json.Serialize(servers);
+            await cache.Redis.GetDatabase().StringSetAsync($"{client.CurrentUser.Id}_topguilds", serialied)
+                .ConfigureAwait(false);
+            await SuccessAsync(Strings.TopGuildsUpdated(ctx.Guild.Id)).ConfigureAwait(false);
+        }
+        catch (Exception e)
+        {
+            await ErrorAsync(Strings.ErrorUpdatingTopGuilds(ctx.Guild.Id, e.Message)).ConfigureAwait(false);
+            logger.LogError(e, "Error updating top guilds");
+        }
+    }
+
+    /// <summary>
     ///     Lists all servers the bot is currently in.
     /// </summary>
     /// <remarks>
@@ -313,7 +419,7 @@ public class OwnerOnly(
         async Task<PageBuilder> PageFactory(int page)
         {
             await Task.CompletedTask;
-            var newGuilds = guilds.Skip(10 * page);
+            var newGuilds = guilds.Skip(10 * page).Take(10);
             var eb = new PageBuilder()
                 .WithOkColor()
                 .WithTitle(Strings.ServersList(ctx.Guild.Id));

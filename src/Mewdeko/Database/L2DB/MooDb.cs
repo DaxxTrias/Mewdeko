@@ -67,6 +67,7 @@ namespace DataModel
 		public ITable<CommandCooldown>           CommandCooldowns           => this.GetTable<CommandCooldown>();
 		public ITable<CommandStat>               CommandStats               => this.GetTable<CommandStat>();
 		public ITable<Confession>                Confessions                => this.GetTable<Confession>();
+	    public ITable<CoprMonitor>               CoprMonitors               => this.GetTable<CoprMonitor>();
 		public ITable<CustomVoiceChannel>        CustomVoiceChannels        => this.GetTable<CustomVoiceChannel>();
 		public ITable<CustomVoiceConfig>         CustomVoiceConfigs         => this.GetTable<CustomVoiceConfig>();
 		public ITable<DelMsgOnCmdChannel>        DelMsgOnCmdChannels        => this.GetTable<DelMsgOnCmdChannel>();
@@ -97,6 +98,7 @@ namespace DataModel
 		public ITable<InviteCount>               InviteCounts               => this.GetTable<InviteCount>();
 		public ITable<InvitedBy>                 InvitedBies                => this.GetTable<InvitedBy>();
 		public ITable<JoinLeaveLog>              JoinLeaveLogs              => this.GetTable<JoinLeaveLog>();
+		public ITable<LastFmUser>                LastFmUsers                => this.GetTable<LastFmUser>();
 		public ITable<LockdownChannelPermission> LockdownChannelPermissions => this.GetTable<LockdownChannelPermission>();
 		public ITable<LoggingV2>                 LoggingV2                  => this.GetTable<LoggingV2>();
 		public ITable<MessageCount>              MessageCounts              => this.GetTable<MessageCount>();

@@ -1431,17 +1431,27 @@ public partial class Searches(
             return;
         }
 
-        var paginator = new LazyPaginatorBuilder()
-            .AddUser(ctx.User)
-            .WithPageFactory(page => CreatePage(page, gameInfo))
-            .WithFooter(PaginatorFooter.PageNumber | PaginatorFooter.Users)
-            .WithMaxPageIndex(gameInfo.Screenshots?.Count ?? 0)
-            .WithDefaultEmotes()
-            .WithActionOnCancellation(ActionOnStop.DeleteMessage)
-            .Build();
+        try
+        {
+            var maxIndex = (gameInfo.Screenshots?.Count ?? 1) - 1;
+            if (maxIndex < 0) maxIndex = 0;
 
-        await serv.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(10))
-            .ConfigureAwait(false);
+            var paginator = new LazyPaginatorBuilder()
+                .AddUser(ctx.User)
+                .WithPageFactory(page => CreatePage(page, gameInfo))
+                .WithFooter(PaginatorFooter.PageNumber | PaginatorFooter.Users)
+                .WithMaxPageIndex(maxIndex)
+                .WithDefaultEmotes()
+                .WithActionOnCancellation(ActionOnStop.DeleteMessage)
+                .Build();
+
+            await serv.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(10))
+                .ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            await ReplyErrorAsync(Strings.NotFound(ctx.Guild.Id)).ConfigureAwait(false);
+        }
     }
 
     /// <summary>
@@ -1504,8 +1514,10 @@ public partial class Searches(
             .AddField("💰 Price", priceText, true)
             .AddField("🎮 Platforms", GetPlatforms(gameInfo), true)
             .AddField("📅 Release Date", gameInfo.ReleaseDate?.Date ?? "N/A", true)
-            .AddField("👥 Developer", string.Join(", ", gameInfo.Developers), true)
-            .AddField("🏷️ Categories", string.Join(", ", gameInfo.Categories?.Take(3).Select(c => c.Description)),
+            .AddField("👥 Developer", string.Join(", ", gameInfo.Developers ?? new List<string>()) is string devs && string.IsNullOrWhiteSpace(devs) ? "N/A" : string.Join(", ", gameInfo.Developers ?? new List<string>()), true)
+            .AddField("🏷️ Categories", (gameInfo.Categories?.Any() ?? false)
+                    ? string.Join(", ", (gameInfo.Categories ?? new List<Category>()).Take(3).Select(c => c.Description))
+                    : "N/A",
                 true);
 
         // Add Metacritic score if available
@@ -1535,10 +1547,13 @@ public partial class Searches(
 
     private string GetPlatforms(SteamGameInfo gameInfo)
     {
+        if (gameInfo.Platforms == null)
+            return "N/A";
+
         var platforms = new List<string>();
-        if (gameInfo.Platforms["windows"]) platforms.Add("Windows");
-        if (gameInfo.Platforms["mac"]) platforms.Add("macOS");
-        if (gameInfo.Platforms["linux"]) platforms.Add("Linux");
+        if (gameInfo.Platforms.TryGetValue("windows", out var win) && win) platforms.Add("Windows");
+        if (gameInfo.Platforms.TryGetValue("mac", out var mac) && mac) platforms.Add("macOS");
+        if (gameInfo.Platforms.TryGetValue("linux", out var linux) && linux) platforms.Add("Linux");
 
         return platforms.Any() ? string.Join(", ", platforms) : "N/A";
     }

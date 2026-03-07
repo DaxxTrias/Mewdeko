@@ -46,6 +46,7 @@ public class SlashUserPermAttribute : PreconditionAttribute
     {
         // Get the permission service.
         var permService = services.GetService<DiscordPermOverrideService>();
+        var tempPermits = services.GetService<Modules.Administration.Services.TemporaryPermitService>();
 
         // Try to get the permission overrides.
         var permResult =
@@ -70,6 +71,10 @@ public class SlashUserPermAttribute : PreconditionAttribute
                     : PreconditionResult.FromError($"You need the `{perm}` permission to use this command.");
             }
         }
+
+        // Temporary permit bypass
+        if (tempPermits?.IsPermitted(context.Guild?.Id ?? 0, context.User.Id, command.Name) == true)
+            return PreconditionResult.FromSuccess();
 
         // If the user does not have the required permissions, return an error.
         if (!permResult) return await UserPermissionAttribute.CheckRequirementsAsync(context, command, services);

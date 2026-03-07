@@ -543,7 +543,8 @@ public class TicketController : Controller
     {
         try
         {
-            logger.LogInformation("UpdateButton called - Request deserialized successfully");
+            if (request == null)
+                return BadRequest("Request body is null or could not be deserialized");
 
             IGuild guild = client.GetGuild(guildId);
             if (guild == null)
@@ -1789,7 +1790,7 @@ public class TicketController : Controller
         try
         {
             var stats = await ticketService.GetGuildStatistics(guildId);
-            var panels = await ticketService.GetPanelsAsync(guildId);
+            var panelInfos = await ticketService.GetAllPanelsAsync(guildId); // Use GetAllPanelsAsync for full data
             var priorities = await ticketService.GetGuildPriorities(guildId);
             var tags = await ticketService.GetGuildTags(guildId);
             var cases = await ticketService.GetGuildCasesAsync(guildId);
@@ -1809,15 +1810,27 @@ public class TicketController : Controller
                 };
             }));
 
+            var textChannels = await guild.GetTextChannelsAsync();
+            // Enrich panel data with channel names and counts
+            var enrichedPanels = await Task.WhenAll(panelInfos.Select(async p =>
+            {
+                var channel = textChannels.FirstOrDefault(x => x.Id == p.ChannelId);
+                return new
+                {
+                    p.MessageId,
+                    p.ChannelId,
+                    ChannelName = channel?.Name ?? "deleted-channel",
+                    ButtonCount = p.Buttons?.Count ?? 0,
+                    SelectMenuCount = p.SelectMenus?.Count ?? 0
+                };
+            }));
+
             return Ok(new
             {
                 Statistics = stats,
                 TicketActivity = activitySummary,
                 StaffResponseStats = staffResponseStats,
-                Panels = panels.Select(p => new
-                {
-                    p.Id, p.MessageId, p.ChannelId
-                }),
+                Panels = enrichedPanels,
                 Priorities = priorities,
                 Tags = tags,
                 Cases = cases.Select(c => new

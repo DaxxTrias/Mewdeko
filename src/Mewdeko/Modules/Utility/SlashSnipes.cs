@@ -1,3 +1,4 @@
+using System.IO;
 using Discord.Interactions;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
@@ -72,21 +73,43 @@ public partial class Utility
                         Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(),
                             (DateTime.UtcNow - msg.DateAdded).Humanize())
                 },
-                Color = Mewdeko.OkColor
+                Color = Mewdeko.OkColor,
+                Timestamp = msg.MessageTimestamp
             };
 
             if (msg.ReferenceMessage is not null)
                 em.AddField("Replied To", msg.ReferenceMessage);
 
-            await ctx.Interaction.RespondAsync(embed: em.Build(),
-                components: config.Data.ShowInviteButton
-                    ? new ComponentBuilder()
-                        .WithButton(style: ButtonStyle.Link,
-                            url:
-                            "",
-                            label: "",
-                            emote: "".ToIEmote()).Build()
-                    : null).ConfigureAwait(false);
+            em.AddField("Sent", TimestampTag.FromDateTimeOffset(msg.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
+
+            if (!string.IsNullOrEmpty(msg.JsonData))
+            {
+                await using var ms = new MemoryStream();
+                await using var writer = new StreamWriter(ms);
+                await writer.WriteAsync(msg.JsonData);
+                await writer.FlushAsync();
+                ms.Position = 0;
+
+                await ctx.Interaction.RespondWithFileAsync(ms, $"snipe_{msg.MessageId}.json", embed: em.Build(),
+                    components: config.Data.ShowInviteButton
+                        ? new ComponentBuilder()
+                            .WithButton(style: ButtonStyle.Link,
+                                url: "",
+                                label: "",
+                                emote: "".ToIEmote()).Build()
+                        : null).ConfigureAwait(false);
+            }
+            else
+            {
+                await ctx.Interaction.RespondAsync(embed: em.Build(),
+                    components: config.Data.ShowInviteButton
+                        ? new ComponentBuilder()
+                            .WithButton(style: ButtonStyle.Link,
+                                url: "",
+                                label: "",
+                                emote: "".ToIEmote()).Build()
+                        : null).ConfigureAwait(false);
+            }
         }
 
         /// <summary>
@@ -129,7 +152,7 @@ public partial class Utility
             {
                 Author = new EmbedAuthorBuilder
                 {
-                    IconUrl = user.GetAvatarUrl(), Name = $"{user} said:"
+                    IconUrl = user.GetAvatarUrl(), Name = $"{user} originally said:"
                 },
                 Description = msg.Message,
                 Footer = new EmbedFooterBuilder
@@ -139,21 +162,43 @@ public partial class Utility
                         Strings.SnipeRequest(ctx.Guild.Id, ctx.User.ToString(),
                             (DateTime.UtcNow - msg.DateAdded).Humanize())
                 },
-                Color = Mewdeko.OkColor
+                Color = Mewdeko.OkColor,
+                Timestamp = msg.MessageTimestamp
             };
 
             if (msg.ReferenceMessage is not null)
                 em.AddField("Replied To", msg.ReferenceMessage);
 
-            await ctx.Interaction.RespondAsync(embed: em.Build(),
-                components: config.Data.ShowInviteButton
-                    ? new ComponentBuilder()
-                        .WithButton(style: ButtonStyle.Link,
-                            url:
-                            "",
-                            label: "",
-                            emote: "".ToIEmote()).Build()
-                    : null).ConfigureAwait(false);
+            em.AddField("Sent", TimestampTag.FromDateTimeOffset(msg.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
+
+            if (!string.IsNullOrEmpty(msg.JsonData))
+            {
+                await using var ms = new MemoryStream();
+                await using var writer = new StreamWriter(ms);
+                await writer.WriteAsync(msg.JsonData);
+                await writer.FlushAsync();
+                ms.Position = 0;
+
+                await ctx.Interaction.RespondWithFileAsync(ms, $"snipe_{msg.MessageId}.json", embed: em.Build(),
+                    components: config.Data.ShowInviteButton
+                        ? new ComponentBuilder()
+                            .WithButton(style: ButtonStyle.Link,
+                                url: "",
+                                label: "",
+                                emote: "".ToIEmote()).Build()
+                        : null).ConfigureAwait(false);
+            }
+            else
+            {
+                await ctx.Interaction.RespondAsync(embed: em.Build(),
+                    components: config.Data.ShowInviteButton
+                        ? new ComponentBuilder()
+                            .WithButton(style: ButtonStyle.Link,
+                                url: "",
+                                label: "",
+                                emote: "".ToIEmote()).Build()
+                        : null).ConfigureAwait(false);
+            }
         }
 
         private async Task SnipeListBase(bool edited, int amount = 5, ITextChannel channel = null, IUser user = null)
@@ -203,14 +248,15 @@ public partial class Utility
                 var builder = new PageBuilder().WithOkColor()
                     .WithAuthor(new EmbedAuthorBuilder()
                         .WithIconUrl(user.RealAvatarUrl().AbsoluteUri)
-                        .WithName($"{user} said:"))
-                    .WithDescription(
-                        Strings.MessageEdited(ctx.Guild.Id, msg1.Message,
-                            (edited ? "edited" : "deleted") + " " + (DateTime.UtcNow - msg1.DateAdded).Humanize() +
-                            " ago"));
+                        .WithName($"{user} {(edited ? "originally said" : "said")}:"))
+                    .WithDescription(msg1.Message)
+                    .WithFooter($"Message {(edited ? "edited" : "deleted")} {(DateTime.UtcNow - msg1.DateAdded).Humanize()} ago")
+                    .WithTimestamp(msg1.MessageTimestamp);
 
                 if (msg1.ReferenceMessage is not null)
                     builder.AddField("Replied To", msg1.ReferenceMessage);
+
+                builder.AddField("Sent", TimestampTag.FromDateTimeOffset(msg1.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
 
                 return builder;
             }

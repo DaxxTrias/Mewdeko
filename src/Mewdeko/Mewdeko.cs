@@ -8,6 +8,10 @@ using Discord.Net;
 using Discord.Rest;
 using Figgle.Fonts;
 using Lavalink4NET;
+using System.Net;
+using System.Net.Http;
+using System.Net.Sockets;
+using System.IO;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Common.TypeReaders;
 using Mewdeko.Common.TypeReaders.Interactions;
@@ -323,15 +327,8 @@ public class Mewdeko : IDisposable
         await interactionService.RegisterCommandsGloballyAsync().ConfigureAwait(false);
 #endif
 #if DEBUG
-        // lock slash commands to debug server (sylv original impl)
-        //if (Client.Guilds.Select(x => x.Id).Contains(Credentials.DebugGuildId))
-        //    await interactionService.RegisterCommandsToGuildAsync(Credentials.DebugGuildId);
-
-        // register slash cmds on all servers (not a problem for my self hosting)
-        foreach (var guild in Client.Guilds)
-        {
-            await interactionService.RegisterCommandsToGuildAsync(guild.Id);
-        }
+        // Register to each guild sequentially with throttling to avoid rate limits/timeouts
+        _ = Task.Run(() => RegisterCommandsToAllGuildsWithThrottlingAsync(interactionService, TimeSpan.FromSeconds(2)));
 #endif
         _ = Task.Run(HandleStatusChanges);
         _ = Task.Run(ExecuteReadySubscriptions);
@@ -339,6 +336,96 @@ public class Mewdeko : IDisposable
         performanceMonitor.Initialize(typeof(Mewdeko).Assembly, "Mewdeko");
         Ready.TrySetResult(true);
         logger.LogInformation("Ready.");
+    }
+
+    private async Task RegisterCommandsToAllGuildsWithThrottlingAsync(InteractionService interactionService, TimeSpan perGuildDelay)
+    {
+        foreach (var guild in Client.Guilds.OrderBy(g => g.Id))
+        {
+            try
+            {
+                logger.LogInformation("Registering interaction commands for guild {GuildId}...", guild.Id);
+                var success = await RegisterCommandsToGuildWithRetryAsync(interactionService, guild.Id, 5);
+                if (success)
+                    logger.LogInformation("Registered interaction commands for guild {GuildId}.", guild.Id);
+                else
+                    logger.LogWarning("Failed to register interaction commands for guild {GuildId} after retries.", guild.Id);
+            }
+            catch (TimeoutException ex)
+            {
+                logger.LogWarning(ex, "Timed out registering commands for guild {GuildId}; will continue.", guild.Id);
+            }
+            catch (HttpException ex)
+            {
+                logger.LogWarning(ex, "HTTP error registering commands for guild {GuildId}; will continue.", guild.Id);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Unexpected error registering commands for guild {GuildId}; continuing.", guild.Id);
+            }
+
+            try
+            {
+                if (perGuildDelay > TimeSpan.Zero)
+                    await Task.Delay(perGuildDelay);
+            }
+            catch
+            {
+                // ignore cancellation or delay errors; proceed to next guild
+            }
+        }
+    }
+
+    private async Task<bool> RegisterCommandsToGuildWithRetryAsync(InteractionService interactionService, ulong guildId, int maxAttempts)
+    {
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            try
+            {
+                await interactionService.RegisterCommandsToGuildAsync(guildId);
+                return true;
+            }
+            catch (HttpException ex) when (ex.HttpCode == HttpStatusCode.BadGateway
+                                           || ex.HttpCode == HttpStatusCode.ServiceUnavailable
+                                           || ex.HttpCode == HttpStatusCode.GatewayTimeout
+                                           || ex.HttpCode == HttpStatusCode.RequestTimeout)
+            {
+                var delay = TimeSpan.FromSeconds(Math.Min(10, Math.Pow(2, attempt))) + TimeSpan.FromMilliseconds(Random.Shared.Next(0, 500));
+                logger.LogWarning(ex, "Transient HTTP {Status} on attempt {Attempt}/{Max} for guild {GuildId}; retrying in {Delay}.",
+                    (int)ex.HttpCode, attempt, maxAttempts, guildId, delay);
+                await Task.Delay(delay);
+            }
+            catch (HttpRequestException ex)
+            {
+                var delay = TimeSpan.FromSeconds(Math.Min(10, Math.Pow(2, attempt))) + TimeSpan.FromMilliseconds(Random.Shared.Next(0, 500));
+                logger.LogWarning(ex, "HTTP request error on attempt {Attempt}/{Max} for guild {GuildId}; retrying in {Delay}.",
+                    attempt, maxAttempts, guildId, delay);
+                await Task.Delay(delay);
+            }
+            catch (IOException ex)
+            {
+                var delay = TimeSpan.FromSeconds(Math.Min(10, Math.Pow(2, attempt))) + TimeSpan.FromMilliseconds(Random.Shared.Next(0, 500));
+                logger.LogWarning(ex, "IO error on attempt {Attempt}/{Max} for guild {GuildId}; retrying in {Delay}.",
+                    attempt, maxAttempts, guildId, delay);
+                await Task.Delay(delay);
+            }
+            catch (SocketException ex)
+            {
+                var delay = TimeSpan.FromSeconds(Math.Min(10, Math.Pow(2, attempt))) + TimeSpan.FromMilliseconds(Random.Shared.Next(0, 500));
+                logger.LogWarning(ex, "Socket error on attempt {Attempt}/{Max} for guild {GuildId}; retrying in {Delay}.",
+                    attempt, maxAttempts, guildId, delay);
+                await Task.Delay(delay);
+            }
+            catch (TimeoutException ex)
+            {
+                var delay = TimeSpan.FromSeconds(Math.Min(10, Math.Pow(2, attempt))) + TimeSpan.FromMilliseconds(Random.Shared.Next(0, 500));
+                logger.LogWarning(ex, "Timeout on attempt {Attempt}/{Max} for guild {GuildId}; retrying in {Delay}.",
+                    attempt, maxAttempts, guildId, delay);
+                await Task.Delay(delay);
+            }
+        }
+
+        return false;
     }
 
     private Task LogCommandsService(LogMessage arg)
@@ -451,10 +538,10 @@ public class Mewdeko : IDisposable
                 Client.LeftGuild -= Client_LeftGuild;
             }
 
-            var commandService = Services.GetService<CommandService>();
-            if (commandService != null)
+            // Use cached reference; do not resolve services during container disposal
+            if (CommandService != null)
             {
-                commandService.Log -= LogCommandsService;
+                CommandService.Log -= LogCommandsService;
             }
         }
 

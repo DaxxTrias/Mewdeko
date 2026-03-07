@@ -1,9 +1,12 @@
 using System.IO;
 using System.Net;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.ClientModel;
 using System.Threading;
+using System.Runtime.CompilerServices;
 using DataModel;
 
 namespace Mewdeko.Modules.Utility.Services.Impl;
@@ -73,11 +76,13 @@ public class OpenAiClient : IAiClient
 
         var payloadJson = JsonSerializer.Serialize(payload);
 
-        async IAsyncEnumerable<string> StreamWithUsage()
+        var completionUpdates = StreamChatCompletionsAsync(httpClient, apiKey, payloadJson, cancellationToken);
+
+        async IAsyncEnumerable<string> TransformUpdates(IAsyncEnumerable<string> updates)
         {
             int? promptTokens = null, completionTokens = null, totalTokens = null;
             var usageEmitted = false;
-            await foreach (var json in StreamChatCompletionsAsync(httpClient, apiKey, payloadJson, cancellationToken))
+            await foreach (var json in updates.WithCancellation(cancellationToken))
             {
                 if (!string.IsNullOrWhiteSpace(json))
                 {
@@ -106,7 +111,8 @@ public class OpenAiClient : IAiClient
             // If usage was not found, make a non-streaming request to get usage
             if (!usageEmitted)
             {
-                var usage = await FetchOpenAiUsageAsync(openAiMessages.ToList(), model, apiKey, cancellationToken);
+                var usage = await FetchOpenAiUsageAsync(openAiMessages.ToList(), model, apiKey, cancellationToken)
+                    .ConfigureAwait(false);
                 if (usage != null)
                 {
                     promptTokens = usage.Value.PromptTokens;
@@ -129,7 +135,7 @@ public class OpenAiClient : IAiClient
             yield return usageJson;
         }
 
-        return Task.FromResult<IAsyncEnumerable<string>>(StreamWithUsage());
+        return Task.FromResult<IAsyncEnumerable<string>>(TransformUpdates(completionUpdates));
     }
 
     // Helper to fetch usage stats after streaming finishes
@@ -148,11 +154,11 @@ public class OpenAiClient : IAiClient
         };
         request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
 
-        using var response = await httpClient.SendAsync(request, cancellationToken);
+        using var response = await httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
             return null;
 
-        var content = await response.Content.ReadAsStringAsync(cancellationToken);
+        var content = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         using var doc = JsonDocument.Parse(content);
         var root = doc.RootElement;
         if (root.TryGetProperty("usage", out var usageElem))
@@ -172,32 +178,60 @@ public class OpenAiClient : IAiClient
     }
 
     /// <summary>
-    ///     pre-parses the response from OpenAI's chat completions endpoint to filter out non-JSON elements
+    ///     Streams Server-Sent Events from OpenAI's chat completions API and yields only JSON payloads
+    ///     from lines prefixed with "data: ". SSE comments/heartbeats and the terminal "data: [DONE]" are skipped.
     /// </summary>
-    /// <param name="httpClient"></param>
-    /// <param name="request"></param>
-    /// <returns></returns>
-    public static async IAsyncEnumerable<string> StreamChatCompletionsAsync(HttpClient httpClient, string apiKey, string payloadJson, CancellationToken cancellationToken)
+    /// <param name="httpClient">The HTTP client used for the request.</param>
+    /// <param name="apiKey">Bearer token for OpenAI authentication.</param>
+    /// <param name="payloadJson">Serialized request payload for the chat completions endpoint.</param>
+    /// <param name="cancellationToken">Enumerator cancellation token; iteration stops when cancellation is requested.</param>
+    /// <returns>An <see cref="IAsyncEnumerable{T}"/> of JSON strings representing streamed response chunks.</returns>
+    public static async IAsyncEnumerable<string> StreamChatCompletionsAsync(HttpClient httpClient, string apiKey, string payloadJson, [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         const int maxAttempts = 3;
         for (var attempt = 1; attempt <= maxAttempts; attempt++)
         {
             using var request = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/chat/completions");
-            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+            request.Headers.Accept.Clear();
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
             request.Content = new StringContent(payloadJson, Encoding.UTF8, "application/json");
 
-            using var response = await httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+            // HTTP/2 with some proxies/CDNs can cause ResponseEnded on SSE; fall back to HTTP/1.1 for stability
+            request.Version = HttpVersion.Version11;
+            request.VersionPolicy = HttpVersionPolicy.RequestVersionOrLower;
+
+            HttpResponseMessage response;
+            try
+            {
+                response = await httpClient
+                    .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (HttpRequestException ex) when (attempt < maxAttempts)
+            {
+                var backoff = ComputeBackoffWithJitter(attempt, null);
+                Serilog.Log.Warning(ex, "OpenAI request transport error. Retrying in {DelayMs}ms (attempt {Attempt}/{Max}).",
+                    (int)backoff.TotalMilliseconds, attempt, maxAttempts);
+                await Task.Delay(backoff, cancellationToken).ConfigureAwait(false);
+                continue;
+            }
 
             if (response.IsSuccessStatusCode)
             {
-                using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+                using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
                 using var reader = new StreamReader(stream);
 
                 string? line;
                 while ((line = await reader.ReadLineAsync()) != null)
                 {
+                    if (cancellationToken.IsCancellationRequested)
+                        yield break;
                     if (string.IsNullOrWhiteSpace(line))
                         continue;  // skip empty lines (SSE heartbeat or spacing)
+
+                    if (line.StartsWith(":"))
+                        continue; // skip SSE comment lines
 
                     if (line.StartsWith("data: [DONE]"))
                         break;    // end of stream detected – stop iteration
@@ -210,9 +244,6 @@ public class OpenAiClient : IAiClient
                     if (string.IsNullOrWhiteSpace(json))
                         continue;  // skip if nothing after prefix (just in case)
 
-                    // Add debug logging for each chunk received
-                    //Serilog.Log.Information("OpenAI Stream Chunk: {Chunk}", json);
-
                     yield return json;  // yield the clean JSON string for parsing
                 }
                 yield break;
@@ -220,7 +251,7 @@ public class OpenAiClient : IAiClient
 
             // Handle non-success
             var status = response.StatusCode;
-            var content = await response.Content.ReadAsStringAsync(cancellationToken);
+            var content = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
 
             // Try to extract OpenAI error payload
             string? errorCode = null;
@@ -257,7 +288,7 @@ public class OpenAiClient : IAiClient
                 // Backoff with jitter
                 var backoff = ComputeBackoffWithJitter(attempt, retryAfterSeconds);
                 Serilog.Log.Warning("OpenAI 429 received. Backing off {DelayMs}ms (attempt {Attempt}/{Max}). Code={Code}", (int)backoff.TotalMilliseconds, attempt, maxAttempts, errorCode);
-                await Task.Delay(backoff, cancellationToken);
+                await Task.Delay(backoff, cancellationToken).ConfigureAwait(false);
                 continue;
             }
 
@@ -266,6 +297,16 @@ public class OpenAiClient : IAiClient
             {
                 var statusForQuota = status == 0 ? HttpStatusCode.Forbidden : status; // default to 403
                 throw new HttpRequestException(errorMessage ?? "OpenAI insufficient_quota", null, statusForQuota);
+            }
+
+            // 5xx errors – retry with backoff, then fail
+            if ((int)status >= 500 && (int)status <= 599 && attempt < maxAttempts)
+            {
+                var backoff = ComputeBackoffWithJitter(attempt, null);
+                Serilog.Log.Warning("OpenAI {Status} received. Backing off {DelayMs}ms (attempt {Attempt}/{Max}).",
+                    status, (int)backoff.TotalMilliseconds, attempt, maxAttempts);
+                await Task.Delay(backoff, cancellationToken).ConfigureAwait(false);
+                continue;
             }
 
             // Other errors: do not spam stack traces here; throw a concise HttpRequestException with status code

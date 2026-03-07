@@ -23,6 +23,8 @@ addautopublish:
   - addautopublish
   - addautopub
   - aap
+updatetopguilds:
+  - updatetopguilds
 addblacklistedpermission:
   - addblacklistedpermission
   - abp
@@ -246,6 +248,9 @@ autobanrolelist:
 autobanroleremove:
   - autobanroleremove
   - abrr
+autobanrolereason:
+  - autobanrolereason
+  - abreason
 autobanword:
   - autobanword
   - autobanw
@@ -519,6 +524,53 @@ confessionunblacklist:
 config:
   - config
   - conf
+coprmonitoradd:
+  - coprmonitoradd
+  - coprmonadd
+  - copradd
+coprmonitorremove:
+  - coprmonitorremove
+  - coprmonremove
+  - coprremove
+  - coprmonrem
+coprmonitorlist:
+  - coprmonitorlist
+  - coprmonlist
+  - coprlist
+coprmonitortoggle:
+  - coprmonitortoggle
+  - coprmontoggle
+  - coprtoggle
+coprnotify:
+  - coprnotify
+  - coprn
+coprfilter:
+  - coprfilter
+  - coprf
+coprsucceededmessage:
+  - coprsucceededmessage
+  - coprsuccessmsg
+  - coprsuccessmessage
+coprfailedmessage:
+  - coprfailedmessage
+  - coprfailmsg
+  - coprfailmessage
+coprcanceledmessage:
+  - coprcanceledmessage
+  - coprcancelmsg
+  - coprcancelmessage
+coprpendingmessage:
+  - coprpendingmessage
+  - coprpendmsg
+coprrunningmessage:
+  - coprrunningmessage
+  - coprrunmsg
+coprskippedmessage:
+  - coprskippedmessage
+  - coprskipmsg
+coprdefaultmessage:
+  - coprdefaultmessage
+  - coprdefmsg
 consider:
   - consider
   - suggestconsider
@@ -777,6 +829,9 @@ ctsclear:
   - ctsclear
 ctsexport:
   - ctsexport
+ctsmigrate:
+  - ctsmigrate
+  - ctsconvert
 ctsimport:
   - ctsimport
 ctsreload:
@@ -1979,6 +2034,11 @@ repeatthreadonly:
   - repeatthreadonly
   - repthreadonly
   - reptonly
+repeatsuppressnotifications:
+  - repeatsuppressnotifications
+  - repsuppressnotif
+  - repsilent
+  - repsuppress
 repeattoggle:
   - repeattoggle
   - reptoggle
@@ -2055,6 +2115,14 @@ repreactionremove:
 represet:
   - represet
   - resetrep
+restartallinstances:
+  - restartallinstances
+  - restartall
+  - rai
+restartinstance:
+  - restartinstance
+  - restartins
+  - ri
 reprole:
   - reprole
 reprolechannel:
@@ -2219,6 +2287,7 @@ rsar:
   - rsar
 rsstest:
   - rsstest
+  - feedtest
 rtt:
   - rtt
   - reactottrigger
@@ -2973,6 +3042,10 @@ togglerolestatesclearonban:
 togglerolestatesignorebots:
   - togglerolestatesignorebots
   - trsib
+togglerolestatesskipautoassign:
+  - togglerolestatesskipautoassign
+  - trssaa
+  - rsskipautoassign
 togglexclsar:
   - togglexclsar
   - tesar
@@ -3045,6 +3118,14 @@ untimeout:
 update:
   - update
   - upd
+updateallinstances:
+  - updateallinstances
+  - updateall
+  - uai
+updateinstance:
+  - updateinstance
+  - updateins
+  - ui
 urbandict:
   - urbandict
   - ud

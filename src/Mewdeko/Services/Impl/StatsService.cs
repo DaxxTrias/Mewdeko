@@ -1,10 +1,11 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Net.Http;
-using System.Net.Http.Headers;
+using System.Net.Http.Json;
 using System.Reflection;
 using System.Threading;
 using Humanizer;
+using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Modules.Utility.Services;
 using Swan.Formatters;
 
@@ -13,12 +14,17 @@ namespace Mewdeko.Services.Impl;
 /// <summary>
 ///     Service for collecting and posting statistics about the bot.
 /// </summary>
-public class StatsService : IStatsService, IDisposable
+public class StatsService : IStatsService, IDisposable, IReadyExecutor
 {
     /// <summary>
     ///     The version of the bot. I should make this set from commits somehow idk
     /// </summary>
-    public const string BotVersion = "7.8.13";
+    public const string BotVersion = "7.8.19";
+
+    private static readonly string[] function = new[]
+    {
+        "botlist", "bots", "xhamster", "nsfw", "18+"
+    };
 
     private readonly IDataCache cache;
     private readonly DiscordShardedClient client;
@@ -51,8 +57,7 @@ public class StatsService : IStatsService, IDisposable
         started = DateTime.UtcNow;
 
             _ = PostToTopGg();
-            _ = OnReadyAsync();
-        }
+            }
 
     /// <summary>
     /// Gets the version of the Discord.Net library.
@@ -161,17 +166,27 @@ public class StatsService : IStatsService, IDisposable
             {
                 try
                 {
+                    IDiscordClient cl = client;
                     logger.LogInformation("Updating top guilds");
-                    var guilds = await client.Rest.GetGuildsAsync(true);
-                    var servers = guilds.OrderByDescending(x => x.ApproximateMemberCount.Value)
-                        .Where(x => !x.Name.Contains("botlist", StringComparison.CurrentCultureIgnoreCase)).Take(11)
-                        .Select(x =>
-                            new MewdekoPartialGuild
-                            {
-                                IconUrl = x.IconId.StartsWith("a_") ? x.IconUrl.Replace(".jpg", ".gif") : x.IconUrl,
-                                MemberCount = x.ApproximateMemberCount.Value,
-                                Name = x.Name
-                            });
+                    var guilds = (await cl.GetGuildsAsync().ConfigureAwait(false))
+                        .Cast<SocketGuild>();
+
+                    var excludedTerms = function;
+                    const ulong excludedId = 374071874222686211;
+
+                    var servers = guilds
+                        .Where(x => x.Id != excludedId &&
+                                    !excludedTerms.Any(term =>
+                                        x.Name.Contains(term, StringComparison.OrdinalIgnoreCase)))
+                        .OrderByDescending(x => x.MemberCount)
+                        .Take(11)
+                        .Select(x => new MewdekoPartialGuild
+                        {
+                            IconUrl = x.IconId.StartsWith("a_") ? x.IconUrl.Replace(".jpg", ".gif") : x.IconUrl,
+                            MemberCount = x.MemberCount,
+                            Name = x.Name
+                        })
+                        .ToList();
 
                     var serialied = Json.Serialize(servers);
                     await cache.Redis.GetDatabase().StringSetAsync($"{client.CurrentUser.Id}_topguilds", serialied)
@@ -197,28 +212,26 @@ public class StatsService : IStatsService, IDisposable
     {
         if (string.IsNullOrEmpty(creds.VotesToken)) return;
 
-        topGgTimer = new PeriodicTimer(TimeSpan.FromSeconds(10));
+        topGgTimer = new PeriodicTimer(TimeSpan.FromMinutes(30));
 
         while (await topGgTimer.WaitForNextTickAsync().ConfigureAwait(false))
         {
-            var content = new FormUrlEncodedContent(new Dictionary<string, string>
+            IDiscordClient cl = client;
+            var guilds = await cl.GetGuildsAsync();
+            var content = JsonContent.Create(new
             {
-                {
-                    "shard_count", creds.TotalShards.ToString()
-                },
-                {
-                    "server_count", client.Guilds.Count.ToString()
-                }
+                shard_count = creds.TotalShards, server_count = guilds.Count
             });
 
-            http.DefaultRequestHeaders.Authorization =
-                new AuthenticationHeaderValue("Authorization", creds.VotesToken);
+            http.DefaultRequestHeaders.Remove("Authorization");
+            http.DefaultRequestHeaders.Add("Authorization", creds.VotesToken);
             var response = await http
                 .PostAsync(new Uri($"https://top.gg/api/bots/{client.CurrentUser.Id}/stats"), content)
                 .ConfigureAwait(false);
 
             if (response.IsSuccessStatusCode) continue;
-            logger.LogError("Failed to post stats to Top.gg");
+            logger.LogError("Failed to post stats to Top.gg: {0} {1} {2}", response.ReasonPhrase, response.StatusCode,
+                response.Content);
             return;
         }
     }
@@ -226,7 +239,7 @@ public class StatsService : IStatsService, IDisposable
     /// <summary>
     ///     Represents a partial guild information.
     /// </summary>
-    private class MewdekoPartialGuild
+    public class MewdekoPartialGuild
     {
         /// <summary>
         ///     Gets or sets the name of the guild.

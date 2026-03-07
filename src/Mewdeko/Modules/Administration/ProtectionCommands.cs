@@ -3,6 +3,9 @@ using Humanizer;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Common.TypeReaders.Models;
 using Mewdeko.Modules.Administration.Common;
+using LinqToDB;
+using LinqToDB.Async;
+using DataModel;
 using Mewdeko.Modules.Administration.Services;
 
 namespace Mewdeko.Modules.Administration;
@@ -13,7 +16,7 @@ public partial class Administration
     ///     Commands for managing the Anti-Alt, Anti-Raid, and Anti-Spam protection settings.
     /// </summary>
     [Group]
-    public class ProtectionCommands : MewdekoSubmodule<ProtectionService>
+    public class ProtectionCommands(IDataConnectionFactory dbFactory) : MewdekoSubmodule<ProtectionService>
     {
         /// <summary>
         ///     Disables the Anti-Alt protection for the guild.
@@ -485,9 +488,10 @@ public partial class Administration
         /// </remarks>
         public async Task AntiList()
         {
-            var (spam, raid, alt, massMention, pattern) = Service.GetAntiStats(ctx.Guild.Id);
+            var (spam, raid, alt, massMention, pattern, massPost, postChannel) = Service.GetAntiStats(ctx.Guild.Id);
 
-            if (spam is null && raid is null && alt is null && massMention is null && pattern is null)
+            if (spam is null && raid is null && alt is null && massMention is null && pattern is null &&
+                massPost is null && postChannel is null)
             {
                 await ReplyConfirmAsync(Strings.ProtNone(ctx.Guild.Id)).ConfigureAwait(false);
                 return;
@@ -521,6 +525,16 @@ public partial class Administration
             if (pattern != null)
             {
                 embed.AddField("Anti-Pattern", GetAntiPatternString(pattern).TrimTo(1024), true);
+            }
+
+            if (massPost != null)
+            {
+                embed.AddField("Anti-Mass-Post", GetAntiMassPostString(massPost).TrimTo(1024), true);
+            }
+
+            if (postChannel != null)
+            {
+                embed.AddField("Anti-Post-Channel", GetAntiPostChannelString(postChannel).TrimTo(1024), true);
             }
 
             await ctx.Channel.EmbedAsync(embed).ConfigureAwait(false);
@@ -568,9 +582,12 @@ public partial class Administration
             var add = "";
             if (settings.MuteTime > 0) add = $" ({TimeSpan.FromMinutes(settings.MuteTime).Humanize()})";
 
+            var actionEnum = ((PunishmentAction)settings.Action).ToString();
+            var actionDisplay = $"{settings.Action} ({actionEnum}){add}";
+
             return Strings.SpamStats(ctx.Guild.Id,
                 Format.Bold(settings.MessageThreshold.ToString()),
-                Format.Bold(settings.Action + add),
+                Format.Bold(actionDisplay),
                 ignoredString);
         }
 
@@ -601,6 +618,72 @@ public partial class Administration
                 Format.Bold(settings.Action + add),
                 Format.Bold(patternCount.ToString()),
                 Format.Bold(stats.Counter.ToString()));
+        }
+
+        /// <summary>
+        ///     Adds a user to the protection ignore list so anti-spam rules will skip them.
+        /// </summary>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.Administrator)]
+        public async Task ProtIgnoreAdd(IGuildUser user, [Remainder] string? note = null)
+        {
+            await using var db = await dbFactory.CreateConnectionAsync();
+            var exists = await db.GetTable<DataModel.ProtectionIgnoredUser>()
+                .AnyAsync(x => x.GuildId == ctx.Guild.Id && x.UserId == user.Id);
+            if (!exists)
+            {
+                await db.InsertAsync(new DataModel.ProtectionIgnoredUser
+                {
+                    GuildId = ctx.Guild.Id,
+                    UserId = user.Id,
+                    DateAdded = DateTime.UtcNow,
+                    Note = note
+                });
+            }
+
+            await ReplyConfirmAsync($"Added {user.Mention} to protection ignore list.");
+        }
+
+        /// <summary>
+        ///     Removes a user from the protection ignore list.
+        /// </summary>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.Administrator)]
+        public async Task ProtIgnoreRemove(IGuildUser user)
+        {
+            await using var db = await dbFactory.CreateConnectionAsync();
+            await db.GetTable<DataModel.ProtectionIgnoredUser>()
+                .Where(x => x.GuildId == ctx.Guild.Id && x.UserId == user.Id)
+                .DeleteAsync();
+            await ReplyConfirmAsync($"Removed {user.Mention} from protection ignore list.");
+        }
+
+        /// <summary>
+        ///     Lists users on the protection ignore list.
+        /// </summary>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.Administrator)]
+        public async Task ProtIgnoreList()
+        {
+            await using var db = await dbFactory.CreateConnectionAsync();
+            var list = await db.GetTable<DataModel.ProtectionIgnoredUser>()
+                .Where(x => x.GuildId == ctx.Guild.Id)
+                .ToListAsync();
+
+            if (list.Count == 0)
+            {
+                await ReplyConfirmAsync("Protection ignore list is empty.");
+                return;
+            }
+
+            var lines = list.Select(x => $"<@{x.UserId}> {(string.IsNullOrWhiteSpace(x.Note) ? string.Empty : $"- {x.Note}")}");
+            await ReplyConfirmAsync(string.Join("\n", lines));
         }
 
         /// <summary>
@@ -760,7 +843,7 @@ public partial class Administration
         [UserPerm(GuildPermission.Administrator)]
         public async Task PatternList()
         {
-            var (_, _, _, _, patternStats) = Service.GetAntiStats(ctx.Guild.Id);
+            var (_, _, _, _, patternStats, _, _) = Service.GetAntiStats(ctx.Guild.Id);
 
             if (patternStats == null)
             {
@@ -811,7 +894,7 @@ public partial class Administration
         [UserPerm(GuildPermission.Administrator)]
         public async Task PatternConfig(string setting, string value)
         {
-            var (_, _, _, _, patternStats) = Service.GetAntiStats(ctx.Guild.Id);
+            var (_, _, _, _, patternStats, _, _) = Service.GetAntiStats(ctx.Guild.Id);
 
             if (patternStats == null)
             {
@@ -923,7 +1006,7 @@ public partial class Administration
         [UserPerm(GuildPermission.Administrator)]
         public async Task PatternConfig()
         {
-            var (_, _, _, _, patternStats) = Service.GetAntiStats(ctx.Guild.Id);
+            var (_, _, _, _, patternStats, _, _) = Service.GetAntiStats(ctx.Guild.Id);
 
             if (patternStats == null)
             {
@@ -950,6 +1033,230 @@ public partial class Administration
                     true);
 
             await ctx.Channel.EmbedAsync(embed).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        ///     Builds the string for the Anti-Mass-Post settings display.
+        /// </summary>
+        private string GetAntiMassPostString(AntiMassPostStats stats)
+        {
+            var settings = stats.AntiMassPostSettings;
+            var add = "";
+            if (settings.PunishDuration > 0)
+                add = $" ({TimeSpan.FromMinutes(settings.PunishDuration).Humanize()})";
+
+            return Strings.AntiMassPostStats(ctx.Guild.Id,
+                Format.Bold(settings.Action.ToString()),
+                add,
+                Format.Bold(settings.ChannelThreshold.ToString()),
+                Format.Bold(settings.TimeWindowSeconds.ToString()),
+                Format.Bold(settings.CheckLinksOnly.ToString()),
+                Format.Bold(stats.Counter.ToString()));
+        }
+
+        /// <summary>
+        ///     Builds the string for the Anti-Post-Channel settings display.
+        /// </summary>
+        private string GetAntiPostChannelString(AntiPostChannelStats stats)
+        {
+            var settings = stats.AntiPostChannelSettings;
+            var add = "";
+            if (settings.PunishDuration > 0)
+                add = $" ({TimeSpan.FromMinutes(settings.PunishDuration).Humanize()})";
+
+            var channelCount = settings.AntiPostChannelChannels?.Count() ?? 0;
+            return Strings.AntiPostChannelStats(ctx.Guild.Id,
+                Format.Bold(settings.Action.ToString()),
+                add,
+                Format.Bold(channelCount.ToString()),
+                Format.Bold(stats.Counter.ToString()));
+        }
+
+        /// <summary>
+        ///     Disables the Anti-Mass-Post protection for the guild.
+        /// </summary>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.Administrator)]
+        public async Task AntiMassPost()
+        {
+            if (await Service.TryStopAntiMassPost(ctx.Guild.Id).ConfigureAwait(false))
+            {
+                await ReplyConfirmAsync(Strings.AntiMassPostDisabled(ctx.Guild.Id)).ConfigureAwait(false);
+                return;
+            }
+
+            await ReplyErrorAsync(Strings.AntiMassPostNotEnabled(ctx.Guild.Id)).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        ///     Configures the Anti-Mass-Post protection for the guild.
+        /// </summary>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.Administrator)]
+        public async Task AntiMassPost(int channelThreshold, int seconds, PunishmentAction action,
+            [Remainder] StoopidTime? punishTime = null)
+        {
+            if (channelThreshold is < 2 or > 20)
+            {
+                await ReplyErrorAsync("Channel threshold must be between 2 and 20.").ConfigureAwait(false);
+                return;
+            }
+
+            if (seconds is < 10 or > 600)
+            {
+                await ReplyErrorAsync("Time window must be between 10 and 600 seconds.").ConfigureAwait(false);
+                return;
+            }
+
+            var punishDuration = (int?)punishTime?.Time.TotalMinutes ?? 0;
+
+            switch (action)
+            {
+                case PunishmentAction.Timeout when punishTime?.Time.Days > 28:
+                    await ReplyErrorAsync(Strings.TimeoutLengthTooLong(ctx.Guild.Id)).ConfigureAwait(false);
+                    return;
+                case PunishmentAction.Timeout when punishTime?.Time == TimeSpan.Zero:
+                    await ReplyErrorAsync(Strings.TimeoutNeedsTime(ctx.Guild.Id)).ConfigureAwait(false);
+                    return;
+            }
+
+            var result = await Service.StartAntiMassPostAsync(
+                ctx.Guild.Id,
+                channelThreshold,
+                seconds,
+                0.8, // contentSimilarityThreshold
+                20, // minContentLength
+                true, // checkLinksOnly
+                true, // checkDuplicateContent
+                false, // requireIdenticalContent
+                false, // caseSensitive
+                true, // deleteMessages
+                true, // notifyUser
+                action,
+                punishDuration,
+                null, // roleId
+                true, // ignoreBots
+                50 // maxMessagesTracked
+            ).ConfigureAwait(false);
+
+            if (result != null)
+            {
+                var durationText = punishDuration > 0 ? $" for {TimeSpan.FromMinutes(punishDuration).Humanize()}" : "";
+                await ReplyConfirmAsync(
+                    Strings.AntiMassPostEnabled(ctx.Guild.Id, channelThreshold, seconds, action.ToString(),
+                        durationText)
+                ).ConfigureAwait(false);
+            }
+            else
+            {
+                await ReplyErrorAsync(Strings.AntiMassPostFailedStart(ctx.Guild.Id)).ConfigureAwait(false);
+            }
+        }
+
+        /// <summary>
+        ///     Disables the Anti-Post-Channel protection for the guild.
+        /// </summary>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.Administrator)]
+        public async Task AntiPostChannel()
+        {
+            if (await Service.TryStopAntiPostChannel(ctx.Guild.Id).ConfigureAwait(false))
+            {
+                await ReplyConfirmAsync(Strings.AntiPostChannelDisabled(ctx.Guild.Id)).ConfigureAwait(false);
+                return;
+            }
+
+            await ReplyErrorAsync(Strings.AntiPostChannelNotEnabled(ctx.Guild.Id)).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        ///     Configures the Anti-Post-Channel protection for the guild.
+        /// </summary>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.Administrator)]
+        public async Task AntiPostChannel(PunishmentAction action, [Remainder] StoopidTime? punishTime = null)
+        {
+            var punishDuration = (int?)punishTime?.Time.TotalMinutes ?? 0;
+
+            switch (action)
+            {
+                case PunishmentAction.Timeout when punishTime?.Time.Days > 28:
+                    await ReplyErrorAsync(Strings.TimeoutLengthTooLong(ctx.Guild.Id)).ConfigureAwait(false);
+                    return;
+                case PunishmentAction.Timeout when punishTime?.Time == TimeSpan.Zero:
+                    await ReplyErrorAsync(Strings.TimeoutNeedsTime(ctx.Guild.Id)).ConfigureAwait(false);
+                    return;
+            }
+
+            var result = await Service.StartAntiPostChannelAsync(
+                ctx.Guild.Id,
+                action,
+                punishDuration,
+                null, // roleId
+                true, // deleteMessages
+                true, // notifyUser
+                true // ignoreBots
+            ).ConfigureAwait(false);
+
+            if (result != null)
+            {
+                var durationText = punishDuration > 0 ? $" for {TimeSpan.FromMinutes(punishDuration).Humanize()}" : "";
+                await ReplyConfirmAsync(
+                    Strings.AntiPostChannelEnabled(ctx.Guild.Id, action.ToString(), durationText)
+                ).ConfigureAwait(false);
+            }
+            else
+            {
+                await ReplyErrorAsync(Strings.AntiPostChannelFailedStart(ctx.Guild.Id)).ConfigureAwait(false);
+            }
+        }
+
+        /// <summary>
+        ///     Adds a honeypot channel to the Anti-Post-Channel protection.
+        /// </summary>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.Administrator)]
+        public async Task AntiPostChannelAdd(ITextChannel channel)
+        {
+            if (await Service.AddAntiPostChannelAsync(ctx.Guild.Id, channel.Id).ConfigureAwait(false))
+            {
+                await ReplyConfirmAsync(Strings.AntiPostChannelAdded(ctx.Guild.Id, channel.Mention))
+                    .ConfigureAwait(false);
+            }
+            else
+            {
+                await ReplyErrorAsync(Strings.AntiPostChannelAddFailed(ctx.Guild.Id)).ConfigureAwait(false);
+            }
+        }
+
+        /// <summary>
+        ///     Removes a honeypot channel from the Anti-Post-Channel protection.
+        /// </summary>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.Administrator)]
+        public async Task AntiPostChannelRemove(ITextChannel channel)
+        {
+            if (await Service.RemoveAntiPostChannelAsync(ctx.Guild.Id, channel.Id).ConfigureAwait(false))
+            {
+                await ReplyConfirmAsync(Strings.AntiPostChannelRemoved(ctx.Guild.Id, channel.Mention))
+                    .ConfigureAwait(false);
+            }
+            else
+            {
+                await ReplyErrorAsync(Strings.AntiPostChannelRemoveFailed(ctx.Guild.Id)).ConfigureAwait(false);
+            }
         }
     }
 }

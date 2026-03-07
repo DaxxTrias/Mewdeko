@@ -92,7 +92,7 @@ public static class LogSetup
             .MinimumLevel.Information()
             .MinimumLevel.Override("Microsoft", LogEventLevel.Error)
             .MinimumLevel.Override("System", LogEventLevel.Error)
-            .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Error)
+            .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Debug)
 
             // Database specific logging
             .MinimumLevel.Override("Microsoft.EntityFrameworkCore", LogEventLevel.Error)
@@ -120,7 +120,6 @@ public static class LogSetup
         {
             loggerConfiguration.WriteTo.Sentry(o =>
             {
-                o.Debug = true;
                 o.Dsn = sentryDsn;
                 o.MinimumBreadcrumbLevel = LogEventLevel.Debug;
                 o.MinimumEventLevel = LogEventLevel.Error;
