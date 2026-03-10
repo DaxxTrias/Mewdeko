@@ -1,4 +1,4 @@
-﻿namespace Mewdeko.Modules.Utility.Common;
+namespace Mewdeko.Modules.Utility.Common;
 
 /// <summary>
 ///     Stores information for a deleted message snipe, including the message, user, and channel details.
@@ -36,6 +36,11 @@ public class SnipeStore
     public string Message { get; set; }
 
     /// <summary>
+    ///     Gets or sets the attachment metadata captured from the sniped message.
+    /// </summary>
+    public List<SnipeAttachmentStore>? Attachments { get; set; }
+
+    /// <summary>
     ///     Gets or sets the content of the reference message, if any.
     /// </summary>
     public string ReferenceMessage { get; set; }
@@ -54,4 +59,25 @@ public class SnipeStore
     ///     Gets or sets the date and time when the message was added to the snipe store.
     /// </summary>
     public DateTime DateAdded { get; set; }
+}
+
+/// <summary>
+///     Represents an attachment captured for a sniped message.
+/// </summary>
+public class SnipeAttachmentStore
+{
+    /// <summary>
+    ///     Gets or sets the attachment filename.
+    /// </summary>
+    public string? Filename { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the direct attachment URL.
+    /// </summary>
+    public string? Url { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the proxy URL for the attachment.
+    /// </summary>
+    public string? ProxyUrl { get; set; }
 }

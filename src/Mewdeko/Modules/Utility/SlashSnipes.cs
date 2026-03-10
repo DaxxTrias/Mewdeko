@@ -1,4 +1,6 @@
 using System.IO;
+using System.Text;
+using System.Text.Json;
 using Discord.Interactions;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
@@ -58,6 +60,7 @@ public partial class Utility
 
             user = await ctx.Channel.GetUserAsync(msg.UserId).ConfigureAwait(false) ??
                    await client.Rest.GetUserAsync(msg.UserId).ConfigureAwait(false);
+            var attachments = GetAttachments(msg);
 
             var em = new EmbedBuilder
             {
@@ -65,7 +68,7 @@ public partial class Utility
                 {
                     IconUrl = user.GetAvatarUrl(), Name = $"{user} said:"
                 },
-                Description = msg.Message,
+                Description = GetDisplayMessage(msg, attachments),
                 Footer = new EmbedFooterBuilder
                 {
                     IconUrl = ctx.User.GetAvatarUrl(),
@@ -81,6 +84,7 @@ public partial class Utility
                 em.AddField("Replied To", msg.ReferenceMessage);
 
             em.AddField("Sent", TimestampTag.FromDateTimeOffset(msg.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
+            AddAttachmentsField(em, attachments);
 
             if (!string.IsNullOrEmpty(msg.JsonData))
             {
@@ -147,6 +151,7 @@ public partial class Utility
 
             user = await ctx.Channel.GetUserAsync(msg.UserId).ConfigureAwait(false) ??
                    await client.Rest.GetUserAsync(msg.UserId).ConfigureAwait(false);
+            var attachments = GetAttachments(msg);
 
             var em = new EmbedBuilder
             {
@@ -154,7 +159,7 @@ public partial class Utility
                 {
                     IconUrl = user.GetAvatarUrl(), Name = $"{user} originally said:"
                 },
-                Description = msg.Message,
+                Description = GetDisplayMessage(msg, attachments),
                 Footer = new EmbedFooterBuilder
                 {
                     IconUrl = ctx.User.GetAvatarUrl(),
@@ -170,6 +175,7 @@ public partial class Utility
                 em.AddField("Replied To", msg.ReferenceMessage);
 
             em.AddField("Sent", TimestampTag.FromDateTimeOffset(msg.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
+            AddAttachmentsField(em, attachments);
 
             if (!string.IsNullOrEmpty(msg.JsonData))
             {
@@ -244,12 +250,13 @@ public partial class Utility
                 var msg1 = msg.Skip(page).FirstOrDefault();
                 var user = await ctx.Channel.GetUserAsync(msg1.UserId).ConfigureAwait(false)
                            ?? await client.Rest.GetUserAsync(msg1.UserId).ConfigureAwait(false);
+                var attachments = GetAttachments(msg1);
 
                 var builder = new PageBuilder().WithOkColor()
                     .WithAuthor(new EmbedAuthorBuilder()
                         .WithIconUrl(user.RealAvatarUrl().AbsoluteUri)
                         .WithName($"{user} {(edited ? "originally said" : "said")}:"))
-                    .WithDescription(msg1.Message)
+                    .WithDescription(GetDisplayMessage(msg1, attachments))
                     .WithFooter($"Message {(edited ? "edited" : "deleted")} {(DateTime.UtcNow - msg1.DateAdded).Humanize()} ago")
                     .WithTimestamp(msg1.MessageTimestamp);
 
@@ -257,6 +264,7 @@ public partial class Utility
                     builder.AddField("Replied To", msg1.ReferenceMessage);
 
                 builder.AddField("Sent", TimestampTag.FromDateTimeOffset(msg1.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
+                AddAttachmentsField(builder, attachments);
 
                 return builder;
             }
@@ -308,6 +316,100 @@ public partial class Utility
             await Service.SnipeSet(ctx.Guild, enabled).ConfigureAwait(false);
             var t = await Service.GetSnipeSet(ctx.Guild.Id);
             await ReplyConfirmAsync(Strings.SnipeSet(ctx.Guild.Id, t ? "Enabled" : "Disabled")).ConfigureAwait(false);
+        }
+
+        private static string GetDisplayMessage(SnipeStore message, IReadOnlyList<SnipeAttachmentStore> attachments)
+        {
+            if (!string.IsNullOrWhiteSpace(message.Message))
+                return message.Message;
+
+            return attachments.Count > 0
+                ? "[Attachment-only message]"
+                : "[No text content]";
+        }
+
+        private static IReadOnlyList<SnipeAttachmentStore> GetAttachments(SnipeStore message)
+        {
+            if (message.Attachments is { Count: > 0 })
+                return message.Attachments;
+
+            if (string.IsNullOrWhiteSpace(message.JsonData))
+                return [];
+
+            try
+            {
+                var messageData = JsonSerializer.Deserialize<SnipeMessageData>(message.JsonData);
+                if (messageData?.Attachments is not { Count: > 0 })
+                    return [];
+
+                return messageData.Attachments
+                    .Select(x => new SnipeAttachmentStore
+                    {
+                        Filename = x.Filename,
+                        Url = x.Url,
+                        ProxyUrl = x.ProxyUrl
+                    }).ToList();
+            }
+            catch
+            {
+                return [];
+            }
+        }
+
+        private static void AddAttachmentsField(EmbedBuilder embed, IReadOnlyList<SnipeAttachmentStore> attachments)
+        {
+            var value = BuildAttachmentsFieldValue(attachments);
+            if (!string.IsNullOrWhiteSpace(value))
+                embed.AddField("Attachments", value);
+        }
+
+        private static void AddAttachmentsField(PageBuilder embed, IReadOnlyList<SnipeAttachmentStore> attachments)
+        {
+            var value = BuildAttachmentsFieldValue(attachments);
+            if (!string.IsNullOrWhiteSpace(value))
+                embed.AddField("Attachments", value);
+        }
+
+        private static string? BuildAttachmentsFieldValue(IReadOnlyList<SnipeAttachmentStore> attachments)
+        {
+            if (attachments.Count == 0)
+                return null;
+
+            var sb = new StringBuilder();
+            var added = 0;
+            for (var i = 0; i < attachments.Count; i++)
+            {
+                var attachment = attachments[i];
+                var url = attachment.Url ?? attachment.ProxyUrl;
+                if (string.IsNullOrWhiteSpace(url))
+                    continue;
+
+                var fileName = string.IsNullOrWhiteSpace(attachment.Filename)
+                    ? $"attachment-{i + 1}"
+                    : attachment.Filename;
+                var line = $"[{fileName}]({url})";
+
+                if (sb.Length > 0)
+                    line = $"\n{line}";
+
+                if (sb.Length + line.Length > 1024)
+                    break;
+
+                sb.Append(line);
+                added++;
+            }
+
+            if (added == 0)
+                return "Attachment metadata was captured, but no URL is available.";
+
+            if (attachments.Count > added)
+            {
+                var suffix = $"\n...and {attachments.Count - added} more.";
+                if (sb.Length + suffix.Length <= 1024)
+                    sb.Append(suffix);
+            }
+
+            return sb.ToString();
         }
     }
 }
