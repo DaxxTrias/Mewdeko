@@ -36,6 +36,10 @@ public sealed class BotConfig
         RedirectUrl = "https://";
         YoutubeSupport = true;
         QuarantineNotification = true;
+        // Leave empty so runtime can derive sane defaults from UpdateBranch
+        // (prod/public => !frog/.frog, nightly/dev => #frog/,frog).
+        AiChatPrefixes = [];
+        AiDeleteSessionTriggers = [];
         UpdateBranch = "null";
         CheckForUpdates = UpdateCheckType.None;
     }
@@ -230,6 +234,18 @@ public sealed class BotConfig
     [Comment(
         "Notify the owner of the bot when the bot gets quarantined. Only dms first owner if ForwardMessages is enabled.")]
     public bool QuarantineNotification { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the message prefixes that trigger AI chat responses.
+    /// </summary>
+    [Comment("Message prefixes that trigger AI chat. Include trailing space where appropriate.")]
+    public List<string> AiChatPrefixes { get; set; }
+
+    /// <summary>
+    ///     Gets or sets trigger messages that clear the AI conversation session.
+    /// </summary>
+    [Comment("Exact trigger messages that clear AI conversation session state.")]
+    public List<string> AiDeleteSessionTriggers { get; set; }
 }
 
 /// <summary>

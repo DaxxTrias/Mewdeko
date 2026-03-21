@@ -60,6 +60,19 @@ public class AiService : INService
     private readonly TimeSpan modelCacheExpiry = TimeSpan.FromHours(24);
     private readonly IServiceProvider serviceProvider;
     private readonly GeneratedBotStrings strings;
+    private static readonly Dictionary<string, AiProvider> ProviderAliases = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["openai"] = AiProvider.OpenAi,
+        ["open-ai"] = AiProvider.OpenAi,
+        ["gpt"] = AiProvider.OpenAi,
+        ["chatgpt"] = AiProvider.OpenAi,
+        ["grok"] = AiProvider.Grok,
+        ["xai"] = AiProvider.Grok,
+        ["grokai"] = AiProvider.Grok,
+        ["groq"] = AiProvider.Groq,
+        ["claude"] = AiProvider.Claude,
+        ["anthropic"] = AiProvider.Claude
+    };
     private string currentToolId;
     private string currentToolInput = "";
 
@@ -125,6 +138,186 @@ public class AiService : INService
     }
 
     /// <summary>
+    ///     Gets all linked AI providers for a guild.
+    /// </summary>
+    public async Task<List<GuildAiProviderLink>> GetProviderLinks(ulong guildId)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+        return await db.GuildAiProviderLinks
+            .Where(x => x.GuildId == guildId)
+            .ToListAsync();
+    }
+
+    /// <summary>
+    ///     Gets a specific provider link for a guild.
+    /// </summary>
+    public async Task<GuildAiProviderLink?> GetProviderLink(ulong guildId, AiProvider provider)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+        return await db.GuildAiProviderLinks
+            .FirstOrDefaultAsync(x => x.GuildId == guildId && x.Provider == (int)provider);
+    }
+
+    /// <summary>
+    ///     Sets or updates the API key for a specific provider.
+    /// </summary>
+    public async Task SetProviderApiKey(ulong guildId, AiProvider provider, string apiKey)
+    {
+        if (string.IsNullOrWhiteSpace(apiKey))
+            throw new ArgumentException("API key cannot be empty.", nameof(apiKey));
+
+        await using var db = await dbFactory.CreateConnectionAsync();
+        var now = DateTime.UtcNow;
+        var normalizedKey = apiKey.Trim();
+        var existing = await db.GuildAiProviderLinks
+            .FirstOrDefaultAsync(x => x.GuildId == guildId && x.Provider == (int)provider);
+
+        if (existing is null)
+        {
+            var hasDefault = await db.GuildAiProviderLinks
+                .AnyAsync(x => x.GuildId == guildId && x.IsDefault);
+
+            await db.InsertAsync(new GuildAiProviderLink
+            {
+                GuildId = guildId,
+                Provider = (int)provider,
+                ApiKey = normalizedKey,
+                IsEnabled = true,
+                IsDefault = !hasDefault,
+                DateAdded = now,
+                DateUpdated = now
+            });
+        }
+        else
+        {
+            existing.ApiKey = normalizedKey;
+            existing.IsEnabled = true;
+            existing.DateUpdated = now;
+            await db.UpdateAsync(existing);
+        }
+
+        // Keep legacy single-provider fields synchronized for compatibility.
+        var config = await db.GuildAiConfigs.FirstOrDefaultAsync(x => x.GuildId == guildId);
+        if (config is null)
+            return;
+
+        if (config.Provider == (int)provider || string.IsNullOrWhiteSpace(config.ApiKey))
+        {
+            config.Provider = (int)provider;
+            config.ApiKey = normalizedKey;
+            await db.UpdateAsync(config);
+        }
+    }
+
+    /// <summary>
+    ///     Sets or updates the default model for a specific provider.
+    /// </summary>
+    public async Task<bool> SetProviderModel(ulong guildId, AiProvider provider, string model)
+    {
+        if (string.IsNullOrWhiteSpace(model))
+            return false;
+
+        await using var db = await dbFactory.CreateConnectionAsync();
+        var existing = await db.GuildAiProviderLinks
+            .FirstOrDefaultAsync(x => x.GuildId == guildId && x.Provider == (int)provider);
+
+        if (existing is null)
+        {
+            var legacy = await db.GuildAiConfigs.FirstOrDefaultAsync(x => x.GuildId == guildId);
+            if (legacy is null || legacy.Provider != (int)provider || string.IsNullOrWhiteSpace(legacy.ApiKey))
+                return false;
+
+            var hasDefault = await db.GuildAiProviderLinks
+                .AnyAsync(x => x.GuildId == guildId && x.IsDefault);
+
+            existing = new GuildAiProviderLink
+            {
+                GuildId = guildId,
+                Provider = (int)provider,
+                ApiKey = legacy.ApiKey!,
+                IsEnabled = true,
+                IsDefault = !hasDefault,
+                DateAdded = DateTime.UtcNow,
+                DateUpdated = DateTime.UtcNow
+            };
+
+            await db.InsertAsync(existing);
+
+            existing = await db.GuildAiProviderLinks
+                .FirstOrDefaultAsync(x => x.GuildId == guildId && x.Provider == (int)provider);
+            if (existing is null)
+                return false;
+        }
+
+        existing.DefaultModel = model;
+        existing.DateUpdated = DateTime.UtcNow;
+        await db.UpdateAsync(existing);
+
+        // Keep legacy single-provider fields synchronized for compatibility.
+        var config = await db.GuildAiConfigs.FirstOrDefaultAsync(x => x.GuildId == guildId);
+        if (config is not null && config.Provider == (int)provider)
+        {
+            config.Model = model;
+            await db.UpdateAsync(config);
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    ///     Sets the default provider for a guild.
+    /// </summary>
+    public async Task<bool> SetDefaultProvider(ulong guildId, AiProvider provider)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+        var links = await db.GuildAiProviderLinks
+            .Where(x => x.GuildId == guildId)
+            .ToListAsync();
+
+        var target = links.FirstOrDefault(x => x.Provider == (int)provider);
+        if (target is null)
+            return false;
+
+        foreach (var link in links)
+        {
+            var shouldBeDefault = link.Id == target.Id;
+            if (link.IsDefault == shouldBeDefault)
+                continue;
+
+            link.IsDefault = shouldBeDefault;
+            link.DateUpdated = DateTime.UtcNow;
+            await db.UpdateAsync(link);
+        }
+
+        var config = await db.GuildAiConfigs.FirstOrDefaultAsync(x => x.GuildId == guildId);
+        if (config is not null)
+        {
+            config.Provider = (int)provider;
+            if (!string.IsNullOrWhiteSpace(target.DefaultModel))
+                config.Model = target.DefaultModel;
+            await db.UpdateAsync(config);
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    ///     Gets the API key for a provider from links, with legacy config fallback.
+    /// </summary>
+    public async Task<string?> GetProviderApiKey(ulong guildId, AiProvider provider)
+    {
+        var link = await GetProviderLink(guildId, provider);
+        if (link is { IsEnabled: true } && !string.IsNullOrWhiteSpace(link.ApiKey))
+            return link.ApiKey;
+
+        var config = await GetOrCreateConfig(guildId);
+        if (config.Provider == (int)provider && !string.IsNullOrWhiteSpace(config.ApiKey))
+            return config.ApiKey;
+
+        return null;
+    }
+
+    /// <summary>
     ///     Sets a custom embed template for AI responses in a guild.
     /// </summary>
     /// <param name="guildId">The ID of the guild to set the custom embed for.</param>
@@ -152,53 +345,63 @@ public class AiService : INService
 
     private async Task HandleMessage(SocketMessage msg)
     {
-        var isDebugMode = false;
-        if (msg is not IUserMessage || msg.Author.IsBot) return;
-        if (msg.Channel is not IGuildChannel guildChannel) return;
+        if (msg is not IUserMessage || msg.Author.IsBot)
+            return;
+        if (msg.Channel is not IGuildChannel guildChannel)
+            return;
 
         var config = await GetOrCreateConfig(guildChannel.GuildId);
-        if (!config.Enabled || config.ChannelId != msg.Channel.Id) return;
-
-#if DEBUG
-        isDebugMode = true;
-#endif
-
-        if (msg.Content == ".deletesession" && !isDebugMode)
-        {
-            await ClearConversation(guildChannel.GuildId, msg.Author.Id);
-            await msg.Channel.SendConfirmAsync(strings.AiConversationDeleted(guildChannel.GuildId));
+        if (!config.Enabled || config.ChannelId != msg.Channel.Id)
             return;
-        }
-        else if (msg.Content == ",deletesession" && isDebugMode)
+
+        if (IsDeleteSessionTrigger(msg.Content))
         {
             await ClearConversation(guildChannel.GuildId, msg.Author.Id);
             await msg.Channel.SendConfirmAsync(strings.AiConversationDeleted(guildChannel.GuildId));
             return;
         }
 
-        if (string.IsNullOrEmpty(config.ApiKey))
+        var prefixes = GetConfiguredPrefixes();
+        var prefix = prefixes.FirstOrDefault(p => msg.Content.StartsWith(p, StringComparison.OrdinalIgnoreCase));
+        if (string.IsNullOrEmpty(prefix))
+            return;
+
+        var rawQuery = msg.Content.Substring(prefix.Length).Trim();
+        if (string.IsNullOrWhiteSpace(rawQuery))
         {
-            await msg.Channel.SendErrorAsync(strings.AiNoApiKey(guildChannel.GuildId, config.Provider), botConfig);
+            await msg.Channel.SendErrorAsync("Please provide a prompt after the AI trigger.", botConfig);
+            return;
+        }
+
+        // Keep existing built-in command words.
+        var scannedWords = rawQuery
+            .ToLowerInvariant()
+            .Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries)
+            .Take(2)
+            .ToList();
+
+        if (scannedWords.Contains("image"))
+        {
+            await msg.Channel.SendMessageAsync("Dall-E disabled.");
+            return;
+        }
+
+        if (scannedWords.Contains("scan"))
+        {
+            await msg.Channel.SendMessageAsync("Not Yet Implemented.");
+            return;
+        }
+
+        var routeResolution = await ResolveRouteAsync(config, rawQuery);
+        if (!routeResolution.Success || routeResolution.Route is null)
+        {
+            await msg.Channel.SendErrorAsync(routeResolution.ErrorMessage ?? "Unable to resolve AI provider.", botConfig);
             return;
         }
 
         DiscordWebhookClient? webhook = null;
         ulong? webhookMessageId = null;
         IUserMessage? processingMessage = null;
-
-        // Determine the prefix based on debug mode
-        var prefixes = isDebugMode
-            ? new[] { "-frog ", ",frog " }
-            : new[] { "!frog ", ".frog " };
-
-        // Find the matching prefix (if any)
-        var prefix = prefixes.FirstOrDefault(p => msg.Content.StartsWith(p, StringComparison.OrdinalIgnoreCase));
-
-        // After determining the prefix
-        if (string.IsNullOrEmpty(prefix) || !msg.Content.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-        {
-            return; // Quit early if no valid prefix
-        }
 
         if (!string.IsNullOrEmpty(config.WebhookUrl))
         {
@@ -213,155 +416,22 @@ public class AiService : INService
         }
         else
         {
-            // Only show processing message if a valid prefix was found and the message starts with it
-            if (!string.IsNullOrEmpty(prefix) && msg.Content.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-            {
-                processingMessage = await msg.Channel.SendConfirmAsync(strings.AiProcessingRequest(guildChannel.GuildId, msg.Author.Mention));
-            }
-
+            processingMessage = await msg.Channel.SendConfirmAsync(strings.AiProcessingRequest(guildChannel.GuildId,
+                msg.Author.Mention));
         }
 
         try
         {
-            // lower any capitalization in message content
-            var loweredContents = msg.Content.ToLower();
+            logger.LogInformation(
+                "Processing AI request from {User} in {Channel} with provider {Provider} and model {Model}: {Query}",
+                msg.Author.Username,
+                msg.Channel.Name,
+                routeResolution.Route.Provider,
+                routeResolution.Route.Model,
+                routeResolution.Prompt);
 
-            // Split the message content into words and take only the first two for checking.
-            var words = loweredContents.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries).Take(2).ToList();
-            var scannedWords = words.Select(w => w.ToLower()).ToList();
-
-            if (scannedWords.Contains("image"))
-            {
-                try
-                {
-                    await msg.Channel.SendMessageAsync("Dall-E disabled.");
-                    return;
-                }
-                catch
-                {
-                    throw;
-                }
-                var authorName = msg.Author.ToString();
-                var prompt = msg.Content.Substring("frog image ".Length).Trim();
-                if (string.IsNullOrEmpty(prompt))
-                {
-                    await msg.Channel.SendMessageAsync("Please provide a prompt for the image.");
-                    return;
-                }
-
-                IUserMessage placeholderMessage = null;
-                try
-                {
-                    // Send a placeholder message directly using the bot's client
-                    placeholderMessage = await msg.Channel.SendConfirmAsync($"Generating image...");
-
-                    // Generate the image
-                    //var images = await api.ImageGenerations.CreateImageAsync(new ImageGenerationRequest
-                    //{
-                    //    Prompt = prompt,  // prompt (text string)
-                    //    NumOfImages = 1, // dall-e2 can provide multiple images, e3 does not support this currently
-                    //    Size = ImageSize._1792x1024, // resolution of the generated images (256x256 | 512x512 | 1024x1024 | 1792x1024) dall-e3 cannot use images below 1024x1024
-                    //    Model = Model.DALLE3, // model (model for this req. defaults to dall-e2
-                    //    User = authorName, // user: author of post, this can be used to help openai detect abuse and rule breaking
-                    //    ResponseFormat = ImageResponseFormat.Url // the format the images can be returned as. must be url or b64_json
-                    //                                             // quality: by default images are generated at standard, but on e3 you can use HD
-                    //});
-
-                    /*
-                    // if dall-e3 ever supports more then 1 image can use this code block instead
-                    // Update the placeholder message with the images
-                    if (images.Data.Count > 0)
-                    {
-                        var embeds = images.Data.Select(image => new EmbedBuilder().WithImageUrl(image.Url).Build()).ToArray(); // Convert to array
-
-                        await placeholderMessage.ModifyAsync(msg =>
-                        {
-                            msg.Content = ""; // Clearing the content
-                            msg.Embeds = new Optional<Embed[]>(embeds); // Wrap the array in an Optional
-                        });
-                    }
-                    else
-                    {
-                        await placeholderMessage.ModifyAsync(msg => msg.Content = "No images were generated.");
-                    }
-                    */
-
-                    // Update the placeholder message with the image
-                    //if (images.Data.Count > 0)
-                    //{
-                    //    var imageUrl = images.Data[0].Url; // Assuming images.Data[0] contains the URL
-                    //    var embed = new EmbedBuilder()
-                    //        .WithImageUrl(imageUrl)
-                    //        .Build();
-                    //    await placeholderMessage.ModifyAsync(msg =>
-                    //    {
-                    //        msg.Content = ""; // Clearing the content
-                    //        msg.Embed = embed;
-                    //    });
-                    //}
-                    //else
-                    //{
-                    //    await placeholderMessage.ModifyAsync(msg => msg.Content = "No image generated.");
-                    //}
-                }
-                catch (HttpRequestException httpEx)
-                {
-                    var content = httpEx.Message; // This is not the response content, but the exception message.
-                    Log.Information("Exception message: {Message}", content);
-
-                    // Log the full exception details for debugging
-                    Log.Error(httpEx, "HttpRequestException occurred while processing the request.");
-
-                    // Clean up the placeholder message if it was assigned
-                    if (placeholderMessage != null)
-                    {
-                        await placeholderMessage.DeleteAsync();
-                    }
-
-                    // Notify the user of a generic error message
-                    await msg.Channel.SendMessageAsync("An error occurred while processing your request. Please try again later.");
-                }
-                catch (Exception ex)
-                {
-                    // Log the error
-                    Log.Error(ex, "Error generating image");
-
-                    // Clean up the placeholder message if it was assigned
-                    if (placeholderMessage != null)
-                    {
-                        await placeholderMessage.DeleteAsync();
-                    }
-                    await msg.Channel.SendMessageAsync($"Failed to generate image due to an unexpected error. Please try again later. Error code: **{ex.HResult}**");
-                }
-                return;
-            }
-
-            if (scannedWords.Contains("scan"))
-            {
-                try
-                {
-                    //todo: should impl this to help with anti bot security (fake support agents)
-                    // https://github.com/OkGoDoIt/OpenAI-API-dotnet/commit/b824ac5b50027af48aa8ea02bf1bc40fac36f390#diff-ba720258629043138df0c8ebea494853e88e2517638a615c4a9c4fdc84a2a168
-                    await msg.Channel.SendMessageAsync("Not Yet Implemented.");
-                    return;
-                }
-                catch
-                {
-                    throw;
-                }
-            }
-
-            if (!string.IsNullOrEmpty(prefix) && msg.Content.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-            {
-                var userQuery = msg.Content.Substring(prefix.Length).Trim();
-
-                logger.LogInformation("Processing AI request from {User} in {Channel}: {userQuery}",
-                    msg.Author.Username, msg.Channel.Name, userQuery);
-
-                // Pass userQuery to your AI logic instead of msg.Content
-                await StreamResponse(config, webhookMessageId, msg, webhook, userQuery);
-                await UpdateConfig(config);
-            }
+            await StreamResponse(config, webhookMessageId, msg, webhook, routeResolution.Prompt, routeResolution.Route);
+            await UpdateConfig(config);
         }
         catch (Exception ex)
         {
@@ -377,7 +447,6 @@ public class AiService : INService
                             .WithDescription(strings.AiErrorOccurred(guildChannel.GuildId, ex.Message))
                             .Build()
                     };
-
                 });
             }
             else
@@ -388,8 +457,7 @@ public class AiService : INService
         finally
         {
             webhook?.Dispose();
-            // Clean up the processing message if it exists and the response was successful
-            if (processingMessage != null)
+            if (processingMessage is not null)
             {
                 try
                 {
@@ -401,6 +469,226 @@ public class AiService : INService
                 }
             }
         }
+    }
+
+    private sealed record ResolvedAiRoute(AiProvider Provider, string ApiKey, string Model);
+
+    private sealed record RouteResolutionResult(
+        bool Success,
+        string? ErrorMessage,
+        string Prompt,
+        ResolvedAiRoute? Route);
+
+    private List<string> GetConfiguredPrefixes()
+    {
+        var configured = botConfig.AiChatPrefixes?
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(x => x.Length)
+            .ToList();
+
+        if (configured is { Count: > 0 } && !IsLegacyMixedPrefixSet(configured))
+            return configured;
+
+        return IsNightlyBranch()
+            ? ["#frog ", ",frog "]
+            : ["!frog ", ".frog "];
+    }
+
+    private bool IsDeleteSessionTrigger(string content)
+    {
+        var triggers = botConfig.AiDeleteSessionTriggers?
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .ToList();
+
+        if (triggers is null || triggers.Count == 0 || IsLegacyMixedDeleteTriggerSet(triggers))
+        {
+            triggers = IsNightlyBranch()
+                ? [",deletesession"]
+                : [".deletesession"];
+        }
+
+        return triggers.Any(x => string.Equals(content, x, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private bool IsNightlyBranch()
+    {
+        var branch = botConfig.UpdateBranch?.Trim();
+        if (string.IsNullOrWhiteSpace(branch))
+            return false;
+
+        return branch.Equals("dev", StringComparison.OrdinalIgnoreCase)
+               || branch.Equals("nightly", StringComparison.OrdinalIgnoreCase)
+               || branch.Contains("dev", StringComparison.OrdinalIgnoreCase)
+               || branch.Contains("nightly", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsLegacyMixedPrefixSet(List<string> prefixes)
+    {
+        var normalized = prefixes
+            .Select(x => x.Trim())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        // Prior mixed defaults from earlier refactor (caused cross-instance bleed).
+        return normalized.SetEquals(
+            ["!frog", ".frog", "#frog", ",frog", "-frog"]);
+    }
+
+    private static bool IsLegacyMixedDeleteTriggerSet(List<string> triggers)
+    {
+        var normalized = triggers
+            .Select(x => x.Trim())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        return normalized.SetEquals([".deletesession", ",deletesession"]);
+    }
+
+    private static bool IsSupportedProvider(int providerValue)
+    {
+        return Enum.IsDefined(typeof(AiProvider), providerValue);
+    }
+
+    private static bool TryGetProviderFromAlias(string token, out AiProvider provider)
+    {
+        if (ProviderAliases.TryGetValue(token, out provider))
+            return true;
+
+        return Enum.TryParse(token, true, out provider) && IsSupportedProvider((int)provider);
+    }
+
+    private async Task<List<GuildAiProviderLink>> GetEffectiveProviderLinks(GuildAiConfig config)
+    {
+        var links = await GetProviderLinks(config.GuildId);
+        var enabledLinks = links
+            .Where(x => x.IsEnabled && !string.IsNullOrWhiteSpace(x.ApiKey))
+            .ToList();
+
+        // Legacy fallback path: old single-provider config still works without explicit link rows.
+        if (IsSupportedProvider(config.Provider) && !string.IsNullOrWhiteSpace(config.ApiKey))
+        {
+            var hasLink = enabledLinks.Any(x => x.Provider == config.Provider);
+            if (!hasLink)
+            {
+                enabledLinks.Add(new GuildAiProviderLink
+                {
+                    GuildId = config.GuildId,
+                    Provider = config.Provider,
+                    ApiKey = config.ApiKey!,
+                    DefaultModel = config.Model,
+                    IsEnabled = true,
+                    IsDefault = enabledLinks.Count == 0
+                });
+            }
+        }
+
+        if (enabledLinks.Count > 0 && enabledLinks.All(x => !x.IsDefault))
+        {
+            var preferred = enabledLinks.FirstOrDefault(x => x.Provider == config.Provider) ?? enabledLinks[0];
+            preferred.IsDefault = true;
+        }
+
+        return enabledLinks;
+    }
+
+    private async Task<RouteResolutionResult> ResolveRouteAsync(GuildAiConfig config, string rawQuery)
+    {
+        var links = await GetEffectiveProviderLinks(config);
+        if (links.Count == 0)
+        {
+            return new RouteResolutionResult(false,
+                "No AI provider is linked yet. Please link a provider key first (for example OpenAI or Grok).",
+                rawQuery,
+                null);
+        }
+
+        var parts = rawQuery.Split(new[] { ' ' }, 2, StringSplitOptions.RemoveEmptyEntries);
+        var selector = parts.Length > 0 ? parts[0].Trim() : string.Empty;
+        var remainder = parts.Length > 1 ? parts[1].Trim() : string.Empty;
+
+        var selectedByModel = links.FirstOrDefault(x =>
+            !string.IsNullOrWhiteSpace(x.DefaultModel) &&
+            x.DefaultModel.Equals(selector, StringComparison.OrdinalIgnoreCase));
+
+        if (selectedByModel is not null)
+        {
+            if (string.IsNullOrWhiteSpace(remainder))
+                return new RouteResolutionResult(false, "Please include a prompt after the model selector.", rawQuery,
+                    null);
+
+            return new RouteResolutionResult(
+                true,
+                null,
+                remainder,
+                new ResolvedAiRoute((AiProvider)selectedByModel.Provider, selectedByModel.ApiKey,
+                    selectedByModel.DefaultModel!));
+        }
+
+        if (TryGetProviderFromAlias(selector, out var selectedProvider))
+        {
+            var selectedByProvider = links.FirstOrDefault(x => x.Provider == (int)selectedProvider);
+            if (selectedByProvider is null)
+            {
+                return new RouteResolutionResult(false,
+                    $"Provider `{selector}` is not linked for this guild.",
+                    rawQuery,
+                    null);
+            }
+
+            if (string.IsNullOrWhiteSpace(selectedByProvider.DefaultModel))
+            {
+                return new RouteResolutionResult(false,
+                    $"Provider `{selectedProvider}` is linked but has no default model configured.",
+                    rawQuery,
+                    null);
+            }
+
+            if (string.IsNullOrWhiteSpace(remainder))
+            {
+                return new RouteResolutionResult(false, "Please include a prompt after the provider selector.",
+                    rawQuery,
+                    null);
+            }
+
+            return new RouteResolutionResult(
+                true,
+                null,
+                remainder,
+                new ResolvedAiRoute((AiProvider)selectedByProvider.Provider, selectedByProvider.ApiKey,
+                    selectedByProvider.DefaultModel!));
+        }
+
+        var looksLikeModelSelector =
+            selector.StartsWith("gpt", StringComparison.OrdinalIgnoreCase) ||
+            selector.StartsWith("grok", StringComparison.OrdinalIgnoreCase) ||
+            selector.StartsWith("claude", StringComparison.OrdinalIgnoreCase) ||
+            selector.StartsWith("llama", StringComparison.OrdinalIgnoreCase);
+
+        if (looksLikeModelSelector && !string.IsNullOrWhiteSpace(remainder))
+        {
+            return new RouteResolutionResult(false,
+                $"Model `{selector}` is not linked or not configured for this guild.",
+                rawQuery,
+                null);
+        }
+
+        var defaultLink = links.FirstOrDefault(x => x.IsDefault)
+                          ?? links.FirstOrDefault(x => x.Provider == config.Provider)
+                          ?? links[0];
+
+        if (string.IsNullOrWhiteSpace(defaultLink.DefaultModel))
+        {
+            return new RouteResolutionResult(false,
+                $"Default provider `{(AiProvider)defaultLink.Provider}` has no model configured.",
+                rawQuery,
+                null);
+        }
+
+        return new RouteResolutionResult(
+            true,
+            null,
+            rawQuery,
+            new ResolvedAiRoute((AiProvider)defaultLink.Provider, defaultLink.ApiKey, defaultLink.DefaultModel!));
     }
 
     /// <summary>
@@ -438,9 +726,20 @@ public class AiService : INService
     }
 
     private async Task StreamResponse(GuildAiConfig config, ulong? webhookMessageId, SocketMessage userMsg,
-        DiscordWebhookClient? webhook, string userQuery = null)
+        DiscordWebhookClient? webhook, string userQuery = null, ResolvedAiRoute? route = null)
     {
-        
+        route ??= new ResolvedAiRoute((AiProvider)config.Provider, config.ApiKey ?? string.Empty, config.Model ?? string.Empty);
+        if (!IsSupportedProvider((int)route.Provider))
+            throw new InvalidOperationException($"Unsupported AI provider: {route.Provider}");
+        if (string.IsNullOrWhiteSpace(route.ApiKey))
+            throw new InvalidOperationException($"No API key linked for provider {route.Provider}.");
+        if (string.IsNullOrWhiteSpace(route.Model))
+            throw new InvalidOperationException($"No model configured for provider {route.Provider}.");
+
+        var provider = route.Provider;
+        var model = route.Model;
+        var apiKey = route.ApiKey;
+
         await using var db = await dbFactory.CreateConnectionAsync();
         var conversation = await db.AiConversations
             .LoadWithAsTable(x => x.AiMessages)
@@ -544,7 +843,7 @@ public class AiService : INService
             .OrderBy(m => m.Id)
             .ToList();
 
-        var (aiClient, streamParser) = aiClientFactory.Create((AiProvider)config.Provider);
+        var (aiClient, streamParser) = aiClientFactory.Create(provider);
         var responseBuilder = new StringBuilder();
         var lastUpdate = DateTime.UtcNow;
         var tokenCount = 0;
@@ -587,35 +886,19 @@ public class AiService : INService
             });
         }
 
-        // Filter out empty assistant messages
-        messagesToSend = messagesToSend
-            .Where(m => m.Role != "assistant" || !string.IsNullOrWhiteSpace(m.Content))
-            .ToList();
-
-        // Ensure last message is a user message (for current prompt)
-        if (messagesToSend.Count == 0 || messagesToSend.Last().Role != "user")
-        {
-            messagesToSend.Add(new AiMessage
-            {
-                ConversationId = convId,
-                Role = "user",
-                Content = userQuery
-            });
-        }
-
         // Use tools if enabled and provider is Claude
         IAsyncEnumerable<string> stream;
-        if (config.Provider == (int)AiProvider.Claude && aiClient is ClaudeClient claudeClient)
+        if (provider == AiProvider.Claude && aiClient is ClaudeClient claudeClient)
         {
             var enableWebSearch = config.WebSearchEnabled;
             var enableUserInfo = true; // Always enable user info for Claude
 
-            stream = await claudeClient.StreamResponseAsync(messagesToSend, config.Model, config.ApiKey,
+            stream = await claudeClient.StreamResponseAsync(messagesToSend, model, apiKey,
                 enableWebSearch, enableUserInfo, guildChannel.Guild.Id);
         }
         else
         {
-            stream = await aiClient.StreamResponseAsync(messagesToSend, config.Model, config.ApiKey);
+            stream = await aiClient.StreamResponseAsync(messagesToSend, model, apiKey);
         }
 
         string stopReason = null;
@@ -635,7 +918,7 @@ public class AiService : INService
                 lastRawJson = rawJson; // Save the last chunk
 
                 // IMPORTANT: Parse the delta to extract just the content
-                var contentDelta = streamParser.ParseDelta(rawJson, (AiProvider)config.Provider);
+                var contentDelta = streamParser.ParseDelta(rawJson, provider);
                 if (!string.IsNullOrEmpty(contentDelta))
                 {
                     responseBuilder.Append(contentDelta);
@@ -643,9 +926,9 @@ public class AiService : INService
                 }
 
                 // Check for usage information
-                if (config.Provider == (int)AiProvider.Groq || config.Provider == (int)AiProvider.Claude)
+                if (provider == AiProvider.Groq || provider == AiProvider.Claude)
                 {
-                    var usage = streamParser.ParseUsage(rawJson, (AiProvider)config.Provider);
+                    var usage = streamParser.ParseUsage(rawJson, provider);
                     if (usage.HasValue)
                     {
                         tokenCount = usage.Value.TotalTokens;
@@ -665,7 +948,7 @@ public class AiService : INService
                 HandleToolUseEventIfNeeded(rawJson, toolUseRequests);
 
                 // Check if stream is finished and extract stop reason
-                var streamFinishInfo = streamParser.CheckStreamFinished(rawJson, (AiProvider)config.Provider);
+                var streamFinishInfo = streamParser.CheckStreamFinished(rawJson, provider);
                 if (streamFinishInfo.IsFinished)
                 {
                     stopReason = streamFinishInfo.StopReason;
@@ -727,10 +1010,10 @@ public class AiService : INService
 
         // Grok and GPT give their usage stats on the final message, not every message like claude/groq
         if (lastRawJson != null && 
-            (config.Provider == (int)AiProvider.OpenAi || config.Provider == (int)AiProvider.Grok))
+            (provider == AiProvider.OpenAi || provider == AiProvider.Grok))
         {
             logger.LogInformation("Parsing final usage from last raw JSON: {Json}", lastRawJson);
-            var usage = streamParser.ParseUsage(lastRawJson, (AiProvider)config.Provider);
+            var usage = streamParser.ParseUsage(lastRawJson, provider);
             if (usage.HasValue)
             {
                 tokenCount = usage.Value.TotalTokens;
@@ -787,60 +1070,7 @@ public class AiService : INService
                 logger.LogInformation($"Message {i}: Role={msg.Role}, ContentLength={msg.Content?.Length ?? 0}");
             }
 
-            await StreamResponse(config, webhookMessageId, userMsg, webhook);
-            return;
-        }
-
-        // Handle tool use if the stream ended with tool_use stop reason
-        if (stopReason == "tool_use" && toolUseRequests.Any())
-        {
-            logger.LogInformation($"Processing {toolUseRequests.Count} tool use requests");
-
-            // Execute all tool requests and collect results
-            var toolResults = new List<ToolResult>();
-            foreach (var toolRequest in toolUseRequests)
-            {
-                var result = await ExecuteToolRequest(toolRequest, guildChannel.Guild.Id);
-                toolResults.Add(result);
-            }
-
-            // Add the assistant message with tool use to conversation history
-            // When Claude uses tools, the assistant message may have no text content
-            var assistantContent = responseBuilder.ToString();
-            logger.LogInformation(
-                $"Assistant content length: {assistantContent?.Length ?? 0}, tool requests: {toolUseRequests.Count}");
-
-            if (!string.IsNullOrWhiteSpace(assistantContent))
-            {
-                messagesToSend.Add(new AiMessage
-                {
-                    Role = "assistant", Content = assistantContent
-                });
-                logger.LogInformation("Added assistant message with content to conversation history");
-            }
-            else
-            {
-                logger.LogInformation("Skipping empty assistant message - Claude used tools without text content");
-            }
-
-            // Add tool results to conversation history
-            var toolResultsContent = string.Join("\n", toolResults.Select(r =>
-                $"<tool_result>\n<tool_use_id>{r.ToolUseId}</tool_use_id>\n{r.Content}\n</tool_result>"));
-
-            messagesToSend.Add(new AiMessage
-            {
-                Role = "user", Content = toolResultsContent
-            });
-
-            // Continue the conversation with the tool results
-            logger.LogInformation($"Continuing conversation with tool results. Total messages: {messagesToSend.Count}");
-            for (var i = 0; i < messagesToSend.Count; i++)
-            {
-                var msg = messagesToSend[i];
-                logger.LogInformation($"Message {i}: Role={msg.Role}, ContentLength={msg.Content?.Length ?? 0}");
-            }
-
-            await StreamResponse(config, webhookMessageId, userMsg, webhook);
+            await StreamResponse(config, webhookMessageId, userMsg, webhook, toolResultsContent, route);
             return;
         }
 
@@ -999,7 +1229,7 @@ public class AiService : INService
                             .WithDescription(processedContent)
                             .WithFooter(strings.AiResponseFooter(config.GuildId, userMsg.Author.Username, tokenCount));
 
-                        AddProviderBranding(embedBuilder, (AiProvider)config.Provider);
+                        AddProviderBranding(embedBuilder, provider);
 
                         var embed = embedBuilder.Build();
 
@@ -1032,7 +1262,7 @@ public class AiService : INService
                                         tokenCount));
                                 }
                                 // Add provider branding here
-                                AddProviderBranding(builder, (AiProvider)config.Provider);
+                                AddProviderBranding(builder, provider);
 
                                 return builder.Build();
                             }).ToList();
@@ -1082,7 +1312,7 @@ public class AiService : INService
                                 .WithDescription(processedContent)
                                 .WithFooter(strings.AiResponseFooter(config.GuildId, userMsg.Author.Username, tokenCount));
 
-                            AddProviderBranding(embedBuilder, (AiProvider)config.Provider);
+                            AddProviderBranding(embedBuilder, provider);
 
                             var embed = embedBuilder.Build();
 

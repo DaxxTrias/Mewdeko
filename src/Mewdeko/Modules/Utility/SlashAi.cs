@@ -1,4 +1,4 @@
-﻿using Discord.Interactions;
+using Discord.Interactions;
 using Mewdeko.Common.Attributes.InteractionCommands;
 using Mewdeko.Common.Autocompleters;
 using Mewdeko.Common.Modals;
@@ -19,28 +19,60 @@ public partial class SlashUtility
         ///     Handles the button interaction for setting an AI API key, displaying a modal for secure input.
         /// </summary>
         /// <returns>A task representing the modal response operation.</returns>
+        [ComponentInteraction("setaikey:*", true)]
+        [RequireContext(ContextType.Guild)]
+        [SlashUserPerm(GuildPermission.Administrator)]
+        public Task AiKeyButton(int provider)
+        {
+            return RespondWithModalAsync<AiKeyModal>($"aikeymodal:{provider}");
+        }
+
+        /// <summary>
+        ///     Legacy fallback for API key button interactions without an explicit provider payload.
+        /// </summary>
         [ComponentInteraction("setaikey", true)]
         [RequireContext(ContextType.Guild)]
         [SlashUserPerm(GuildPermission.Administrator)]
-        public Task AiKeyButton()
+        public async Task AiKeyButtonLegacy()
         {
-            return RespondWithModalAsync<AiKeyModal>("aikeymodal");
+            var config = await Service.GetOrCreateConfig(ctx.Guild.Id);
+            await RespondWithModalAsync<AiKeyModal>($"aikeymodal:{config.Provider}");
         }
 
         /// <summary>
         ///     Processes the submitted AI API key from the modal and updates the configuration.
         /// </summary>
+        /// <param name="provider">The provider encoded in the modal custom ID.</param>
         /// <param name="modal">The modal containing the submitted API key.</param>
         /// <returns>A task representing the asynchronous configuration update operation.</returns>
+        [ModalInteraction("aikeymodal:*", true)]
+        [RequireContext(ContextType.Guild)]
+        [SlashUserPerm(GuildPermission.Administrator)]
+        public async Task AiKeyModal(int provider, AiKeyModal modal)
+        {
+            if (!Enum.IsDefined((AiProvider)provider))
+            {
+                await ctx.Interaction.SendErrorAsync("Unsupported provider selected for API key update.", Config);
+                return;
+            }
+
+            var selectedProvider = (AiProvider)provider;
+            await Service.SetProviderApiKey(ctx.Guild.Id, selectedProvider, modal.ApiKey);
+
+            await ctx.Interaction.SendConfirmAsync(Strings.AiApiKeyUpdated(ctx.Guild.Id, selectedProvider));
+        }
+
+        /// <summary>
+        ///     Legacy fallback for API key modal submissions without provider payload.
+        /// </summary>
+        /// <param name="modal">The modal containing the submitted API key.</param>
         [ModalInteraction("aikeymodal", true)]
         [RequireContext(ContextType.Guild)]
         [SlashUserPerm(GuildPermission.Administrator)]
-        public async Task AiKeyModal(AiKeyModal modal)
+        public async Task AiKeyModalLegacy(AiKeyModal modal)
         {
             var config = await Service.GetOrCreateConfig(ctx.Guild.Id);
-            config.ApiKey = modal.ApiKey;
-            await Service.UpdateConfig(config);
-
+            await Service.SetProviderApiKey(ctx.Guild.Id, (AiProvider)config.Provider, modal.ApiKey);
             await ctx.Interaction.SendConfirmAsync(Strings.AiApiKeyUpdated(ctx.Guild.Id, config.Provider));
         }
 
@@ -83,13 +115,15 @@ public partial class SlashUtility
             string? model = null)
         {
             var config = await Service.GetOrCreateConfig(ctx.Guild.Id);
-            if (string.IsNullOrEmpty(config.ApiKey))
+            var providerApiKey = await Service.GetProviderApiKey(ctx.Guild.Id, provider);
+            if (string.IsNullOrWhiteSpace(providerApiKey))
             {
-                await ctx.Interaction.SendErrorAsync(Strings.AiNoApiKey(ctx.Guild.Id, provider), Config);
+                await ctx.Interaction.SendErrorAsync($"No API key linked for {provider}. Set one using /ai key.",
+                    Config);
                 return;
             }
 
-            var models = await Service.GetSupportedModels(provider, config.ApiKey);
+            var models = await Service.GetSupportedModels(provider, providerApiKey);
 
             if (model == null)
             {
@@ -110,6 +144,15 @@ public partial class SlashUtility
                 return;
             }
 
+            var updated = await Service.SetProviderModel(ctx.Guild.Id, provider, model);
+            if (!updated)
+            {
+                await ctx.Interaction.SendErrorAsync(
+                    $"Couldn't set model for {provider} because that provider is not linked yet.",
+                    Config);
+                return;
+            }
+
             config.Provider = (int)provider;
             config.Model = model;
             await Service.UpdateConfig(config);
@@ -121,16 +164,37 @@ public partial class SlashUtility
         }
 
         /// <summary>
+        ///     Sets the default provider route for AI chat.
+        /// </summary>
+        [SlashCommand("default-provider", "Set the default provider used when no selector is given")]
+        [RequireContext(ContextType.Guild)]
+        [SlashUserPerm(GuildPermission.ManageGuild)]
+        public async Task AiDefaultProvider(AiService.AiProvider provider)
+        {
+            var success = await Service.SetDefaultProvider(ctx.Guild.Id, provider);
+            if (!success)
+            {
+                await ctx.Interaction.SendErrorAsync(
+                    $"Provider {provider} is not linked yet. Set an API key for it first.",
+                    Config);
+                return;
+            }
+
+            await ctx.Interaction.SendConfirmAsync($"Default AI provider set to {provider}.");
+        }
+
+        /// <summary>
         ///     Sets the API key for the configured AI provider.
         /// </summary>
         /// <returns>A task representing the asynchronous operation.</returns>
         [SlashCommand("key", "Set the API key for the AI service")]
         [RequireContext(ContextType.Guild)]
         [SlashUserPerm(GuildPermission.Administrator)]
-        public async Task AiKey()
+        public async Task AiKey(AiService.AiProvider provider = AiService.AiProvider.OpenAi)
         {
             var component = new ComponentBuilder()
-                .WithButton(Strings.AiKeyClickToSet(ctx.Guild.Id), "setaikey")
+                .WithButton($"{Strings.AiKeyClickToSet(ctx.Guild.Id)} ({provider})",
+                    $"setaikey:{(int)provider}")
                 .Build();
             await ctx.Interaction.RespondAsync(Strings.EmptyResponse(ctx.Guild.Id), components: component);
         }
@@ -164,11 +228,18 @@ public partial class SlashUtility
         public async Task AiConfig()
         {
             var config = await Service.GetOrCreateConfig(ctx.Guild.Id);
+            var links = await Service.GetProviderLinks(ctx.Guild.Id);
 
             // Get provider enum value and its integer index
             var providerEnum = (AiProvider)config.Provider;
             var providerIndex = (int)providerEnum;
             var providerLabel = $"{providerEnum} ({providerIndex})";
+            var linkedSummary = links.Count == 0
+                ? "None"
+                : string.Join("\n", links
+                    .OrderByDescending(x => x.IsDefault)
+                    .Select(x =>
+                        $"{(x.IsDefault ? "⭐" : "•")} {(AiService.AiProvider)x.Provider}: `{x.DefaultModel ?? "No model"}` ({(x.IsEnabled ? "enabled" : "disabled")})"));
 
             await ctx.Interaction.RespondAsync(embed: new EmbedBuilder()
                 .WithTitle(Strings.AiConfigTitle(ctx.Guild.Id))
@@ -179,6 +250,7 @@ public partial class SlashUtility
                     providerLabel,
                     config.Model ?? "Not Set",
                     config.TokensUsed))
+                .AddField("Linked providers", linkedSummary)
                 .WithOkColor()
                 .Build());
         }
