@@ -12,6 +12,7 @@ using LinqToDB;
 using LinqToDB.Async;
 using Mewdeko.Common.Configs;
 using Mewdeko.Modules.Utility.Services.Impl;
+using Mewdeko.Services.Settings;
 using Mewdeko.Services.Strings;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
@@ -51,7 +52,7 @@ public class AiService : INService
     }
 
     private readonly AiClientFactory aiClientFactory;
-    private readonly BotConfig botConfig;
+    private readonly BotConfigService botConfigService;
     private readonly DiscordShardedClient client;
     private readonly IDataConnectionFactory dbFactory;
     private readonly IHttpClientFactory httpFactory;
@@ -60,6 +61,7 @@ public class AiService : INService
     private readonly TimeSpan modelCacheExpiry = TimeSpan.FromHours(24);
     private readonly IServiceProvider serviceProvider;
     private readonly GeneratedBotStrings strings;
+    private BotConfig BotConfig => botConfigService.Data;
     private static readonly Dictionary<string, AiProvider> ProviderAliases = new(StringComparer.OrdinalIgnoreCase)
     {
         ["openai"] = AiProvider.OpenAi,
@@ -87,19 +89,19 @@ public class AiService : INService
     /// <param name="dbFactory">The database connection factory.</param>
     /// <param name="httpFactory">The httpfactory factory.</param>
     /// <param name="strings">The localized strings service.</param>
-    /// <param name="config">The bot configuration settings.</param>
+    /// <param name="configService">The bot configuration service.</param>
     /// <param name="handler">The handler parameter.</param>
     /// <param name="client">The Discord client instance.</param>
     /// <param name="logger">The logger instance for structured logging.</param>
     /// <param name="serviceProvider">The service provider for dependency injection.</param>
     public AiService(IDataConnectionFactory dbFactory, IHttpClientFactory httpFactory,
-        GeneratedBotStrings strings, BotConfig config, EventHandler handler, DiscordShardedClient client,
+        GeneratedBotStrings strings, BotConfigService configService, EventHandler handler, DiscordShardedClient client,
         ILogger<AiService> logger, IServiceProvider serviceProvider)
     {
         this.dbFactory = dbFactory;
         this.httpFactory = httpFactory;
         this.strings = strings;
-        botConfig = config;
+        botConfigService = configService;
         this.client = client;
         this.logger = logger;
         this.serviceProvider = serviceProvider;
@@ -369,7 +371,7 @@ public class AiService : INService
         var rawQuery = msg.Content.Substring(prefix.Length).Trim();
         if (string.IsNullOrWhiteSpace(rawQuery))
         {
-            await msg.Channel.SendErrorAsync("Please provide a prompt after the AI trigger.", botConfig);
+            await msg.Channel.SendErrorAsync("Please provide a prompt after the AI trigger.", BotConfig);
             return;
         }
 
@@ -395,7 +397,7 @@ public class AiService : INService
         var routeResolution = await ResolveRouteAsync(config, rawQuery);
         if (!routeResolution.Success || routeResolution.Route is null)
         {
-            await msg.Channel.SendErrorAsync(routeResolution.ErrorMessage ?? "Unable to resolve AI provider.", botConfig);
+            await msg.Channel.SendErrorAsync(routeResolution.ErrorMessage ?? "Unable to resolve AI provider.", BotConfig);
             return;
         }
 
@@ -451,7 +453,7 @@ public class AiService : INService
             }
             else
             {
-                await msg.Channel.SendErrorAsync(strings.AiErrorOccurred(guildChannel.GuildId, ex.Message), botConfig);
+                await msg.Channel.SendErrorAsync(strings.AiErrorOccurred(guildChannel.GuildId, ex.Message), BotConfig);
             }
         }
         finally
@@ -481,7 +483,7 @@ public class AiService : INService
 
     private List<string> GetConfiguredPrefixes()
     {
-        var configured = botConfig.AiChatPrefixes?
+        var configured = BotConfig.AiChatPrefixes?
             .Where(x => !string.IsNullOrWhiteSpace(x))
             .Select(x => x)
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -498,7 +500,7 @@ public class AiService : INService
 
     private bool IsDeleteSessionTrigger(string content)
     {
-        var triggers = botConfig.AiDeleteSessionTriggers?
+        var triggers = BotConfig.AiDeleteSessionTriggers?
             .Where(x => !string.IsNullOrWhiteSpace(x))
             .ToList();
 
@@ -514,7 +516,7 @@ public class AiService : INService
 
     private bool IsNightlyBranch()
     {
-        var branch = botConfig.UpdateBranch?.Trim();
+        var branch = BotConfig.UpdateBranch?.Trim();
         if (string.IsNullOrWhiteSpace(branch))
             return false;
 
@@ -981,7 +983,7 @@ public class AiService : INService
             }
             else
             {
-                await userMsg.Channel.SendErrorAsync(friendly, botConfig);
+                await userMsg.Channel.SendErrorAsync(friendly, BotConfig);
             }
             return;
         }
@@ -1003,7 +1005,7 @@ public class AiService : INService
             }
             else
             {
-                await userMsg.Channel.SendErrorAsync(friendly, botConfig);
+                await userMsg.Channel.SendErrorAsync(friendly, BotConfig);
             }
             return;
         }
