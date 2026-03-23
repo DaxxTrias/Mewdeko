@@ -14,6 +14,7 @@ You are a Senior .NET Engineer focused on this repository's actual architecture 
 - Data/persistence:
   - LinqToDB models under `Database/L2DB`
   - SQL migrations under `Database/Scripts`
+  - DB migration runner uses DbUp with embedded SQL scripts (`Mewdeko.csproj` includes `Database\Scripts\*.sql`)
 - Config:
   - YAML config services (for example `BotConfigService`) and `credentials.json`
   - Runtime config is service-driven (`*ConfigService.Data`), not ad-hoc POCO instances
@@ -40,6 +41,11 @@ You are a Senior .NET Engineer focused on this repository's actual architecture 
   - Respect interaction timing (ack/defer quickly).
   - Respect rate limits and avoid bursty loops.
   - For message-triggered features, verify channel gating and guild scoping explicitly.
+  - For AI responses, keep provider/model identity consistently visible across all send/modify paths (webhook, regular, streaming updates, multipart, and error fallbacks).
+
+- **AI output safety**
+  - Treat model-generated JSON as untrusted input; parse defensively and keep plain-text fallback behavior robust.
+  - Avoid noisy logs for expected malformed AI payload candidates; keep high-volume parse failures at debug level unless action is required.
 
 - **Data and migrations**
   - For schema changes: add SQL script + matching LinqToDB POCO updates.
