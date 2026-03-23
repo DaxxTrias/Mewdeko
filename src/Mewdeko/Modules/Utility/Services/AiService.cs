@@ -408,12 +408,13 @@ public class AiService : INService
         if (!string.IsNullOrEmpty(config.WebhookUrl))
         {
             webhook = new DiscordWebhookClient(config.WebhookUrl);
+            var processingEmbedBuilder = new EmbedBuilder()
+                .WithOkColor()
+                .WithDescription(strings.AiProcessingRequest(guildChannel.GuildId, msg.Author.Mention));
+            AddProviderBranding(processingEmbedBuilder, routeResolution.Route.Provider);
             webhookMessageId = await webhook.SendMessageAsync(embeds:
             [
-                new EmbedBuilder()
-                    .WithOkColor()
-                    .WithDescription(strings.AiProcessingRequest(guildChannel.GuildId, msg.Author.Mention))
-                    .Build()
+                processingEmbedBuilder.Build()
             ]);
         }
         else
@@ -442,12 +443,13 @@ public class AiService : INService
             {
                 await webhook.ModifyMessageAsync(webhookMessageId.Value, x =>
                 {
+                    var errorEmbedBuilder = new EmbedBuilder()
+                        .WithErrorColor()
+                        .WithDescription(strings.AiErrorOccurred(guildChannel.GuildId, ex.Message));
+                    AddProviderBranding(errorEmbedBuilder, routeResolution.Route.Provider);
                     x.Embeds = new[]
                     {
-                        new EmbedBuilder()
-                            .WithErrorColor()
-                            .WithDescription(strings.AiErrorOccurred(guildChannel.GuildId, ex.Message))
-                            .Build()
+                        errorEmbedBuilder.Build()
                     };
                 });
             }
@@ -975,9 +977,11 @@ public class AiService : INService
             {
                 await webhook.ModifyMessageAsync(webhookMessageId.Value, x =>
                 {
+                    var errorEmbedBuilder = new EmbedBuilder().WithErrorColor().WithDescription(friendly);
+                    AddProviderBranding(errorEmbedBuilder, provider);
                     x.Embeds = new[]
                     {
-                        new EmbedBuilder().WithErrorColor().WithDescription(friendly).Build()
+                        errorEmbedBuilder.Build()
                     };
                 });
             }
@@ -997,9 +1001,11 @@ public class AiService : INService
             {
                 await webhook.ModifyMessageAsync(webhookMessageId.Value, x =>
                 {
+                    var errorEmbedBuilder = new EmbedBuilder().WithErrorColor().WithDescription(friendly);
+                    AddProviderBranding(errorEmbedBuilder, provider);
                     x.Embeds = new[]
                     {
-                        new EmbedBuilder().WithErrorColor().WithDescription(friendly).Build()
+                        errorEmbedBuilder.Build()
                     };
                 });
             }
@@ -1128,7 +1134,7 @@ public class AiService : INService
 
                         if (newEmbed != null && (newEmbed.Embeds?.Count > 0 || newEmbed.Embed != null))
                         {
-                            var discordEmbeds = GetDiscordEmbeds(newEmbed);
+                                var discordEmbeds = ApplyProviderBranding(GetDiscordEmbeds(newEmbed), provider);
 
                             if (discordEmbeds.Count > 0)
                             {
@@ -1205,7 +1211,7 @@ public class AiService : INService
                             out _))
                     {
                         // Use the parsed embed data
-                        var modifiedEmbeds = embedData.Select(embed =>
+                        var modifiedEmbeds = (embedData ?? Array.Empty<Embed>()).Select(embed =>
                         {
                             var builder = embed.ToEmbedBuilder();
                             if (builder.Footer is null || isFinalUpdate)
@@ -1216,12 +1222,30 @@ public class AiService : INService
 
                             return builder.Build();
                         }).ToList();
+                        modifiedEmbeds = ApplyProviderBranding(modifiedEmbeds, provider);
 
-                        await webhook.ModifyMessageAsync(webhookMessageId.Value, x =>
+                        if (modifiedEmbeds.Count > 0)
                         {
-                            x.Content = plainText;
-                            x.Embeds = modifiedEmbeds;
-                        });
+                            await webhook.ModifyMessageAsync(webhookMessageId.Value, x =>
+                            {
+                                x.Content = plainText;
+                                x.Embeds = modifiedEmbeds;
+                            });
+                        }
+                        else
+                        {
+                            var embedBuilder = new EmbedBuilder()
+                                .WithOkColor()
+                                .WithDescription(plainText ?? processedContent)
+                                .WithFooter(strings.AiResponseFooter(config.GuildId, userMsg.Author.Username, tokenCount));
+                            AddProviderBranding(embedBuilder, provider);
+                            var embed = embedBuilder.Build();
+                            await webhook.ModifyMessageAsync(webhookMessageId.Value, x =>
+                            {
+                                x.Content = null;
+                                x.Embeds = new List<Embed> { embed };
+                            });
+                        }
                     }
                     else
                     {
@@ -1255,7 +1279,7 @@ public class AiService : INService
                                 out _))
                         {
                             // Use the parsed embed data for the initial message
-                            var modifiedEmbeds = embedData.Select(embed =>
+                            var modifiedEmbeds = (embedData ?? Array.Empty<Embed>()).Select(embed =>
                             {
                                 var builder = embed.ToEmbedBuilder();
                                 if (builder.Footer is null || isFinalUpdate)
@@ -1268,16 +1292,36 @@ public class AiService : INService
 
                                 return builder.Build();
                             }).ToList();
+                            modifiedEmbeds = ApplyProviderBranding(modifiedEmbeds, provider);
 
                             // Send the initial message and store the reference
-                            regularMessage = await userMsg.Channel.SendMessageAsync(
-                                plainText,
-                                embeds: modifiedEmbeds.ToArray(), allowedMentions: AllowedMentions.None);
+                            if (modifiedEmbeds.Count > 0)
+                            {
+                                regularMessage = await userMsg.Channel.SendMessageAsync(
+                                    plainText,
+                                    embeds: modifiedEmbeds.ToArray(), allowedMentions: AllowedMentions.None);
+                            }
+                            else
+                            {
+                                var embedBuilder = new EmbedBuilder()
+                                    .WithOkColor()
+                                    .WithDescription(plainText ?? processedContent)
+                                    .WithFooter(strings.AiResponseFooter(config.GuildId, userMsg.Author.Username, tokenCount));
+                                AddProviderBranding(embedBuilder, provider);
+                                regularMessage = await userMsg.Channel.SendMessageAsync(
+                                    embeds: new[] { embedBuilder.Build() }, allowedMentions: AllowedMentions.None);
+                            }
                         }
                         else
                         {
                             // Create simple embed for first message
-                            regularMessage = await userMsg.Channel.SendConfirmAsync(processedContent);
+                            var embedBuilder = new EmbedBuilder()
+                                .WithOkColor()
+                                .WithDescription(processedContent)
+                                .WithFooter(strings.AiResponseFooter(config.GuildId, userMsg.Author.Username, tokenCount));
+                            AddProviderBranding(embedBuilder, provider);
+                            regularMessage = await userMsg.Channel.SendMessageAsync(
+                                embeds: new[] { embedBuilder.Build() }, allowedMentions: AllowedMentions.None);
                         }
                     }
                     else
@@ -1287,7 +1331,7 @@ public class AiService : INService
                                 out _))
                         {
                             // Use the parsed embed data for updates
-                            var modifiedEmbeds = embedData.Select(embed =>
+                            var modifiedEmbeds = (embedData ?? Array.Empty<Embed>()).Select(embed =>
                             {
                                 var builder = embed.ToEmbedBuilder();
                                 if (builder.Footer is null || isFinalUpdate)
@@ -1298,13 +1342,31 @@ public class AiService : INService
 
                                 return builder.Build();
                             }).ToList();
+                            modifiedEmbeds = ApplyProviderBranding(modifiedEmbeds, provider);
 
-                            // Update the existing message
-                            await regularMessage.ModifyAsync(msg =>
+                            if (modifiedEmbeds.Count > 0)
                             {
-                                msg.Content = plainText;
-                                msg.Embeds = modifiedEmbeds.ToArray();
-                            });
+                                // Update the existing message
+                                await regularMessage.ModifyAsync(msg =>
+                                {
+                                    msg.Content = plainText;
+                                    msg.Embeds = modifiedEmbeds.ToArray();
+                                });
+                            }
+                            else
+                            {
+                                var embedBuilder = new EmbedBuilder()
+                                    .WithOkColor()
+                                    .WithDescription(plainText ?? processedContent)
+                                    .WithFooter(strings.AiResponseFooter(config.GuildId, userMsg.Author.Username, tokenCount));
+                                AddProviderBranding(embedBuilder, provider);
+                                var embed = embedBuilder.Build();
+                                await regularMessage.ModifyAsync(msg =>
+                                {
+                                    msg.Content = null;
+                                    msg.Embed = embed;
+                                });
+                            }
                         }
                         else
                         {
@@ -1363,7 +1425,7 @@ public class AiService : INService
                     var newEmbed = JsonSerializer.Deserialize<NewEmbed>(jsonTemplate);
                     if (newEmbed != null && (newEmbed.Embeds?.Count > 0 || newEmbed.Embed != null))
                     {
-                        var firstMessageEmbeds = GetDiscordEmbeds(newEmbed);
+                        var firstMessageEmbeds = ApplyProviderBranding(GetDiscordEmbeds(newEmbed), provider);
 
                         if (webhook != null && webhookMessageId.HasValue)
                         {
@@ -1395,12 +1457,13 @@ public class AiService : INService
                     logger.LogWarning($"Error creating JSON embed for first chunk: {ex.Message}");
 
                     // Fallback for the first chunk
-                    var fallbackEmbed = new EmbedBuilder()
+                    var fallbackEmbedBuilder = new EmbedBuilder()
                         .WithOkColor()
                         .WithTitle($"Response (Part 1/{chunks.Count})")
                         .WithDescription(chunks[0])
-                        .WithFooter(strings.AiResponseFooter(config.GuildId, userMsg.Author.Username, tokenCount))
-                        .Build();
+                        .WithFooter(strings.AiResponseFooter(config.GuildId, userMsg.Author.Username, tokenCount));
+                    AddProviderBranding(fallbackEmbedBuilder, provider);
+                    var fallbackEmbed = fallbackEmbedBuilder.Build();
 
                     if (webhook != null && webhookMessageId.HasValue)
                     {
@@ -1446,6 +1509,7 @@ public class AiService : INService
                                 tokenCount));
                         }
 
+                        AddProviderBranding(embedBuilder, provider);
                         var embed = embedBuilder.Build();
 
                         if (webhook != null && webhookMessageId.HasValue)
@@ -1483,6 +1547,7 @@ public class AiService : INService
                         tokenCount));
                 }
 
+                AddProviderBranding(firstEmbedBuilder, provider);
                 var firstEmbed = firstEmbedBuilder.Build();
 
                 // Send/modify the main message with only the first chunk
@@ -1527,6 +1592,7 @@ public class AiService : INService
                             tokenCount));
                     }
 
+                    AddProviderBranding(embedBuilder, provider);
                     var embed = embedBuilder.Build();
 
                     if (webhook != null && webhookMessageId.HasValue)
@@ -2042,6 +2108,18 @@ public class AiService : INService
             AiProvider.Claude => "https://images.seeklogo.com/logo-png/55/1/claude-logo-png_seeklogo-554534.png",
             _ => string.Empty
         };
+    }
+
+    private List<Embed> ApplyProviderBranding(IEnumerable<Embed> embeds, AiProvider provider)
+    {
+        return embeds
+            .Select(embed =>
+            {
+                var builder = embed.ToEmbedBuilder();
+                AddProviderBranding(builder, provider);
+                return builder.Build();
+            })
+            .ToList();
     }
 
     private EmbedBuilder AddProviderBranding(EmbedBuilder builder, AiProvider provider)
