@@ -895,7 +895,8 @@ public class AiService : INService
         if (provider == AiProvider.Claude && aiClient is ClaudeClient claudeClient)
         {
             var enableWebSearch = config.WebSearchEnabled;
-            var enableUserInfo = true; // Always enable user info for Claude
+            var enableUserInfo = ShouldEnableUserInfoTool(userQuery);
+            logger.LogInformation("Claude user info tool enabled: {Enabled}", enableUserInfo);
 
             stream = await claudeClient.StreamResponseAsync(messagesToSend, model, apiKey,
                 enableWebSearch, enableUserInfo, guildChannel.Guild.Id);
@@ -2120,6 +2121,70 @@ public class AiService : INService
                 return builder.Build();
             })
             .ToList();
+    }
+
+    private bool ShouldEnableUserInfoTool(string? userQuery)
+    {
+        if (string.IsNullOrWhiteSpace(userQuery))
+            return false;
+
+        // Recursive Claude tool-result turns should not re-enable lookup tools.
+        if (userQuery.Contains("<tool_result>", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        if (userQuery.Contains("<@", StringComparison.Ordinal))
+            return true;
+
+        if (ContainsSnowflakeLikeId(userQuery))
+            return true;
+
+        var lowered = userQuery.ToLowerInvariant();
+
+        // Require explicit Discord/member lookup intent to avoid false positives on normal knowledge prompts.
+        string[] intentPhrases =
+        [
+            "discord user",
+            "server member",
+            "guild member",
+            "member info",
+            "user info",
+            "userinfo",
+            "user profile",
+            "member profile",
+            "find user",
+            "lookup user",
+            "look up user",
+            "check user",
+            "who is this user",
+            "their xp",
+            "their warnings",
+            "their roles",
+            "joined this server",
+            "in this server"
+        ];
+
+        return intentPhrases.Any(lowered.Contains);
+    }
+
+    private static bool ContainsSnowflakeLikeId(string input)
+    {
+        var digitRun = 0;
+
+        foreach (var ch in input)
+        {
+            if (char.IsDigit(ch))
+            {
+                digitRun++;
+                if (digitRun >= 16)
+                    return true;
+            }
+            else
+            {
+                digitRun = 0;
+            }
+        }
+
+        return false;
     }
 
     private EmbedBuilder AddProviderBranding(EmbedBuilder builder, AiProvider provider)
