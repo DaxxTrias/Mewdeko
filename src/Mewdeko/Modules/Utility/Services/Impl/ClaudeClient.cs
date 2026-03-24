@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
@@ -14,6 +14,9 @@ namespace Mewdeko.Modules.Utility.Services.Impl;
 /// </summary>
 public class ClaudeClient : IAiClient
 {
+    private const string UserInfoToolGuardrails =
+        "Tool policy: Use `get_user_info` only for explicit Discord guild member lookups (for example @mention, user ID, or clear request for server member profile/xp/warnings/roles). Never use it for public figures, historical people, fictional characters, or general knowledge questions.";
+
     private static readonly string[] item = new[]
     {
         "user_query"
@@ -102,6 +105,13 @@ public class ClaudeClient : IAiClient
                 ["stream"] = true
             };
 
+            if (enableUserInfo)
+            {
+                systemMessage = string.IsNullOrWhiteSpace(systemMessage)
+                    ? UserInfoToolGuardrails
+                    : $"{systemMessage}\n\n{UserInfoToolGuardrails}";
+            }
+
             if (!string.IsNullOrWhiteSpace(systemMessage))
             {
                 requestBody["system"] = systemMessage;
@@ -124,7 +134,7 @@ public class ClaudeClient : IAiClient
                 {
                     ["name"] = "get_user_info",
                     ["description"] =
-                        "Get detailed information about a Discord user in this guild, including XP stats, profile, warnings, and activity",
+                        "Get detailed information about a Discord user in this guild, including XP stats, profile, warnings, and activity. Use only when user explicitly asks about a member in this Discord server.",
                     ["input_schema"] = new Dictionary<string, object>
                     {
                         ["type"] = "object",
@@ -133,7 +143,8 @@ public class ClaudeClient : IAiClient
                             ["user_query"] = new Dictionary<string, object>
                             {
                                 ["type"] = "string",
-                                ["description"] = "User ID, username, display name, or @mention to look up"
+                                ["description"] =
+                                    "Discord user identifier to look up (user ID, username, display name, or @mention). Not for public figures or general entities."
                             }
                         },
                         ["required"] = item

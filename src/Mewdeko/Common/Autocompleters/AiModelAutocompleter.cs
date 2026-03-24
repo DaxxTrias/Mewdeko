@@ -46,15 +46,14 @@ public class AiModelAutoCompleter : AutocompleteHandler
         };
         logger.LogInformation(provider.GetType().Name);
 
-        var config = await aiService.GetOrCreateConfig(guildId);
-
-        if (string.IsNullOrEmpty(config.ApiKey))
+        var providerApiKey = await aiService.GetProviderApiKey(guildId, provider);
+        if (string.IsNullOrWhiteSpace(providerApiKey))
             return AutocompletionResult.FromSuccess(
                 [new AutocompleteResult("No API key set for this provider. Set a key before trying to query models", "none")]);
 
         try
         {
-            var models = await aiService.GetSupportedModels(provider, config.ApiKey);
+            var models = await aiService.GetSupportedModels(provider, providerApiKey);
             var searchTerm = (string)autocompleteInteraction.Data.Current.Value;
 
             return AutocompletionResult.FromSuccess(

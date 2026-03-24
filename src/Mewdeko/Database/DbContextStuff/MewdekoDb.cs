@@ -443,6 +443,11 @@ public class MewdekoDb : DataConnection
     public ITable<GuildAiConfig> GuildAiConfigs => this.GetTable<GuildAiConfig>();
 
     /// <summary>
+    ///     Gets the guild AI provider links table.
+    /// </summary>
+    public ITable<GuildAiProviderLink> GuildAiProviderLinks => this.GetTable<GuildAiProviderLink>();
+
+    /// <summary>
     ///     Gets the guild repeaters table.
     /// </summary>
     public ITable<GuildRepeater> GuildRepeaters => this.GetTable<GuildRepeater>();

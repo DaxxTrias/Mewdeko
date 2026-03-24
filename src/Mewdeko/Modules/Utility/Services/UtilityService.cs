@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using LinqToDB;
@@ -216,21 +216,26 @@ public partial class UtilityService : INService
             return;
 
 
-        var msgs = messages.Where(x => x.HasValue).Select(x => new SnipeStore
+        var msgs = messages.Where(x => x.HasValue).Select(x =>
         {
-            GuildId = chan.Guild.Id,
-            ChannelId = chan.Id,
-            MessageId = x.Value.Id,
-            MessageTimestamp = x.Value.Timestamp,
-            ReferenceMessage =
-                (x.Value as IUserMessage)?.ReferencedMessage == null
-                    ? null
-                    : $"{Format.Bold((x.Value as IUserMessage).ReferencedMessage.Author.ToString())}: {(x.Value as IUserMessage).ReferencedMessage.Content.TrimTo(400)}",
-            Message = x.Value.Content,
-            JsonData = SerializeMessageData(x.Value),
-            UserId = x.Value.Author.Id,
-            Edited = false,
-            DateAdded = DateTime.UtcNow
+            var attachments = BuildAttachmentStore(x.Value);
+            return new SnipeStore
+            {
+                GuildId = chan.Guild.Id,
+                ChannelId = chan.Id,
+                MessageId = x.Value.Id,
+                MessageTimestamp = x.Value.Timestamp,
+                ReferenceMessage =
+                    (x.Value as IUserMessage)?.ReferencedMessage == null
+                        ? null
+                        : $"{Format.Bold((x.Value as IUserMessage).ReferencedMessage.Author.ToString())}: {(x.Value as IUserMessage).ReferencedMessage.Content.TrimTo(400)}",
+                Message = BuildSnipeMessageContent(x.Value, attachments),
+                Attachments = attachments,
+                JsonData = SerializeMessageData(x.Value),
+                UserId = x.Value.Author.Id,
+                Edited = false,
+                DateAdded = DateTime.UtcNow
+            };
         });
 
         if (!msgs.Any())
@@ -257,17 +262,19 @@ public partial class UtilityService : INService
 
         if ((optMsg.HasValue ? optMsg.Value : null) is not IUserMessage msg) return;
         if (msg.Author is null /*for some reason*/) return;
+        var attachments = BuildAttachmentStore(msg);
         var snipemsg = new SnipeStore
         {
             GuildId = channel.Guild.Id,
             ChannelId = channel.Id,
             MessageId = msg.Id,
             MessageTimestamp = msg.Timestamp,
-            Message = msg.Content,
+            Message = BuildSnipeMessageContent(msg, attachments),
             ReferenceMessage =
                 msg.ReferencedMessage == null
                     ? null
                     : $"{Format.Bold(msg.ReferencedMessage.Author.ToString())}: {msg.ReferencedMessage.Content.TrimTo(400)}",
+            Attachments = attachments,
             JsonData = SerializeMessageData(msg),
             UserId = msg.Author.Id,
             Edited = false,
@@ -292,17 +299,19 @@ public partial class UtilityService : INService
         if (!await GetSnipeSet(channel.Guild.Id)) return;
 
         if ((optMsg.HasValue ? optMsg.Value : null) is not IUserMessage msg) return;
+        var attachments = BuildAttachmentStore(msg);
         var snipemsg = new SnipeStore
         {
             GuildId = channel.GuildId,
             ChannelId = channel.Id,
             MessageId = msg.Id,
             MessageTimestamp = msg.Timestamp,
-            Message = msg.Content,
+            Message = BuildSnipeMessageContent(msg, attachments),
             ReferenceMessage =
                 msg.ReferencedMessage == null
                     ? null
                     : $"{Format.Bold(msg.ReferencedMessage.Author.ToString())}: {msg.ReferencedMessage.Content.TrimTo(1048)}",
+            Attachments = attachments,
             JsonData = SerializeMessageData(msg),
             UserId = msg.Author.Id,
             Edited = true,
@@ -402,6 +411,35 @@ public partial class UtilityService : INService
         @"https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)",
         RegexOptions.IgnoreCase | RegexOptions.Compiled, "en-US")]
     private static partial Regex MyRegex();
+
+    private static List<SnipeAttachmentStore> BuildAttachmentStore(IMessage msg)
+    {
+        return msg.Attachments.Select(a => new SnipeAttachmentStore
+        {
+            Filename = a.Filename,
+            Url = a.Url,
+            ProxyUrl = a.ProxyUrl
+        }).ToList();
+    }
+
+    private static string BuildSnipeMessageContent(IMessage msg, IReadOnlyCollection<SnipeAttachmentStore> attachments)
+    {
+        if (!string.IsNullOrWhiteSpace(msg.Content))
+            return msg.Content;
+
+        if (attachments.Count == 0)
+            return string.Empty;
+
+        var names = attachments
+            .Take(5)
+            .Select(a => string.IsNullOrWhiteSpace(a.Filename) ? "unnamed attachment" : a.Filename);
+
+        var summary = $"[Attachment-only message] {string.Join(", ", names)}";
+        if (attachments.Count > 5)
+            summary += $" (+{attachments.Count - 5} more)";
+
+        return summary;
+    }
 }
 
 /// <summary>

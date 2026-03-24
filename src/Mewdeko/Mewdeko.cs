@@ -324,7 +324,13 @@ public class Mewdeko : IDisposable
             throw;
         }
 #if !DEBUG
-        await interactionService.RegisterCommandsGloballyAsync().ConfigureAwait(false);
+        var globalRegistrationSucceeded =
+            await RegisterCommandsGloballyWithRetryAsync(interactionService, 5).ConfigureAwait(false);
+        if (!globalRegistrationSucceeded)
+        {
+            logger.LogWarning(
+                "Continuing startup without successful global command registration. Slash commands may be stale until the next successful registration.");
+        }
 #endif
 #if DEBUG
         // Register to each guild sequentially with throttling to avoid rate limits/timeouts
@@ -425,6 +431,80 @@ public class Mewdeko : IDisposable
             }
         }
 
+        return false;
+    }
+
+    private async Task<bool> RegisterCommandsGloballyWithRetryAsync(InteractionService interactionService, int maxAttempts)
+    {
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            try
+            {
+                logger.LogInformation("Registering interaction commands globally (attempt {Attempt}/{MaxAttempts})...",
+                    attempt, maxAttempts);
+                await interactionService.RegisterCommandsGloballyAsync().ConfigureAwait(false);
+                logger.LogInformation("Registered interaction commands globally.");
+                return true;
+            }
+            catch (HttpException ex) when (ex.HttpCode == HttpStatusCode.BadGateway
+                                           || ex.HttpCode == HttpStatusCode.ServiceUnavailable
+                                           || ex.HttpCode == HttpStatusCode.GatewayTimeout
+                                           || ex.HttpCode == HttpStatusCode.RequestTimeout
+                                           || ex.HttpCode == HttpStatusCode.TooManyRequests)
+            {
+                var delay = TimeSpan.FromSeconds(Math.Min(15, Math.Pow(2, attempt))) +
+                            TimeSpan.FromMilliseconds(Random.Shared.Next(0, 500));
+                logger.LogWarning(ex,
+                    "Transient HTTP {Status} while registering global commands on attempt {Attempt}/{MaxAttempts}; retrying in {Delay}.",
+                    (int)ex.HttpCode, attempt, maxAttempts, delay);
+                await Task.Delay(delay).ConfigureAwait(false);
+            }
+            catch (HttpRequestException ex)
+            {
+                var delay = TimeSpan.FromSeconds(Math.Min(15, Math.Pow(2, attempt))) +
+                            TimeSpan.FromMilliseconds(Random.Shared.Next(0, 500));
+                logger.LogWarning(ex,
+                    "HTTP request error while registering global commands on attempt {Attempt}/{MaxAttempts}; retrying in {Delay}.",
+                    attempt, maxAttempts, delay);
+                await Task.Delay(delay).ConfigureAwait(false);
+            }
+            catch (IOException ex)
+            {
+                var delay = TimeSpan.FromSeconds(Math.Min(15, Math.Pow(2, attempt))) +
+                            TimeSpan.FromMilliseconds(Random.Shared.Next(0, 500));
+                logger.LogWarning(ex,
+                    "IO error while registering global commands on attempt {Attempt}/{MaxAttempts}; retrying in {Delay}.",
+                    attempt, maxAttempts, delay);
+                await Task.Delay(delay).ConfigureAwait(false);
+            }
+            catch (SocketException ex)
+            {
+                var delay = TimeSpan.FromSeconds(Math.Min(15, Math.Pow(2, attempt))) +
+                            TimeSpan.FromMilliseconds(Random.Shared.Next(0, 500));
+                logger.LogWarning(ex,
+                    "Socket error while registering global commands on attempt {Attempt}/{MaxAttempts}; retrying in {Delay}.",
+                    attempt, maxAttempts, delay);
+                await Task.Delay(delay).ConfigureAwait(false);
+            }
+            catch (TimeoutException ex)
+            {
+                var delay = TimeSpan.FromSeconds(Math.Min(15, Math.Pow(2, attempt))) +
+                            TimeSpan.FromMilliseconds(Random.Shared.Next(0, 500));
+                logger.LogWarning(ex,
+                    "Timeout while registering global commands on attempt {Attempt}/{MaxAttempts}; retrying in {Delay}.",
+                    attempt, maxAttempts, delay);
+                await Task.Delay(delay).ConfigureAwait(false);
+            }
+            catch (HttpException ex)
+            {
+                logger.LogError(ex,
+                    "Non-transient HTTP {Status} while registering global commands; skipping retries.",
+                    (int)ex.HttpCode);
+                return false;
+            }
+        }
+
+        logger.LogError("Failed to register global commands after {MaxAttempts} attempts.", maxAttempts);
         return false;
     }
 

@@ -11,6 +11,9 @@ namespace Mewdeko.Modules.Utility.Services.Impl
         /// <inheritdoc />
         public string ParseDelta(string json, AiService.AiProvider provider)
         {
+            if (provider != AiService.AiProvider.OpenAi)
+                return string.Empty;
+
             try
             {
                 using var doc = JsonDocument.Parse(json);
@@ -53,6 +56,9 @@ namespace Mewdeko.Modules.Utility.Services.Impl
     /// <inheritdoc />
     public (bool IsFinished, string StopReason) CheckStreamFinished(string json, AiService.AiProvider provider)
     {
+        if (provider != AiService.AiProvider.OpenAi)
+            return (false, null);
+
         try
         {
             using var doc = JsonDocument.Parse(json);
@@ -83,6 +89,9 @@ namespace Mewdeko.Modules.Utility.Services.Impl
         /// <inheritdoc />
         public (int InputTokens, int OutputTokens, int TotalTokens)? ParseUsage(string json, AiService.AiProvider provider)
         {
+            if (provider != AiService.AiProvider.OpenAi)
+                return null;
+
             try
             {
                 using var doc = JsonDocument.Parse(json);

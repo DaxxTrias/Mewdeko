@@ -1,4 +1,4 @@
-﻿using System.Net.Http;
+using System.Net.Http;
 using Discord.Commands;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Modules.Utility.Services;
@@ -44,13 +44,15 @@ public partial class Utility
         public async Task AiModel(AiService.AiProvider provider, string? model = null)
         {
             var config = await Service.GetOrCreateConfig(ctx.Guild.Id);
-            if (string.IsNullOrEmpty(config.ApiKey))
+            var providerApiKey = await Service.GetProviderApiKey(ctx.Guild.Id, provider);
+            if (string.IsNullOrWhiteSpace(providerApiKey))
             {
-                await ctx.Channel.SendErrorAsync(Strings.AiNoApiKey(ctx.Guild.Id, provider), Config);
+                await ctx.Channel.SendErrorAsync($"No API key linked for {provider}. Set one using aikey {provider}.",
+                    Config);
                 return;
             }
 
-            var models = await Service.GetSupportedModels(provider, config.ApiKey);
+            var models = await Service.GetSupportedModels(provider, providerApiKey);
 
             if (model == null)
             {
@@ -66,11 +68,41 @@ public partial class Utility
                 return;
             }
 
+            var updated = await Service.SetProviderModel(ctx.Guild.Id, provider, model);
+            if (!updated)
+            {
+                await ctx.Channel.SendErrorAsync(
+                    $"Couldn't set model for {provider} because that provider is not linked yet.",
+                    Config);
+                return;
+            }
+
             config.Provider = (int)provider;
             config.Model = model;
             await Service.UpdateConfig(config);
 
             await ctx.Channel.SendConfirmAsync(Strings.AiModelChanged(ctx.Guild.Id, model));
+        }
+
+        /// <summary>
+        ///     Sets the default provider route for AI chat.
+        /// </summary>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.ManageGuild)]
+        public async Task AiDefaultProvider(AiService.AiProvider provider)
+        {
+            var success = await Service.SetDefaultProvider(ctx.Guild.Id, provider);
+            if (!success)
+            {
+                await ctx.Channel.SendErrorAsync(
+                    $"Provider {provider} is not linked yet. Set an API key for it first.",
+                    Config);
+                return;
+            }
+
+            await ctx.Channel.SendConfirmAsync($"Default AI provider set to {provider}.");
         }
 
         /// <summary>
@@ -164,10 +196,16 @@ public partial class Utility
         [Aliases]
         [RequireContext(ContextType.Guild)]
         [UserPerm(GuildPermission.Administrator)]
-        public async Task AiKey()
+        public async Task AiKey(AiService.AiProvider? provider = null)
         {
+            var config = await Service.GetOrCreateConfig(ctx.Guild.Id);
+            var targetProvider = provider ?? (AiService.AiProvider)config.Provider;
+            if (!Enum.IsDefined(targetProvider))
+                targetProvider = AiService.AiProvider.OpenAi;
+
             var component = new ComponentBuilder()
-                .WithButton(Strings.AiKeyClickToSet(ctx.Guild.Id), "setaikey")
+                .WithButton($"{Strings.AiKeyClickToSet(ctx.Guild.Id)} ({targetProvider})",
+                    $"setaikey:{(int)targetProvider}")
                 .Build();
             await ctx.Channel.SendMessageAsync(Strings.EmptyResponse(ctx.Guild.Id), components: component);
         }
@@ -226,6 +264,13 @@ public partial class Utility
         public async Task AiConfig()
         {
             var config = await Service.GetOrCreateConfig(ctx.Guild.Id);
+            var links = await Service.GetProviderLinks(ctx.Guild.Id);
+            var linkedSummary = links.Count == 0
+                ? "None"
+                : string.Join("\n", links
+                    .OrderByDescending(x => x.IsDefault)
+                    .Select(x =>
+                        $"{(x.IsDefault ? "⭐" : "•")} {(AiService.AiProvider)x.Provider}: `{x.DefaultModel ?? "No model"}` ({(x.IsEnabled ? "enabled" : "disabled")})"));
 
             var eb = new EmbedBuilder()
                 .WithTitle(Strings.AiConfigTitle(ctx.Guild.Id))
@@ -236,6 +281,7 @@ public partial class Utility
             $"{config.Provider} ({(AiService.AiProvider)config.Provider} = {config.Provider})",
             config.Model ?? "Not Set",
             config.TokensUsed))
+                        .AddField("Linked providers", linkedSummary)
                         .WithOkColor();
 
             // Add web search status if using Claude

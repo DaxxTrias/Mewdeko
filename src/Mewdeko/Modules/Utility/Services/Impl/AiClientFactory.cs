@@ -27,9 +27,21 @@ public class AiClientFactory : IAiClientFactory
     /// <inheritdoc />
     public (IAiClient Client, IAiStreamParser Parser) Create(AiService.AiProvider provider)
     {
-        if (!clients.TryGetValue(provider, out var client))
+        if (!Enum.IsDefined(provider))
+            throw new NotSupportedException($"Provider {provider} is not a valid AI provider.");
+
+        if (!clients.TryGetValue(provider, out var entry))
             throw new NotSupportedException($"Provider {provider} not supported");
 
-        return client;
+        if (entry.Client is null || entry.Parser is null)
+            throw new InvalidOperationException($"Provider {provider} is registered with an invalid client/parser.");
+
+        if (entry.Client.Provider != provider)
+        {
+            throw new InvalidOperationException(
+                $"Provider registry mismatch. Requested {provider} but client reports {entry.Client.Provider}.");
+        }
+
+        return entry;
     }
 }
