@@ -39,7 +39,7 @@ public class MewdekoService : IHostedService
         ).Token;
 
         // Start the bot initialization
-        await mewdeko.RunAsync();
+        await mewdeko.RunAsync(combinedToken);
 
         // Keep the service running until cancellation is requested
         runningTask = Task.Run(async () =>

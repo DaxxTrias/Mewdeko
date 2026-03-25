@@ -12,6 +12,7 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Sockets;
 using System.IO;
+using System.Threading;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Common.TypeReaders;
 using Mewdeko.Common.TypeReaders.Interactions;
@@ -154,70 +155,108 @@ public class Mewdeko : IDisposable
         logger.LogInformation("TypeReaders loaded in {ElapsedTotalSeconds}s", sw.Elapsed.TotalSeconds);
     }
 
-    private async Task LoginAsync(string token)
+    private async Task LoginAsync(string token, CancellationToken cancellationToken = default)
     {
         Client.Log += Client_Log;
-        var clientReady = new TaskCompletionSource<bool>();
+        var attempt = 0;
 
         logger.LogInformation("Logging in...");
-        try
+        while (!cancellationToken.IsCancellationRequested)
         {
-            // Login but don't start shards yet
-            await Client.LoginAsync(TokenType.Bot, token.Trim()).ConfigureAwait(false);
-            var gw = await Client.GetBotGatewayAsync();
+            TaskCompletionSource<bool>? clientReady = null;
 
-            var maxConcurrency = gw.SessionStartLimit.MaxConcurrency;
-
-            // Start shards in rate-limited batches according to max concurrency
-            var totalShards = Client.Shards.Count;
-            logger.LogInformation("Starting {TotalShards} shards with max concurrency of {MaxConcurrency}", totalShards,
-                maxConcurrency);
-
-            // Group shards by their rate limit bucket using the formula from Discord docs
-            var shardGroups = Client.Shards
-                .GroupBy(shard => shard.ShardId % maxConcurrency)
-                .OrderBy(group => group.Key)
-                .ToList();
-
-            // Start each batch of shards
-            foreach (var group in shardGroups)
+            Task SetClientReady(DiscordSocketClient shard)
             {
-                var tasks = group.Select(shard => shard.StartAsync()).ToList();
-                logger.LogInformation("Starting shard bucket {BucketKey} with {ShardCount} shards", group.Key,
-                    tasks.Count);
-                await Task.WhenAll(tasks);
-            }
-        }
-        catch (HttpException ex)
-        {
-            LoginErrorHandler.Handle(ex);
-            Helpers.ReadErrorAndExit(3);
-        }
-        catch (Exception ex)
-        {
-            LoginErrorHandler.Handle(ex);
-            Helpers.ReadErrorAndExit(4);
-        }
-
-        Client.ShardReady += SetClientReady;
-        await clientReady.Task.ConfigureAwait(false);
-        Client.ShardReady -= SetClientReady;
-        Client.JoinedGuild += Client_JoinedGuild;
-        Client.LeftGuild += Client_LeftGuild;
-        logger.LogInformation("Logged in.");
-        logger.LogInformation("Logged in as:");
-        Console.WriteLine(FiggleFonts.Digital.Render(Client.CurrentUser.Username));
-        return;
-
-        Task SetClientReady(DiscordSocketClient unused)
-        {
-            ReadyCount++;
-            logger.LogInformation("Shard {ShardId} is ready", unused.ShardId);
-            logger.LogInformation("{ReadyCount}/{TotalShards} shards connected", ReadyCount, Client.Shards.Count);
-            if (ReadyCount != Client.Shards.Count)
+                ReadyCount++;
+                logger.LogInformation("Shard {ShardId} is ready", shard.ShardId);
+                logger.LogInformation("{ReadyCount}/{TotalShards} shards connected", ReadyCount, Client.Shards.Count);
+                if (ReadyCount == Client.Shards.Count)
+                    clientReady?.TrySetResult(true);
                 return Task.CompletedTask;
-            _ = Task.Run(() => clientReady.TrySetResult(true));
-            return Task.CompletedTask;
+            }
+
+            try
+            {
+                attempt++;
+                ReadyCount = 0;
+                clientReady = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                Client.ShardReady += SetClientReady;
+
+                // Login but don't start shards yet
+                await Client.LoginAsync(TokenType.Bot, token.Trim()).ConfigureAwait(false);
+                var gw = await Client.GetBotGatewayAsync().ConfigureAwait(false);
+                var maxConcurrency = Math.Max(1, gw.SessionStartLimit.MaxConcurrency);
+
+                // Start shards in rate-limited batches according to max concurrency
+                var totalShards = Client.Shards.Count;
+                logger.LogInformation("Starting {TotalShards} shards with max concurrency of {MaxConcurrency}", totalShards,
+                    maxConcurrency);
+
+                // Group shards by their rate limit bucket using the formula from Discord docs
+                var shardGroups = Client.Shards
+                    .GroupBy(shard => shard.ShardId % maxConcurrency)
+                    .OrderBy(group => group.Key)
+                    .ToList();
+
+                // Start each batch of shards
+                foreach (var group in shardGroups)
+                {
+                    var tasks = group.Select(shard => shard.StartAsync()).ToList();
+                    logger.LogInformation("Starting shard bucket {BucketKey} with {ShardCount} shards", group.Key,
+                        tasks.Count);
+                    await Task.WhenAll(tasks).ConfigureAwait(false);
+                }
+
+                var readyTimeout = TimeSpan.FromMinutes(2);
+                var readyOrTimeoutTask = await Task.WhenAny(clientReady.Task, Task.Delay(readyTimeout, cancellationToken))
+                    .ConfigureAwait(false);
+                if (readyOrTimeoutTask != clientReady.Task)
+                {
+                    throw new TimeoutException(
+                        $"Timed out waiting for shard readiness after {readyTimeout.TotalSeconds} seconds.");
+                }
+
+                await clientReady.Task.ConfigureAwait(false);
+
+                Client.JoinedGuild -= Client_JoinedGuild;
+                Client.LeftGuild -= Client_LeftGuild;
+                Client.JoinedGuild += Client_JoinedGuild;
+                Client.LeftGuild += Client_LeftGuild;
+
+                logger.LogInformation("Logged in.");
+                logger.LogInformation("Logged in as:");
+                Console.WriteLine(FiggleFonts.Digital.Render(Client.CurrentUser.Username));
+                return;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex) when (IsTransientLoginException(ex))
+            {
+                var delay = TimeSpan.FromSeconds(Math.Min(60, Math.Pow(2, Math.Min(attempt, 6)))) +
+                            TimeSpan.FromMilliseconds(Random.Shared.Next(0, 1000));
+                logger.LogWarning(ex,
+                    "Transient Discord connection error during startup (attempt {Attempt}); retrying in {Delay}.",
+                    attempt, delay);
+
+                await ResetDiscordClientStateAsync().ConfigureAwait(false);
+                await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
+            }
+            catch (HttpException ex)
+            {
+                LoginErrorHandler.Handle(ex);
+                Helpers.ReadErrorAndExit(3);
+            }
+            catch (Exception ex)
+            {
+                LoginErrorHandler.Handle(ex);
+                Helpers.ReadErrorAndExit(4);
+            }
+            finally
+            {
+                Client.ShardReady -= SetClientReady;
+            }
         }
     }
 
@@ -275,12 +314,12 @@ public class Mewdeko : IDisposable
     ///     Runs the bot, initializing all necessary components and services.
     /// </summary>
     /// <returns>A task representing the asynchronous operation.</returns>
-    public async Task RunAsync()
+    public async Task RunAsync(CancellationToken cancellationToken = default)
     {
         var sw = Stopwatch.StartNew();
 
 
-        await LoginAsync(Credentials.Token).ConfigureAwait(false);
+        await LoginAsync(Credentials.Token, cancellationToken).ConfigureAwait(false);
 
         logger.LogInformation("Loading Services...");
         try
@@ -342,6 +381,50 @@ public class Mewdeko : IDisposable
         performanceMonitor.Initialize(typeof(Mewdeko).Assembly, "Mewdeko");
         Ready.TrySetResult(true);
         logger.LogInformation("Ready.");
+    }
+
+    private async Task ResetDiscordClientStateAsync()
+    {
+        try
+        {
+            await Client.StopAsync().ConfigureAwait(false);
+        }
+        catch
+        {
+            // ignore cleanup errors during transient reconnect attempts
+        }
+
+        try
+        {
+            await Client.LogoutAsync().ConfigureAwait(false);
+        }
+        catch
+        {
+            // ignore cleanup errors during transient reconnect attempts
+        }
+    }
+
+    private static bool IsTransientLoginException(Exception ex)
+    {
+        if (ex is HttpException httpEx)
+        {
+            return httpEx.HttpCode == HttpStatusCode.BadGateway
+                   || httpEx.HttpCode == HttpStatusCode.ServiceUnavailable
+                   || httpEx.HttpCode == HttpStatusCode.GatewayTimeout
+                   || httpEx.HttpCode == HttpStatusCode.RequestTimeout
+                   || httpEx.HttpCode == HttpStatusCode.TooManyRequests;
+        }
+
+        if (ex is HttpRequestException
+            || ex is IOException
+            || ex is SocketException
+            || ex is TimeoutException
+            || ex is TaskCanceledException)
+        {
+            return true;
+        }
+
+        return ex.InnerException != null && IsTransientLoginException(ex.InnerException);
     }
 
     private async Task RegisterCommandsToAllGuildsWithThrottlingAsync(InteractionService interactionService, TimeSpan perGuildDelay)
