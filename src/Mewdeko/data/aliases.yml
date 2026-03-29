@@ -3493,3 +3493,8 @@ mcplayer:
   - mcp
 mcskin:
   - mcskin
+mcrcon:
+  - mcrcon
+mcwhitelist:
+  - mcwhitelist
+  - mcwl
