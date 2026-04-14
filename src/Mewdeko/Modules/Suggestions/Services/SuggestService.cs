@@ -22,6 +22,7 @@ public class SuggestionsService : INService
     private static readonly Dictionary<string, string[]> DigestCategories = new(StringComparer.OrdinalIgnoreCase)
     {
         ["Charting"] = ["chart", "charts", "tradingview", "indicator", "candlestick", "candle"],
+        ["Exchanges"] = ["exchange", "exchanges", "bybit", "binance", "coinbase", "kraken", "okx", "mexc", "kucoin"],
         ["Orders"] = ["order", "maker", "taker", "limit", "market", "stop", "slippage", "fill"],
         ["PnL"] = ["profit", "pnl", "loss", "roi", "drawdown", "performance"],
         ["Risk"] = ["risk", "leverage", "margin", "liquidation", "stoploss", "takeprofit"],
@@ -32,7 +33,8 @@ public class SuggestionsService : INService
 
     private static readonly string[] BaseDigestKeywords =
     [
-        "tradingview", "chart", "profit", "maker order", "maker", "order", "pnl", "slippage", "execution", "latency"
+        "tradingview", "chart", "profit", "maker order", "maker", "order", "pnl", "slippage", "execution", "latency",
+        "exchange", "bybit", "binance"
     ];
 
     /// <summary>
@@ -2210,11 +2212,9 @@ public class SuggestionsService : INService
             {
                 var message = EscapeMarkdown(item.Message.Content.TrimTo(350));
                 var author = EscapeMarkdown(item.Message.Author.ToString());
-                var link =
-                    $"https://discord.com/channels/{channel.GuildId}/{channel.Id}/{item.Message.Id}";
 
                 report.AppendLine(
-                    $"- **Score {item.Score}** | dedup x{item.DedupCount} | keyword hits {item.KeywordHits} | by `{author}` | [jump]({link})");
+                    $"- **Score {item.Score}** | dedup x{item.DedupCount} | keyword hits {item.KeywordHits} | by `{author}`");
                 report.AppendLine($"  - {message}");
             }
 
