@@ -1,4 +1,4 @@
-﻿using DataModel;
+using DataModel;
 using Discord.Net;
 using LinqToDB;
 using LinqToDB.Async;
@@ -7,6 +7,8 @@ using Mewdeko.Modules.Administration.Services;
 using Mewdeko.Modules.Permissions.Common;
 using Mewdeko.Modules.Permissions.Services;
 using Mewdeko.Services.Strings;
+using System.Text;
+using System.Text.RegularExpressions;
 using Embed = Discord.Embed;
 
 namespace Mewdeko.Modules.Suggestions.Services;
@@ -17,6 +19,22 @@ namespace Mewdeko.Modules.Suggestions.Services;
 /// </summary>
 public class SuggestionsService : INService
 {
+    private static readonly Dictionary<string, string[]> DigestCategories = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Charting"] = ["chart", "charts", "tradingview", "indicator", "candlestick", "candle"],
+        ["Orders"] = ["order", "maker", "taker", "limit", "market", "stop", "slippage", "fill"],
+        ["PnL"] = ["profit", "pnl", "loss", "roi", "drawdown", "performance"],
+        ["Risk"] = ["risk", "leverage", "margin", "liquidation", "stoploss", "takeprofit"],
+        ["Execution"] = ["latency", "execution", "speed", "delay", "websocket", "api"],
+        ["UX"] = ["ui", "ux", "layout", "theme", "dashboard", "terminal", "mobile"],
+        ["General"] = []
+    };
+
+    private static readonly string[] BaseDigestKeywords =
+    [
+        "tradingview", "chart", "profit", "maker order", "maker", "order", "pnl", "slippage", "execution", "latency"
+    ];
+
     /// <summary>
     ///     Used to track the state of a suggestion.
     /// </summary>
@@ -2110,6 +2128,172 @@ public class SuggestionsService : INService
     }
 
     /// <summary>
+    ///     Builds a keyword-scored, deduplicated markdown digest from recent channel messages.
+    /// </summary>
+    /// <param name="channel">The source channel to read from.</param>
+    /// <param name="messageLimit">How many recent messages to inspect.</param>
+    /// <param name="extraKeywords">Optional comma/space-separated keywords for additional scoring.</param>
+    /// <returns>A markdown report and source statistics.</returns>
+    public async Task<(string Markdown, int SourceMessages, int UniqueItems)> BuildSuggestionDigestAsync(
+        ITextChannel channel,
+        int messageLimit,
+        string? extraKeywords = null)
+    {
+        var clamped = Math.Clamp(messageLimit, 25, 2000);
+        var rawMessages = (await channel.GetMessagesAsync(clamped).FlattenAsync().ConfigureAwait(false))
+            .OfType<IUserMessage>()
+            .Where(x => !x.Author.IsBot && !string.IsNullOrWhiteSpace(x.Content))
+            .ToList();
+
+        if (rawMessages.Count == 0)
+        {
+            var emptyReport = new StringBuilder()
+                .AppendLine($"# Suggestions Digest for #{channel.Name}")
+                .AppendLine()
+                .AppendLine($"Generated: {DateTimeOffset.UtcNow:yyyy-MM-dd HH:mm:ss} UTC")
+                .AppendLine($"Source messages scanned: {clamped}")
+                .AppendLine()
+                .AppendLine("No non-bot messages with text were found in the scanned range.")
+                .ToString();
+
+            return (emptyReport, 0, 0);
+        }
+
+        var keywordSet = BuildKeywordSet(extraKeywords);
+        var grouped = rawMessages
+            .Select(x => new
+            {
+                Message = x, Key = BuildDedupKey(x.Content)
+            })
+            .Where(x => !string.IsNullOrWhiteSpace(x.Key))
+            .GroupBy(x => x.Key)
+            .Select(g =>
+            {
+                var best = g.OrderByDescending(m => m.Message.Content.Length).First().Message;
+                var reactionCount = best.Reactions.Sum(r => r.Value.ReactionCount);
+                var category = ClassifyCategory(best.Content);
+                var keywordHits = CountKeywordHits(best.Content, keywordSet);
+                var repetitionBonus = Math.Min((g.Count() - 1) * 2, 10);
+                var score = (keywordHits * 3) + Math.Min(reactionCount, 5) + repetitionBonus;
+
+                return new DigestItem(
+                    best,
+                    category,
+                    g.Count(),
+                    score,
+                    keywordHits,
+                    reactionCount);
+            })
+            .OrderByDescending(x => x.Score)
+            .ThenByDescending(x => x.DedupCount)
+            .ToList();
+
+        var report = new StringBuilder()
+            .AppendLine($"# Suggestions Digest for #{channel.Name}")
+            .AppendLine()
+            .AppendLine($"Generated: {DateTimeOffset.UtcNow:yyyy-MM-dd HH:mm:ss} UTC")
+            .AppendLine($"Source messages scanned: {rawMessages.Count}")
+            .AppendLine($"Unique suggestion candidates: {grouped.Count}")
+            .AppendLine()
+            .AppendLine("## Top Suggestions")
+            .AppendLine();
+
+        var buckets = grouped
+            .GroupBy(x => x.Category)
+            .OrderByDescending(g => g.Max(i => i.Score))
+            .ThenBy(g => g.Key, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var bucket in buckets)
+        {
+            report.AppendLine($"### {bucket.Key}");
+            foreach (var item in bucket.Take(20))
+            {
+                var message = EscapeMarkdown(item.Message.Content.TrimTo(350));
+                var author = EscapeMarkdown(item.Message.Author.ToString());
+                var link =
+                    $"https://discord.com/channels/{channel.GuildId}/{channel.Id}/{item.Message.Id}";
+
+                report.AppendLine(
+                    $"- **Score {item.Score}** | dedup x{item.DedupCount} | keyword hits {item.KeywordHits} | by `{author}` | [jump]({link})");
+                report.AppendLine($"  - {message}");
+            }
+
+            report.AppendLine();
+        }
+
+        return (report.ToString(), rawMessages.Count, grouped.Count);
+    }
+
+    private static HashSet<string> BuildKeywordSet(string? extraKeywords)
+    {
+        var parsed = (extraKeywords ?? string.Empty)
+            .Split([',', ';', '\n', '\r', '\t'], StringSplitOptions.RemoveEmptyEntries)
+            .SelectMany(x => x.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+            .Select(x => x.Trim().ToLowerInvariant())
+            .Where(x => x.Length >= 3);
+
+        return BaseDigestKeywords
+            .Concat(parsed)
+            .Select(x => x.Trim().ToLowerInvariant())
+            .Where(x => x.Length >= 3)
+            .Distinct()
+            .ToHashSet();
+    }
+
+    private static string BuildDedupKey(string content)
+    {
+        if (string.IsNullOrWhiteSpace(content))
+            return string.Empty;
+
+        var normalized = Regex.Replace(content.ToLowerInvariant(), @"https?://\S+", " ");
+        normalized = Regex.Replace(normalized, @"[^a-z0-9\s]", " ");
+        normalized = Regex.Replace(normalized, @"\s+", " ").Trim();
+
+        var tokens = normalized.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .Where(x => x.Length > 2)
+            .Take(20)
+            .ToArray();
+
+        return string.Join(' ', tokens);
+    }
+
+    private static string ClassifyCategory(string content)
+    {
+        var lower = content.ToLowerInvariant();
+        var best = "General";
+        var bestHits = 0;
+
+        foreach (var kvp in DigestCategories)
+        {
+            if (kvp.Value.Length == 0)
+                continue;
+
+            var hits = kvp.Value.Count(keyword => lower.Contains(keyword, StringComparison.Ordinal));
+            if (hits <= bestHits)
+                continue;
+
+            best = kvp.Key;
+            bestHits = hits;
+        }
+
+        return best;
+    }
+
+    private static int CountKeywordHits(string content, IReadOnlyCollection<string> keywords)
+    {
+        var lower = content.ToLowerInvariant();
+        return keywords.Count(keyword => lower.Contains(keyword, StringComparison.Ordinal));
+    }
+
+    private static string EscapeMarkdown(string value)
+    {
+        return value
+            .Replace("`", "\\`")
+            .Replace("*", "\\*")
+            .Replace("_", "\\_");
+    }
+
+    /// <summary>
     ///     Unloads the service and unsubscribes from events.
     /// </summary>
     public Task Unload()
@@ -2121,6 +2305,14 @@ public class SuggestionsService : INService
         return Task.CompletedTask;
     }
 }
+
+file sealed record DigestItem(
+    IUserMessage Message,
+    string Category,
+    int DedupCount,
+    int Score,
+    int KeywordHits,
+    int ReactionCount);
 
 /// <summary>
 /// </summary>
