@@ -1,4 +1,5 @@
-﻿using System.IO;
+using System.IO;
+using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -602,7 +603,26 @@ public static partial class StringExtensions
     /// <returns>The input string with HTML tags removed.</returns>
     public static string StripHtml(this string input)
     {
-        return Regex.Replace(input, "<.*?>", string.Empty);
+        if (string.IsNullOrWhiteSpace(input))
+            return input;
+
+        // Remove script and style tags with their contents.
+        var result = Regex.Replace(input, "<script[^>]*?>.*?</script>", string.Empty,
+            RegexOptions.IgnoreCase | RegexOptions.Singleline);
+        result = Regex.Replace(result, "<style[^>]*?>.*?</style>", string.Empty,
+            RegexOptions.IgnoreCase | RegexOptions.Singleline);
+
+        // Remove HTML comments.
+        result = Regex.Replace(result, "<!--.*?-->", string.Empty, RegexOptions.Singleline);
+
+        // Remove remaining HTML tags.
+        result = Regex.Replace(result, "<.*?>", string.Empty);
+
+        // Decode HTML entities and normalize whitespace.
+        result = WebUtility.HtmlDecode(result);
+        result = Regex.Replace(result, @"\s+", " ");
+
+        return result.Trim();
     }
 
 

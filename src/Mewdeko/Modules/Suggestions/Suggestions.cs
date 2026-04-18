@@ -1,15 +1,20 @@
-﻿using Discord.Commands;
+using System.IO;
+using System.Text;
+using Discord.Commands;
 using Humanizer;
 using Mewdeko.Common.Attributes.TextCommands;
 using Mewdeko.Modules.Suggestions.Services;
+using Mewdeko.Services;
 
 namespace Mewdeko.Modules.Suggestions;
 
 /// <summary>
 ///     Commands for managing and interacting with suggestions.
 /// </summary>
-public partial class Suggestions : MewdekoModuleBase<SuggestionsService>
+public partial class Suggestions(IBotCredentials creds) : MewdekoModuleBase<SuggestionsService>
 {
+    private readonly IBotCredentials digestCreds = creds;
+
     /// <summary>
     ///     Sets or disables the suggestion channel for the server.
     /// </summary>
@@ -168,6 +173,43 @@ public partial class Suggestions : MewdekoModuleBase<SuggestionsService>
 
         await Service.SendSuggestion(ctx.Guild, ctx.User as IGuildUser, ctx.Client as DiscordShardedClient,
             suggestion, ctx.Channel as ITextChannel).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Generates a markdown digest of recent channel feedback with deduplication and keyword scoring.
+    /// </summary>
+    /// <param name="messageCount">How many recent messages to analyze (25-2000).</param>
+    /// <param name="channel">Optional source channel. Defaults to current channel.</param>
+    /// <param name="extraKeywords">Optional comma/space-separated keywords to boost scoring.</param>
+    [Cmd]
+    [Aliases]
+    [RequireContext(ContextType.Guild)]
+    public async Task SuggestDigest(int messageCount = 300, ITextChannel? channel = null,
+        [Remainder] string? extraKeywords = null)
+    {
+        if (ctx.User is not IGuildUser guser ||
+            (!guser.GuildPermissions.ManageMessages && !digestCreds.IsOwner(ctx.User)))
+        {
+            await ReplyErrorAsync("You need Manage Messages (or be a bot owner) to use this command.")
+                .ConfigureAwait(false);
+            return;
+        }
+
+        channel ??= ctx.Channel as ITextChannel;
+        if (channel is null)
+        {
+            await ReplyErrorAsync("This command can only run in text channels.").ConfigureAwait(false);
+            return;
+        }
+
+        await ctx.Channel.TriggerTypingAsync().ConfigureAwait(false);
+        var result = await Service.BuildSuggestionDigestAsync(channel, messageCount, extraKeywords).ConfigureAwait(false);
+        await using var stream = new MemoryStream(Encoding.UTF8.GetBytes(result.Markdown));
+        var fileName = $"suggestions-digest-{channel.Id}-{DateTimeOffset.UtcNow:yyyyMMdd-HHmmss}.md";
+
+        await ctx.Channel.SendFileAsync(stream, fileName,
+                $"Digest complete: scanned `{result.SourceMessages}` messages, `{result.UniqueItems}` unique items.")
+            .ConfigureAwait(false);
     }
 
     /// <summary>

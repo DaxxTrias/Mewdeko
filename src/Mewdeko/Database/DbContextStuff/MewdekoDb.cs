@@ -1333,4 +1333,37 @@ public class MewdekoDb : DataConnection
             return this.GetTable<FormQuestionCondition>();
         }
     }
+
+    /// <summary>
+    ///     Gets the Minecraft servers table.
+    /// </summary>
+    public ITable<MinecraftServer> MinecraftServers
+    {
+        get
+        {
+            return this.GetTable<MinecraftServer>();
+        }
+    }
+
+    /// <summary>
+    ///     Gets the Minecraft server snapshots table.
+    /// </summary>
+    public ITable<MinecraftServerSnapshot> MinecraftServerSnapshots
+    {
+        get
+        {
+            return this.GetTable<MinecraftServerSnapshot>();
+        }
+    }
+
+    /// <summary>
+    ///     Gets the stat channels table.
+    /// </summary>
+    public ITable<StatChannel> StatChannels
+    {
+        get
+        {
+            return this.GetTable<StatChannel>();
+        }
+    }
 }

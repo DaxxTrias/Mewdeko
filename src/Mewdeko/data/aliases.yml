@@ -3083,6 +3083,64 @@ trivia:
 triviachain:
   - triviachain
   - tc
+ttsenable:
+  - ttsenable
+  - tts
+  - ttson
+ttslink:
+  - ttslink
+  - ttschannel
+ttsannounce:
+  - ttsannounce
+  - ttsjoinleave
+ttsjoinformat:
+  - ttsjoinformat
+  - ttsjoin
+ttsleaveformat:
+  - ttsleaveformat
+  - ttsleave
+ttsvolume:
+  - ttsvolume
+  - ttsvol
+ttsspeed:
+  - ttsspeed
+ttsdefaultvoice:
+  - ttsdefaultvoice
+  - ttsdefvoice
+ttsvoice:
+  - ttsvoice
+  - myvoice
+ttsvoices:
+  - ttsvoices
+  - ttsvoicelist
+  - ttsvoicesearch
+ttsblock:
+  - ttsblock
+  - ttsban
+ttsblocklist:
+  - ttsblocklist
+  - ttsbanlist
+  - ttsblocked
+ttsrole:
+  - ttsrole
+ttsreplycontext:
+  - ttsreplycontext
+  - ttsreply
+ttsattachmentnarration:
+  - ttsattachmentnarration
+  - ttsattach
+ttsconsecutivegrouping:
+  - ttsconsecutivegrouping
+  - ttsgroup
+ttsmaxqueue:
+  - ttsmaxqueue
+  - ttsqueue
+ttssettings:
+  - ttssettings
+  - ttsinfo
+ttsremove:
+  - ttsremove
+  - ttsoff
 typeadd:
   - typeadd
 typedel:
@@ -3404,6 +3462,60 @@ yandere:
 yomama:
   - yomama
   - ym
+statchannelcreate:
+  - statchannelcreate
+  - scnew
+statchanneladd:
+  - statchanneladd
+  - sca
+statchannelrole:
+  - statchannelrole
+  - scr
+statchannelcountdown:
+  - statchannelcountdown
+  - scc
+statchannelgoal:
+  - statchannelgoal
+  - scg
+statchannelremove:
+  - statchannelremove
+  - scrm
+statchannellist:
+  - statchannellist
+  - scl
 youtube:
   - youtube
   - yt
+mcstatus:
+  - mcstatus
+  - mcs
+mcadd:
+  - mcadd
+mcremove:
+  - mcremove
+  - mcrm
+mclist:
+  - mclist
+  - mcl
+mcdefault:
+  - mcdefault
+  - mcdef
+mcwatch:
+  - mcwatch
+  - mcw
+mcwatchmode:
+  - mcwatchmode
+  - mcwm
+mcembed:
+  - mcembed
+  - mce
+mcplayer:
+  - mcplayer
+  - mcp
+mcskin:
+  - mcskin
+mcrcon:
+  - mcrcon
+mcwhitelist:
+  - mcwhitelist
+  - mcwl

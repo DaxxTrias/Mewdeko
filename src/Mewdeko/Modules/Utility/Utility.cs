@@ -2082,10 +2082,10 @@ public partial class Utility(
                     Strings.BotVersionAuthor(ctx.Guild.Id, client.CurrentUser.Username, StatsService.BotVersion),
                     client.CurrentUser.GetAvatarUrl(), config.Data.SupportServer)
                 // .AddField(Strings.Authors(ctx.Guild.Id),
-                    // $"[{users[0]}](https://github.com/SylveonDeko)\n[{users[1]}](https://github.com/CottageDwellingCat)")
+                    // $"[{users[0]}](https://github.com/SylveonDeko)")
                 .AddField(Strings.CommandsRan(ctx.Guild.Id), $"{commandStats}/5s")
                 .AddField(Strings.CommandCount(ctx.Guild.Id), cmdServ.Commands.DistinctBy(x => x.Name).Count())
-                // .AddField("Library", stats.Library)
+                .AddField("Library", stats.Library)
                 //.AddField(GetText("library"), $"{targetFramework} \n {libraryInfo.Library} \n {libraryInfo.OpenAILib}")
                 .AddField(Strings.OwnerIds(ctx.Guild.Id), string.Join("\n", creds.OwnerIds.Select(x => $"<@{x}>")))
                 .AddField(Strings.Shard(ctx.Guild.Id),

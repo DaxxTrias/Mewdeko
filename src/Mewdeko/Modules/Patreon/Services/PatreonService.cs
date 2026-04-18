@@ -83,14 +83,16 @@ public class PatreonService : BackgroundService, INService, IReadyExecutor
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
-                // Normal shutdown path.
+                break;
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
                 break;
             }
             catch (Exception ex)
             {
                 logger.LogError(ex, "Error in PatreonService background task");
 
-                // Wait 5 minutes before retrying on error
                 try
                 {
                     await Task.Delay(TimeSpan.FromMinutes(5), stoppingToken);

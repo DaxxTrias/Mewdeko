@@ -1,6 +1,7 @@
 using System.IO;
 using System.Net;
 using System.Net.Http;
+using System.Net.Sockets;
 using System.Net.Security;
 using System.Security.Authentication;
 using System.Text;
@@ -34,6 +35,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.OpenApi;
 using NekosBestApiNet;
+using Prometheus;
 using Serilog;
 using ZiggyCreatures.Caching.Fusion;
 using RunMode = Discord.Commands.RunMode;
@@ -65,6 +67,32 @@ public class Program
 
         // Load credentials first to check if setup was already completed
         var credentials = new BotCredentials();
+
+        // Start Prometheus metrics server as early as possible to capture startup metrics
+        KestrelMetricServer metricServer = null;
+        if (!credentials.IsApiEnabled)
+        {
+            var metricsPort = credentials.ApiPort + 1000;
+            if (!IsPortAvailable(metricsPort))
+            {
+                log.Warning("Prometheus metrics disabled: port {MetricsPort} is already in use.", metricsPort);
+            }
+            else
+            {
+                metricServer = new KestrelMetricServer(metricsPort);
+                try
+                {
+                    metricServer.Start();
+                    log.Information("Prometheus metrics available on http://0.0.0.0:{MetricsPort}/metrics", metricsPort);
+                }
+                catch (Exception ex)
+                {
+                    metricServer = null;
+                    log.Warning("Could not start Prometheus metrics server on port {MetricsPort}: {Reason}",
+                        metricsPort, ex.Message);
+                }
+            }
+        }
 
         // Check and install dependencies (pass setup status to avoid prompting if already done)
         DependencyInstaller.CheckAndInstallDependencies(credentials.PsqlConnectionString, credentials.IsMasterInstance,
@@ -289,8 +317,10 @@ public class Program
             {
                 KeepAliveInterval = TimeSpan.FromSeconds(120)
             });
+            app.UseHttpMetrics();
             app.UseAuthorization();
             app.MapControllers();
+            app.MapMetrics();
 
             foreach (var address in app.Urls) log.Information("API Listening on {Address}", address);
             await app.RunAsync();
@@ -496,5 +526,24 @@ public class Program
         services.AddHostedService<MewdekoService>();
         services.AddHostedService<ScheduledDeletionService>();
         services.AddHostedService<PatreonService>();
+    }
+
+    private static bool IsPortAvailable(int port)
+    {
+        TcpListener listener = null;
+        try
+        {
+            listener = new TcpListener(IPAddress.Any, port);
+            listener.Start();
+            return true;
+        }
+        catch (SocketException)
+        {
+            return false;
+        }
+        finally
+        {
+            listener?.Stop();
+        }
     }
 }

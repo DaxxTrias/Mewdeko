@@ -1,8 +1,11 @@
-﻿using Discord.Interactions;
+using System.IO;
+using System.Text;
+using Discord.Interactions;
 using Mewdeko.Common.Attributes.InteractionCommands;
 using Mewdeko.Common.Autocompleters;
 using Mewdeko.Common.Modals;
 using Mewdeko.Modules.Suggestions.Services;
+using Mewdeko.Services;
 
 namespace Mewdeko.Modules.Suggestions;
 
@@ -10,8 +13,10 @@ namespace Mewdeko.Modules.Suggestions;
 ///     Slash commands for sending and managing suggestions.
 /// </summary>
 [Group("suggestions", "Send or manage suggestions!")]
-public partial class SlashSuggestions : MewdekoSlashModuleBase<SuggestionsService>
+public partial class SlashSuggestions(IBotCredentials creds) : MewdekoSlashModuleBase<SuggestionsService>
 {
+    private readonly IBotCredentials digestCreds = creds;
+
     /// <summary>
     ///     Sets the suggestion channel for the guild.
     /// </summary>
@@ -191,6 +196,41 @@ public partial class SlashSuggestions : MewdekoSlashModuleBase<SuggestionsServic
 
         await Service.SendSuggestion(ctx.Guild, ctx.User as IGuildUser, ctx.Client as DiscordShardedClient,
             modal.Suggestion, ctx.Channel as ITextChannel, ctx.Interaction).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Builds and exports a markdown digest of recent channel suggestions/feedback.
+    /// </summary>
+    /// <param name="messageCount">How many recent messages to inspect (25-2000).</param>
+    /// <param name="channel">Optional source channel. Defaults to current channel.</param>
+    /// <param name="extraKeywords">Optional comma/space-separated keywords to improve sorting.</param>
+    [SlashCommand("digest", "Export a markdown digest of recent feedback from a channel.")]
+    [RequireContext(ContextType.Guild)]
+    [CheckPermissions]
+    public async Task SuggestDigest(int messageCount = 300, ITextChannel? channel = null, string? extraKeywords = null)
+    {
+        if (ctx.User is not IGuildUser guser ||
+            (!guser.GuildPermissions.ManageMessages && !digestCreds.IsOwner(ctx.User)))
+        {
+            await EphemeralReplyErrorAsync("You need Manage Messages (or be a bot owner) to use this command.")
+                .ConfigureAwait(false);
+            return;
+        }
+
+        channel ??= ctx.Channel as ITextChannel;
+        if (channel is null)
+        {
+            await EphemeralReplyErrorAsync("This command can only run in text channels.").ConfigureAwait(false);
+            return;
+        }
+
+        await DeferAsync().ConfigureAwait(false);
+        var result = await Service.BuildSuggestionDigestAsync(channel, messageCount, extraKeywords).ConfigureAwait(false);
+        await using var stream = new MemoryStream(Encoding.UTF8.GetBytes(result.Markdown));
+        var fileName = $"suggestions-digest-{channel.Id}-{DateTimeOffset.UtcNow:yyyyMMdd-HHmmss}.md";
+        await FollowupWithFileAsync(stream, fileName,
+                $"Digest complete: scanned `{result.SourceMessages}` messages, `{result.UniqueItems}` unique items.")
+            .ConfigureAwait(false);
     }
 
     /// <summary>

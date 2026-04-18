@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Text;
 using Serilog;
 using Serilog.Events;
@@ -36,6 +36,8 @@ public static class LogSetup
             .MinimumLevel.Override("Npgsql.Command", LogEventLevel.Debug)
             .MinimumLevel.Override("Npgsql.Connection", LogEventLevel.Debug)
             .MinimumLevel.Override("ZiggyCreatures.Caching.Fusion", LogEventLevel.Warning)
+            .MinimumLevel.Override("Lavalink4NET", LogEventLevel.Fatal)
+            .MinimumLevel.Override("Prometheus", LogEventLevel.Warning)
 
             // Enrichers
             .Enrich.FromLogContext()
@@ -92,7 +94,7 @@ public static class LogSetup
             .MinimumLevel.Information()
             .MinimumLevel.Override("Microsoft", LogEventLevel.Error)
             .MinimumLevel.Override("System", LogEventLevel.Error)
-            .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Debug)
+            .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Error)
 
             // Database specific logging
             .MinimumLevel.Override("Microsoft.EntityFrameworkCore", LogEventLevel.Error)
@@ -104,6 +106,8 @@ public static class LogSetup
             .MinimumLevel.Override("Npgsql.Command", LogEventLevel.Debug)
             .MinimumLevel.Override("Npgsql.Connection", LogEventLevel.Debug)
             .MinimumLevel.Override("ZiggyCreatures.Caching.Fusion", LogEventLevel.Warning)
+            .MinimumLevel.Override("Lavalink4NET", LogEventLevel.Fatal)
+            .MinimumLevel.Override("Prometheus", LogEventLevel.Warning)
 
             // Enrichers
             .Enrich.FromLogContext()

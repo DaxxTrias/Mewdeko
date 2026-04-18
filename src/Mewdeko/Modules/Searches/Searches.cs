@@ -46,6 +46,7 @@ public partial class Searches(
     : MewdekoModuleBase<SearchesService>
 {
     private static readonly ConcurrentDictionary<string, string> CachedShortenedLinks = new();
+    private static int googleImageProviderDisabledForSession;
 
     /// <summary>
     ///     Fetches and displays a random meme from Reddit.
@@ -738,34 +739,47 @@ public partial class Searches(
         var checkingMessage =
             await ctx.Channel.SendConfirmAsync(Strings.ImageChecking(ctx.Guild.Id)).ConfigureAwait(false);
 
-        IEnumerable<IImageResult> images = null;
-        string sourceName = null;
-        string sourceIconUrl = null;
+        IEnumerable<IImageResult>? images = null;
+        var sourceName = "Search Provider";
+        var sourceIconUrl = string.Empty;
+        var providerErrorCount = 0;
+        var googleProviderDisabled =
+            System.Threading.Volatile.Read(ref googleImageProviderDisabledForSession) == 1;
 
-        // Try to get images from Google
-        using (var gscraper = new GoogleScraper())
+        // Try to get images from Google first. If blocked/rate-limited, fall back to DuckDuckGo.
+        if (!googleProviderDisabled)
         {
-            var search = await gscraper.GetImagesAsync(query, SafeSearchLevel.Strict).ConfigureAwait(false);
-            search = search.Take(20);
+            images = await TrySearchImagesAsync(
+                "Google",
+                async () =>
+                {
+                    using var gscraper = new GoogleScraper();
+                    return await gscraper.GetImagesAsync(query, SafeSearchLevel.Strict).ConfigureAwait(false);
+                }).ConfigureAwait(false);
 
-            if (search.Any())
+            if (images is not null)
             {
-                images = search;
                 sourceName = "Google";
                 sourceIconUrl = "https://www.google.com/favicon.ico";
             }
         }
-
-        // If Google didn't return any results, try DuckDuckGo
-        if (images == null)
+        else
         {
-            using var dscraper = new DuckDuckGoScraper();
-            var search2 = await dscraper.GetImagesAsync(query, SafeSearchLevel.Strict).ConfigureAwait(false);
-            search2 = search2.Take(20);
+            logger.LogDebug("Skipping Google image provider because it is disabled for this process.");
+        }
 
-            if (search2.Any())
+        if (images is null)
+        {
+            images = await TrySearchImagesAsync(
+                "DuckDuckGo",
+                async () =>
+                {
+                    using var dscraper = new DuckDuckGoScraper();
+                    return await dscraper.GetImagesAsync(query, SafeSearchLevel.Strict).ConfigureAwait(false);
+                }).ConfigureAwait(false);
+
+            if (images is not null)
             {
-                images = search2;
                 sourceName = "DuckDuckGo";
                 sourceIconUrl = "https://duckduckgo.com/assets/logo_homepage.normal.v108.svg";
             }
@@ -775,8 +789,11 @@ public partial class Searches(
         if (images == null)
         {
             await checkingMessage.DeleteAsync().ConfigureAwait(false);
-            await ctx.Channel.SendErrorAsync(Strings.ImageNoResults(ctx.Guild.Id), Config)
-                .ConfigureAwait(false);
+            if (providerErrorCount > 0)
+                await ctx.Channel.SendErrorAsync(Strings.FetchFailed(ctx.Guild.Id), Config).ConfigureAwait(false);
+            else
+                await ctx.Channel.SendErrorAsync(Strings.ImageNoResults(ctx.Guild.Id), Config)
+                    .ConfigureAwait(false);
             return;
         }
 
@@ -829,6 +846,54 @@ public partial class Searches(
         await serv.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60))
             .ConfigureAwait(false);
         return;
+
+        async Task<IReadOnlyList<IImageResult>?> TrySearchImagesAsync(
+            string providerName,
+            Func<Task<IEnumerable<IImageResult>>> searchFunc)
+        {
+            try
+            {
+                var searchResults = (await searchFunc().ConfigureAwait(false))
+                    .Take(20)
+                    .ToList();
+
+                return searchResults.Count > 0 ? searchResults : null;
+            }
+            catch (HttpRequestException ex)
+            {
+                providerErrorCount++;
+                logger.LogWarning(
+                    ex,
+                    "Image search provider {ProviderName} failed for query '{Query}' with HTTP error.",
+                    providerName,
+                    query);
+                DisableGoogleProviderForSession(providerName);
+                return null;
+            }
+            catch (Exception ex)
+            {
+                providerErrorCount++;
+                logger.LogWarning(
+                    ex,
+                    "Image search provider {ProviderName} failed for query '{Query}'.",
+                    providerName,
+                    query);
+                DisableGoogleProviderForSession(providerName);
+                return null;
+            }
+        }
+
+        void DisableGoogleProviderForSession(string providerName)
+        {
+            if (!string.Equals(providerName, "Google", StringComparison.Ordinal))
+                return;
+
+            if (System.Threading.Interlocked.Exchange(ref googleImageProviderDisabledForSession, 1) == 0)
+            {
+                logger.LogWarning(
+                    "Disabling Google image provider for current process after failure. It will retry after bot restart.");
+            }
+        }
 
         Task<PageBuilder> PageFactory(int page)
         {

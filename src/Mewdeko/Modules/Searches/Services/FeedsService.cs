@@ -1,4 +1,4 @@
-﻿using CodeHollow.FeedReader;
+using CodeHollow.FeedReader;
 using CodeHollow.FeedReader.Feeds;
 using DataModel;
 using LinqToDB;
@@ -12,6 +12,8 @@ namespace Mewdeko.Modules.Searches.Services;
 /// </summary>
 public class FeedsService : INService
 {
+    private const string FeedReaderUserAgent =
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
     private readonly DiscordShardedClient client;
     private readonly IDataConnectionFactory dbFactory;
     private bool isRunning;
@@ -70,7 +72,7 @@ public class FeedsService : INService
 
                 try
                 {
-                    var feed = await FeedReader.ReadAsync(rssUrl).ConfigureAwait(false);
+                    var feed = await FeedReader.ReadAsync(rssUrl, default, true, FeedReaderUserAgent).ConfigureAwait(false);
 
                     string feedTitle = null;
 
@@ -289,7 +291,7 @@ public class FeedsService : INService
     /// <returns>An asynchronous task representing the operation.</returns>
     public async Task TestRss(FeedSub sub, ITextChannel channel, bool sendBoth = false)
     {
-        var feed = await FeedReader.ReadAsync(sub.Url);
+        var feed = await FeedReader.ReadAsync(sub.Url, default, true, FeedReaderUserAgent);
 
         string feedTitle = null;
 
@@ -313,7 +315,7 @@ public class FeedsService : INService
                 LastUpdate: item.PublishingDate?.ToUniversalTime() ??
                             (item.SpecificItem as AtomFeedItem)?.UpdatedDate?.ToUniversalTime()))
             .Where(data => data.LastUpdate is not null)
-            .Select(data => (data.Item, LastUpdate: (DateTime)data.LastUpdate)).LastOrDefault();
+            .Select(data => (data.Item, LastUpdate: (DateTime)data.LastUpdate)).FirstOrDefault();
 
         var repbuilder = new ReplacementBuilder()
             .WithOverride("%title%", () => feedItem.Title ?? "Unkown")

@@ -1,4 +1,4 @@
-﻿using DataModel;
+using DataModel;
 using Discord.Net;
 using LinqToDB;
 using LinqToDB.Async;
@@ -7,6 +7,8 @@ using Mewdeko.Modules.Administration.Services;
 using Mewdeko.Modules.Permissions.Common;
 using Mewdeko.Modules.Permissions.Services;
 using Mewdeko.Services.Strings;
+using System.Text;
+using System.Text.RegularExpressions;
 using Embed = Discord.Embed;
 
 namespace Mewdeko.Modules.Suggestions.Services;
@@ -17,6 +19,24 @@ namespace Mewdeko.Modules.Suggestions.Services;
 /// </summary>
 public class SuggestionsService : INService
 {
+    private static readonly Dictionary<string, string[]> DigestCategories = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Charting"] = ["chart", "charts", "tradingview", "indicator", "candlestick", "candle"],
+        ["Exchanges"] = ["exchange", "exchanges", "bybit", "binance", "coinbase", "kraken", "okx", "mexc", "kucoin"],
+        ["Orders"] = ["order", "maker", "taker", "limit", "market", "stop", "slippage", "fill"],
+        ["PnL"] = ["profit", "pnl", "loss", "roi", "drawdown", "performance"],
+        ["Risk"] = ["risk", "leverage", "margin", "liquidation", "stoploss", "takeprofit"],
+        ["Execution"] = ["latency", "execution", "speed", "delay", "websocket", "api"],
+        ["UX"] = ["ui", "ux", "layout", "theme", "dashboard", "terminal", "mobile"],
+        ["General"] = []
+    };
+
+    private static readonly string[] BaseDigestKeywords =
+    [
+        "tradingview", "chart", "profit", "maker order", "maker", "order", "pnl", "slippage", "execution", "latency",
+        "exchange", "bybit", "binance"
+    ];
+
     /// <summary>
     ///     Used to track the state of a suggestion.
     /// </summary>
@@ -2107,6 +2127,467 @@ public class SuggestionsService : INService
         await using var dbContext = await dbFactory.CreateConnectionAsync();
 
         return dbContext.SuggestThreads.FirstOrDefault(x => x.MessageId == messageId)?.ThreadChannelId ?? 0;
+    }
+
+    /// <summary>
+    ///     Builds a ranked implementation-focused markdown digest from recent channel messages.
+    /// </summary>
+    /// <param name="channel">The source channel to read from.</param>
+    /// <param name="messageLimit">How many recent messages to inspect.</param>
+    /// <param name="extraKeywords">Optional comma/space-separated keywords for additional scoring.</param>
+    /// <returns>A markdown report and source statistics.</returns>
+    public async Task<(string Markdown, int SourceMessages, int UniqueItems)> BuildSuggestionDigestAsync(
+        ITextChannel channel,
+        int messageLimit,
+        string? extraKeywords = null)
+    {
+        var clamped = Math.Clamp(messageLimit, 25, 2000);
+        var rawMessages = (await channel.GetMessagesAsync(clamped).FlattenAsync().ConfigureAwait(false))
+            .OfType<IUserMessage>()
+            .Where(x => !x.Author.IsBot && !string.IsNullOrWhiteSpace(x.Content))
+            .ToList();
+
+        if (rawMessages.Count == 0)
+        {
+            var emptyReport = new StringBuilder()
+                .AppendLine($"# Suggestions Digest for #{channel.Name}")
+                .AppendLine()
+                .AppendLine($"Generated: {DateTimeOffset.UtcNow:yyyy-MM-dd HH:mm:ss} UTC")
+                .AppendLine($"Source messages scanned: {clamped}")
+                .AppendLine()
+                .AppendLine("No non-bot messages with text were found in the scanned range.")
+                .ToString();
+
+            return (emptyReport, 0, 0);
+        }
+
+        var keywordSet = BuildKeywordSet(extraKeywords);
+        var grouped = rawMessages
+            .Select(x => new
+            {
+                Message = x, Key = BuildDedupKey(x.Content)
+            })
+            .Where(x => !string.IsNullOrWhiteSpace(x.Key))
+            .GroupBy(x => x.Key)
+            .Select(g => BuildDigestItem(g.Key, g.Select(x => x.Message).ToList(), keywordSet))
+            .OrderByDescending(x => x.Score)
+            .ThenByDescending(x => x.UniqueAuthors.Count)
+            .ToList();
+
+        var implementationCandidates = grouped.Where(x => !x.IsNoise && !x.LikelySupport && !x.NeedsClarification).ToList();
+        var needsClarification = grouped.Where(x => x.NeedsClarification && !x.IsNoise).ToList();
+        var likelySupport = grouped.Where(x => x.LikelySupport && !x.IsNoise).ToList();
+        var suppressedNoise = grouped.Count(x => x.IsNoise);
+
+        var report = new StringBuilder()
+            .AppendLine($"# Suggestions Digest for #{channel.Name}")
+            .AppendLine()
+            .AppendLine($"Generated: {DateTimeOffset.UtcNow:yyyy-MM-dd HH:mm:ss} UTC")
+            .AppendLine($"Source messages scanned: {rawMessages.Count}")
+            .AppendLine($"Unique suggestion candidates: {grouped.Count}")
+            .AppendLine()
+            .AppendLine("## Implementation Candidates (ranked)")
+            .AppendLine();
+
+        if (implementationCandidates.Count == 0)
+        {
+            report.AppendLine("No strong implementation candidates were detected in the scanned range.");
+            report.AppendLine();
+        }
+        else
+        {
+            foreach (var item in implementationCandidates.Take(30))
+                AppendTriageItem(report, item);
+        }
+
+        report.AppendLine("## Needs Clarification").AppendLine();
+        if (needsClarification.Count == 0)
+        {
+            report.AppendLine("No clarification items detected.").AppendLine();
+        }
+        else
+        {
+            foreach (var item in needsClarification.Take(20))
+                AppendTriageItem(report, item);
+        }
+
+        report.AppendLine("## Likely Support / Not Feature").AppendLine();
+        if (likelySupport.Count == 0)
+        {
+            report.AppendLine("No likely support-only items detected.").AppendLine();
+        }
+        else
+        {
+            foreach (var item in likelySupport.Take(20))
+                AppendTriageItem(report, item);
+        }
+
+        report
+            .AppendLine("## Suppressed Noise (count only)")
+            .AppendLine()
+            .AppendLine($"- {suppressedNoise}");
+
+        return (report.ToString(), rawMessages.Count, grouped.Count);
+    }
+
+    private static HashSet<string> BuildKeywordSet(string? extraKeywords)
+    {
+        var parsed = (extraKeywords ?? string.Empty)
+            .Split([',', ';', '\n', '\r', '\t'], StringSplitOptions.RemoveEmptyEntries)
+            .SelectMany(x => x.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+            .Select(x => x.Trim().ToLowerInvariant())
+            .Where(x => x.Length >= 3);
+
+        return BaseDigestKeywords
+            .Concat(parsed)
+            .Select(x => x.Trim().ToLowerInvariant())
+            .Where(x => x.Length >= 3)
+            .Distinct()
+            .ToHashSet();
+    }
+
+    private static string BuildDedupKey(string content)
+    {
+        if (string.IsNullOrWhiteSpace(content))
+            return string.Empty;
+
+        var normalized = Regex.Replace(content.ToLowerInvariant(), @"https?://\S+", " ");
+        normalized = Regex.Replace(normalized, @"[^a-z0-9\s]", " ");
+        normalized = Regex.Replace(normalized, @"\s+", " ").Trim();
+
+        var tokens = normalized.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .Where(x => x.Length > 2)
+            .Take(20)
+            .ToArray();
+
+        return string.Join(' ', tokens);
+    }
+
+    private static string ClassifyCategory(string content)
+    {
+        var lower = content.ToLowerInvariant();
+        var best = "General";
+        var bestHits = 0;
+
+        foreach (var kvp in DigestCategories)
+        {
+            if (kvp.Value.Length == 0)
+                continue;
+
+            var hits = kvp.Value.Count(keyword => lower.Contains(keyword, StringComparison.Ordinal));
+            if (hits <= bestHits)
+                continue;
+
+            best = kvp.Key;
+            bestHits = hits;
+        }
+
+        return best;
+    }
+
+    private static int CountKeywordHits(string content, IReadOnlyCollection<string> keywords)
+    {
+        var lower = content.ToLowerInvariant();
+        return keywords.Count(keyword => lower.Contains(keyword, StringComparison.Ordinal));
+    }
+
+    private static DigestItem BuildDigestItem(string key, IReadOnlyList<IUserMessage> messages, HashSet<string> keywordSet)
+    {
+        var primary = messages
+            .OrderByDescending(x => x.Reactions.Sum(r => r.Value.ReactionCount))
+            .ThenByDescending(x => x.Content.Length)
+            .First();
+        var content = primary.Content;
+        var category = ClassifyCategory(content);
+        var intentScore = CalculateIntentScore(content);
+        var weightedKeywordScore = CalculateWeightedKeywordScore(content, keywordSet);
+        var uniqueAuthors = messages.Select(x => x.Author.Id).Distinct().ToHashSet();
+        var uniqueAuthorBonus = Math.Min((uniqueAuthors.Count - 1) * 2, 8);
+        var exchangeBugBonus = HasExchangeTerm(content) && HasErrorPhrase(content) ? 4 : 0;
+        var likelySupport = IsLikelySupport(content, intentScore);
+        var isNoise = IsNoise(content);
+        var needsClarification = NeedsClarification(content, intentScore, weightedKeywordScore, likelySupport, isNoise);
+        var staffOnly = messages.All(x => IsStaffLikeAuthor(x.Author));
+        var noisePenalty = 0;
+
+        if (isNoise)
+            noisePenalty += 6;
+        if (likelySupport)
+            noisePenalty += 3;
+        if (needsClarification)
+            noisePenalty += 2;
+        if (staffOnly)
+            noisePenalty += 2;
+
+        var score = (intentScore * 2) + weightedKeywordScore + uniqueAuthorBonus + exchangeBugBonus - noisePenalty;
+        var owner = DetermineOwner(category);
+        var scopeTags = BuildScopeTags(content, category, likelySupport, needsClarification);
+        var canonicalTitle = BuildCanonicalTitle(content, category, HasErrorPhrase(content));
+        var impact = CalculateImpact(uniqueAuthors.Count, content);
+        var confidence = CalculateConfidence(intentScore, weightedKeywordScore, needsClarification, isNoise);
+        var evidence = messages
+            .OrderByDescending(x => x.Reactions.Sum(r => r.Value.ReactionCount))
+            .ThenByDescending(x => x.Content.Length)
+            .Take(4)
+            .ToList();
+
+        return new DigestItem(
+            key,
+            primary,
+            evidence,
+            uniqueAuthors,
+            staffOnly,
+            canonicalTitle,
+            category,
+            owner,
+            scopeTags,
+            intentScore,
+            weightedKeywordScore,
+            uniqueAuthorBonus,
+            noisePenalty,
+            score,
+            impact,
+            confidence,
+            needsClarification,
+            likelySupport,
+            isNoise);
+    }
+
+    private static int CalculateIntentScore(string content)
+    {
+        var lower = content.ToLowerInvariant();
+        var featureTerms = new[]
+        {
+            "add", "support", "allow", "implement", "feature", "would be nice", "can we", "please add", "need"
+        };
+        var bugTerms = new[]
+        {
+            "bug", "broken", "error", "fails", "doesn't", "doesnt", "wrong", "issue", "problem", "stuck"
+        };
+        var painTerms = new[]
+        {
+            "can't", "cant", "unable", "blocked", "impossible", "loss", "lost", "slippage", "liquidation"
+        };
+
+        var score = 0;
+        score += featureTerms.Count(x => lower.Contains(x, StringComparison.Ordinal));
+        score += bugTerms.Count(x => lower.Contains(x, StringComparison.Ordinal)) * 2;
+        score += painTerms.Count(x => lower.Contains(x, StringComparison.Ordinal));
+        if (lower.Contains('?'))
+            score += 1;
+
+        return score;
+    }
+
+    private static int CalculateWeightedKeywordScore(string content, IReadOnlyCollection<string> keywords)
+    {
+        var lower = content.ToLowerInvariant();
+        var score = 0;
+        foreach (var keyword in keywords)
+        {
+            if (!lower.Contains(keyword, StringComparison.Ordinal))
+                continue;
+
+            score += keyword is "bybit" or "binance" or "exchange" or "tradingview" ? 2 : 1;
+        }
+
+        return score;
+    }
+
+    private static bool NeedsClarification(string content, int intentScore, int weightedKeywordScore, bool likelySupport,
+        bool isNoise)
+    {
+        if (likelySupport || isNoise)
+            return false;
+
+        var lower = content.ToLowerInvariant();
+        var hasQuestion = lower.Contains('?');
+        var shortContent = lower.Length < 70;
+        return (intentScore >= 2 && weightedKeywordScore <= 1) || (hasQuestion && shortContent);
+    }
+
+    private static bool IsLikelySupport(string content, int intentScore)
+    {
+        var lower = content.ToLowerInvariant();
+        var supportTerms = new[]
+        {
+            "how do i", "how to", "where is", "can't login", "cant login", "help", "why is", "what is"
+        };
+        var featureTerms = new[] { "add", "implement", "feature", "support", "allow", "can we", "please add" };
+        var supportHits = supportTerms.Count(x => lower.Contains(x, StringComparison.Ordinal));
+        var featureHits = featureTerms.Count(x => lower.Contains(x, StringComparison.Ordinal));
+        return supportHits > 0 && featureHits == 0 && intentScore <= 4;
+    }
+
+    private static bool IsNoise(string content)
+    {
+        var lower = content.ToLowerInvariant().Trim();
+        if (lower.Length < 18)
+            return true;
+
+        var noisePhrases = new[] { "thanks", "thx", "ok", "okay", "nice", "bump", "up", "same", "lol", "lmao" };
+        return noisePhrases.Contains(lower);
+    }
+
+    private static string DetermineOwner(string category)
+    {
+        return category switch
+        {
+            "Charting" => "Chart",
+            "Exchanges" => "Exchange integration",
+            "UX" => "UX",
+            "Execution" => "Exchange integration",
+            _ => "Trading"
+        };
+    }
+
+    private static HashSet<string> BuildScopeTags(string content, string category, bool likelySupport, bool needsClarification)
+    {
+        var lower = content.ToLowerInvariant();
+        var tags = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            $"owner:{DetermineOwner(category).ToLowerInvariant().Replace(" ", "-")}"
+        };
+
+        if (lower.Contains("bybit", StringComparison.Ordinal))
+            tags.Add("exchange:bybit");
+        if (lower.Contains("binance", StringComparison.Ordinal))
+            tags.Add("exchange:binance");
+        if (lower.Contains("coinbase", StringComparison.Ordinal))
+            tags.Add("exchange:coinbase");
+        if (lower.Contains("chart", StringComparison.Ordinal) || lower.Contains("tradingview", StringComparison.Ordinal))
+            tags.Add("module:charting");
+        if (lower.Contains("order", StringComparison.Ordinal) || lower.Contains("maker", StringComparison.Ordinal))
+            tags.Add("module:order-entry");
+        if (lower.Contains("latency", StringComparison.Ordinal) || lower.Contains("websocket", StringComparison.Ordinal))
+            tags.Add("module:execution");
+        if (lower.Contains("ui", StringComparison.Ordinal) || lower.Contains("layout", StringComparison.Ordinal))
+            tags.Add("module:ui");
+
+        if (HasErrorPhrase(content))
+            tags.Add("type:bug");
+        else if (likelySupport)
+            tags.Add("type:support");
+        else if (needsClarification)
+            tags.Add("type:clarification");
+        else
+            tags.Add("type:feature");
+
+        return tags;
+    }
+
+    private static string BuildCanonicalTitle(string content, string category, bool isBug)
+    {
+        var cleaned = Regex.Replace(content, @"\s+", " ").Trim().TrimEnd('.', '!', '?');
+        cleaned = cleaned.TrimTo(110);
+        if (cleaned.Length == 0)
+            return "Unspecified request";
+
+        var prefix = isBug ? "Fix" : "Improve";
+        return $"{prefix}: {cleaned}";
+    }
+
+    private static string CalculateImpact(int uniqueAuthors, string content)
+    {
+        var strongPain = HasErrorPhrase(content) || content.Contains("loss", StringComparison.OrdinalIgnoreCase) ||
+                         content.Contains("liquidation", StringComparison.OrdinalIgnoreCase);
+        if (uniqueAuthors >= 4 || (uniqueAuthors >= 2 && strongPain))
+            return "High";
+        if (uniqueAuthors >= 2 || strongPain)
+            return "Med";
+        return "Low";
+    }
+
+    private static string CalculateConfidence(int intentScore, int weightedKeywordScore, bool needsClarification,
+        bool isNoise)
+    {
+        if (isNoise || intentScore <= 1)
+            return "Low";
+        if (!needsClarification && intentScore >= 4 && weightedKeywordScore >= 2)
+            return "High";
+        return "Med";
+    }
+
+    private static bool HasExchangeTerm(string content)
+    {
+        var lower = content.ToLowerInvariant();
+        return lower.Contains("exchange", StringComparison.Ordinal) ||
+               lower.Contains("bybit", StringComparison.Ordinal) ||
+               lower.Contains("binance", StringComparison.Ordinal) ||
+               lower.Contains("coinbase", StringComparison.Ordinal) ||
+               lower.Contains("kraken", StringComparison.Ordinal) ||
+               lower.Contains("okx", StringComparison.Ordinal);
+    }
+
+    private static bool HasErrorPhrase(string content)
+    {
+        var lower = content.ToLowerInvariant();
+        var phrases = new[]
+        {
+            "bug", "broken", "error", "fails", "doesn't", "doesnt", "wrong", "issue", "problem", "stuck", "not working"
+        };
+        return phrases.Any(x => lower.Contains(x, StringComparison.Ordinal));
+    }
+
+    private static bool IsStaffLikeAuthor(IUser author)
+    {
+        if (author is not IGuildUser gUser)
+            return false;
+
+        var hints = new[] { "staff", "mod", "moderator", "helper", "admin", "support", "team" };
+        return gUser.RoleIds.Count > 0 &&
+               gUser.Guild.Roles
+                   .Where(r => gUser.RoleIds.Contains(r.Id))
+                   .Any(r => hints.Any(h => r.Name.Contains(h, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    private static void AppendTriageItem(StringBuilder report, DigestItem item)
+    {
+        report.AppendLine($"### {EscapeMarkdown(item.CanonicalTitle)}");
+        report.AppendLine($"- Impact: {item.Impact}");
+        report.AppendLine($"- Confidence: {item.Confidence}");
+        report.AppendLine($"- Owner: {item.Owner}");
+        report.AppendLine($"- Score: {item.Score} (intent={item.IntentScore}, weightedKeywords={item.WeightedKeywordScore}, uniqueAuthorBonus={item.UniqueAuthorBonus}, noisePenalty={item.NoisePenalty})");
+        report.AppendLine($"- Scope tags: {string.Join(", ", item.ScopeTags.OrderBy(x => x, StringComparer.OrdinalIgnoreCase))}");
+        report.AppendLine("- Evidence:");
+
+        foreach (var ev in item.EvidenceMessages.Take(4))
+        {
+            var quote = EscapeMarkdown(ev.Content.TrimTo(260));
+            var author = EscapeMarkdown(ev.Author.ToString());
+            report.AppendLine($"  - \"{quote}\" — `{author}`");
+        }
+
+        report.AppendLine();
+    }
+
+    private sealed record DigestItem(
+        string Key,
+        IUserMessage PrimaryMessage,
+        IReadOnlyList<IUserMessage> EvidenceMessages,
+        HashSet<ulong> UniqueAuthors,
+        bool StaffOnly,
+        string CanonicalTitle,
+        string Category,
+        string Owner,
+        HashSet<string> ScopeTags,
+        int IntentScore,
+        int WeightedKeywordScore,
+        int UniqueAuthorBonus,
+        int NoisePenalty,
+        int Score,
+        string Impact,
+        string Confidence,
+        bool NeedsClarification,
+        bool LikelySupport,
+        bool IsNoise);
+
+    private static string EscapeMarkdown(string value)
+    {
+        return value
+            .Replace("`", "\\`")
+            .Replace("*", "\\*")
+            .Replace("_", "\\_");
     }
 
     /// <summary>
