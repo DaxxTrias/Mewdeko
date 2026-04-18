@@ -332,7 +332,7 @@ public class Mewdeko : IDisposable
             }
             catch (Exception e)
             {
-                logger.LogError("Unable to start audio service: {Message}", e.Message);
+                logger.LogWarning("Lavalink server offline. Music features are unavailable. ({Reason})", e.Message);
             }
 
             var dbProvider = Services.GetRequiredService<IDataConnectionFactory>();

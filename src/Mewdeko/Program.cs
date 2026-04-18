@@ -1,6 +1,7 @@
 using System.IO;
 using System.Net;
 using System.Net.Http;
+using System.Net.Sockets;
 using System.Net.Security;
 using System.Security.Authentication;
 using System.Text;
@@ -72,18 +73,24 @@ public class Program
         if (!credentials.IsApiEnabled)
         {
             var metricsPort = credentials.ApiPort + 1000;
-            metricServer = new KestrelMetricServer(metricsPort);
-            try
+            if (!IsPortAvailable(metricsPort))
             {
-                metricServer.Start();
-                log.Information("Prometheus metrics available on http://0.0.0.0:{MetricsPort}/metrics", metricsPort);
+                log.Warning("Prometheus metrics disabled: port {MetricsPort} is already in use.", metricsPort);
             }
-            catch (IOException ex)
+            else
             {
-                metricServer = null;
-                log.Warning(ex,
-                    "Could not bind Prometheus metrics server on port {MetricsPort}. Continuing without metrics for this instance.",
-                    metricsPort);
+                metricServer = new KestrelMetricServer(metricsPort);
+                try
+                {
+                    metricServer.Start();
+                    log.Information("Prometheus metrics available on http://0.0.0.0:{MetricsPort}/metrics", metricsPort);
+                }
+                catch (Exception ex)
+                {
+                    metricServer = null;
+                    log.Warning("Could not start Prometheus metrics server on port {MetricsPort}: {Reason}",
+                        metricsPort, ex.Message);
+                }
             }
         }
 
@@ -519,5 +526,24 @@ public class Program
         services.AddHostedService<MewdekoService>();
         services.AddHostedService<ScheduledDeletionService>();
         services.AddHostedService<PatreonService>();
+    }
+
+    private static bool IsPortAvailable(int port)
+    {
+        TcpListener listener = null;
+        try
+        {
+            listener = new TcpListener(IPAddress.Any, port);
+            listener.Start();
+            return true;
+        }
+        catch (SocketException)
+        {
+            return false;
+        }
+        finally
+        {
+            listener?.Stop();
+        }
     }
 }
