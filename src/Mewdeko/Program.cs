@@ -73,8 +73,18 @@ public class Program
         {
             var metricsPort = credentials.ApiPort + 1000;
             metricServer = new KestrelMetricServer(metricsPort);
-            metricServer.Start();
-            log.Information("Prometheus metrics available on http://0.0.0.0:{MetricsPort}/metrics", metricsPort);
+            try
+            {
+                metricServer.Start();
+                log.Information("Prometheus metrics available on http://0.0.0.0:{MetricsPort}/metrics", metricsPort);
+            }
+            catch (IOException ex)
+            {
+                metricServer = null;
+                log.Warning(ex,
+                    "Could not bind Prometheus metrics server on port {MetricsPort}. Continuing without metrics for this instance.",
+                    metricsPort);
+            }
         }
 
         // Check and install dependencies (pass setup status to avoid prompting if already done)
