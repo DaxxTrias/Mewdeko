@@ -738,34 +738,37 @@ public partial class Searches(
         var checkingMessage =
             await ctx.Channel.SendConfirmAsync(Strings.ImageChecking(ctx.Guild.Id)).ConfigureAwait(false);
 
-        IEnumerable<IImageResult> images = null;
-        string sourceName = null;
-        string sourceIconUrl = null;
+        IEnumerable<IImageResult>? images = null;
+        var sourceName = "Search Provider";
+        var sourceIconUrl = string.Empty;
+        var providerErrorCount = 0;
 
-        // Try to get images from Google
-        using (var gscraper = new GoogleScraper())
-        {
-            var search = await gscraper.GetImagesAsync(query, SafeSearchLevel.Strict).ConfigureAwait(false);
-            search = search.Take(20);
-
-            if (search.Any())
+        // Try to get images from Google first. If blocked/rate-limited, fall back to DuckDuckGo.
+        images = await TrySearchImagesAsync(
+            "Google",
+            async () =>
             {
-                images = search;
-                sourceName = "Google";
-                sourceIconUrl = "https://www.google.com/favicon.ico";
-            }
+                using var gscraper = new GoogleScraper();
+                return await gscraper.GetImagesAsync(query, SafeSearchLevel.Strict).ConfigureAwait(false);
+            }).ConfigureAwait(false);
+
+        if (images is not null)
+        {
+            sourceName = "Google";
+            sourceIconUrl = "https://www.google.com/favicon.ico";
         }
-
-        // If Google didn't return any results, try DuckDuckGo
-        if (images == null)
+        else
         {
-            using var dscraper = new DuckDuckGoScraper();
-            var search2 = await dscraper.GetImagesAsync(query, SafeSearchLevel.Strict).ConfigureAwait(false);
-            search2 = search2.Take(20);
+            images = await TrySearchImagesAsync(
+                "DuckDuckGo",
+                async () =>
+                {
+                    using var dscraper = new DuckDuckGoScraper();
+                    return await dscraper.GetImagesAsync(query, SafeSearchLevel.Strict).ConfigureAwait(false);
+                }).ConfigureAwait(false);
 
-            if (search2.Any())
+            if (images is not null)
             {
-                images = search2;
                 sourceName = "DuckDuckGo";
                 sourceIconUrl = "https://duckduckgo.com/assets/logo_homepage.normal.v108.svg";
             }
@@ -775,8 +778,11 @@ public partial class Searches(
         if (images == null)
         {
             await checkingMessage.DeleteAsync().ConfigureAwait(false);
-            await ctx.Channel.SendErrorAsync(Strings.ImageNoResults(ctx.Guild.Id), Config)
-                .ConfigureAwait(false);
+            if (providerErrorCount > 0)
+                await ctx.Channel.SendErrorAsync(Strings.FetchFailed(ctx.Guild.Id), Config).ConfigureAwait(false);
+            else
+                await ctx.Channel.SendErrorAsync(Strings.ImageNoResults(ctx.Guild.Id), Config)
+                    .ConfigureAwait(false);
             return;
         }
 
@@ -829,6 +835,40 @@ public partial class Searches(
         await serv.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60))
             .ConfigureAwait(false);
         return;
+
+        async Task<IReadOnlyList<IImageResult>?> TrySearchImagesAsync(
+            string providerName,
+            Func<Task<IEnumerable<IImageResult>>> searchFunc)
+        {
+            try
+            {
+                var searchResults = (await searchFunc().ConfigureAwait(false))
+                    .Take(20)
+                    .ToList();
+
+                return searchResults.Count > 0 ? searchResults : null;
+            }
+            catch (HttpRequestException ex)
+            {
+                providerErrorCount++;
+                logger.LogWarning(
+                    ex,
+                    "Image search provider {ProviderName} failed for query '{Query}' with HTTP error.",
+                    providerName,
+                    query);
+                return null;
+            }
+            catch (Exception ex)
+            {
+                providerErrorCount++;
+                logger.LogWarning(
+                    ex,
+                    "Image search provider {ProviderName} failed for query '{Query}'.",
+                    providerName,
+                    query);
+                return null;
+            }
+        }
 
         Task<PageBuilder> PageFactory(int page)
         {
