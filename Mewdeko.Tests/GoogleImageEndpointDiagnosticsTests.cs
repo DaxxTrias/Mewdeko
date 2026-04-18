@@ -5,6 +5,7 @@ using GScraper.Google;
 namespace Mewdeko.Tests;
 
 [TestFixture]
+[Explicit("Manual diagnostic test. Run explicitly when investigating Google endpoint behavior.")]
 public class GoogleImageEndpointDiagnosticsTests
 {
     private const string LiveTestEnvVar = "MEWDEKO_RUN_LIVE_GOOGLE_IMAGE_TEST";
