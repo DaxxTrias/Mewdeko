@@ -555,10 +555,22 @@ public class AiService : INService
 
     private static bool TryGetProviderFromAlias(string token, out AiProvider provider)
     {
+        // Prevent numeric prompts (e.g., "3 is more than 2?") from being treated as enum values.
+        if (IsNumericSelectorToken(token))
+        {
+            provider = default;
+            return false;
+        }
+
         if (ProviderAliases.TryGetValue(token, out provider))
             return true;
 
         return Enum.TryParse(token, true, out provider) && IsSupportedProvider((int)provider);
+    }
+
+    private static bool IsNumericSelectorToken(string token)
+    {
+        return !string.IsNullOrWhiteSpace(token) && token.All(char.IsDigit);
     }
 
     private async Task<List<GuildAiProviderLink>> GetEffectiveProviderLinks(GuildAiConfig config)
@@ -609,10 +621,13 @@ public class AiService : INService
         var parts = rawQuery.Split(new[] { ' ' }, 2, StringSplitOptions.RemoveEmptyEntries);
         var selector = parts.Length > 0 ? parts[0].Trim() : string.Empty;
         var remainder = parts.Length > 1 ? parts[1].Trim() : string.Empty;
+        var hasNumericSelector = IsNumericSelectorToken(selector);
 
-        var selectedByModel = links.FirstOrDefault(x =>
-            !string.IsNullOrWhiteSpace(x.DefaultModel) &&
-            x.DefaultModel.Equals(selector, StringComparison.OrdinalIgnoreCase));
+        var selectedByModel = hasNumericSelector
+            ? null
+            : links.FirstOrDefault(x =>
+                !string.IsNullOrWhiteSpace(x.DefaultModel) &&
+                x.DefaultModel.Equals(selector, StringComparison.OrdinalIgnoreCase));
 
         if (selectedByModel is not null)
         {
@@ -628,7 +643,7 @@ public class AiService : INService
                     selectedByModel.DefaultModel!));
         }
 
-        if (TryGetProviderFromAlias(selector, out var selectedProvider))
+        if (!hasNumericSelector && TryGetProviderFromAlias(selector, out var selectedProvider))
         {
             var selectedByProvider = links.FirstOrDefault(x => x.Provider == (int)selectedProvider);
             if (selectedByProvider is null)
