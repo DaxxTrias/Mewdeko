@@ -46,7 +46,8 @@ public partial class Searches(
     : MewdekoModuleBase<SearchesService>
 {
     private static readonly ConcurrentDictionary<string, string> CachedShortenedLinks = new();
-    private static int googleImageProviderDisabledForSession;
+    private static long googleImageProviderCooldownUntilUnixSeconds;
+    private static readonly TimeSpan GoogleImageProviderCooldown = TimeSpan.FromHours(2);
 
     /// <summary>
     ///     Fetches and displays a random meme from Reddit.
@@ -743,11 +744,10 @@ public partial class Searches(
         var sourceName = "Search Provider";
         var sourceIconUrl = string.Empty;
         var providerErrorCount = 0;
-        var googleProviderDisabled =
-            System.Threading.Volatile.Read(ref googleImageProviderDisabledForSession) == 1;
+        var googleProviderInCooldown = IsGoogleProviderInCooldown();
 
         // Try to get images from Google first. If blocked/rate-limited, fall back to DuckDuckGo.
-        if (!googleProviderDisabled)
+        if (!googleProviderInCooldown)
         {
             images = await TrySearchImagesAsync(
                 "Google",
@@ -765,7 +765,11 @@ public partial class Searches(
         }
         else
         {
-            logger.LogDebug("Skipping Google image provider because it is disabled for this process.");
+            var cooldownUntilUnix = System.Threading.Volatile.Read(ref googleImageProviderCooldownUntilUnixSeconds);
+            var cooldownUntil = DateTimeOffset.FromUnixTimeSeconds(cooldownUntilUnix);
+            logger.LogDebug(
+                "Skipping Google image provider because it is in cooldown until {CooldownUntilUtc:O}.",
+                cooldownUntil.UtcDateTime);
         }
 
         if (images is null)
@@ -888,11 +892,25 @@ public partial class Searches(
             if (!string.Equals(providerName, "Google", StringComparison.Ordinal))
                 return;
 
-            if (System.Threading.Interlocked.Exchange(ref googleImageProviderDisabledForSession, 1) == 0)
+            var nowUnix = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            var newCooldownUntilUnix = nowUnix + (long)GoogleImageProviderCooldown.TotalSeconds;
+            var previousCooldownUntilUnix = System.Threading.Interlocked.Exchange(
+                ref googleImageProviderCooldownUntilUnixSeconds,
+                newCooldownUntilUnix);
+
+            if (previousCooldownUntilUnix <= nowUnix)
             {
                 logger.LogWarning(
-                    "Disabling Google image provider for current process after failure. It will retry after bot restart.");
+                    "Google image provider failed and is now in cooldown for {CooldownMinutes} minutes. It will be retried after cooldown expires.",
+                    GoogleImageProviderCooldown.TotalMinutes);
             }
+        }
+
+        bool IsGoogleProviderInCooldown()
+        {
+            var cooldownUntilUnix = System.Threading.Volatile.Read(ref googleImageProviderCooldownUntilUnixSeconds);
+            var nowUnix = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            return cooldownUntilUnix > nowUnix;
         }
 
         Task<PageBuilder> PageFactory(int page)
