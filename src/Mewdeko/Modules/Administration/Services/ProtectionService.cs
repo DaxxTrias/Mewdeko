@@ -1,4 +1,4 @@
-﻿using System.Text.RegularExpressions;
+using System.Text.RegularExpressions;
 using System.Text;
 using System.Threading;
 using DataModel;
@@ -24,12 +24,25 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
     private readonly ConcurrentDictionary<ulong, AntiRaidStats> antiRaidGuilds = new();
     private readonly ConcurrentDictionary<ulong, AntiSpamStats> antiSpamGuilds = new();
 
+    /// <summary>
+    ///     Maximum account age (in days) at which a coordinated reactor is auto-punished alongside
+    ///     the original spammer. Older accounts are surfaced for manual review instead of auto-actioned.
+    /// </summary>
+    private const int ReactorMaxAccountAgeDays = 30;
+
+    /// <summary>
+    ///     Window after a message is posted in which a reaction is considered "coordinated"
+    ///     (i.e. an upvote from a sock-puppet account rather than an organic reaction).
+    /// </summary>
+    private static readonly TimeSpan ReactorCoordinatedReactionWindow = TimeSpan.FromSeconds(60);
+
     private readonly DiscordShardedClient client;
     private readonly IDataConnectionFactory dbFactory;
     private readonly EventHandler eventHandler;
     private readonly ILogger<ProtectionService> logger;
     private readonly MuteService mute;
     private readonly UserPunishService punishService;
+    private readonly ReactionTrackingService reactionTracker;
     private readonly ConcurrentDictionary<ulong, ConcurrentDictionary<ulong, int>> imageMentionSpamCounters = new();
     private readonly ConcurrentDictionary<ulong, HashSet<ulong>> ignoredUsers = new();
 
@@ -54,9 +67,10 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
     /// <param name="eventHandler">The event handler.</param>
     /// <param name="logger">The logger instance for structured logging.</param>
     /// <param name="strings">The localization strings service.</param>
+    /// <param name="reactionTracker">Bounded snapshot of reactions used to identify coordinated upvoters on deleted messages.</param>
     public ProtectionService(DiscordShardedClient client,
         MuteService mute, IDataConnectionFactory dbFactory, UserPunishService punishService, EventHandler eventHandler,
-        ILogger<ProtectionService> logger, GeneratedBotStrings strings)
+        ILogger<ProtectionService> logger, GeneratedBotStrings strings, ReactionTrackingService reactionTracker)
     {
         this.client = client;
         this.mute = mute;
@@ -65,6 +79,7 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
         this.logger = logger;
         this.eventHandler = eventHandler;
         this.strings = strings;
+        this.reactionTracker = reactionTracker;
 
         eventHandler.Subscribe("MessageReceived", "ProtectionService", HandleAntiSpam);
         eventHandler.Subscribe("UserJoined", "ProtectionService", HandleUserJoined);
@@ -883,6 +898,10 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
                 await PunishUsers(settings.Action, ProtectionType.Spamming, settings.MuteTime, settings.RoleId, gu)
                     .ConfigureAwait(false);
 
+                // Resolve coordinated reactors (likely sock-puppet upvoters) from the reaction snapshot.
+                // Discord wipes reactions on delete, so this is the only way to recover the reactor list.
+                var reactorReport = await ProcessSuspiciousReactorsAsync(channel, msg, gu).ConfigureAwait(false);
+
                 var warnlogChannelId = await punishService.GetWarnlogChannel(channel.Guild.Id).ConfigureAwait(false);
                 if (warnlogChannelId != 0)
                 {
@@ -904,9 +923,23 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
                             .WithOkColor()
                             .WithCurrentTimestamp();
 
+                        if (reactorReport != null)
+                        {
+                            if (!string.IsNullOrWhiteSpace(reactorReport.PunishedSummary))
+                                eb.AddField("Auto-punished reactors",
+                                    reactorReport.PunishedSummary.TrimTo(1024));
+
+                            if (!string.IsNullOrWhiteSpace(reactorReport.ReviewSummary))
+                                eb.AddField("Other reactors (review)",
+                                    reactorReport.ReviewSummary.TrimTo(1024));
+                        }
+
                         await warnlog.SendMessageAsync(embed: eb.Build()).ConfigureAwait(false);
                     }
                 }
+
+                // Snapshot has served its purpose for this message; release the memory eagerly.
+                reactionTracker.Remove(msg.Id);
             }
             catch (Exception ex)
             {
@@ -915,6 +948,97 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
         });
 
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    ///     Inspects the reaction snapshot for the given message and auto-punishes reactors whose
+    ///     account characteristics match the coordinated sock-puppet pattern (very young account,
+    ///     no acquired roles, reaction landed inside the coordinated reaction window). Reactors that
+    ///     don't match the pattern are returned as a review list for moderators.
+    /// </summary>
+    /// <param name="channel">The channel the suspicious message was posted in.</param>
+    /// <param name="msg">The cached suspicious message.</param>
+    /// <param name="author">The author of the suspicious message (already being punished).</param>
+    /// <returns>
+    ///     A <see cref="ReactorActionReport" /> describing punished and review reactors, or
+    ///     <c>null</c> when no snapshot exists or anti-spam isn't configured for the guild.
+    /// </returns>
+    private async Task<ReactorActionReport?> ProcessSuspiciousReactorsAsync(ITextChannel channel,
+        SocketUserMessage msg, IGuildUser author)
+    {
+        if (!reactionTracker.TryGetReactors(msg.Id, out var snapshot) || snapshot is null)
+            return null;
+
+        if (!antiSpamGuilds.TryGetValue(channel.Guild.Id, out var spamStats))
+            return null;
+
+        var settings = spamStats.AntiSpamSettings;
+        var ignored = ignoredUsers.TryGetValue(channel.Guild.Id, out var igs) ? igs : null;
+
+        var toPunish = new List<IGuildUser>();
+        var review = new List<IGuildUser>();
+
+        foreach (var (reactorId, reactionTime) in snapshot.Reactors)
+        {
+            if (reactorId == author.Id) continue;
+            if (ignored != null && ignored.Contains(reactorId)) continue;
+
+            IGuildUser? reactor = null;
+            try
+            {
+                reactor = await channel.Guild.GetUserAsync(reactorId).ConfigureAwait(false);
+            }
+            catch
+            {
+                // User may have already left; nothing actionable.
+            }
+
+            if (reactor is null || reactor.IsBot || reactor.GuildPermissions.Administrator)
+                continue;
+
+            var accountAgeDays = (DateTimeOffset.UtcNow - reactor.CreatedAt).TotalDays;
+            // Roles always include @everyone (id == guild id); anything else means the reactor has
+            // been around long enough to acquire roles, which is a strong "not a sock-puppet" signal.
+            var hasNonDefaultRole = reactor.RoleIds.Any(r => r != channel.Guild.Id);
+            var reactionDelay = reactionTime - msg.Timestamp.UtcDateTime;
+
+            var coordinatedSignals =
+                accountAgeDays <= ReactorMaxAccountAgeDays
+                && !hasNonDefaultRole
+                && reactionDelay >= TimeSpan.Zero
+                && reactionDelay <= ReactorCoordinatedReactionWindow;
+
+            if (coordinatedSignals)
+                toPunish.Add(reactor);
+            else
+                review.Add(reactor);
+        }
+
+        if (toPunish.Count > 0)
+        {
+            await PunishUsers(settings.Action, ProtectionType.Spamming, settings.MuteTime, settings.RoleId,
+                toPunish.ToArray()).ConfigureAwait(false);
+
+            logger.LogInformation(
+                "[Anti-Spam] Auto-punished {Count} coordinated reactors of suspicious deletion by {AuthorId} in {GuildId}",
+                toPunish.Count, author.Id, channel.Guild.Id);
+        }
+
+        return new ReactorActionReport
+        {
+            PunishedSummary = toPunish.Count == 0
+                ? string.Empty
+                : string.Join(", ", toPunish.Select(u => $"{u.Mention} (`{u.Id}`)")),
+            ReviewSummary = review.Count == 0
+                ? string.Empty
+                : string.Join(", ", review.Select(u => $"{u.Mention} (`{u.Id}`)"))
+        };
+    }
+
+    private sealed class ReactorActionReport
+    {
+        public string PunishedSummary { get; init; } = string.Empty;
+        public string ReviewSummary { get; init; } = string.Empty;
     }
 
 
