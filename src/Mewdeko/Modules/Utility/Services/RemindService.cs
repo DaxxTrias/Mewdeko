@@ -16,6 +16,7 @@ namespace Mewdeko.Modules.Utility.Services;
 /// </summary>
 public partial class RemindService : INService, IReadyExecutor
 {
+    private const int MaxReminderRetryAttempts = 8;
     private readonly DiscordShardedClient client;
     private readonly IDataConnectionFactory dbFactory;
     private readonly SemaphoreSlim initializationLock = new(1, 1);
@@ -24,6 +25,7 @@ public partial class RemindService : INService, IReadyExecutor
     private bool remindersInitialized;
     private readonly Regex regex = MyRegex();
     private readonly ConcurrentDictionary<int, Timer> reminderTimers;
+    private readonly ConcurrentDictionary<int, int> reminderRetryAttempts = new();
     private readonly GeneratedBotStrings strings;
     private readonly GuildTimezoneService tz;
 
@@ -100,9 +102,9 @@ public partial class RemindService : INService, IReadyExecutor
     ///     Schedules a reminder by setting a timer.
     /// </summary>
     /// <param name="reminder">The reminder to be scheduled.</param>
-    public Task ScheduleReminder(Reminder reminder)
+    public Task ScheduleReminder(Reminder reminder, TimeSpan? retryDelay = null)
     {
-        var timeToGo = reminder.When - DateTime.UtcNow;
+        var timeToGo = retryDelay ?? (reminder.When - DateTime.UtcNow);
         if (timeToGo <= TimeSpan.Zero)
         {
             timeToGo = TimeSpan.Zero;
@@ -110,6 +112,11 @@ public partial class RemindService : INService, IReadyExecutor
 
         var timer = new Timer(async _ => await ExecuteReminderAsync(reminder), null, timeToGo,
             Timeout.InfiniteTimeSpan);
+        if (reminderTimers.TryGetValue(reminder.Id, out var existingTimer))
+        {
+            existingTimer.Dispose();
+        }
+
         reminderTimers[reminder.Id] = timer;
         return Task.CompletedTask;
     }
@@ -132,10 +139,8 @@ public partial class RemindService : INService, IReadyExecutor
 
             if (ch == null)
             {
-                logger.LogWarning(
-                    "Reminder {ReminderId} target channel/user is unavailable, removing reminder.",
-                    reminder.Id);
-                await RemoveReminder(reminder).ConfigureAwait(false);
+                if (!TryScheduleRetry(reminder, "target channel/user is unavailable"))
+                    await RemoveReminder(reminder).ConfigureAwait(false);
                 return;
             }
 
@@ -165,9 +170,8 @@ public partial class RemindService : INService, IReadyExecutor
         }
         catch (HttpException ex) when (ex.DiscordCode == DiscordErrorCode.CannotSendMessageToUser)
         {
-            logger.LogWarning("Cannot send reminder to user {UserId}, removing reminder {ReminderId}",
-                reminder.UserId, reminder.Id);
-            await RemoveReminder(reminder);
+            if (!TryScheduleRetry(reminder, $"cannot send message to user {reminder.UserId}", ex))
+                await RemoveReminder(reminder).ConfigureAwait(false);
         }
         catch (HttpException ex) when (ex.DiscordCode == DiscordErrorCode.UnknownChannel)
         {
@@ -184,15 +188,40 @@ public partial class RemindService : INService, IReadyExecutor
         }
         catch (HttpException ex)
         {
-            logger.LogWarning(ex, "Discord API error executing reminder {ReminderId}: {ErrorCode} - {ErrorMessage}",
-                reminder.Id, ex.DiscordCode, ex.Message);
-            await RemoveReminder(reminder);
+            if (!TryScheduleRetry(reminder, $"discord API error {ex.DiscordCode}", ex))
+                await RemoveReminder(reminder).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Unexpected error executing reminder {ReminderId}", reminder.Id);
-            await RemoveReminder(reminder);
+            if (!TryScheduleRetry(reminder, "unexpected exception", ex))
+                await RemoveReminder(reminder).ConfigureAwait(false);
         }
+    }
+
+    private bool TryScheduleRetry(Reminder reminder, string reason, Exception? ex = null)
+    {
+        var attempt = reminderRetryAttempts.AddOrUpdate(reminder.Id, 1, (_, current) => current + 1);
+        if (attempt > MaxReminderRetryAttempts)
+        {
+            reminderRetryAttempts.TryRemove(reminder.Id, out _);
+            logger.LogWarning(ex,
+                "Giving up reminder {ReminderId} after {Attempts} failed attempts ({Reason}), removing reminder.",
+                reminder.Id, attempt - 1, reason);
+            return false;
+        }
+
+        var retryDelay = CalculateRetryDelay(attempt);
+        logger.LogWarning(ex,
+            "Retrying reminder {ReminderId} in {Delay} (attempt {Attempt}/{MaxAttempts}) due to {Reason}.",
+            reminder.Id, retryDelay, attempt, MaxReminderRetryAttempts, reason);
+        _ = ScheduleReminder(reminder, retryDelay);
+        return true;
+    }
+
+    private static TimeSpan CalculateRetryDelay(int attempt)
+    {
+        var seconds = Math.Min(900, 15 * Math.Pow(2, Math.Max(0, attempt - 1)));
+        return TimeSpan.FromSeconds(seconds);
     }
 
     private async Task<IMessageChannel?> ResolveReminderChannelAsync(Reminder reminder)
@@ -220,6 +249,7 @@ public partial class RemindService : INService, IReadyExecutor
     /// <param name="reminder">The reminder to be removed.</param>
     private async Task RemoveReminder(Reminder reminder)
     {
+        reminderRetryAttempts.TryRemove(reminder.Id, out _);
         if (reminderTimers.TryRemove(reminder.Id, out var timer))
         {
             await timer.DisposeAsync();

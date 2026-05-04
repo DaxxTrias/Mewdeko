@@ -555,10 +555,22 @@ public class AiService : INService
 
     private static bool TryGetProviderFromAlias(string token, out AiProvider provider)
     {
+        // Prevent numeric prompts (e.g., "3 is more than 2?") from being treated as enum values.
+        if (IsNumericSelectorToken(token))
+        {
+            provider = default;
+            return false;
+        }
+
         if (ProviderAliases.TryGetValue(token, out provider))
             return true;
 
         return Enum.TryParse(token, true, out provider) && IsSupportedProvider((int)provider);
+    }
+
+    private static bool IsNumericSelectorToken(string token)
+    {
+        return !string.IsNullOrWhiteSpace(token) && token.All(char.IsDigit);
     }
 
     private async Task<List<GuildAiProviderLink>> GetEffectiveProviderLinks(GuildAiConfig config)
@@ -609,10 +621,13 @@ public class AiService : INService
         var parts = rawQuery.Split(new[] { ' ' }, 2, StringSplitOptions.RemoveEmptyEntries);
         var selector = parts.Length > 0 ? parts[0].Trim() : string.Empty;
         var remainder = parts.Length > 1 ? parts[1].Trim() : string.Empty;
+        var hasNumericSelector = IsNumericSelectorToken(selector);
 
-        var selectedByModel = links.FirstOrDefault(x =>
-            !string.IsNullOrWhiteSpace(x.DefaultModel) &&
-            x.DefaultModel.Equals(selector, StringComparison.OrdinalIgnoreCase));
+        var selectedByModel = hasNumericSelector
+            ? null
+            : links.FirstOrDefault(x =>
+                !string.IsNullOrWhiteSpace(x.DefaultModel) &&
+                x.DefaultModel.Equals(selector, StringComparison.OrdinalIgnoreCase));
 
         if (selectedByModel is not null)
         {
@@ -628,7 +643,7 @@ public class AiService : INService
                     selectedByModel.DefaultModel!));
         }
 
-        if (TryGetProviderFromAlias(selector, out var selectedProvider))
+        if (!hasNumericSelector && TryGetProviderFromAlias(selector, out var selectedProvider))
         {
             var selectedByProvider = links.FirstOrDefault(x => x.Provider == (int)selectedProvider);
             if (selectedByProvider is null)
@@ -730,7 +745,8 @@ public class AiService : INService
     }
 
     private async Task StreamResponse(GuildAiConfig config, ulong? webhookMessageId, SocketMessage userMsg,
-        DiscordWebhookClient? webhook, string userQuery = null, ResolvedAiRoute? route = null)
+        DiscordWebhookClient? webhook, string userQuery = null, ResolvedAiRoute? route = null,
+        int accumulatedTokenCount = 0)
     {
         route ??= new ResolvedAiRoute((AiProvider)config.Provider, config.ApiKey ?? string.Empty, config.Model ?? string.Empty);
         if (!IsSupportedProvider((int)route.Provider))
@@ -851,6 +867,7 @@ public class AiService : INService
         var responseBuilder = new StringBuilder();
         var lastUpdate = DateTime.UtcNow;
         var tokenCount = 0;
+        var startingTotalTokensUsed = config.TokensUsed;
 
         // Store response message for regular (non-webhook) updates
         IUserMessage? regularMessage = null;
@@ -931,7 +948,7 @@ public class AiService : INService
                 }
 
                 // Check for usage information
-                if (provider == AiProvider.Groq || provider == AiProvider.Claude)
+                if (provider == AiProvider.Groq || provider == AiProvider.Claude || provider == AiProvider.Grok)
                 {
                     var usage = streamParser.ParseUsage(rawJson, provider);
                     if (usage.HasValue)
@@ -1079,9 +1096,12 @@ public class AiService : INService
                 logger.LogInformation($"Message {i}: Role={msg.Role}, ContentLength={msg.Content?.Length ?? 0}");
             }
 
-            await StreamResponse(config, webhookMessageId, userMsg, webhook, toolResultsContent, route);
+            await StreamResponse(config, webhookMessageId, userMsg, webhook, toolResultsContent, route,
+                accumulatedTokenCount + tokenCount);
             return;
         }
+
+        var requestTokenCount = accumulatedTokenCount + tokenCount;
 
         await db.InsertAsync(new AiMessage
         {
@@ -1089,12 +1109,19 @@ public class AiService : INService
             Role = "assistant",
             Content = responseBuilder.ToString()
         });
-        config.TokensUsed += tokenCount;
+        config.TokensUsed += requestTokenCount;
         await db.UpdateAsync(config);
 
         // Final update with completed response
         await UpdateMessageEmbed(true); // true = final update
         return;
+
+        string BuildTokenUsageFooter()
+        {
+            var currentRequestTokens = Math.Max(0, accumulatedTokenCount + tokenCount);
+            var lifetimeTokens = Math.Max(0, startingTotalTokensUsed + currentRequestTokens);
+            return $"{currentRequestTokens:N0} ({lifetimeTokens:N0})";
+        }
 
         async Task UpdateMessageEmbed(bool isFinalUpdate)
         {
@@ -1218,7 +1245,7 @@ public class AiService : INService
                             if (builder.Footer is null || isFinalUpdate)
                             {
                                 builder.WithFooter(strings.AiResponseFooter(config.GuildId, userMsg.Author.Username,
-                                    tokenCount));
+                                    BuildTokenUsageFooter()));
                             }
 
                             return builder.Build();
@@ -1238,7 +1265,8 @@ public class AiService : INService
                             var embedBuilder = new EmbedBuilder()
                                 .WithOkColor()
                                 .WithDescription(plainText ?? processedContent)
-                                .WithFooter(strings.AiResponseFooter(config.GuildId, userMsg.Author.Username, tokenCount));
+                                .WithFooter(strings.AiResponseFooter(config.GuildId, userMsg.Author.Username,
+                                    BuildTokenUsageFooter()));
                             AddProviderBranding(embedBuilder, provider);
                             var embed = embedBuilder.Build();
                             await webhook.ModifyMessageAsync(webhookMessageId.Value, x =>
@@ -1254,7 +1282,8 @@ public class AiService : INService
                         var embedBuilder = new EmbedBuilder()
                             .WithOkColor()
                             .WithDescription(processedContent)
-                            .WithFooter(strings.AiResponseFooter(config.GuildId, userMsg.Author.Username, tokenCount));
+                            .WithFooter(strings.AiResponseFooter(config.GuildId, userMsg.Author.Username,
+                                BuildTokenUsageFooter()));
 
                         AddProviderBranding(embedBuilder, provider);
 
@@ -1286,7 +1315,7 @@ public class AiService : INService
                                 if (builder.Footer is null || isFinalUpdate)
                                 {
                                     builder.WithFooter(strings.AiResponseFooter(config.GuildId, userMsg.Author.Username,
-                                        tokenCount));
+                                        BuildTokenUsageFooter()));
                                 }
                                 // Add provider branding here
                                 AddProviderBranding(builder, provider);
@@ -1307,7 +1336,8 @@ public class AiService : INService
                                 var embedBuilder = new EmbedBuilder()
                                     .WithOkColor()
                                     .WithDescription(plainText ?? processedContent)
-                                    .WithFooter(strings.AiResponseFooter(config.GuildId, userMsg.Author.Username, tokenCount));
+                                    .WithFooter(strings.AiResponseFooter(config.GuildId, userMsg.Author.Username,
+                                        BuildTokenUsageFooter()));
                                 AddProviderBranding(embedBuilder, provider);
                                 regularMessage = await userMsg.Channel.SendMessageAsync(
                                     embeds: new[] { embedBuilder.Build() }, allowedMentions: AllowedMentions.None);
@@ -1319,7 +1349,8 @@ public class AiService : INService
                             var embedBuilder = new EmbedBuilder()
                                 .WithOkColor()
                                 .WithDescription(processedContent)
-                                .WithFooter(strings.AiResponseFooter(config.GuildId, userMsg.Author.Username, tokenCount));
+                                .WithFooter(strings.AiResponseFooter(config.GuildId, userMsg.Author.Username,
+                                    BuildTokenUsageFooter()));
                             AddProviderBranding(embedBuilder, provider);
                             regularMessage = await userMsg.Channel.SendMessageAsync(
                                 embeds: new[] { embedBuilder.Build() }, allowedMentions: AllowedMentions.None);
@@ -1338,7 +1369,7 @@ public class AiService : INService
                                 if (builder.Footer is null || isFinalUpdate)
                                 {
                                     builder.WithFooter(strings.AiResponseFooter(config.GuildId, userMsg.Author.Username,
-                                        tokenCount));
+                                        BuildTokenUsageFooter()));
                                 }
 
                                 return builder.Build();
@@ -1359,7 +1390,8 @@ public class AiService : INService
                                 var embedBuilder = new EmbedBuilder()
                                     .WithOkColor()
                                     .WithDescription(plainText ?? processedContent)
-                                    .WithFooter(strings.AiResponseFooter(config.GuildId, userMsg.Author.Username, tokenCount));
+                                    .WithFooter(strings.AiResponseFooter(config.GuildId, userMsg.Author.Username,
+                                        BuildTokenUsageFooter()));
                                 AddProviderBranding(embedBuilder, provider);
                                 var embed = embedBuilder.Build();
                                 await regularMessage.ModifyAsync(msg =>
@@ -1375,7 +1407,8 @@ public class AiService : INService
                             var embedBuilder = new EmbedBuilder()
                                 .WithOkColor()
                                 .WithDescription(processedContent)
-                                .WithFooter(strings.AiResponseFooter(config.GuildId, userMsg.Author.Username, tokenCount));
+                                .WithFooter(strings.AiResponseFooter(config.GuildId, userMsg.Author.Username,
+                                    BuildTokenUsageFooter()));
 
                             AddProviderBranding(embedBuilder, provider);
 
@@ -1462,7 +1495,8 @@ public class AiService : INService
                         .WithOkColor()
                         .WithTitle($"Response (Part 1/{chunks.Count})")
                         .WithDescription(chunks[0])
-                        .WithFooter(strings.AiResponseFooter(config.GuildId, userMsg.Author.Username, tokenCount));
+                        .WithFooter(strings.AiResponseFooter(config.GuildId, userMsg.Author.Username,
+                            BuildTokenUsageFooter()));
                     AddProviderBranding(fallbackEmbedBuilder, provider);
                     var fallbackEmbed = fallbackEmbedBuilder.Build();
 
@@ -1507,7 +1541,7 @@ public class AiService : INService
                         if (i == chunks.Count - 1)
                         {
                             embedBuilder.WithFooter(strings.AiResponseFooter(config.GuildId, userMsg.Author.Username,
-                                tokenCount));
+                                BuildTokenUsageFooter()));
                         }
 
                         AddProviderBranding(embedBuilder, provider);
@@ -1545,7 +1579,7 @@ public class AiService : INService
                 if (showAllChunks && chunks.Count == 1)
                 {
                     firstEmbedBuilder.WithFooter(strings.AiResponseFooter(config.GuildId, userMsg.Author.Username,
-                        tokenCount));
+                        BuildTokenUsageFooter()));
                 }
 
                 AddProviderBranding(firstEmbedBuilder, provider);
@@ -1590,7 +1624,7 @@ public class AiService : INService
                     if (i == chunks.Count - 1)
                     {
                         embedBuilder.WithFooter(strings.AiResponseFooter(config.GuildId, userMsg.Author.Username,
-                            tokenCount));
+                            BuildTokenUsageFooter()));
                     }
 
                     AddProviderBranding(embedBuilder, provider);

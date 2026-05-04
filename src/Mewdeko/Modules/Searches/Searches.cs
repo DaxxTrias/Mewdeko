@@ -46,7 +46,6 @@ public partial class Searches(
     : MewdekoModuleBase<SearchesService>
 {
     private static readonly ConcurrentDictionary<string, string> CachedShortenedLinks = new();
-    private static int googleImageProviderDisabledForSession;
 
     /// <summary>
     ///     Fetches and displays a random meme from Reddit.
@@ -743,11 +742,22 @@ public partial class Searches(
         var sourceName = "Search Provider";
         var sourceIconUrl = string.Empty;
         var providerErrorCount = 0;
-        var googleProviderDisabled =
-            System.Threading.Volatile.Read(ref googleImageProviderDisabledForSession) == 1;
+        
+        // Prefer DuckDuckGo. Fall back to Google if DDG fails.
+        images = await TrySearchImagesAsync(
+            "DuckDuckGo",
+            async () =>
+            {
+                using var dscraper = new DuckDuckGoScraper();
+                return await dscraper.GetImagesAsync(query, SafeSearchLevel.Strict).ConfigureAwait(false);
+            }).ConfigureAwait(false);
 
-        // Try to get images from Google first. If blocked/rate-limited, fall back to DuckDuckGo.
-        if (!googleProviderDisabled)
+        if (images is not null)
+        {
+            sourceName = "DuckDuckGo";
+            sourceIconUrl = "https://duckduckgo.com/assets/logo_homepage.normal.v108.svg";
+        }
+        else
         {
             images = await TrySearchImagesAsync(
                 "Google",
@@ -761,27 +771,6 @@ public partial class Searches(
             {
                 sourceName = "Google";
                 sourceIconUrl = "https://www.google.com/favicon.ico";
-            }
-        }
-        else
-        {
-            logger.LogDebug("Skipping Google image provider because it is disabled for this process.");
-        }
-
-        if (images is null)
-        {
-            images = await TrySearchImagesAsync(
-                "DuckDuckGo",
-                async () =>
-                {
-                    using var dscraper = new DuckDuckGoScraper();
-                    return await dscraper.GetImagesAsync(query, SafeSearchLevel.Strict).ConfigureAwait(false);
-                }).ConfigureAwait(false);
-
-            if (images is not null)
-            {
-                sourceName = "DuckDuckGo";
-                sourceIconUrl = "https://duckduckgo.com/assets/logo_homepage.normal.v108.svg";
             }
         }
 
@@ -867,7 +856,6 @@ public partial class Searches(
                     "Image search provider {ProviderName} failed for query '{Query}' with HTTP error.",
                     providerName,
                     query);
-                DisableGoogleProviderForSession(providerName);
                 return null;
             }
             catch (Exception ex)
@@ -878,20 +866,7 @@ public partial class Searches(
                     "Image search provider {ProviderName} failed for query '{Query}'.",
                     providerName,
                     query);
-                DisableGoogleProviderForSession(providerName);
                 return null;
-            }
-        }
-
-        void DisableGoogleProviderForSession(string providerName)
-        {
-            if (!string.Equals(providerName, "Google", StringComparison.Ordinal))
-                return;
-
-            if (System.Threading.Interlocked.Exchange(ref googleImageProviderDisabledForSession, 1) == 0)
-            {
-                logger.LogWarning(
-                    "Disabling Google image provider for current process after failure. It will retry after bot restart.");
             }
         }
 

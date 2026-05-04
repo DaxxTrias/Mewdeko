@@ -6,6 +6,7 @@ using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
 using Humanizer;
 using Mewdeko.Common.Attributes.InteractionCommands;
+using Mewdeko.Modules.Administration.Services;
 using Mewdeko.Modules.Utility.Common;
 using Mewdeko.Modules.Utility.Services;
 using Mewdeko.Services.Settings;
@@ -22,7 +23,8 @@ public partial class Utility
         DiscordShardedClient client,
         InteractiveService interactiveService,
         GuildSettingsService guildSettings,
-        BotConfigService config)
+        BotConfigService config,
+        ReactionTrackingService reactionTracker)
         : MewdekoSlashModuleBase<UtilityService>
     {
         /// <summary>
@@ -85,6 +87,7 @@ public partial class Utility
 
             em.AddField("Sent", TimestampTag.FromDateTimeOffset(msg.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
             AddAttachmentsField(em, attachments);
+            SnipeReactionFormatter.AddReactorsField(em, reactionTracker, msg.MessageId, msg.MessageTimestamp);
 
             if (!string.IsNullOrEmpty(msg.JsonData))
             {
@@ -176,6 +179,7 @@ public partial class Utility
 
             em.AddField("Sent", TimestampTag.FromDateTimeOffset(msg.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
             AddAttachmentsField(em, attachments);
+            SnipeReactionFormatter.AddReactorsField(em, reactionTracker, msg.MessageId, msg.MessageTimestamp);
 
             if (!string.IsNullOrEmpty(msg.JsonData))
             {
@@ -265,6 +269,7 @@ public partial class Utility
 
                 builder.AddField("Sent", TimestampTag.FromDateTimeOffset(msg1.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
                 AddAttachmentsField(builder, attachments);
+                SnipeReactionFormatter.AddReactorsField(builder, reactionTracker, msg1.MessageId, msg1.MessageTimestamp);
 
                 return builder;
             }

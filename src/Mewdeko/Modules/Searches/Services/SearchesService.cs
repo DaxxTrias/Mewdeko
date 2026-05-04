@@ -1285,8 +1285,12 @@ public class SearchesService : INService, IUnloadableService
     /// </returns>
     public async Task<SteamGameInfo?> GetSteamGameInfoByName(string query)
     {
-        query = query.Trim().ToLowerInvariant();
-        var searchCacheKey = $"steam_game_search_{query}";
+        query = query.Trim();
+        if (string.IsNullOrWhiteSpace(query))
+            return null;
+
+        var normalizedQuery = query.ToLowerInvariant();
+        var searchCacheKey = $"steam_game_search_{normalizedQuery}_v2";
 
         // First try to get the AppId from search
         var searchResult = await cache.GetOrAddCachedDataAsync(
@@ -1296,7 +1300,7 @@ public class SearchesService : INService, IUnloadableService
                 using var http = httpFactory.CreateClient();
                 var response =
                     await http.GetAsync(
-                        $"https://store.steampowered.com/api/storesearch/?term={Uri.EscapeDataString(query)}&l=en&cc=US");
+                        $"https://store.steampowered.com/api/storesearch/?term={Uri.EscapeDataString(query)}&l=english&cc=US");
 
                 if (!response.IsSuccessStatusCode)
                     return null;
@@ -1307,8 +1311,8 @@ public class SearchesService : INService, IUnloadableService
                 if (result?.Items == null || !result.Items.Any())
                     return null;
 
-                // Return the most relevant match
-                return result.Items[0];
+                // Select the most relevant app match instead of always taking the first result.
+                return SelectBestSteamSearchResult(result.Items, normalizedQuery);
             },
             default(string),
             TimeSpan.FromHours(1)
@@ -1319,13 +1323,13 @@ public class SearchesService : INService, IUnloadableService
 
         // Then get detailed info
         return await cache.GetOrAddCachedDataAsync(
-            $"steam_game_details_{searchResult.Id}",
+            $"steam_game_details_{searchResult.Id}_en_us",
             async _ =>
             {
                 using var http = httpFactory.CreateClient();
                 var detailsStr =
                     await http.GetStringAsync(
-                        $"https://store.steampowered.com/api/appdetails?appids={searchResult.Id}");
+                        $"https://store.steampowered.com/api/appdetails?appids={searchResult.Id}&l=english&cc=US");
 
                 var response =
                     JsonSerializer.Deserialize<Dictionary<string, AppDetailsResponse>>(detailsStr, CachedJsonOptions);
@@ -1335,7 +1339,7 @@ public class SearchesService : INService, IUnloadableService
                 {
                     var data = gameDetails.Data;
                     data.Price = searchResult.Price; // Include the price from search result as it's more reliable
-                    data.Metascore = searchResult.Metascore; // Include metascore from search as it's already parsed
+                    data.Metascore = searchResult.Metascore.ToString(CultureInfo.InvariantCulture); // Include metascore from search as it's already parsed
                     return data;
                 }
 
@@ -1344,6 +1348,20 @@ public class SearchesService : INService, IUnloadableService
             default(string),
             TimeSpan.FromHours(6)
         );
+    }
+
+    private static StoreSearchItem? SelectBestSteamSearchResult(IEnumerable<StoreSearchItem> items, string query)
+    {
+        var normalizedQuery = query.Trim();
+
+        return items
+            .Where(item => item != null)
+            .OrderByDescending(item => string.Equals(item.Type, "app", StringComparison.OrdinalIgnoreCase))
+            .ThenByDescending(item => string.Equals(item.Name, normalizedQuery, StringComparison.OrdinalIgnoreCase))
+            .ThenByDescending(item => item.Name.StartsWith(normalizedQuery, StringComparison.OrdinalIgnoreCase))
+            .ThenByDescending(item => item.Name.Contains(normalizedQuery, StringComparison.OrdinalIgnoreCase))
+            .ThenBy(item => Math.Abs(item.Name.Length - normalizedQuery.Length))
+            .FirstOrDefault();
     }
 
 
