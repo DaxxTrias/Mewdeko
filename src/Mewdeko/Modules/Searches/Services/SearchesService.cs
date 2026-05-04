@@ -1339,7 +1339,7 @@ public class SearchesService : INService, IUnloadableService
                 {
                     var data = gameDetails.Data;
                     data.Price = searchResult.Price; // Include the price from search result as it's more reliable
-                    data.Metascore = searchResult.Metascore.ToString(CultureInfo.InvariantCulture); // Include metascore from search as it's already parsed
+                    data.Metascore = searchResult.Metascore; // Include metascore from search as it's already parsed
                     return data;
                 }
 

@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Mewdeko.Modules.Searches.Common;
@@ -46,8 +48,8 @@ public class StoreSearchItem
     /// <summary>
     ///     Gets or sets the Metacritic score of the game.
     /// </summary>
-    [JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
-    public int Metascore { get; set; }
+    [JsonConverter(typeof(SteamMetascoreJsonConverter))]
+    public string Metascore { get; set; } = "";
 
     /// <summary>
     ///     Gets or sets the URL of the item's thumbnail image.
@@ -63,6 +65,38 @@ public class StoreSearchItem
     ///     Gets or sets the level of controller support (e.g., "full", "partial").
     /// </summary>
     public string ControllerSupport { get; set; }
+}
+
+/// <summary>
+///     Handles Steam metascore values which may be numbers, strings, or null.
+/// </summary>
+public sealed class SteamMetascoreJsonConverter : JsonConverter<string>
+{
+    /// <inheritdoc />
+    public override string Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        return reader.TokenType switch
+        {
+            JsonTokenType.String => reader.GetString() ?? "",
+            JsonTokenType.Number when reader.TryGetInt32(out var intValue) => intValue.ToString(CultureInfo.InvariantCulture),
+            JsonTokenType.Number when reader.TryGetDouble(out var doubleValue) => doubleValue.ToString(CultureInfo.InvariantCulture),
+            JsonTokenType.True or JsonTokenType.False => reader.GetBoolean().ToString(),
+            JsonTokenType.Null => "",
+            _ => ReadFallbackAsString(ref reader)
+        };
+    }
+
+    /// <inheritdoc />
+    public override void Write(Utf8JsonWriter writer, string value, JsonSerializerOptions options)
+    {
+        writer.WriteStringValue(value);
+    }
+
+    private static string ReadFallbackAsString(ref Utf8JsonReader reader)
+    {
+        using var doc = JsonDocument.ParseValue(ref reader);
+        return doc.RootElement.ToString();
+    }
 }
 
 /// <summary>
