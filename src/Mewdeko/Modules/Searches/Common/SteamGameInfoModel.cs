@@ -1,4 +1,4 @@
-﻿using System.Text.Json.Serialization;
+using System.Text.Json.Serialization;
 
 namespace Mewdeko.Modules.Searches.Common;
 
@@ -46,7 +46,8 @@ public class StoreSearchItem
     /// <summary>
     ///     Gets or sets the Metacritic score of the game.
     /// </summary>
-    public string Metascore { get; set; }
+    [JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
+    public int Metascore { get; set; }
 
     /// <summary>
     ///     Gets or sets the URL of the item's thumbnail image.
