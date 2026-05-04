@@ -1,4 +1,8 @@
-﻿using System.Threading;
+using System.IO;
+using System.Net;
+using System.Net.Http;
+using System.Net.Sockets;
+using System.Threading;
 using DataModel;
 using Discord.Net;
 using Mewdeko.Modules.Administration.Services;
@@ -12,6 +16,7 @@ namespace Mewdeko.Modules.Utility.Common;
 /// </summary>
 public class RepeatRunner : IDisposable
 {
+    private const int MaxTransientRetryAttempts = 3;
     private readonly DiscordShardedClient client;
     private readonly StickyConditionService? conditionService;
     private readonly GuildTimezoneService? guildTimezoneService;
@@ -284,14 +289,8 @@ public class RepeatRunner : IDisposable
                 return;
             }
 
-            if (Channel == null)
+            if (!await EnsureChannelLoadedAsync())
             {
-                Channel = await Guild.GetTextChannelAsync(Repeater.ChannelId);
-            }
-
-            if (Channel == null)
-            {
-                Log.Warning("Channel {ChannelId} not found. Removing repeater.", Repeater.ChannelId);
                 await RemoveRepeater();
                 return;
             }
@@ -330,6 +329,20 @@ public class RepeatRunner : IDisposable
             }
 
             ScheduleNextCheck();
+        }
+        catch (HttpException ex) when (IsTransientDiscordException(ex))
+        {
+            Log.Warning(ex,
+                "Transient HTTP error in repeater {RepeaterId} for channel {ChannelId}; keeping repeater and retrying soon",
+                Repeater.Id, Repeater.ChannelId);
+            ScheduleTransientRetry();
+        }
+        catch (Exception ex) when (IsTransientDiscordException(ex))
+        {
+            Log.Warning(ex,
+                "Transient network error in repeater {RepeaterId} for channel {ChannelId}; keeping repeater and retrying soon",
+                Repeater.Id, Repeater.ChannelId);
+            ScheduleTransientRetry();
         }
         catch (HttpException ex)
         {
@@ -388,7 +401,9 @@ public class RepeatRunner : IDisposable
         try
         {
             var timeWindow = TimeSpan.Parse(Repeater.ActivityTimeWindow ?? "00:05:00");
-            var messages = await Channel.GetMessagesAsync(50).FlattenAsync();
+            var messages = await ExecuteWithTransientRetryAsync(
+                async () => await Channel!.GetMessagesAsync(50).FlattenAsync(),
+                "checking quiet channel activity");
 
             var recentMessages = messages.Where(m =>
                 DateTime.UtcNow - m.Timestamp.UtcDateTime < timeWindow).ToArray();
@@ -409,7 +424,9 @@ public class RepeatRunner : IDisposable
         try
         {
             // Count messages since last trigger
-            var messages = await Channel.GetMessagesAsync(Repeater.ActivityThreshold + 10).FlattenAsync();
+            var messages = await ExecuteWithTransientRetryAsync(
+                async () => await Channel!.GetMessagesAsync(Repeater.ActivityThreshold + 10).FlattenAsync(),
+                "checking repeater message threshold");
             var messagesSinceLastTrigger = messages
                 .Where(m => !Repeater.LastDisplayed.HasValue || m.Timestamp.UtcDateTime > Repeater.LastDisplayed.Value)
                 .Count();
@@ -431,7 +448,9 @@ public class RepeatRunner : IDisposable
         try
         {
             // Check if there's been rapid message activity indicating active conversation
-            var messages = await Channel.GetMessagesAsync(20).FlattenAsync();
+            var messages = await ExecuteWithTransientRetryAsync(
+                async () => await Channel!.GetMessagesAsync(20).FlattenAsync(),
+                "checking conversation activity");
             var recentMessages = messages.Where(m =>
                 DateTime.UtcNow - m.Timestamp.UtcDateTime < TimeSpan.FromMinutes(1)).ToArray();
 
@@ -457,7 +476,9 @@ public class RepeatRunner : IDisposable
         if (Channel != null)
             return true;
 
-        Channel = await Guild.GetTextChannelAsync(Repeater.ChannelId);
+        Channel = await ExecuteWithTransientRetryAsync(
+            () => Guild.GetTextChannelAsync(Repeater.ChannelId),
+            "loading repeater channel");
         if (Channel == null)
         {
             Log.Warning("Channel {ChannelId} not found for repeater {RepeaterId}", Repeater.ChannelId, Repeater.Id);
@@ -513,10 +534,35 @@ public class RepeatRunner : IDisposable
         }
     }
 
+    private void ScheduleTransientRetry()
+    {
+        // Retry transient failures quickly instead of waiting a full cycle.
+        var retryDelay = TimeSpan.FromSeconds(15);
+        NextDateTime = DateTime.UtcNow + retryDelay;
+
+        if (timer == null)
+            return;
+
+        var triggerMode = (StickyTriggerMode)Repeater.TriggerMode;
+        var period = triggerMode == StickyTriggerMode.TimeInterval
+            ? TimeSpan.Parse(Repeater.Interval)
+            : TimeSpan.FromMinutes(1);
+        try
+        {
+            timer.Change(retryDelay, period);
+        }
+        catch (ObjectDisposedException)
+        {
+            // timer already disposed; ignore
+        }
+    }
+
     private async Task<IMessage?> GetLastMessageAsync()
     {
         if (Channel == null) return null;
-        var messages = await Channel.GetMessagesAsync(2).FlattenAsync().ConfigureAwait(false);
+        var messages = await ExecuteWithTransientRetryAsync(
+            async () => await Channel.GetMessagesAsync(2).FlattenAsync().ConfigureAwait(false),
+            "fetching last channel message").ConfigureAwait(false);
         return messages.FirstOrDefault();
     }
 
@@ -563,6 +609,51 @@ public class RepeatRunner : IDisposable
     {
         Stop();
         await mrs.RemoveRepeater(Repeater).ConfigureAwait(false);
+    }
+
+    private async Task<T> ExecuteWithTransientRetryAsync<T>(Func<Task<T>> operation, string operationName)
+    {
+        for (var attempt = 1; attempt <= MaxTransientRetryAttempts; attempt++)
+        {
+            try
+            {
+                return await operation().ConfigureAwait(false);
+            }
+            catch (Exception ex) when (IsTransientDiscordException(ex) && attempt < MaxTransientRetryAttempts)
+            {
+                var delay = TimeSpan.FromSeconds(Math.Min(8, Math.Pow(2, attempt))) +
+                            TimeSpan.FromMilliseconds(Random.Shared.Next(0, 400));
+                Log.Warning(ex,
+                    "Transient error during {Operation} for repeater {RepeaterId} on attempt {Attempt}/{MaxAttempts}; retrying in {Delay}.",
+                    operationName, Repeater.Id, attempt, MaxTransientRetryAttempts, delay);
+                await Task.Delay(delay).ConfigureAwait(false);
+            }
+        }
+
+        throw new InvalidOperationException("Transient retry loop unexpectedly completed without returning.");
+    }
+
+    private static bool IsTransientDiscordException(Exception ex)
+    {
+        if (ex is HttpException httpEx)
+        {
+            return httpEx.HttpCode == HttpStatusCode.BadGateway
+                   || httpEx.HttpCode == HttpStatusCode.ServiceUnavailable
+                   || httpEx.HttpCode == HttpStatusCode.GatewayTimeout
+                   || httpEx.HttpCode == HttpStatusCode.RequestTimeout
+                   || httpEx.HttpCode == HttpStatusCode.TooManyRequests;
+        }
+
+        if (ex is HttpRequestException
+            || ex is IOException
+            || ex is SocketException
+            || ex is TimeoutException
+            || ex is TaskCanceledException)
+        {
+            return true;
+        }
+
+        return ex.InnerException != null && IsTransientDiscordException(ex.InnerException);
     }
 
     /// <summary>
