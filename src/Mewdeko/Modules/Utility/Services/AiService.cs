@@ -58,9 +58,12 @@ public class AiService : INService
     private readonly IHttpClientFactory httpFactory;
     private readonly ILogger<AiService> logger;
     private readonly ConcurrentDictionary<AiProvider, List<AiModel>> modelCache;
+    private readonly ConcurrentDictionary<ulong, CleanupTrackedResponse> trackedResponseCleanupRequests = new();
     private readonly TimeSpan modelCacheExpiry = TimeSpan.FromHours(24);
     private readonly IServiceProvider serviceProvider;
     private readonly GeneratedBotStrings strings;
+    private static readonly Emoji CleanupReaction = new("🗑️");
+    private static readonly TimeSpan CleanupTrackingLifetime = TimeSpan.FromHours(12);
     private BotConfig BotConfig => botConfigService.Data;
     private static readonly Dictionary<string, AiProvider> ProviderAliases = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -107,6 +110,7 @@ public class AiService : INService
         this.serviceProvider = serviceProvider;
         aiClientFactory = new AiClientFactory(httpFactory);
         handler.Subscribe("MessageReceived", "AiService", HandleMessage);
+        handler.Subscribe("ReactionAdded", "AiService", HandleAiCleanupReactionAdded);
         modelCache = new ConcurrentDictionary<AiProvider, List<AiModel>>();
     }
 
@@ -1114,6 +1118,7 @@ public class AiService : INService
 
         // Final update with completed response
         await UpdateMessageEmbed(true); // true = final update
+        await AttachCleanupReactionForRequester(userMsg.Author.Id, regularMessage, webhookMessageId, userMsg.Channel);
         return;
 
         string BuildTokenUsageFooter()
@@ -1550,12 +1555,16 @@ public class AiService : INService
                         if (webhook != null && webhookMessageId.HasValue)
                         {
                             // Send a new webhook message for each additional part
-                            await webhook.SendMessageAsync(embeds: new[] { embed });
+                            var followupMessageId = await webhook.SendMessageAsync(embeds: new[] { embed });
+                            await AttachCleanupReactionForRequester(userMsg.Author.Id, null, followupMessageId,
+                                userMsg.Channel);
                         }
                         else
                         {
-                            await userMsg.Channel.SendMessageAsync(embeds: new[] { embed },
+                            var followupMessage = await userMsg.Channel.SendMessageAsync(
+                                embeds: new[] { embed },
                                 allowedMentions: AllowedMentions.None);
+                            await TrackAndAttachCleanupReaction(followupMessage, userMsg.Author.Id);
                         }
                     }
                     catch (Exception ex)
@@ -1632,15 +1641,116 @@ public class AiService : INService
 
                     if (webhook != null && webhookMessageId.HasValue)
                     {
-                        await webhook.SendMessageAsync(embeds: new[] { embed });
+                        var followupMessageId = await webhook.SendMessageAsync(embeds: new[] { embed });
+                        await AttachCleanupReactionForRequester(userMsg.Author.Id, null, followupMessageId,
+                            userMsg.Channel);
                     }
                     else
                     {
-                        await userMsg.Channel.SendMessageAsync(embeds: new[] { embed },
+                        var followupMessage = await userMsg.Channel.SendMessageAsync(
+                            embeds: new[] { embed },
                             allowedMentions: AllowedMentions.None);
+                        await TrackAndAttachCleanupReaction(followupMessage, userMsg.Author.Id);
                     }
                 }
             }
+        }
+    }
+
+    private sealed record CleanupTrackedResponse(ulong RequesterId, DateTimeOffset CreatedAt);
+
+    private async Task HandleAiCleanupReactionAdded(
+        Cacheable<IUserMessage, ulong> msg,
+        Cacheable<IMessageChannel, ulong> chan,
+        SocketReaction reaction)
+    {
+        _ = chan;
+        if (reaction.UserId == client.CurrentUser.Id || !IsCleanupReaction(reaction.Emote))
+            return;
+
+        PruneTrackedCleanupRequests();
+        if (!trackedResponseCleanupRequests.TryGetValue(reaction.MessageId, out var trackedResponse))
+            return;
+
+        if (trackedResponse.RequesterId != reaction.UserId)
+            return;
+
+        try
+        {
+            var targetMessage = msg.HasValue ? msg.Value : await msg.GetOrDownloadAsync().ConfigureAwait(false);
+            if (targetMessage != null)
+                await targetMessage.DeleteAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            logger.LogDebug(ex, "Failed to delete AI response message {MessageId} via cleanup reaction",
+                reaction.MessageId);
+        }
+        finally
+        {
+            trackedResponseCleanupRequests.TryRemove(reaction.MessageId, out _);
+        }
+    }
+
+    private static bool IsCleanupReaction(IEmote emote)
+    {
+        return emote.Name is "🗑️" or "🗑";
+    }
+
+    private async Task AttachCleanupReactionForRequester(
+        ulong requesterId,
+        IUserMessage? regularMessage,
+        ulong? webhookMessageId,
+        IMessageChannel responseChannel)
+    {
+        if (regularMessage != null)
+        {
+            await TrackAndAttachCleanupReaction(regularMessage, requesterId);
+            return;
+        }
+
+        if (!webhookMessageId.HasValue)
+            return;
+
+        try
+        {
+            var webhookMessage = await responseChannel.GetMessageAsync(webhookMessageId.Value).ConfigureAwait(false);
+            if (webhookMessage is IUserMessage userMessage)
+                await TrackAndAttachCleanupReaction(userMessage, requesterId);
+        }
+        catch (Exception ex)
+        {
+            logger.LogDebug(ex, "Failed to fetch webhook AI message {MessageId} for cleanup reaction",
+                webhookMessageId.Value);
+        }
+    }
+
+    private async Task TrackAndAttachCleanupReaction(IUserMessage message, ulong requesterId)
+    {
+        PruneTrackedCleanupRequests();
+        trackedResponseCleanupRequests[message.Id] = new CleanupTrackedResponse(requesterId, DateTimeOffset.UtcNow);
+
+        try
+        {
+            await message.AddReactionAsync(CleanupReaction).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            trackedResponseCleanupRequests.TryRemove(message.Id, out _);
+            logger.LogDebug(ex, "Failed to add cleanup reaction to AI response message {MessageId}", message.Id);
+        }
+    }
+
+    private void PruneTrackedCleanupRequests()
+    {
+        if (trackedResponseCleanupRequests.IsEmpty)
+            return;
+
+        var cutoff = DateTimeOffset.UtcNow.Subtract(CleanupTrackingLifetime);
+        foreach (var trackedEntry in trackedResponseCleanupRequests)
+        {
+            if (trackedEntry.Value.CreatedAt < cutoff)
+                trackedResponseCleanupRequests.TryRemove(trackedEntry.Key, out _);
         }
     }
 
