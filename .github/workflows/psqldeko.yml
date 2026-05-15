@@ -1,4 +1,4 @@
-﻿name: .NET
+name: .NET
 
 on:
   push:
@@ -9,7 +9,7 @@ jobs:
   build:
     runs-on: self-hosted
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0  # This ensures all history is fetched
 
@@ -28,7 +28,7 @@ jobs:
 
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 9.0.203
 
