@@ -1,8 +1,10 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
+using System.Threading;
 using LinqToDB;
 using LinqToDB.Async;
+using Microsoft.Extensions.Caching.Memory;
 using Mewdeko.Modules.Utility.Common;
 using VirusTotalNet;
 using VirusTotalNet.Results;
@@ -15,10 +17,15 @@ namespace Mewdeko.Modules.Utility.Services;
 /// </summary>
 public partial class UtilityService : INService
 {
+    private static readonly TimeSpan SnipeRetention = TimeSpan.FromDays(3);
+    private static readonly ConcurrentDictionary<ulong, SemaphoreSlim> SnipeLocks = new();
+    private const string SnipeSnapshotCachePrefix = "snipe:snapshot:";
+
     private readonly IDataCache cache;
     private readonly DiscordShardedClient client;
     private readonly IDataConnectionFactory dbFactory;
     private readonly GuildSettingsService guildSettings;
+    private readonly IMemoryCache memoryCache;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="UtilityService" /> class.
@@ -28,12 +35,14 @@ public partial class UtilityService : INService
     /// <param name="guildSettings">The guild settings service.</param>
     /// <param name="eventHandler">The event handler service.</param>
     /// <param name="client">The Discord client.</param>
+    /// <param name="memoryCache">The memory cache used for recent message snapshots.</param>
     public UtilityService(
         IDataConnectionFactory dbFactory,
         IDataCache cache,
         GuildSettingsService guildSettings,
         EventHandler eventHandler,
-        DiscordShardedClient client)
+        DiscordShardedClient client,
+        IMemoryCache memoryCache)
     {
         eventHandler.Subscribe("MessageDeleted", "UtilityService", MsgStore);
         eventHandler.Subscribe("MessageUpdated", "UtilityService", MsgStore2);
@@ -43,6 +52,7 @@ public partial class UtilityService : INService
         this.cache = cache;
         this.guildSettings = guildSettings;
         this.client = client;
+        this.memoryCache = memoryCache;
     }
 
     /// <summary>
@@ -50,9 +60,9 @@ public partial class UtilityService : INService
     /// </summary>
     /// <param name="guildId">The ID of the guild to retrieve sniped messages for.</param>
     /// <returns>A task that represents the asynchronous operation, containing a list of sniped messages.</returns>
-    public Task<List<SnipeStore>> GetSnipes(ulong guildId)
+    public async Task<List<SnipeStore>> GetSnipes(ulong guildId)
     {
-        return cache.GetSnipesForGuild(guildId);
+        return await cache.GetSnipesForGuild(guildId).ConfigureAwait(false) ?? [];
     }
 
     /// <summary>
@@ -216,41 +226,15 @@ public partial class UtilityService : INService
             return;
 
 
-        var msgs = messages.Where(x => x.HasValue).Select(x =>
-        {
-            var attachments = BuildAttachmentStore(x.Value);
-            return new SnipeStore
-            {
-                GuildId = chan.Guild.Id,
-                ChannelId = chan.Id,
-                MessageId = x.Value.Id,
-                MessageTimestamp = x.Value.Timestamp,
-                ReferenceMessage =
-                    (x.Value as IUserMessage)?.ReferencedMessage == null
-                        ? null
-                        : $"{Format.Bold((x.Value as IUserMessage).ReferencedMessage.Author.ToString())}: {(x.Value as IUserMessage).ReferencedMessage.Content.TrimTo(400)}",
-                Message = BuildSnipeMessageContent(x.Value, attachments),
-                Attachments = attachments,
-                JsonData = SerializeMessageData(x.Value),
-                UserId = x.Value.Author.Id,
-                Edited = false,
-                DateAdded = DateTime.UtcNow
-            };
-        });
+        var msgs = messages
+            .Where(x => x.HasValue)
+            .Select(x => CreateSnipeStore(x.Value, chan, false))
+            .ToList();
 
-        if (!msgs.Any())
+        if (msgs.Count == 0)
             return;
 
-        var snipes = await cache.GetSnipesForGuild(chan.Guild.Id).ConfigureAwait(false) ?? [];
-        if (snipes.Count == 0)
-        {
-            var todelete = snipes.Where(x => DateTime.UtcNow.Subtract(x.DateAdded) >= TimeSpan.FromDays(3));
-            if (todelete.Any())
-                snipes.RemoveRange(todelete);
-        }
-
-        snipes.AddRange(msgs);
-        await cache.AddSnipeToCache(chan.Guild.Id, snipes).ConfigureAwait(false);
+        await AddSnipesToCache(chan.Guild.Id, msgs).ConfigureAwait(false);
     }
 
     private async Task MsgStore(Cacheable<IMessage, ulong> optMsg, Cacheable<IMessageChannel, ulong> ch)
@@ -260,36 +244,15 @@ public partial class UtilityService : INService
 
         if (!await GetSnipeSet(channel.Guild.Id)) return;
 
-        if ((optMsg.HasValue ? optMsg.Value : null) is not IUserMessage msg) return;
-        if (msg.Author is null /*for some reason*/) return;
-        var attachments = BuildAttachmentStore(msg);
-        var snipemsg = new SnipeStore
-        {
-            GuildId = channel.Guild.Id,
-            ChannelId = channel.Id,
-            MessageId = msg.Id,
-            MessageTimestamp = msg.Timestamp,
-            Message = BuildSnipeMessageContent(msg, attachments),
-            ReferenceMessage =
-                msg.ReferencedMessage == null
-                    ? null
-                    : $"{Format.Bold(msg.ReferencedMessage.Author.ToString())}: {msg.ReferencedMessage.Content.TrimTo(400)}",
-            Attachments = attachments,
-            JsonData = SerializeMessageData(msg),
-            UserId = msg.Author.Id,
-            Edited = false,
-            DateAdded = DateTime.UtcNow
-        };
-        var snipes = await cache.GetSnipesForGuild(channel.Guild.Id).ConfigureAwait(false) ?? [];
-        if (snipes.Count == 0)
-        {
-            var todelete = snipes.Where(x => DateTime.UtcNow.Subtract(x.DateAdded) >= TimeSpan.FromDays(3));
-            if (todelete.Any())
-                snipes.RemoveRange(todelete);
-        }
+        var snipemsg = (optMsg.HasValue ? optMsg.Value : null) is IUserMessage msg
+            ? CreateSnipeStore(msg, channel, false)
+            : TryGetSnipeSnapshot(optMsg.Id, channel, false);
 
-        snipes.Add(snipemsg);
-        await cache.AddSnipeToCache(channel.Guild.Id, snipes).ConfigureAwait(false);
+        if (snipemsg is null)
+            return;
+
+        await AddSnipesToCache(channel.Guild.Id, snipemsg).ConfigureAwait(false);
+        memoryCache.Remove(GetSnipeSnapshotCacheKey(snipemsg.MessageId));
     }
 
     private async Task MsgStore2(Cacheable<IMessage, ulong> optMsg, SocketMessage imsg2, ISocketMessageChannel ch)
@@ -298,35 +261,102 @@ public partial class UtilityService : INService
 
         if (!await GetSnipeSet(channel.Guild.Id)) return;
 
-        if ((optMsg.HasValue ? optMsg.Value : null) is not IUserMessage msg) return;
-        var attachments = BuildAttachmentStore(msg);
-        var snipemsg = new SnipeStore
+        var snipemsg = (optMsg.HasValue ? optMsg.Value : null) is IUserMessage msg
+            ? CreateSnipeStore(msg, channel, true)
+            : TryGetSnipeSnapshot(optMsg.Id, channel, true);
+
+        if (snipemsg is not null)
+            await AddSnipesToCache(channel.Guild.Id, snipemsg).ConfigureAwait(false);
+
+        if (imsg2 is IUserMessage updatedMsg)
+            CacheSnipeSnapshot(updatedMsg, channel);
+    }
+
+    private async Task AddSnipesToCache(ulong guildId, SnipeStore snipe)
+    {
+        await AddSnipesToCache(guildId, [snipe]).ConfigureAwait(false);
+    }
+
+    private async Task AddSnipesToCache(ulong guildId, IReadOnlyCollection<SnipeStore> newSnipes)
+    {
+        if (newSnipes.Count == 0)
+            return;
+
+        var guildLock = SnipeLocks.GetOrAdd(guildId, _ => new SemaphoreSlim(1, 1));
+        await guildLock.WaitAsync().ConfigureAwait(false);
+        try
         {
-            GuildId = channel.GuildId,
+            var snipes = await cache.GetSnipesForGuild(guildId).ConfigureAwait(false) ?? [];
+            snipes.RemoveAll(x => DateTime.UtcNow.Subtract(x.DateAdded) >= SnipeRetention);
+            snipes.AddRange(newSnipes);
+            await cache.AddSnipeToCache(guildId, snipes).ConfigureAwait(false);
+        }
+        finally
+        {
+            guildLock.Release();
+        }
+    }
+
+    private static SnipeStore CreateSnipeStore(IMessage msg, IGuildChannel channel, bool edited)
+    {
+        var attachments = BuildAttachmentStore(msg);
+        return new SnipeStore
+        {
+            GuildId = channel.Guild.Id,
             ChannelId = channel.Id,
             MessageId = msg.Id,
             MessageTimestamp = msg.Timestamp,
             Message = BuildSnipeMessageContent(msg, attachments),
-            ReferenceMessage =
-                msg.ReferencedMessage == null
-                    ? null
-                    : $"{Format.Bold(msg.ReferencedMessage.Author.ToString())}: {msg.ReferencedMessage.Content.TrimTo(1048)}",
+            ReferenceMessage = msg is IUserMessage { ReferencedMessage: not null } userMsg
+                ? $"{Format.Bold(userMsg.ReferencedMessage.Author.ToString())}: {userMsg.ReferencedMessage.Content.TrimTo(edited ? 1048 : 400)}"
+                : null,
             Attachments = attachments,
             JsonData = SerializeMessageData(msg),
             UserId = msg.Author.Id,
-            Edited = true,
+            Edited = edited,
             DateAdded = DateTime.UtcNow
         };
-        var snipes = await cache.GetSnipesForGuild(channel.Guild.Id).ConfigureAwait(false) ?? [];
-        if (snipes.Count == 0)
-        {
-            var todelete = snipes.Where(x => DateTime.UtcNow.Subtract(x.DateAdded) >= TimeSpan.FromDays(3));
-            if (todelete.Any())
-                snipes.RemoveRange(todelete);
-        }
+    }
 
-        snipes.Add(snipemsg);
-        await cache.AddSnipeToCache(channel.Guild.Id, snipes).ConfigureAwait(false);
+    private static string GetSnipeSnapshotCacheKey(ulong messageId)
+    {
+        return $"{SnipeSnapshotCachePrefix}{messageId}";
+    }
+
+    private void CacheSnipeSnapshot(IUserMessage msg, IGuildChannel channel)
+    {
+        if (msg.Author is null)
+            return;
+
+        memoryCache.Set(GetSnipeSnapshotCacheKey(msg.Id), CreateSnipeStore(msg, channel, false),
+            new MemoryCacheEntryOptions
+            {
+                AbsoluteExpirationRelativeToNow = SnipeRetention
+            });
+    }
+
+    private SnipeStore? TryGetSnipeSnapshot(ulong messageId, IGuildChannel channel, bool edited)
+    {
+        if (!memoryCache.TryGetValue(GetSnipeSnapshotCacheKey(messageId), out SnipeStore? snapshot) ||
+            snapshot is null ||
+            snapshot.GuildId != channel.Guild.Id ||
+            snapshot.ChannelId != channel.Id)
+            return null;
+
+        return new SnipeStore
+        {
+            GuildId = snapshot.GuildId,
+            ChannelId = snapshot.ChannelId,
+            MessageId = snapshot.MessageId,
+            MessageTimestamp = snapshot.MessageTimestamp,
+            Message = snapshot.Message,
+            ReferenceMessage = snapshot.ReferenceMessage,
+            Attachments = snapshot.Attachments,
+            JsonData = snapshot.JsonData,
+            UserId = snapshot.UserId,
+            Edited = edited,
+            DateAdded = DateTime.UtcNow
+        };
     }
 
     /// <summary>
@@ -342,6 +372,10 @@ public partial class UtilityService : INService
 
     private async Task MsgReciev(IMessage msg)
     {
+        if (msg is IUserMessage userMsg && msg.Channel is IGuildChannel guildChannel &&
+            await GetSnipeSet(guildChannel.Guild.Id).ConfigureAwait(false))
+            CacheSnipeSnapshot(userMsg, guildChannel);
+
         if (msg.Channel is SocketTextChannel t)
         {
             if (msg.Author.IsBot) return;
