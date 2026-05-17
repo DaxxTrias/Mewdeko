@@ -26,9 +26,12 @@
     <EmbeddedResource Include="Database\Scripts\*.sql" />
   </ItemGroup>
 
-  <!-- Include generated sources during design-time builds so editors (DotRush/OmniSharp) see them -->
+  <!-- Include generated sources during design-time builds so editors (DotRush/OmniSharp) see them.
+       Exclude Sentry generator output because it is already emitted by the analyzer and causes duplicate definitions. -->
   <ItemGroup Condition="'$(DesignTimeBuild)' == 'true'">
-    <Compile Include="$(CompilerGeneratedFilesOutputPath)\**\*.cs" Visible="false" />
+    <Compile Include="$(CompilerGeneratedFilesOutputPath)\**\*.cs"
+             Exclude="$(CompilerGeneratedFilesOutputPath)\Sentry.*\**\*.cs"
+             Visible="false" />
   </ItemGroup>
 
 
