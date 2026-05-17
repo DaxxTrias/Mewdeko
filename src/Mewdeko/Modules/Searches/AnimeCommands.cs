@@ -495,12 +495,12 @@ public partial class Searches
                         .AddField(Strings.AnimeType(ctx.Guild.Id), data?.Type ?? "Unknown", true)
                         .AddField(Strings.AnimeStartDate(ctx.Guild.Id),
                             data?.Aired?.From.HasValue == true
-                                ? TimestampTag.FromDateTime(data.Aired.From.Value)
+                                ? TimestampTag.FromDateTime(data.Aired.From.Value.UtcDateTime)
                                 : "Unknown",
                             true)
                         .AddField(Strings.AnimeEndDate(ctx.Guild.Id),
                             data?.Aired?.To.HasValue == true
-                                ? TimestampTag.FromDateTime(data.Aired.To.Value)
+                                ? TimestampTag.FromDateTime(data.Aired.To.Value.UtcDateTime)
                                 : "Unknown", true)
                         .AddField(Strings.AnimeRating(ctx.Guild.Id), data?.Rating ?? "Unknown", true)
                         .AddField(Strings.AnimeRank(ctx.Guild.Id), data?.Rank.HasValue == true ? data.Rank : "Unknown",

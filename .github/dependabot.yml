@@ -15,9 +15,56 @@ updates:
     commit-message:
       prefix: "deps"
     groups:
-      nuget-minor-and-patch:
+      discord:
         patterns:
-          - "*"
+          - "Discord.*"
+          - "Lavalink4NET.*"
+        update-types:
+          - "minor"
+          - "patch"
+      microsoft:
+        patterns:
+          - "Microsoft.*"
+          - "System.*"
+        update-types:
+          - "minor"
+          - "patch"
+      google:
+        patterns:
+          - "Google.*"
+        update-types:
+          - "minor"
+          - "patch"
+      serilog:
+        patterns:
+          - "Serilog*"
+        update-types:
+          - "minor"
+          - "patch"
+      sentry:
+        patterns:
+          - "Sentry*"
+        update-types:
+          - "minor"
+          - "patch"
+      skia:
+        patterns:
+          - "SkiaSharp*"
+          - "HarfBuzzSharp*"
+        update-types:
+          - "minor"
+          - "patch"
+      tests:
+        patterns:
+          - "NUnit*"
+          - "coverlet.*"
+        update-types:
+          - "minor"
+          - "patch"
+      analyzers:
+        patterns:
+          - "*.Analyzers"
+          - "Microsoft.CodeAnalysis.*"
         update-types:
           - "minor"
           - "patch"
