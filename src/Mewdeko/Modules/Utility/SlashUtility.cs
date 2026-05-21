@@ -313,6 +313,7 @@ public partial class SlashUtility(
             "woo" or "woox" => "https://docs.tealstreet.io/docs/connect/woo",
             "woofi" => "https://docs.tealstreet.io/docs/connect/woofi",
             "hyperliquid" or "hl" => "https://docs.tealstreet.io/docs/connect/hyperliquid",
+            "lighter" or "lit" => "https://docs.tealstreet.io/docs/trade/lighter",
             "terminal" or "term" => "https://docs.tealstreet.io/docs/trade/terminal",
             "ref" or "reflink" or "referral" or "ref-link" => "https://docs.tealstreet.io/docs/ref-links",
             "changelog" or "changes" or "patchnotes" => "https://docs.tealstreet.io/docs/changelog",

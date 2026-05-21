@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using DataModel;
 using Mewdeko.Modules.Music.Common;
@@ -444,12 +444,11 @@ public class RedisCache : IDataCache
     /// <param name="id">The guild ID.</param>
     /// <param name="newSnipes">The list of snipes.</param>
     /// <returns></returns>
-    public Task AddSnipeToCache(ulong id, List<SnipeStore> newSnipes)
+    public async Task AddSnipeToCache(ulong id, List<SnipeStore> newSnipes)
     {
-        var customers = new RedisDictionary<ulong, List<SnipeStore>>($"{id}_{redisKey}_snipes", Redis);
-        customers.Remove(id);
-        customers.Add(id, newSnipes);
-        return Task.CompletedTask;
+        var db = Redis.GetDatabase();
+        await db.HashSetAsync($"{id}_{redisKey}_snipes", JsonSerializer.Serialize(id),
+            JsonSerializer.Serialize(newSnipes)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -522,10 +521,12 @@ public class RedisCache : IDataCache
     /// </summary>
     /// <param name="id">The guild ID.</param>
     /// <returns></returns>
-    public Task<List<SnipeStore>?> GetSnipesForGuild(ulong id)
+    public async Task<List<SnipeStore>?> GetSnipesForGuild(ulong id)
     {
-        var customers = new RedisDictionary<ulong, List<SnipeStore>>($"{id}_{redisKey}_snipes", Redis);
-        return Task.FromResult(customers[id]);
+        var db = Redis.GetDatabase();
+        var snipes = await db.HashGetAsync($"{id}_{redisKey}_snipes", JsonSerializer.Serialize(id))
+            .ConfigureAwait(false);
+        return snipes.HasValue ? JsonSerializer.Deserialize<List<SnipeStore>>((string)snipes!) : null;
     }
 
     /// <summary>

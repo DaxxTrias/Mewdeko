@@ -1,16 +1,5 @@
 {
-  "scripts": {
-    "format": "prettier --write . && dotnet format Mewdeko.sln",
-    "format:check": "prettier --check . && dotnet format Mewdeko.sln --verify-no-changes --no-restore",
-    "format:prettier": "prettier --write .",
-    "format:prettier:check": "prettier --check .",
-    "format:dotnet": "dotnet format Mewdeko.sln",
-    "format:dotnet:check": "dotnet format Mewdeko.sln --verify-no-changes --no-restore"
-  },
   "dependencies": {
     "http-server": "^14.1.1"
-  },
-  "devDependencies": {
-    "prettier": "^3.8.3"
   }
 }

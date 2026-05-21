@@ -1,13 +1,12 @@
-﻿using YamlDotNet.Core;
+using YamlDotNet.Core;
 using YamlDotNet.Serialization;
-using YamlDotNet.Serialization.TypeInspectors;
 
 namespace Mewdeko.Common.Yml;
 
 /// <summary>
 ///     Type inspector that gathers comments associated with properties during YAML serialization.
 /// </summary>
-public class CommentGatheringTypeInspector : TypeInspectorSkeleton
+public class CommentGatheringTypeInspector : ITypeInspector
 {
     private readonly ITypeInspector innerTypeDescriptor;
 
@@ -23,23 +22,60 @@ public class CommentGatheringTypeInspector : TypeInspectorSkeleton
     }
 
     /// <inheritdoc />
-    public override string GetEnumName(Type enumType, string name)
+    public string GetEnumName(Type enumType, string name)
     {
         return name;
     }
 
     /// <inheritdoc />
-    public override string? GetEnumValue(object enumValue)
+    public string? GetEnumValue(object enumValue)
     {
         return enumValue.ToString();
     }
 
     /// <inheritdoc />
-    public override IEnumerable<IPropertyDescriptor> GetProperties(Type type, object? container)
+    public IEnumerable<IPropertyDescriptor> GetProperties(Type type, object? container)
     {
         return innerTypeDescriptor
             .GetProperties(type, container)
             .Select(d => new CommentsPropertyDescriptor(d));
+    }
+
+    /// <inheritdoc />
+    public IPropertyDescriptor? GetProperty(
+        Type type,
+        object? container,
+        string name,
+        bool ignoreUnmatched,
+        bool caseInsensitivePropertyMatching)
+    {
+        var property = innerTypeDescriptor.GetProperty(
+            type,
+            container,
+            name,
+            ignoreUnmatched,
+            caseInsensitivePropertyMatching);
+
+        return property is null ? null : new CommentsPropertyDescriptor(property);
+    }
+
+    /// <inheritdoc />
+    public bool HasParseMethod(Type type)
+    {
+        var method = typeof(ITypeInspector).GetMethod(nameof(HasParseMethod), [typeof(Type)])
+                     ?? innerTypeDescriptor.GetType().GetMethod(nameof(HasParseMethod), [typeof(Type)]);
+
+        return method is not null && method.Invoke(innerTypeDescriptor, [type]) is true;
+    }
+
+    /// <inheritdoc />
+    public object? Parse(string value, Type type)
+    {
+        var method = typeof(ITypeInspector).GetMethod(nameof(Parse), [typeof(string), typeof(Type)])
+                     ?? innerTypeDescriptor.GetType().GetMethod(nameof(Parse), [typeof(string), typeof(Type)])
+                     ?? throw new MissingMethodException(innerTypeDescriptor.GetType().FullName, nameof(Parse));
+
+        return method.Invoke(innerTypeDescriptor, [value, type]);
     }
 
     private sealed class CommentsPropertyDescriptor(IPropertyDescriptor baseDescriptor) : IPropertyDescriptor

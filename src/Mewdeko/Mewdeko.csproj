@@ -26,9 +26,12 @@
     <EmbeddedResource Include="Database\Scripts\*.sql" />
   </ItemGroup>
 
-  <!-- Include generated sources during design-time builds so editors (DotRush/OmniSharp) see them -->
+  <!-- Include generated sources during design-time builds so editors (DotRush/OmniSharp) see them.
+       Exclude Sentry generator output because it is already emitted by the analyzer and causes duplicate definitions. -->
   <ItemGroup Condition="'$(DesignTimeBuild)' == 'true'">
-    <Compile Include="$(CompilerGeneratedFilesOutputPath)\**\*.cs" Visible="false" />
+    <Compile Include="$(CompilerGeneratedFilesOutputPath)\**\*.cs"
+             Exclude="$(CompilerGeneratedFilesOutputPath)\Sentry.*\**\*.cs"
+             Visible="false" />
   </ItemGroup>
 
 
@@ -83,7 +86,7 @@
     <PackageReference Include="Fergun.Interactive" Version="1.9.2"/>
     <PackageReference Include="Figgle" Version="0.6.6"/>
     <PackageReference Include="Genius.NET" Version="4.0.1"/>
-    <PackageReference Include="GScraper" Version="1.1.3"/>
+    <PackageReference Include="GScraper" Version="1.2.1"/>
     <PackageReference Include="GTranslate" Version="2.3.1"/>
     <PackageReference Include="Html2Markdown" Version="7.1.2.20"/>
     <PackageReference Include="Humanizer" Version="3.0.10"/>
