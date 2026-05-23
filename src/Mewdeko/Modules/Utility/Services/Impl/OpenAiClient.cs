@@ -59,9 +59,47 @@ public class OpenAiClient : IAiClient
         string apiKey,
         CancellationToken cancellationToken = default)
     {
+        return StreamResponseAsync(messages, model, apiKey, false, cancellationToken);
+    }
+
+    /// <summary>
+    ///     Streams a response from the OpenAI model with optional hosted web search.
+    /// </summary>
+    public Task<IAsyncEnumerable<string>> StreamResponseAsync(
+        IEnumerable<AiMessage> messages,
+        string model,
+        string apiKey,
+        bool enableWebSearch,
+        CancellationToken cancellationToken = default)
+    {
         var openAiMessages = messages
             .Where(m => !string.IsNullOrWhiteSpace(m.Content))
             .Select(m => new { role = m.Role.ToLowerInvariant(), content = m.Content });
+
+        if (enableWebSearch)
+        {
+            var responsesPayload = new
+            {
+                model,
+                input = openAiMessages.Select(m => new
+                {
+                    role = MapResponsesRole(m.role), content = m.content
+                }).ToArray(),
+                tools = new object[]
+                {
+                    new
+                    {
+                        type = "web_search"
+                    }
+                },
+                tool_choice = "required",
+                stream = true
+            };
+
+            var responsesPayloadJson = JsonSerializer.Serialize(responsesPayload);
+            return Task.FromResult<IAsyncEnumerable<string>>(StreamResponsesAsync(httpClient, apiKey,
+                responsesPayloadJson, cancellationToken));
+        }
 
         var payload = new
         {
@@ -136,6 +174,11 @@ public class OpenAiClient : IAiClient
         }
 
         return Task.FromResult<IAsyncEnumerable<string>>(TransformUpdates(completionUpdates));
+    }
+
+    private static string MapResponsesRole(string role)
+    {
+        return role.Equals("system", StringComparison.OrdinalIgnoreCase) ? "developer" : role;
     }
 
     // Helper to fetch usage stats after streaming finishes
@@ -311,6 +354,178 @@ public class OpenAiClient : IAiClient
 
             // Other errors: do not spam stack traces here; throw a concise HttpRequestException with status code
             throw new HttpRequestException(errorMessage ?? $"OpenAI request failed: {(int)status} {status}", null, status);
+        }
+    }
+
+    private static async IAsyncEnumerable<string> StreamResponsesAsync(HttpClient httpClient, string apiKey,
+        string payloadJson, [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/responses");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+        request.Headers.Accept.Clear();
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
+        request.Content = new StringContent(payloadJson, Encoding.UTF8, "application/json");
+        request.Version = HttpVersion.Version11;
+        request.VersionPolicy = HttpVersionPolicy.RequestVersionOrLower;
+
+        using var response = await httpClient
+            .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var content = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            throw new HttpRequestException($"OpenAI Responses request failed: {(int)response.StatusCode} {response.StatusCode} - {content}",
+                null, response.StatusCode);
+        }
+
+        using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        using var reader = new StreamReader(stream);
+
+        string? line;
+        while ((line = await reader.ReadLineAsync()) != null)
+        {
+            if (cancellationToken.IsCancellationRequested)
+                yield break;
+
+            if (string.IsNullOrWhiteSpace(line) || line.StartsWith(":"))
+                continue;
+
+            if (line.StartsWith("data: [DONE]"))
+                yield break;
+
+            if (!line.StartsWith("data: "))
+                continue;
+
+            var payload = line.Substring("data: ".Length).Trim();
+            if (string.IsNullOrWhiteSpace(payload))
+                continue;
+
+            if (TryConvertResponsesPayload(payload, out var convertedJson))
+                yield return convertedJson!;
+        }
+    }
+
+    private static bool TryConvertResponsesPayload(string payload, out string? convertedJson)
+    {
+        convertedJson = null;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(payload);
+            var root = doc.RootElement;
+
+            if (TryExtractResponsesTextDelta(root, out var text))
+            {
+                convertedJson = JsonSerializer.Serialize(new
+                {
+                    choices = new[]
+                    {
+                        new
+                        {
+                            delta = new
+                            {
+                                content = text
+                            },
+                            finish_reason = (string?)null
+                        }
+                    }
+                });
+                return true;
+            }
+
+            if (TryExtractResponsesUsage(root, out var usage))
+            {
+                convertedJson = JsonSerializer.Serialize(new
+                {
+                    usage = new
+                    {
+                        prompt_tokens = usage.Value.InputTokens,
+                        completion_tokens = usage.Value.OutputTokens,
+                        total_tokens = usage.Value.TotalTokens
+                    }
+                });
+                return true;
+            }
+        }
+        catch
+        {
+            return false;
+        }
+
+        return false;
+    }
+
+    private static bool TryExtractResponsesTextDelta(JsonElement root, out string text)
+    {
+        text = string.Empty;
+
+        if (root.TryGetProperty("type", out var typeElem) &&
+            typeElem.GetString()?.Equals("response.output_text.delta", StringComparison.OrdinalIgnoreCase) == true &&
+            root.TryGetProperty("delta", out var deltaElem))
+        {
+            text = deltaElem.GetString() ?? string.Empty;
+            return !string.IsNullOrEmpty(text);
+        }
+
+        if (root.TryGetProperty("delta", out deltaElem) && deltaElem.ValueKind == JsonValueKind.String)
+        {
+            text = deltaElem.GetString() ?? string.Empty;
+            return !string.IsNullOrEmpty(text);
+        }
+
+        return false;
+    }
+
+    private static bool TryExtractResponsesUsage(JsonElement root,
+        out (int InputTokens, int OutputTokens, int TotalTokens)? usage)
+    {
+        usage = null;
+
+        if (root.TryGetProperty("usage", out var usageElem))
+        {
+            usage = ParseResponsesUsageObject(usageElem);
+            return usage.HasValue;
+        }
+
+        if (root.TryGetProperty("response", out var responseElem) &&
+            responseElem.TryGetProperty("usage", out usageElem))
+        {
+            usage = ParseResponsesUsageObject(usageElem);
+            return usage.HasValue;
+        }
+
+        return false;
+    }
+
+    private static (int InputTokens, int OutputTokens, int TotalTokens)? ParseResponsesUsageObject(JsonElement usageElem)
+    {
+        try
+        {
+            var input = 0;
+            var output = 0;
+            var total = 0;
+
+            if (usageElem.TryGetProperty("prompt_tokens", out var promptElem))
+                input = promptElem.GetInt32();
+            if (usageElem.TryGetProperty("input_tokens", out var inputElem))
+                input = inputElem.GetInt32();
+
+            if (usageElem.TryGetProperty("completion_tokens", out var completionElem))
+                output = completionElem.GetInt32();
+            if (usageElem.TryGetProperty("output_tokens", out var outputElem))
+                output = outputElem.GetInt32();
+
+            if (usageElem.TryGetProperty("total_tokens", out var totalElem))
+                total = totalElem.GetInt32();
+            else
+                total = input + output;
+
+            return (input, output, total);
+        }
+        catch
+        {
+            return null;
         }
     }
 
