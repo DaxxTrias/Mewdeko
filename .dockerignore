@@ -1,0 +1,66 @@
+# Build outputs
+**/bin/
+**/obj/
+**/output/
+**/publish/
+
+# User-specific files
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Tests
+**/Tests/
+**/*.Tests/
+
+# Logs and databases
+*.log
+logs/
+*.db
+*.sqlite
+
+# Credentials should be passed via environment variables or mounted files.
+credentials.json
+credentials_example.json
+gcreds.json
+**/certs/fedora-key.pem
+**/certs/fedora-cert.pem
+
+# NuGet
+*.nupkg
+*.snupkg
+.nuget/
+packages/
+
+# Build results
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+# OS files
+.DS_Store
+Thumbs.db

@@ -1852,7 +1852,7 @@ public partial class Music(
 
                 // Show loading message for long playlists
                 IUserMessage loadingMsg = null;
-                if (playlist.Tracks.Total > 10)
+                if (playlist.Items.Total > 10)
                 {
                     var loadingComponents = new ComponentBuilderV2()
                         .WithContainer([
@@ -1860,7 +1860,7 @@ public partial class Music(
                         ], Mewdeko.OkColor)
                         .WithSeparator()
                         .WithSection([
-                                new TextDisplayBuilder(Strings.LoadingPlaylist(ctx.Guild.Id, playlist.Tracks.Total,
+                                new TextDisplayBuilder(Strings.LoadingPlaylist(ctx.Guild.Id, playlist.Items.Total,
                                     playlist.Owner.DisplayName))
                             ],
                             playlist.Images.FirstOrDefault()?.Url != null
@@ -1868,13 +1868,13 @@ public partial class Music(
                                 : null)
                         .WithSeparator()
                         .WithContainer(new TextDisplayBuilder(
-                            $"ℹ️ {Strings.MusicProcessingTracks(ctx.Guild.Id, tracks.Count, playlist.Tracks.Total)}"));
+                            $"ℹ️ {Strings.MusicProcessingTracks(ctx.Guild.Id, tracks.Count, playlist.Items.Total)}"));
 
                     loadingMsg = await ctx.Channel.SendMessageAsync(components: loadingComponents.Build(),
                         flags: MessageFlags.ComponentsV2, allowedMentions: AllowedMentions.None);
                 }
 
-                foreach (var item in playlist.Tracks.Items)
+                foreach (var item in playlist.Items.Items)
                 {
                     if (item.Track is not FullTrack track) continue;
 
@@ -1905,7 +1905,7 @@ public partial class Music(
                                     .WithSeparator()
                                     .WithSection([
                                             new TextDisplayBuilder(Strings.LoadingPlaylistWithTrack(ctx.Guild.Id,
-                                                playlist.Tracks.Total,
+                                                playlist.Items.Total,
                                                 playlist.Owner.DisplayName, ytTrack.Title))
                                         ],
                                         playlist.Images.FirstOrDefault()?.Url != null
@@ -1913,7 +1913,7 @@ public partial class Music(
                                             : null)
                                     .WithSeparator()
                                     .WithContainer(new TextDisplayBuilder(
-                                        $"ℹ️ {Strings.MusicProcessingTracks(ctx.Guild.Id, tracks.Count, playlist.Tracks.Total)}"));
+                                        $"ℹ️ {Strings.MusicProcessingTracks(ctx.Guild.Id, tracks.Count, playlist.Items.Total)}"));
 
                                 await loadingMsg.ModifyAsync(x =>
                                 {
@@ -1933,7 +1933,7 @@ public partial class Music(
                                 .WithSeparator()
                                 .WithSection([
                                         new TextDisplayBuilder(Strings.LoadingPlaylist(ctx.Guild.Id,
-                                            playlist.Tracks.Total,
+                                            playlist.Items.Total,
                                             playlist.Owner.DisplayName))
                                     ],
                                     playlist.Images.FirstOrDefault()?.Url != null
@@ -1941,7 +1941,7 @@ public partial class Music(
                                         : null)
                                 .WithSeparator()
                                 .WithContainer(new TextDisplayBuilder(
-                                    $"ℹ️ {Strings.MusicProcessingTracks(ctx.Guild.Id, tracks.Count, playlist.Tracks.Total)}"));
+                                    $"ℹ️ {Strings.MusicProcessingTracks(ctx.Guild.Id, tracks.Count, playlist.Items.Total)}"));
 
                             await loadingMsg.ModifyAsync(x =>
                             {
@@ -1984,10 +1984,10 @@ public partial class Music(
                     retrieveOptions)
                 .ConfigureAwait(false);
 
-            await result.Player.SetVolumeAsync(await result.Player.GetVolume() / 100f).ConfigureAwait(false);
-
-            if (result.IsSuccess)
+            if (result.IsSuccess && result.Player is not null)
             {
+                await result.Player.SetVolumeAsync(await result.Player.GetVolume() / 100f).ConfigureAwait(false);
+
                 // Publish Redis event when player is created (bot joins voice)
                 if (connectToVoiceChannel && result.Status == PlayerRetrieveStatus.Success)
                 {

@@ -755,9 +755,11 @@ public partial class Music
                         retrieveOptions)
                     .ConfigureAwait(false);
 
-                await result.Player.SetVolumeAsync(await result.Player.GetVolume() / 100f).ConfigureAwait(false);
-
-                if (result.IsSuccess) return (result.Player, null);
+                if (result.IsSuccess && result.Player is not null)
+                {
+                    await result.Player.SetVolumeAsync(await result.Player.GetVolume() / 100f).ConfigureAwait(false);
+                    return (result.Player, null);
+                }
                 var errorMessage = result.Status switch
                 {
                     PlayerRetrieveStatus.UserNotInVoiceChannel => Strings.MusicNotInChannel(ctx.Guild.Id),

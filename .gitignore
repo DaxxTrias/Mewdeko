@@ -390,6 +390,10 @@ src/Mewdeko/application.yml
 src/Mewdeko.Api/
 src/Mewdeko.Database/
 
+# Fedora Messaging client credentials - provision out-of-band, never commit
+/src/Mewdeko/certs/fedora-key.pem
+/src/Mewdeko/certs/fedora-cert.pem
+
 .cursorrules
 .cursor/rules
 src/Mewdeko/.cursor/rules/
