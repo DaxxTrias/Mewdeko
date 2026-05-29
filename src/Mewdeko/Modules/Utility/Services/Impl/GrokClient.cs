@@ -50,6 +50,21 @@ public class GrokClient : IAiClient
     public Task<IAsyncEnumerable<string>> StreamResponseAsync(IEnumerable<AiMessage> messages, string model,
     string apiKey, CancellationToken cancellationToken = default)
     {
+        return StreamResponseAsync(messages, model, apiKey, false, cancellationToken);
+    }
+
+    /// <summary>
+    ///     Streams a response from the Grok model with optional hosted web search.
+    /// </summary>
+    public Task<IAsyncEnumerable<string>> StreamResponseAsync(IEnumerable<AiMessage> messages, string model,
+    string apiKey, bool enableWebSearch, CancellationToken cancellationToken = default)
+    {
+        if (enableWebSearch)
+        {
+            return Task.FromResult<IAsyncEnumerable<string>>(StreamViaResponsesApiAsync(messages, model, apiKey, true,
+                cancellationToken));
+        }
+
         // Configure OpenAI SDK to point to xAI's endpoint
         var options = new OpenAIClientOptions
         {
@@ -74,7 +89,7 @@ public class GrokClient : IAiClient
             var shouldUseResponses = await IsChatCompletionsNotFoundAsync(messages, model, apiKey, ct);
             if (shouldUseResponses)
             {
-                await foreach (var json in StreamViaResponsesApiAsync(messages, model, apiKey, ct))
+                await foreach (var json in StreamViaResponsesApiAsync(messages, model, apiKey, false, ct))
                 {
                     yield return json;
                 }
@@ -185,17 +200,18 @@ public class GrokClient : IAiClient
         IEnumerable<AiMessage> messages,
         string model,
         string apiKey,
+        bool enableWebSearch,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         using var httpClient = httpClientFactory.CreateClient();
         httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
 
-        var requestBody = new
+        var requestBody = new Dictionary<string, object>
         {
-            model,
+            ["model"] = model,
             // Provide both shapes to maximize compatibility
-            messages = messages.Select(m => new { role = m.Role, content = m.Content }).ToArray(),
-            input = messages.Select(m => new
+            ["messages"] = messages.Select(m => new { role = m.Role, content = m.Content }).ToArray(),
+            ["input"] = messages.Select(m => new
             {
                 role = m.Role,
                 content = new object[]
@@ -203,8 +219,19 @@ public class GrokClient : IAiClient
                     new { type = "input_text", text = m.Content }
                 }
             }).ToArray(),
-            stream = true
+            ["stream"] = true
         };
+
+        if (enableWebSearch)
+        {
+            requestBody["tools"] = new object[]
+            {
+                new
+                {
+                    type = "web_search"
+                }
+            };
+        }
 
         var jsonRequest = JsonSerializer.Serialize(requestBody);
         using var content = new StringContent(jsonRequest, Encoding.UTF8, "application/json");
@@ -235,7 +262,7 @@ public class GrokClient : IAiClient
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         using var reader = new StreamReader(stream);
 
-        while (!reader.EndOfStream && !cancellationToken.IsCancellationRequested)
+        while (!cancellationToken.IsCancellationRequested)
         {
             var line = await reader.ReadLineAsync();
             if (line is null)
@@ -302,7 +329,7 @@ public class GrokClient : IAiClient
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         using var reader = new StreamReader(stream);
 
-        while (!reader.EndOfStream && !cancellationToken.IsCancellationRequested)
+        while (!cancellationToken.IsCancellationRequested)
         {
             var line = await reader.ReadLineAsync();
             if (line is null)
@@ -411,6 +438,23 @@ public class GrokClient : IAiClient
             else if (root.TryGetProperty("usage", out var usageElem))
             {
                 var usage = ParseUsageObject(usageElem);
+                if (usage != null)
+                {
+                    usageJson = JsonSerializer.Serialize(new
+                    {
+                        usage = new
+                        {
+                            prompt_tokens = usage.Value.InputTokens,
+                            completion_tokens = usage.Value.OutputTokens,
+                            total_tokens = usage.Value.TotalTokens
+                        }
+                    });
+                }
+            }
+            else if (root.TryGetProperty("response", out var responseElem) &&
+                     responseElem.TryGetProperty("usage", out var responseUsageElem))
+            {
+                var usage = ParseUsageObject(responseUsageElem);
                 if (usage != null)
                 {
                     usageJson = JsonSerializer.Serialize(new

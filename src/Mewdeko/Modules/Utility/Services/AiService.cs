@@ -479,7 +479,7 @@ public class AiService : INService
         }
     }
 
-    private sealed record ResolvedAiRoute(AiProvider Provider, string ApiKey, string Model);
+    private sealed record ResolvedAiRoute(AiProvider Provider, string ApiKey, string Model, bool WebSearchRequested);
 
     private sealed record RouteResolutionResult(
         bool Success,
@@ -577,6 +577,15 @@ public class AiService : INService
         return !string.IsNullOrWhiteSpace(token) && token.All(char.IsDigit);
     }
 
+    private static (string Prompt, bool WebSearchRequested) ConsumeWebSearchKeyword(string prompt)
+    {
+        var parts = prompt.Split(new[] { ' ' }, 2, StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0 || !parts[0].Equals("web", StringComparison.OrdinalIgnoreCase))
+            return (prompt, false);
+
+        return (parts.Length > 1 ? parts[1].Trim() : string.Empty, true);
+    }
+
     private async Task<List<GuildAiProviderLink>> GetEffectiveProviderLinks(GuildAiConfig config)
     {
         var links = await GetProviderLinks(config.GuildId);
@@ -639,12 +648,17 @@ public class AiService : INService
                 return new RouteResolutionResult(false, "Please include a prompt after the model selector.", rawQuery,
                     null);
 
+            var webSelection = ConsumeWebSearchKeyword(remainder);
+            if (string.IsNullOrWhiteSpace(webSelection.Prompt))
+                return new RouteResolutionResult(false, "Please include a prompt after the web search keyword.", rawQuery,
+                    null);
+
             return new RouteResolutionResult(
                 true,
                 null,
-                remainder,
+                webSelection.Prompt,
                 new ResolvedAiRoute((AiProvider)selectedByModel.Provider, selectedByModel.ApiKey,
-                    selectedByModel.DefaultModel!));
+                    selectedByModel.DefaultModel!, webSelection.WebSearchRequested));
         }
 
         if (!hasNumericSelector && TryGetProviderFromAlias(selector, out var selectedProvider))
@@ -673,12 +687,17 @@ public class AiService : INService
                     null);
             }
 
+            var webSelection = ConsumeWebSearchKeyword(remainder);
+            if (string.IsNullOrWhiteSpace(webSelection.Prompt))
+                return new RouteResolutionResult(false, "Please include a prompt after the web search keyword.", rawQuery,
+                    null);
+
             return new RouteResolutionResult(
                 true,
                 null,
-                remainder,
+                webSelection.Prompt,
                 new ResolvedAiRoute((AiProvider)selectedByProvider.Provider, selectedByProvider.ApiKey,
-                    selectedByProvider.DefaultModel!));
+                    selectedByProvider.DefaultModel!, webSelection.WebSearchRequested));
         }
 
         var looksLikeModelSelector =
@@ -707,11 +726,17 @@ public class AiService : INService
                 null);
         }
 
+        var defaultWebSelection = ConsumeWebSearchKeyword(rawQuery);
+        if (string.IsNullOrWhiteSpace(defaultWebSelection.Prompt))
+            return new RouteResolutionResult(false, "Please include a prompt after the web search keyword.", rawQuery,
+                null);
+
         return new RouteResolutionResult(
             true,
             null,
-            rawQuery,
-            new ResolvedAiRoute((AiProvider)defaultLink.Provider, defaultLink.ApiKey, defaultLink.DefaultModel!));
+            defaultWebSelection.Prompt,
+            new ResolvedAiRoute((AiProvider)defaultLink.Provider, defaultLink.ApiKey, defaultLink.DefaultModel!,
+                defaultWebSelection.WebSearchRequested));
     }
 
     /// <summary>
@@ -752,7 +777,8 @@ public class AiService : INService
         DiscordWebhookClient? webhook, string userQuery = null, ResolvedAiRoute? route = null,
         int accumulatedTokenCount = 0)
     {
-        route ??= new ResolvedAiRoute((AiProvider)config.Provider, config.ApiKey ?? string.Empty, config.Model ?? string.Empty);
+        route ??= new ResolvedAiRoute((AiProvider)config.Provider, config.ApiKey ?? string.Empty,
+            config.Model ?? string.Empty, false);
         if (!IsSupportedProvider((int)route.Provider))
             throw new InvalidOperationException($"Unsupported AI provider: {route.Provider}");
         if (string.IsNullOrWhiteSpace(route.ApiKey))
@@ -911,16 +937,25 @@ public class AiService : INService
             });
         }
 
-        // Use tools if enabled and provider is Claude
+        // Use hosted web search only when configured for Claude or explicitly requested via the `web` keyword.
         IAsyncEnumerable<string> stream;
         if (provider == AiProvider.Claude && aiClient is ClaudeClient claudeClient)
         {
-            var enableWebSearch = config.WebSearchEnabled;
+            var enableWebSearch = route.WebSearchRequested || config.WebSearchEnabled;
             var enableUserInfo = ShouldEnableUserInfoTool(userQuery);
-            logger.LogInformation("Claude user info tool enabled: {Enabled}", enableUserInfo);
+            logger.LogInformation("Claude tools enabled. Web search: {WebSearchEnabled}, user info: {UserInfoEnabled}",
+                enableWebSearch, enableUserInfo);
 
             stream = await claudeClient.StreamResponseAsync(messagesToSend, model, apiKey,
                 enableWebSearch, enableUserInfo, guildChannel.Guild.Id);
+        }
+        else if (provider == AiProvider.OpenAi && aiClient is OpenAiClient openAiClient)
+        {
+            stream = await openAiClient.StreamResponseAsync(messagesToSend, model, apiKey, route.WebSearchRequested);
+        }
+        else if (provider == AiProvider.Grok && aiClient is GrokClient grokClient)
+        {
+            stream = await grokClient.StreamResponseAsync(messagesToSend, model, apiKey, route.WebSearchRequested);
         }
         else
         {
