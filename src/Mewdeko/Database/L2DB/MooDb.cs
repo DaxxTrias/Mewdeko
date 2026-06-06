@@ -71,6 +71,7 @@ namespace DataModel
 		public ITable<CustomVoiceChannel>        CustomVoiceChannels        => this.GetTable<CustomVoiceChannel>();
 		public ITable<CustomVoiceConfig>         CustomVoiceConfigs         => this.GetTable<CustomVoiceConfig>();
 		public ITable<DelMsgOnCmdChannel>        DelMsgOnCmdChannels        => this.GetTable<DelMsgOnCmdChannel>();
+		public ITable<DeletedMessageLogSetting>  DeletedMessageLogSettings  => this.GetTable<DeletedMessageLogSetting>();
 		public ITable<DiscordPermOverride>       DiscordPermOverrides       => this.GetTable<DiscordPermOverride>();
 		public ITable<DiscordUser>               DiscordUsers               => this.GetTable<DiscordUser>();
 		public ITable<Embed>                     Embeds                     => this.GetTable<Embed>();
