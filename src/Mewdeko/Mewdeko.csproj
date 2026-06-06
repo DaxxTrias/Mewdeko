@@ -91,7 +91,7 @@
     <PackageReference Include="Html2Markdown" Version="7.1.2.20"/>
     <PackageReference Include="Humanizer" Version="3.0.10"/>
     <PackageReference Include="JikanDotNet" Version="2.10.4"/>
-    <PackageReference Include="Google.Apis.YouTube.v3" Version="1.74.0.4137"/>
+    <PackageReference Include="Google.Apis.YouTube.v3" Version="1.74.0.4162"/>
     <PackageReference Include="Google.Apis.CustomSearchAPI.v1" Version="1.74.0.3520"/>
     <PackageReference Include="Lavalink4NET.Discord.NET" Version="4.2.1"/>
     <PackageReference Include="Lavalink4NET.Integrations.Lavasearch" Version="4.2.1"/>
@@ -125,7 +125,7 @@
     <PackageReference Include="SpotifyAPI.Web" Version="7.4.2"/>
     <PackageReference Include="SpotifyAPI.Web.Auth" Version="7.4.2"/>
     <PackageReference Include="StackExchange.Redis" Version="2.13.17"/>
-    <PackageReference Include="Swashbuckle.AspNetCore" Version="10.1.7"/>
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="10.2.1"/>
     <PackageReference Include="System.Drawing.Common" Version="10.0.8"/>
     <PackageReference Include="TwitchLib.Api" Version="3.10.2"/>
     <PackageReference Include="VirusTotalNet" Version="2.2.0"/>

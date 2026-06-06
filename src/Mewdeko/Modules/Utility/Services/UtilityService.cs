@@ -1,7 +1,10 @@
+using System.IO;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using System.Threading;
+using DataModel;
 using LinqToDB;
 using LinqToDB.Async;
 using Microsoft.Extensions.Caching.Memory;
@@ -17,14 +20,31 @@ namespace Mewdeko.Modules.Utility.Services;
 /// </summary>
 public partial class UtilityService : INService
 {
+    /// <summary>
+    ///     Default lifecycle window for automatically posting recent deleted messages.
+    /// </summary>
+    public const int DefaultDeletedMessageLogWindowMinutes = 10;
+
+    /// <summary>
+    ///     Minimum lifecycle window allowed for the automatic deleted message log.
+    /// </summary>
+    public const int MinDeletedMessageLogWindowMinutes = 1;
+
+    /// <summary>
+    ///     Maximum lifecycle window allowed for the automatic deleted message log.
+    /// </summary>
+    public const int MaxDeletedMessageLogWindowMinutes = 10;
+
     private static readonly TimeSpan SnipeRetention = TimeSpan.FromDays(3);
     private static readonly ConcurrentDictionary<ulong, SemaphoreSlim> SnipeLocks = new();
     private const string SnipeSnapshotCachePrefix = "snipe:snapshot:";
+    private const string DeletedMessageLogSettingsCachePrefix = "deleted-message-log:settings:";
 
     private readonly IDataCache cache;
     private readonly DiscordShardedClient client;
     private readonly IDataConnectionFactory dbFactory;
     private readonly GuildSettingsService guildSettings;
+    private readonly ILogger<UtilityService> logger;
     private readonly IMemoryCache memoryCache;
 
     /// <summary>
@@ -36,13 +56,15 @@ public partial class UtilityService : INService
     /// <param name="eventHandler">The event handler service.</param>
     /// <param name="client">The Discord client.</param>
     /// <param name="memoryCache">The memory cache used for recent message snapshots.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     public UtilityService(
         IDataConnectionFactory dbFactory,
         IDataCache cache,
         GuildSettingsService guildSettings,
         EventHandler eventHandler,
         DiscordShardedClient client,
-        IMemoryCache memoryCache)
+        IMemoryCache memoryCache,
+        ILogger<UtilityService> logger)
     {
         eventHandler.Subscribe("MessageDeleted", "UtilityService", MsgStore);
         eventHandler.Subscribe("MessageUpdated", "UtilityService", MsgStore2);
@@ -53,6 +75,7 @@ public partial class UtilityService : INService
         this.guildSettings = guildSettings;
         this.client = client;
         this.memoryCache = memoryCache;
+        this.logger = logger;
     }
 
     /// <summary>
@@ -141,6 +164,166 @@ public partial class UtilityService : INService
         }
 
         await guildSettings.UpdateGuildConfig(guild.Id, gc);
+    }
+
+    /// <summary>
+    ///     Gets the automatic deleted message log settings for a guild.
+    /// </summary>
+    /// <param name="guildId">The guild id to get settings for.</param>
+    /// <returns>The configured settings, or a disabled default when no settings exist.</returns>
+    public async Task<DeletedMessageLogSetting> GetDeletedMessageLogSettings(ulong guildId)
+    {
+        return await memoryCache.GetOrCreateAsync(GetDeletedMessageLogSettingsCacheKey(guildId), async entry =>
+        {
+            entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5);
+
+            await using var db = await dbFactory.CreateConnectionAsync();
+            var settings = await db.DeletedMessageLogSettings
+                .FirstOrDefaultAsync(x => x.GuildId == guildId)
+                .ConfigureAwait(false);
+
+            return settings ?? CreateDisabledDeletedMessageLogSettings(guildId);
+        }).ConfigureAwait(false) ?? CreateDisabledDeletedMessageLogSettings(guildId);
+    }
+
+    /// <summary>
+    ///     Sets the channel and lifecycle window for the automatic deleted message log.
+    /// </summary>
+    /// <param name="guild">The guild to configure.</param>
+    /// <param name="channel">The channel that should receive deleted message copies.</param>
+    /// <param name="maxAgeMinutes">The maximum age, in minutes, for a deleted message to be posted.</param>
+    /// <returns>The updated settings.</returns>
+    public async Task<DeletedMessageLogSetting> SetDeletedMessageLogChannel(IGuild guild, ITextChannel channel,
+        int maxAgeMinutes)
+    {
+        maxAgeMinutes = ClampDeletedMessageLogWindow(maxAgeMinutes);
+
+        await using var db = await dbFactory.CreateConnectionAsync();
+        var now = DateTime.UtcNow;
+        var settings = await db.DeletedMessageLogSettings
+            .FirstOrDefaultAsync(x => x.GuildId == guild.Id)
+            .ConfigureAwait(false);
+
+        if (settings is null)
+        {
+            settings = new DeletedMessageLogSetting
+            {
+                GuildId = guild.Id,
+                ChannelId = channel.Id,
+                Enabled = true,
+                MaxAgeMinutes = maxAgeMinutes,
+                DateAdded = now,
+                DateModified = now
+            };
+
+            await db.InsertAsync(settings).ConfigureAwait(false);
+        }
+        else
+        {
+            settings.ChannelId = channel.Id;
+            settings.Enabled = true;
+            settings.MaxAgeMinutes = maxAgeMinutes;
+            settings.DateModified = now;
+            await db.UpdateAsync(settings).ConfigureAwait(false);
+        }
+
+        CacheDeletedMessageLogSettings(settings);
+        return settings;
+    }
+
+    /// <summary>
+    ///     Updates the lifecycle window for the automatic deleted message log.
+    /// </summary>
+    /// <param name="guildId">The guild id to configure.</param>
+    /// <param name="maxAgeMinutes">The maximum age, in minutes, for a deleted message to be posted.</param>
+    /// <returns>The updated settings.</returns>
+    public async Task<DeletedMessageLogSetting> SetDeletedMessageLogWindow(ulong guildId, int maxAgeMinutes)
+    {
+        maxAgeMinutes = ClampDeletedMessageLogWindow(maxAgeMinutes);
+
+        await using var db = await dbFactory.CreateConnectionAsync();
+        var now = DateTime.UtcNow;
+        var settings = await db.DeletedMessageLogSettings
+            .FirstOrDefaultAsync(x => x.GuildId == guildId)
+            .ConfigureAwait(false);
+
+        if (settings is null)
+        {
+            settings = new DeletedMessageLogSetting
+            {
+                GuildId = guildId,
+                Enabled = false,
+                MaxAgeMinutes = maxAgeMinutes,
+                DateAdded = now,
+                DateModified = now
+            };
+
+            await db.InsertAsync(settings).ConfigureAwait(false);
+        }
+        else
+        {
+            settings.MaxAgeMinutes = maxAgeMinutes;
+            settings.DateModified = now;
+            await db.UpdateAsync(settings).ConfigureAwait(false);
+        }
+
+        CacheDeletedMessageLogSettings(settings);
+        return settings;
+    }
+
+    /// <summary>
+    ///     Disables the automatic deleted message log for a guild.
+    /// </summary>
+    /// <param name="guildId">The guild id to configure.</param>
+    public async Task DisableDeletedMessageLog(ulong guildId)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+        var settings = await db.DeletedMessageLogSettings
+            .FirstOrDefaultAsync(x => x.GuildId == guildId)
+            .ConfigureAwait(false);
+
+        if (settings is null)
+        {
+            settings = CreateDisabledDeletedMessageLogSettings(guildId);
+        }
+        else
+        {
+            settings.Enabled = false;
+            settings.DateModified = DateTime.UtcNow;
+            await db.UpdateAsync(settings).ConfigureAwait(false);
+        }
+
+        CacheDeletedMessageLogSettings(settings);
+    }
+
+    private static int ClampDeletedMessageLogWindow(int maxAgeMinutes)
+    {
+        return Math.Clamp(maxAgeMinutes, MinDeletedMessageLogWindowMinutes, MaxDeletedMessageLogWindowMinutes);
+    }
+
+    private static string GetDeletedMessageLogSettingsCacheKey(ulong guildId)
+    {
+        return $"{DeletedMessageLogSettingsCachePrefix}{guildId}";
+    }
+
+    private void CacheDeletedMessageLogSettings(DeletedMessageLogSetting settings)
+    {
+        memoryCache.Set(GetDeletedMessageLogSettingsCacheKey(settings.GuildId), settings, TimeSpan.FromMinutes(5));
+    }
+
+    private static DeletedMessageLogSetting CreateDisabledDeletedMessageLogSettings(ulong guildId)
+    {
+        return new DeletedMessageLogSetting
+        {
+            GuildId = guildId,
+            Enabled = false,
+            MaxAgeMinutes = DefaultDeletedMessageLogWindowMinutes
+        };
+    }
+
+    private static bool IsDeletedMessageLogEnabled(DeletedMessageLogSetting settings)
+    {
+        return settings.Enabled && settings.ChannelId is > 0;
     }
 
     private static readonly JsonSerializerOptions SnipeJsonOptions = new()
@@ -242,7 +425,10 @@ public partial class UtilityService : INService
         if (!ch.HasValue || ch.Value is not IGuildChannel channel)
             return;
 
-        if (!await GetSnipeSet(channel.Guild.Id)) return;
+        var snipeEnabled = await GetSnipeSet(channel.Guild.Id).ConfigureAwait(false);
+        var deletedLogSettings = await GetDeletedMessageLogSettings(channel.Guild.Id).ConfigureAwait(false);
+        var deletedLogEnabled = IsDeletedMessageLogEnabled(deletedLogSettings);
+        if (!snipeEnabled && !deletedLogEnabled) return;
 
         var snipemsg = (optMsg.HasValue ? optMsg.Value : null) is IUserMessage msg
             ? CreateSnipeStore(msg, channel, false)
@@ -251,7 +437,12 @@ public partial class UtilityService : INService
         if (snipemsg is null)
             return;
 
-        await AddSnipesToCache(channel.Guild.Id, snipemsg).ConfigureAwait(false);
+        if (snipeEnabled)
+            await AddSnipesToCache(channel.Guild.Id, snipemsg).ConfigureAwait(false);
+
+        if (deletedLogEnabled)
+            await PublishDeletedMessageLog(channel, snipemsg, deletedLogSettings).ConfigureAwait(false);
+
         memoryCache.Remove(GetSnipeSnapshotCacheKey(snipemsg.MessageId));
     }
 
@@ -259,14 +450,20 @@ public partial class UtilityService : INService
     {
         if (ch is not IGuildChannel channel) return;
 
-        if (!await GetSnipeSet(channel.Guild.Id)) return;
+        var snipeEnabled = await GetSnipeSet(channel.Guild.Id).ConfigureAwait(false);
+        var deletedLogEnabled = IsDeletedMessageLogEnabled(
+            await GetDeletedMessageLogSettings(channel.Guild.Id).ConfigureAwait(false));
+        if (!snipeEnabled && !deletedLogEnabled) return;
 
-        var snipemsg = (optMsg.HasValue ? optMsg.Value : null) is IUserMessage msg
-            ? CreateSnipeStore(msg, channel, true)
-            : TryGetSnipeSnapshot(optMsg.Id, channel, true);
+        if (snipeEnabled)
+        {
+            var snipemsg = (optMsg.HasValue ? optMsg.Value : null) is IUserMessage msg
+                ? CreateSnipeStore(msg, channel, true)
+                : TryGetSnipeSnapshot(optMsg.Id, channel, true);
 
-        if (snipemsg is not null)
-            await AddSnipesToCache(channel.Guild.Id, snipemsg).ConfigureAwait(false);
+            if (snipemsg is not null)
+                await AddSnipesToCache(channel.Guild.Id, snipemsg).ConfigureAwait(false);
+        }
 
         if (imsg2 is IUserMessage updatedMsg)
             CacheSnipeSnapshot(updatedMsg, channel);
@@ -359,6 +556,155 @@ public partial class UtilityService : INService
         };
     }
 
+    private async Task PublishDeletedMessageLog(IGuildChannel sourceChannel, SnipeStore snipe,
+        DeletedMessageLogSetting settings)
+    {
+        if (snipe.Edited || settings.ChannelId is null or 0)
+            return;
+
+        var deletedAfter = DateTimeOffset.UtcNow - snipe.MessageTimestamp;
+        if (deletedAfter < TimeSpan.Zero)
+            deletedAfter = TimeSpan.Zero;
+
+        if (deletedAfter > TimeSpan.FromMinutes(settings.MaxAgeMinutes))
+            return;
+
+        var logChannel = await sourceChannel.Guild.GetTextChannelAsync(settings.ChannelId.Value).ConfigureAwait(false);
+        if (logChannel is null)
+            return;
+
+        var author = await TryResolveUser(sourceChannel.Guild, snipe.UserId).ConfigureAwait(false);
+        if (author is { IsBot: true })
+            return;
+
+        var attachments = snipe.Attachments ?? [];
+        var embed = new EmbedBuilder()
+            .WithTitle("Deleted message captured")
+            .WithDescription(Format.Sanitize(GetDeletedMessageLogDisplayMessage(snipe, attachments).TrimTo(4096)))
+            .WithOkColor()
+            .WithCurrentTimestamp()
+            .AddField("Author", $"{author?.Mention ?? $"<@{snipe.UserId}>"} (`{snipe.UserId}`)", true)
+            .AddField("Channel", $"<#{sourceChannel.Id}> (`{sourceChannel.Id}`)", true)
+            .AddField("Deleted after", $"{deletedAfter.TotalSeconds:F0}s", true)
+            .AddField("Sent",
+                TimestampTag.FromDateTimeOffset(snipe.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(),
+                true)
+            .WithFooter("Automatic deleted message log");
+
+        if (author is not null)
+        {
+            embed.WithAuthor(author.ToString(), author.GetAvatarUrl());
+        }
+
+        if (!string.IsNullOrWhiteSpace(snipe.ReferenceMessage))
+            embed.AddField("Replied To", Format.Sanitize(snipe.ReferenceMessage.TrimTo(1024)));
+
+        AddDeletedMessageLogAttachments(embed, attachments);
+
+        var imageUrl = attachments
+            .Select(x => x.Url ?? x.ProxyUrl)
+            .FirstOrDefault(IsLikelyImageUrl);
+        if (!string.IsNullOrWhiteSpace(imageUrl))
+            embed.WithImageUrl(imageUrl);
+
+        try
+        {
+            await logChannel.SendMessageAsync(embed: embed.Build()).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex,
+                "Failed to publish deleted message log for message {MessageId} in guild {GuildId}",
+                snipe.MessageId, snipe.GuildId);
+        }
+    }
+
+    private async Task<IUser?> TryResolveUser(IGuild guild, ulong userId)
+    {
+        try
+        {
+            var guildUser = await guild.GetUserAsync(userId).ConfigureAwait(false);
+            if (guildUser is not null)
+                return guildUser;
+
+            return await client.Rest.GetUserAsync(userId).ConfigureAwait(false);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string GetDeletedMessageLogDisplayMessage(SnipeStore message,
+        IReadOnlyList<SnipeAttachmentStore> attachments)
+    {
+        if (!string.IsNullOrWhiteSpace(message.Message))
+            return message.Message;
+
+        return attachments.Count > 0
+            ? "[Attachment-only message]"
+            : "[No text content]";
+    }
+
+    private static void AddDeletedMessageLogAttachments(EmbedBuilder embed,
+        IReadOnlyList<SnipeAttachmentStore> attachments)
+    {
+        if (attachments.Count == 0)
+            return;
+
+        var sb = new StringBuilder();
+        var added = 0;
+        for (var i = 0; i < attachments.Count; i++)
+        {
+            var attachment = attachments[i];
+            var url = attachment.Url ?? attachment.ProxyUrl;
+            if (string.IsNullOrWhiteSpace(url))
+                continue;
+
+            var fileName = string.IsNullOrWhiteSpace(attachment.Filename)
+                ? $"attachment-{i + 1}"
+                : attachment.Filename;
+            var line = $"[{Format.Sanitize(fileName)}]({url})";
+
+            if (sb.Length > 0)
+                line = $"\n{line}";
+
+            if (sb.Length + line.Length > 1024)
+                break;
+
+            sb.Append(line);
+            added++;
+        }
+
+        if (added == 0)
+        {
+            embed.AddField("Attachments", "Attachment metadata was captured, but no URL is available.");
+            return;
+        }
+
+        if (attachments.Count > added)
+        {
+            var suffix = $"\n...and {attachments.Count - added} more.";
+            if (sb.Length + suffix.Length <= 1024)
+                sb.Append(suffix);
+        }
+
+        embed.AddField("Attachments", sb.ToString());
+    }
+
+    private static bool IsLikelyImageUrl(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+            return false;
+
+        var path = url.Split('?', 2)[0];
+        return path.EndsWith(".png", StringComparison.OrdinalIgnoreCase)
+               || path.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase)
+               || path.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase)
+               || path.EndsWith(".gif", StringComparison.OrdinalIgnoreCase)
+               || path.EndsWith(".webp", StringComparison.OrdinalIgnoreCase);
+    }
+
     /// <summary>
     ///     Checks a URL for malware and other security threats.
     /// </summary>
@@ -372,9 +718,15 @@ public partial class UtilityService : INService
 
     private async Task MsgReciev(IMessage msg)
     {
-        if (msg is IUserMessage userMsg && msg.Channel is IGuildChannel guildChannel &&
-            await GetSnipeSet(guildChannel.Guild.Id).ConfigureAwait(false))
-            CacheSnipeSnapshot(userMsg, guildChannel);
+        if (msg is IUserMessage userMsg && msg.Channel is IGuildChannel guildChannel)
+        {
+            var snipeEnabled = await GetSnipeSet(guildChannel.Guild.Id).ConfigureAwait(false);
+            var deletedLogEnabled = IsDeletedMessageLogEnabled(
+                await GetDeletedMessageLogSettings(guildChannel.Guild.Id).ConfigureAwait(false));
+
+            if (snipeEnabled || deletedLogEnabled)
+                CacheSnipeSnapshot(userMsg, guildChannel);
+        }
 
         if (msg.Channel is SocketTextChannel t)
         {

@@ -323,6 +323,78 @@ public partial class Utility
             await ReplyConfirmAsync(Strings.SnipeSet(ctx.Guild.Id, t ? "Enabled" : "Disabled")).ConfigureAwait(false);
         }
 
+        /// <summary>
+        ///     Sets the channel used for automatic recent deleted-message copies.
+        /// </summary>
+        /// <param name="channel">The channel to post deleted messages to.</param>
+        /// <param name="windowMinutes">The maximum message age, in minutes, to post when deleted.</param>
+        [SlashCommand("deletedlog", "Post recently deleted messages to a dedicated channel automatically.")]
+        [RequireContext(ContextType.Guild)]
+        [SlashUserPerm(GuildPermission.Administrator)]
+        [CheckPermissions]
+        public async Task DeletedLog(ITextChannel channel,
+            int windowMinutes = UtilityService.DefaultDeletedMessageLogWindowMinutes)
+        {
+            var settings = await Service.SetDeletedMessageLogChannel(ctx.Guild, channel, windowMinutes)
+                .ConfigureAwait(false);
+
+            await ReplyConfirmAsync(
+                    $"Deleted message auto-log enabled in {channel.Mention}. Messages deleted within {settings.MaxAgeMinutes} minute(s) of being sent will be copied there.")
+                .ConfigureAwait(false);
+        }
+
+        /// <summary>
+        ///     Updates the automatic deleted-message log lifecycle window.
+        /// </summary>
+        /// <param name="windowMinutes">The maximum message age, in minutes, to post when deleted.</param>
+        [SlashCommand("deletedlogwindow", "Set how recent a deleted message must be to auto-log.")]
+        [RequireContext(ContextType.Guild)]
+        [SlashUserPerm(GuildPermission.Administrator)]
+        [CheckPermissions]
+        public async Task DeletedLogWindow(int windowMinutes)
+        {
+            var settings = await Service.SetDeletedMessageLogWindow(ctx.Guild.Id, windowMinutes)
+                .ConfigureAwait(false);
+
+            await ReplyConfirmAsync(
+                    $"Deleted message auto-log window set to {settings.MaxAgeMinutes} minute(s).")
+                .ConfigureAwait(false);
+        }
+
+        /// <summary>
+        ///     Shows the automatic deleted-message log settings.
+        /// </summary>
+        [SlashCommand("deletedlogstatus", "Show automatic deleted-message log settings.")]
+        [RequireContext(ContextType.Guild)]
+        [SlashUserPerm(GuildPermission.Administrator)]
+        [CheckPermissions]
+        public async Task DeletedLogStatus()
+        {
+            var settings = await Service.GetDeletedMessageLogSettings(ctx.Guild.Id).ConfigureAwait(false);
+            if (!settings.Enabled || settings.ChannelId is null or 0)
+            {
+                await ReplyConfirmAsync("Deleted message auto-log is disabled.").ConfigureAwait(false);
+                return;
+            }
+
+            await ReplyConfirmAsync(
+                    $"Deleted message auto-log is enabled in <#{settings.ChannelId}> with a {settings.MaxAgeMinutes} minute window.")
+                .ConfigureAwait(false);
+        }
+
+        /// <summary>
+        ///     Disables the automatic deleted-message log.
+        /// </summary>
+        [SlashCommand("deletedlogoff", "Disable automatic deleted-message logging.")]
+        [RequireContext(ContextType.Guild)]
+        [SlashUserPerm(GuildPermission.Administrator)]
+        [CheckPermissions]
+        public async Task DeletedLogOff()
+        {
+            await Service.DisableDeletedMessageLog(ctx.Guild.Id).ConfigureAwait(false);
+            await ReplyConfirmAsync("Deleted message auto-log disabled.").ConfigureAwait(false);
+        }
+
         private static string GetDisplayMessage(SnipeStore message, IReadOnlyList<SnipeAttachmentStore> attachments)
         {
             if (!string.IsNullOrWhiteSpace(message.Message))
