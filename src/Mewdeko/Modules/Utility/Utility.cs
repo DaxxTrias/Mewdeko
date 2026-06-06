@@ -404,6 +404,129 @@ public partial class Utility(
     }
 
     /// <summary>
+    ///     Handles text-command subcommands for automatic deleted-message logging.
+    /// </summary>
+    /// <param name="subcommand">The deleted-message log subcommand.</param>
+    [Cmd]
+    [Aliases]
+    [UserPerm(GuildPermission.Administrator)]
+    [RequireContext(ContextType.Guild)]
+    [Priority(1)]
+    public async Task Snipe(string subcommand)
+    {
+        switch (subcommand.ToLowerInvariant())
+        {
+            case "deletedlogstatus":
+            case "deletedlogsettings":
+                await ShowDeletedLogStatus().ConfigureAwait(false);
+                return;
+            case "deletedlogoff":
+            case "deletedlogdisable":
+                await DisableDeletedLog().ConfigureAwait(false);
+                return;
+            default:
+                await ctx.Channel.SendErrorAsync(
+                    "Unknown snipe subcommand. Try `snipe deletedlog #channel [1-10]`, `snipe deletedlogwindow <1-10>`, `snipe deletedlogstatus`, or `snipe deletedlogoff`.",
+                    Config).ConfigureAwait(false);
+                return;
+        }
+    }
+
+    /// <summary>
+    ///     Configures automatic deleted-message logging from a text command.
+    /// </summary>
+    /// <param name="subcommand">The deleted-message log subcommand.</param>
+    /// <param name="channel">The channel to post deleted messages to.</param>
+    /// <param name="windowMinutes">The maximum message age, in minutes, to post when deleted.</param>
+    [Cmd]
+    [Aliases]
+    [UserPerm(GuildPermission.Administrator)]
+    [RequireContext(ContextType.Guild)]
+    [Priority(2)]
+    public async Task Snipe(string subcommand, ITextChannel channel,
+        int windowMinutes = UtilityService.DefaultDeletedMessageLogWindowMinutes)
+    {
+        switch (subcommand.ToLowerInvariant())
+        {
+            case "deletedlog":
+            case "deletedlogchannel":
+            case "deletedlogon":
+                await SetDeletedLog(channel, windowMinutes).ConfigureAwait(false);
+                return;
+            default:
+                await ctx.Channel.SendErrorAsync(
+                    "Unknown snipe subcommand. Try `snipe deletedlog #channel [1-10]`.",
+                    Config).ConfigureAwait(false);
+                return;
+        }
+    }
+
+    /// <summary>
+    ///     Configures the automatic deleted-message logging window from a text command.
+    /// </summary>
+    /// <param name="subcommand">The deleted-message log subcommand.</param>
+    /// <param name="windowMinutes">The maximum message age, in minutes, to post when deleted.</param>
+    [Cmd]
+    [Aliases]
+    [UserPerm(GuildPermission.Administrator)]
+    [RequireContext(ContextType.Guild)]
+    [Priority(2)]
+    public async Task Snipe(string subcommand, int windowMinutes)
+    {
+        switch (subcommand.ToLowerInvariant())
+        {
+            case "deletedlogwindow":
+                await SetDeletedLogWindow(windowMinutes).ConfigureAwait(false);
+                return;
+            default:
+                await ctx.Channel.SendErrorAsync(
+                    "Unknown snipe subcommand. Try `snipe deletedlogwindow <1-10>`.",
+                    Config).ConfigureAwait(false);
+                return;
+        }
+    }
+
+    private async Task SetDeletedLog(ITextChannel channel, int windowMinutes)
+    {
+        var settings = await Service.SetDeletedMessageLogChannel(ctx.Guild, channel, windowMinutes)
+            .ConfigureAwait(false);
+
+        await ReplyConfirmAsync(
+                $"Deleted message auto-log enabled in {channel.Mention}. Messages deleted within {settings.MaxAgeMinutes} minute(s) of being sent will be copied there.")
+            .ConfigureAwait(false);
+    }
+
+    private async Task SetDeletedLogWindow(int windowMinutes)
+    {
+        var settings = await Service.SetDeletedMessageLogWindow(ctx.Guild.Id, windowMinutes)
+            .ConfigureAwait(false);
+
+        await ReplyConfirmAsync(
+                $"Deleted message auto-log window set to {settings.MaxAgeMinutes} minute(s).")
+            .ConfigureAwait(false);
+    }
+
+    private async Task ShowDeletedLogStatus()
+    {
+        var settings = await Service.GetDeletedMessageLogSettings(ctx.Guild.Id).ConfigureAwait(false);
+        if (!settings.Enabled || settings.ChannelId is null or 0)
+        {
+            await ReplyConfirmAsync("Deleted message auto-log is disabled.").ConfigureAwait(false);
+            return;
+        }
+
+        await ReplyConfirmAsync(
+                $"Deleted message auto-log is enabled in <#{settings.ChannelId}> with a {settings.MaxAgeMinutes} minute window.")
+            .ConfigureAwait(false);
+    }
+
+    private async Task DisableDeletedLog()
+    {
+        await Service.DisableDeletedMessageLog(ctx.Guild.Id).ConfigureAwait(false);
+        await ReplyConfirmAsync("Deleted message auto-log disabled.").ConfigureAwait(false);
+    }
+
+    /// <summary>
     ///     Snipes the last deleted message in the channel.
     /// </summary>
     [Cmd]
