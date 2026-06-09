@@ -91,7 +91,7 @@
     <PackageReference Include="Html2Markdown" Version="7.1.2.20"/>
     <PackageReference Include="Humanizer" Version="3.0.10"/>
     <PackageReference Include="JikanDotNet" Version="2.10.4"/>
-    <PackageReference Include="Google.Apis.YouTube.v3" Version="1.74.0.4162"/>
+    <PackageReference Include="Google.Apis.YouTube.v3" Version="1.75.0.4172"/>
     <PackageReference Include="Google.Apis.CustomSearchAPI.v1" Version="1.74.0.3520"/>
     <PackageReference Include="Lavalink4NET.Discord.NET" Version="4.2.1"/>
     <PackageReference Include="Lavalink4NET.Integrations.Lavasearch" Version="4.2.1"/>
