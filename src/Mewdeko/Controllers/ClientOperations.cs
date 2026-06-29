@@ -233,9 +233,7 @@ public class ClientOperations(DiscordShardedClient client) : Controller
             })
             .ToList();
 
-        if (mutuals.Count != 0)
-            return Ok(mutuals);
-        return NotFound();
+        return Ok(mutuals);
     }
 
     /// <summary>
@@ -390,7 +388,7 @@ public class ClientOperations(DiscordShardedClient client) : Controller
 
             return Ok(forumInfo);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             // Return basic forum info if thread fetching fails
             var basicInfo = new ForumChannelInfo
