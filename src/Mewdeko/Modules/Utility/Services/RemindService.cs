@@ -102,6 +102,7 @@ public partial class RemindService : INService, IReadyExecutor
     ///     Schedules a reminder by setting a timer.
     /// </summary>
     /// <param name="reminder">The reminder to be scheduled.</param>
+    /// <param name="retryDelay">Optional delay to use instead of the reminder's scheduled time.</param>
     public Task ScheduleReminder(Reminder reminder, TimeSpan? retryDelay = null)
     {
         var timeToGo = retryDelay ?? (reminder.When - DateTime.UtcNow);
