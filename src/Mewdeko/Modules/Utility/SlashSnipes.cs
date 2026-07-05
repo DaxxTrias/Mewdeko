@@ -63,6 +63,7 @@ public partial class Utility
             user = await ctx.Channel.GetUserAsync(msg.UserId).ConfigureAwait(false) ??
                    await client.Rest.GetUserAsync(msg.UserId).ConfigureAwait(false);
             var attachments = GetAttachments(msg);
+            var preservedFiles = Service.BuildPreservedSnipeAttachmentFiles(msg);
 
             var em = new EmbedBuilder
             {
@@ -86,37 +87,10 @@ public partial class Utility
                 em.AddField("Replied To", msg.ReferenceMessage);
 
             em.AddField("Sent", TimestampTag.FromDateTimeOffset(msg.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
-            AddAttachmentsField(em, attachments);
+            AddAttachmentsField(em, attachments, preservedFiles.Count > 0);
             SnipeReactionFormatter.AddReactorsField(em, reactionTracker, msg.MessageId, msg.MessageTimestamp);
 
-            if (!string.IsNullOrEmpty(msg.JsonData))
-            {
-                await using var ms = new MemoryStream();
-                await using var writer = new StreamWriter(ms);
-                await writer.WriteAsync(msg.JsonData);
-                await writer.FlushAsync();
-                ms.Position = 0;
-
-                await ctx.Interaction.RespondWithFileAsync(ms, $"snipe_{msg.MessageId}.json", embed: em.Build(),
-                    components: config.Data.ShowInviteButton
-                        ? new ComponentBuilder()
-                            .WithButton(style: ButtonStyle.Link,
-                                url: "",
-                                label: "",
-                                emote: "".ToIEmote()).Build()
-                        : null).ConfigureAwait(false);
-            }
-            else
-            {
-                await ctx.Interaction.RespondAsync(embed: em.Build(),
-                    components: config.Data.ShowInviteButton
-                        ? new ComponentBuilder()
-                            .WithButton(style: ButtonStyle.Link,
-                                url: "",
-                                label: "",
-                                emote: "".ToIEmote()).Build()
-                        : null).ConfigureAwait(false);
-            }
+            await RespondWithSnipeAsync(msg, em, preservedFiles).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -155,6 +129,7 @@ public partial class Utility
             user = await ctx.Channel.GetUserAsync(msg.UserId).ConfigureAwait(false) ??
                    await client.Rest.GetUserAsync(msg.UserId).ConfigureAwait(false);
             var attachments = GetAttachments(msg);
+            var preservedFiles = Service.BuildPreservedSnipeAttachmentFiles(msg);
 
             var em = new EmbedBuilder
             {
@@ -178,37 +153,10 @@ public partial class Utility
                 em.AddField("Replied To", msg.ReferenceMessage);
 
             em.AddField("Sent", TimestampTag.FromDateTimeOffset(msg.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
-            AddAttachmentsField(em, attachments);
+            AddAttachmentsField(em, attachments, preservedFiles.Count > 0);
             SnipeReactionFormatter.AddReactorsField(em, reactionTracker, msg.MessageId, msg.MessageTimestamp);
 
-            if (!string.IsNullOrEmpty(msg.JsonData))
-            {
-                await using var ms = new MemoryStream();
-                await using var writer = new StreamWriter(ms);
-                await writer.WriteAsync(msg.JsonData);
-                await writer.FlushAsync();
-                ms.Position = 0;
-
-                await ctx.Interaction.RespondWithFileAsync(ms, $"snipe_{msg.MessageId}.json", embed: em.Build(),
-                    components: config.Data.ShowInviteButton
-                        ? new ComponentBuilder()
-                            .WithButton(style: ButtonStyle.Link,
-                                url: "",
-                                label: "",
-                                emote: "".ToIEmote()).Build()
-                        : null).ConfigureAwait(false);
-            }
-            else
-            {
-                await ctx.Interaction.RespondAsync(embed: em.Build(),
-                    components: config.Data.ShowInviteButton
-                        ? new ComponentBuilder()
-                            .WithButton(style: ButtonStyle.Link,
-                                url: "",
-                                label: "",
-                                emote: "".ToIEmote()).Build()
-                        : null).ConfigureAwait(false);
-            }
+            await RespondWithSnipeAsync(msg, em, preservedFiles).ConfigureAwait(false);
         }
 
         private async Task SnipeListBase(bool edited, int amount = 5, ITextChannel channel = null, IUser user = null)
@@ -268,7 +216,7 @@ public partial class Utility
                     builder.AddField("Replied To", msg1.ReferenceMessage);
 
                 builder.AddField("Sent", TimestampTag.FromDateTimeOffset(msg1.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
-                AddAttachmentsField(builder, attachments);
+                AddAttachmentsField(builder, attachments, false);
                 SnipeReactionFormatter.AddReactorsField(builder, reactionTracker, msg1.MessageId, msg1.MessageTimestamp);
 
                 return builder;
@@ -424,7 +372,9 @@ public partial class Utility
                     {
                         Filename = x.Filename,
                         Url = x.Url,
-                        ProxyUrl = x.ProxyUrl
+                        ProxyUrl = x.ProxyUrl,
+                        Size = x.Size,
+                        ContentType = x.ContentType
                     }).ToList();
             }
             catch
@@ -433,21 +383,24 @@ public partial class Utility
             }
         }
 
-        private static void AddAttachmentsField(EmbedBuilder embed, IReadOnlyList<SnipeAttachmentStore> attachments)
+        private static void AddAttachmentsField(EmbedBuilder embed, IReadOnlyList<SnipeAttachmentStore> attachments,
+            bool preservedFilesAttached)
         {
-            var value = BuildAttachmentsFieldValue(attachments);
+            var value = BuildAttachmentsFieldValue(attachments, preservedFilesAttached);
             if (!string.IsNullOrWhiteSpace(value))
                 embed.AddField("Attachments", value);
         }
 
-        private static void AddAttachmentsField(PageBuilder embed, IReadOnlyList<SnipeAttachmentStore> attachments)
+        private static void AddAttachmentsField(PageBuilder embed, IReadOnlyList<SnipeAttachmentStore> attachments,
+            bool preservedFilesAttached)
         {
-            var value = BuildAttachmentsFieldValue(attachments);
+            var value = BuildAttachmentsFieldValue(attachments, preservedFilesAttached);
             if (!string.IsNullOrWhiteSpace(value))
                 embed.AddField("Attachments", value);
         }
 
-        private static string? BuildAttachmentsFieldValue(IReadOnlyList<SnipeAttachmentStore> attachments)
+        private static string? BuildAttachmentsFieldValue(IReadOnlyList<SnipeAttachmentStore> attachments,
+            bool preservedFilesAttached)
         {
             if (attachments.Count == 0)
                 return null;
@@ -457,14 +410,24 @@ public partial class Utility
             for (var i = 0; i < attachments.Count; i++)
             {
                 var attachment = attachments[i];
-                var url = attachment.Url ?? attachment.ProxyUrl;
-                if (string.IsNullOrWhiteSpace(url))
-                    continue;
-
                 var fileName = string.IsNullOrWhiteSpace(attachment.Filename)
                     ? $"attachment-{i + 1}"
                     : attachment.Filename;
-                var line = $"[{fileName}]({url})";
+                string line;
+                if (!string.IsNullOrWhiteSpace(attachment.PreservedCacheKey))
+                {
+                    line = preservedFilesAttached
+                        ? $"{fileName} (preserved file attached)"
+                        : $"{fileName} (preserved file cached)";
+                }
+                else
+                {
+                    var url = attachment.Url ?? attachment.ProxyUrl;
+                    if (string.IsNullOrWhiteSpace(url))
+                        continue;
+
+                    line = $"[{fileName}]({url})";
+                }
 
                 if (sb.Length > 0)
                     line = $"\n{line}";
@@ -487,6 +450,49 @@ public partial class Utility
             }
 
             return sb.ToString();
+        }
+
+        private async Task RespondWithSnipeAsync(SnipeStore msg, EmbedBuilder embed, List<FileAttachment> files)
+        {
+            MemoryStream? jsonStream = null;
+            try
+            {
+                if (!string.IsNullOrEmpty(msg.JsonData))
+                {
+                    jsonStream = new MemoryStream(Encoding.UTF8.GetBytes(msg.JsonData));
+                    files.Add(new FileAttachment(jsonStream, $"snipe_{msg.MessageId}.json"));
+                }
+
+                var components = GetInviteButtonComponents();
+                if (files.Count > 0)
+                {
+                    await ctx.Interaction.RespondWithFilesAsync(files, embed: embed.Build(), components: components)
+                        .ConfigureAwait(false);
+                }
+                else
+                {
+                    await ctx.Interaction.RespondAsync(embed: embed.Build(), components: components)
+                        .ConfigureAwait(false);
+                }
+            }
+            finally
+            {
+                foreach (var file in files)
+                    file.Dispose();
+
+                jsonStream?.Dispose();
+            }
+        }
+
+        private MessageComponent? GetInviteButtonComponents()
+        {
+            return config.Data.ShowInviteButton
+                ? new ComponentBuilder()
+                    .WithButton(style: ButtonStyle.Link,
+                        url: "",
+                        label: "",
+                        emote: "".ToIEmote()).Build()
+                : null;
         }
     }
 }

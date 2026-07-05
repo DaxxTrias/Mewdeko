@@ -80,4 +80,19 @@ public class SnipeAttachmentStore
     ///     Gets or sets the proxy URL for the attachment.
     /// </summary>
     public string? ProxyUrl { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the attachment size in bytes.
+    /// </summary>
+    public int Size { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the attachment content type.
+    /// </summary>
+    public string? ContentType { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the local cache key for preserved attachment bytes.
+    /// </summary>
+    public string? PreservedCacheKey { get; set; }
 }
