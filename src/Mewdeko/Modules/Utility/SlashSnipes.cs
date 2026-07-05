@@ -1,6 +1,7 @@
 using System.IO;
 using System.Text;
 using System.Text.Json;
+using DataModel;
 using Discord.Interactions;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
@@ -343,6 +344,87 @@ public partial class Utility
             await ReplyConfirmAsync("Deleted message auto-log disabled.").ConfigureAwait(false);
         }
 
+        /// <summary>
+        ///     Adds a user id to the automatic deleted-message log ignore list.
+        /// </summary>
+        /// <param name="userId">The raw user id or mention to ignore.</param>
+        /// <param name="note">Optional context for why the user is ignored.</param>
+        [SlashCommand("deletedlogignoreadd", "Exclude a user id from automatic deleted-message logging.")]
+        [RequireContext(ContextType.Guild)]
+        [SlashUserPerm(GuildPermission.Administrator)]
+        [CheckPermissions]
+        public async Task DeletedLogIgnoreAdd(string userId, string? note = null)
+        {
+            if (!UtilityService.TryParseDiscordUserId(userId, out var parsedUserId))
+            {
+                await ReplyErrorAsync("Provide a raw Discord user ID or user mention.").ConfigureAwait(false);
+                return;
+            }
+
+            var added = await Service.AddDeletedMessageLogIgnoredUser(ctx.Guild.Id, parsedUserId, note)
+                .ConfigureAwait(false);
+
+            await ReplyConfirmAsync(added
+                    ? $"Deleted message auto-log will now ignore user ID `{parsedUserId}`."
+                    : $"User ID `{parsedUserId}` was already ignored. Note updated if one was provided.")
+                .ConfigureAwait(false);
+        }
+
+        /// <summary>
+        ///     Removes a user id from the automatic deleted-message log ignore list.
+        /// </summary>
+        /// <param name="userId">The raw user id or mention to remove.</param>
+        [SlashCommand("deletedlogignoreremove", "Remove a user id from automatic deleted-message log ignores.")]
+        [RequireContext(ContextType.Guild)]
+        [SlashUserPerm(GuildPermission.Administrator)]
+        [CheckPermissions]
+        public async Task DeletedLogIgnoreRemove(string userId)
+        {
+            if (!UtilityService.TryParseDiscordUserId(userId, out var parsedUserId))
+            {
+                await ReplyErrorAsync("Provide a raw Discord user ID or user mention.").ConfigureAwait(false);
+                return;
+            }
+
+            var removed = await Service.RemoveDeletedMessageLogIgnoredUser(ctx.Guild.Id, parsedUserId)
+                .ConfigureAwait(false);
+
+            await ReplyConfirmAsync(removed
+                    ? $"Deleted message auto-log no longer ignores user ID `{parsedUserId}`."
+                    : $"User ID `{parsedUserId}` was not on the deleted message auto-log ignore list.")
+                .ConfigureAwait(false);
+        }
+
+        /// <summary>
+        ///     Lists users ignored by the automatic deleted-message log.
+        /// </summary>
+        [SlashCommand("deletedlogignorelist", "List user IDs excluded from automatic deleted-message logging.")]
+        [RequireContext(ContextType.Guild)]
+        [SlashUserPerm(GuildPermission.Administrator)]
+        [CheckPermissions]
+        public async Task DeletedLogIgnoreList()
+        {
+            var ignoredUsers = await Service.GetDeletedMessageLogIgnoredUsers(ctx.Guild.Id).ConfigureAwait(false);
+            if (ignoredUsers.Count == 0)
+            {
+                await ReplyConfirmAsync("Deleted message auto-log has no ignored users.").ConfigureAwait(false);
+                return;
+            }
+
+            var lines = ignoredUsers
+                .Take(50)
+                .Select((x, i) => FormatDeletedLogIgnoredUser(i + 1, x));
+            var description = string.Join("\n", lines);
+            if (ignoredUsers.Count > 50)
+                description += $"\n...and {ignoredUsers.Count - 50} more.";
+
+            await ctx.Interaction.RespondAsync(embed: new EmbedBuilder()
+                .WithOkColor()
+                .WithTitle("Deleted Message Auto-Log Ignored Users")
+                .WithDescription(description.TrimTo(4096))
+                .Build()).ConfigureAwait(false);
+        }
+
         private static string GetDisplayMessage(SnipeStore message, IReadOnlyList<SnipeAttachmentStore> attachments)
         {
             if (!string.IsNullOrWhiteSpace(message.Message))
@@ -493,6 +575,15 @@ public partial class Utility
                         label: "",
                         emote: "".ToIEmote()).Build()
                 : null;
+        }
+
+        private static string FormatDeletedLogIgnoredUser(int index, DeletedMessageLogIgnoredUser ignoredUser)
+        {
+            var note = string.IsNullOrWhiteSpace(ignoredUser.Note)
+                ? string.Empty
+                : $" - {Format.Sanitize(ignoredUser.Note).TrimTo(120)}";
+
+            return $"{index}. `{ignoredUser.UserId}`{note}";
         }
     }
 }

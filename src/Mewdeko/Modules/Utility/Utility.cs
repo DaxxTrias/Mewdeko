@@ -4,6 +4,7 @@ using System.Net.Http;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
+using DataModel;
 using Discord.Commands;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
@@ -424,9 +425,46 @@ public partial class Utility(
             case "deletedlogdisable":
                 await DisableDeletedLog().ConfigureAwait(false);
                 return;
+            case "deletedlogignorelist":
+            case "deletedlogignored":
+            case "deletedlogignores":
+                await ShowDeletedLogIgnoredUsers().ConfigureAwait(false);
+                return;
             default:
                 await ctx.Channel.SendErrorAsync(
-                    "Unknown snipe subcommand. Try `snipe deletedlog #channel [1-10]`, `snipe deletedlogwindow <1-10>`, `snipe deletedlogstatus`, or `snipe deletedlogoff`.",
+                    "Unknown snipe subcommand. Try `snipe deletedlog #channel [1-10]`, `snipe deletedlogwindow <1-10>`, `snipe deletedlogstatus`, `snipe deletedlogoff`, or `snipe deletedlogignorelist`.",
+                    Config).ConfigureAwait(false);
+                return;
+        }
+    }
+
+    /// <summary>
+    ///     Handles text-command subcommands for automatic deleted-message log ignored users.
+    /// </summary>
+    /// <param name="subcommand">The deleted-message log ignore subcommand.</param>
+    /// <param name="userId">The raw user id or mention.</param>
+    /// <param name="note">Optional context for why the user is ignored.</param>
+    [Cmd]
+    [Aliases]
+    [UserPerm(GuildPermission.Administrator)]
+    [RequireContext(ContextType.Guild)]
+    [Priority(0)]
+    public async Task Snipe(string subcommand, string userId, [Remainder] string? note = null)
+    {
+        switch (subcommand.ToLowerInvariant())
+        {
+            case "deletedlogignoreadd":
+            case "deletedlogignore":
+                await AddDeletedLogIgnoredUser(userId, note).ConfigureAwait(false);
+                return;
+            case "deletedlogignoreremove":
+            case "deletedlogignoredelete":
+            case "deletedlogunignore":
+                await RemoveDeletedLogIgnoredUser(userId).ConfigureAwait(false);
+                return;
+            default:
+                await ctx.Channel.SendErrorAsync(
+                    "Unknown snipe subcommand. Try `snipe deletedlogignoreadd <userId> [note]`, `snipe deletedlogignoreremove <userId>`, or `snipe deletedlogignorelist`.",
                     Config).ConfigureAwait(false);
                 return;
         }
@@ -524,6 +562,72 @@ public partial class Utility(
     {
         await Service.DisableDeletedMessageLog(ctx.Guild.Id).ConfigureAwait(false);
         await ReplyConfirmAsync("Deleted message auto-log disabled.").ConfigureAwait(false);
+    }
+
+    private async Task AddDeletedLogIgnoredUser(string userId, string? note)
+    {
+        if (!UtilityService.TryParseDiscordUserId(userId, out var parsedUserId))
+        {
+            await ReplyErrorAsync("Provide a raw Discord user ID or user mention.").ConfigureAwait(false);
+            return;
+        }
+
+        var added = await Service.AddDeletedMessageLogIgnoredUser(ctx.Guild.Id, parsedUserId, note)
+            .ConfigureAwait(false);
+
+        await ReplyConfirmAsync(added
+                ? $"Deleted message auto-log will now ignore user ID `{parsedUserId}`."
+                : $"User ID `{parsedUserId}` was already ignored. Note updated if one was provided.")
+            .ConfigureAwait(false);
+    }
+
+    private async Task RemoveDeletedLogIgnoredUser(string userId)
+    {
+        if (!UtilityService.TryParseDiscordUserId(userId, out var parsedUserId))
+        {
+            await ReplyErrorAsync("Provide a raw Discord user ID or user mention.").ConfigureAwait(false);
+            return;
+        }
+
+        var removed = await Service.RemoveDeletedMessageLogIgnoredUser(ctx.Guild.Id, parsedUserId)
+            .ConfigureAwait(false);
+
+        await ReplyConfirmAsync(removed
+                ? $"Deleted message auto-log no longer ignores user ID `{parsedUserId}`."
+                : $"User ID `{parsedUserId}` was not on the deleted message auto-log ignore list.")
+            .ConfigureAwait(false);
+    }
+
+    private async Task ShowDeletedLogIgnoredUsers()
+    {
+        var ignoredUsers = await Service.GetDeletedMessageLogIgnoredUsers(ctx.Guild.Id).ConfigureAwait(false);
+        if (ignoredUsers.Count == 0)
+        {
+            await ReplyConfirmAsync("Deleted message auto-log has no ignored users.").ConfigureAwait(false);
+            return;
+        }
+
+        var lines = ignoredUsers
+            .Take(50)
+            .Select((x, i) => FormatDeletedLogIgnoredUser(i + 1, x));
+        var description = string.Join("\n", lines);
+        if (ignoredUsers.Count > 50)
+            description += $"\n...and {ignoredUsers.Count - 50} more.";
+
+        await ctx.Channel.SendMessageAsync(embed: new EmbedBuilder()
+            .WithOkColor()
+            .WithTitle("Deleted Message Auto-Log Ignored Users")
+            .WithDescription(description.TrimTo(4096))
+            .Build()).ConfigureAwait(false);
+    }
+
+    private static string FormatDeletedLogIgnoredUser(int index, DeletedMessageLogIgnoredUser ignoredUser)
+    {
+        var note = string.IsNullOrWhiteSpace(ignoredUser.Note)
+            ? string.Empty
+            : $" - {Format.Sanitize(ignoredUser.Note).TrimTo(120)}";
+
+        return $"{index}. `{ignoredUser.UserId}`{note}";
     }
 
     /// <summary>

@@ -121,6 +121,12 @@ public class MewdekoDb : DataConnection
     public ITable<DeletedMessageLogSetting> DeletedMessageLogSettings => this.GetTable<DeletedMessageLogSetting>();
 
     /// <summary>
+    ///     Gets the deleted message log ignored users table.
+    /// </summary>
+    public ITable<DeletedMessageLogIgnoredUser> DeletedMessageLogIgnoredUsers =>
+        this.GetTable<DeletedMessageLogIgnoredUser>();
+
+    /// <summary>
     ///     Gets the guild bot profiles table.
     /// </summary>
     public ITable<GuildBotProfile> GuildBotProfiles

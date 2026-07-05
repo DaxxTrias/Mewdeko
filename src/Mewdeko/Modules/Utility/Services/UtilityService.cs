@@ -41,6 +41,7 @@ public partial class UtilityService : INService
     private const string SnipeSnapshotCachePrefix = "snipe:snapshot:";
     private const string PreservedSnipeAttachmentCachePrefix = "snipe:attachment:";
     private const string DeletedMessageLogSettingsCachePrefix = "deleted-message-log:settings:";
+    private const string DeletedMessageLogIgnoredUsersCachePrefix = "deleted-message-log:ignored-users:";
     private const int MaxPreservedAttachmentBytes = 8 * 1024 * 1024;
     private const int MaxPreservedAttachmentsPerMessage = 5;
 
@@ -314,9 +315,19 @@ public partial class UtilityService : INService
         return $"{DeletedMessageLogSettingsCachePrefix}{guildId}";
     }
 
+    private static string GetDeletedMessageLogIgnoredUsersCacheKey(ulong guildId)
+    {
+        return $"{DeletedMessageLogIgnoredUsersCachePrefix}{guildId}";
+    }
+
     private void CacheDeletedMessageLogSettings(DeletedMessageLogSetting settings)
     {
         memoryCache.Set(GetDeletedMessageLogSettingsCacheKey(settings.GuildId), settings, TimeSpan.FromMinutes(5));
+    }
+
+    private void ClearDeletedMessageLogIgnoredUsersCache(ulong guildId)
+    {
+        memoryCache.Remove(GetDeletedMessageLogIgnoredUsersCacheKey(guildId));
     }
 
     private static DeletedMessageLogSetting CreateDisabledDeletedMessageLogSettings(ulong guildId)
@@ -332,6 +343,122 @@ public partial class UtilityService : INService
     private static bool IsDeletedMessageLogEnabled(DeletedMessageLogSetting settings)
     {
         return settings.Enabled && settings.ChannelId is > 0;
+    }
+
+    /// <summary>
+    ///     Parses a raw Discord user id or user mention.
+    /// </summary>
+    /// <param name="input">The raw id or mention.</param>
+    /// <param name="userId">The parsed user id.</param>
+    /// <returns>True when parsing succeeded.</returns>
+    public static bool TryParseDiscordUserId(string? input, out ulong userId)
+    {
+        userId = 0;
+        if (string.IsNullOrWhiteSpace(input))
+            return false;
+
+        var candidate = input.Trim();
+        if (candidate.StartsWith("<@", StringComparison.Ordinal) && candidate.EndsWith('>'))
+            candidate = candidate[2..^1].TrimStart('!');
+
+        return ulong.TryParse(candidate, out userId) && userId > 0;
+    }
+
+    /// <summary>
+    ///     Adds a user id to the automatic deleted-message log ignore list.
+    /// </summary>
+    /// <param name="guildId">The guild id.</param>
+    /// <param name="userId">The user id to ignore.</param>
+    /// <param name="note">Optional context for why the user is ignored.</param>
+    /// <returns>True when a new ignore entry was added.</returns>
+    public async Task<bool> AddDeletedMessageLogIgnoredUser(ulong guildId, ulong userId, string? note = null)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+        var ignoredUsers = db.GetTable<DeletedMessageLogIgnoredUser>();
+        var existing = await ignoredUsers
+            .FirstOrDefaultAsync(x => x.GuildId == guildId && x.UserId == userId)
+            .ConfigureAwait(false);
+
+        if (existing is not null)
+        {
+            if (!string.IsNullOrWhiteSpace(note) && !string.Equals(existing.Note, note, StringComparison.Ordinal))
+            {
+                existing.Note = note.TrimTo(500);
+                existing.DateModified = DateTime.UtcNow;
+                await db.UpdateAsync(existing).ConfigureAwait(false);
+                ClearDeletedMessageLogIgnoredUsersCache(guildId);
+            }
+
+            return false;
+        }
+
+        var now = DateTime.UtcNow;
+        await ignoredUsers.InsertAsync(() => new DeletedMessageLogIgnoredUser
+        {
+            GuildId = guildId,
+            UserId = userId,
+            Note = string.IsNullOrWhiteSpace(note) ? null : note.TrimTo(500),
+            DateAdded = now,
+            DateModified = now
+        }).ConfigureAwait(false);
+
+        ClearDeletedMessageLogIgnoredUsersCache(guildId);
+        return true;
+    }
+
+    /// <summary>
+    ///     Removes a user id from the automatic deleted-message log ignore list.
+    /// </summary>
+    /// <param name="guildId">The guild id.</param>
+    /// <param name="userId">The user id to remove.</param>
+    /// <returns>True when an ignore entry was removed.</returns>
+    public async Task<bool> RemoveDeletedMessageLogIgnoredUser(ulong guildId, ulong userId)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+        var removed = await db.GetTable<DeletedMessageLogIgnoredUser>()
+            .Where(x => x.GuildId == guildId && x.UserId == userId)
+            .DeleteAsync()
+            .ConfigureAwait(false);
+
+        if (removed > 0)
+            ClearDeletedMessageLogIgnoredUsersCache(guildId);
+
+        return removed > 0;
+    }
+
+    /// <summary>
+    ///     Gets ignored users for the automatic deleted-message log.
+    /// </summary>
+    /// <param name="guildId">The guild id.</param>
+    /// <returns>Ignored users ordered by insertion time.</returns>
+    public async Task<List<DeletedMessageLogIgnoredUser>> GetDeletedMessageLogIgnoredUsers(ulong guildId)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+        return await db.GetTable<DeletedMessageLogIgnoredUser>()
+            .Where(x => x.GuildId == guildId)
+            .OrderBy(x => x.DateAdded)
+            .ThenBy(x => x.UserId)
+            .ToListAsync()
+            .ConfigureAwait(false);
+    }
+
+    private async Task<bool> IsDeletedMessageLogIgnoredUser(ulong guildId, ulong userId)
+    {
+        var ignoredUsers = await memoryCache.GetOrCreateAsync(GetDeletedMessageLogIgnoredUsersCacheKey(guildId),
+            async entry =>
+            {
+                entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5);
+
+                await using var db = await dbFactory.CreateConnectionAsync();
+                var ignoredUserIds = await db.GetTable<DeletedMessageLogIgnoredUser>()
+                    .Where(x => x.GuildId == guildId)
+                    .Select(x => x.UserId)
+                    .ToListAsync()
+                    .ConfigureAwait(false);
+                return ignoredUserIds.ToHashSet();
+            }).ConfigureAwait(false);
+
+        return ignoredUsers?.Contains(userId) == true;
     }
 
     private static readonly JsonSerializerOptions SnipeJsonOptions = new()
@@ -702,6 +829,9 @@ public partial class UtilityService : INService
 
         var logChannel = await sourceChannel.Guild.GetTextChannelAsync(settings.ChannelId.Value).ConfigureAwait(false);
         if (logChannel is null)
+            return;
+
+        if (await IsDeletedMessageLogIgnoredUser(sourceChannel.Guild.Id, snipe.UserId).ConfigureAwait(false))
             return;
 
         var author = await TryResolveUser(sourceChannel.Guild, snipe.UserId).ConfigureAwait(false);
