@@ -8,6 +8,7 @@ using Fergun.Interactive.Pagination;
 using GScraper;
 using GScraper.DuckDuckGo;
 using GScraper.Google;
+using Google.Cloud.Vision.V1;
 using MartineApiNet;
 using MartineApiNet.Enums;
 using MartineApiNet.Models.Images;
@@ -739,17 +740,19 @@ public partial class Searches(
         var checkingMessage =
             await ctx.Channel.SendConfirmAsync(Strings.ImageChecking(ctx.Guild.Id)).ConfigureAwait(false);
 
-        IEnumerable<IImageResult>? images = null;
+        IReadOnlyList<IImageResult>? filteredImages = null;
         var sourceName = "Search Provider";
         var sourceIconUrl = string.Empty;
+        var providerCandidateCount = 0;
         var providerErrorCount = 0;
+        var googleAccessDeniedImageCount = 0;
         var googleProviderDisabled =
             System.Threading.Volatile.Read(ref googleImageProviderDisabledForSession) == 1;
 
-        // Try Google first. If it errors, keep using DuckDuckGo for the rest of this process.
+        // Try Google first, but only accept it if usable images survive validation.
         if (!googleProviderDisabled)
         {
-            images = await TrySearchImagesAsync(
+            filteredImages = await TryGetSafeImagesFromProviderAsync(
                 "Google",
                 async () =>
                 {
@@ -757,7 +760,7 @@ public partial class Searches(
                     return await gscraper.GetImagesAsync(query, SafeSearchLevel.Strict).ConfigureAwait(false);
                 }).ConfigureAwait(false);
 
-            if (images is not null)
+            if (filteredImages is not null)
             {
                 sourceName = "Google";
                 sourceIconUrl = "https://www.google.com/favicon.ico";
@@ -768,9 +771,9 @@ public partial class Searches(
             logger.LogDebug("Skipping Google image provider because it is disabled for this process.");
         }
 
-        if (images is null)
+        if (filteredImages is null)
         {
-            images = await TrySearchImagesAsync(
+            filteredImages = await TryGetSafeImagesFromProviderAsync(
                 "DuckDuckGo",
                 async () =>
                 {
@@ -778,18 +781,21 @@ public partial class Searches(
                     return await dscraper.GetImagesAsync(query, SafeSearchLevel.Strict).ConfigureAwait(false);
                 }).ConfigureAwait(false);
 
-            if (images is not null)
+            if (filteredImages is not null)
             {
                 sourceName = "DuckDuckGo";
                 sourceIconUrl = "https://duckduckgo.com/assets/logo_homepage.normal.v108.svg";
             }
         }
 
-        // If no images were found by either scraper
-        if (images == null)
+        // If no images survived search and validation from either scraper.
+        if (filteredImages is null)
         {
             await checkingMessage.DeleteAsync().ConfigureAwait(false);
-            if (providerErrorCount > 0)
+            if (providerCandidateCount > 0)
+                await ctx.Channel.SendErrorAsync(Strings.ImageNoSafeImages(ctx.Guild.Id), Config)
+                    .ConfigureAwait(false);
+            else if (providerErrorCount > 0)
                 await ctx.Channel.SendErrorAsync(Strings.FetchFailed(ctx.Guild.Id), Config).ConfigureAwait(false);
             else
                 await ctx.Channel.SendErrorAsync(Strings.ImageNoResults(ctx.Guild.Id), Config)
@@ -797,41 +803,7 @@ public partial class Searches(
             return;
         }
 
-        // Now, filter the images using Safe Search Detection
-        var imagesList = images.ToList(); // Convert to list for indexing
-
-        var filteredImages = new List<IImageResult>();
-        var tasks = imagesList.Select(async image =>
-        {
-            try
-            {
-                var safeSearchResult = await google.DetectSafeSearchAsync(image.Url);
-
-                if (google.IsImageSafe(safeSearchResult))
-                {
-                    lock (filteredImages)
-                    {
-                        filteredImages.Add(image);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                // Handle exceptions (e.g., logging)
-                Console.WriteLine($"Error processing image: {ex.Message}");
-            }
-        }).ToList();
-
-        await Task.WhenAll(tasks);
-
         await checkingMessage.DeleteAsync().ConfigureAwait(false);
-
-        if (filteredImages.Count == 0)
-        {
-            await ctx.Channel.SendErrorAsync(Strings.ImageNoSafeImages(ctx.Guild.Id), Config)
-                .ConfigureAwait(false);
-            return;
-        }
 
         // Proceed with displaying the images using a paginator
         var paginator = new LazyPaginatorBuilder()
@@ -846,6 +818,132 @@ public partial class Searches(
         await serv.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60))
             .ConfigureAwait(false);
         return;
+
+        async Task<IReadOnlyList<IImageResult>?> TryGetSafeImagesFromProviderAsync(
+            string providerName,
+            Func<Task<IEnumerable<IImageResult>>> searchFunc)
+        {
+            var searchResults = await TrySearchImagesAsync(providerName, searchFunc).ConfigureAwait(false);
+            if (searchResults is null)
+                return null;
+
+            providerCandidateCount += searchResults.Count;
+            var googleAccessDeniedCountBefore = googleAccessDeniedImageCount;
+            var safeImages = await FilterSafeImagesAsync(providerName, searchResults).ConfigureAwait(false);
+
+            if (safeImages.Count > 0)
+                return safeImages;
+
+            var googleAccessDeniedCount = googleAccessDeniedImageCount - googleAccessDeniedCountBefore;
+            if (googleAccessDeniedCount > 0)
+            {
+                logger.LogDebug(
+                    "Image search provider {ProviderName} returned {AccessDeniedCount} Google access-denied placeholder images for query '{Query}'.",
+                    providerName,
+                    googleAccessDeniedCount,
+                    query);
+                DisableGoogleProviderForSession(providerName);
+            }
+
+            logger.LogDebug(
+                "Image search provider {ProviderName} returned {ResultCount} images for query '{Query}', but none passed validation.",
+                providerName,
+                searchResults.Count,
+                query);
+            return null;
+        }
+
+        async Task<IReadOnlyList<IImageResult>> FilterSafeImagesAsync(
+            string providerName,
+            IReadOnlyList<IImageResult> imagesToFilter)
+        {
+            var safeImages = new List<IImageResult>();
+            var tasks = imagesToFilter.Select(async image =>
+            {
+                try
+                {
+                    if (!IsValidImageResultUrl(image.Url))
+                    {
+                        logger.LogDebug(
+                            "Image search provider {ProviderName} returned an invalid image URL for query '{Query}': {ImageUrl}",
+                            providerName,
+                            query,
+                            image.Url);
+                        return;
+                    }
+
+                    var safeSearchResult = await google.DetectSafeSearchAsync(image.Url).ConfigureAwait(false);
+                    if (!google.IsImageSafe(safeSearchResult))
+                        return;
+
+                    if (await IsKnownGoogleAccessDeniedImageAsync(providerName, image).ConfigureAwait(false))
+                        return;
+
+                    lock (safeImages)
+                    {
+                        safeImages.Add(image);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    logger.LogDebug(
+                        ex,
+                        "Image result from {ProviderName} failed validation for query '{Query}' and URL '{ImageUrl}'.",
+                        providerName,
+                        query,
+                        image.Url);
+                }
+            }).ToList();
+
+            await Task.WhenAll(tasks).ConfigureAwait(false);
+            return safeImages;
+        }
+
+        static bool IsValidImageResultUrl(string imageUrl)
+        {
+            return Uri.TryCreate(imageUrl, UriKind.Absolute, out var uri)
+                   && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
+        }
+
+        async Task<bool> IsKnownGoogleAccessDeniedImageAsync(string providerName, IImageResult image)
+        {
+            if (!string.Equals(providerName, "Google", StringComparison.Ordinal))
+                return false;
+
+            IReadOnlyList<EntityAnnotation> textAnnotations;
+            try
+            {
+                textAnnotations = await google.DetectTextAsync(image.Url).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                logger.LogDebug(
+                    ex,
+                    "Failed to check Google image result text for query '{Query}' and URL '{ImageUrl}'.",
+                    query,
+                    image.Url);
+                return false;
+            }
+
+            var detectedText = textAnnotations.FirstOrDefault()?.Description;
+            if (string.IsNullOrWhiteSpace(detectedText))
+                return false;
+
+            var isAccessDeniedPlaceholder =
+                detectedText.Contains("This site does not have permission", StringComparison.OrdinalIgnoreCase) &&
+                detectedText.Contains("access or serve", StringComparison.OrdinalIgnoreCase) &&
+                detectedText.Contains("this content", StringComparison.OrdinalIgnoreCase);
+
+            if (!isAccessDeniedPlaceholder)
+                return false;
+
+            System.Threading.Interlocked.Increment(ref googleAccessDeniedImageCount);
+            logger.LogDebug(
+                "Rejected Google access-denied placeholder image for query '{Query}' and URL '{ImageUrl}'.",
+                query,
+                image.Url);
+            return true;
+        }
 
         async Task<IReadOnlyList<IImageResult>?> TrySearchImagesAsync(
             string providerName,
@@ -891,7 +989,7 @@ public partial class Searches(
             if (System.Threading.Interlocked.Exchange(ref googleImageProviderDisabledForSession, 1) == 0)
             {
                 logger.LogWarning(
-                    "Disabling Google image provider for current process after failure. It will retry after bot restart.");
+                    "Disabling Google image provider for current process after failure or unusable results. It will retry after bot restart.");
             }
         }
 

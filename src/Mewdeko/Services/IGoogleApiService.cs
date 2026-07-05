@@ -1,4 +1,4 @@
-﻿using Google.Apis.YouTube.v3.Data;
+using Google.Apis.YouTube.v3.Data;
 using Google.Cloud.Vision.V1;
 
 namespace Mewdeko.Services;
@@ -35,6 +35,13 @@ public interface IGoogleApiService : INService
     /// <param name="imageUrl">The image to check</param>
     /// <returns></returns>
     public Task<SafeSearchAnnotation> DetectSafeSearchAsync(string imageUrl);
+
+    /// <summary>
+    ///     Gets text detected in an image.
+    /// </summary>
+    /// <param name="imageUrl">The image to check.</param>
+    /// <returns>The detected text annotations.</returns>
+    public Task<IReadOnlyList<EntityAnnotation>> DetectTextAsync(string imageUrl);
 
     /// <summary>
     ///     Determines whether an image is considered safe based on the likelihoods in the <see cref="SafeSearchAnnotation" />.
