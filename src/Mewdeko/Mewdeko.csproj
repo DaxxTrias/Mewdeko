@@ -50,7 +50,7 @@
     <PackageReference Include="Figgle.Fonts" Version="0.6.6"/>
     <PackageReference Include="FluentMigrator" Version="8.0.1"/>
     <PackageReference Include="Google.Cloud.Vision.V1" Version="3.8.0"/>
-    <PackageReference Include="GroqApiLibrary" Version="2.0.0"/>
+    <PackageReference Include="GroqApiLibrary" Version="2.2.0"/>
     <PackageReference Include="HarfBuzzSharp" Version="14.2.0"/>
     <PackageReference Include="HarfBuzzSharp.NativeAssets.Linux" Version="14.2.0"/>
     <PackageReference Include="HtmlAgilityPack" Version="1.12.4"/>
