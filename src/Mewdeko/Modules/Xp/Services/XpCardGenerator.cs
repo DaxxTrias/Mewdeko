@@ -19,6 +19,8 @@ public class XpCardGenerator : INService
     private readonly IHttpClientFactory httpClientFactory;
     private readonly ILogger<XpCardGenerator> logger;
     private readonly XpService xpService;
+    private const int DefaultCanvasWidth = 797;
+    private const int DefaultCanvasHeight = 279;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="XpCardGenerator" /> class.
@@ -93,6 +95,8 @@ public class XpCardGenerator : INService
     /// <returns>A stream containing the generated image.</returns>
     private async Task<Stream> GenerateXpImageAsync(FullUserStats stats, Template template)
     {
+        ApplyDefaultTemplateLayoutFixups(template);
+
         // Load the background image
         await using var xpstream = new MemoryStream();
         var xpImage = await GetXpImageAsync(stats.FullGuildStats.GuildId);
@@ -235,7 +239,7 @@ public class XpCardGenerator : INService
         }
 
         // Draw user avatar
-        if (stats.User.GetAvatarUrl() != null && template.TemplateUser.ShowIcon)
+        if (template.TemplateUser.ShowIcon)
         {
             try
             {
@@ -247,27 +251,11 @@ public class XpCardGenerator : INService
                 {
                     var avatarData = await httpResponse.Content.ReadAsByteArrayAsync();
                     await using var avatarStream = new MemoryStream(avatarData);
-                    var avatarImgData = SKData.Create(avatarStream);
-                    var avatarImg = SKBitmap.Decode(avatarImgData);
+                    using var avatarImgData = SKData.Create(avatarStream);
+                    using var avatarImg = SKBitmap.Decode(avatarImgData);
 
-                    // Create a new bitmap with the desired size
-                    var targetSize = new SKImageInfo(
-                        template.TemplateUser.IconSizeX,
-                        template.TemplateUser.IconSizeY);
-
-                    // Create sampling options for scaling the avatar
-                    var avatarSamplingOptions = new SKSamplingOptions(
-                        SKFilterMode.Linear,
-                        SKMipmapMode.Nearest);
-
-                    var resizedAvatar = new SKBitmap(targetSize);
-                    avatarImg.ScalePixels(resizedAvatar, avatarSamplingOptions);
-
-                    // Apply rounded corners
-                    var roundedAvatar = ApplyRoundedCorners(resizedAvatar, template.TemplateUser.IconSizeX / 2);
-
-                    // Draw the avatar onto the main image
-                    canvas.DrawImage(roundedAvatar, template.TemplateUser.IconX, template.TemplateUser.IconY);
+                    if (avatarImg != null)
+                        DrawCircularAvatar(canvas, avatarImg, template.TemplateUser);
                 }
             }
             catch (Exception ex)
@@ -283,40 +271,68 @@ public class XpCardGenerator : INService
     }
 
     /// <summary>
-    ///     Applies rounded corners to an image.
+    ///     Corrects the historic default template values that don't line up with the default XP card art.
     /// </summary>
-    /// <param name="src">The source image.</param>
-    /// <param name="cornerRadius">The corner radius.</param>
-    /// <returns>An image with rounded corners.</returns>
-    private static SKImage ApplyRoundedCorners(SKBitmap src, float cornerRadius)
+    /// <param name="template">The template to normalize.</param>
+    private static void ApplyDefaultTemplateLayoutFixups(Template template)
     {
-        var width = src.Width;
-        var height = src.Height;
-        var info = new SKImageInfo(width, height);
+        if (template.OutputSizeX != DefaultCanvasWidth || template.OutputSizeY != DefaultCanvasHeight)
+            return;
 
-        using var surface = SKSurface.Create(info);
-        var canvas = surface.Canvas;
+        if (template.TemplateUser is
+            {
+                IconX: 27, IconY: 24, IconSizeX: 73, IconSizeY: 74
+            })
+        {
+            template.TemplateUser.IconY = 8;
+            template.TemplateUser.IconSizeY = 73;
+        }
+
+        if (template is
+            {
+                TimeOnLevelX: 50, TimeOnLevelY: 204, TimeOnLevelFontSize: 20
+            })
+        {
+            template.TimeOnLevelX = 42;
+            template.TimeOnLevelY = 240;
+            template.TimeOnLevelFontSize = 15;
+        }
+    }
+
+    /// <summary>
+    ///     Draws the user avatar as a centered, circular crop inside the configured icon box.
+    /// </summary>
+    /// <param name="canvas">The target canvas.</param>
+    /// <param name="avatar">The decoded avatar bitmap.</param>
+    /// <param name="templateUser">The user template settings.</param>
+    private static void DrawCircularAvatar(SKCanvas canvas, SKBitmap avatar, TemplateUser templateUser)
+    {
+        var diameter = Math.Min(templateUser.IconSizeX, templateUser.IconSizeY);
+        if (diameter <= 0)
+            return;
+
+        var left = templateUser.IconX + ((templateUser.IconSizeX - diameter) / 2f);
+        var top = templateUser.IconY + ((templateUser.IconSizeY - diameter) / 2f);
+        var destination = new SKRect(left, top, left + diameter, top + diameter);
+
+        var sourceSize = Math.Min(avatar.Width, avatar.Height);
+        var sourceLeft = (avatar.Width - sourceSize) / 2f;
+        var sourceTop = (avatar.Height - sourceSize) / 2f;
+        var source = new SKRect(sourceLeft, sourceTop, sourceLeft + sourceSize, sourceTop + sourceSize);
+
+        using var clipPath = new SKPath();
+        clipPath.AddOval(destination);
+
+        canvas.Save();
+        canvas.ClipPath(clipPath, SKClipOperation.Intersect, true);
 
         using var paint = new SKPaint
         {
-            IsAntialias = true, Color = SKColors.White
+            IsAntialias = true
         };
 
-        var rect = new SKRect(0, 0, width, height);
-        using var roundRect = new SKRoundRect();
-        roundRect.SetRectRadii(rect, [
-            new SKPoint(cornerRadius, cornerRadius), new SKPoint(cornerRadius, cornerRadius),
-            new SKPoint(cornerRadius, cornerRadius), new SKPoint(cornerRadius, cornerRadius)
-        ]);
-
-        // Clear canvas and create clipping region
-        canvas.Clear(SKColors.Transparent);
-        canvas.ClipRoundRect(roundRect, SKClipOperation.Intersect, true);
-
-        // Draw the bitmap
-        canvas.DrawBitmap(src, 0, 0, paint);
-
-        return surface.Snapshot();
+        canvas.DrawBitmap(avatar, source, destination, paint);
+        canvas.Restore();
     }
 
     /// <summary>
@@ -456,9 +472,9 @@ public class XpCardGenerator : INService
             TextY = 70,
             ShowText = true,
             IconX = 27,
-            IconY = 24,
+            IconY = 8,
             IconSizeX = 73,
-            IconSizeY = 74,
+            IconSizeY = 73,
             ShowIcon = true
         };
 
@@ -477,9 +493,9 @@ public class XpCardGenerator : INService
             OutputSizeX = 797,
             OutputSizeY = 279,
             TimeOnLevelFormat = "{0}d{1}h{2}m",
-            TimeOnLevelX = 50,
-            TimeOnLevelY = 204,
-            TimeOnLevelFontSize = 20,
+            TimeOnLevelX = 42,
+            TimeOnLevelY = 240,
+            TimeOnLevelFontSize = 15,
             TimeOnLevelColor = "FF000000",
             ShowTimeOnLevel = true,
             AwardedX = 445,

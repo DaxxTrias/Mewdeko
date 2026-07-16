@@ -1,5 +1,6 @@
 using Mewdeko.Modules.Utility.Services;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Mewdeko.Controllers;
@@ -10,8 +11,16 @@ namespace Mewdeko.Controllers;
 [ApiController]
 [Route("botapi/[controller]/{guildId}")]
 [Authorize("ApiKeyPolicy")]
-public class MessageCountController(DiscordShardedClient client, MessageCountService messageCountService) : Controller
+public class MessageCountController(
+    DiscordShardedClient client,
+    MessageCountService messageCountService,
+    IMemoryCache cache) : Controller
 {
+    private static string StatsCacheKey(ulong guildId)
+    {
+        return $"messagecount:dashboard:stats:{guildId}";
+    }
+
     /// <summary>
     ///     Gets daily message statistics for the guild
     /// </summary>
@@ -151,32 +160,45 @@ public class MessageCountController(DiscordShardedClient client, MessageCountSer
         var guild = client.GetGuild(guildId);
         if (guild == null) return NotFound("Guild not found");
 
+        if (cache.TryGetValue(StatsCacheKey(guildId), out var cachedStats))
+            return Ok(cachedStats);
+
         var (counts, enabled) = await messageCountService.GetAllCountsForEntity(
             MessageCountService.CountQueryType.Guild, guildId, guildId);
 
         if (!enabled)
-            return Ok(new
+        {
+            var disabledStats = new
             {
                 enabled = false,
                 topUsers = Array.Empty<object>(),
                 topChannels = Array.Empty<object>(),
+                leastActiveUser = (object?)null,
+                leastActiveChannel = (object?)null,
+                busiestHours = Array.Empty<object>(),
+                busiestDays = Array.Empty<object>(),
                 dailyMessages = 0,
                 totalMessages = 0
-            });
+            };
 
-        // Get top users
+            cache.Set(StatsCacheKey(guildId), disabledStats, TimeSpan.FromSeconds(15));
+            return Ok(disabledStats);
+        }
+
+        var totalMessages = counts.Sum(c => (long)c.Count);
+        var dayCutoff = DateTime.UtcNow.AddDays(-1);
+
         var topUsers = counts.GroupBy(c => c.UserId)
             .Select(g => new
             {
                 userId = g.Key.ToString(),
                 totalMessages = g.Sum(x => (long)x.Count),
-                dailyMessages = g.Where(x => x.DateAdded >= DateTime.UtcNow.AddDays(-1)).Sum(x => (long)x.Count)
+                dailyMessages = g.Where(x => x.DateAdded >= dayCutoff).Sum(x => (long)x.Count),
+                percentage = totalMessages > 0 ? Math.Round(g.Sum(x => (long)x.Count) * 100.0 / totalMessages, 2) : 0
             })
             .OrderByDescending(u => u.totalMessages)
-            .Take(10)
             .ToArray();
 
-        // Get top channels
         var topChannels = counts.GroupBy(c => c.ChannelId)
             .Where(g => g.Key != 0) // Filter out entries without channel
             .Select(g => new
@@ -184,24 +206,46 @@ public class MessageCountController(DiscordShardedClient client, MessageCountSer
                 channelId = g.Key.ToString(),
                 channelName = guild.GetTextChannel(g.Key)?.Name ?? "Unknown Channel",
                 totalMessages = g.Sum(x => (long)x.Count),
-                dailyMessages = g.Where(x => x.DateAdded >= DateTime.UtcNow.AddDays(-1)).Sum(x => (long)x.Count)
+                dailyMessages = g.Where(x => x.DateAdded >= dayCutoff).Sum(x => (long)x.Count),
+                percentage = totalMessages > 0 ? Math.Round(g.Sum(x => (long)x.Count) * 100.0 / totalMessages, 2) : 0
             })
             .OrderByDescending(c => c.totalMessages)
-            .Take(10)
             .ToArray();
 
-        var totalMessages = counts.Sum(c => (long)c.Count);
-        var dailyMessages = counts.Where(c => c.DateAdded >= DateTime.UtcNow.AddDays(-1)).Sum(c => (long)c.Count);
+        var busiestHours = (await messageCountService.GetBusiestHours(guildId))
+            .OrderBy(h => h.Hour)
+            .Select(h => new
+            {
+                hour = h.Hour, messageCount = h.Count
+            })
+            .ToArray();
 
-        return Ok(new
+        var busiestDays = (await messageCountService.GetBusiestDays(guildId))
+            .OrderBy(d => (int)d.Day)
+            .Select(d => new
+            {
+                day = d.Day.ToString(), messageCount = d.Count
+            })
+            .ToArray();
+
+        var dailyMessages = counts.Where(c => c.DateAdded >= dayCutoff).Sum(c => (long)c.Count);
+
+        var stats = new
         {
             enabled = true,
-            topUsers,
-            topChannels,
+            topUsers = topUsers.Take(10).ToArray(),
+            topChannels = topChannels.Take(10).ToArray(),
+            leastActiveUser = topUsers.LastOrDefault(),
+            leastActiveChannel = topChannels.LastOrDefault(),
+            busiestHours,
+            busiestDays,
             dailyMessages,
             totalMessages,
             lastUpdated = DateTime.UtcNow
-        });
+        };
+
+        cache.Set(StatsCacheKey(guildId), stats, TimeSpan.FromSeconds(15));
+        return Ok(stats);
     }
 
     /// <summary>
@@ -234,6 +278,7 @@ public class MessageCountController(DiscordShardedClient client, MessageCountSer
         try
         {
             var enabled = await messageCountService.ToggleGuildMessageCount(guildId);
+            cache.Remove(StatsCacheKey(guildId));
             return Ok(new
             {
                 enabled, message = enabled ? "Message counting enabled" : "Message counting disabled"
@@ -260,7 +305,8 @@ public class MessageCountController(DiscordShardedClient client, MessageCountSer
 
         try
         {
-            await messageCountService.ResetCount(guildId, userId, channelId);
+            var removedAny = await messageCountService.ResetCount(guildId, userId, channelId);
+            cache.Remove(StatsCacheKey(guildId));
 
             var message = (userId, channelId) switch
             {
@@ -272,7 +318,7 @@ public class MessageCountController(DiscordShardedClient client, MessageCountSer
 
             return Ok(new
             {
-                message
+                message, removedAny
             });
         }
         catch (Exception ex)

@@ -496,6 +496,18 @@ public class GoogleApiService : IGoogleApiService
         return response;
     }
 
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<EntityAnnotation>> DetectTextAsync(string imageUrl)
+    {
+        if (visionClient is null)
+            return [];
+        if (string.IsNullOrWhiteSpace(imageUrl))
+            throw new ArgumentNullException(nameof(imageUrl), "Image URL cannot be null or empty.");
+
+        var image = Image.FromUri(imageUrl);
+        return await visionClient.DetectTextAsync(image).ConfigureAwait(false);
+    }
+
 
     /// <summary>
     ///     Gets video links by keyword.

@@ -1799,6 +1799,16 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
 
                 // User posted in honeypot channel - punish them
                 postChannelStats.Increment();
+                postChannelStats.RecentViolations.Enqueue((guildUser.Id, guildUser.Username, DateTimeOffset.UtcNow));
+                while (postChannelStats.RecentViolations.Count > 10)
+                    postChannelStats.RecentViolations.TryDequeue(out _);
+
+                if (settings.StatusChannelId is null)
+                {
+                    settings.StatusChannelId = channel.Id;
+                    await using var statusDb = await dbFactory.CreateConnectionAsync();
+                    await statusDb.UpdateAsync(settings).ConfigureAwait(false);
+                }
 
                 if (settings.DeleteMessages)
                 {
@@ -1830,6 +1840,8 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
                 await PunishUsers(settings.Action, ProtectionType.PostChannelBan, settings.PunishDuration,
                         settings.RoleId, guildUser)
                     .ConfigureAwait(false);
+
+                await UpdateAntiPostChannelStatusEmbedAsync(channel.Guild.Id).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -1905,7 +1917,8 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
     ///     Starts the anti-post-channel protection for a guild.
     /// </summary>
     public async Task<AntiPostChannelStats?> StartAntiPostChannelAsync(ulong guildId, PunishmentAction action,
-        int punishDuration, ulong? roleId, bool deleteMessages, bool notifyUser, bool ignoreBots)
+        int punishDuration, ulong? roleId, bool deleteMessages, bool notifyUser, bool ignoreBots,
+        ulong? statusChannelId = null)
     {
         if (!IsDurationAllowed(action)) punishDuration = 0;
 
@@ -1924,6 +1937,11 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
         settings.DeleteMessages = deleteMessages;
         settings.NotifyUser = notifyUser;
         settings.IgnoreBots = ignoreBots;
+        if (statusChannelId.HasValue)
+        {
+            settings.StatusChannelId = statusChannelId.Value;
+            settings.StatusMessageId = null;
+        }
 
         if (isNew)
             await db.InsertAsync(settings).ConfigureAwait(false);
@@ -1932,6 +1950,74 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
 
         await Initialize(guildId);
         return antiPostChannelGuilds.GetValueOrDefault(guildId);
+    }
+
+    /// <summary>
+    ///     Posts or updates the anti-post-channel status embed.
+    /// </summary>
+    /// <param name="guildId">The guild ID whose status embed should be updated.</param>
+    public async Task UpdateAntiPostChannelStatusEmbedAsync(ulong guildId)
+    {
+        if (!antiPostChannelGuilds.TryGetValue(guildId, out var stats))
+            return;
+
+        var settings = stats.AntiPostChannelSettings;
+        if (settings.StatusChannelId is not { } channelId)
+            return;
+
+        var guild = client.GetGuild(guildId);
+        if (guild?.GetChannel(channelId) is not ITextChannel textChannel)
+            return;
+
+        var thumbnailUrl = Emote.TryParse("<:HaneAngry:1026529071825420408>", out var emote) ? emote.Url : null;
+        var embed = new EmbedBuilder()
+            .WithTitle(strings.AntiPostChannelStatusWarning(guildId,
+                ((PunishmentAction)settings.Action).ToString().ToLower()))
+            .WithThumbnailUrl(thumbnailUrl)
+            .WithErrorColor()
+            .AddField(strings.AntiPostChannelStatusAction(guildId), ((PunishmentAction)settings.Action).ToString(),
+                true)
+            .AddField(strings.AntiPostChannelStatusChannels(guildId),
+                settings.AntiPostChannelChannels?.Count().ToString() ?? "0", true)
+            .AddField(strings.AntiPostChannelStatusTotal(guildId), stats.Counter.ToString(), true)
+            .AddField(strings.AntiPostChannelStatusDelete(guildId),
+                settings.DeleteMessages ? strings.Yes(guildId) : strings.No(guildId), true)
+            .AddField(strings.AntiPostChannelStatusNotify(guildId),
+                settings.NotifyUser ? strings.Yes(guildId) : strings.No(guildId), true)
+            .WithTimestamp(DateTimeOffset.UtcNow);
+
+        var violations = stats.RecentViolations.ToArray();
+        if (violations.Length > 0)
+        {
+            var violationList = string.Join("\n",
+                violations.Reverse().Select((v, i) =>
+                    $"`{i + 1}.` {v.Username} (`{v.UserId}`) - <t:{v.PunishedAt.ToUnixTimeSeconds()}:R>"));
+            embed.AddField(strings.AntiPostChannelStatusViolations(guildId), violationList);
+        }
+
+        try
+        {
+            if (settings.StatusMessageId is { } messageId)
+            {
+                var message = await textChannel.GetMessageAsync(messageId).ConfigureAwait(false);
+                if (message is IUserMessage userMessage)
+                {
+                    await userMessage.ModifyAsync(x => x.Embed = embed.Build()).ConfigureAwait(false);
+                    return;
+                }
+            }
+
+            var newMessage = await textChannel.SendMessageAsync(embed: embed.Build()).ConfigureAwait(false);
+            settings.StatusMessageId = newMessage.Id;
+            settings.StatusChannelId = channelId;
+
+            await using var db = await dbFactory.CreateConnectionAsync();
+            await db.UpdateAsync(settings).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to update anti-post-channel status embed for guild {GuildId}", guildId);
+        }
     }
 
     /// <summary>
@@ -1973,6 +2059,7 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
         }).ConfigureAwait(false);
 
         await Initialize(guildId);
+        await UpdateAntiPostChannelStatusEmbedAsync(guildId).ConfigureAwait(false);
         return true;
     }
 
@@ -1995,6 +2082,7 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
         if (deleted > 0)
         {
             await Initialize(guildId);
+            await UpdateAntiPostChannelStatusEmbedAsync(guildId).ConfigureAwait(false);
             return true;
         }
 

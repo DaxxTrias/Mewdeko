@@ -1,6 +1,7 @@
 using System.IO;
 using System.Text;
 using System.Text.Json;
+using DataModel;
 using Discord.Interactions;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
@@ -63,6 +64,7 @@ public partial class Utility
             user = await ctx.Channel.GetUserAsync(msg.UserId).ConfigureAwait(false) ??
                    await client.Rest.GetUserAsync(msg.UserId).ConfigureAwait(false);
             var attachments = GetAttachments(msg);
+            var preservedFiles = Service.BuildPreservedSnipeAttachmentFiles(msg);
 
             var em = new EmbedBuilder
             {
@@ -86,37 +88,10 @@ public partial class Utility
                 em.AddField("Replied To", msg.ReferenceMessage);
 
             em.AddField("Sent", TimestampTag.FromDateTimeOffset(msg.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
-            AddAttachmentsField(em, attachments);
+            AddAttachmentsField(em, attachments, preservedFiles.Count > 0);
             SnipeReactionFormatter.AddReactorsField(em, reactionTracker, msg.MessageId, msg.MessageTimestamp);
 
-            if (!string.IsNullOrEmpty(msg.JsonData))
-            {
-                await using var ms = new MemoryStream();
-                await using var writer = new StreamWriter(ms);
-                await writer.WriteAsync(msg.JsonData);
-                await writer.FlushAsync();
-                ms.Position = 0;
-
-                await ctx.Interaction.RespondWithFileAsync(ms, $"snipe_{msg.MessageId}.json", embed: em.Build(),
-                    components: config.Data.ShowInviteButton
-                        ? new ComponentBuilder()
-                            .WithButton(style: ButtonStyle.Link,
-                                url: "",
-                                label: "",
-                                emote: "".ToIEmote()).Build()
-                        : null).ConfigureAwait(false);
-            }
-            else
-            {
-                await ctx.Interaction.RespondAsync(embed: em.Build(),
-                    components: config.Data.ShowInviteButton
-                        ? new ComponentBuilder()
-                            .WithButton(style: ButtonStyle.Link,
-                                url: "",
-                                label: "",
-                                emote: "".ToIEmote()).Build()
-                        : null).ConfigureAwait(false);
-            }
+            await RespondWithSnipeAsync(msg, em, preservedFiles).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -155,6 +130,7 @@ public partial class Utility
             user = await ctx.Channel.GetUserAsync(msg.UserId).ConfigureAwait(false) ??
                    await client.Rest.GetUserAsync(msg.UserId).ConfigureAwait(false);
             var attachments = GetAttachments(msg);
+            var preservedFiles = Service.BuildPreservedSnipeAttachmentFiles(msg);
 
             var em = new EmbedBuilder
             {
@@ -178,37 +154,10 @@ public partial class Utility
                 em.AddField("Replied To", msg.ReferenceMessage);
 
             em.AddField("Sent", TimestampTag.FromDateTimeOffset(msg.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
-            AddAttachmentsField(em, attachments);
+            AddAttachmentsField(em, attachments, preservedFiles.Count > 0);
             SnipeReactionFormatter.AddReactorsField(em, reactionTracker, msg.MessageId, msg.MessageTimestamp);
 
-            if (!string.IsNullOrEmpty(msg.JsonData))
-            {
-                await using var ms = new MemoryStream();
-                await using var writer = new StreamWriter(ms);
-                await writer.WriteAsync(msg.JsonData);
-                await writer.FlushAsync();
-                ms.Position = 0;
-
-                await ctx.Interaction.RespondWithFileAsync(ms, $"snipe_{msg.MessageId}.json", embed: em.Build(),
-                    components: config.Data.ShowInviteButton
-                        ? new ComponentBuilder()
-                            .WithButton(style: ButtonStyle.Link,
-                                url: "",
-                                label: "",
-                                emote: "".ToIEmote()).Build()
-                        : null).ConfigureAwait(false);
-            }
-            else
-            {
-                await ctx.Interaction.RespondAsync(embed: em.Build(),
-                    components: config.Data.ShowInviteButton
-                        ? new ComponentBuilder()
-                            .WithButton(style: ButtonStyle.Link,
-                                url: "",
-                                label: "",
-                                emote: "".ToIEmote()).Build()
-                        : null).ConfigureAwait(false);
-            }
+            await RespondWithSnipeAsync(msg, em, preservedFiles).ConfigureAwait(false);
         }
 
         private async Task SnipeListBase(bool edited, int amount = 5, ITextChannel channel = null, IUser user = null)
@@ -268,7 +217,7 @@ public partial class Utility
                     builder.AddField("Replied To", msg1.ReferenceMessage);
 
                 builder.AddField("Sent", TimestampTag.FromDateTimeOffset(msg1.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
-                AddAttachmentsField(builder, attachments);
+                AddAttachmentsField(builder, attachments, false);
                 SnipeReactionFormatter.AddReactorsField(builder, reactionTracker, msg1.MessageId, msg1.MessageTimestamp);
 
                 return builder;
@@ -395,6 +344,87 @@ public partial class Utility
             await ReplyConfirmAsync("Deleted message auto-log disabled.").ConfigureAwait(false);
         }
 
+        /// <summary>
+        ///     Adds a user id to the automatic deleted-message log ignore list.
+        /// </summary>
+        /// <param name="userId">The raw user id or mention to ignore.</param>
+        /// <param name="note">Optional context for why the user is ignored.</param>
+        [SlashCommand("deletedlogignoreadd", "Exclude a user id from automatic deleted-message logging.")]
+        [RequireContext(ContextType.Guild)]
+        [SlashUserPerm(GuildPermission.Administrator)]
+        [CheckPermissions]
+        public async Task DeletedLogIgnoreAdd(string userId, string? note = null)
+        {
+            if (!UtilityService.TryParseDiscordUserId(userId, out var parsedUserId))
+            {
+                await ReplyErrorAsync("Provide a raw Discord user ID or user mention.").ConfigureAwait(false);
+                return;
+            }
+
+            var added = await Service.AddDeletedMessageLogIgnoredUser(ctx.Guild.Id, parsedUserId, note)
+                .ConfigureAwait(false);
+
+            await ReplyConfirmAsync(added
+                    ? $"Deleted message auto-log will now ignore user ID `{parsedUserId}`."
+                    : $"User ID `{parsedUserId}` was already ignored. Note updated if one was provided.")
+                .ConfigureAwait(false);
+        }
+
+        /// <summary>
+        ///     Removes a user id from the automatic deleted-message log ignore list.
+        /// </summary>
+        /// <param name="userId">The raw user id or mention to remove.</param>
+        [SlashCommand("deletedlogignoreremove", "Remove a user id from automatic deleted-message log ignores.")]
+        [RequireContext(ContextType.Guild)]
+        [SlashUserPerm(GuildPermission.Administrator)]
+        [CheckPermissions]
+        public async Task DeletedLogIgnoreRemove(string userId)
+        {
+            if (!UtilityService.TryParseDiscordUserId(userId, out var parsedUserId))
+            {
+                await ReplyErrorAsync("Provide a raw Discord user ID or user mention.").ConfigureAwait(false);
+                return;
+            }
+
+            var removed = await Service.RemoveDeletedMessageLogIgnoredUser(ctx.Guild.Id, parsedUserId)
+                .ConfigureAwait(false);
+
+            await ReplyConfirmAsync(removed
+                    ? $"Deleted message auto-log no longer ignores user ID `{parsedUserId}`."
+                    : $"User ID `{parsedUserId}` was not on the deleted message auto-log ignore list.")
+                .ConfigureAwait(false);
+        }
+
+        /// <summary>
+        ///     Lists users ignored by the automatic deleted-message log.
+        /// </summary>
+        [SlashCommand("deletedlogignorelist", "List user IDs excluded from automatic deleted-message logging.")]
+        [RequireContext(ContextType.Guild)]
+        [SlashUserPerm(GuildPermission.Administrator)]
+        [CheckPermissions]
+        public async Task DeletedLogIgnoreList()
+        {
+            var ignoredUsers = await Service.GetDeletedMessageLogIgnoredUsers(ctx.Guild.Id).ConfigureAwait(false);
+            if (ignoredUsers.Count == 0)
+            {
+                await ReplyConfirmAsync("Deleted message auto-log has no ignored users.").ConfigureAwait(false);
+                return;
+            }
+
+            var lines = ignoredUsers
+                .Take(50)
+                .Select((x, i) => FormatDeletedLogIgnoredUser(i + 1, x));
+            var description = string.Join("\n", lines);
+            if (ignoredUsers.Count > 50)
+                description += $"\n...and {ignoredUsers.Count - 50} more.";
+
+            await ctx.Interaction.RespondAsync(embed: new EmbedBuilder()
+                .WithOkColor()
+                .WithTitle("Deleted Message Auto-Log Ignored Users")
+                .WithDescription(description.TrimTo(4096))
+                .Build()).ConfigureAwait(false);
+        }
+
         private static string GetDisplayMessage(SnipeStore message, IReadOnlyList<SnipeAttachmentStore> attachments)
         {
             if (!string.IsNullOrWhiteSpace(message.Message))
@@ -424,7 +454,9 @@ public partial class Utility
                     {
                         Filename = x.Filename,
                         Url = x.Url,
-                        ProxyUrl = x.ProxyUrl
+                        ProxyUrl = x.ProxyUrl,
+                        Size = x.Size,
+                        ContentType = x.ContentType
                     }).ToList();
             }
             catch
@@ -433,21 +465,24 @@ public partial class Utility
             }
         }
 
-        private static void AddAttachmentsField(EmbedBuilder embed, IReadOnlyList<SnipeAttachmentStore> attachments)
+        private static void AddAttachmentsField(EmbedBuilder embed, IReadOnlyList<SnipeAttachmentStore> attachments,
+            bool preservedFilesAttached)
         {
-            var value = BuildAttachmentsFieldValue(attachments);
+            var value = BuildAttachmentsFieldValue(attachments, preservedFilesAttached);
             if (!string.IsNullOrWhiteSpace(value))
                 embed.AddField("Attachments", value);
         }
 
-        private static void AddAttachmentsField(PageBuilder embed, IReadOnlyList<SnipeAttachmentStore> attachments)
+        private static void AddAttachmentsField(PageBuilder embed, IReadOnlyList<SnipeAttachmentStore> attachments,
+            bool preservedFilesAttached)
         {
-            var value = BuildAttachmentsFieldValue(attachments);
+            var value = BuildAttachmentsFieldValue(attachments, preservedFilesAttached);
             if (!string.IsNullOrWhiteSpace(value))
                 embed.AddField("Attachments", value);
         }
 
-        private static string? BuildAttachmentsFieldValue(IReadOnlyList<SnipeAttachmentStore> attachments)
+        private static string? BuildAttachmentsFieldValue(IReadOnlyList<SnipeAttachmentStore> attachments,
+            bool preservedFilesAttached)
         {
             if (attachments.Count == 0)
                 return null;
@@ -457,14 +492,24 @@ public partial class Utility
             for (var i = 0; i < attachments.Count; i++)
             {
                 var attachment = attachments[i];
-                var url = attachment.Url ?? attachment.ProxyUrl;
-                if (string.IsNullOrWhiteSpace(url))
-                    continue;
-
                 var fileName = string.IsNullOrWhiteSpace(attachment.Filename)
                     ? $"attachment-{i + 1}"
                     : attachment.Filename;
-                var line = $"[{fileName}]({url})";
+                string line;
+                if (!string.IsNullOrWhiteSpace(attachment.PreservedCacheKey))
+                {
+                    line = preservedFilesAttached
+                        ? $"{fileName} (preserved file attached)"
+                        : $"{fileName} (preserved file cached)";
+                }
+                else
+                {
+                    var url = attachment.Url ?? attachment.ProxyUrl;
+                    if (string.IsNullOrWhiteSpace(url))
+                        continue;
+
+                    line = $"[{fileName}]({url})";
+                }
 
                 if (sb.Length > 0)
                     line = $"\n{line}";
@@ -487,6 +532,58 @@ public partial class Utility
             }
 
             return sb.ToString();
+        }
+
+        private async Task RespondWithSnipeAsync(SnipeStore msg, EmbedBuilder embed, List<FileAttachment> files)
+        {
+            MemoryStream? jsonStream = null;
+            try
+            {
+                if (!string.IsNullOrEmpty(msg.JsonData))
+                {
+                    jsonStream = new MemoryStream(Encoding.UTF8.GetBytes(msg.JsonData));
+                    files.Add(new FileAttachment(jsonStream, $"snipe_{msg.MessageId}.json"));
+                }
+
+                var components = GetInviteButtonComponents();
+                if (files.Count > 0)
+                {
+                    await ctx.Interaction.RespondWithFilesAsync(files, embed: embed.Build(), components: components)
+                        .ConfigureAwait(false);
+                }
+                else
+                {
+                    await ctx.Interaction.RespondAsync(embed: embed.Build(), components: components)
+                        .ConfigureAwait(false);
+                }
+            }
+            finally
+            {
+                foreach (var file in files)
+                    file.Dispose();
+
+                jsonStream?.Dispose();
+            }
+        }
+
+        private MessageComponent? GetInviteButtonComponents()
+        {
+            return config.Data.ShowInviteButton
+                ? new ComponentBuilder()
+                    .WithButton(style: ButtonStyle.Link,
+                        url: "",
+                        label: "",
+                        emote: "".ToIEmote()).Build()
+                : null;
+        }
+
+        private static string FormatDeletedLogIgnoredUser(int index, DeletedMessageLogIgnoredUser ignoredUser)
+        {
+            var note = string.IsNullOrWhiteSpace(ignoredUser.Note)
+                ? string.Empty
+                : $" - {Format.Sanitize(ignoredUser.Note).TrimTo(120)}";
+
+            return $"{index}. `{ignoredUser.UserId}`{note}";
         }
     }
 }

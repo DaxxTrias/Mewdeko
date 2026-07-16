@@ -1,4 +1,5 @@
 using System.IO;
+using System.Net.Http;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -38,12 +39,17 @@ public partial class UtilityService : INService
     private static readonly TimeSpan SnipeRetention = TimeSpan.FromDays(3);
     private static readonly ConcurrentDictionary<ulong, SemaphoreSlim> SnipeLocks = new();
     private const string SnipeSnapshotCachePrefix = "snipe:snapshot:";
+    private const string PreservedSnipeAttachmentCachePrefix = "snipe:attachment:";
     private const string DeletedMessageLogSettingsCachePrefix = "deleted-message-log:settings:";
+    private const string DeletedMessageLogIgnoredUsersCachePrefix = "deleted-message-log:ignored-users:";
+    private const int MaxPreservedAttachmentBytes = 8 * 1024 * 1024;
+    private const int MaxPreservedAttachmentsPerMessage = 5;
 
     private readonly IDataCache cache;
     private readonly DiscordShardedClient client;
     private readonly IDataConnectionFactory dbFactory;
     private readonly GuildSettingsService guildSettings;
+    private readonly IHttpClientFactory httpFactory;
     private readonly ILogger<UtilityService> logger;
     private readonly IMemoryCache memoryCache;
 
@@ -55,6 +61,7 @@ public partial class UtilityService : INService
     /// <param name="guildSettings">The guild settings service.</param>
     /// <param name="eventHandler">The event handler service.</param>
     /// <param name="client">The Discord client.</param>
+    /// <param name="httpFactory">Factory used to download attachment evidence before Discord invalidates it.</param>
     /// <param name="memoryCache">The memory cache used for recent message snapshots.</param>
     /// <param name="logger">The logger instance for structured logging.</param>
     public UtilityService(
@@ -63,6 +70,7 @@ public partial class UtilityService : INService
         GuildSettingsService guildSettings,
         EventHandler eventHandler,
         DiscordShardedClient client,
+        IHttpClientFactory httpFactory,
         IMemoryCache memoryCache,
         ILogger<UtilityService> logger)
     {
@@ -74,6 +82,7 @@ public partial class UtilityService : INService
         this.cache = cache;
         this.guildSettings = guildSettings;
         this.client = client;
+        this.httpFactory = httpFactory;
         this.memoryCache = memoryCache;
         this.logger = logger;
     }
@@ -306,9 +315,19 @@ public partial class UtilityService : INService
         return $"{DeletedMessageLogSettingsCachePrefix}{guildId}";
     }
 
+    private static string GetDeletedMessageLogIgnoredUsersCacheKey(ulong guildId)
+    {
+        return $"{DeletedMessageLogIgnoredUsersCachePrefix}{guildId}";
+    }
+
     private void CacheDeletedMessageLogSettings(DeletedMessageLogSetting settings)
     {
         memoryCache.Set(GetDeletedMessageLogSettingsCacheKey(settings.GuildId), settings, TimeSpan.FromMinutes(5));
+    }
+
+    private void ClearDeletedMessageLogIgnoredUsersCache(ulong guildId)
+    {
+        memoryCache.Remove(GetDeletedMessageLogIgnoredUsersCacheKey(guildId));
     }
 
     private static DeletedMessageLogSetting CreateDisabledDeletedMessageLogSettings(ulong guildId)
@@ -324,6 +343,122 @@ public partial class UtilityService : INService
     private static bool IsDeletedMessageLogEnabled(DeletedMessageLogSetting settings)
     {
         return settings.Enabled && settings.ChannelId is > 0;
+    }
+
+    /// <summary>
+    ///     Parses a raw Discord user id or user mention.
+    /// </summary>
+    /// <param name="input">The raw id or mention.</param>
+    /// <param name="userId">The parsed user id.</param>
+    /// <returns>True when parsing succeeded.</returns>
+    public static bool TryParseDiscordUserId(string? input, out ulong userId)
+    {
+        userId = 0;
+        if (string.IsNullOrWhiteSpace(input))
+            return false;
+
+        var candidate = input.Trim();
+        if (candidate.StartsWith("<@", StringComparison.Ordinal) && candidate.EndsWith('>'))
+            candidate = candidate[2..^1].TrimStart('!');
+
+        return ulong.TryParse(candidate, out userId) && userId > 0;
+    }
+
+    /// <summary>
+    ///     Adds a user id to the automatic deleted-message log ignore list.
+    /// </summary>
+    /// <param name="guildId">The guild id.</param>
+    /// <param name="userId">The user id to ignore.</param>
+    /// <param name="note">Optional context for why the user is ignored.</param>
+    /// <returns>True when a new ignore entry was added.</returns>
+    public async Task<bool> AddDeletedMessageLogIgnoredUser(ulong guildId, ulong userId, string? note = null)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+        var ignoredUsers = db.GetTable<DeletedMessageLogIgnoredUser>();
+        var existing = await ignoredUsers
+            .FirstOrDefaultAsync(x => x.GuildId == guildId && x.UserId == userId)
+            .ConfigureAwait(false);
+
+        if (existing is not null)
+        {
+            if (!string.IsNullOrWhiteSpace(note) && !string.Equals(existing.Note, note, StringComparison.Ordinal))
+            {
+                existing.Note = note.TrimTo(500);
+                existing.DateModified = DateTime.UtcNow;
+                await db.UpdateAsync(existing).ConfigureAwait(false);
+                ClearDeletedMessageLogIgnoredUsersCache(guildId);
+            }
+
+            return false;
+        }
+
+        var now = DateTime.UtcNow;
+        await ignoredUsers.InsertAsync(() => new DeletedMessageLogIgnoredUser
+        {
+            GuildId = guildId,
+            UserId = userId,
+            Note = string.IsNullOrWhiteSpace(note) ? null : note.TrimTo(500),
+            DateAdded = now,
+            DateModified = now
+        }).ConfigureAwait(false);
+
+        ClearDeletedMessageLogIgnoredUsersCache(guildId);
+        return true;
+    }
+
+    /// <summary>
+    ///     Removes a user id from the automatic deleted-message log ignore list.
+    /// </summary>
+    /// <param name="guildId">The guild id.</param>
+    /// <param name="userId">The user id to remove.</param>
+    /// <returns>True when an ignore entry was removed.</returns>
+    public async Task<bool> RemoveDeletedMessageLogIgnoredUser(ulong guildId, ulong userId)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+        var removed = await db.GetTable<DeletedMessageLogIgnoredUser>()
+            .Where(x => x.GuildId == guildId && x.UserId == userId)
+            .DeleteAsync()
+            .ConfigureAwait(false);
+
+        if (removed > 0)
+            ClearDeletedMessageLogIgnoredUsersCache(guildId);
+
+        return removed > 0;
+    }
+
+    /// <summary>
+    ///     Gets ignored users for the automatic deleted-message log.
+    /// </summary>
+    /// <param name="guildId">The guild id.</param>
+    /// <returns>Ignored users ordered by insertion time.</returns>
+    public async Task<List<DeletedMessageLogIgnoredUser>> GetDeletedMessageLogIgnoredUsers(ulong guildId)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+        return await db.GetTable<DeletedMessageLogIgnoredUser>()
+            .Where(x => x.GuildId == guildId)
+            .OrderBy(x => x.DateAdded)
+            .ThenBy(x => x.UserId)
+            .ToListAsync()
+            .ConfigureAwait(false);
+    }
+
+    private async Task<bool> IsDeletedMessageLogIgnoredUser(ulong guildId, ulong userId)
+    {
+        var ignoredUsers = await memoryCache.GetOrCreateAsync(GetDeletedMessageLogIgnoredUsersCacheKey(guildId),
+            async entry =>
+            {
+                entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5);
+
+                await using var db = await dbFactory.CreateConnectionAsync();
+                var ignoredUserIds = await db.GetTable<DeletedMessageLogIgnoredUser>()
+                    .Where(x => x.GuildId == guildId)
+                    .Select(x => x.UserId)
+                    .ToListAsync()
+                    .ConfigureAwait(false);
+                return ignoredUserIds.ToHashSet();
+            }).ConfigureAwait(false);
+
+        return ignoredUsers?.Contains(userId) == true;
     }
 
     private static readonly JsonSerializerOptions SnipeJsonOptions = new()
@@ -409,10 +544,18 @@ public partial class UtilityService : INService
             return;
 
 
-        var msgs = messages
-            .Where(x => x.HasValue)
-            .Select(x => CreateSnipeStore(x.Value, chan, false))
-            .ToList();
+        var msgs = new List<SnipeStore>();
+        foreach (var cachedMessage in messages.Where(x => x.HasValue))
+        {
+            var snipe = TryGetSnipeSnapshot(cachedMessage.Id, chan, false);
+            if (snipe is null)
+            {
+                snipe = CreateSnipeStore(cachedMessage.Value, chan, false);
+                await PreserveSnipeAttachments(cachedMessage.Value, snipe).ConfigureAwait(false);
+            }
+
+            msgs.Add(snipe);
+        }
 
         if (msgs.Count == 0)
             return;
@@ -430,9 +573,12 @@ public partial class UtilityService : INService
         var deletedLogEnabled = IsDeletedMessageLogEnabled(deletedLogSettings);
         if (!snipeEnabled && !deletedLogEnabled) return;
 
-        var snipemsg = (optMsg.HasValue ? optMsg.Value : null) is IUserMessage msg
-            ? CreateSnipeStore(msg, channel, false)
-            : TryGetSnipeSnapshot(optMsg.Id, channel, false);
+        var snipemsg = TryGetSnipeSnapshot(optMsg.Id, channel, false);
+        if (snipemsg is null && (optMsg.HasValue ? optMsg.Value : null) is IUserMessage msg)
+        {
+            snipemsg = CreateSnipeStore(msg, channel, false);
+            await PreserveSnipeAttachments(msg, snipemsg).ConfigureAwait(false);
+        }
 
         if (snipemsg is null)
             return;
@@ -457,16 +603,19 @@ public partial class UtilityService : INService
 
         if (snipeEnabled)
         {
-            var snipemsg = (optMsg.HasValue ? optMsg.Value : null) is IUserMessage msg
-                ? CreateSnipeStore(msg, channel, true)
-                : TryGetSnipeSnapshot(optMsg.Id, channel, true);
+            var snipemsg = TryGetSnipeSnapshot(optMsg.Id, channel, true);
+            if (snipemsg is null && (optMsg.HasValue ? optMsg.Value : null) is IUserMessage msg)
+            {
+                snipemsg = CreateSnipeStore(msg, channel, true);
+                await PreserveSnipeAttachments(msg, snipemsg).ConfigureAwait(false);
+            }
 
             if (snipemsg is not null)
                 await AddSnipesToCache(channel.Guild.Id, snipemsg).ConfigureAwait(false);
         }
 
         if (imsg2 is IUserMessage updatedMsg)
-            CacheSnipeSnapshot(updatedMsg, channel);
+            await CacheSnipeSnapshot(updatedMsg, channel).ConfigureAwait(false);
     }
 
     private async Task AddSnipesToCache(ulong guildId, SnipeStore snipe)
@@ -520,12 +669,20 @@ public partial class UtilityService : INService
         return $"{SnipeSnapshotCachePrefix}{messageId}";
     }
 
-    private void CacheSnipeSnapshot(IUserMessage msg, IGuildChannel channel)
+    private static string GetPreservedSnipeAttachmentCacheKey(ulong messageId, int attachmentIndex)
+    {
+        return $"{PreservedSnipeAttachmentCachePrefix}{messageId}:{attachmentIndex}";
+    }
+
+    private async Task CacheSnipeSnapshot(IUserMessage msg, IGuildChannel channel)
     {
         if (msg.Author is null)
             return;
 
-        memoryCache.Set(GetSnipeSnapshotCacheKey(msg.Id), CreateSnipeStore(msg, channel, false),
+        var snapshot = CreateSnipeStore(msg, channel, false);
+        await PreserveSnipeAttachments(msg, snapshot).ConfigureAwait(false);
+
+        memoryCache.Set(GetSnipeSnapshotCacheKey(msg.Id), snapshot,
             new MemoryCacheEntryOptions
             {
                 AbsoluteExpirationRelativeToNow = SnipeRetention
@@ -548,12 +705,113 @@ public partial class UtilityService : INService
             MessageTimestamp = snapshot.MessageTimestamp,
             Message = snapshot.Message,
             ReferenceMessage = snapshot.ReferenceMessage,
-            Attachments = snapshot.Attachments,
+            Attachments = snapshot.Attachments?.Select(CloneAttachmentStore).ToList(),
             JsonData = snapshot.JsonData,
             UserId = snapshot.UserId,
             Edited = edited,
             DateAdded = DateTime.UtcNow
         };
+    }
+
+    private async Task PreserveSnipeAttachments(IMessage msg, SnipeStore snipe)
+    {
+        if (snipe.Attachments is not { Count: > 0 })
+            return;
+
+        var http = httpFactory.CreateClient();
+        for (var i = 0; i < msg.Attachments.Count && i < snipe.Attachments.Count; i++)
+        {
+            if (i >= MaxPreservedAttachmentsPerMessage)
+                break;
+
+            var sourceAttachment = msg.Attachments.ElementAt(i);
+            var storedAttachment = snipe.Attachments[i];
+            storedAttachment.Size = sourceAttachment.Size;
+            storedAttachment.ContentType = sourceAttachment.ContentType;
+
+            if (sourceAttachment.Size > MaxPreservedAttachmentBytes)
+                continue;
+
+            var downloadUrl = sourceAttachment.Url ?? sourceAttachment.ProxyUrl;
+            if (string.IsNullOrWhiteSpace(downloadUrl))
+                continue;
+
+            try
+            {
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                using var response = await http.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead, cts.Token)
+                    .ConfigureAwait(false);
+                if (!response.IsSuccessStatusCode)
+                    continue;
+
+                var contentLength = response.Content.Headers.ContentLength;
+                if (contentLength > MaxPreservedAttachmentBytes)
+                    continue;
+
+                var data = await response.Content.ReadAsByteArrayAsync(cts.Token).ConfigureAwait(false);
+                if (data.Length > MaxPreservedAttachmentBytes)
+                    continue;
+
+                var fileName = string.IsNullOrWhiteSpace(sourceAttachment.Filename)
+                    ? $"attachment-{i + 1}"
+                    : sourceAttachment.Filename;
+                var cacheKey = GetPreservedSnipeAttachmentCacheKey(msg.Id, i);
+                storedAttachment.PreservedCacheKey = cacheKey;
+                memoryCache.Set(cacheKey, new PreservedSnipeAttachment(data, fileName, sourceAttachment.ContentType),
+                    new MemoryCacheEntryOptions
+                    {
+                        AbsoluteExpirationRelativeToNow = SnipeRetention,
+                        Size = data.Length
+                    });
+            }
+            catch (Exception ex)
+            {
+                logger.LogDebug(ex,
+                    "Failed to preserve snipe attachment {AttachmentFileName} for message {MessageId}",
+                    sourceAttachment.Filename, msg.Id);
+            }
+        }
+    }
+
+    /// <summary>
+    ///     Builds preserved attachment uploads for a sniped message.
+    /// </summary>
+    /// <param name="snipe">The sniped message.</param>
+    /// <returns>File attachments backed by preserved in-memory bytes.</returns>
+    public List<FileAttachment> BuildPreservedSnipeAttachmentFiles(SnipeStore snipe)
+    {
+        return CreatePreservedAttachmentUploads(snipe)
+            .Select(x => x.File)
+            .ToList();
+    }
+
+    private List<PreservedAttachmentUpload> CreatePreservedAttachmentUploads(SnipeStore snipe)
+    {
+        if (snipe.Attachments is not { Count: > 0 })
+            return [];
+
+        var uploads = new List<PreservedAttachmentUpload>();
+        foreach (var attachment in snipe.Attachments)
+        {
+            if (uploads.Count >= MaxPreservedAttachmentsPerMessage)
+                break;
+
+            if (string.IsNullOrWhiteSpace(attachment.PreservedCacheKey) ||
+                !memoryCache.TryGetValue(attachment.PreservedCacheKey, out PreservedSnipeAttachment? preserved) ||
+                preserved is null)
+            {
+                attachment.PreservedCacheKey = null;
+                continue;
+            }
+
+            var fileName = string.IsNullOrWhiteSpace(attachment.Filename)
+                ? preserved.FileName
+                : attachment.Filename;
+            uploads.Add(new PreservedAttachmentUpload(attachment,
+                new FileAttachment(new MemoryStream(preserved.Data, false), fileName), fileName));
+        }
+
+        return uploads;
     }
 
     private async Task PublishDeletedMessageLog(IGuildChannel sourceChannel, SnipeStore snipe,
@@ -571,6 +829,9 @@ public partial class UtilityService : INService
 
         var logChannel = await sourceChannel.Guild.GetTextChannelAsync(settings.ChannelId.Value).ConfigureAwait(false);
         if (logChannel is null)
+            return;
+
+        if (await IsDeletedMessageLogIgnoredUser(sourceChannel.Guild.Id, snipe.UserId).ConfigureAwait(false))
             return;
 
         var author = await TryResolveUser(sourceChannel.Guild, snipe.UserId).ConfigureAwait(false);
@@ -599,23 +860,46 @@ public partial class UtilityService : INService
         if (!string.IsNullOrWhiteSpace(snipe.ReferenceMessage))
             embed.AddField("Replied To", Format.Sanitize(snipe.ReferenceMessage.TrimTo(1024)));
 
-        AddDeletedMessageLogAttachments(embed, attachments);
+        var preservedUploads = CreatePreservedAttachmentUploads(snipe);
+        AddDeletedMessageLogAttachments(embed, attachments, preservedUploads.Count > 0);
 
-        var imageUrl = attachments
-            .Select(x => x.Url ?? x.ProxyUrl)
-            .FirstOrDefault(IsLikelyImageUrl);
-        if (!string.IsNullOrWhiteSpace(imageUrl))
-            embed.WithImageUrl(imageUrl);
+        var preservedImage = preservedUploads
+            .FirstOrDefault(x => IsLikelyImageAttachment(x.Attachment, x.FileName));
+        if (preservedImage is not null)
+        {
+            embed.WithImageUrl($"attachment://{preservedImage.FileName}");
+        }
+        else
+        {
+            var imageUrl = attachments
+                .Select(x => x.Url ?? x.ProxyUrl)
+                .FirstOrDefault(IsLikelyImageUrl);
+            if (!string.IsNullOrWhiteSpace(imageUrl))
+                embed.WithImageUrl(imageUrl);
+        }
 
         try
         {
-            await logChannel.SendMessageAsync(embed: embed.Build()).ConfigureAwait(false);
+            if (preservedUploads.Count > 0)
+            {
+                await logChannel.SendFilesAsync(preservedUploads.Select(x => x.File).ToList(), embed: embed.Build())
+                    .ConfigureAwait(false);
+            }
+            else
+            {
+                await logChannel.SendMessageAsync(embed: embed.Build()).ConfigureAwait(false);
+            }
         }
         catch (Exception ex)
         {
             logger.LogWarning(ex,
                 "Failed to publish deleted message log for message {MessageId} in guild {GuildId}",
                 snipe.MessageId, snipe.GuildId);
+        }
+        finally
+        {
+            foreach (var upload in preservedUploads)
+                upload.File.Dispose();
         }
     }
 
@@ -647,7 +931,7 @@ public partial class UtilityService : INService
     }
 
     private static void AddDeletedMessageLogAttachments(EmbedBuilder embed,
-        IReadOnlyList<SnipeAttachmentStore> attachments)
+        IReadOnlyList<SnipeAttachmentStore> attachments, bool preservedFilesAttached)
     {
         if (attachments.Count == 0)
             return;
@@ -657,14 +941,24 @@ public partial class UtilityService : INService
         for (var i = 0; i < attachments.Count; i++)
         {
             var attachment = attachments[i];
-            var url = attachment.Url ?? attachment.ProxyUrl;
-            if (string.IsNullOrWhiteSpace(url))
-                continue;
-
             var fileName = string.IsNullOrWhiteSpace(attachment.Filename)
                 ? $"attachment-{i + 1}"
                 : attachment.Filename;
-            var line = $"[{Format.Sanitize(fileName)}]({url})";
+            string line;
+            if (!string.IsNullOrWhiteSpace(attachment.PreservedCacheKey))
+            {
+                line = preservedFilesAttached
+                    ? $"{Format.Sanitize(fileName)} (preserved file attached)"
+                    : $"{Format.Sanitize(fileName)} (preserved file cached)";
+            }
+            else
+            {
+                var url = attachment.Url ?? attachment.ProxyUrl;
+                if (string.IsNullOrWhiteSpace(url))
+                    continue;
+
+                line = $"[{Format.Sanitize(fileName)}]({url})";
+            }
 
             if (sb.Length > 0)
                 line = $"\n{line}";
@@ -705,6 +999,27 @@ public partial class UtilityService : INService
                || path.EndsWith(".webp", StringComparison.OrdinalIgnoreCase);
     }
 
+    private static bool IsLikelyImageAttachment(SnipeAttachmentStore attachment, string fileName)
+    {
+        if (attachment.ContentType?.StartsWith("image/", StringComparison.OrdinalIgnoreCase) == true)
+            return true;
+
+        return IsLikelyImageUrl(fileName);
+    }
+
+    private static SnipeAttachmentStore CloneAttachmentStore(SnipeAttachmentStore attachment)
+    {
+        return new SnipeAttachmentStore
+        {
+            Filename = attachment.Filename,
+            Url = attachment.Url,
+            ProxyUrl = attachment.ProxyUrl,
+            Size = attachment.Size,
+            ContentType = attachment.ContentType,
+            PreservedCacheKey = attachment.PreservedCacheKey
+        };
+    }
+
     /// <summary>
     ///     Checks a URL for malware and other security threats.
     /// </summary>
@@ -725,7 +1040,7 @@ public partial class UtilityService : INService
                 await GetDeletedMessageLogSettings(guildChannel.Guild.Id).ConfigureAwait(false));
 
             if (snipeEnabled || deletedLogEnabled)
-                CacheSnipeSnapshot(userMsg, guildChannel);
+                await CacheSnipeSnapshot(userMsg, guildChannel).ConfigureAwait(false);
         }
 
         if (msg.Channel is SocketTextChannel t)
@@ -809,7 +1124,9 @@ public partial class UtilityService : INService
         {
             Filename = a.Filename,
             Url = a.Url,
-            ProxyUrl = a.ProxyUrl
+            ProxyUrl = a.ProxyUrl,
+            Size = a.Size,
+            ContentType = a.ContentType
         }).ToList();
     }
 
@@ -832,6 +1149,10 @@ public partial class UtilityService : INService
         return summary;
     }
 }
+
+internal sealed record PreservedSnipeAttachment(byte[] Data, string FileName, string? ContentType);
+
+internal sealed record PreservedAttachmentUpload(SnipeAttachmentStore Attachment, FileAttachment File, string FileName);
 
 /// <summary>
 ///     Represents serialized message data for snipe storage.
