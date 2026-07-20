@@ -211,6 +211,16 @@ anonrep:
   - anongiverep
 antialt:
   - antialt
+antiimagehash:
+  - antiimagehash
+  - antihash
+  - aihash
+antiimagehashignore:
+  - antiimagehashignore
+  - imagehashignore
+antiimagehashpreset:
+  - antiimagehashpreset
+  - imagehashpreset
 antimassmention:
   - antimassmention
   - amm
@@ -223,6 +233,14 @@ antiraid:
   - antiraid
 antispam:
   - antispam
+blockimage:
+  - blockimage
+  - banimagehash
+  - bih
+blockedimages:
+  - blockedimages
+  - bannedimagehashes
+  - imagehashes
 archiveonaccept:
   - archiveonaccept
 archiveonconsider:
@@ -1191,6 +1209,10 @@ image:
   - image
   - img
   - rimg
+imagehash:
+  - imagehash
+  - hashimage
+  - pdqhash
 imagesreload:
   - imagesreload
 implementchannel:
@@ -3153,6 +3175,10 @@ typestop:
   - typestop
 unban:
   - unban
+unblockimage:
+  - unblockimage
+  - removeimagehash
+  - rmimagehash
 undeafen:
   - undeafen
   - undef

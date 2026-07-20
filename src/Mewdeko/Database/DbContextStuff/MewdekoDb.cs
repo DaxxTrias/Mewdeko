@@ -163,6 +163,27 @@ public class MewdekoDb : DataConnection
     public ITable<AntiMassMentionSetting> AntiMassMentionSettings => this.GetTable<AntiMassMentionSetting>();
 
     /// <summary>
+    ///     Gets the anti-image-hash settings table.
+    /// </summary>
+    public ITable<AntiImageHashSetting> AntiImageHashSettings => this.GetTable<AntiImageHashSetting>();
+
+    /// <summary>
+    ///     Gets the banned image hashes table.
+    /// </summary>
+    public ITable<BannedImageHash> BannedImageHashes => this.GetTable<BannedImageHash>();
+
+    /// <summary>
+    ///     Gets the anti-image-hash ignored roles table.
+    /// </summary>
+    public ITable<AntiImageHashIgnoredRole> AntiImageHashIgnoredRoles => this.GetTable<AntiImageHashIgnoredRole>();
+
+    /// <summary>
+    ///     Gets the anti-image-hash ignored channels table.
+    /// </summary>
+    public ITable<AntiImageHashIgnoredChannel> AntiImageHashIgnoredChannels =>
+        this.GetTable<AntiImageHashIgnoredChannel>();
+
+    /// <summary>
     ///     Gets the anti-mass-post settings table.
     /// </summary>
     public ITable<AntiMassPostSetting> AntiMassPostSettings
