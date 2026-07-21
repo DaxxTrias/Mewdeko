@@ -3558,3 +3558,24 @@ mcrcon:
 mcwhitelist:
   - mcwhitelist
   - mcwl
+err:
+  - err
+  - nxerr
+  - serr
+err2hex:
+  - err2hex
+  - e2h
+hex2err:
+  - hex2err
+  - h2e
+switchbrew:
+  - switchbrew
+  - sb
+  - svc
+analyselog:
+  - analyselog
+  - analyzelog
+  - analyselogs
+  - analyzelogs
+  - analyze
+  - analyse
