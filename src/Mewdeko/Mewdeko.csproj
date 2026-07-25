@@ -56,7 +56,7 @@
     <PackageReference Include="HtmlAgilityPack" Version="1.12.4"/>
     <PackageReference Include="IF.Lastfm.Core" Version="1.0.0"/>
     <PackageReference Include="Inflatable.Lastfm" Version="1.2.0"/>
-    <PackageReference Include="LibGit2Sharp" Version="0.31.0"/>
+    <PackageReference Include="LibGit2Sharp" Version="0.32.0"/>
     <PackageReference Include="linq2db" Version="6.3.0"/>
     <PackageReference Include="MathNet.Symbolics" Version="0.25.0"/>
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.10"/>
@@ -66,11 +66,12 @@
     <PackageReference Include="OpenAI" Version="2.12.0"/>
     <PackageReference Include="OxyPlot.Core" Version="2.2.0"/>
     <PackageReference Include="OxyPlot.SkiaSharp" Version="2.2.0"/>
+    <PackageReference Include="PdqHash" Version="1.1.0"/>
     <PackageReference Include="Polly" Version="8.7.0"/>
     <PackageReference Include="prometheus-net.AspNetCore" Version="8.2.1"/>
     <PackageReference Include="RabbitMQ.Client" Version="7.2.1"/>
-    <PackageReference Include="Sentry.AspNetCore" Version="6.6.0"/>
-    <PackageReference Include="Sentry.Serilog" Version="6.6.0"/>
+    <PackageReference Include="Sentry.AspNetCore" Version="6.7.0"/>
+    <PackageReference Include="Sentry.Serilog" Version="6.7.0"/>
     <PackageReference Include="Serilog.AspNetCore" Version="10.0.0"/>
     <PackageReference Include="System.ServiceProcess.ServiceController" Version="10.0.10"/>
     <PackageReference Include="ZiggyCreatures.FusionCache" Version="2.6.0"/>

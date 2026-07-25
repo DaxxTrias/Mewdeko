@@ -11,7 +11,7 @@ namespace Mewdeko.Controllers;
 [ApiController]
 [Route("botapi/[controller]/{guildId}")]
 [Authorize("ApiKeyPolicy")]
-public class ProtectionController(ProtectionService protectionService) : Controller
+public class ProtectionController(ProtectionService protectionService, ImageHashingService imageHashing) : Controller
 {
     /// <summary>
     ///     Gets comprehensive protection status for all protection types
@@ -24,6 +24,7 @@ public class ProtectionController(ProtectionService protectionService) : Control
         var (antiSpamStats, antiRaidStats, antiAltStats, antiMassMentionStats, antiPatternStats, antiMassPostStats,
                 antiPostChannelStats) =
             protectionService.GetAntiStats(guildId);
+        var imageHashStats = protectionService.GetAntiImageHashStats(guildId);
 
         return Ok(new
         {
@@ -118,6 +119,24 @@ public class ProtectionController(ProtectionService protectionService) : Control
                 ignoreBots = antiPostChannelStats?.AntiPostChannelSettings?.IgnoreBots ?? true,
                 channelCount = antiPostChannelStats?.AntiPostChannelSettings?.AntiPostChannelChannels?.Count() ?? 0,
                 counter = antiPostChannelStats?.Counter ?? 0
+            },
+            antiImageHash = new
+            {
+                enabled = imageHashStats != null,
+                action = imageHashStats?.AntiImageHashSettings?.Action ?? 2,
+                punishDuration = imageHashStats?.AntiImageHashSettings?.PunishDuration ?? 0,
+                roleId = imageHashStats?.AntiImageHashSettings?.RoleId ?? 0,
+                hashThreshold = imageHashStats?.AntiImageHashSettings?.HashThreshold ?? 31,
+                deleteMessages = imageHashStats?.AntiImageHashSettings?.DeleteMessages ?? true,
+                notifyUser = imageHashStats?.AntiImageHashSettings?.NotifyUser ?? true,
+                ignoreBots = imageHashStats?.AntiImageHashSettings?.IgnoreBots ?? true,
+                checkEmbeds = imageHashStats?.AntiImageHashSettings?.CheckEmbeds ?? true,
+                checkBorders = imageHashStats?.AntiImageHashSettings?.CheckBorders ?? true,
+                usePresetList = imageHashStats?.AntiImageHashSettings?.UsePresetList ?? false,
+                presetTriggers = imageHashStats?.AntiImageHashSettings?.PresetTriggers ?? 0,
+                blockedImageCount = imageHashStats?.Hashes?.Count ?? 0,
+                maxImageSizeMb = imageHashStats?.AntiImageHashSettings?.MaxImageSizeMb ?? 8,
+                counter = imageHashStats?.Counter ?? 0
             }
         });
     }
@@ -422,5 +441,195 @@ public class ProtectionController(ProtectionService protectionService) : Control
     {
         var patterns = await protectionService.GetAntiPatternPatternsAsync(guildId);
         return Ok(patterns);
+    }
+
+    /// <summary>
+    ///     Configures anti-image-hash protection
+    /// </summary>
+    [HttpPut("anti-image-hash")]
+    public async Task<IActionResult> ConfigureAntiImageHash(ulong guildId,
+        [FromBody] AntiImageHashConfigRequest? request)
+    {
+        if (request == null)
+            return BadRequest("Request body is required");
+
+        if (!request.Enabled)
+        {
+            var stopped = await protectionService.TryStopAntiImageHash(guildId);
+            return Ok(new
+            {
+                success = stopped
+            });
+        }
+
+        var result = await protectionService.StartAntiImageHashAsync(
+            guildId,
+            request.Action,
+            request.PunishDuration,
+            request.RoleId,
+            request.HashThreshold,
+            request.DeleteMessages,
+            request.NotifyUser,
+            request.IgnoreBots,
+            request.CheckEmbeds,
+            request.CheckBorders,
+            request.UsePresetList,
+            request.MaxImageSizeMb);
+
+        if (result == null)
+            return BadRequest("Failed to start anti-image-hash protection");
+
+        return Ok(new
+        {
+            success = true, settings = result.AntiImageHashSettings
+        });
+    }
+
+    /// <summary>
+    ///     Gets blocked image hashes for a guild
+    /// </summary>
+    [HttpGet("anti-image-hash/hashes")]
+    public async Task<IActionResult> GetBannedImageHashes(ulong guildId)
+    {
+        var hashes = await protectionService.GetBannedImageHashesAsync(guildId);
+        return Ok(hashes);
+    }
+
+    /// <summary>
+    ///     Adds a blocked image hash for a guild
+    /// </summary>
+    [HttpPost("anti-image-hash/hashes")]
+    public async Task<IActionResult> AddBannedImageHash(ulong guildId, [FromBody] AddBannedImageHashRequest? request)
+    {
+        if (request == null)
+            return BadRequest("Request body is required");
+
+        var hashSet = await ResolveHashSetAsync(request);
+        if (hashSet is null)
+            return BadRequest("Provide a valid PDQ hash, imageUrl, or imageBase64");
+
+        if (hashSet.Quality < ImageHashingService.MinReliableQuality)
+            return BadRequest("Image quality is too low for reliable matching");
+
+        var entry = await protectionService.AddBannedImageHashAsync(
+            guildId,
+            hashSet,
+            request.Name,
+            request.ImageUrl,
+            request.AddedBy,
+            request.Action,
+            request.PunishDuration,
+            request.RoleId);
+
+        if (entry == null)
+            return Conflict("Image hash already exists or is invalid");
+
+        return Ok(entry);
+    }
+
+    /// <summary>
+    ///     Removes a blocked image hash from a guild
+    /// </summary>
+    [HttpDelete("anti-image-hash/hashes/{hashId:int}")]
+    public async Task<IActionResult> RemoveBannedImageHash(ulong guildId, int hashId)
+    {
+        var success = await protectionService.RemoveBannedImageHashAsync(guildId, hashId);
+        return Ok(new
+        {
+            success
+        });
+    }
+
+    /// <summary>
+    ///     Computes a PDQ hash for an image without adding it to the blocklist
+    /// </summary>
+    [HttpPost("anti-image-hash/compute")]
+    public async Task<IActionResult> ComputeImageHash(ulong guildId, [FromBody] AddBannedImageHashRequest? request)
+    {
+        await Task.CompletedTask;
+
+        if (request == null)
+            return BadRequest("Request body is required");
+
+        var hashSet = await ResolveHashSetAsync(request);
+        if (hashSet is null)
+            return BadRequest("Provide a valid imageUrl, imageBase64, or PDQ hash");
+
+        return Ok(new
+        {
+            hashSet.Hash,
+            hashSet.Quality,
+            hashSet.Variants,
+            reliable = hashSet.Quality >= ImageHashingService.MinReliableQuality,
+            minQuality = ImageHashingService.MinReliableQuality
+        });
+    }
+
+    /// <summary>
+    ///     Toggles the shipped known scam image preset list for a guild
+    /// </summary>
+    [HttpPost("anti-image-hash/preset/{enabled:bool}")]
+    public async Task<IActionResult> SetAntiImageHashPreset(ulong guildId, bool enabled)
+    {
+        var success = await protectionService.SetPresetScamImagesAsync(guildId, enabled);
+        return Ok(new
+        {
+            success
+        });
+    }
+
+    /// <summary>
+    ///     Toggles a role as exempt from anti-image-hash protection
+    /// </summary>
+    [HttpPost("anti-image-hash/ignored-roles/{roleId}")]
+    public async Task<IActionResult> ToggleAntiImageHashIgnoredRole(ulong guildId, ulong roleId)
+    {
+        var added = await protectionService.ToggleAntiImageHashIgnoredRoleAsync(guildId, roleId);
+        return Ok(new
+        {
+            added
+        });
+    }
+
+    /// <summary>
+    ///     Toggles a channel as exempt from anti-image-hash protection
+    /// </summary>
+    [HttpPost("anti-image-hash/ignored-channels/{channelId}")]
+    public async Task<IActionResult> ToggleAntiImageHashIgnoredChannel(ulong guildId, ulong channelId)
+    {
+        var added = await protectionService.ToggleAntiImageHashIgnoredChannelAsync(guildId, channelId);
+        return Ok(new
+        {
+            added
+        });
+    }
+
+    private async Task<ImageHashSet?> ResolveHashSetAsync(AddBannedImageHashRequest request)
+    {
+        if (!string.IsNullOrWhiteSpace(request.ImageUrl))
+            return await imageHashing.ComputeHashSetFromUrlAsync(request.ImageUrl).ConfigureAwait(false);
+
+        if (!string.IsNullOrWhiteSpace(request.ImageBase64))
+        {
+            var data = request.ImageBase64;
+            var commaIndex = data.IndexOf(',');
+            if (data.StartsWith("data:", StringComparison.OrdinalIgnoreCase) && commaIndex >= 0)
+                data = data[(commaIndex + 1)..];
+
+            try
+            {
+                var bytes = Convert.FromBase64String(data);
+                return imageHashing.ComputeHashSet(bytes);
+            }
+            catch (FormatException)
+            {
+                return null;
+            }
+        }
+
+        return !string.IsNullOrWhiteSpace(request.Hash) &&
+               ImageHashingService.TryParseHash(request.Hash, out _)
+            ? new ImageHashSet(request.Hash.Trim().ToLowerInvariant(), 100, [])
+            : null;
     }
 }
