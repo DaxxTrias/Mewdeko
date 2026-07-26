@@ -15,6 +15,7 @@ using Mewdeko.Common.Configs;
 using Mewdeko.Common.Constraints;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Common.PubSub;
+using Mewdeko.Controllers.Common.DashboardAccess;
 using Mewdeko.Database.Impl;
 using Mewdeko.Modules.Currency.Services;
 using Mewdeko.Modules.Currency.Services.Impl;
@@ -171,7 +172,13 @@ public class Program
             builder.Services.AddTransient<IApiKeyValidation, ApiKeyValidation>();
             builder.Services.AddAuthorization();
 
-            builder.Services.AddControllers()
+            builder.Services.AddScoped<IDashboardAuditContext, DashboardAuditContext>();
+
+            builder.Services.AddControllers(options =>
+                {
+                    options.Filters.Add<AuditLogFilter>();
+                    options.Filters.Add<DashboardAccessEnforcementFilter>();
+                })
                 .AddJsonOptions(options =>
                 {
                     options.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
