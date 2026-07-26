@@ -5,10 +5,12 @@ ARG TARGETARCH
 
 WORKDIR /source
 
+# Copy project files
 COPY src/Mewdeko/Mewdeko.csproj ./src/Mewdeko/
 COPY src/MewdekoSourceGen/MewdekoSourceGen.csproj ./src/MewdekoSourceGen/
 
-RUN dotnet restore ./src/Mewdeko/Mewdeko.csproj -a $TARGETARCH
+# Restore dependencies (with proper architecture)
+RUN dotnet restore src/Mewdeko/Mewdeko.csproj -a $TARGETARCH
 
 COPY src/ ./src/
 
