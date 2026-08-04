@@ -257,6 +257,11 @@ public class AntiPatternStats
     public AntiPatternSetting AntiPatternSettings { get; set; }
 
     /// <summary>
+    ///     Gets or sets the normalized names watched by anti-pattern protection.
+    /// </summary>
+    public IReadOnlyList<AntiPatternName> AntiPatternNames { get; set; } = [];
+
+    /// <summary>
     ///     Gets the action to be taken against pattern matches.
     /// </summary>
     public int Action

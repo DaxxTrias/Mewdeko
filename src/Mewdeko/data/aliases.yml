@@ -1623,13 +1623,26 @@ patreonlink:
 patternadd:
   - patternadd
   - padd
+patternnameadd:
+  - patternnameadd
+  - pnameadd
+  - pnadd
 patternlist:
   - patternlist
   - plist
+patternnamelist:
+  - patternnamelist
+  - pnamelist
+  - pnlist
 patternremove:
   - patternremove
   - premove
   - prem
+patternnameremove:
+  - patternnameremove
+  - pnameremove
+  - pnremove
+  - pnrem
 patternconfig:
   - patternconfig
   - pconfig
