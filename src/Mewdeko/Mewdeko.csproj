@@ -69,7 +69,7 @@
     <PackageReference Include="PdqHash" Version="1.1.0"/>
     <PackageReference Include="Polly" Version="8.7.0"/>
     <PackageReference Include="prometheus-net.AspNetCore" Version="8.2.1"/>
-    <PackageReference Include="RabbitMQ.Client" Version="7.2.1"/>
+    <PackageReference Include="RabbitMQ.Client" Version="7.2.2"/>
     <PackageReference Include="Sentry.AspNetCore" Version="6.8.0"/>
     <PackageReference Include="Sentry.Serilog" Version="6.8.0"/>
     <PackageReference Include="Serilog.AspNetCore" Version="10.0.0"/>
