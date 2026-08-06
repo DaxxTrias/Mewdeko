@@ -293,7 +293,8 @@ public class Program
                     if (ex != null || httpContext.Response.StatusCode >= 500)
                         return LogEventLevel.Error;
 
-                    if (httpContext.Request.Path.StartsWithSegments("/metrics"))
+                    if (httpContext.Request.Path.StartsWithSegments("/metrics") ||
+                        httpContext.Request.Path.StartsWithSegments("/health"))
                         return LogEventLevel.Debug;
 
                     return elapsed >= 1000 || httpContext.Response.StatusCode >= 400
@@ -320,6 +321,10 @@ public class Program
             app.UseAuthorization();
             app.MapControllers();
             app.MapMetrics();
+            app.MapGet("/health", () => Results.Ok(new
+            {
+                status = "ok"
+            })).AllowAnonymous();
 
             foreach (var address in app.Urls) log.Information("API Listening on {Address}", address);
             await app.RunAsync();
