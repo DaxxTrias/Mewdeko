@@ -57,7 +57,7 @@
     <PackageReference Include="IF.Lastfm.Core" Version="1.0.0"/>
     <PackageReference Include="Inflatable.Lastfm" Version="1.2.0"/>
     <PackageReference Include="LibGit2Sharp" Version="0.32.0"/>
-    <PackageReference Include="linq2db" Version="6.3.0"/>
+    <PackageReference Include="linq2db" Version="6.4.0"/>
     <PackageReference Include="MathNet.Symbolics" Version="0.25.0"/>
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.10"/>
     <PackageReference Include="Microsoft.IO.RecyclableMemoryStream" Version="3.0.1"/>
