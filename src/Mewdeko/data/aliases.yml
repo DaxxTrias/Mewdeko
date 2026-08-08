@@ -3558,6 +3558,88 @@ mcrcon:
 mcwhitelist:
   - mcwhitelist
   - mcwl
+lastfmlink:
+  - lastfmlink
+  - lflink
+lastfmunlink:
+  - lastfmunlink
+  - lfunlink
+lastfmtoggle:
+  - lastfmtoggle
+  - lftoggle
+lastfmstatus:
+  - lastfmstatus
+  - lfstatus
+fm:
+  - fm
+fmrecent:
+  - fmrecent
+  - fmr
+fmtopartists:
+  - fmtopartists
+  - fmta
+fmtopalbums:
+  - fmtopalbums
+  - fmtal
+fmtoptracks:
+  - fmtoptracks
+  - fmtt
+fmartist:
+  - fmartist
+  - fma
+fmalbum:
+  - fmalbum
+  - fmal
+fmwhoknows:
+  - fmwhoknows
+  - whoknows
+  - wk
+fmwhoknowsalbum:
+  - fmwhoknowsalbum
+  - whoknowsalbum
+  - wka
+fmwhoknowstrack:
+  - fmwhoknowstrack
+  - whoknowstrack
+  - wkt
+fmcrowns:
+  - fmcrowns
+  - crowns
+fmtaste:
+  - fmtaste
+  - taste
+fmchart:
+  - fmchart
+  - chart
+antimasspost:
+  - antimasspost
+antipostchannel:
+  - antipostchannel
+antipostchanneladd:
+  - antipostchanneladd
+antipostchannelremove:
+  - antipostchannelremove
+antiimagehash:
+  - antiimagehash
+  - aih
+antiimagehashignore:
+  - antiimagehashignore
+  - aihignore
+antiimagehashpreset:
+  - antiimagehashpreset
+  - aihpreset
+  - blockcommonscams
+blockimage:
+  - blockimage
+  - banimage
+unblockimage:
+  - unblockimage
+  - unbanimage
+blockedimages:
+  - blockedimages
+  - blockedimagelist
+imagehash:
+  - imagehash
 err:
   - err
   - nxerr

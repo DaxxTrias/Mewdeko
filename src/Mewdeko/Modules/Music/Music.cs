@@ -1,3 +1,4 @@
+using System.Net.Http;
 using System.Text.Json;
 using System.Threading;
 using DataModel;
@@ -34,7 +35,9 @@ public partial class Music(
     IPubSub pubSub,
     IDataConnectionFactory dbFactory,
     IBotCredentials creds,
-    MusicLinkService musicLinkService) : MewdekoModule
+    MusicLinkService musicLinkService,
+    LastFmStatsService lastFmStats,
+    IHttpClientFactory httpClientFactory) : MewdekoModule
 {
     /// <summary>
     ///     Retrieves the music player an attempts to join the voice channel.
