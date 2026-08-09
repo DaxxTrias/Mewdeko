@@ -784,7 +784,7 @@ public partial class Searches(
             if (filteredImages is not null)
             {
                 sourceName = "DuckDuckGo";
-                sourceIconUrl = "https://duckduckgo.com/assets/logo_homepage.normal.v108.svg";
+                sourceIconUrl = "https://duckduckgo.com/assets/icons/meta/DDG-icon_256x256.png";
             }
         }
 
@@ -899,7 +899,7 @@ public partial class Searches(
             return safeImages;
         }
 
-        static bool IsValidImageResultUrl(string imageUrl)
+        static bool IsValidImageResultUrl(string? imageUrl)
         {
             return Uri.TryCreate(imageUrl, UriKind.Absolute, out var uri)
                    && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
@@ -996,14 +996,33 @@ public partial class Searches(
         Task<PageBuilder> PageFactory(int page)
         {
             var result = filteredImages.ElementAt(page);
+            var title = string.IsNullOrWhiteSpace(result.Title)
+                ? Strings.ImageResultSource(ctx.Guild.Id, sourceName)
+                : result.Title.TrimTo(256);
+            var sourceUrl = GetImageResultSourceUrl(result);
 
-            return Task.FromResult(new PageBuilder()
+            var builder = new PageBuilder()
                 .WithOkColor()
-                .WithDescription(result.Title)
+                .WithTitle(title)
                 .WithImageUrl(result.Url)
                 .WithAuthor(
                     Strings.ImageResultSource(ctx.Guild.Id, sourceName), // e.g., "Image Result from Google"
-                    sourceIconUrl));
+                    sourceIconUrl);
+
+            if (IsValidImageResultUrl(sourceUrl))
+                builder.WithUrl(sourceUrl);
+
+            return Task.FromResult(builder);
+        }
+
+        static string? GetImageResultSourceUrl(IImageResult result)
+        {
+            return result switch
+            {
+                GoogleImageResult googleResult => googleResult.SourceUrl,
+                DuckDuckGoImageResult duckDuckGoResult => duckDuckGoResult.SourceUrl,
+                _ => null
+            };
         }
     }
 
