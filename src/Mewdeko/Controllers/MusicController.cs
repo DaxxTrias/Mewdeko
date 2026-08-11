@@ -11,6 +11,7 @@ using Mewdeko.Controllers.Common.Music;
 using Mewdeko.Modules.Music.Common;
 using Mewdeko.Modules.Music.CustomPlayer;
 using Mewdeko.Modules.Music.Services;
+using Mewdeko.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -43,6 +44,7 @@ public class MusicController : Controller
     /// <param name="eventManager">The event manager for music events</param>
     /// <param name="musicLinkService">The service managing music link auto-conversion channels</param>
     /// <param name="logger">The logger instance for structured logging.</param>
+    /// <param name="auditContext">The dashboard audit context for recording before/after state.</param>
     public MusicController(
         IAudioService audioService,
         IDataCache cache,
@@ -59,6 +61,7 @@ public class MusicController : Controller
         this.eventManager = eventManager;
         this.musicLinkService = musicLinkService;
         this.logger = logger;
+        this.auditContext = auditContext;
     }
 
     /// <summary>

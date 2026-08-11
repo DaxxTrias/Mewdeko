@@ -63,9 +63,9 @@ public class InstanceManagementService : INService, IReadyExecutor
             try
             {
                 await using var db = await dbFactory.CreateConnectionAsync();
-                var exists = await db.BotInstances.AnyAsync(x => x.Port == creds.ApiPort);
+                var existing = await db.BotInstances.FirstOrDefaultAsync(x => x.Port == creds.ApiPort);
 
-                if (!exists)
+                if (existing is null)
                 {
                     logger.LogInformation("Registering self as master instance on {Host}:{Port}",
                         creds.InstanceApiHost, creds.ApiPort);
@@ -214,7 +214,7 @@ public class InstanceManagementService : INService, IReadyExecutor
         }
         catch (Exception ex)
         {
-            logger.LogError("Failed to get status for instance on port {Port}", port);
+            logger.LogError(ex, "Failed to get status for instance on port {Port}", port);
             return null;
         }
     }
