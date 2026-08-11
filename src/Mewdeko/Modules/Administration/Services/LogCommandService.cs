@@ -276,6 +276,12 @@ public class LogCommandService(
                     await OnUserUnbanned(data.Target, arsg2, args.User, args.Reason);
                 break;
             }
+            case ActionType.MemberUpdated:
+            {
+                if (args.Data is SocketMemberUpdateAuditLogData data)
+                    await OnMemberTimeoutUpdated(data, arsg2, args.User, args.Reason);
+                break;
+            }
         }
     }
 
@@ -2091,6 +2097,75 @@ public class LogCommandService(
             await logChannel.SendMessageAsync(components: components.Build(),
                 flags: MessageFlags.ComponentsV2, allowedMentions: AllowedMentions.None);
         }
+    }
+
+    /// <summary>
+    ///     Handles timeout changes from Discord's member update audit log.
+    /// </summary>
+    /// <param name="data">The member update audit log data.</param>
+    /// <param name="guild">The guild where the member was updated.</param>
+    /// <param name="moderator">The user who updated the member.</param>
+    /// <param name="reason">The audit log reason.</param>
+    private async Task OnMemberTimeoutUpdated(SocketMemberUpdateAuditLogData data, SocketGuild guild, IUser moderator,
+        string? reason)
+    {
+        var beforeTimeout = data.Before.TimedOutUntil;
+        var afterTimeout = data.After.TimedOutUntil;
+        if (beforeTimeout == afterTimeout)
+            return;
+
+        if (!GuildLogSettings.TryGetValue(guild.Id, out var logSetting))
+            return;
+
+        if (logSetting.UserMutedId is null or 0)
+            return;
+
+        var logChannel = guild.GetTextChannel(logSetting.UserMutedId.Value);
+        if (logChannel is null)
+            return;
+
+        var guildUser = guild.GetUser(data.Target.Id);
+        var targetUser = data.Target.HasValue ? data.Target.Value : null;
+        var userMention = guildUser?.Mention ?? $"<@{data.Target.Id}>";
+        var userName = guildUser?.ToString() ?? targetUser?.ToString() ?? data.Target.Id.ToString();
+        var avatarUrl = guildUser?.RealAvatarUrl().ToString() ?? targetUser?.RealAvatarUrl().ToString();
+
+        var timeoutSet = afterTimeout is { } until && until > DateTimeOffset.UtcNow;
+        var title = timeoutSet ? "User Timed Out" : "User Timeout Removed";
+        var color = timeoutSet ? Mewdeko.ErrorColor : Mewdeko.OkColor;
+        var timeoutDetails = timeoutSet
+            ? $"`Until:` <t:{afterTimeout!.Value.ToUnixTimeSeconds()}:F> (<t:{afterTimeout.Value.ToUnixTimeSeconds()}:R>)\n"
+            : beforeTimeout is { } previousTimeout
+                ? $"`Previous Timeout:` <t:{previousTimeout.ToUnixTimeSeconds()}:F>\n"
+                : "";
+
+        var components = new ComponentBuilderV2()
+            .WithContainer([
+                new TextDisplayBuilder($"# {title}")
+            ], color)
+            .WithSeparator();
+
+        if (!string.IsNullOrWhiteSpace(avatarUrl))
+        {
+            components.WithSection([
+                new TextDisplayBuilder($"**User Details**\n`User:` {userMention} | `{data.Target.Id}`\n`Name:` {userName}")
+            ], new ThumbnailBuilder(avatarUrl));
+        }
+        else
+        {
+            components.WithContainer(new TextDisplayBuilder(
+                $"**User Details**\n`User:` {userMention} | `{data.Target.Id}`\n`Name:` {userName}"));
+        }
+
+        components
+            .WithSeparator()
+            .WithContainer(new TextDisplayBuilder("**Moderation Information**\n" +
+                                                  $"`Updated By:` {moderator.Mention} | `{moderator.Id}`\n" +
+                                                  timeoutDetails +
+                                                  $"`Reason:` {reason ?? "N/A"}"));
+
+        await logChannel.SendMessageAsync(components: components.Build(),
+            flags: MessageFlags.ComponentsV2, allowedMentions: AllowedMentions.None);
     }
 
     /// <summary>
