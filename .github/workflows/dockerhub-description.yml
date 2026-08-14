@@ -13,7 +13,7 @@ jobs:
   update-description:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Publish Docker Hub overview
         uses: peter-evans/dockerhub-description@v5
