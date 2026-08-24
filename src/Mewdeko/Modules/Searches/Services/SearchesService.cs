@@ -449,35 +449,280 @@ public class SearchesService : INService, IUnloadableService
     /// <param name="query">The anime title to search for.</param>
     /// <param name="isNsfwChannel">Whether the current channel is marked NSFW.</param>
     /// <returns>The matching anime results, or null if the provider failed.</returns>
-    public async Task<IReadOnlyList<Anime>?> SearchMalAnimeAsync(string query, bool isNsfwChannel)
+    public async Task<IReadOnlyList<MalAnimeSearchResult>?> SearchMalAnimeAsync(string query, bool isNsfwChannel)
     {
         var client = new Jikan();
+        Exception? lastJikanException = null;
         const int maxAttempts = 2;
         for (var attempt = 1; attempt <= maxAttempts; attempt++)
         {
             try
             {
-                var result = await client.SearchAnimeAsync(query).ConfigureAwait(false);
+                var result = await client.SearchAnimeAsync(new AnimeSearchConfig
+                {
+                    Query = query,
+                    PageSize = 10,
+                    Sfw = !isNsfwChannel
+                }).ConfigureAwait(false);
                 if (result?.Data == null)
                     return [];
 
                 return result.Data
                     .Where(x => isNsfwChannel || !IsHentaiAnime(x))
+                    .Select(FromJikanAnime)
                     .ToList();
             }
             catch (JikanRequestException ex) when (attempt < maxAttempts)
             {
+                lastJikanException = ex;
                 logger.LogDebug(ex, "MyAnimeList anime search failed for query {Query}; retrying", query);
                 await Task.Delay(TimeSpan.FromMilliseconds(750)).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
-                logger.LogWarning(ex, "MyAnimeList anime search failed for query {Query}", query);
-                return null;
+                lastJikanException = ex;
+                break;
             }
         }
 
+        var fallbackResults = await SearchMalAnimePrefixAsync(query, isNsfwChannel).ConfigureAwait(false);
+        if (fallbackResults is not null)
+        {
+            logger.LogDebug(lastJikanException,
+                "Jikan anime search failed for query {Query}; using MyAnimeList prefix fallback", query);
+            return fallbackResults;
+        }
+
+        logger.LogWarning(lastJikanException, "MyAnimeList anime search failed for query {Query}", query);
         return null;
+    }
+
+    private async Task<IReadOnlyList<MalAnimeSearchResult>?> SearchMalAnimePrefixAsync(string query, bool isNsfwChannel)
+    {
+        try
+        {
+            using var http = httpFactory.CreateClient();
+            using var req = new HttpRequestMessage(HttpMethod.Get,
+                $"https://myanimelist.net/search/prefix.json?type=anime&keyword={Uri.EscapeDataString(query)}&v=1");
+            req.Headers.UserAgent.ParseAdd("MewdekoBot/1.0 (+https://github.com/)");
+
+            using var res = await http.SendAsync(req).ConfigureAwait(false);
+            if (!res.IsSuccessStatusCode)
+                return null;
+
+            await using var stream = await res.Content.ReadAsStreamAsync().ConfigureAwait(false);
+            using var document = await JsonDocument.ParseAsync(stream).ConfigureAwait(false);
+            if (!document.RootElement.TryGetProperty("categories", out var categories)
+                || categories.ValueKind != JsonValueKind.Array)
+                return [];
+
+            var results = new List<MalAnimeSearchResult>();
+            foreach (var category in categories.EnumerateArray())
+            {
+                if (!string.Equals(GetJsonString(category, "type"), "anime", StringComparison.OrdinalIgnoreCase)
+                    || !category.TryGetProperty("items", out var items)
+                    || items.ValueKind != JsonValueKind.Array)
+                    continue;
+
+                foreach (var item in items.EnumerateArray())
+                {
+                    if (!string.Equals(GetJsonString(item, "type"), "anime", StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    var payload = item.TryGetProperty("payload", out var payloadElement)
+                        ? payloadElement
+                        : default;
+                    var ratingText = GetJsonString(payload, "rating");
+                    if (!isNsfwChannel && string.Equals(ratingText, "Rx - Hentai", StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    results.Add(new MalAnimeSearchResult
+                    {
+                        Title = GetJsonString(item, "name") ?? "Unknown",
+                        Url = GetJsonString(item, "url") ?? "",
+                        ImageUrl = GetJsonString(item, "image_url"),
+                        Type = GetJsonString(payload, "media_type"),
+                        StartDateText = GetJsonString(payload, "aired")
+                                        ?? GetJsonNumber(payload, "start_year")?.ToString(CultureInfo.InvariantCulture),
+                        Score = GetJsonString(payload, "score"),
+                        Status = GetJsonString(payload, "status"),
+                        Rating = ratingText
+                    });
+                }
+            }
+
+            return results;
+        }
+        catch (Exception ex)
+        {
+            logger.LogDebug(ex, "MyAnimeList prefix anime search failed for query {Query}", query);
+            return null;
+        }
+    }
+
+    private static string? GetJsonString(JsonElement element, string propertyName)
+    {
+        if (element.ValueKind != JsonValueKind.Object
+            || !element.TryGetProperty(propertyName, out var property)
+            || property.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+            return null;
+
+        return property.ValueKind == JsonValueKind.String
+            ? property.GetString()
+            : property.ToString();
+    }
+
+    private static double? GetJsonNumber(JsonElement element, string propertyName)
+    {
+        if (element.ValueKind != JsonValueKind.Object
+            || !element.TryGetProperty(propertyName, out var property)
+            || property.ValueKind != JsonValueKind.Number)
+            return null;
+
+        return property.GetDouble();
+    }
+
+    /// <summary>
+    ///     Represents an anime search result from MyAnimeList/Jikan.
+    /// </summary>
+    public sealed class MalAnimeSearchResult
+    {
+        /// <summary>
+        ///     Gets the result title.
+        /// </summary>
+        public string Title { get; init; } = "Unknown";
+
+        /// <summary>
+        ///     Gets the MyAnimeList URL.
+        /// </summary>
+        public string Url { get; init; } = "";
+
+        /// <summary>
+        ///     Gets the result synopsis.
+        /// </summary>
+        public string? Synopsis { get; init; }
+
+        /// <summary>
+        ///     Gets the image URL.
+        /// </summary>
+        public string? ImageUrl { get; init; }
+
+        /// <summary>
+        ///     Gets the genres.
+        /// </summary>
+        public string? Genres { get; init; }
+
+        /// <summary>
+        ///     Gets the episode count.
+        /// </summary>
+        public string? Episodes { get; init; }
+
+        /// <summary>
+        ///     Gets the score.
+        /// </summary>
+        public string? Score { get; init; }
+
+        /// <summary>
+        ///     Gets the airing status.
+        /// </summary>
+        public string? Status { get; init; }
+
+        /// <summary>
+        ///     Gets the media type.
+        /// </summary>
+        public string? Type { get; init; }
+
+        /// <summary>
+        ///     Gets the start date.
+        /// </summary>
+        public DateTime? StartDateUtc { get; init; }
+
+        /// <summary>
+        ///     Gets fallback start/aired text.
+        /// </summary>
+        public string? StartDateText { get; init; }
+
+        /// <summary>
+        ///     Gets the end date.
+        /// </summary>
+        public DateTime? EndDateUtc { get; init; }
+
+        /// <summary>
+        ///     Gets fallback end date text.
+        /// </summary>
+        public string? EndDateText { get; init; }
+
+        /// <summary>
+        ///     Gets the age rating.
+        /// </summary>
+        public string? Rating { get; init; }
+
+        /// <summary>
+        ///     Gets the MAL rank.
+        /// </summary>
+        public string? Rank { get; init; }
+
+        /// <summary>
+        ///     Gets the popularity rank.
+        /// </summary>
+        public string? Popularity { get; init; }
+
+        /// <summary>
+        ///     Gets the member count.
+        /// </summary>
+        public string? Members { get; init; }
+
+        /// <summary>
+        ///     Gets the favorite count.
+        /// </summary>
+        public string? Favorites { get; init; }
+
+        /// <summary>
+        ///     Gets the source material.
+        /// </summary>
+        public string? Source { get; init; }
+
+        /// <summary>
+        ///     Gets the duration.
+        /// </summary>
+        public string? Duration { get; init; }
+
+        /// <summary>
+        ///     Gets the studios.
+        /// </summary>
+        public string? Studios { get; init; }
+
+        /// <summary>
+        ///     Gets the producers.
+        /// </summary>
+        public string? Producers { get; init; }
+    }
+
+    private static MalAnimeSearchResult FromJikanAnime(Anime anime)
+    {
+        return new MalAnimeSearchResult
+        {
+            Title = anime.Titles?.FirstOrDefault()?.Title ?? "Unknown",
+            Url = anime.Url ?? "",
+            Synopsis = anime.Synopsis,
+            ImageUrl = anime.Images?.JPG?.LargeImageUrl,
+            Genres = anime.Genres?.Any() == true ? string.Join(", ", anime.Genres.Select(x => x.Name)) : null,
+            Episodes = anime.Episodes?.ToString(CultureInfo.InvariantCulture),
+            Score = anime.Score?.ToString(CultureInfo.InvariantCulture),
+            Status = anime.Status,
+            Type = anime.Type,
+            StartDateUtc = anime.Aired?.From?.UtcDateTime,
+            EndDateUtc = anime.Aired?.To?.UtcDateTime,
+            Rating = anime.Rating,
+            Rank = anime.Rank?.ToString(CultureInfo.InvariantCulture),
+            Popularity = anime.Popularity?.ToString(CultureInfo.InvariantCulture),
+            Members = anime.Members?.ToString(CultureInfo.InvariantCulture),
+            Favorites = anime.Favorites?.ToString(CultureInfo.InvariantCulture),
+            Source = anime.Source,
+            Duration = anime.Duration,
+            Studios = anime.Studios?.Any() == true ? string.Join(", ", anime.Studios.Select(x => x.Name)) : null,
+            Producers = anime.Producers?.Any() == true ? string.Join(", ", anime.Producers.Select(x => x.Name)) : null
+        };
     }
 
     /// <summary>
@@ -486,53 +731,39 @@ public class SearchesService : INService, IUnloadableService
     /// <param name="guildId">The guild id for localization.</param>
     /// <param name="data">The anime result to display.</param>
     /// <returns>A paginator page for the anime result.</returns>
-    public PageBuilder BuildMalAnimePage(ulong guildId, Anime? data)
+    public PageBuilder BuildMalAnimePage(ulong guildId, MalAnimeSearchResult? data)
     {
         return new PageBuilder()
-            .WithTitle(data?.Titles?.FirstOrDefault()?.Title ?? "Unknown")
+            .WithTitle(data?.Title ?? "Unknown")
             .WithUrl(data?.Url ?? "")
             .WithDescription(string.IsNullOrWhiteSpace(data?.Synopsis)
                 ? strings.NoDescriptionAvailable(guildId)
                 : data.Synopsis)
-            .AddField(strings.AnimeGenres(guildId),
-                data?.Genres?.Any() == true ? string.Join(", ", data.Genres.Select(x => x.Name)) : "Unknown", true)
-            .AddField(strings.AnimeEpisodes(guildId),
-                data?.Episodes.HasValue == true ? data.Episodes : "Unknown", true)
-            .AddField(strings.AnimeScore(guildId),
-                data?.Score.HasValue == true ? data.Score : "Unknown", true)
+            .AddField(strings.AnimeGenres(guildId), data?.Genres ?? "Unknown", true)
+            .AddField(strings.AnimeEpisodes(guildId), data?.Episodes ?? "Unknown", true)
+            .AddField(strings.AnimeScore(guildId), data?.Score ?? "Unknown", true)
             .AddField(strings.AnimeStatus(guildId), data?.Status ?? "Unknown", true)
             .AddField(strings.AnimeType(guildId), data?.Type ?? "Unknown", true)
             .AddField(strings.AnimeStartDate(guildId),
-                data?.Aired?.From.HasValue == true
-                    ? TimestampTag.FromDateTime(data.Aired.From.Value.UtcDateTime)
-                    : "Unknown",
+                data?.StartDateUtc != null
+                    ? TimestampTag.FromDateTime(data.StartDateUtc.Value)
+                    : data?.StartDateText ?? "Unknown",
                 true)
             .AddField(strings.AnimeEndDate(guildId),
-                data?.Aired?.To.HasValue == true
-                    ? TimestampTag.FromDateTime(data.Aired.To.Value.UtcDateTime)
-                    : "Unknown", true)
+                data?.EndDateUtc != null
+                    ? TimestampTag.FromDateTime(data.EndDateUtc.Value)
+                    : data?.EndDateText ?? "Unknown", true)
             .AddField(strings.AnimeRating(guildId), data?.Rating ?? "Unknown", true)
-            .AddField(strings.AnimeRank(guildId), data?.Rank.HasValue == true ? data.Rank : "Unknown",
-                true)
-            .AddField(strings.AnimePopularity(guildId),
-                data?.Popularity.HasValue == true ? data.Popularity : "Unknown", true)
-            .AddField(strings.AnimeMembers(guildId),
-                data?.Members.HasValue == true ? data.Members : "Unknown", true)
-            .AddField(strings.AnimeFavorites(guildId),
-                data?.Favorites.HasValue == true ? data.Favorites : "Unknown", true)
+            .AddField(strings.AnimeRank(guildId), data?.Rank ?? "Unknown", true)
+            .AddField(strings.AnimePopularity(guildId), data?.Popularity ?? "Unknown", true)
+            .AddField(strings.AnimeMembers(guildId), data?.Members ?? "Unknown", true)
+            .AddField(strings.AnimeFavorites(guildId), data?.Favorites ?? "Unknown", true)
             .AddField(strings.AnimeSource(guildId), data?.Source ?? "Unknown", true)
             .AddField(strings.AnimeDuration(guildId), data?.Duration ?? "Unknown", true)
-            .AddField(strings.AnimeStudios(guildId),
-                data?.Studios?.Any() == true
-                    ? string.Join(", ", data.Studios.Select(x => x.Name))
-                    : "Unknown", true)
-            .AddField(strings.AnimeProducers(guildId),
-                data?.Producers?.Any() == true
-                    ? string.Join(", ", data.Producers.Select(x => x.Name))
-                    : "Unknown",
-                true)
+            .AddField(strings.AnimeStudios(guildId), data?.Studios ?? "Unknown", true)
+            .AddField(strings.AnimeProducers(guildId), data?.Producers ?? "Unknown", true)
             .WithOkColor()
-            .WithImageUrl(data?.Images?.JPG?.LargeImageUrl ?? "");
+            .WithImageUrl(data?.ImageUrl ?? "");
     }
 
     /// <summary>
