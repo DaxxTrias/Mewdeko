@@ -188,7 +188,13 @@ public partial class Searches
         {
             var embed = await Service.BuildMalProfileEmbedAsync(ctx.Guild.Id, name).ConfigureAwait(false);
             if (embed is not null)
+            {
                 await ctx.Channel.EmbedAsync(embed).ConfigureAwait(false);
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(name))
+                await SendMalAnimeSearchAsync(name).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -375,6 +381,12 @@ public partial class Searches
             {
                 IsNsfw: true
             }).ConfigureAwait(false);
+            if (results is null)
+            {
+                await ctx.Channel.SendErrorAsync(Strings.FetchFailed(ctx.Guild.Id), Config).ConfigureAwait(false);
+                return;
+            }
+
             if (results.Count == 0)
             {
                 await ctx.Channel.SendErrorAsync(

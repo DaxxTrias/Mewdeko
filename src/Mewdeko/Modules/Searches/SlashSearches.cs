@@ -261,7 +261,10 @@ public class SlashMyAnimeListSearches(InteractiveService interactiveService)
         await DeferAsync().ConfigureAwait(false);
         var embed = await Service.BuildMalProfileEmbedAsync(ctx.Guild.Id, name).ConfigureAwait(false);
         if (embed is null)
+        {
+            await ErrorAsync(Strings.SearchNoResults(ctx.Guild.Id)).ConfigureAwait(false);
             return;
+        }
 
         await ctx.Interaction.FollowupAsync(embed: embed.Build()).ConfigureAwait(false);
     }
@@ -281,6 +284,12 @@ public class SlashMyAnimeListSearches(InteractiveService interactiveService)
         {
             IsNsfw: true
         }).ConfigureAwait(false);
+        if (results is null)
+        {
+            await ErrorAsync(Strings.FetchFailed(ctx.Guild.Id)).ConfigureAwait(false);
+            return;
+        }
+
         if (results.Count == 0)
         {
             await ErrorAsync(Strings.AnimeNotFound(ctx.Guild.Id)).ConfigureAwait(false);

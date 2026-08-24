@@ -13,6 +13,7 @@ using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
 using GTranslate.Translators;
 using JikanDotNet;
+using JikanDotNet.Exceptions;
 using LinqToDB.Async;
 using MartineApiNet;
 using MartineApiNet.Enums;
@@ -380,6 +381,10 @@ public class SearchesService : INService, IUnloadableService
             .Select(x => x.TextContent.Split(':').Select(y => y.Trim()).ToArray())
             .ToArray();
 
+        if (stats.Count < 5 || info.Count < 2 || daysAndMean.Length < 2
+                            || daysAndMean[0].Length < 2 || daysAndMean[1].Length < 2)
+            return null;
+
         var embed = new EmbedBuilder()
             .WithOkColor()
             .WithTitle(strings.MalProfile(guildId, name))
@@ -443,17 +448,36 @@ public class SearchesService : INService, IUnloadableService
     /// </summary>
     /// <param name="query">The anime title to search for.</param>
     /// <param name="isNsfwChannel">Whether the current channel is marked NSFW.</param>
-    /// <returns>The matching anime results.</returns>
-    public async Task<IReadOnlyList<Anime>> SearchMalAnimeAsync(string query, bool isNsfwChannel)
+    /// <returns>The matching anime results, or null if the provider failed.</returns>
+    public async Task<IReadOnlyList<Anime>?> SearchMalAnimeAsync(string query, bool isNsfwChannel)
     {
         var client = new Jikan();
-        var result = await client.SearchAnimeAsync(query).ConfigureAwait(false);
-        if (result?.Data == null)
-            return [];
+        const int maxAttempts = 2;
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            try
+            {
+                var result = await client.SearchAnimeAsync(query).ConfigureAwait(false);
+                if (result?.Data == null)
+                    return [];
 
-        return result.Data
-            .Where(x => isNsfwChannel || !IsHentaiAnime(x))
-            .ToList();
+                return result.Data
+                    .Where(x => isNsfwChannel || !IsHentaiAnime(x))
+                    .ToList();
+            }
+            catch (JikanRequestException ex) when (attempt < maxAttempts)
+            {
+                logger.LogDebug(ex, "MyAnimeList anime search failed for query {Query}; retrying", query);
+                await Task.Delay(TimeSpan.FromMilliseconds(750)).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "MyAnimeList anime search failed for query {Query}", query);
+                return null;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>
