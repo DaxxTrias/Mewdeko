@@ -5,10 +5,14 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
+using AngleSharp;
 using AngleSharp.Dom;
 using AngleSharp.Html.Dom;
 using AngleSharp.Html.Parser;
+using Fergun.Interactive;
+using Fergun.Interactive.Pagination;
 using GTranslate.Translators;
+using JikanDotNet;
 using LinqToDB.Async;
 using MartineApiNet;
 using MartineApiNet.Enums;
@@ -75,6 +79,7 @@ public class SearchesService : INService, IUnloadableService
     private readonly IHttpClientFactory httpFactory;
 
     private readonly ConcurrentDictionary<ulong, SearchImageCacher> imageCacher = new();
+    private readonly ConcurrentDictionary<ulong, SearchCleanupTrackedResponse> trackedCleanupRequests = new();
     private readonly IImageCache imgs;
     private readonly ILogger<SearchesService> logger;
     private readonly MartineApi martineApi;
@@ -84,6 +89,8 @@ public class SearchesService : INService, IUnloadableService
     private readonly List<string?> yomamaJokes;
 
     private readonly object yomamaLock = new();
+    private static readonly Emoji CleanupReaction = new("🗑️");
+    private static readonly TimeSpan CleanupTrackingLifetime = TimeSpan.FromHours(12);
     private int yomamaJokeIndex;
 
     /// <summary>
@@ -113,6 +120,8 @@ public class SearchesService : INService, IUnloadableService
         this.strings = strings;
         this.logger = logger;
         rng = new MewdekoRandom();
+
+        handler.Subscribe("ReactionAdded", "SearchesService", HandleCleanupReactionAdded);
 
         //translate commands
         handler.Subscribe("MessageReceived", "SearchesService", async (SocketMessage msg) =>
@@ -245,7 +254,302 @@ public class SearchesService : INService, IUnloadableService
         AutoHentaiTimers.Clear();
 
         imageCacher.Clear();
+        trackedCleanupRequests.Clear();
         return Task.CompletedTask;
+    }
+
+    private sealed record SearchCleanupTrackedResponse(ulong RequesterId, DateTimeOffset CreatedAt);
+
+    private async Task HandleCleanupReactionAdded(
+        Cacheable<IUserMessage, ulong> msg,
+        Cacheable<IMessageChannel, ulong> chan,
+        SocketReaction reaction)
+    {
+        _ = chan;
+        if (!IsCleanupReaction(reaction.Emote))
+            return;
+
+        PruneTrackedCleanupRequests();
+        if (!trackedCleanupRequests.TryGetValue(reaction.MessageId, out var trackedResponse))
+            return;
+
+        if (trackedResponse.RequesterId != reaction.UserId)
+            return;
+
+        try
+        {
+            var targetMessage = msg.HasValue ? msg.Value : await msg.GetOrDownloadAsync().ConfigureAwait(false);
+            if (targetMessage != null)
+                await targetMessage.DeleteAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            logger.LogDebug(ex, "Failed to delete search response message {MessageId} via cleanup reaction",
+                reaction.MessageId);
+        }
+        finally
+        {
+            trackedCleanupRequests.TryRemove(reaction.MessageId, out _);
+        }
+    }
+
+    private static bool IsCleanupReaction(IEmote emote)
+    {
+        return emote.Name is "🗑️" or "🗑";
+    }
+
+    /// <summary>
+    ///     Adds a requester-only cleanup reaction to a search response.
+    /// </summary>
+    /// <param name="message">The message to track for cleanup.</param>
+    /// <param name="requesterId">The user allowed to remove the message.</param>
+    public async Task TrackCleanupReaction(IUserMessage message, ulong requesterId)
+    {
+        PruneTrackedCleanupRequests();
+        trackedCleanupRequests[message.Id] = new SearchCleanupTrackedResponse(requesterId, DateTimeOffset.UtcNow);
+
+        try
+        {
+            await message.AddReactionAsync(CleanupReaction).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            trackedCleanupRequests.TryRemove(message.Id, out _);
+            logger.LogDebug(ex, "Failed to add cleanup reaction to search response message {MessageId}", message.Id);
+        }
+    }
+
+    private void PruneTrackedCleanupRequests()
+    {
+        if (trackedCleanupRequests.IsEmpty)
+            return;
+
+        var cutoff = DateTimeOffset.UtcNow.Subtract(CleanupTrackingLifetime);
+        foreach (var trackedEntry in trackedCleanupRequests)
+        {
+            if (trackedEntry.Value.CreatedAt < cutoff)
+                trackedCleanupRequests.TryRemove(trackedEntry.Key, out _);
+        }
+    }
+
+    /// <summary>
+    ///     Builds a MyAnimeList profile embed.
+    /// </summary>
+    /// <param name="guildId">The guild id for localization.</param>
+    /// <param name="name">The MyAnimeList username.</param>
+    /// <returns>The profile embed, or null if no name was supplied.</returns>
+    public async Task<EmbedBuilder?> BuildMalProfileEmbedAsync(ulong guildId, string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return null;
+
+        var fullQueryLink = "https://myanimelist.net/profile/" + name;
+
+        var malConfig = Configuration.Default.WithDefaultLoader();
+        using var document = await BrowsingContext.New(malConfig).OpenAsync(fullQueryLink).ConfigureAwait(false);
+        var imageElem = document.QuerySelector(
+            "body > div#myanimelist > div.wrapper > div#contentWrapper > div#content > div.content-container > div.container-left > div.user-profile > div.user-image > img");
+        var imageUrl = ((IHtmlImageElement?)imageElem)?.Source ??
+                       "https://icecream.me/uploads/870b03f36b59cc16ebfe314ef2dde781.png";
+
+        var stats = document
+            .QuerySelectorAll(
+                "body > div#myanimelist > div.wrapper > div#contentWrapper > div#content > div.content-container > div.container-right > div#statistics > div.user-statistics-stats > div.stats > div.clearfix > ul.stats-status > li > span")
+            .Select(x => x.InnerHtml).ToList();
+
+        var favorites = document.QuerySelectorAll("div.user-favorites > div.di-tc");
+
+        var favAnime = strings.AnimeNoFav(guildId);
+        if (favorites.Length > 0 && favorites[0].QuerySelector("p") == null)
+        {
+            favAnime = string.Join("\n", favorites[0].QuerySelectorAll("ul > li > div.di-tc.va-t > a")
+                .SecureShuffle()
+                .Take(3)
+                .Select(x =>
+                {
+                    var elem = (IHtmlAnchorElement)x;
+                    return $"[{elem.InnerHtml}]({elem.Href})";
+                }));
+        }
+
+        var info = document.QuerySelectorAll("ul.user-status:nth-child(3) > li.clearfix")
+            .Select(x => Tuple.Create(x.Children[0].InnerHtml, x.Children[1].InnerHtml))
+            .ToList();
+
+        var daysAndMean = document.QuerySelectorAll("div.anime:nth-child(1) > div:nth-child(2) > div")
+            .Select(x => x.TextContent.Split(':').Select(y => y.Trim()).ToArray())
+            .ToArray();
+
+        var embed = new EmbedBuilder()
+            .WithOkColor()
+            .WithTitle(strings.MalProfile(guildId, name))
+            .AddField(efb =>
+                efb.WithName("💚 " + strings.Watching(guildId)).WithValue(stats[0]).WithIsInline(true))
+            .AddField(efb =>
+                efb.WithName("💙 " + strings.Completed(guildId)).WithValue(stats[1]).WithIsInline(true));
+        if (info.Count < 3)
+            embed.AddField(efb =>
+                efb.WithName("💛 " + strings.OnHold(guildId)).WithValue(stats[2]).WithIsInline(true));
+        embed
+            .AddField(efb =>
+                efb.WithName("💔 " + strings.Dropped(guildId)).WithValue(stats[3]).WithIsInline(true))
+            .AddField(efb =>
+                efb.WithName("⚪ " + strings.PlanToWatch(guildId)).WithValue(stats[4]).WithIsInline(true))
+            .AddField(efb =>
+                efb.WithName("🕐 " + daysAndMean[0][0]).WithValue(daysAndMean[0][1]).WithIsInline(true))
+            .AddField(efb =>
+                efb.WithName("📊 " + daysAndMean[1][0]).WithValue(daysAndMean[1][1]).WithIsInline(true))
+            .AddField(efb =>
+                efb.WithName(MalInfoToEmoji(info[0].Item1) + " " + info[0].Item1)
+                    .WithValue(info[0].Item2.TrimTo(20)).WithIsInline(true))
+            .AddField(efb =>
+                efb.WithName(MalInfoToEmoji(info[1].Item1) + " " + info[1].Item1)
+                    .WithValue(info[1].Item2.TrimTo(20)).WithIsInline(true));
+        if (info.Count > 2)
+            embed.AddField(efb =>
+                efb.WithName(MalInfoToEmoji(info[2].Item1) + " " + info[2].Item1)
+                    .WithValue(info[2].Item2.TrimTo(20)).WithIsInline(true));
+
+        embed
+            .WithDescription($"""
+
+                              ** https://myanimelist.net/animelist/{name} **
+
+                              **{strings.TopThreeFavAnime(guildId)}**
+                              {favAnime}
+                              """
+            )
+            .WithUrl(fullQueryLink)
+            .WithImageUrl(imageUrl);
+
+        return embed;
+    }
+
+    private static string MalInfoToEmoji(string info)
+    {
+        info = info.Trim().ToLowerInvariant();
+        return info switch
+        {
+            "gender" => "🚁",
+            "location" => "🗺",
+            "last online" => "👥",
+            "birthday" => "📆",
+            _ => "❔"
+        };
+    }
+
+    /// <summary>
+    ///     Searches MyAnimeList for anime through Jikan.
+    /// </summary>
+    /// <param name="query">The anime title to search for.</param>
+    /// <param name="isNsfwChannel">Whether the current channel is marked NSFW.</param>
+    /// <returns>The matching anime results.</returns>
+    public async Task<IReadOnlyList<Anime>> SearchMalAnimeAsync(string query, bool isNsfwChannel)
+    {
+        var client = new Jikan();
+        var result = await client.SearchAnimeAsync(query).ConfigureAwait(false);
+        if (result?.Data == null)
+            return [];
+
+        return result.Data
+            .Where(x => isNsfwChannel || !IsHentaiAnime(x))
+            .ToList();
+    }
+
+    /// <summary>
+    ///     Builds a paginated anime result page.
+    /// </summary>
+    /// <param name="guildId">The guild id for localization.</param>
+    /// <param name="data">The anime result to display.</param>
+    /// <returns>A paginator page for the anime result.</returns>
+    public PageBuilder BuildMalAnimePage(ulong guildId, Anime? data)
+    {
+        return new PageBuilder()
+            .WithTitle(data?.Titles?.FirstOrDefault()?.Title ?? "Unknown")
+            .WithUrl(data?.Url ?? "")
+            .WithDescription(string.IsNullOrWhiteSpace(data?.Synopsis)
+                ? strings.NoDescriptionAvailable(guildId)
+                : data.Synopsis)
+            .AddField(strings.AnimeGenres(guildId),
+                data?.Genres?.Any() == true ? string.Join(", ", data.Genres.Select(x => x.Name)) : "Unknown", true)
+            .AddField(strings.AnimeEpisodes(guildId),
+                data?.Episodes.HasValue == true ? data.Episodes : "Unknown", true)
+            .AddField(strings.AnimeScore(guildId),
+                data?.Score.HasValue == true ? data.Score : "Unknown", true)
+            .AddField(strings.AnimeStatus(guildId), data?.Status ?? "Unknown", true)
+            .AddField(strings.AnimeType(guildId), data?.Type ?? "Unknown", true)
+            .AddField(strings.AnimeStartDate(guildId),
+                data?.Aired?.From.HasValue == true
+                    ? TimestampTag.FromDateTime(data.Aired.From.Value.UtcDateTime)
+                    : "Unknown",
+                true)
+            .AddField(strings.AnimeEndDate(guildId),
+                data?.Aired?.To.HasValue == true
+                    ? TimestampTag.FromDateTime(data.Aired.To.Value.UtcDateTime)
+                    : "Unknown", true)
+            .AddField(strings.AnimeRating(guildId), data?.Rating ?? "Unknown", true)
+            .AddField(strings.AnimeRank(guildId), data?.Rank.HasValue == true ? data.Rank : "Unknown",
+                true)
+            .AddField(strings.AnimePopularity(guildId),
+                data?.Popularity.HasValue == true ? data.Popularity : "Unknown", true)
+            .AddField(strings.AnimeMembers(guildId),
+                data?.Members.HasValue == true ? data.Members : "Unknown", true)
+            .AddField(strings.AnimeFavorites(guildId),
+                data?.Favorites.HasValue == true ? data.Favorites : "Unknown", true)
+            .AddField(strings.AnimeSource(guildId), data?.Source ?? "Unknown", true)
+            .AddField(strings.AnimeDuration(guildId), data?.Duration ?? "Unknown", true)
+            .AddField(strings.AnimeStudios(guildId),
+                data?.Studios?.Any() == true
+                    ? string.Join(", ", data.Studios.Select(x => x.Name))
+                    : "Unknown", true)
+            .AddField(strings.AnimeProducers(guildId),
+                data?.Producers?.Any() == true
+                    ? string.Join(", ", data.Producers.Select(x => x.Name))
+                    : "Unknown",
+                true)
+            .WithOkColor()
+            .WithImageUrl(data?.Images?.JPG?.LargeImageUrl ?? "");
+    }
+
+    /// <summary>
+    ///     Builds a movie result page.
+    /// </summary>
+    /// <param name="movie">The movie data to display.</param>
+    /// <param name="imageIndex">The image index to show.</param>
+    /// <returns>A paginator page for the movie result.</returns>
+    public PageBuilder BuildMoviePage(WikiMovie movie, int imageIndex = 0)
+    {
+        var imageUrl = movie.ImageUrls.Count > imageIndex ? movie.ImageUrls[imageIndex] : movie.ImageUrl;
+        var page = new PageBuilder().WithOkColor()
+            .WithTitle(movie.Title)
+            .WithUrl(movie.Url)
+            .WithDescription(movie.Plot)
+            .AddField("Year", movie.Year, true);
+
+        if (IsValidHttpUrl(imageUrl))
+            page.WithImageUrl(imageUrl);
+
+        if (IsValidHttpUrl(movie.LogoUrl))
+            page.WithThumbnailUrl(movie.LogoUrl);
+
+        return page;
+    }
+
+    /// <summary>
+    ///     Builds a movie result embed.
+    /// </summary>
+    /// <param name="movie">The movie data to display.</param>
+    /// <param name="imageIndex">The image index to show.</param>
+    /// <returns>An embed for the movie result.</returns>
+    public EmbedBuilder BuildMovieEmbed(WikiMovie movie, int imageIndex = 0)
+    {
+        return BuildMoviePage(movie, imageIndex).GetEmbedBuilder();
+    }
+
+    private static bool IsHentaiAnime(Anime anime)
+    {
+        return anime.Genres?.Any(x => string.Equals(x.Name, "Hentai", StringComparison.OrdinalIgnoreCase)) == true
+               || string.Equals(anime.Rating, "Rx - Hentai", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -1077,13 +1381,16 @@ public class SearchesService : INService, IUnloadableService
             // ignore logo failures
         }
 
-        // Resolve poster/main image: prefer API thumbnail, fall back to scraping the first infobox image
-        var imageUrl = page.Thumbnail?.Source;
-        if (string.IsNullOrWhiteSpace(imageUrl) && !string.IsNullOrWhiteSpace(page.FullUrl))
+        // Resolve poster/main images: prefer API thumbnail, then scrape infobox images for extra pages.
+        var imageUrls = new List<string>();
+        if (IsValidHttpUrl(page.Thumbnail?.Source))
+            imageUrls.Add(page.Thumbnail.Source);
+
+        if (!string.IsNullOrWhiteSpace(page.FullUrl))
         {
             try
             {
-                imageUrl = await TryScrapeFirstInfoboxImageAsync(page.FullUrl, http).ConfigureAwait(false);
+                imageUrls.AddRange(await TryScrapeInfoboxImagesAsync(page.FullUrl, http).ConfigureAwait(false));
             }
             catch
             {
@@ -1091,13 +1398,20 @@ public class SearchesService : INService, IUnloadableService
             }
         }
 
+        imageUrls = imageUrls
+            .Where(IsValidHttpUrl)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(10)
+            .ToList();
+
         return new WikiMovie
         {
             Title = page.Title.Replace("(film)", "").Trim(),
             Year = year,
             Plot = GetFirstParagraph(page.Extract),
             Url = page.FullUrl,
-            ImageUrl = imageUrl,
+            ImageUrl = imageUrls.FirstOrDefault(),
+            ImageUrls = imageUrls,
             LogoUrl = logoUrl
         };
     }
@@ -1166,7 +1480,7 @@ public class SearchesService : INService, IUnloadableService
         return $"https://commons.wikimedia.org/wiki/Special:FilePath/{Uri.EscapeDataString(clean)}?width=300";
     }
 
-    private static async Task<string?> TryScrapeFirstInfoboxImageAsync(string pageUrl, HttpClient http)
+    private static async Task<List<string>> TryScrapeInfoboxImagesAsync(string pageUrl, HttpClient http)
     {
         using var req = new HttpRequestMessage(HttpMethod.Get, pageUrl);
         if (!req.Headers.UserAgent.Any())
@@ -1178,11 +1492,21 @@ public class SearchesService : INService, IUnloadableService
 
         using var doc = await GoogleParser.ParseDocumentAsync(html).ConfigureAwait(false);
 
-        // Look for the first image inside the infobox (prefer explicit infobox-image cell)
-        var img = doc.QuerySelector("table.infobox .infobox-image img, table.infobox img") as IHtmlImageElement;
-        if (img == null)
-            return null;
+        var images = doc.QuerySelectorAll("table.infobox .infobox-image img, table.infobox img")
+            .OfType<IHtmlImageElement>();
+        var resolvedImages = new List<string>();
+        foreach (var img in images)
+        {
+            var resolved = await TryResolveWikiImageAsync(img, http).ConfigureAwait(false);
+            if (IsValidHttpUrl(resolved))
+                resolvedImages.Add(resolved);
+        }
 
+        return resolvedImages;
+    }
+
+    private static async Task<string?> TryResolveWikiImageAsync(IHtmlImageElement img, HttpClient http)
+    {
         // Prefer highest-resolution candidate from srcset when available
         var srcset = img.GetAttribute("srcset");
         string? chosen = null;
@@ -1197,11 +1521,12 @@ public class SearchesService : INService, IUnloadableService
         // If no srcset, try resolving via the surrounding file link (more robust, returns a thumb from API)
         if (string.IsNullOrWhiteSpace(chosen))
         {
-            var parentAnchor = img.ParentElement as IHtmlAnchorElement;
+            var parentAnchor = img.ParentElement?.Closest("a[href^='/wiki/File:']") as IHtmlAnchorElement;
             var fileHref = parentAnchor?.GetAttribute("href");
             if (!string.IsNullOrWhiteSpace(fileHref) && fileHref.StartsWith("/wiki/File:", StringComparison.Ordinal))
             {
-                var fileTitle = fileHref["/wiki/File:".Length..];
+                var fileTitle = Uri.EscapeDataString(Uri.UnescapeDataString(fileHref["/wiki/File:".Length..])
+                    .Replace('_', ' '));
                 try
                 {
                     var infoUrl =
@@ -1248,6 +1573,13 @@ public class SearchesService : INService, IUnloadableService
             chosen = "https://en.wikipedia.org" + chosen;
 
         return chosen;
+    }
+
+    private static bool IsValidHttpUrl(string? imageUrl)
+    {
+        return !string.IsNullOrWhiteSpace(imageUrl)
+               && Uri.TryCreate(imageUrl, UriKind.Absolute, out var uri)
+               && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
     }
 
     private sealed class WikidataClaimsResponse

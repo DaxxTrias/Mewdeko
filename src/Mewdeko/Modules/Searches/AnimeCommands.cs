@@ -2,8 +2,6 @@
 using System.IO;
 using System.Net.Http;
 using System.Text.Json;
-using AngleSharp;
-using AngleSharp.Html.Dom;
 using Anilist4Net;
 using Discord.Commands;
 using Fergun.Interactive;
@@ -188,102 +186,9 @@ public partial class Searches
         [Priority(0)]
         public async Task Mal([Remainder] string? name)
         {
-            if (string.IsNullOrWhiteSpace(name))
-                return;
-
-            var fullQueryLink = "https://myanimelist.net/profile/" + name;
-
-            var malConfig = Configuration.Default.WithDefaultLoader();
-            using var document = await BrowsingContext.New(malConfig).OpenAsync(fullQueryLink).ConfigureAwait(false);
-            var imageElem = document.QuerySelector(
-                "body > div#myanimelist > div.wrapper > div#contentWrapper > div#content > div.content-container > div.container-left > div.user-profile > div.user-image > img");
-            var imageUrl = ((IHtmlImageElement?)imageElem)?.Source ??
-                           "https://icecream.me/uploads/870b03f36b59cc16ebfe314ef2dde781.png";
-
-            var stats = document
-                .QuerySelectorAll(
-                    "body > div#myanimelist > div.wrapper > div#contentWrapper > div#content > div.content-container > div.container-right > div#statistics > div.user-statistics-stats > div.stats > div.clearfix > ul.stats-status > li > span")
-                .Select(x => x.InnerHtml).ToList();
-
-            var favorites = document.QuerySelectorAll("div.user-favorites > div.di-tc");
-
-            var favAnime = Strings.AnimeNoFav(ctx.Guild.Id);
-            if (favorites.Length > 0 && favorites[0].QuerySelector("p") == null)
-            {
-                favAnime = string.Join("\n", favorites[0].QuerySelectorAll("ul > li > div.di-tc.va-t > a")
-                    .SecureShuffle()
-                    .Take(3)
-                    .Select(x =>
-                    {
-                        var elem = (IHtmlAnchorElement)x;
-                        return $"[{elem.InnerHtml}]({elem.Href})";
-                    }));
-            }
-
-            var info = document.QuerySelectorAll("ul.user-status:nth-child(3) > li.clearfix")
-                .Select(x => Tuple.Create(x.Children[0].InnerHtml, x.Children[1].InnerHtml))
-                .ToList();
-
-            var daysAndMean = document.QuerySelectorAll("div.anime:nth-child(1) > div:nth-child(2) > div")
-                .Select(x => x.TextContent.Split(':').Select(y => y.Trim()).ToArray())
-                .ToArray();
-
-            var embed = new EmbedBuilder()
-                .WithOkColor()
-                .WithTitle(Strings.MalProfile(ctx.Guild.Id, name))
-                .AddField(efb =>
-                    efb.WithName("💚 " + Strings.Watching(ctx.Guild.Id)).WithValue(stats[0]).WithIsInline(true))
-                .AddField(efb =>
-                    efb.WithName("💙 " + Strings.Completed(ctx.Guild.Id)).WithValue(stats[1]).WithIsInline(true));
-            if (info.Count < 3)
-                embed.AddField(efb =>
-                    efb.WithName("💛 " + Strings.OnHold(ctx.Guild.Id)).WithValue(stats[2]).WithIsInline(true));
-            embed
-                .AddField(efb =>
-                    efb.WithName("💔 " + Strings.Dropped(ctx.Guild.Id)).WithValue(stats[3]).WithIsInline(true))
-                .AddField(efb =>
-                    efb.WithName("⚪ " + Strings.PlanToWatch(ctx.Guild.Id)).WithValue(stats[4]).WithIsInline(true))
-                .AddField(efb =>
-                    efb.WithName("🕐 " + daysAndMean[0][0]).WithValue(daysAndMean[0][1]).WithIsInline(true))
-                .AddField(efb =>
-                    efb.WithName("📊 " + daysAndMean[1][0]).WithValue(daysAndMean[1][1]).WithIsInline(true))
-                .AddField(efb =>
-                    efb.WithName(MalInfoToEmoji(info[0].Item1) + " " + info[0].Item1)
-                        .WithValue(info[0].Item2.TrimTo(20)).WithIsInline(true))
-                .AddField(efb =>
-                    efb.WithName(MalInfoToEmoji(info[1].Item1) + " " + info[1].Item1)
-                        .WithValue(info[1].Item2.TrimTo(20)).WithIsInline(true));
-            if (info.Count > 2)
-                embed.AddField(efb =>
-                    efb.WithName(MalInfoToEmoji(info[2].Item1) + " " + info[2].Item1)
-                        .WithValue(info[2].Item2.TrimTo(20)).WithIsInline(true));
-
-            embed
-                .WithDescription($"""
-
-                                  ** https://myanimelist.net/animelist/{name} **
-
-                                  **{Strings.TopThreeFavAnime(ctx.Guild.Id)}**
-                                  {favAnime}
-                                  """
-                )
-                .WithUrl(fullQueryLink)
-                .WithImageUrl(imageUrl);
-
-            await ctx.Channel.EmbedAsync(embed).ConfigureAwait(false);
-        }
-
-        private static string MalInfoToEmoji(string info)
-        {
-            info = info.Trim().ToLowerInvariant();
-            return info switch
-            {
-                "gender" => "🚁",
-                "location" => "🗺",
-                "last online" => "👥",
-                "birthday" => "📆",
-                _ => "❔"
-            };
+            var embed = await Service.BuildMalProfileEmbedAsync(ctx.Guild.Id, name).ConfigureAwait(false);
+            if (embed is not null)
+                await ctx.Channel.EmbedAsync(embed).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -426,6 +331,24 @@ public partial class Searches
         }
 
         /// <summary>
+        ///     Searches MyAnimeList for anime and displays information about the search results.
+        /// </summary>
+        /// <param name="query">The query to search for.</param>
+        /// <remarks>
+        ///     This command extends the MyAnimeList search set to anime titles, using the same result
+        ///     pages as the anime command.
+        /// </remarks>
+        /// <example>
+        ///     <code>.malanime search_query</code>
+        /// </example>
+        [Cmd]
+        [Aliases]
+        public Task MalAnime([Remainder] string query)
+        {
+            return SendMalAnimeSearchAsync(query);
+        }
+
+        /// <summary>
         ///     Searches for anime and displays information about the search results.
         /// </summary>
         /// <param name="query">The query to search for.</param>
@@ -440,24 +363,22 @@ public partial class Searches
         [Aliases]
         public async Task Anime([Remainder] string query)
         {
-            var client = new Jikan();
-            var result = await client.SearchAnimeAsync(query);
-            if (result is null)
+            await SendMalAnimeSearchAsync(query).ConfigureAwait(false);
+        }
+
+        private async Task SendMalAnimeSearchAsync(string query)
+        {
+            if (string.IsNullOrWhiteSpace(query))
+                return;
+
+            var results = await Service.SearchMalAnimeAsync(query, ctx.Channel is ITextChannel
+            {
+                IsNsfw: true
+            }).ConfigureAwait(false);
+            if (results.Count == 0)
             {
                 await ctx.Channel.SendErrorAsync(
                         Strings.AnimeNotFound(ctx.Guild.Id), Config)
-                    .ConfigureAwait(false);
-                return;
-            }
-
-            IEnumerable<Anime> newResult = ((ITextChannel)ctx.Channel).IsNsfw
-                ? result.Data
-                    .Where(x => x.Genres.Any(malUrl => malUrl.Name != "Hentai"))
-                : result.Data;
-
-            if (!newResult.Any())
-            {
-                await ctx.Channel.SendErrorAsync(Strings.NoResultsFound(ctx.Guild.Id), Config)
                     .ConfigureAwait(false);
                 return;
             }
@@ -466,7 +387,7 @@ public partial class Searches
                 .AddUser(ctx.User)
                 .WithPageFactory(PageFactory)
                 .WithFooter(PaginatorFooter.PageNumber | PaginatorFooter.Users)
-                .WithMaxPageIndex(result.Data.Count - 1)
+                .WithMaxPageIndex(results.Count - 1)
                 .WithDefaultCanceledPage()
                 .WithDefaultEmotes()
                 .WithActionOnCancellation(ActionOnStop.DeleteMessage)
@@ -474,62 +395,10 @@ public partial class Searches
             await service.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(60))
                 .ConfigureAwait(false);
 
-
             async Task<PageBuilder> PageFactory(int page)
             {
-                try
-                {
-                    await Task.CompletedTask;
-                    var data = newResult.Skip(page).FirstOrDefault();
-                    return new PageBuilder()
-                        .WithTitle(data?.Titles?.FirstOrDefault()?.Title ?? "Unknown")
-                        .WithUrl(data?.Url ?? "")
-                        .WithDescription(data?.Synopsis ?? Strings.NoDescriptionAvailable(ctx.Guild.Id))
-                        .AddField(Strings.AnimeGenres(ctx.Guild.Id),
-                            data?.Genres != null ? string.Join(", ", data.Genres) : "Unknown", true)
-                        .AddField(Strings.AnimeEpisodes(ctx.Guild.Id),
-                            data?.Episodes.HasValue == true ? data.Episodes : "Unknown", true)
-                        .AddField(Strings.AnimeScore(ctx.Guild.Id),
-                            data?.Score.HasValue == true ? data.Score : "Unknown", true)
-                        .AddField(Strings.AnimeStatus(ctx.Guild.Id), data?.Status ?? "Unknown", true)
-                        .AddField(Strings.AnimeType(ctx.Guild.Id), data?.Type ?? "Unknown", true)
-                        .AddField(Strings.AnimeStartDate(ctx.Guild.Id),
-                            data?.Aired?.From.HasValue == true
-                                ? TimestampTag.FromDateTime(data.Aired.From.Value.UtcDateTime)
-                                : "Unknown",
-                            true)
-                        .AddField(Strings.AnimeEndDate(ctx.Guild.Id),
-                            data?.Aired?.To.HasValue == true
-                                ? TimestampTag.FromDateTime(data.Aired.To.Value.UtcDateTime)
-                                : "Unknown", true)
-                        .AddField(Strings.AnimeRating(ctx.Guild.Id), data?.Rating ?? "Unknown", true)
-                        .AddField(Strings.AnimeRank(ctx.Guild.Id), data?.Rank.HasValue == true ? data.Rank : "Unknown",
-                            true)
-                        .AddField(Strings.AnimePopularity(ctx.Guild.Id),
-                            data?.Popularity.HasValue == true ? data.Popularity : "Unknown", true)
-                        .AddField(Strings.AnimeMembers(ctx.Guild.Id),
-                            data?.Members.HasValue == true ? data.Members : "Unknown", true)
-                        .AddField(Strings.AnimeFavorites(ctx.Guild.Id),
-                            data?.Favorites.HasValue == true ? data.Favorites : "Unknown", true)
-                        .AddField(Strings.AnimeSource(ctx.Guild.Id), data?.Source ?? "Unknown", true)
-                        .AddField(Strings.AnimeDuration(ctx.Guild.Id), data?.Duration ?? "Unknown", true)
-                        .AddField(Strings.AnimeStudios(ctx.Guild.Id),
-                            data?.Studios?.Any() == true
-                                ? string.Join(", ", data.Studios.Select(x => x.Name))
-                                : "Unknown", true)
-                        .AddField(Strings.AnimeProducers(ctx.Guild.Id),
-                            data?.Producers?.Any() == true
-                                ? string.Join(", ", data.Producers.Select(x => x.Name))
-                                : "Unknown",
-                            true)
-                        .WithOkColor()
-                        .WithImageUrl(data?.Images?.JPG?.LargeImageUrl ?? "");
-                }
-                catch (Exception e)
-                {
-                    Console.WriteLine(e);
-                    throw;
-                }
+                await Task.CompletedTask.ConfigureAwait(false);
+                return Service.BuildMalAnimePage(ctx.Guild.Id, results[page]);
             }
         }
 

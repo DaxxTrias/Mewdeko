@@ -581,27 +581,37 @@ public partial class Searches(
             return;
         }
 
-        var eb = new EmbedBuilder().WithOkColor()
-            .WithTitle(movie.Title)
-            .WithUrl(movie.Url)
-            .WithDescription(movie.Plot)
-            .AddField(efb => efb.WithName("Year").WithValue(movie.Year).WithIsInline(true));
+        await SendMovieResultAsync(movie, ctx.User, ctx.Channel).ConfigureAwait(false);
+    }
 
-        if (!string.IsNullOrWhiteSpace(movie.ImageUrl)
-            && Uri.TryCreate(movie.ImageUrl, UriKind.Absolute, out var posterUri)
-            && (posterUri.Scheme == Uri.UriSchemeHttp || posterUri.Scheme == Uri.UriSchemeHttps))
+    private async Task SendMovieResultAsync(WikiMovie movie, IUser user, IMessageChannel channel)
+    {
+        if (movie.ImageUrls.Count <= 1)
         {
-            eb.WithImageUrl(movie.ImageUrl);
+            var msg = await channel.EmbedAsync(Service.BuildMovieEmbed(movie)).ConfigureAwait(false);
+            await Service.TrackCleanupReaction(msg, user.Id).ConfigureAwait(false);
+            return;
         }
 
-        if (!string.IsNullOrWhiteSpace(movie.LogoUrl)
-            && Uri.TryCreate(movie.LogoUrl, UriKind.Absolute, out var logoUri)
-            && (logoUri.Scheme == Uri.UriSchemeHttp || logoUri.Scheme == Uri.UriSchemeHttps))
-        {
-            eb.WithThumbnailUrl(movie.LogoUrl);
-        }
+        var paginator = new LazyPaginatorBuilder()
+            .AddUser(user)
+            .WithPageFactory(PageFactory)
+            .WithFooter(PaginatorFooter.PageNumber | PaginatorFooter.Users)
+            .WithMaxPageIndex(movie.ImageUrls.Count - 1)
+            .AddOption(new Emoji("◀️"), PaginatorAction.Backward)
+            .AddOption(new Emoji("▶️"), PaginatorAction.Forward)
+            .AddOption(new Emoji("🗑️"), PaginatorAction.Exit)
+            .WithActionOnCancellation(ActionOnStop.DeleteMessage)
+            .Build();
 
-        await ctx.Channel.EmbedAsync(eb).ConfigureAwait(false);
+        await serv.SendPaginatorAsync(paginator, channel, TimeSpan.FromMinutes(60)).ConfigureAwait(false);
+        return;
+
+        async Task<PageBuilder> PageFactory(int page)
+        {
+            await Task.CompletedTask.ConfigureAwait(false);
+            return Service.BuildMoviePage(movie, page);
+        }
     }
 
     /// <summary>
