@@ -2715,7 +2715,12 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
 
         _ = Task.Run(() => RecordImageHashHitAsync(user.Guild.Id, match.Entry.Id));
 
-        await ApplyImageHashPunishment(user, stats, triggerMessage, action, duration, roleId).ConfigureAwait(false);
+        var matchDescription = string.IsNullOrWhiteSpace(match.Entry.Name)
+            ? $"blocked image hash #{match.Entry.Id}"
+            : $"blocked image hash #{match.Entry.Id}: {match.Entry.Name}";
+
+        await ApplyImageHashPunishment(user, stats, triggerMessage, action, duration, roleId, matchDescription)
+            .ConfigureAwait(false);
     }
 
     private static PresetScamImage? FindPresetMatch(IReadOnlyList<PresetScamImage> presets, ImageMatchHashes posted,
@@ -2776,20 +2781,23 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
 
         _ = Task.Run(() => RecordPresetHitAsync(user.Guild.Id));
 
-        await ApplyImageHashPunishment(user, stats, triggerMessage, action, settings.PunishDuration, settings.RoleId)
+        await ApplyImageHashPunishment(user, stats, triggerMessage, action, settings.PunishDuration, settings.RoleId,
+                $"known scam image preset: {preset.Id}")
             .ConfigureAwait(false);
     }
 
     private async Task ApplyImageHashPunishment(IGuildUser user, AntiImageHashStats stats,
-        IUserMessage triggerMessage, PunishmentAction action, int duration, ulong? roleId)
+        IUserMessage triggerMessage, PunishmentAction action, int duration, ulong? roleId, string matchDescription)
     {
         var settings = stats.AntiImageHashSettings;
+        var deletedMessage = false;
 
         if (settings.DeleteMessages || action == PunishmentAction.Delete)
         {
             try
             {
                 await triggerMessage.DeleteAsync().ConfigureAwait(false);
+                deletedMessage = true;
             }
             catch (Exception ex)
             {
@@ -2812,9 +2820,67 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
         }
 
         if (action is PunishmentAction.Delete or PunishmentAction.None)
+        {
+            await SendImageHashReceiptAsync(user, triggerMessage, action, duration, deletedMessage, matchDescription)
+                .ConfigureAwait(false);
             return;
+        }
 
         await PunishUsers((int)action, ProtectionType.ImageHash, duration, roleId, user).ConfigureAwait(false);
+
+        await SendImageHashReceiptAsync(user, triggerMessage, action, duration, deletedMessage, matchDescription)
+            .ConfigureAwait(false);
+    }
+
+    private async Task SendImageHashReceiptAsync(IGuildUser user, IUserMessage triggerMessage, PunishmentAction action,
+        int duration, bool deletedMessage, string matchDescription)
+    {
+        if (triggerMessage.Channel is not ITextChannel sourceChannel)
+            return;
+
+        try
+        {
+            var warnlogChannelId = await punishService.GetWarnlogChannel(sourceChannel.Guild.Id).ConfigureAwait(false);
+            if (warnlogChannelId == 0)
+                return;
+
+            var warnlog = await sourceChannel.Guild.GetTextChannelAsync(warnlogChannelId).ConfigureAwait(false);
+            if (warnlog is null)
+                return;
+
+            var durationText = duration > 0 ? $" for {duration} minute{(duration == 1 ? "" : "s")}" : "";
+            var preview = string.IsNullOrWhiteSpace(triggerMessage.Content)
+                ? "[no text content]"
+                : Format.Sanitize(triggerMessage.Content.TrimTo(500));
+            var attachmentSummary = triggerMessage.Attachments.Count == 0
+                ? "None"
+                : string.Join(", ", triggerMessage.Attachments
+                    .Select(a => string.IsNullOrWhiteSpace(a.Filename) ? a.Url : a.Filename)
+                    .Take(MaxImagesPerMessage)).TrimTo(500);
+
+            var desc = new StringBuilder()
+                .AppendLine($"User: {user.Mention} ({user.Id})")
+                .AppendLine($"Channel: <#{sourceChannel.Id}>")
+                .AppendLine($"Action: {action}{durationText}")
+                .AppendLine($"Cleanup: {(deletedMessage ? "offending message deleted" : "offending message not deleted")}")
+                .AppendLine($"Match: {Format.Sanitize(matchDescription)}")
+                .AppendLine($"Attachments: {Format.Sanitize(attachmentSummary)}")
+                .AppendLine("Preview:")
+                .AppendLine(preview);
+
+            var eb = new EmbedBuilder()
+                .WithTitle("[Anti-Image-Hash] Blocked Image Detected")
+                .WithDescription(desc.ToString().TrimTo(4096))
+                .WithOkColor()
+                .WithCurrentTimestamp();
+
+            await warnlog.SendMessageAsync(embed: eb.Build(), allowedMentions: AllowedMentions.None)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to publish anti-image-hash receipt for user {UserId}", user.Id);
+        }
     }
 
     private async Task RecordPresetHitAsync(ulong guildId)
