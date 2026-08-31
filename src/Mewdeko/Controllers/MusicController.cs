@@ -530,14 +530,21 @@ public class MusicController : Controller
         if (guild == null)
             return NotFound("Guild not found");
 
+        var term = request?.Term;
+        if (string.IsNullOrWhiteSpace(term))
+            return BadRequest("A url or search query is required");
+
+        if (request.Requester is null)
+            return BadRequest("Requester is required");
+
         var player = await audioService.Players.GetPlayerAsync<MewdekoPlayer>(guildId);
         if (player == null)
             return NotFound("No active player found");
 
-        var searchMode = request.Url.Contains("spotify") ? TrackSearchMode.Spotify :
-            request.Url.Contains("youtube") ? TrackSearchMode.YouTube : TrackSearchMode.None;
+        var searchMode = term.Contains("spotify") ? TrackSearchMode.Spotify :
+            term.Contains("youtube") ? TrackSearchMode.YouTube : TrackSearchMode.None;
 
-        var trackResult = await audioService.Tracks.LoadTrackAsync(request.Url, new TrackLoadOptions
+        var trackResult = await audioService.Tracks.LoadTrackAsync(term, new TrackLoadOptions
         {
             SearchMode = searchMode
         });

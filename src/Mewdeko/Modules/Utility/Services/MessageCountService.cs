@@ -276,7 +276,7 @@ public class MessageCountService : INService, IDisposable
                         GuildId = guildId, ChannelId = channelId, UserId = userId, Count = 0
                     };
 
-                    record.Id = await db.InsertWithInt32IdentityAsync(record, token: cancellationToken);
+                    record.Id = await db.InsertWithInt64IdentityAsync(record, token: cancellationToken);
                 }
 
                 // Cache the result
