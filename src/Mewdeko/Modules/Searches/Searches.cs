@@ -6,6 +6,7 @@ using Discord.Commands;
 using Fergun.Interactive;
 using Fergun.Interactive.Pagination;
 using GScraper;
+using GScraper.Brave;
 using GScraper.DuckDuckGo;
 using GScraper.Google;
 using Google.Cloud.Vision.V1;
@@ -48,6 +49,7 @@ public partial class Searches(
 {
     private static readonly ConcurrentDictionary<string, string> CachedShortenedLinks = new();
     private static int googleImageProviderDisabledForSession;
+    private static int duckDuckGoImageProviderDisabledForSession;
 
     /// <summary>
     ///     Fetches and displays a random meme from Reddit.
@@ -731,11 +733,11 @@ public partial class Searches(
     }
 
     /// <summary>
-    ///     Performs an image search using Google and DuckDuckGo, then filters out NSFW results.
+    ///     Performs an image search using Google, DuckDuckGo, and Brave, then filters out NSFW results.
     /// </summary>
     /// <param name="query">The search query for the image.</param>
     /// <remarks>
-    ///     This command uses both Google and DuckDuckGo to perform an image search based on the provided query.
+    ///     This command uses Google, DuckDuckGo, and Brave to perform an image search based on the provided query.
     ///     It then filters out NSFW results using NsfwSpy and presents the safe images in a paginated embed format.
     /// </remarks>
     /// <example>
@@ -758,6 +760,8 @@ public partial class Searches(
         var googleAccessDeniedImageCount = 0;
         var googleProviderDisabled =
             System.Threading.Volatile.Read(ref googleImageProviderDisabledForSession) == 1;
+        var duckDuckGoProviderDisabled =
+            System.Threading.Volatile.Read(ref duckDuckGoImageProviderDisabledForSession) == 1;
 
         // Try Google first, but only accept it if usable images survive validation.
         if (!googleProviderDisabled)
@@ -783,22 +787,49 @@ public partial class Searches(
 
         if (filteredImages is null)
         {
+            if (!duckDuckGoProviderDisabled)
+            {
+                filteredImages = await TryGetSafeImagesFromProviderAsync(
+                    "DuckDuckGo",
+                    async () =>
+                    {
+                        using var http = CreateImageSearchHttpClient("https://duckduckgo.com/");
+                        using var dscraper = new DuckDuckGoScraper(http);
+                        return await dscraper.GetImagesAsync(query, SafeSearchLevel.Strict).ConfigureAwait(false);
+                    }).ConfigureAwait(false);
+
+                if (filteredImages is not null)
+                {
+                    sourceName = "DuckDuckGo";
+                    sourceIconUrl = "https://duckduckgo.com/assets/icons/meta/DDG-icon_256x256.png";
+                }
+            }
+            else
+            {
+                logger.LogDebug("Skipping DuckDuckGo image provider because it is disabled for this process.");
+            }
+        }
+
+        if (filteredImages is null)
+        {
             filteredImages = await TryGetSafeImagesFromProviderAsync(
-                "DuckDuckGo",
+                "Brave",
                 async () =>
                 {
-                    using var dscraper = new DuckDuckGoScraper();
-                    return await dscraper.GetImagesAsync(query, SafeSearchLevel.Strict).ConfigureAwait(false);
+                    using var http = CreateImageSearchHttpClient("https://search.brave.com/");
+                    using var bscraper = new BraveScraper(http);
+                    return await bscraper.GetImagesAsync(query, SafeSearchLevel.Strict, BraveCountries.UnitedStates)
+                        .ConfigureAwait(false);
                 }).ConfigureAwait(false);
 
             if (filteredImages is not null)
             {
-                sourceName = "DuckDuckGo";
-                sourceIconUrl = "https://duckduckgo.com/assets/icons/meta/DDG-icon_256x256.png";
+                sourceName = "Brave";
+                sourceIconUrl = "https://brave.com/favicon.ico";
             }
         }
 
-        // If no images survived search and validation from either scraper.
+        // If no images survived search and validation from any provider.
         if (filteredImages is null)
         {
             await checkingMessage.DeleteAsync().ConfigureAwait(false);
@@ -972,10 +1003,12 @@ public partial class Searches(
                 providerErrorCount++;
                 logger.LogWarning(
                     ex,
-                    "Image search provider {ProviderName} failed for query '{Query}' with HTTP error.",
+                    "Image search provider {ProviderName} failed for query '{Query}' with HTTP status {StatusCode}.",
                     providerName,
-                    query);
+                    query,
+                    ex.StatusCode);
                 DisableGoogleProviderForSession(providerName);
+                DisableDuckDuckGoProviderForSessionIfBlocked(providerName, ex.StatusCode);
                 return null;
             }
             catch (Exception ex)
@@ -987,8 +1020,23 @@ public partial class Searches(
                     providerName,
                     query);
                 DisableGoogleProviderForSession(providerName);
+                if (ex.InnerException is HttpRequestException httpRequestException)
+                    DisableDuckDuckGoProviderForSessionIfBlocked(providerName, httpRequestException.StatusCode);
                 return null;
             }
+        }
+
+        HttpClient CreateImageSearchHttpClient(string referrer)
+        {
+            var http = factory.CreateClient();
+            http.DefaultRequestHeaders.Clear();
+            http.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
+            http.DefaultRequestHeaders.TryAddWithoutValidation("Accept",
+                "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8");
+            http.DefaultRequestHeaders.TryAddWithoutValidation("Accept-Language", "en-US,en;q=0.9");
+            http.DefaultRequestHeaders.Referrer = new Uri(referrer);
+            return http;
         }
 
         void DisableGoogleProviderForSession(string providerName)
@@ -1000,6 +1048,23 @@ public partial class Searches(
             {
                 logger.LogWarning(
                     "Disabling Google image provider for current process after failure or unusable results. It will retry after bot restart.");
+            }
+        }
+
+        void DisableDuckDuckGoProviderForSessionIfBlocked(string providerName, HttpStatusCode? statusCode)
+        {
+            if (!string.Equals(providerName, "DuckDuckGo", StringComparison.Ordinal))
+                return;
+
+            if (statusCode is not (HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden
+                or HttpStatusCode.TooManyRequests))
+                return;
+
+            if (System.Threading.Interlocked.Exchange(ref duckDuckGoImageProviderDisabledForSession, 1) == 0)
+            {
+                logger.LogWarning(
+                    "Disabling DuckDuckGo image provider for current process after receiving HTTP status {StatusCode}. It will retry after bot restart.",
+                    statusCode);
             }
         }
 
@@ -1031,6 +1096,7 @@ public partial class Searches(
             {
                 GoogleImageResult googleResult => googleResult.SourceUrl,
                 DuckDuckGoImageResult duckDuckGoResult => duckDuckGoResult.SourceUrl,
+                BraveImageResult braveResult => braveResult.SourceUrl,
                 _ => null
             };
         }
