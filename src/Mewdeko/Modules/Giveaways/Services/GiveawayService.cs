@@ -22,6 +22,12 @@ public class GiveawayService : INService, IDisposable
     private readonly IDataConnectionFactory dbFactory;
 
 
+    /// <summary>
+    ///     The longest a single timer waits before re-checking a giveaway. <see cref="Timer" /> cannot wait past
+    ///     about 49.7 days, so far-off giveaways hop in day-long steps until their end time is within reach.
+    /// </summary>
+    private static readonly TimeSpan MaxTimerWait = TimeSpan.FromDays(1);
+
     // Memory management
     private readonly ConcurrentDictionary<int, Timer> giveawayTimers = new();
     private readonly GuildSettingsService guildConfig;
@@ -969,6 +975,10 @@ public class GiveawayService : INService, IDisposable
             {
                 timeToGo = TimeSpan.Zero;
             }
+            else if (timeToGo > MaxTimerWait)
+            {
+                timeToGo = MaxTimerWait;
+            }
 
             // Use a separate state object to minimize memory leaks from closures
             var state = new GiveawayTimerState
@@ -1022,6 +1032,12 @@ public class GiveawayService : INService, IDisposable
             if (giveaway == null || giveaway.Ended == 1)
             {
                 CleanupGiveawayTimer(timerState.GiveawayId);
+                return;
+            }
+
+            if (giveaway.When > DateTime.UtcNow)
+            {
+                await ScheduleGiveaway(giveaway);
                 return;
             }
 

@@ -99,7 +99,7 @@ public static class SmartEmbed
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Unable to parse embed");
+            Log.Warning(ex, "Unable to parse embed for guild {GuildId}", guildId);
             embeds = null;
             plainText = null;
             components = null;
