@@ -4,6 +4,8 @@ using Discord.Net;
 using LinqToDB;
 using LinqToDB.Async;
 using Mewdeko.Common.ModuleBehaviors;
+using Mewdeko.Database.DbContextStuff;
+using Npgsql;
 
 namespace Mewdeko.Modules.Utility.Services;
 
@@ -238,7 +240,7 @@ public class InviteCountService : INService, IReadyExecutor
             {
                 GuildId = guildId, RemoveInviteOnLeave = false, MinAccountAge = TimeSpan.Zero, IsEnabled = true
             };
-            await uow.InsertAsync(settings);
+            settings = await InsertOrReadSettingsAsync(uow, settings);
         }
 
         inviteCountSettings[guildId] = settings;
@@ -256,14 +258,43 @@ public class InviteCountService : INService, IReadyExecutor
             {
                 GuildId = guildId
             };
-            await uow.InsertAsync(settings);
+            updateAction(settings);
+            var stored = await InsertOrReadSettingsAsync(uow, settings);
+            if (!ReferenceEquals(stored, settings))
+            {
+                settings = stored;
+                updateAction(settings);
+                await uow.UpdateAsync(settings);
+            }
         }
-
-        updateAction(settings);
-        await uow.UpdateAsync(settings);
+        else
+        {
+            updateAction(settings);
+            await uow.UpdateAsync(settings);
+        }
 
 
         inviteCountSettings[guildId] = settings;
+    }
+
+    /// <summary>
+    ///     Inserts a guild's settings row, or returns the row another request created in the meantime.
+    /// </summary>
+    /// <param name="uow">The open connection.</param>
+    /// <param name="settings">The row to insert.</param>
+    /// <returns>The inserted row, or the existing one when the insert lost the race.</returns>
+    private static async Task<InviteCountSetting> InsertOrReadSettingsAsync(MewdekoDb uow,
+        InviteCountSetting settings)
+    {
+        try
+        {
+            settings.Id = await uow.InsertWithInt32IdentityAsync(settings);
+            return settings;
+        }
+        catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.UniqueViolation)
+        {
+            return await uow.InviteCountSettings.FirstAsync(x => x.GuildId == settings.GuildId);
+        }
     }
 
     /// <summary>
