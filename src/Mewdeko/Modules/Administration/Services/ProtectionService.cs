@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using System.Text;
+using System.Globalization;
 using System.Threading;
 using DataModel;
 using LinqToDB;
@@ -7,6 +8,7 @@ using LinqToDB.Async;
 using Mewdeko.Common.ModuleBehaviors;
 using Mewdeko.Modules.Administration.Common;
 using Mewdeko.Modules.Moderation.Services;
+using Mewdeko.Services.Settings;
 using Mewdeko.Services.Strings;
 
 namespace Mewdeko.Modules.Administration.Services;
@@ -25,6 +27,8 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
     private readonly ConcurrentDictionary<ulong, AntiRaidStats> antiRaidGuilds = new();
     private readonly ConcurrentDictionary<ulong, AntiSpamStats> antiSpamGuilds = new();
 
+    private const int MinimumWatchedNameLength = 4;
+
     /// <summary>
     ///     Maximum account age (in days) at which a coordinated reactor is auto-punished alongside
     ///     the original spammer. Older accounts are surfaced for manual review instead of auto-actioned.
@@ -42,6 +46,7 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
     /// </summary>
     private static readonly TimeSpan ReactorCoordinatedReactionWindow = TimeSpan.FromSeconds(60);
 
+    private readonly BotConfigService bss;
     private readonly DiscordShardedClient client;
     private readonly IDataConnectionFactory dbFactory;
     private readonly EventHandler eventHandler;
@@ -78,10 +83,11 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
     /// <param name="reactionTracker">Bounded snapshot of reactions used to identify coordinated upvoters on deleted messages.</param>
     /// <param name="imageHashing">The perceptual image hashing service.</param>
     /// <param name="scamPresets">The shipped known scam image hash list.</param>
+    /// <param name="bss">The bot configuration service.</param>
     public ProtectionService(DiscordShardedClient client,
         MuteService mute, IDataConnectionFactory dbFactory, UserPunishService punishService, EventHandler eventHandler,
         ILogger<ProtectionService> logger, GeneratedBotStrings strings, ReactionTrackingService reactionTracker,
-        ImageHashingService imageHashing, ScamImagePresetService scamPresets)
+        ImageHashingService imageHashing, ScamImagePresetService scamPresets, BotConfigService bss)
     {
         this.client = client;
         this.mute = mute;
@@ -93,9 +99,12 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
         this.reactionTracker = reactionTracker;
         this.imageHashing = imageHashing;
         this.scamPresets = scamPresets;
+        this.bss = bss;
 
         eventHandler.Subscribe("MessageReceived", "ProtectionService", HandleAntiSpam);
         eventHandler.Subscribe("UserJoined", "ProtectionService", HandleUserJoined);
+        eventHandler.Subscribe("GuildMemberUpdated", "ProtectionService", HandleGuildMemberUpdated);
+        eventHandler.Subscribe("UserUpdated", "ProtectionService", HandleUserUpdated);
         eventHandler.Subscribe("MessageReceived", "ProtectionService", HandleAntiMassMention);
         eventHandler.Subscribe("MessageDeleted", "ProtectionService", HandleSuspiciousDeletion);
         eventHandler.Subscribe("MessageReceived", "ProtectionService", HandleImageMentionSpam);
@@ -133,6 +142,8 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
     {
         eventHandler.Unsubscribe("MessageReceived", "ProtectionService", HandleAntiSpam);
         eventHandler.Unsubscribe("UserJoined", "ProtectionService", HandleUserJoined);
+        eventHandler.Unsubscribe("GuildMemberUpdated", "ProtectionService", HandleGuildMemberUpdated);
+        eventHandler.Unsubscribe("UserUpdated", "ProtectionService", HandleUserUpdated);
         eventHandler.Unsubscribe("MessageReceived", "ProtectionService", HandleAntiMassMention);
         eventHandler.Unsubscribe("MessageDeleted", "ProtectionService", HandleSuspiciousDeletion);
         eventHandler.Unsubscribe("MessageReceived", "ProtectionService", HandleImageMentionSpam);
@@ -280,7 +291,13 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
             pattern.AntiPatternPatterns = (await db.GetTable<AntiPatternPattern>()
                 .Where(p => p.AntiPatternSettingId == pattern.Id)
                 .ToListAsync().ConfigureAwait(false)).ToHashSet();
-            antiPatternGuilds[guildId] = new AntiPatternStats(pattern);
+            var watchedNames = await db.GetTable<AntiPatternName>()
+                .Where(p => p.AntiPatternSettingId == pattern.Id)
+                .ToListAsync().ConfigureAwait(false);
+            antiPatternGuilds[guildId] = new AntiPatternStats(pattern)
+            {
+                AntiPatternNames = watchedNames
+            };
         }
         else antiPatternGuilds.TryRemove(guildId, out _);
 
@@ -410,121 +427,9 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
             }
         }
 
-        if (patternStats is { } patterns && patterns.Action != (int)PunishmentAction.Warn)
-        {
-            try
-            {
-                var username = user.Username?.ToLower() ?? "";
-                var displayName = user.DisplayName?.ToLower() ?? "";
-                var settings = patterns.AntiPatternSettings;
-                var score = 0;
-                var reasons = new List<string>();
-                var now = DateTimeOffset.UtcNow;
-
-                // Account age check
-                if (settings.CheckAccountAge)
-                {
-                    var accountAge = now - user.CreatedAt;
-                    if (accountAge.TotalDays <= settings.MaxAccountAgeMonths * 30)
-                    {
-                        score += 5;
-                        reasons.Add($"AccountAge({accountAge.TotalDays:F1}d)");
-                    }
-                }
-
-                // Join timing check
-                if (settings.CheckJoinTiming && user.JoinedAt.HasValue)
-                {
-                    var timeBetween = (user.JoinedAt.Value - user.CreatedAt).TotalHours;
-                    if (timeBetween <= settings.MaxJoinHours)
-                    {
-                        score += timeBetween < 1 ? 10 : timeBetween < 6 ? 7 : 3;
-                        reasons.Add($"QuickJoin({timeBetween:F1}h)");
-                    }
-                }
-
-                // Batch creation check
-                if (settings.CheckBatchCreation)
-                {
-                    var guild = user.Guild;
-                    var creationHour = user.CreatedAt.ToString("yyyy-MM-dd HH");
-                    var recentUsers = await guild.GetUsersAsync();
-                    var batchCount = recentUsers.Count(u => !u.IsBot &&
-                                                            u.CreatedAt.ToString("yyyy-MM-dd HH") == creationHour);
-                    if (batchCount > 1)
-                    {
-                        score += Math.Min(batchCount, 10);
-                        reasons.Add($"Batch({batchCount})");
-                    }
-                }
-
-                // Offline status check
-                if (settings.CheckOfflineStatus && user.Status == UserStatus.Offline)
-                {
-                    score += 2;
-                    reasons.Add("Offline");
-                }
-
-                // New account check
-                if (settings.CheckNewAccounts)
-                {
-                    var accountAge = (now - user.CreatedAt).TotalDays;
-                    if (accountAge < settings.NewAccountDays)
-                    {
-                        score += 3;
-                        reasons.Add($"NewAccount({accountAge:F1}d)");
-                    }
-                }
-
-                // Pattern matching
-                foreach (var pattern in patterns.AntiPatternSettings.AntiPatternPatterns)
-                {
-                    var regex = new Regex(pattern.Pattern, RegexOptions.IgnoreCase);
-
-                    var isMatch = false;
-                    if (pattern.CheckUsername && regex.IsMatch(username))
-                    {
-                        isMatch = true;
-                        score += 15;
-                        reasons.Add($"UsernamePattern({pattern.Name ?? "Unnamed"})");
-                    }
-
-                    if (pattern.CheckDisplayName && regex.IsMatch(displayName))
-                    {
-                        isMatch = true;
-                        score += 12;
-                        reasons.Add($"DisplayNamePattern({pattern.Name ?? "Unnamed"})");
-                    }
-
-                    if (isMatch && score >= settings.MinimumScore)
-                    {
-                        patterns.Increment();
-                        await PunishUsers(patterns.Action, ProtectionType.PatternMatching, patterns.PunishDuration,
-                            patterns.RoleId, user).ConfigureAwait(false);
-                        logger.LogInformation(
-                            "Anti-pattern triggered for user {UserId} ({Username}) - Score: {Score}, Reasons: {Reasons}",
-                            user.Id, user.Username, score, string.Join("|", reasons));
-                        return;
-                    }
-                }
-
-                // Check if overall score meets threshold without pattern match
-                if (score >= settings.MinimumScore && reasons.Any())
-                {
-                    patterns.Increment();
-                    await PunishUsers(patterns.Action, ProtectionType.PatternMatching, patterns.PunishDuration,
-                        patterns.RoleId, user).ConfigureAwait(false);
-                    logger.LogInformation(
-                        "Anti-pattern triggered for user {UserId} ({Username}) - Score: {Score}, Reasons: {Reasons}",
-                        user.Id, user.Username, score, string.Join("|", reasons));
-                    return;
-                }
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Error processing anti-pattern for user {UserId}", user.Id);
-            }
-        }
+        if (patternStats is { } patterns &&
+            await EvaluateAntiPatternAsync(user, patterns, "Join").ConfigureAwait(false))
+            return;
 
         if (raidStats is { } stats && stats.AntiRaidSettings.Action != (int)PunishmentAction.Warn)
         {
@@ -563,6 +468,224 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
                 logger.LogWarning(ex, "Error processing anti-raid for user {UserId}", user.Id);
             }
         }
+    }
+
+    private async Task HandleGuildMemberUpdated(Cacheable<SocketGuildUser, ulong> before, SocketGuildUser after)
+    {
+        if (after.IsBot || !antiPatternGuilds.TryGetValue(after.Guild.Id, out var patterns)) return;
+
+        if (before.HasValue &&
+            string.Equals(before.Value.Username, after.Username, StringComparison.Ordinal) &&
+            string.Equals(before.Value.DisplayName, after.DisplayName, StringComparison.Ordinal) &&
+            string.Equals(before.Value.Nickname, after.Nickname, StringComparison.Ordinal))
+            return;
+
+        await EvaluateAntiPatternAsync(after, patterns, "GuildMemberUpdated").ConfigureAwait(false);
+    }
+
+    private async Task HandleUserUpdated(SocketUser before, SocketUser after)
+    {
+        if (after.IsBot ||
+            (string.Equals(before.Username, after.Username, StringComparison.Ordinal) &&
+             string.Equals(before.GlobalName, after.GlobalName, StringComparison.Ordinal)))
+            return;
+
+        foreach (var guild in client.Guilds)
+        {
+            var user = guild.GetUser(after.Id);
+            if (user is null || !antiPatternGuilds.TryGetValue(guild.Id, out var patterns)) continue;
+
+            await EvaluateAntiPatternAsync(user, patterns, "UserUpdated").ConfigureAwait(false);
+        }
+    }
+
+    private async Task<bool> EvaluateAntiPatternAsync(IGuildUser user, AntiPatternStats patterns, string source)
+    {
+        if (patterns.Action is (int)PunishmentAction.Warn or (int)PunishmentAction.None) return false;
+
+        if (ignoredUsers.TryGetValue(user.Guild.Id, out var ignored) && ignored.Contains(user.Id)) return false;
+
+        try
+        {
+            var username = user.Username?.ToLowerInvariant() ?? "";
+            var displayName = user.DisplayName?.ToLowerInvariant() ?? "";
+            var usernameCandidates = GetNormalizedNameCandidates(user.Username).ToArray();
+            var displayNameCandidates = GetNormalizedNameCandidates(user.DisplayName).ToArray();
+            var settings = patterns.AntiPatternSettings;
+            var score = 0;
+            var reasons = new List<string>();
+            var now = DateTimeOffset.UtcNow;
+
+            if (settings.CheckAccountAge)
+            {
+                var accountAge = now - user.CreatedAt;
+                if (accountAge.TotalDays <= settings.MaxAccountAgeMonths * 30)
+                {
+                    score += 5;
+                    reasons.Add($"AccountAge({accountAge.TotalDays:F1}d)");
+                }
+            }
+
+            if (settings.CheckJoinTiming && user.JoinedAt.HasValue)
+            {
+                var timeBetween = (user.JoinedAt.Value - user.CreatedAt).TotalHours;
+                if (timeBetween <= settings.MaxJoinHours)
+                {
+                    score += timeBetween < 1 ? 10 : timeBetween < 6 ? 7 : 3;
+                    reasons.Add($"QuickJoin({timeBetween:F1}h)");
+                }
+            }
+
+            if (settings.CheckBatchCreation)
+            {
+                var guild = user.Guild;
+                var creationHour = user.CreatedAt.ToString("yyyy-MM-dd HH");
+                var recentUsers = await guild.GetUsersAsync();
+                var batchCount = recentUsers.Count(u => !u.IsBot &&
+                                                        u.CreatedAt.ToString("yyyy-MM-dd HH") == creationHour);
+                if (batchCount > 1)
+                {
+                    score += Math.Min(batchCount, 10);
+                    reasons.Add($"Batch({batchCount})");
+                }
+            }
+
+            if (settings.CheckOfflineStatus && user.Status == UserStatus.Offline)
+            {
+                score += 2;
+                reasons.Add("Offline");
+            }
+
+            if (settings.CheckNewAccounts)
+            {
+                var accountAge = (now - user.CreatedAt).TotalDays;
+                if (accountAge < settings.NewAccountDays)
+                {
+                    score += 3;
+                    reasons.Add($"NewAccount({accountAge:F1}d)");
+                }
+            }
+
+            foreach (var pattern in patterns.AntiPatternSettings.AntiPatternPatterns)
+            {
+                var regex = new Regex(pattern.Pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
+                    TimeSpan.FromMilliseconds(250));
+
+                if (pattern.CheckUsername && regex.IsMatch(username))
+                {
+                    score += 15;
+                    reasons.Add($"UsernamePattern({pattern.Name ?? "Unnamed"})");
+                }
+
+                if (pattern.CheckDisplayName && regex.IsMatch(displayName))
+                {
+                    score += 12;
+                    reasons.Add($"DisplayNamePattern({pattern.Name ?? "Unnamed"})");
+                }
+            }
+
+            foreach (var watchedName in patterns.AntiPatternNames)
+            {
+                if (watchedName.NormalizedName.Length < MinimumWatchedNameLength) continue;
+
+                if (watchedName.CheckUsername &&
+                    IsWatchedNameMatch(watchedName.NormalizedName, usernameCandidates))
+                {
+                    score += 15;
+                    reasons.Add($"UsernameName({watchedName.OriginalName})");
+                }
+
+                if (watchedName.CheckDisplayName &&
+                    IsWatchedNameMatch(watchedName.NormalizedName, displayNameCandidates))
+                {
+                    score += 12;
+                    reasons.Add($"DisplayNameName({watchedName.OriginalName})");
+                }
+            }
+
+            if (score < settings.MinimumScore || reasons.Count == 0) return false;
+
+            patterns.Increment();
+            await PunishUsers(patterns.Action, ProtectionType.PatternMatching, patterns.PunishDuration,
+                patterns.RoleId, user).ConfigureAwait(false);
+            if (bss.Data.LogPunishments)
+            {
+                logger.LogInformation(
+                    "Anti-pattern triggered for user {UserId} ({Username}) from {Source} - Score: {Score}, Reasons: {Reasons}",
+                    user.Id, user.Username, source, score, string.Join("|", reasons));
+            }
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Error processing anti-pattern for user {UserId}", user.Id);
+            return false;
+        }
+    }
+
+    private static bool IsWatchedNameMatch(string watchedName, IEnumerable<string> candidateNames)
+    {
+        return candidateNames.Any(candidate => candidate.Contains(watchedName, StringComparison.Ordinal));
+    }
+
+    private static IEnumerable<string> GetNormalizedNameCandidates(string? value)
+    {
+        var droppedDigits = NormalizeWatchedName(value, false);
+        if (!string.IsNullOrWhiteSpace(droppedDigits))
+            yield return droppedDigits;
+
+        var foldedDigits = NormalizeWatchedName(value, true);
+        if (!string.IsNullOrWhiteSpace(foldedDigits) && foldedDigits != droppedDigits)
+            yield return foldedDigits;
+    }
+
+    private static string NormalizeWatchedName(string? value, bool foldDigits = false)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return "";
+
+        var normalized = value.Normalize(NormalizationForm.FormKD);
+        var builder = new StringBuilder(normalized.Length);
+        foreach (var c in normalized)
+        {
+            var category = CharUnicodeInfo.GetUnicodeCategory(c);
+            if (category is UnicodeCategory.NonSpacingMark or UnicodeCategory.SpacingCombiningMark
+                or UnicodeCategory.EnclosingMark or UnicodeCategory.Format or UnicodeCategory.Control)
+                continue;
+
+            var mapped = MapNameCharacter(c, foldDigits);
+            if (mapped is not null)
+                builder.Append(char.ToLowerInvariant(mapped.Value));
+        }
+
+        return builder.ToString();
+    }
+
+    private static char? MapNameCharacter(char value, bool foldDigits)
+    {
+        if (foldDigits)
+        {
+            switch (value)
+            {
+                case '0':
+                    return 'o';
+                case '1':
+                case '!':
+                    return 'i';
+                case '3':
+                    return 'e';
+                case '4':
+                case '@':
+                    return 'a';
+                case '5':
+                case '$':
+                    return 's';
+                case '7':
+                    return 't';
+            }
+        }
+
+        return char.IsLetter(value) ? value : null;
     }
 
     /// <summary>
@@ -629,9 +752,12 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
     {
         if (gus == null || gus.Length == 0) return;
 
-        logger.LogInformation("[{PunishType}] - Punishing [{Count}] users with [{PunishAction}] in {GuildName} guild",
-            pt,
-            gus.Length, action, gus[0].Guild.Name);
+        if (bss.Data.LogPunishments)
+        {
+            logger.LogInformation("[{PunishType}] - Punishing [{Count}] users with [{PunishAction}] in {GuildName} guild",
+                pt,
+                gus.Length, action, gus[0].Guild.Name);
+        }
 
         foreach (var gu in gus)
         {
@@ -1075,9 +1201,12 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
             await PunishUsers(settings.Action, ProtectionType.Spamming, settings.MuteTime, settings.RoleId,
                 toPunish.ToArray()).ConfigureAwait(false);
 
-            logger.LogInformation(
-                "[Anti-Spam] Auto-punished {Count} coordinated reactors of suspicious deletion by {AuthorId} in {GuildId}",
-                toPunish.Count, author.Id, channel.Guild.Id);
+            if (bss.Data.LogPunishments)
+            {
+                logger.LogInformation(
+                    "[Anti-Spam] Auto-punished {Count} coordinated reactors of suspicious deletion by {AuthorId} in {GuildId}",
+                    toPunish.Count, author.Id, channel.Guild.Id);
+            }
         }
 
         return new ReactorActionReport
@@ -1482,8 +1611,14 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
         settings.AntiPatternPatterns = (await db.GetTable<AntiPatternPattern>()
             .Where(p => p.AntiPatternSettingId == settings.Id)
             .ToListAsync().ConfigureAwait(false)).ToHashSet();
+        var watchedNames = await db.GetTable<AntiPatternName>()
+            .Where(p => p.AntiPatternSettingId == settings.Id)
+            .ToListAsync().ConfigureAwait(false);
 
-        var stats = new AntiPatternStats(settings);
+        var stats = new AntiPatternStats(settings)
+        {
+            AntiPatternNames = watchedNames
+        };
         antiPatternGuilds[guildId] = stats;
 
         return stats;
@@ -1657,6 +1792,90 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
         if (setting == null) return new List<AntiPatternPattern>();
 
         return await db.GetTable<AntiPatternPattern>()
+            .Where(p => p.AntiPatternSettingId == setting.Id)
+            .ToListAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Adds a normalized watched name to anti-pattern protection for a guild.
+    /// </summary>
+    /// <param name="guildId">The ID of the guild to add the watched name for.</param>
+    /// <param name="name">The plain name moderators want to watch.</param>
+    /// <param name="checkUsername">Whether to check usernames against this watched name.</param>
+    /// <param name="checkDisplayName">Whether to check display names and nicknames against this watched name.</param>
+    /// <returns>The added watched name, or null if anti-pattern is disabled or the name is invalid.</returns>
+    public async Task<AntiPatternName?> AddPatternNameAsync(ulong guildId, string name, bool checkUsername = true,
+        bool checkDisplayName = true)
+    {
+        if (!checkUsername && !checkDisplayName) return null;
+
+        var normalizedName = NormalizeWatchedName(name);
+        if (normalizedName.Length < MinimumWatchedNameLength) return null;
+
+        await using var db = await dbFactory.CreateConnectionAsync();
+        var setting = await db.GetTable<AntiPatternSetting>().FirstOrDefaultAsync(x => x.GuildId == guildId)
+            .ConfigureAwait(false);
+
+        if (setting == null) return null;
+
+        var exists = await db.GetTable<AntiPatternName>()
+            .AnyAsync(p => p.AntiPatternSettingId == setting.Id && p.NormalizedName == normalizedName)
+            .ConfigureAwait(false);
+        if (exists) return null;
+
+        var watchedName = new AntiPatternName
+        {
+            AntiPatternSettingId = setting.Id,
+            OriginalName = name.Trim(),
+            NormalizedName = normalizedName,
+            CheckUsername = checkUsername,
+            CheckDisplayName = checkDisplayName,
+            DateAdded = DateTime.UtcNow
+        };
+        watchedName.Id = await db.InsertWithInt32IdentityAsync(watchedName).ConfigureAwait(false);
+
+        await Initialize(guildId).ConfigureAwait(false);
+        return watchedName;
+    }
+
+    /// <summary>
+    ///     Removes a normalized watched name from anti-pattern protection.
+    /// </summary>
+    /// <param name="guildId">The ID of the guild to remove the watched name from.</param>
+    /// <param name="nameId">The watched name ID.</param>
+    /// <returns>True if a watched name was removed; otherwise false.</returns>
+    public async Task<bool> RemovePatternNameAsync(ulong guildId, int nameId)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+        var setting = await db.GetTable<AntiPatternSetting>().FirstOrDefaultAsync(x => x.GuildId == guildId)
+            .ConfigureAwait(false);
+
+        if (setting == null) return false;
+
+        var deletedCount = await db.GetTable<AntiPatternName>()
+            .Where(p => p.Id == nameId && p.AntiPatternSettingId == setting.Id)
+            .DeleteAsync().ConfigureAwait(false);
+
+        if (deletedCount <= 0) return false;
+
+        await Initialize(guildId).ConfigureAwait(false);
+        return true;
+    }
+
+    /// <summary>
+    ///     Gets all normalized watched names for a guild's anti-pattern protection.
+    /// </summary>
+    /// <param name="guildId">The ID of the guild to get watched names for.</param>
+    /// <returns>A list of watched names.</returns>
+    public async Task<List<AntiPatternName>> GetAntiPatternNamesAsync(ulong guildId)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+        var setting = await db.GetTable<AntiPatternSetting>().FirstOrDefaultAsync(x => x.GuildId == guildId)
+            .ConfigureAwait(false);
+
+        if (setting == null) return new List<AntiPatternName>();
+
+        return await db.GetTable<AntiPatternName>()
             .Where(p => p.AntiPatternSettingId == setting.Id)
             .ToListAsync().ConfigureAwait(false);
     }
@@ -2496,7 +2715,12 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
 
         _ = Task.Run(() => RecordImageHashHitAsync(user.Guild.Id, match.Entry.Id));
 
-        await ApplyImageHashPunishment(user, stats, triggerMessage, action, duration, roleId).ConfigureAwait(false);
+        var matchDescription = string.IsNullOrWhiteSpace(match.Entry.Name)
+            ? $"blocked image hash #{match.Entry.Id}"
+            : $"blocked image hash #{match.Entry.Id}: {match.Entry.Name}";
+
+        await ApplyImageHashPunishment(user, stats, triggerMessage, action, duration, roleId, matchDescription)
+            .ConfigureAwait(false);
     }
 
     private static PresetScamImage? FindPresetMatch(IReadOnlyList<PresetScamImage> presets, ImageMatchHashes posted,
@@ -2549,25 +2773,31 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
         while (stats.RecentViolations.Count > 10)
             stats.RecentViolations.TryDequeue(out _);
 
-        logger.LogInformation("Known scam image {PresetId} posted by {UserId} in guild {GuildId}", preset.Id, user.Id,
-            user.Guild.Id);
+        if (bss.Data.LogPunishments)
+        {
+            logger.LogInformation("Known scam image {PresetId} posted by {UserId} in guild {GuildId}", preset.Id,
+                user.Id, user.Guild.Id);
+        }
 
         _ = Task.Run(() => RecordPresetHitAsync(user.Guild.Id));
 
-        await ApplyImageHashPunishment(user, stats, triggerMessage, action, settings.PunishDuration, settings.RoleId)
+        await ApplyImageHashPunishment(user, stats, triggerMessage, action, settings.PunishDuration, settings.RoleId,
+                $"known scam image preset: {preset.Id}")
             .ConfigureAwait(false);
     }
 
     private async Task ApplyImageHashPunishment(IGuildUser user, AntiImageHashStats stats,
-        IUserMessage triggerMessage, PunishmentAction action, int duration, ulong? roleId)
+        IUserMessage triggerMessage, PunishmentAction action, int duration, ulong? roleId, string matchDescription)
     {
         var settings = stats.AntiImageHashSettings;
+        var deletedMessage = false;
 
         if (settings.DeleteMessages || action == PunishmentAction.Delete)
         {
             try
             {
                 await triggerMessage.DeleteAsync().ConfigureAwait(false);
+                deletedMessage = true;
             }
             catch (Exception ex)
             {
@@ -2590,9 +2820,67 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
         }
 
         if (action is PunishmentAction.Delete or PunishmentAction.None)
+        {
+            await SendImageHashReceiptAsync(user, triggerMessage, action, duration, deletedMessage, matchDescription)
+                .ConfigureAwait(false);
             return;
+        }
 
         await PunishUsers((int)action, ProtectionType.ImageHash, duration, roleId, user).ConfigureAwait(false);
+
+        await SendImageHashReceiptAsync(user, triggerMessage, action, duration, deletedMessage, matchDescription)
+            .ConfigureAwait(false);
+    }
+
+    private async Task SendImageHashReceiptAsync(IGuildUser user, IUserMessage triggerMessage, PunishmentAction action,
+        int duration, bool deletedMessage, string matchDescription)
+    {
+        if (triggerMessage.Channel is not ITextChannel sourceChannel)
+            return;
+
+        try
+        {
+            var warnlogChannelId = await punishService.GetWarnlogChannel(sourceChannel.Guild.Id).ConfigureAwait(false);
+            if (warnlogChannelId == 0)
+                return;
+
+            var warnlog = await sourceChannel.Guild.GetTextChannelAsync(warnlogChannelId).ConfigureAwait(false);
+            if (warnlog is null)
+                return;
+
+            var durationText = duration > 0 ? $" for {duration} minute{(duration == 1 ? "" : "s")}" : "";
+            var preview = string.IsNullOrWhiteSpace(triggerMessage.Content)
+                ? "[no text content]"
+                : Format.Sanitize(triggerMessage.Content.TrimTo(500));
+            var attachmentSummary = triggerMessage.Attachments.Count == 0
+                ? "None"
+                : string.Join(", ", triggerMessage.Attachments
+                    .Select(a => string.IsNullOrWhiteSpace(a.Filename) ? a.Url : a.Filename)
+                    .Take(MaxImagesPerMessage)).TrimTo(500);
+
+            var desc = new StringBuilder()
+                .AppendLine($"User: {user.Mention} ({user.Id})")
+                .AppendLine($"Channel: <#{sourceChannel.Id}>")
+                .AppendLine($"Action: {action}{durationText}")
+                .AppendLine($"Cleanup: {(deletedMessage ? "offending message deleted" : "offending message not deleted")}")
+                .AppendLine($"Match: {Format.Sanitize(matchDescription)}")
+                .AppendLine($"Attachments: {Format.Sanitize(attachmentSummary)}")
+                .AppendLine("Preview:")
+                .AppendLine(preview);
+
+            var eb = new EmbedBuilder()
+                .WithTitle("[Anti-Image-Hash] Blocked Image Detected")
+                .WithDescription(desc.ToString().TrimTo(4096))
+                .WithOkColor()
+                .WithCurrentTimestamp();
+
+            await warnlog.SendMessageAsync(embed: eb.Build(), allowedMentions: AllowedMentions.None)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to publish anti-image-hash receipt for user {UserId}", user.Id);
+        }
     }
 
     private async Task RecordPresetHitAsync(ulong guildId)

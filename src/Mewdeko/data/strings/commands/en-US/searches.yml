@@ -1001,6 +1001,24 @@ mal_string_2:
       name: name
       optional: true
       type: string
+malanime:
+  args:
+    - text
+  desc: 'Searches MyAnimeList for anime and displays paginated results.'
+  params:
+    - desc: 'The anime title to search for.'
+      name: query
+      optional: false
+      type: string
+malanime_string:
+  args:
+    - text
+  desc: 'Searches MyAnimeList for anime and displays paginated results.'
+  params:
+    - desc: 'The anime title to search for.'
+      name: query
+      optional: false
+      type: string
 manga:
   args:
     - text

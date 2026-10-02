@@ -3,34 +3,22 @@ name: .NET
 on:
   push:
     branches:
-      - psqldeko
+      - main
 
 jobs:
   build:
     runs-on: self-hosted
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0  # This ensures all history is fetched
 
-          
-      - name: Debug .NET Environment
-        run: |
-          echo "--- Checking PATH and which dotnet ---"
-          echo "$PATH"
-          which dotnet
-          
-          echo "\n--- Running dotnet --info ---"
-          dotnet --info
-          
-          echo "\n--- Listing installed SDKs ---"
-          ls -l /usr/share/dotnet/sdk/
-
-
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 9.0.203
+          dotnet-version: 10.0.x
 
       - name: Get previous tag
         id: prev_tag
@@ -49,39 +37,39 @@ jobs:
           echo "count=$commit_count" >> $GITHUB_OUTPUT
 
       - name: Build Skipped
-        if: ${{ steps.commit_count.outputs.count < 20 }}
-        run: echo "Build skipped because there are less than 20 commits since last build."
+        if: ${{ steps.commit_count.outputs.count < 5 }}
+        run: echo "Build skipped because there are less than 5 commits since last build."
 
       - name: Restore dependencies
-        if: ${{ steps.commit_count.outputs.count >= 20 }}
+        if: ${{ steps.commit_count.outputs.count >= 5 }}
         run: dotnet restore Mewdeko.sln
 
       - name: Build Source Generator
-        if: ${{ steps.commit_count.outputs.count >= 20 }}
+        if: ${{ steps.commit_count.outputs.count >= 5 }}
         run: dotnet build src/MewdekoSourceGen/MewdekoSourceGen.csproj --no-restore -c Release
 
       - name: Build Mewdeko
-        if: ${{ steps.commit_count.outputs.count >= 20 }}
+        if: ${{ steps.commit_count.outputs.count >= 5 }}
         run: dotnet publish src/Mewdeko/Mewdeko.csproj --no-restore -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false -p:IncludeNativeLibrariesForSelfExtract=true -p:UseAppHost=true -o output/
 
       - name: Copy data folder
-        if: ${{ steps.commit_count.outputs.count >= 20 }}
+        if: ${{ steps.commit_count.outputs.count >= 5 }}
         run: cp -r src/Mewdeko/data output/
 
       - name: Zip artifacts
-        if: ${{ steps.commit_count.outputs.count >= 20 }}
+        if: ${{ steps.commit_count.outputs.count >= 5 }}
         run: |
           cd output
           find . -name "*.pdb" -delete
           zip -r ../MewdekoPsql-win64.zip .
 
       - name: Get current date
-        if: ${{ steps.commit_count.outputs.count >= 20 }}
+        if: ${{ steps.commit_count.outputs.count >= 5 }}
         id: get_date
         run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
 
       - name: Get commit messages with links
-        if: ${{ steps.commit_count.outputs.count >= 20 }}
+        if: ${{ steps.commit_count.outputs.count >= 5 }}
         id: commit_messages
         run: |
           if [ -z "${{ env.prev_tag }}" ]; then
@@ -97,17 +85,16 @@ jobs:
           fi
 
       - name: Create Release
-        if: ${{ steps.commit_count.outputs.count >= 20 }}
+        if: ${{ steps.commit_count.outputs.count >= 5 }}
         id: create_release
         uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: psqldeko-${{ github.run_number }}
-          release_name: PsqlDeko build ${{ github.run_number }} (${{ env.date }})
+          tag_name: nightly-${{ env.date }}-${{ github.run_number }}
+          release_name: Nightly build ${{ github.run_number }} (${{ env.date }})
           body: |
-            Automated psql build for commit ${{ github.sha }}
-            # WARNING: Mewdeko on PSQL is in early beta and has missing features. If you find bugs please report them.
+            Automated nightly build for commit ${{ github.sha }}
 
             ## Commits since previous release:
             ${{ env.messages }}
@@ -115,7 +102,7 @@ jobs:
           prerelease: true
 
       - name: Upload Release Asset
-        if: ${{ steps.commit_count.outputs.count >= 20 }}
+        if: ${{ steps.commit_count.outputs.count >= 5 }}
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

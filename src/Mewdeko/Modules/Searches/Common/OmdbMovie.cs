@@ -33,6 +33,11 @@ public class WikiMovie
     public string ImageUrl { get; set; }
 
     /// <summary>
+    ///     Gets or sets the URLs of available movie images.
+    /// </summary>
+    public List<string> ImageUrls { get; set; } = [];
+
+    /// <summary>
     ///     Gets or sets the URL of the movie's logo image if available.
     /// </summary>
     public string LogoUrl { get; set; }

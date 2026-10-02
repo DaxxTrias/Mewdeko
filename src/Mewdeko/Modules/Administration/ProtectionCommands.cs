@@ -618,6 +618,7 @@ public partial class Administration
             var settings = stats.AntiPatternSettings;
             var patterns = settings.AntiPatternPatterns?.ToList();
             var patternCount = patterns?.Count ?? 0;
+            var nameCount = stats.AntiPatternNames.Count;
 
             var add = "";
             if (settings.PunishDuration > 0)
@@ -625,7 +626,7 @@ public partial class Administration
 
             return Strings.AntiPatternStats(ctx.Guild.Id,
                 Format.Bold(settings.Action + add),
-                Format.Bold(patternCount.ToString()),
+                Format.Bold($"{patternCount} regex, {nameCount} names"),
                 Format.Bold(stats.Counter.ToString()));
         }
 
@@ -815,6 +816,93 @@ public partial class Administration
             {
                 await ReplyErrorAsync(Strings.PatternAddFailed(ctx.Guild.Id)).ConfigureAwait(false);
             }
+        }
+
+        /// <summary>
+        ///     Adds a plain watched name to Anti-Pattern protection using normalized matching.
+        /// </summary>
+        /// <param name="name">The plain name to match after stripping separators and padding characters.</param>
+        /// <remarks>
+        ///     This command is restricted to users with Administrator permissions.
+        /// </remarks>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.Administrator)]
+        public async Task PatternNameAdd([Remainder] string name)
+        {
+            var watchedName = await Service.AddPatternNameAsync(ctx.Guild.Id, name).ConfigureAwait(false);
+            if (watchedName is null)
+            {
+                await ReplyErrorAsync(
+                    "Failed to add watched name. Make sure Anti-Pattern protection is enabled, the normalized name is at least 4 letters, and it is not already listed.").ConfigureAwait(false);
+                return;
+            }
+
+            await ReplyConfirmAsync(
+                $"Watched name **{watchedName.OriginalName}** has been added. Normalized match key: `{watchedName.NormalizedName}`")
+                .ConfigureAwait(false);
+        }
+
+        /// <summary>
+        ///     Removes a watched name from Anti-Pattern protection.
+        /// </summary>
+        /// <param name="nameId">The watched name ID to remove.</param>
+        /// <remarks>
+        ///     This command is restricted to users with Administrator permissions.
+        /// </remarks>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.Administrator)]
+        public async Task PatternNameRemove(int nameId)
+        {
+            if (await Service.RemovePatternNameAsync(ctx.Guild.Id, nameId).ConfigureAwait(false))
+            {
+                await ReplyConfirmAsync($"Watched name with ID `{nameId}` has been removed.").ConfigureAwait(false);
+                return;
+            }
+
+            await ReplyErrorAsync($"Failed to remove watched name with ID `{nameId}`.").ConfigureAwait(false);
+        }
+
+        /// <summary>
+        ///     Lists all watched names configured for Anti-Pattern protection.
+        /// </summary>
+        /// <remarks>
+        ///     This command is restricted to users with Administrator permissions.
+        /// </remarks>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.Administrator)]
+        public async Task PatternNameList()
+        {
+            var names = await Service.GetAntiPatternNamesAsync(ctx.Guild.Id).ConfigureAwait(false);
+            if (names.Count == 0)
+            {
+                await ReplyConfirmAsync("No watched names are configured for Anti-Pattern protection.")
+                    .ConfigureAwait(false);
+                return;
+            }
+
+            var embed = new EmbedBuilder()
+                .WithOkColor()
+                .WithTitle("Anti-Pattern Watched Names");
+
+            foreach (var watchedName in names.Take(10))
+            {
+                var fieldValue = $"**Original:** {watchedName.OriginalName}\n" +
+                                 $"**Normalized:** `{watchedName.NormalizedName}`\n" +
+                                 $"**Username:** {(watchedName.CheckUsername ? "Yes" : "No")}\n" +
+                                 $"**Display Name:** {(watchedName.CheckDisplayName ? "Yes" : "No")}";
+                embed.AddField($"ID: {watchedName.Id}", fieldValue, true);
+            }
+
+            if (names.Count > 10)
+                embed.WithFooter($"Showing first 10 of {names.Count} watched names");
+
+            await ctx.Channel.EmbedAsync(embed).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -1038,7 +1126,9 @@ public partial class Administration
                 .AddField("New Account Check",
                     $"**Enabled:** {settings.CheckNewAccounts}\n**Days:** {settings.NewAccountDays}", true)
                 .AddField("Statistics",
-                    $"**Patterns:** {settings.AntiPatternPatterns?.Count() ?? 0}\n**Triggered:** {patternStats.Counter} times",
+                    $"**Regex Patterns:** {settings.AntiPatternPatterns?.Count() ?? 0}\n" +
+                    $"**Watched Names:** {patternStats.AntiPatternNames.Count}\n" +
+                    $"**Triggered:** {patternStats.Counter} times",
                     true);
 
             await ctx.Channel.EmbedAsync(embed).ConfigureAwait(false);

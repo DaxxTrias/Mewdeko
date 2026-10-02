@@ -208,9 +208,10 @@ public partial class SlashUtility(
     public async Task SayModal(ulong channelId, SayModal modal)
     {
         var channel = await ctx.Guild.GetTextChannelAsync(channelId);
-        var canMention = ((IGuildUser)ctx.User).GuildPermissions.MentionEveryone;
+        var guildUser = ctx.User as IGuildUser ?? await ctx.Guild.GetUserAsync(ctx.User.Id);
+        var canMention = guildUser.GuildPermissions.MentionEveryone;
         var rep = new ReplacementBuilder()
-            .WithDefault(ctx.User, channel, (SocketGuild)ctx.Guild, (DiscordShardedClient)ctx.Client).Build();
+            .WithDefault(ctx.User, channel, ctx.Guild as SocketGuild, ctx.Client as DiscordShardedClient).Build();
 
         if (SmartEmbed.TryParse(rep.Replace(modal.Message), ctx.Guild?.Id, out var embedData, out var plainText,
                 out var components))
@@ -298,14 +299,14 @@ public partial class SlashUtility(
             "binance" or "nance" => "https://docs.tealstreet.io/docs/connect/binance",
             "blofin" or "blo" => "https://docs.tealstreet.io/docs/connect/blofin",
             "bitget" or "bg" => "https://docs.tealstreet.io/docs/connect/bitget",
-            "bitmex" or "bmex" => "https://docs.tealstreet.io/docs/connect/bitmex",
-            "bitrue" => "https://docs.tealstreet.io/docs/connect/bitrue",
+            // "bitmex" or "bmex" => "https://docs.tealstreet.io/docs/connect/bitmex",
+            // "bitrue" => "https://docs.tealstreet.io/docs/connect/bitrue",
             "bitunix" => "https://docs.tealstreet.io/docs/connect/bitunix",
             "bybit" => "https://docs.tealstreet.io/docs/connect/bybit",
             "brackets" or "bracketorders" or "bracket-orders" => "https://docs.tealstreet.io/docs/trade/bracket-orders",
             "bybitv5" => "https://docs.tealstreet.io/docs/connect/bybitv5",
             "bingx" => "https://docs.tealstreet.io/docs/connect/bingx",
-            "coincatch" => "https://docs.tealstreet.io/docs/connect/coincatch",
+            // "coincatch" => "https://docs.tealstreet.io/docs/connect/coincatch",
             "coinbase" or "cb" => "https://docs.tealstreet.io/docs/connect/coinbase",
             "cli" or "console" or "commandline" => "https://docs.tealstreet.io/docs/cli",
             "okx" or "okex" => "https://docs.tealstreet.io/docs/connect/okex",
