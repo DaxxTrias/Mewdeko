@@ -132,6 +132,7 @@ namespace DataModel
 		public ITable<RoleStateSetting>          RoleStateSettings          => this.GetTable<RoleStateSetting>();
 		public ITable<RotatingStatus>            RotatingStatuses           => this.GetTable<RotatingStatus>();
 		public ITable<SelectMenuOption>          SelectMenuOptions          => this.GetTable<SelectMenuOption>();
+		public ITable<SecurityAuditSetting>      SecurityAuditSettings      => this.GetTable<SecurityAuditSetting>();
 		public ITable<SelfAssignableRole>        SelfAssignableRoles        => this.GetTable<SelfAssignableRole>();
 		public ITable<ServerRecoveryStore>       ServerRecoveryStores       => this.GetTable<ServerRecoveryStore>();
 		public ITable<StarboardPost>             StarboardPosts             => this.GetTable<StarboardPost>();

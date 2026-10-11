@@ -595,6 +595,11 @@ public class MewdekoDb : DataConnection
     public ITable<LoggingV2> LoggingV2 => this.GetTable<LoggingV2>();
 
     /// <summary>
+    ///     Gets the security audit monitor settings table.
+    /// </summary>
+    public ITable<SecurityAuditSetting> SecurityAuditSettings => this.GetTable<SecurityAuditSetting>();
+
+    /// <summary>
     ///     Gets the message counts table.
     /// </summary>
     public ITable<MessageCount> MessageCounts => this.GetTable<MessageCount>();
