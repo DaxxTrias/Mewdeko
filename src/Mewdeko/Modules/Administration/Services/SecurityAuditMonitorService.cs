@@ -596,7 +596,7 @@ public sealed class SecurityAuditMonitorService : INService, IReadyExecutor, IUn
         SecurityAuditSetting settings)
     {
         logger.LogCritical(
-            "CRITICAL SECURITY AUDIT: {Rule} in guild {GuildName} ({GuildId}); audit {AuditLogId}; action {ActionType}; executor {ExecutorName} ({ExecutorId}); target {TargetId}; role {RoleId}",
+            "CRITICAL SECURITY AUDIT: {Rule} in guild {GuildName} ({GuildId}); audit {AuditLogId}; action {ActionType}; executor {ExecutorName} ({ExecutorId}); target {TargetId}; role {Role}",
             match.Rule,
             auditEvent.GuildName,
             auditEvent.GuildId,
@@ -605,7 +605,7 @@ public sealed class SecurityAuditMonitorService : INService, IReadyExecutor, IUn
             auditEvent.ExecutorName,
             auditEvent.ExecutorId,
             auditEvent.TargetUserId,
-            auditEvent.RoleId);
+            FormatLogRole(auditEvent));
 
         var channel = await ResolveAlertChannelAsync(guild, auditEvent, settings).ConfigureAwait(false);
         if (channel is not null)
@@ -727,6 +727,16 @@ public sealed class SecurityAuditMonitorService : INService, IReadyExecutor, IUn
         return roleId is null
             ? roleName ?? "n/a"
             : $"{MentionUtils.MentionRole(roleId.Value)} `{roleId.Value}` ({roleName ?? "unknown"})";
+    }
+
+    private static string FormatLogRole(SecurityAuditEvent auditEvent)
+    {
+        if (auditEvent.RoleId is null)
+            return auditEvent.RoleName ?? "n/a";
+
+        return string.IsNullOrWhiteSpace(auditEvent.RoleName)
+            ? auditEvent.RoleId.Value.ToString()
+            : $"{auditEvent.RoleName} ({auditEvent.RoleId.Value})";
     }
 
     private static string FormatPermissions(GuildPermissions? permissions)
