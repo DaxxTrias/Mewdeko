@@ -566,3 +566,184 @@ Things to account for before revisiting:
 
 - Upstream's exact implementation assumes the newer invite-tracking service from `1c1a0e5ee`. If that overhaul is later ported, re-check whether the local adapted helper should be replaced by upstream's version.
 - Consider adding a focused concurrency test around simultaneous dashboard/settings requests for a fresh guild.
+
+## 2026-10-11 Drive-By Upstream Pass
+
+This session reviewed the following upstream commits:
+
+- `766d2624faca73434cecc754a848cedd18d01d38`
+- `da162536bdb6a71a0d0501b81fe941afef63be5c`
+- `ef107ab7ae9ca58e24f7499e360d2d7994e5be09`
+- `577775195be3500405fa9922a1847e4a757aa263`
+- `d09be0a2ef1b8cffa4457c956b90859a8c4c765e`
+- `2c1852459189d2b1835070058df04aa073714068`
+- `31fc7f35e2aefb773d945b9a7b1f6e611646b159`
+- `67ebf3c3046a5ab2191244d98e288bda3e68e463`
+- `d3ae32356e36b4f19be7f1a35b842a3d3ef2cd85`
+
+Already taken from this session:
+
+- None. `d09be0a2e` applies cleanly, but it adds a large owner-only Docker management surface and should receive focused security and operations review before being adopted.
+
+Deferred commits from this session are documented below. Treat them as candidates for focused ports, not clean cherry-picks.
+
+## 766d2624f
+
+Upstream summary: adds help categories and descriptions for ServerStats, LiveBoardCommands, and StatRoles.
+
+Why it was skipped:
+
+- Small by line count, but it documents features from the previously skipped server stats/stat roles/live boards work.
+- Direct patch failed in `HelpService`.
+- Upstream expects `data/strings/responses/en-US/help.json`, which does not exist in this branch's current response-string layout.
+
+Things to account for before revisiting:
+
+- Revisit only after the ServerStats, LiveBoardCommands, and StatRoles modules exist locally.
+- Add help text in this branch's current localization format rather than applying upstream response JSON literally.
+- Make sure new help categories are not visible before the commands they describe are registered.
+
+## da162536b
+
+Upstream summary: adds guild data retention configuration, schema, services, owner commands, analytics retention APIs, and purge functionality.
+
+Why it was skipped:
+
+- Feature-sized commit: 17 files and about 1,200 insertions.
+- Depends on analytics controllers/services that are not present locally.
+- Direct patch failed in `BotConfig`, `MewdekoDb`, `AutoAssignRoleService`, `OwnerOnly`, `BotConfigService`, and multiple analytics paths.
+- Adds migration `215-AddGuildDataRetention.sql`, which needs migration-lane review.
+
+Things to account for before revisiting:
+
+- Split retention policy storage from analytics-specific retention APIs.
+- Decide which data sets are subject to guild retention purges and whether deletion should be hard-delete, anonymization, or table-specific cleanup.
+- Review owner-only purge commands carefully. They can be destructive and should have confirmation, audit logging, batching, and failure recovery.
+- Port schema, config parsing, and service registration before adding command/API surfaces.
+- If analytics remains unported, remove or replace analytics query dependencies rather than bringing dead endpoints.
+
+## ef107ab7a
+
+Upstream summary: makes `GuildTableRow` and `ForeignKeyRow` properties mutable in `GuildDataRetentionService`.
+
+Why it was skipped:
+
+- Depends entirely on `GuildDataRetentionService` from `da162536b`, which is not present locally.
+
+Things to account for before revisiting:
+
+- Fold this into any future guild data retention port.
+- Check why mutability is needed before adopting it; immutable metadata rows may be preferable unless later retention logic mutates them intentionally.
+
+## 577775195
+
+Upstream summary: adds a `RetentionPurgeAll` owner command and optimizes retention purge batching.
+
+Why it was skipped:
+
+- Depends on `GuildDataRetentionService` from `da162536b`.
+- Direct patch failed in `OwnerOnly`, aliases, owner-only command strings, and missing response JSON files.
+- Adds more destructive purge behavior on top of an already skipped retention feature.
+
+Things to account for before revisiting:
+
+- Port only after the base retention service is implemented and tested.
+- Treat purge-all as a separate review item with explicit safeguards, dry-run support if possible, progress logging, and interruption recovery.
+- Confirm batch sizes and transaction boundaries on large deployments before running against production-sized tables.
+
+## d09be0a2
+
+Upstream summary: adds an owner-only Docker controller for the dashboard, Docker service models, service implementation, tests, and Docker documentation.
+
+Why it was skipped:
+
+- Applies cleanly, but it is not a safe drive-by: it adds about 1,700 lines of new Docker/container management surface.
+- Exposes operational controls through owner-only API paths, which requires security review beyond a clean cherry-pick.
+- Adds a new service with Docker host assumptions, process/container access implications, and dashboard API behavior.
+
+Things to account for before revisiting:
+
+- Perform a focused security review of authentication, authorization, input validation, path/container name handling, command execution boundaries, and information disclosure.
+- Confirm runtime assumptions: whether the bot has Docker socket access, whether that is acceptable, and how it behaves in non-Docker deployments.
+- Review tests for host-specific behavior and make sure CI can run them deterministically.
+- Decide whether this belongs behind a config flag, deployment capability check, or separate owner-only permission.
+- Keep documentation updates with the feature, but do not expose setup guidance before the safety model is accepted.
+
+## 2c1852459
+
+Upstream summary: adds BotHell APIs and services for bot-dominated server management, expands Docker support, adds build info, config, owner commands, and workflow/docker changes.
+
+Why it was skipped:
+
+- Depends on the skipped Docker controller/service from `d09be0a2`.
+- Large mixed commit: 18 files and about 1,800 insertions.
+- Direct patch failed across Docker docs/files, `BotConfig`, missing Docker service files, owner-only modules, aliases, and localization.
+- Includes workflow and Dockerfile changes that need separate deployment review.
+
+Things to account for before revisiting:
+
+- Port only after deciding whether to adopt the Docker management feature.
+- Split BotHell service/API behavior from Dockerfile/workflow/build-info changes.
+- Review the policy model for identifying and managing bot-dominated guilds. Make sure false positives cannot trigger destructive action.
+- Confirm dashboard and owner command authorization before adding APIs that can manage or leave guilds.
+
+## 31fc7f35e
+
+Upstream summary: introduces Word of the Day with dashboard API, database schema, services, slash/text commands, formatter, scheduling, aliases, strings, and integrations.
+
+Why it was skipped:
+
+- Large new feature: 36 files and about 4,100 insertions.
+- Direct patch failed in controllers, `MewdekoDb`, `HelpService`, and analytics feature definitions.
+- Adds migrations `216-WordOfTheDay.sql` and `217-WordOfTheDaySchedule.sql`.
+- Touches unrelated existing APIs such as custom voice, repeaters, todo, stream notifications, logging, chat triggers, and message repeaters.
+
+Things to account for before revisiting:
+
+- Split the feature into schema/service, commands, dashboard API, and cross-module integrations.
+- Reconcile migration numbers and ensure the schedule/history tables support expected retention.
+- Decide whether WotD should use text commands, slash commands, dashboard-only configuration, or all of them.
+- Review scheduler behavior for missed runs, bot restarts, channel deletion, permissions, and localization.
+- Keep analytics definitions optional unless analytics is ported locally.
+
+## 67ebf3c30
+
+Upstream summary: adds configurable discussion threads under Word of the Day posts.
+
+Why it was skipped:
+
+- Depends on the Word of the Day feature from `31fc7f35e`.
+- Direct patch failed because all Word of the Day controller/model/service/module files are absent locally.
+- Adds migration `218-WordOfTheDayThreads.sql`.
+
+Things to account for before revisiting:
+
+- Port only after the base WotD feature exists.
+- Review Discord thread permissions, auto-archive behavior, forum/channel support, cleanup on failed post creation, and migration defaults.
+- Keep logging additions aligned with the local administration log-command structure.
+
+## d3ae32356
+
+Upstream summary: broad mixed improvements across controllers and services, including punishment pause support, repeater validation, role-state upsert behavior, guild/channel response enhancements, starboard scoring, counting settings, music settings lookup, and assorted fallback/logging changes.
+
+Why it was skipped:
+
+- Large mixed commit touching 37 files and nearly 1,000 insertions.
+- Direct patch failed in multiple divergent files including feature requests, filters, invite tracking, repeaters, role states, protection, XP card generation, and localization paths.
+- Depends on earlier skipped features in this batch, including feature requests and other dashboard/API changes.
+- Contains many unrelated behavior changes that should not land as one drive-by.
+
+Things to account for before revisiting:
+
+- Split by behavior:
+  - repeater input validation/update ordering
+  - role-state settings upsert
+  - automod punishment pause model and protection-service behavior
+  - guild/channel lightweight response models
+  - counting settings response expansion
+  - starboard scoring changes
+  - music settings lookup fallback
+  - assorted controller fallback/logging fixes
+- Review `PunishmentPause` and protection-service retry behavior carefully; this affects moderation enforcement timing.
+- Port response-model changes alongside dashboard callers so API contracts stay consistent.
+- Treat starboard scoring as a behavior change that needs before/after examples or focused tests.
