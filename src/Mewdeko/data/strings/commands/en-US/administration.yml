@@ -5019,3 +5019,40 @@ vcrolerm_ulong_2:
       name: vcId
       optional: false
       type: ulong
+securityauditdisablechannel:
+  args:
+    - ''
+  desc: 'Clears the dedicated security audit alert channel.'
+  params: [ ]
+securityauditenabled:
+  args:
+    - enabled
+  desc: 'Enables or disables critical security audit monitoring.'
+  params:
+    - desc: 'Whether the security audit monitor should be enabled.'
+      name: enabled
+      optional: false
+      type: bool
+securityauditownerdms:
+  args:
+    - enabled
+  desc: 'Enables or disables bot-owner DMs for critical security audit alerts.'
+  params:
+    - desc: 'Whether bot owners should receive DMs for critical security audit alerts.'
+      name: enabled
+      optional: false
+      type: bool
+securityauditsetchannel:
+  args:
+    - '#channel'
+  desc: 'Sets the dedicated security audit alert channel.'
+  params:
+    - desc: 'The channel where critical security audit alerts should be sent.'
+      name: channel
+      optional: false
+      type: ITextChannel
+securityauditstatus:
+  args:
+    - ''
+  desc: 'Shows security audit monitor settings.'
+  params: [ ]

@@ -2386,6 +2386,25 @@ servermessages:
   - guildmessages
   - guildmsg
   - gmsg
+securityauditdisablechannel:
+  - securityauditdisablechannel
+  - sadisablechannel
+  - securityauditnochannel
+securityauditenabled:
+  - securityauditenabled
+  - saenabled
+  - satoggle
+securityauditownerdms:
+  - securityauditownerdms
+  - saownerdms
+  - sadms
+securityauditsetchannel:
+  - securityauditsetchannel
+  - sasetchannel
+  - securityauditchannel
+securityauditstatus:
+  - securityauditstatus
+  - sastatus
 setaddroles:
   - setaddroles
   - sar
