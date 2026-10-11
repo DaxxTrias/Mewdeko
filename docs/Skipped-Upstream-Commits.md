@@ -747,3 +747,93 @@ Things to account for before revisiting:
 - Review `PunishmentPause` and protection-service retry behavior carefully; this affects moderation enforcement timing.
 - Port response-model changes alongside dashboard callers so API contracts stay consistent.
 - Treat starboard scoring as a behavior change that needs before/after examples or focused tests.
+
+## 2026-10-11 Final Upstream Pass
+
+This session reviewed the following upstream commits:
+
+- `cbf3e86ee971e4329e7755fab85ce90cbfd5d343`
+- `369a361ce90bb79be176e324d52bbda4e4946a8c`
+- `268dca6ccddc8d852250c224c25adbfdccc55e22`
+- `01c73f9f58597489c27499cbf9895a3971417fda`
+- `543c627aeae5f7761a4d65e379c46e38c0ca890f`
+- `f87002d0d9c8582673512aa4d11336d9550ac9f7`
+- `e079240609e4160e4a5e1248798eebf030832fb6`
+- `9a1c61768fee412809c4647a9867b77b4de755b2`
+
+Already present before this session:
+
+- `369a361ce`: suggestion modal min/max validation.
+- `9a1c61768`: API key middleware failure details.
+
+Taken from this session:
+
+- `01c73f9f`: ticket custom open message, closed-ticket locking, and created-ticket link fixes.
+- `543c627ae`: delete queries now filter by primary key instead of projecting a constant.
+- `f87002d0`: starboard counts stars from reaction metadata instead of listing reactors.
+- Partial `268dca6c`: macOS dependency-install skip and macOS runtime identifiers.
+- Partial `e0792406`: XP leaderboard/reward caches no longer scan Redis keyspace during XP batches and level-up reward processing. The global command registration retry hunk was not taken because this branch already has a retry helper.
+
+Deferred commits from this session are documented below. Treat them as candidates for focused ports, not clean cherry-picks.
+
+## cbf3e86ee
+
+Upstream summary: adds Role Menus as a first-class feature with dashboard API, database schema, role-menu commands, services, autocompletion, aliases, and strings.
+
+Why it was skipped:
+
+- Large new feature: 21 files and about 5,900 insertions.
+- Direct patch failed in `MewdekoDb`, `HelpService`, aliases, and missing analytics feature definitions.
+- Adds migration `219-RoleMenus.sql`, which needs migration-lane review.
+- Introduces a new interactive role-assignment surface that needs permission and abuse review.
+
+Things to account for before revisiting:
+
+- Split into schema/service, text/slash commands, dashboard API, and localization.
+- Review Discord component limits and custom ID design for dropdown and button menus.
+- Check role hierarchy, managed roles, bot permissions, role removal behavior, and audit logging.
+- Keep analytics feature definition changes optional unless analytics is ported locally.
+- Add focused tests or manual checks for multi-role, exclusive role, deleted role, deleted channel/message, and permission-denied cases.
+
+## 268dca6c
+
+Upstream summary: fixes WotD templates and slowmode, ticket panel identifiers, ticket component capacity responses, macOS dependency/build targets, and channel command validation.
+
+What was partially taken:
+
+- macOS dependency installer skip.
+- macOS runtime identifiers in `Mewdeko.csproj`.
+
+Why the rest was skipped:
+
+- Most of the commit depends on the skipped Word of the Day feature.
+- Ticket panel ID normalization conflicted in `TicketController` after the ticket fixes from `01c73f9f`.
+- The remaining ticket controller changes are broad enough to deserve a focused review rather than manual drive-by edits.
+
+Things to account for before revisiting:
+
+- For WotD, revisit only after the base Word of the Day feature exists locally.
+- For ticket panel IDs, decide whether dashboard routes should accept both database IDs and Discord message IDs. If yes, port `ResolvePanelMessageIdAsync` with controller coverage for every panel endpoint.
+- Test dashboard ticket panel actions with old clients that send database IDs and new clients that send message IDs.
+- Review the component capacity errors for both buttons and select menus so callers get clear 25-component-limit feedback.
+- Keep macOS runtime changes already taken in mind if the full commit is later cherry-picked.
+
+## e0792406
+
+Upstream summary: stops scanning the Redis keyspace on every XP batch and level-up by versioning leaderboard caches and caching all XP rewards per guild.
+
+What was partially taken:
+
+- XP leaderboard cache versioning.
+- XP role/currency rewards are cached as per-guild lists instead of per-level keys discovered via Redis key scans.
+- Recompute-level invalidation now calls the cache manager's constant-time invalidation path.
+
+Why the rest was skipped:
+
+- The `Mewdeko.cs` command-registration retry hunk was already represented locally by `RegisterCommandsGloballyWithRetryAsync`.
+
+Things to account for before revisiting:
+
+- If this upstream commit is cherry-picked later, avoid duplicating or replacing the local global command registration retry helper without review.
+- Consider adding a focused test or diagnostic check for leaderboard cache version changes after XP writes and recomputes.
+- Monitor Redis memory for orphaned versioned leaderboard pages; they rely on TTL expiry rather than immediate key deletion.
