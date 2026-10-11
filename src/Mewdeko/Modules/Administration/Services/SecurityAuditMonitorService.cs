@@ -1,5 +1,6 @@
 using System.Threading;
 using DataModel;
+using Discord.Net;
 using Discord.Rest;
 using LinqToDB;
 using LinqToDB.Async;
@@ -16,6 +17,7 @@ public sealed class SecurityAuditMonitorService : INService, IReadyExecutor, IUn
 {
     private const int AuditBackfillLimit = 25;
     private const int MaxProcessedAuditLogIds = 10000;
+    private static readonly TimeSpan MissingAuditLogPermissionRetry = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan ScanInterval = TimeSpan.FromMinutes(1);
     private const string ModuleName = "SecurityAuditMonitorService";
 
@@ -25,6 +27,7 @@ public sealed class SecurityAuditMonitorService : INService, IReadyExecutor, IUn
     private readonly EventHandler eventHandler;
     private readonly ILogger<SecurityAuditMonitorService> logger;
     private readonly UserPunishService punishService;
+    private readonly ConcurrentDictionary<ulong, DateTimeOffset> auditLogAccessRetryAfter = new();
     private readonly ConcurrentDictionary<ulong, byte> processedAuditLogIds = new();
     private readonly ConcurrentDictionary<ulong, SecurityAuditSetting> settingsCache = new();
     private readonly SemaphoreSlim scanLock = new(1, 1);
@@ -195,6 +198,10 @@ public sealed class SecurityAuditMonitorService : INService, IReadyExecutor, IUn
         if (!settings.Enabled)
             return;
 
+        if (auditLogAccessRetryAfter.TryGetValue(guild.Id, out var retryAfter) &&
+            retryAfter > DateTimeOffset.UtcNow)
+            return;
+
         IReadOnlyCollection<RestAuditLogEntry> entries;
         try
         {
@@ -202,10 +209,22 @@ public sealed class SecurityAuditMonitorService : INService, IReadyExecutor, IUn
                 .OfType<RestAuditLogEntry>()
                 .OrderBy(x => x.CreatedAt)
                 .ToList();
+
+            auditLogAccessRetryAfter.TryRemove(guild.Id, out _);
+        }
+        catch (HttpException ex) when (ex.DiscordCode == DiscordErrorCode.MissingPermissions)
+        {
+            auditLogAccessRetryAfter[guild.Id] = DateTimeOffset.UtcNow + MissingAuditLogPermissionRetry;
+            logger.LogWarning(
+                "Security audit backfill skipped for guild {GuildName} ({GuildId}) because Discord denied audit-log access. Grant View Audit Log, or Administrator, to enable backfill scanning. Live audit-log gateway alerts may still arrive when Discord emits them.",
+                guild.Name,
+                guild.Id);
+            return;
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Failed to scan security audit logs for guild {GuildId}", guild.Id);
+            logger.LogWarning(ex, "Failed to scan security audit logs for guild {GuildName} ({GuildId})", guild.Name,
+                guild.Id);
             return;
         }
 
