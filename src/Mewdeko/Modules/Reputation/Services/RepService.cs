@@ -698,12 +698,18 @@ public class RepService : INService, IReadyExecutor, IUnloadableService
         try
         {
             // Only process reactions in guilds
-            if (channel.Value is not SocketTextChannel text ||
-                await message.GetOrDownloadAsync() is not { } reactionMessage) return;
+            if (channel.Value is not SocketTextChannel text) return;
 
             ITextChannel textChannel = text;
             var guildId = textChannel.Guild.Id;
             var reactorId = reaction.UserId;
+
+            // Check if we have reaction configs for this guild
+            if (!reactionConfigCache.ContainsKey(guildId)) return;
+
+            // Find matching reaction config
+            var matchingConfig = FindMatchingReactionConfig(guildId, reaction.Emote);
+            if (matchingConfig is not { IsEnabled: true }) return;
 
             // Don't give rep for own reactions or bot reactions
             var reactingUser = reaction.User.IsSpecified
@@ -711,14 +717,8 @@ public class RepService : INService, IReadyExecutor, IUnloadableService
                 : await textChannel.Guild.GetUserAsync(reactorId);
             if (reactingUser is null || reactingUser.IsBot) return;
 
-            // Check if we have reaction configs for this guild
-            if (!reactionConfigCache.ContainsKey(guildId)) return;
-
             // Get the message to find the author
-
-            // Find matching reaction config
-            var matchingConfig = FindMatchingReactionConfig(guildId, reaction.Emote);
-            if (matchingConfig is not { IsEnabled: true }) return;
+            if (await message.GetOrDownloadAsync() is not { } reactionMessage) return;
 
             // Check message age requirements
             if (matchingConfig.MinMessageAgeMinutes > 0)
@@ -781,8 +781,7 @@ public class RepService : INService, IReadyExecutor, IUnloadableService
         try
         {
             // Only process reactions in guilds
-            if (channel.Value is not SocketTextChannel text ||
-                await message.GetOrDownloadAsync() is not { } reactionMessage) return;
+            if (channel.Value is not SocketTextChannel text) return;
 
             ITextChannel textChannel = text;
 
@@ -796,6 +795,7 @@ public class RepService : INService, IReadyExecutor, IUnloadableService
             if (matchingConfig is not { IsEnabled: true }) return;
 
             // Get the message to find the author
+            if (await message.GetOrDownloadAsync() is not { } reactionMessage) return;
 
             // Remove reputation by giving negative amount
             await GiveReputationAsync(guildId, reaction.UserId, reactionMessage.Author.Id, channel.Id,
