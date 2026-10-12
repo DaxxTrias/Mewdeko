@@ -1,0 +1,9 @@
+---
+description: Use the upstream commit check skill for recurring upstream cherry-pick/catch-up reviews
+alwaysApply: true
+---
+
+# Upstream Commit Checks
+
+- When the user asks to check, grab, cherry-pick, or catch up upstream commits, use `.cursor/skills/upstream-commit-check/SKILL.md`.
+- Preserve the established workflow: dry-run commits, apply only easy/safe changes, document skipped or partial commits in `docs/Skipped-Upstream-Commits.md`, validate, and commit the result unless told otherwise.
