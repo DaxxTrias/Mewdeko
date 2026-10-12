@@ -837,3 +837,117 @@ Things to account for before revisiting:
 - If this upstream commit is cherry-picked later, avoid duplicating or replacing the local global command registration retry helper without review.
 - Consider adding a focused test or diagnostic check for leaderboard cache version changes after XP writes and recomputes.
 - Monitor Redis memory for orphaned versioned leaderboard pages; they rely on TTL expiry rather than immediate key deletion.
+
+## 2026-10-12 Upstream Catch-Up Pass
+
+This session reviewed the following upstream commits:
+
+- `78483069b4564f1f051064c5475d720baadab487`
+- `db8e821238a6647bf5bca696121a47b5442983b5`
+- `58a7171429f225bf3cd50b080c49efe87033684e`
+- `71493eaf193f0914b20c713ba8d148ea35719976`
+- `08e54f2eae9c1a3aa3fc3ec855158a8f1a32d3aa`
+- `8c8b8303ce3f0f965425caa2d3a7415436370efd`
+- `af1fc99159a61b5ea2f2172c4722b7cf5c024434`
+- `ee1526393b3b88d04f974e2440d0493ec49d81af`
+
+Taken from this session:
+
+- `78483069`: keep LinqToDB connections open while a transaction is active.
+- `db8e8212`: skip embed footers with no text.
+- `58a7171`: avoid sending the bot token to user-supplied image URLs.
+- Partial `ee152639`: avoid fetching reacted messages before matching configured role, reputation, and suggestion handlers.
+
+Deferred commits from this session are documented below. Treat them as candidates for focused ports, not clean cherry-picks.
+
+## 71493eaf1
+
+Upstream summary: adds achievements, achievement dashboard APIs, card rendering, palette services, achievement schema/indexes, commands, strings, tests, fonts, and some ticket/raw-string fixes.
+
+Why it was skipped:
+
+- Very large new feature: 79 files and about 18,000 insertions.
+- Direct patch failed across `MewdekoDb`, missing currency/analytics paths, owner-only services, ticket service, localization, and multiple skipped feature dependencies.
+- Adds migrations `220-Achievements.sql` and `221-AchievementIndexes.concurrent.sql`, plus binary font assets.
+- Mixes the achievement feature with unrelated fixes such as ticket creation and raw string clearing.
+
+Things to account for before revisiting:
+
+- Split achievements into schema/models, catalog/definitions, rendering assets, service/evaluation, commands, dashboard APIs, and localization.
+- Review binary font assets and licensing before adding them.
+- Reconcile concurrent index migration handling with this branch's migration conventions.
+- Keep ticket and raw-string fixes separate from the achievement feature where possible.
+- If achievements depend on analytics feature definitions, either port analytics first or remove that coupling locally.
+
+## 08e54f2e
+
+Upstream summary: adds quiet channels and a talk permission rule for achievement unlock announcements.
+
+Why it was skipped:
+
+- Depends entirely on the skipped achievement feature from `71493eaf1`.
+- Direct patch failed because achievement controllers, models, services, and schema are not present locally.
+- Adds migration `222-AchievementAnnouncementRules.sql`.
+
+Things to account for before revisiting:
+
+- Port only after base achievements exist locally.
+- Review announcement permission behavior carefully: quiet channels, talk permissions, fallback channels, and moderation expectations.
+- Include migration defaults that preserve existing announcement behavior for guilds already using achievements.
+
+## 8c8b8303c
+
+Upstream summary: adds anti-external-app protection, dashboard/controller configuration, persistence, commands, analytics feature definitions, and a reset for the bot's server profile.
+
+Why it was skipped:
+
+- Medium-large cross-cutting protection feature: 15 files and about 900 insertions.
+- Direct patch failed in protection controllers/services, `MewdekoDb`, command strings, localization, and missing analytics paths.
+- Adds migration `223-AddAntiExternalApp.sql`.
+- Changes protection behavior, which needs focused moderation review.
+
+Things to account for before revisiting:
+
+- Split anti-external-app protection from bot profile reset behavior.
+- Review Discord event coverage for external application detection and expected false positives.
+- Confirm punishment/escalation behavior, exemptions, logging, dashboard audit entries, and permission failure paths.
+- Reconcile protection stats/command output with current administration module structure.
+- Keep analytics feature definition changes optional unless analytics exists locally.
+
+## af1fc9915
+
+Upstream summary: adds import support from MEE6, Lurkr, Polaris, Arcane, Amari, Tatsu, and UnbelievaBoat, including API/file readers, importer services, controller, slash commands, data import schema, tests, and XP calculator changes.
+
+Why it was skipped:
+
+- Large new subsystem: 17 files and about 5,400 insertions.
+- Direct patch failed in `MewdekoDb`.
+- Adds migration `224-AddDataImports.sql` and broad import/parsing logic.
+- Imports mutate XP/settings data and need strong validation and dry-run behavior before production use.
+
+Things to account for before revisiting:
+
+- Split schema/controller/commands from individual importer implementations.
+- Review every importer for untrusted input handling, rate limits, and partial failure recovery.
+- Add dry-run/preview and idempotency guarantees before allowing imports to write live guild data.
+- Verify XP curve conversion and level recalculation semantics against this branch's XP system.
+- Keep external API readers isolated from file import readers for testing and operational safety.
+
+## ee1526393
+
+Upstream summary: reduces rate limits in busy reaction channels by avoiding message fetches before a handler knows the reaction belongs to a configured feature.
+
+What was partially taken:
+
+- Role command reaction handlers now match by `msg.Id` before fetching message content.
+- Reputation reaction handlers now check guild/config/emote before downloading the reacted message.
+- Suggestion reaction handlers now look up suggestions by cached message ID before downloading the message.
+
+Why the rest was skipped:
+
+- The chat-trigger hunk did not apply cleanly because this branch's `ChatTriggersService` has diverged.
+
+Things to account for before revisiting:
+
+- Locate the current chat-trigger reaction handling path before porting the remaining rate-limit optimization.
+- Preserve behavior for triggers that genuinely need message content; only defer downloads until after cheap config/message-ID checks.
