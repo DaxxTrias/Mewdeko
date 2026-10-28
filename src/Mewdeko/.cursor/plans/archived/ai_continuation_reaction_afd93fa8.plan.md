@@ -4,19 +4,19 @@ overview: Add an opt-in continuation path when an AI provider stops because it r
 todos:
   - id: detect-truncated-stop
     content: Add a helper in AiService to identify output-limit stop reasons such as Claude max_tokens.
-    status: pending
+    status: completed
   - id: track-continuations
     content: Add continuation reaction constants, tracking record, tracking dictionary, and pruning logic alongside cleanup tracking.
-    status: pending
+    status: completed
   - id: prompt-for-continuation
     content: After final response update, send a continuation prompt when stopReason indicates truncation and attach the checkmark reaction.
-    status: pending
+    status: completed
   - id: handle-continuation-reaction
     content: Extend the ReactionAdded handler to authorize the requester and launch a continuation request.
     status: pending
   - id: validate-build
     content: Run a targeted dotnet build with isolated output and check lints for edited files.
-    status: pending
+    status: completed
 isProject: false
 ---
 
