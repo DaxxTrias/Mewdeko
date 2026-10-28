@@ -1,6 +1,6 @@
 # Skipped Upstream Commits
 
-Last reviewed: 2026-09-26.
+Last reviewed: 2026-10-28.
 
 This note tracks upstream commits that were considered during the drive-by cherry-pick pass but were not pulled into this branch. The branch did take the small suggestion modal, wizard, and XP default-setting fixes separately; the commits below were skipped because they are large, mixed-purpose, dependent on skipped work, or likely to need a focused port.
 
@@ -951,3 +951,57 @@ Things to account for before revisiting:
 
 - Locate the current chat-trigger reaction handling path before porting the remaining rate-limit optimization.
 - Preserve behavior for triggers that genuinely need message content; only defer downloads until after cheap config/message-ID checks.
+
+## 2026-10-28 Drive-By Upstream Pass
+
+This session reviewed the following upstream commits:
+
+- `58ac8cf39fac1a40dd6311978a040d0c863aca69`
+- `79fc6a939fed85ae290b89188bb3095d030c8660`
+- `7507c311622a27a423674c19f0cddf53cd3e8d77`
+
+Taken from this session:
+
+- `79fc6a939`: component messages now suppress mentions in music queue pages, reputation config components, and weather components. Ported as local commit `1a30d5b54` because the direct patch applied cleanly but `git cherry-pick` conflicted after the skipped TTS parent.
+- Partial `7507c311`: the two C# XML command-doc fixes were ported as local commit `74fb1e241`.
+
+Deferred commits from this session are documented below. Treat them as candidates for focused ports, not clean cherry-picks.
+
+## 58ac8cf39
+
+Upstream summary: adds per-channel auto-join for TTS voice channels, including controller request fields, TTS voice channel setting storage, migration `225-AddTtsAutoJoin.sql`, text/slash commands, aliases, and strings.
+
+Why it was skipped:
+
+- Direct patch check failed because upstream expects `SlashMusicTts.cs` and `data/strings/responses/en-US/music.json`, which are not present on this branch.
+- `--3way` also reported a conflict in `MusicController`.
+- The commit includes a schema migration and behavior changes across API, text commands, slash commands, and `TtsService`; that is too broad for a drive-by without validating current TTS settings semantics.
+
+Things to account for before revisiting:
+
+- Inspect this branch's current TTS command/module split before deciding whether to add a new slash TTS file or fold the command into existing slash music surfaces.
+- Re-check migration numbering and the `TtsVoiceChannelSetting` model before taking `225-AddTtsAutoJoin.sql`.
+- Define auto-join behavior for channel deletion, permission loss, concurrent voice sessions, and whether the bot should leave automatically after the queue drains.
+- Port controller/API request changes only after the service and storage behavior is settled.
+
+## 7507c3116
+
+Upstream summary: translates command help and responses into 11 languages and fixes broken command docs/English strings.
+
+What was partially taken:
+
+- `MuteCommands.RemoveOnMute` XML docs now describe `yesnt` as `y to enable, n to disable.`.
+- `Permissions.MovePerm` XML docs now spell `hierarchy` correctly.
+
+Why the rest was skipped:
+
+- The commit is a generated-style localization sweep: 949 files, about 390,000 insertions, and many response/command paths.
+- Direct and 3-way patch checks failed across many locale files because this branch does not have the same localization file layout.
+- Importing the full translation sweep would obscure smaller English fixes and risks breaking placeholder/key ordering without a dedicated localization validation pass.
+
+Things to account for before revisiting:
+
+- Split remaining English string/doc fixes from the generated locale rebuild.
+- Verify this branch's command YAML and response JSON generation process before adding or replacing locale files.
+- Check placeholder parity and response formatting for every translated key before shipping generated translations.
+- Consider porting one locale or one command family first if the full translation refresh is still wanted.
