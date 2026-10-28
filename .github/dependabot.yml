@@ -2,7 +2,7 @@ version: 2
 
 updates:
   - package-ecosystem: "nuget"
-    directory: "/"
+    directory: "/src/Mewdeko"
     target-branch: "dev"
     schedule:
       interval: "daily"
@@ -68,6 +68,73 @@ updates:
         update-types:
           - "minor"
           - "patch"
+
+  - package-ecosystem: "nuget"
+    directory: "/Mewdeko.Tests"
+    target-branch: "dev"
+    schedule:
+      interval: "daily"
+      time: "09:00"
+      timezone: "America/New_York"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "nuget"
+    commit-message:
+      prefix: "deps"
+    groups:
+      microsoft:
+        patterns:
+          - "Microsoft.*"
+          - "System.*"
+        update-types:
+          - "minor"
+          - "patch"
+      skia:
+        patterns:
+          - "SkiaSharp*"
+          - "HarfBuzzSharp*"
+        update-types:
+          - "minor"
+          - "patch"
+      tests:
+        patterns:
+          - "NUnit*"
+          - "coverlet.*"
+        update-types:
+          - "minor"
+          - "patch"
+      analyzers:
+        patterns:
+          - "*.Analyzers"
+        update-types:
+          - "minor"
+          - "patch"
+
+  - package-ecosystem: "nuget"
+    directory: "/src/MewdekoSourceGen"
+    target-branch: "dev"
+    schedule:
+      interval: "daily"
+      time: "09:00"
+      timezone: "America/New_York"
+    open-pull-requests-limit: 2
+    labels:
+      - "dependencies"
+      - "nuget"
+    commit-message:
+      prefix: "deps"
+    ignore:
+      # Source generators run inside the SDK compiler; newer Roslyn assemblies can fail to load
+      # until the installed SDK carries the matching compiler version.
+      - dependency-name: "Microsoft.CodeAnalysis.Analyzers"
+        update-types:
+          - "version-update:semver-minor"
+          - "version-update:semver-patch"
+      - dependency-name: "Microsoft.CodeAnalysis.CSharp"
+        update-types:
+          - "version-update:semver-minor"
+          - "version-update:semver-patch"
 
   - package-ecosystem: "github-actions"
     directory: "/"
