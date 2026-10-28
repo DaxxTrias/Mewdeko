@@ -56,7 +56,28 @@ public class SnipeStore
     public bool Edited { get; set; }
 
     /// <summary>
+    ///     Gets or sets edit history captured before the message was deleted.
+    /// </summary>
+    public List<SnipeEditHistoryEntry>? EditHistory { get; set; }
+
+    /// <summary>
     ///     Gets or sets the date and time when the message was added to the snipe store.
+    /// </summary>
+    public DateTime DateAdded { get; set; }
+}
+
+/// <summary>
+///     Represents a captured pre-edit version of a sniped message.
+/// </summary>
+public class SnipeEditHistoryEntry
+{
+    /// <summary>
+    ///     Gets or sets the captured message content before an edit.
+    /// </summary>
+    public string Message { get; set; } = string.Empty;
+
+    /// <summary>
+    ///     Gets or sets when the edit was observed.
     /// </summary>
     public DateTime DateAdded { get; set; }
 }

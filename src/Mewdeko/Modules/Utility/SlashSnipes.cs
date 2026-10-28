@@ -89,6 +89,7 @@ public partial class Utility
 
             em.AddField("Sent", TimestampTag.FromDateTimeOffset(msg.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
             AddAttachmentsField(em, attachments, preservedFiles.Count > 0);
+            SnipeEditHistoryFormatter.AddDeletedEditHistoryField(em, msg);
             SnipeReactionFormatter.AddReactorsField(em, reactionTracker, msg.MessageId, msg.MessageTimestamp);
 
             await RespondWithSnipeAsync(msg, em, preservedFiles).ConfigureAwait(false);
@@ -155,6 +156,7 @@ public partial class Utility
 
             em.AddField("Sent", TimestampTag.FromDateTimeOffset(msg.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
             AddAttachmentsField(em, attachments, preservedFiles.Count > 0);
+            SnipeEditHistoryFormatter.AddDeletedEditHistoryField(em, msg);
             SnipeReactionFormatter.AddReactorsField(em, reactionTracker, msg.MessageId, msg.MessageTimestamp);
 
             await RespondWithSnipeAsync(msg, em, preservedFiles).ConfigureAwait(false);
@@ -218,6 +220,7 @@ public partial class Utility
 
                 builder.AddField("Sent", TimestampTag.FromDateTimeOffset(msg1.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
                 AddAttachmentsField(builder, attachments, false);
+                SnipeEditHistoryFormatter.AddDeletedEditHistoryField(builder, msg1);
                 SnipeReactionFormatter.AddReactorsField(builder, reactionTracker, msg1.MessageId, msg1.MessageTimestamp);
 
                 return builder;

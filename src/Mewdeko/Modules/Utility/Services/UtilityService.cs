@@ -44,6 +44,7 @@ public partial class UtilityService : INService
     private const string DeletedMessageLogIgnoredUsersCachePrefix = "deleted-message-log:ignored-users:";
     private const int MaxPreservedAttachmentBytes = 8 * 1024 * 1024;
     private const int MaxPreservedAttachmentsPerMessage = 5;
+    private const int MaxSnipeEditHistoryEntries = 5;
 
     private readonly IDataCache cache;
     private readonly DiscordShardedClient client;
@@ -601,21 +602,22 @@ public partial class UtilityService : INService
             await GetDeletedMessageLogSettings(channel.Guild.Id).ConfigureAwait(false));
         if (!snipeEnabled && !deletedLogEnabled) return;
 
-        if (snipeEnabled)
+        SnipeStore? snipemsg = null;
+        if (snipeEnabled || deletedLogEnabled)
         {
-            var snipemsg = TryGetSnipeSnapshot(optMsg.Id, channel, true);
+            snipemsg = TryGetSnipeSnapshot(optMsg.Id, channel, true);
             if (snipemsg is null && (optMsg.HasValue ? optMsg.Value : null) is IUserMessage msg)
             {
                 snipemsg = CreateSnipeStore(msg, channel, true);
                 await PreserveSnipeAttachments(msg, snipemsg).ConfigureAwait(false);
             }
 
-            if (snipemsg is not null)
+            if (snipeEnabled && snipemsg is not null)
                 await AddSnipesToCache(channel.Guild.Id, snipemsg).ConfigureAwait(false);
         }
 
         if (imsg2 is IUserMessage updatedMsg)
-            await CacheSnipeSnapshot(updatedMsg, channel).ConfigureAwait(false);
+            await CacheSnipeSnapshot(updatedMsg, channel, snipemsg).ConfigureAwait(false);
     }
 
     private async Task AddSnipesToCache(ulong guildId, SnipeStore snipe)
@@ -674,12 +676,13 @@ public partial class UtilityService : INService
         return $"{PreservedSnipeAttachmentCachePrefix}{messageId}:{attachmentIndex}";
     }
 
-    private async Task CacheSnipeSnapshot(IUserMessage msg, IGuildChannel channel)
+    private async Task CacheSnipeSnapshot(IUserMessage msg, IGuildChannel channel, SnipeStore? preEditVersion = null)
     {
         if (msg.Author is null)
             return;
 
         var snapshot = CreateSnipeStore(msg, channel, false);
+        AddEditHistory(snapshot, preEditVersion);
         await PreserveSnipeAttachments(msg, snapshot).ConfigureAwait(false);
 
         memoryCache.Set(GetSnipeSnapshotCacheKey(msg.Id), snapshot,
@@ -709,8 +712,32 @@ public partial class UtilityService : INService
             JsonData = snapshot.JsonData,
             UserId = snapshot.UserId,
             Edited = edited,
+            EditHistory = snapshot.EditHistory?.Select(CloneEditHistoryEntry).ToList(),
             DateAdded = DateTime.UtcNow
         };
+    }
+
+    private static void AddEditHistory(SnipeStore snapshot, SnipeStore? preEditVersion)
+    {
+        if (preEditVersion is null)
+            return;
+
+        var history = preEditVersion.EditHistory?.Select(CloneEditHistoryEntry).ToList() ?? [];
+        if (!string.Equals(preEditVersion.Message, snapshot.Message, StringComparison.Ordinal))
+        {
+            history.Add(new SnipeEditHistoryEntry
+            {
+                Message = preEditVersion.Message,
+                DateAdded = DateTime.UtcNow
+            });
+        }
+
+        if (history.Count == 0)
+            return;
+
+        snapshot.EditHistory = history
+            .TakeLast(MaxSnipeEditHistoryEntries)
+            .ToList();
     }
 
     private async Task PreserveSnipeAttachments(IMessage msg, SnipeStore snipe)
@@ -859,6 +886,8 @@ public partial class UtilityService : INService
 
         if (!string.IsNullOrWhiteSpace(snipe.ReferenceMessage))
             embed.AddField("Replied To", Format.Sanitize(snipe.ReferenceMessage.TrimTo(1024)));
+
+        SnipeEditHistoryFormatter.AddDeletedEditHistoryField(embed, snipe, true);
 
         var preservedUploads = CreatePreservedAttachmentUploads(snipe);
         AddDeletedMessageLogAttachments(embed, attachments, preservedUploads.Count > 0);
@@ -1017,6 +1046,15 @@ public partial class UtilityService : INService
             Size = attachment.Size,
             ContentType = attachment.ContentType,
             PreservedCacheKey = attachment.PreservedCacheKey
+        };
+    }
+
+    private static SnipeEditHistoryEntry CloneEditHistoryEntry(SnipeEditHistoryEntry entry)
+    {
+        return new SnipeEditHistoryEntry
+        {
+            Message = entry.Message,
+            DateAdded = entry.DateAdded
         };
     }
 

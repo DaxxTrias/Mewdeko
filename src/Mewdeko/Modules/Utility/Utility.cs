@@ -680,6 +680,7 @@ public partial class Utility(
 
         // Add message ID field for reference
         em.AddField("Sent", TimestampTag.FromDateTimeOffset(msg.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
+        SnipeEditHistoryFormatter.AddDeletedEditHistoryField(em, msg);
         SnipeReactionFormatter.AddReactorsField(em, reactionTracker, msg.MessageId, msg.MessageTimestamp);
 
         // Send with JSON attachment if available
@@ -772,6 +773,7 @@ public partial class Utility(
                     builder.AddField("Replied To", msg1.ReferenceMessage);
 
                 builder.AddField("Sent", TimestampTag.FromDateTimeOffset(msg1.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
+                SnipeEditHistoryFormatter.AddDeletedEditHistoryField(builder, msg1);
                 SnipeReactionFormatter.AddReactorsField(builder, reactionTracker, msg1.MessageId, msg1.MessageTimestamp);
 
                 return builder;
@@ -839,6 +841,7 @@ public partial class Utility(
                     builder.AddField("Replied To", msg1.ReferenceMessage);
 
                 builder.AddField("Sent", TimestampTag.FromDateTimeOffset(msg1.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
+                SnipeEditHistoryFormatter.AddDeletedEditHistoryField(builder, msg1);
                 SnipeReactionFormatter.AddReactorsField(builder, reactionTracker, msg1.MessageId, msg1.MessageTimestamp);
 
                 return builder;
@@ -906,6 +909,7 @@ public partial class Utility(
                     builder.AddField("Replied To", msg1.ReferenceMessage);
 
                 builder.AddField("Sent", TimestampTag.FromDateTimeOffset(msg1.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
+                SnipeEditHistoryFormatter.AddDeletedEditHistoryField(builder, msg1);
                 SnipeReactionFormatter.AddReactorsField(builder, reactionTracker, msg1.MessageId, msg1.MessageTimestamp);
 
                 return builder;
@@ -974,6 +978,7 @@ public partial class Utility(
                     builder.AddField("Replied To", msg1.ReferenceMessage);
 
                 builder.AddField("Sent", TimestampTag.FromDateTimeOffset(msg1.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
+                SnipeEditHistoryFormatter.AddDeletedEditHistoryField(builder, msg1);
                 SnipeReactionFormatter.AddReactorsField(builder, reactionTracker, msg1.MessageId, msg1.MessageTimestamp);
 
                 return builder;
@@ -1040,6 +1045,7 @@ public partial class Utility(
                     builder.AddField("Replied To", msg1.ReferenceMessage);
 
                 builder.AddField("Sent", TimestampTag.FromDateTimeOffset(msg1.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
+                SnipeEditHistoryFormatter.AddDeletedEditHistoryField(builder, msg1);
                 SnipeReactionFormatter.AddReactorsField(builder, reactionTracker, msg1.MessageId, msg1.MessageTimestamp);
 
                 return builder;
@@ -1107,6 +1113,7 @@ public partial class Utility(
                     builder.AddField("Replied To", msg1.ReferenceMessage);
 
                 builder.AddField("Sent", TimestampTag.FromDateTimeOffset(msg1.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
+                SnipeEditHistoryFormatter.AddDeletedEditHistoryField(builder, msg1);
                 SnipeReactionFormatter.AddReactorsField(builder, reactionTracker, msg1.MessageId, msg1.MessageTimestamp);
 
                 return builder;
@@ -1174,6 +1181,7 @@ public partial class Utility(
                     builder.AddField("Replied To", msg1.ReferenceMessage);
 
                 builder.AddField("Sent", TimestampTag.FromDateTimeOffset(msg1.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
+                SnipeEditHistoryFormatter.AddDeletedEditHistoryField(builder, msg1);
                 SnipeReactionFormatter.AddReactorsField(builder, reactionTracker, msg1.MessageId, msg1.MessageTimestamp);
 
                 return builder;
@@ -1242,6 +1250,7 @@ public partial class Utility(
                     builder.AddField("Replied To", msg1.ReferenceMessage);
 
                 builder.AddField("Sent", TimestampTag.FromDateTimeOffset(msg1.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
+                SnipeEditHistoryFormatter.AddDeletedEditHistoryField(builder, msg1);
                 SnipeReactionFormatter.AddReactorsField(builder, reactionTracker, msg1.MessageId, msg1.MessageTimestamp);
 
                 return builder;
@@ -1299,6 +1308,7 @@ public partial class Utility(
             em.AddField("Replied To", msg.ReferenceMessage);
 
         em.AddField("Sent", TimestampTag.FromDateTimeOffset(msg.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
+        SnipeEditHistoryFormatter.AddDeletedEditHistoryField(em, msg);
         SnipeReactionFormatter.AddReactorsField(em, reactionTracker, msg.MessageId, msg.MessageTimestamp);
 
         if (!string.IsNullOrEmpty(msg.JsonData))
@@ -1407,6 +1417,7 @@ public partial class Utility(
             em.AddField("Replied To", msg.ReferenceMessage);
 
         em.AddField("Sent", TimestampTag.FromDateTimeOffset(msg.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
+        SnipeEditHistoryFormatter.AddDeletedEditHistoryField(em, msg);
         SnipeReactionFormatter.AddReactorsField(em, reactionTracker, msg.MessageId, msg.MessageTimestamp);
 
         if (!string.IsNullOrEmpty(msg.JsonData))
@@ -1490,6 +1501,7 @@ public partial class Utility(
             em.AddField("Replied To", msg.ReferenceMessage);
 
         em.AddField("Sent", TimestampTag.FromDateTimeOffset(msg.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
+        SnipeEditHistoryFormatter.AddDeletedEditHistoryField(em, msg);
         SnipeReactionFormatter.AddReactorsField(em, reactionTracker, msg.MessageId, msg.MessageTimestamp);
 
         if (!string.IsNullOrEmpty(msg.JsonData))
@@ -1572,6 +1584,7 @@ public partial class Utility(
             em.AddField("Replied To", msg.ReferenceMessage);
 
         em.AddField("Sent", TimestampTag.FromDateTimeOffset(msg.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
+        SnipeEditHistoryFormatter.AddDeletedEditHistoryField(em, msg);
         SnipeReactionFormatter.AddReactorsField(em, reactionTracker, msg.MessageId, msg.MessageTimestamp);
 
         if (!string.IsNullOrEmpty(msg.JsonData))
@@ -1655,6 +1668,7 @@ public partial class Utility(
             em.AddField("Replied To", msg.ReferenceMessage);
 
         em.AddField("Sent", TimestampTag.FromDateTimeOffset(msg.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
+        SnipeEditHistoryFormatter.AddDeletedEditHistoryField(em, msg);
         SnipeReactionFormatter.AddReactorsField(em, reactionTracker, msg.MessageId, msg.MessageTimestamp);
 
         if (!string.IsNullOrEmpty(msg.JsonData))
@@ -1738,6 +1752,7 @@ public partial class Utility(
             em.AddField("Replied To", msg.ReferenceMessage);
 
         em.AddField("Sent", TimestampTag.FromDateTimeOffset(msg.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
+        SnipeEditHistoryFormatter.AddDeletedEditHistoryField(em, msg);
         SnipeReactionFormatter.AddReactorsField(em, reactionTracker, msg.MessageId, msg.MessageTimestamp);
 
         if (!string.IsNullOrEmpty(msg.JsonData))
@@ -1822,6 +1837,7 @@ public partial class Utility(
             em.AddField("Replied To", msg.ReferenceMessage);
 
         em.AddField("Sent", TimestampTag.FromDateTimeOffset(msg.MessageTimestamp, TimestampTagStyles.ShortDateTime).ToString(), true);
+        SnipeEditHistoryFormatter.AddDeletedEditHistoryField(em, msg);
         SnipeReactionFormatter.AddReactorsField(em, reactionTracker, msg.MessageId, msg.MessageTimestamp);
 
         if (!string.IsNullOrEmpty(msg.JsonData))
