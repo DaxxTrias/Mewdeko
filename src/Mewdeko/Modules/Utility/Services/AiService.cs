@@ -59,11 +59,15 @@ public class AiService : INService
     private readonly ILogger<AiService> logger;
     private readonly ConcurrentDictionary<AiProvider, List<AiModel>> modelCache;
     private readonly ConcurrentDictionary<ulong, CleanupTrackedResponse> trackedResponseCleanupRequests = new();
+    private readonly ConcurrentDictionary<ulong, ContinuationTrackedResponse> trackedResponseContinuationRequests = new();
     private readonly TimeSpan modelCacheExpiry = TimeSpan.FromHours(24);
     private readonly IServiceProvider serviceProvider;
     private readonly GeneratedBotStrings strings;
     private static readonly Emoji CleanupReaction = new("🗑️");
+    private static readonly Emoji ContinueReaction = new("✅");
     private static readonly TimeSpan CleanupTrackingLifetime = TimeSpan.FromHours(12);
+    private const string ContinuationPrompt =
+        "Continue the previous answer exactly where it stopped. Do not repeat prior content.";
     private BotConfig BotConfig => botConfigService.Data;
     private static readonly Dictionary<string, AiProvider> ProviderAliases = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -555,6 +559,14 @@ public class AiService : INService
     private static bool IsSupportedProvider(int providerValue)
     {
         return Enum.IsDefined(typeof(AiProvider), providerValue);
+    }
+
+    private static bool IsOutputLimitStopReason(string? stopReason)
+    {
+        return stopReason is not null &&
+               (stopReason.Equals("max_tokens", StringComparison.OrdinalIgnoreCase) ||
+                stopReason.Equals("length", StringComparison.OrdinalIgnoreCase) ||
+                stopReason.Equals("max_output_tokens", StringComparison.OrdinalIgnoreCase));
     }
 
     private static bool TryGetProviderFromAlias(string token, out AiProvider provider)
@@ -1154,6 +1166,12 @@ public class AiService : INService
         // Final update with completed response
         await UpdateMessageEmbed(true); // true = final update
         await AttachCleanupReactionForRequester(userMsg.Author.Id, regularMessage, webhookMessageId, userMsg.Channel);
+        if (IsOutputLimitStopReason(stopReason))
+        {
+            await AttachContinuationPromptForRequester(userMsg.Author.Id, config, route, userMsg)
+                .ConfigureAwait(false);
+        }
+
         return;
 
         string BuildTokenUsageFooter()
@@ -1694,15 +1712,34 @@ public class AiService : INService
 
     private sealed record CleanupTrackedResponse(ulong RequesterId, DateTimeOffset CreatedAt);
 
+    private sealed record ContinuationTrackedResponse(
+        ulong RequesterId,
+        DateTimeOffset CreatedAt,
+        GuildAiConfig Config,
+        ResolvedAiRoute Route,
+        SocketMessage UserMessage);
+
     private async Task HandleAiCleanupReactionAdded(
         Cacheable<IUserMessage, ulong> msg,
         Cacheable<IMessageChannel, ulong> chan,
         SocketReaction reaction)
     {
         _ = chan;
-        if (reaction.UserId == client.CurrentUser.Id || !IsCleanupReaction(reaction.Emote))
+        if (reaction.UserId == client.CurrentUser.Id)
             return;
 
+        if (IsCleanupReaction(reaction.Emote))
+        {
+            await HandleCleanupReactionAsync(msg, reaction).ConfigureAwait(false);
+            return;
+        }
+
+        if (IsContinueReaction(reaction.Emote))
+            await HandleContinuationReactionAsync(msg, reaction).ConfigureAwait(false);
+    }
+
+    private async Task HandleCleanupReactionAsync(Cacheable<IUserMessage, ulong> msg, SocketReaction reaction)
+    {
         PruneTrackedCleanupRequests();
         if (!trackedResponseCleanupRequests.TryGetValue(reaction.MessageId, out var trackedResponse))
             return;
@@ -1727,9 +1764,126 @@ public class AiService : INService
         }
     }
 
+    private async Task HandleContinuationReactionAsync(Cacheable<IUserMessage, ulong> msg, SocketReaction reaction)
+    {
+        PruneTrackedContinuationRequests();
+        if (!trackedResponseContinuationRequests.TryGetValue(reaction.MessageId, out var trackedResponse))
+            return;
+
+        if (trackedResponse.RequesterId != reaction.UserId)
+            return;
+
+        if (!trackedResponseContinuationRequests.TryRemove(reaction.MessageId, out _))
+            return;
+
+        try
+        {
+            var promptMessage = msg.HasValue ? msg.Value : await msg.GetOrDownloadAsync().ConfigureAwait(false);
+            if (promptMessage != null)
+                await promptMessage.DeleteAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            logger.LogDebug(ex, "Failed to delete AI continuation prompt message {MessageId}",
+                reaction.MessageId);
+        }
+
+        await ContinueAiResponse(trackedResponse).ConfigureAwait(false);
+    }
+
+    private async Task ContinueAiResponse(ContinuationTrackedResponse trackedResponse)
+    {
+        if (trackedResponse.UserMessage.Channel is not SocketTextChannel guildChannel)
+        {
+            logger.LogDebug("Cannot continue AI response outside a guild text channel for message {MessageId}",
+                trackedResponse.UserMessage.Id);
+            return;
+        }
+
+        DiscordWebhookClient? webhook = null;
+        ulong? webhookMessageId = null;
+        IUserMessage? processingMessage = null;
+
+        try
+        {
+            if (!string.IsNullOrEmpty(trackedResponse.Config.WebhookUrl))
+            {
+                webhook = new DiscordWebhookClient(trackedResponse.Config.WebhookUrl);
+                var processingEmbedBuilder = new EmbedBuilder()
+                    .WithOkColor()
+                    .WithDescription(strings.AiProcessingRequest(guildChannel.Guild.Id,
+                        trackedResponse.UserMessage.Author.Mention));
+                AddProviderBranding(processingEmbedBuilder, trackedResponse.Route.Provider);
+                webhookMessageId = await webhook.SendMessageAsync(embeds:
+                [
+                    processingEmbedBuilder.Build()
+                ]).ConfigureAwait(false);
+            }
+            else
+            {
+                processingMessage = await trackedResponse.UserMessage.Channel.SendConfirmAsync(
+                    strings.AiProcessingRequest(guildChannel.Guild.Id, trackedResponse.UserMessage.Author.Mention));
+            }
+
+            logger.LogInformation(
+                "Continuing AI response for {User} in {Channel} with provider {Provider} and model {Model}",
+                trackedResponse.UserMessage.Author.Username,
+                trackedResponse.UserMessage.Channel.Name,
+                trackedResponse.Route.Provider,
+                trackedResponse.Route.Model);
+
+            await StreamResponse(trackedResponse.Config, webhookMessageId, trackedResponse.UserMessage, webhook,
+                ContinuationPrompt, trackedResponse.Route).ConfigureAwait(false);
+            await UpdateConfig(trackedResponse.Config).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Error continuing AI response");
+            if (webhook != null && webhookMessageId.HasValue)
+            {
+                await webhook.ModifyMessageAsync(webhookMessageId.Value, x =>
+                {
+                    var errorEmbedBuilder = new EmbedBuilder()
+                        .WithErrorColor()
+                        .WithDescription(strings.AiErrorOccurred(guildChannel.Guild.Id, ex.Message));
+                    AddProviderBranding(errorEmbedBuilder, trackedResponse.Route.Provider);
+                    x.Embeds = new[]
+                    {
+                        errorEmbedBuilder.Build()
+                    };
+                }).ConfigureAwait(false);
+            }
+            else
+            {
+                await trackedResponse.UserMessage.Channel.SendErrorAsync(
+                    strings.AiErrorOccurred(guildChannel.Guild.Id, ex.Message), BotConfig);
+            }
+        }
+        finally
+        {
+            webhook?.Dispose();
+            if (processingMessage is not null)
+            {
+                try
+                {
+                    await processingMessage.DeleteAsync().ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogDebug(ex, "Failed to delete AI continuation processing message");
+                }
+            }
+        }
+    }
+
     private static bool IsCleanupReaction(IEmote emote)
     {
         return emote.Name is "🗑️" or "🗑";
+    }
+
+    private static bool IsContinueReaction(IEmote emote)
+    {
+        return emote.Name is "✅";
     }
 
     private async Task AttachCleanupReactionForRequester(
@@ -1776,6 +1930,51 @@ public class AiService : INService
         }
     }
 
+    private async Task AttachContinuationPromptForRequester(ulong requesterId, GuildAiConfig config,
+        ResolvedAiRoute route, SocketMessage userMsg)
+    {
+        var embedBuilder = new EmbedBuilder()
+            .WithOkColor()
+            .WithDescription("Response hit the model output limit. React with ✅ to continue.")
+            .WithFooter("Only the original requester can continue this response.");
+        AddProviderBranding(embedBuilder, route.Provider);
+
+        try
+        {
+            var promptMessage = await userMsg.Channel.SendMessageAsync(
+                embeds: new[]
+                {
+                    embedBuilder.Build()
+                },
+                allowedMentions: AllowedMentions.None).ConfigureAwait(false);
+
+            await TrackAndAttachContinuationReaction(promptMessage, requesterId, config, route, userMsg)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            logger.LogDebug(ex, "Failed to send AI continuation prompt for user {UserId}", requesterId);
+        }
+    }
+
+    private async Task TrackAndAttachContinuationReaction(IUserMessage message, ulong requesterId, GuildAiConfig config,
+        ResolvedAiRoute route, SocketMessage userMsg)
+    {
+        PruneTrackedContinuationRequests();
+        trackedResponseContinuationRequests[message.Id] =
+            new ContinuationTrackedResponse(requesterId, DateTimeOffset.UtcNow, config, route, userMsg);
+
+        try
+        {
+            await message.AddReactionAsync(ContinueReaction).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            trackedResponseContinuationRequests.TryRemove(message.Id, out _);
+            logger.LogDebug(ex, "Failed to add continuation reaction to AI prompt message {MessageId}", message.Id);
+        }
+    }
+
     private void PruneTrackedCleanupRequests()
     {
         if (trackedResponseCleanupRequests.IsEmpty)
@@ -1786,6 +1985,19 @@ public class AiService : INService
         {
             if (trackedEntry.Value.CreatedAt < cutoff)
                 trackedResponseCleanupRequests.TryRemove(trackedEntry.Key, out _);
+        }
+    }
+
+    private void PruneTrackedContinuationRequests()
+    {
+        if (trackedResponseContinuationRequests.IsEmpty)
+            return;
+
+        var cutoff = DateTimeOffset.UtcNow.Subtract(CleanupTrackingLifetime);
+        foreach (var trackedEntry in trackedResponseContinuationRequests)
+        {
+            if (trackedEntry.Value.CreatedAt < cutoff)
+                trackedResponseContinuationRequests.TryRemove(trackedEntry.Key, out _);
         }
     }
 
