@@ -1005,3 +1005,64 @@ Things to account for before revisiting:
 - Verify this branch's command YAML and response JSON generation process before adding or replacing locale files.
 - Check placeholder parity and response formatting for every translated key before shipping generated translations.
 - Consider porting one locale or one command family first if the full translation refresh is still wanted.
+
+## 2026-10-28 Achievement/Fluxer Follow-Up Pass
+
+This session reviewed the following upstream commits:
+
+- `1f88f11b3dd5257e7ce410c85357237427fa4361`
+- `9f4ad9fbdda7737801ce131fb6f2ee4e5bf45947`
+- `b1f7f53193252ecf679b9b5ded3fcf9bd84b0e65`
+
+Taken from this session:
+
+- None. The achievement commits depend on the still-deferred achievements feature, and this branch does not have the Fluxer migration module/string surface targeted by the Fluxer cleanup commit.
+
+Deferred commits from this session are documented below. Treat them as candidates for focused ports only after their underlying features exist locally.
+
+## 1f88f11b3
+
+Upstream summary: lets achievement card text hold emoji, icons, and placeholders by adding achievement card text parsing, request/response fields, renderer support, notification rendering changes, and tests.
+
+Why it was skipped:
+
+- Direct and 3-way patch checks failed because the target achievement controller, request/response models, renderer, template, notification service partial, and achievement card tests are not present on this branch.
+- This is follow-up work for the base achievements feature from `71493eaf1`, which remains deferred.
+- Taking the new `AchievementCardText` helper alone would add dead code without the achievement card rendering pipeline that consumes it.
+
+Things to account for before revisiting:
+
+- Port only after the base achievements schema, services, controller, card renderer, and tests exist locally.
+- Re-check placeholder parsing, emoji rendering, and text measurement against this branch's chosen achievement fonts/assets.
+- Keep dashboard/API request and response fields in sync with any frontend card-template editor before exposing the feature.
+
+## 9f4ad9fb
+
+Upstream summary: loads achievement card emoji in parallel and avoids cutting surrogate pairs when trimming rendered card text.
+
+Why it was skipped:
+
+- Depends on `1f88f11b3` and the achievement unlock renderer from the deferred achievements feature.
+- Direct and 3-way patch checks failed because `AchievementUnlockRenderer.cs` does not exist on this branch.
+
+Things to account for before revisiting:
+
+- Fold this into the achievement renderer port after the renderer exists locally.
+- Preserve the surrogate-pair trimming behavior for emoji-heavy achievement text.
+- Confirm parallel emoji loading respects rate limits, cancellation, and renderer fallback behavior.
+
+## b1f7f5319
+
+Upstream summary: makes Fluxer migration dashboard-only, removes the text command/aliases/strings, and bounds export load size in the Fluxer migration service.
+
+Why it was skipped:
+
+- Direct patch check failed because `FluxerMigration.cs`, `FluxerMigrationService.cs`, and the Fluxer command/response localization files are not present on this branch.
+- The only 3-way-clean hunk was in aliases, but a repo search found no current Fluxer alias or module surface to remove locally.
+- The bounded export-load change is not portable without the missing Fluxer migration service implementation.
+
+Things to account for before revisiting:
+
+- Revisit only if the Fluxer migration dashboard/service feature is ported or reintroduced.
+- If the service is adopted, keep the dashboard-only intent and export-size bounds together so large imports cannot be triggered from a legacy text command path.
+- Verify aliases and localization paths against this branch's current command-string layout before deleting or adding Fluxer command metadata.
