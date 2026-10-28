@@ -740,6 +740,7 @@ public class SlashMusic(
 
             return new PageBuilder()
                 .WithComponents(componentsV2.Build())
+                .WithAllowedMentions(Discord.AllowedMentions.None)
                 .Build();
         }
     }

@@ -209,7 +209,10 @@ public partial class Searches(
         }
 
         var component = BuildWeatherComponent(data);
-        await ctx.Channel.SendMessageAsync(components: component.Build(), flags: MessageFlags.ComponentsV2)
+        await ctx.Channel.SendMessageAsync(
+                components: component.Build(),
+                flags: MessageFlags.ComponentsV2,
+                allowedMentions: AllowedMentions.None)
             .ConfigureAwait(false);
     }
 
