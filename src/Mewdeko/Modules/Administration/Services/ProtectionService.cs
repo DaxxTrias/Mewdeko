@@ -27,7 +27,10 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
     private readonly ConcurrentDictionary<ulong, AntiRaidStats> antiRaidGuilds = new();
     private readonly ConcurrentDictionary<ulong, AntiSpamStats> antiSpamGuilds = new();
 
-    private const int MinimumWatchedNameLength = 4;
+    /// <summary>
+    ///     Minimum number of normalized letters required for watched-name matching.
+    /// </summary>
+    public const int MinimumWatchedNameLength = 4;
 
     /// <summary>
     ///     Maximum account age (in days) at which a coordinated reactor is auto-punished alongside
@@ -1807,21 +1810,57 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
     public async Task<AntiPatternName?> AddPatternNameAsync(ulong guildId, string name, bool checkUsername = true,
         bool checkDisplayName = true)
     {
-        if (!checkUsername && !checkDisplayName) return null;
+        var result = await AddPatternNameWithResultAsync(guildId, name, checkUsername, checkDisplayName)
+            .ConfigureAwait(false);
+        return result.AddedName;
+    }
+
+    /// <summary>
+    ///     Adds a normalized watched name to anti-pattern protection and returns the specific outcome.
+    /// </summary>
+    /// <param name="guildId">The ID of the guild to add the watched name for.</param>
+    /// <param name="name">The plain name moderators want to watch.</param>
+    /// <param name="checkUsername">Whether to check usernames against this watched name.</param>
+    /// <param name="checkDisplayName">Whether to check display names and nicknames against this watched name.</param>
+    /// <returns>The result of attempting to add the watched name.</returns>
+    public async Task<AddPatternNameResult> AddPatternNameWithResultAsync(ulong guildId, string name,
+        bool checkUsername = true, bool checkDisplayName = true)
+    {
+        if (!checkUsername && !checkDisplayName)
+            return new AddPatternNameResult
+            {
+                Result = AddPatternNameResultType.NoMatchingTargets
+            };
 
         var normalizedName = NormalizeWatchedName(name);
-        if (normalizedName.Length < MinimumWatchedNameLength) return null;
+        if (normalizedName.Length < MinimumWatchedNameLength)
+            return new AddPatternNameResult
+            {
+                Result = AddPatternNameResultType.NormalizedNameTooShort,
+                NormalizedName = normalizedName
+            };
 
         await using var db = await dbFactory.CreateConnectionAsync();
         var setting = await db.GetTable<AntiPatternSetting>().FirstOrDefaultAsync(x => x.GuildId == guildId)
             .ConfigureAwait(false);
 
-        if (setting == null) return null;
+        if (setting == null)
+            return new AddPatternNameResult
+            {
+                Result = AddPatternNameResultType.AntiPatternNotEnabled,
+                NormalizedName = normalizedName
+            };
 
-        var exists = await db.GetTable<AntiPatternName>()
-            .AnyAsync(p => p.AntiPatternSettingId == setting.Id && p.NormalizedName == normalizedName)
+        var existingName = await db.GetTable<AntiPatternName>()
+            .FirstOrDefaultAsync(p => p.AntiPatternSettingId == setting.Id && p.NormalizedName == normalizedName)
             .ConfigureAwait(false);
-        if (exists) return null;
+        if (existingName is not null)
+            return new AddPatternNameResult
+            {
+                Result = AddPatternNameResultType.AlreadyExists,
+                ExistingName = existingName,
+                NormalizedName = normalizedName
+            };
 
         var watchedName = new AntiPatternName
         {
@@ -1835,7 +1874,12 @@ public class ProtectionService : INService, IReadyExecutor, IUnloadableService
         watchedName.Id = await db.InsertWithInt32IdentityAsync(watchedName).ConfigureAwait(false);
 
         await Initialize(guildId).ConfigureAwait(false);
-        return watchedName;
+        return new AddPatternNameResult
+        {
+            Result = AddPatternNameResultType.Success,
+            AddedName = watchedName,
+            NormalizedName = normalizedName
+        };
     }
 
     /// <summary>

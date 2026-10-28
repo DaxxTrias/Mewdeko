@@ -831,17 +831,37 @@ public partial class Administration
         [UserPerm(GuildPermission.Administrator)]
         public async Task PatternNameAdd([Remainder] string name)
         {
-            var watchedName = await Service.AddPatternNameAsync(ctx.Guild.Id, name).ConfigureAwait(false);
-            if (watchedName is null)
+            var result = await Service.AddPatternNameWithResultAsync(ctx.Guild.Id, name).ConfigureAwait(false);
+            if (result.Result != AddPatternNameResultType.Success)
             {
-                await ReplyErrorAsync(
-                    "Failed to add watched name. Make sure Anti-Pattern protection is enabled, the normalized name is at least 4 letters, and it is not already listed.").ConfigureAwait(false);
+                await ReplyErrorAsync(GetPatternNameAddError(result)).ConfigureAwait(false);
                 return;
             }
 
+            var watchedName = result.AddedName!;
             await ReplyConfirmAsync(
                 $"Watched name **{watchedName.OriginalName}** has been added. Normalized match key: `{watchedName.NormalizedName}`")
                 .ConfigureAwait(false);
+        }
+
+        private static string GetPatternNameAddError(AddPatternNameResult result)
+        {
+            return result.Result switch
+            {
+                AddPatternNameResultType.NoMatchingTargets =>
+                    "Failed to add watched name: at least one target must be enabled (username or display name).",
+                AddPatternNameResultType.NormalizedNameTooShort when string.IsNullOrEmpty(result.NormalizedName) =>
+                    $"Failed to add watched name: the name has no usable letters after normalization. Enter at least {ProtectionService.MinimumWatchedNameLength} letters.",
+                AddPatternNameResultType.NormalizedNameTooShort =>
+                    $"Failed to add watched name: normalized key `{result.NormalizedName}` is only {result.NormalizedName.Length} letters. Enter at least {ProtectionService.MinimumWatchedNameLength} letters.",
+                AddPatternNameResultType.AntiPatternNotEnabled =>
+                    "Failed to add watched name: Anti-Pattern protection is not enabled. Enable it with the `antipattern` command first.",
+                AddPatternNameResultType.AlreadyExists when result.ExistingName is not null =>
+                    $"Failed to add watched name: normalized key `{result.NormalizedName}` is already listed as ID `{result.ExistingName.Id}` (original: **{result.ExistingName.OriginalName}**).",
+                AddPatternNameResultType.AlreadyExists =>
+                    $"Failed to add watched name: normalized key `{result.NormalizedName}` is already listed.",
+                _ => "Failed to add watched name."
+            };
         }
 
         /// <summary>
