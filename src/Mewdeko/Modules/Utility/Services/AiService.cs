@@ -148,6 +148,103 @@ public class AiService : INService
     }
 
     /// <summary>
+    ///     Adds an additional channel where AI prompts are accepted for a guild.
+    /// </summary>
+    /// <param name="guildId">The guild ID.</param>
+    /// <param name="channelId">The channel ID to allow.</param>
+    /// <returns>Whether the channel was newly added.</returns>
+    public async Task<bool> AddAllowedChannel(ulong guildId, ulong channelId)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+        var exists = await db.GuildAiChannels
+            .AnyAsync(x => x.GuildId == guildId && x.ChannelId == channelId);
+
+        if (exists)
+            return false;
+
+        await db.InsertAsync(new GuildAiChannel
+        {
+            GuildId = guildId,
+            ChannelId = channelId
+        });
+
+        return true;
+    }
+
+    /// <summary>
+    ///     Removes an additional AI channel from a guild.
+    /// </summary>
+    /// <param name="guildId">The guild ID.</param>
+    /// <param name="channelId">The channel ID to remove.</param>
+    /// <returns>Whether a channel was removed.</returns>
+    public async Task<bool> RemoveAllowedChannel(ulong guildId, ulong channelId)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+        var deleted = await db.GuildAiChannels
+            .Where(x => x.GuildId == guildId && x.ChannelId == channelId)
+            .DeleteAsync();
+
+        return deleted > 0;
+    }
+
+    /// <summary>
+    ///     Gets the additional AI channels configured for a guild.
+    /// </summary>
+    /// <param name="guildId">The guild ID.</param>
+    /// <returns>The configured additional channel IDs.</returns>
+    public async Task<List<ulong>> GetAllowedChannels(ulong guildId)
+    {
+        await using var db = await dbFactory.CreateConnectionAsync();
+        return await db.GuildAiChannels
+            .Where(x => x.GuildId == guildId)
+            .OrderBy(x => x.ChannelId)
+            .Select(x => x.ChannelId)
+            .ToListAsync();
+    }
+
+    /// <summary>
+    ///     Determines whether AI prompts are allowed in a channel for a guild config.
+    /// </summary>
+    /// <param name="config">The guild AI config.</param>
+    /// <param name="channelId">The incoming message channel ID.</param>
+    /// <returns>Whether prompts are allowed in the channel.</returns>
+    public async Task<bool> IsChannelAllowed(GuildAiConfig config, ulong channelId)
+    {
+        if (config.ChannelId == 0 || config.ChannelId == channelId)
+            return true;
+
+        await using var db = await dbFactory.CreateConnectionAsync();
+        return await db.GuildAiChannels
+            .AnyAsync(x => x.GuildId == config.GuildId && x.ChannelId == channelId);
+    }
+
+    /// <summary>
+    ///     Formats the AI channel scope for display.
+    /// </summary>
+    /// <param name="config">The guild AI config.</param>
+    /// <returns>A human-readable channel scope.</returns>
+    public async Task<string> GetChannelScopeSummary(GuildAiConfig config)
+    {
+        if (!config.Enabled)
+            return "Disabled";
+
+        if (config.ChannelId == 0)
+            return "All channels";
+
+        var channels = await GetAllowedChannels(config.GuildId);
+        var entries = new[]
+            {
+                config.ChannelId
+            }
+            .Concat(channels)
+            .Where(x => x != 0)
+            .Distinct()
+            .Select(x => x == config.ChannelId ? $"Primary: <#{x}>" : $"<#{x}>");
+
+        return string.Join("\n", entries);
+    }
+
+    /// <summary>
     ///     Gets all linked AI providers for a guild.
     /// </summary>
     public async Task<List<GuildAiProviderLink>> GetProviderLinks(ulong guildId)
@@ -361,7 +458,7 @@ public class AiService : INService
             return;
 
         var config = await GetOrCreateConfig(guildChannel.GuildId);
-        if (!config.Enabled || config.ChannelId != msg.Channel.Id)
+        if (!config.Enabled || !await IsChannelAllowed(config, msg.Channel.Id))
             return;
 
         if (IsDeleteSessionTrigger(msg.Content))
@@ -413,7 +510,7 @@ public class AiService : INService
         ulong? webhookMessageId = null;
         IUserMessage? processingMessage = null;
 
-        if (!string.IsNullOrEmpty(config.WebhookUrl))
+        if (!string.IsNullOrEmpty(config.WebhookUrl) && config.ChannelId == msg.Channel.Id)
         {
             webhook = new DiscordWebhookClient(config.WebhookUrl);
             var processingEmbedBuilder = new EmbedBuilder()

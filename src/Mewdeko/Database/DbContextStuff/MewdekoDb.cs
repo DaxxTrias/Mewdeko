@@ -612,6 +612,11 @@ public class MewdekoDb : DataConnection
     public ITable<GuildAiConfig> GuildAiConfigs => this.GetTable<GuildAiConfig>();
 
     /// <summary>
+    ///     Gets the additional guild AI channels table.
+    /// </summary>
+    public ITable<GuildAiChannel> GuildAiChannels => this.GetTable<GuildAiChannel>();
+
+    /// <summary>
     ///     Gets the guild AI provider links table.
     /// </summary>
     public ITable<GuildAiProviderLink> GuildAiProviderLinks => this.GetTable<GuildAiProviderLink>();

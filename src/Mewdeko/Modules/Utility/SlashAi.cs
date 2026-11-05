@@ -101,6 +101,99 @@ public partial class SlashUtility
         }
 
         /// <summary>
+        ///     Adds another channel where AI prompts are accepted.
+        /// </summary>
+        /// <param name="channel">The channel to allow. Defaults to current channel if not specified.</param>
+        /// <returns>A task representing the asynchronous operation.</returns>
+        [SlashCommand("channel-add", "Allow AI prompts in another channel")]
+        [RequireContext(ContextType.Guild)]
+        [SlashUserPerm(GuildPermission.ManageGuild)]
+        public async Task AiChannelAdd(ITextChannel? channel = null)
+        {
+            channel ??= (ITextChannel)ctx.Channel;
+            var config = await Service.GetOrCreateConfig(ctx.Guild.Id);
+            config.Enabled = true;
+            if (config.Id == 0)
+                config.ChannelId = channel.Id;
+            await Service.UpdateConfig(config);
+
+            string message;
+            if (config.ChannelId == 0)
+            {
+                message = "AI prompts are already allowed in all channels.";
+            }
+            else if (config.ChannelId == channel.Id)
+            {
+                message = $"AI prompts are already allowed in {channel.Mention} as the primary AI channel.";
+            }
+            else
+            {
+                var added = await Service.AddAllowedChannel(ctx.Guild.Id, channel.Id);
+                message = added
+                    ? $"AI prompts are now also allowed in {channel.Mention}."
+                    : $"AI prompts were already allowed in {channel.Mention}.";
+            }
+
+            await ctx.Interaction.SendConfirmAsync(message);
+        }
+
+        /// <summary>
+        ///     Removes an additional AI prompt channel.
+        /// </summary>
+        /// <param name="channel">The channel to remove. Defaults to current channel if not specified.</param>
+        /// <returns>A task representing the asynchronous operation.</returns>
+        [SlashCommand("channel-remove", "Remove an additional AI prompt channel")]
+        [RequireContext(ContextType.Guild)]
+        [SlashUserPerm(GuildPermission.ManageGuild)]
+        public async Task AiChannelRemove(ITextChannel? channel = null)
+        {
+            channel ??= (ITextChannel)ctx.Channel;
+            var config = await Service.GetOrCreateConfig(ctx.Guild.Id);
+            if (config.ChannelId == channel.Id)
+            {
+                await ctx.Interaction.SendErrorAsync(
+                    "That is the primary AI channel. Set a different primary channel with `/ai channel` first.",
+                    Config);
+                return;
+            }
+
+            var removed = await Service.RemoveAllowedChannel(ctx.Guild.Id, channel.Id);
+            await ctx.Interaction.SendConfirmAsync(removed
+                ? $"AI prompts are no longer allowed in {channel.Mention}."
+                : $"{channel.Mention} was not in the additional AI channel list.");
+        }
+
+        /// <summary>
+        ///     Allows AI prompts in all channels.
+        /// </summary>
+        /// <returns>A task representing the asynchronous operation.</returns>
+        [SlashCommand("channel-all", "Allow AI prompts in all channels")]
+        [RequireContext(ContextType.Guild)]
+        [SlashUserPerm(GuildPermission.ManageGuild)]
+        public async Task AiChannelAll()
+        {
+            var config = await Service.GetOrCreateConfig(ctx.Guild.Id);
+            config.Enabled = true;
+            config.ChannelId = 0;
+            await Service.UpdateConfig(config);
+
+            await ctx.Interaction.SendConfirmAsync("AI prompts are now allowed in all channels.");
+        }
+
+        /// <summary>
+        ///     Lists the channels where AI prompts are accepted.
+        /// </summary>
+        /// <returns>A task representing the asynchronous operation.</returns>
+        [SlashCommand("channels", "Show the AI channel scope")]
+        [RequireContext(ContextType.Guild)]
+        public async Task AiChannels()
+        {
+            var config = await Service.GetOrCreateConfig(ctx.Guild.Id);
+            var summary = await Service.GetChannelScopeSummary(config);
+            await ctx.Interaction.SendConfirmAsync($"AI channel scope:\n{summary}");
+        }
+
+        /// <summary>
         ///     Sets or lists available AI models for a provider.
         /// </summary>
         /// <param name="provider">The AI provider to use.</param>
@@ -228,6 +321,7 @@ public partial class SlashUtility
         public async Task AiConfig()
         {
             var config = await Service.GetOrCreateConfig(ctx.Guild.Id);
+            var channelSummary = await Service.GetChannelScopeSummary(config);
             var links = await Service.GetProviderLinks(ctx.Guild.Id);
 
             // Get provider enum value and its integer index
@@ -243,13 +337,8 @@ public partial class SlashUtility
 
             await ctx.Interaction.RespondAsync(embed: new EmbedBuilder()
                 .WithTitle(Strings.AiConfigTitle(ctx.Guild.Id))
-                .WithDescription(Strings.AiConfigDescription(
-                    ctx.Guild.Id,
-                    config.Enabled,
-                    config.ChannelId,
-                    providerLabel,
-                    config.Model ?? "Not Set",
-                    config.TokensUsed))
+                .WithDescription(
+                    $"Enabled: {config.Enabled}\nChannels: {channelSummary}\nProvider: {providerLabel}\nModel: {config.Model ?? "Not Set"}\nTotal Tokens Used: {config.TokensUsed}")
                 .AddField("Linked providers", linkedSummary)
                 .WithOkColor()
                 .Build());

@@ -33,6 +33,97 @@ public partial class Utility
         }
 
         /// <summary>
+        ///     Adds another channel where AI prompts are accepted.
+        /// </summary>
+        /// <param name="channel">Channel to allow. Defaults to the current channel.</param>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.ManageGuild)]
+        public async Task AiChannelAdd(ITextChannel? channel = null)
+        {
+            channel ??= (ITextChannel)ctx.Channel;
+            var config = await Service.GetOrCreateConfig(ctx.Guild.Id);
+            config.Enabled = true;
+            if (config.Id == 0)
+                config.ChannelId = channel.Id;
+            await Service.UpdateConfig(config);
+
+            if (config.ChannelId == 0)
+            {
+                await ctx.Channel.SendConfirmAsync("AI prompts are already allowed in all channels.");
+                return;
+            }
+
+            if (config.ChannelId == channel.Id)
+            {
+                await ctx.Channel.SendConfirmAsync($"AI prompts are already allowed in {channel.Mention} as the primary AI channel.");
+                return;
+            }
+
+            var added = await Service.AddAllowedChannel(ctx.Guild.Id, channel.Id);
+            await ctx.Channel.SendConfirmAsync(added
+                ? $"AI prompts are now also allowed in {channel.Mention}."
+                : $"AI prompts were already allowed in {channel.Mention}.");
+        }
+
+        /// <summary>
+        ///     Removes an additional AI prompt channel.
+        /// </summary>
+        /// <param name="channel">Channel to remove. Defaults to the current channel.</param>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.ManageGuild)]
+        public async Task AiChannelRemove(ITextChannel? channel = null)
+        {
+            channel ??= (ITextChannel)ctx.Channel;
+            var config = await Service.GetOrCreateConfig(ctx.Guild.Id);
+            if (config.ChannelId == channel.Id)
+            {
+                await ctx.Channel.SendErrorAsync(
+                    "That is the primary AI channel. Set a different primary channel with `aichannel` first.",
+                    Config);
+                return;
+            }
+
+            var removed = await Service.RemoveAllowedChannel(ctx.Guild.Id, channel.Id);
+            await ctx.Channel.SendConfirmAsync(removed
+                ? $"AI prompts are no longer allowed in {channel.Mention}."
+                : $"{channel.Mention} was not in the additional AI channel list.");
+        }
+
+        /// <summary>
+        ///     Allows AI prompts in all channels.
+        /// </summary>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        [UserPerm(GuildPermission.ManageGuild)]
+        public async Task AiChannelAll()
+        {
+            var config = await Service.GetOrCreateConfig(ctx.Guild.Id);
+            config.Enabled = true;
+            config.ChannelId = 0;
+            await Service.UpdateConfig(config);
+
+            await ctx.Channel.SendConfirmAsync("AI prompts are now allowed in all channels.");
+        }
+
+        /// <summary>
+        ///     Lists the channels where AI prompts are accepted.
+        /// </summary>
+        [Cmd]
+        [Aliases]
+        [RequireContext(ContextType.Guild)]
+        public async Task AiChannels()
+        {
+            var config = await Service.GetOrCreateConfig(ctx.Guild.Id);
+            var summary = await Service.GetChannelScopeSummary(config);
+            await ctx.Channel.SendConfirmAsync($"AI channel scope:\n{summary}");
+        }
+
+        /// <summary>
         ///     Sets the AI provider and model
         /// </summary>
         /// <param name="provider">AI provider to use</param>
@@ -264,6 +355,7 @@ public partial class Utility
         public async Task AiConfig()
         {
             var config = await Service.GetOrCreateConfig(ctx.Guild.Id);
+            var channelSummary = await Service.GetChannelScopeSummary(config);
             var links = await Service.GetProviderLinks(ctx.Guild.Id);
             var linkedSummary = links.Count == 0
                 ? "None"
@@ -274,13 +366,8 @@ public partial class Utility
 
             var eb = new EmbedBuilder()
                 .WithTitle(Strings.AiConfigTitle(ctx.Guild.Id))
-        .WithDescription(Strings.AiConfigDescription(
-            ctx.Guild.Id,
-            config.Enabled,
-            config.ChannelId,
-            $"{config.Provider} ({(AiService.AiProvider)config.Provider} = {config.Provider})",
-            config.Model ?? "Not Set",
-            config.TokensUsed))
+                .WithDescription(
+                    $"Enabled: {config.Enabled}\nChannels: {channelSummary}\nProvider: {config.Provider} ({(AiService.AiProvider)config.Provider} = {config.Provider})\nModel: {config.Model ?? "Not Set"}\nTotal Tokens Used: {config.TokensUsed}")
                         .AddField("Linked providers", linkedSummary)
                         .WithOkColor();
 
